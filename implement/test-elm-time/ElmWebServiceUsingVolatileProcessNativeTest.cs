@@ -1,7 +1,7 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
+using Pine.Core.Elm;
 using Pine.Elm.Platform;
-using Pine.ElmInteractive;
 using System;
 using System.Linq;
 using System.Net.Http;

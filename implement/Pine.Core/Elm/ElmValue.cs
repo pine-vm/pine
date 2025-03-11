@@ -1,11 +1,10 @@
-using Pine.Core;
 using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 
-namespace Pine.ElmInteractive;
+namespace Pine.Core.Elm;
 
 /// <summary>
 /// Corresponding to the type ElmValue in ElmInteractive.elm
@@ -27,6 +26,9 @@ public abstract record ElmValue
 
      * */
 
+    /// <summary>
+    /// The number of ElmValue nodes contained within this ElmValue.
+    /// </summary>
     abstract public int ContainedNodesCount { get; }
 
     /// <summary>
@@ -137,7 +139,14 @@ public abstract record ElmValue
     public record ElmInteger(System.Numerics.BigInteger Value)
         : ElmValue
     {
+        /// <inheritdoc/>
         override public int ContainedNodesCount { get; } = 0;
+
+        /// <inheritdoc/>
+        public override string ToString()
+        {
+            return GetType().Name + " : " + Value.ToString();
+        }
     }
 
     public record ElmTag
@@ -149,6 +158,7 @@ public abstract record ElmValue
 
         readonly int slimHashCode;
 
+        /// <inheritdoc/>
         override public int ContainedNodesCount { get; }
 
         internal ElmTag(
@@ -174,6 +184,7 @@ public abstract record ElmValue
             }
         }
 
+        /// <inheritdoc/>
         public virtual bool Equals(ElmTag? otherTag)
         {
             if (ReferenceEquals(this, otherTag))
@@ -200,6 +211,7 @@ public abstract record ElmValue
             return true;
         }
 
+        /// <inheritdoc/>
         override public int GetHashCode() =>
             slimHashCode;
 
@@ -262,6 +274,7 @@ public abstract record ElmValue
                 GetType().Name + " : " + ElmTagAsExpression(TagName, Arguments).expressionString;
         }
 
+        /// <inheritdoc/>
         public override string ToString() =>
             GetType().Name + " : " + RenderAsElmExpression(this).expressionString;
     }
@@ -274,6 +287,7 @@ public abstract record ElmValue
 
         internal readonly int slimHashCode;
 
+        /// <inheritdoc/>
         public override int ContainedNodesCount { get; }
 
         public ElmList(IReadOnlyList<ElmValue> Elements)
@@ -290,6 +304,7 @@ public abstract record ElmValue
             }
         }
 
+        /// <inheritdoc/>
         public virtual bool Equals(ElmList? otherList)
         {
             if (otherList is null)
@@ -307,6 +322,7 @@ public abstract record ElmValue
             return true;
         }
 
+        /// <inheritdoc/>
         public override int GetHashCode()
         {
             return slimHashCode;
@@ -324,6 +340,7 @@ public abstract record ElmValue
             return hashCode.ToHashCode();
         }
 
+        /// <inheritdoc/>
         public override string ToString() =>
             GetType().Name + " : " + RenderAsElmExpression(this).expressionString;
     }
@@ -331,21 +348,25 @@ public abstract record ElmValue
     public record ElmString(string Value)
         : ElmValue
     {
+        /// <inheritdoc/>
         public override int ContainedNodesCount { get; } = 0;
     }
 
     public record ElmChar(int Value)
         : ElmValue
     {
+        /// <inheritdoc/>
         public override int ContainedNodesCount { get; } = 0;
     }
 
     public record ElmRecord(IReadOnlyList<(string FieldName, ElmValue Value)> Fields)
         : ElmValue
     {
+        /// <inheritdoc/>
         public override int ContainedNodesCount { get; } =
             Fields.Sum(field => field.Value.ContainedNodesCount) + Fields.Count;
 
+        /// <inheritdoc/>
         public virtual bool Equals(ElmRecord? otherRecord)
         {
             if (otherRecord is null)
@@ -366,6 +387,7 @@ public abstract record ElmValue
             return true;
         }
 
+        /// <inheritdoc/>
         public override int GetHashCode()
         {
             var hashCode = new HashCode();
@@ -379,9 +401,14 @@ public abstract record ElmValue
             return hashCode.ToHashCode();
         }
 
+        /// <inheritdoc/>
         public override string ToString() =>
             GetType().Name + " : " + RenderAsElmExpression(this).expressionString;
 
+        /// <summary>
+        /// Get the value of a field by name.
+        /// Returns null if the record does not contain a field with the given name.
+        /// </summary>
         public ElmValue? this[string fieldName] =>
             Fields.FirstOrDefault(field => field.FieldName == fieldName).Value;
     }
@@ -393,7 +420,7 @@ public abstract record ElmValue
         : ElmValue
     {
         /// <summary>
-        /// The number of contained nodes is always zero for the 'Bytes' variant.
+        /// The number of contained nodes is always zero for 'Bytes' values.
         /// </summary>
         public override int ContainedNodesCount { get; } = 0;
 
@@ -416,8 +443,9 @@ public abstract record ElmValue
     }
 
     /// <summary>
-    /// The Elm compiler included with Pine models the 'Float' type from Elm as a rational number,
+    /// The Elm compiler included with Pine models the 'Float' type as a rational number,
     /// expressed as the quotient or fraction ⁠of two integers, a numerator and a denominator.
+    /// <see href="https://en.wikipedia.org/wiki/Rational_number" />
     /// </summary>
     public record ElmFloat
         : ElmValue
@@ -473,6 +501,9 @@ public abstract record ElmValue
                 Denominator: System.Numerics.BigInteger.Abs(Denominator) / divisor);
         }
 
+        /// <summary>
+        /// Convert from a .NET <see cref="double"/> to an Elm Float.
+        /// </summary>
         public static ElmFloat Convert(double fromDouble)
         {
             if (Math.Floor(fromDouble) == fromDouble)
@@ -495,29 +526,25 @@ public abstract record ElmValue
                 Denominator: new System.Numerics.BigInteger(denominator));
         }
 
+        /// <inheritdoc/>
         override public int ContainedNodesCount { get; } = 0;
     }
 
     public record ElmInternal(string Value)
         : ElmValue
     {
+        /// <inheritdoc/>
         public override int ContainedNodesCount { get; } = 0;
     }
 
-    public static Maybe<string> TryMapElmValueToString(ElmList elmValues) =>
-        elmValues.Elements.Select(TryMapElmValueToChar).ListCombine()
-        .Map(chars => string.Join("", chars.Select(char.ConvertFromUtf32)));
-
-    public static Maybe<int> TryMapElmValueToChar(ElmValue elmValue) =>
-        elmValue switch
-        {
-            ElmChar elmChar =>
-            elmChar.Value,
-
-            _ =>
-            Maybe<int>.nothing()
-        };
-
+    /// <summary>
+    /// Build a text which is a valid Elm expression and evaluates to the given Elm value.
+    /// <para />
+    /// Besides the expression string, the returned tuple also contains a boolean value indicating
+    /// if the given string needs to be enclosed in parentheses when used as an argument to a function application.
+    /// For example, an expression like 'Just 4' does not need parentheses by itself,
+    /// but needs to be enclosed in parentheses when used as an argument to a function application like 'f (Just 4)'.
+    /// </summary>
     public static (string expressionString, bool needsParens) RenderAsElmExpression(
         ElmValue elmValue)
     {
@@ -531,7 +558,7 @@ public abstract record ElmValue
                 ("'" + RenderCharAsElmExpression(charValue.Value) + "'", needsParens: false),
 
                 ElmList list =>
-                ElmListItemsLookLikeTupleItems(list.Elements).WithDefault(false)
+                ElmListItemsLookLikeTupleItems(list.Elements) ?? false
                 ?
                 ("(" + string.Join(",", list.Elements.Select(item => RenderAsElmExpression(item).expressionString)) + ")",
                 needsParens: false)
@@ -543,7 +570,7 @@ public abstract record ElmValue
                 ("\"" + stringValue.Value.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"", needsParens: false),
 
                 ElmRecord record =>
-                (record.Fields.Count < 1)
+                record.Fields.Count < 1
                 ?
                 ("{}", needsParens: false)
                 :
@@ -662,7 +689,7 @@ public abstract record ElmValue
         return aggregate;
     }
 
-    public static Maybe<bool> ElmListItemsLookLikeTupleItems(IReadOnlyList<ElmValue> list)
+    public static bool? ElmListItemsLookLikeTupleItems(IReadOnlyList<ElmValue> list)
     {
         if (3 < list.Count)
         {
@@ -675,7 +702,7 @@ public abstract record ElmValue
             if (areAllItemsEqual is Maybe<bool>.Just areAllItemsEqualJust)
                 return !areAllItemsEqualJust.Value;
             else
-                return Maybe<bool>.nothing();
+                return null;
         }
     }
 

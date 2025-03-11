@@ -3,7 +3,6 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using Pine.Core.Elm;
 using Pine.Elm;
-using Pine.ElmInteractive;
 using Pine.PineVM;
 using System;
 using System.Linq;

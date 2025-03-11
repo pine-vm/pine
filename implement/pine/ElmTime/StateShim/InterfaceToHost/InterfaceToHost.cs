@@ -7,35 +7,6 @@ using System.Text.Json.Serialization;
 
 namespace ElmTime.StateShim.InterfaceToHost;
 
-[JsonConverter(typeof(JsonConverterForChoiceType))]
-public abstract record StateShimRequestStruct
-{
-    public record ListExposedFunctionsShimRequest : StateShimRequestStruct;
-
-    public record ApplyFunctionShimRequest(ApplyFunctionShimRequestStruct ApplyFunction)
-        : StateShimRequestStruct;
-
-    public record SerializeStateShimRequest(StateSource StateSource)
-        : StateShimRequestStruct;
-
-    public record SetBranchesStateShimRequest(StateSource StateSource, IReadOnlyList<string> Branches)
-        : StateShimRequestStruct;
-
-    public record EstimateSerializedStateLengthShimRequest(StateSource StateSource)
-        : StateShimRequestStruct;
-
-    public record ListBranchesShimRequest
-        : StateShimRequestStruct;
-
-    public record RemoveBranchesShimRequest(IReadOnlyList<string> BranchesNames)
-        : StateShimRequestStruct;
-
-    public record TestAreStatesEqualRequest(IReadOnlyList<StateSource> StatesSources)
-        : StateShimRequestStruct;
-
-    public string SerializeToJsonString() =>
-        JsonSerializer.Serialize(this);
-}
 
 [JsonConverter(typeof(JsonConverterForChoiceType))]
 public abstract record StateShimResponseStruct

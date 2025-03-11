@@ -1,9 +1,8 @@
-using Pine.Core;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace Pine.ElmInteractive;
+namespace Pine.Core.Elm;
 
 public class ElmValueInterop
 {

@@ -544,8 +544,8 @@ public class ElmCompiler
         Core.PineVM.IPineVM pineVM)
     {
         var elmModuleTextEncoded =
-            ElmInteractive.ElmValueEncoding.ElmValueAsPineValue(
-                ElmInteractive.ElmValue.StringInstance(elmModuleText));
+            ElmValueEncoding.ElmValueAsPineValue(
+                ElmValue.StringInstance(elmModuleText));
 
         var parseToFileResultValue =
             ElmInteractiveEnvironment.ApplyFunction(
@@ -560,16 +560,16 @@ public class ElmCompiler
             throw new Exception("Unexpected result type: " + parseToFileResultValue.GetType().FullName);
 
         return
-            ElmInteractive.ElmValueInterop.ParseElmResultValue(
+            ElmValueInterop.ParseElmResultValue(
                 applyFunctionOk,
                 err:
                 errValue =>
                 Result<string, PineValue>.err(
                     "Failed to parse Elm module text: 'Err': " +
-                        ElmInteractive.ElmValueEncoding.PineValueAsElmValue(errValue, null, null)
+                        ElmValueEncoding.PineValueAsElmValue(errValue, null, null)
                         .Unpack(
                             fromErr: err => "Failed to parse as Elm value: " + err,
-                            fromOk: elmValue => ElmInteractive.ElmValue.RenderAsElmExpression(elmValue).expressionString)),
+                            fromOk: elmValue => ElmValue.RenderAsElmExpression(elmValue).expressionString)),
                 ok:
                 okValue => okValue,
                 invalid:
@@ -581,8 +581,8 @@ public class ElmCompiler
         Core.PineVM.IPineVM pineVM)
     {
         var submissionTextEncoded =
-            ElmInteractive.ElmValueEncoding.ElmValueAsPineValue(
-                ElmInteractive.ElmValue.StringInstance(submissionText));
+            ElmValueEncoding.ElmValueAsPineValue(
+                ElmValue.StringInstance(submissionText));
 
         var parseResultValue =
             ElmInteractiveEnvironment.ApplyFunction(
@@ -597,16 +597,16 @@ public class ElmCompiler
             throw new Exception("Unexpected result type: " + parseResultValue.GetType().FullName);
 
         return
-            ElmInteractive.ElmValueInterop.ParseElmResultValue(
+            ElmValueInterop.ParseElmResultValue(
                 applyFunctionOk,
                 err:
                 errValue =>
                 Result<string, PineValue>.err(
                     "Failed to parse submission text: 'Err': " +
-                        ElmInteractive.ElmValueEncoding.PineValueAsElmValue(errValue, null, null)
+                        ElmValueEncoding.PineValueAsElmValue(errValue, null, null)
                         .Unpack(
                             fromErr: err => "Failed to parse as Elm value: " + err,
-                            fromOk: elmValue => ElmInteractive.ElmValue.RenderAsElmExpression(elmValue).expressionString)),
+                            fromOk: elmValue => ElmValue.RenderAsElmExpression(elmValue).expressionString)),
                 ok:
                 okValue => okValue,
                 invalid:

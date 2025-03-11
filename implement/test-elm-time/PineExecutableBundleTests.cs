@@ -1,5 +1,6 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
+using Pine.Core.Elm;
 using Pine.UnitTests;
 
 namespace TestElmTime;
@@ -88,14 +89,14 @@ public class PineExecutableBundleTests
             elmCompiler.ParseElmModuleText(elmModuleText, pineVM);
 
         var parsedElmValue =
-            Pine.ElmInteractive.ElmValueEncoding.PineValueAsElmValue(
+            ElmValueEncoding.PineValueAsElmValue(
                 parseResult.Extract(err => throw new System.Exception(err)),
                 null,
                 null)
             .Extract(err => throw new System.Exception(err));
 
         var parsedElmModuleSyntaxAsString =
-            Pine.ElmInteractive.ElmValue.RenderAsElmExpression(parsedElmValue).expressionString;
+            ElmValue.RenderAsElmExpression(parsedElmValue).expressionString;
 
         Assert.AreEqual(
             "{ comments = [], declarations = [Node { end = { column = 14, row = 4 }, start = { column = 1, row = 3 } } (AliasDeclaration { documentation = Nothing, generics = [], name = Node { end = { column = 20, row = 3 }, start = { column = 12, row = 3 } } \"MaybeInt\", typeAnnotation = Node { end = { column = 14, row = 4 }, start = { column = 5, row = 4 } } (Typed (Node { end = { column = 10, row = 4 }, start = { column = 5, row = 4 } } ([],\"Maybe\")) [Node { end = { column = 14, row = 4 }, start = { column = 11, row = 4 } } (Typed (Node { end = { column = 14, row = 4 }, start = { column = 11, row = 4 } } ([],\"Int\")) [])]) })], imports = [], moduleDefinition = Node { end = { column = 36, row = 1 }, start = { column = 1, row = 1 } } (NormalModule { exposingList = Node { end = { column = 36, row = 1 }, start = { column = 23, row = 1 } } (All { end = { column = 35, row = 1 }, start = { column = 33, row = 1 } }), moduleName = Node { end = { column = 22, row = 1 }, start = { column = 8, row = 1 } } [\"Namespace\",\"Beta\"] }) }",

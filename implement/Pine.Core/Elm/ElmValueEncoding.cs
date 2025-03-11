@@ -1,10 +1,9 @@
-using Pine.Core;
 using Pine.PineVM;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace Pine.ElmInteractive;
+namespace Pine.Core.Elm;
 
 public static class ElmValueEncoding
 {
@@ -242,8 +241,8 @@ public static class ElmValueEncoding
                                 var tagNameChar = tagNameValue.Elements.Span[i];
 
                                 if (tagNameChar is not PineValue.BlobValue blobValue ||
-                                    (blobValue.Bytes.Length is > 1 &&
-                                    blobValue.Bytes.Span[0] is 2 or 4))
+                                    blobValue.Bytes.Length is > 1 &&
+                                    blobValue.Bytes.Span[0] is 2 or 4)
                                 {
                                     tagNameItemMightBeInteger = true;
                                     break;

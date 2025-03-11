@@ -1,7 +1,7 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
+using Pine.Core.Elm;
 using Pine.Elm;
-using Pine.ElmInteractive;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;

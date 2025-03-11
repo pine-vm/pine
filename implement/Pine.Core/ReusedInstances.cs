@@ -1,4 +1,4 @@
-using Pine.ElmInteractive;
+using Pine.Core.Elm;
 using Pine.PineVM;
 using System.Collections.Frozen;
 using System.Collections.Generic;
@@ -295,7 +295,7 @@ public record ReusedInstances(
             foreach (var elmValue in sourceElmValues.OrderBy(ev => ev.ContainedNodesCount))
             {
                 tempElmValueEncodingDict[elmValue] =
-                    ElmInteractive.ElmValueEncoding.ElmValueAsPineValue(
+                    Elm.ElmValueEncoding.ElmValueAsPineValue(
                         elmValue,
                         tempElmValueEncodingDict,
                         reportNewEncoding:
@@ -593,7 +593,7 @@ public record ReusedInstances(
             foreach (var item in elmValuesSorted)
             {
                 encodedDict[item] =
-                    ElmInteractive.ElmValueEncoding.ElmValueAsPineValue(
+                    Elm.ElmValueEncoding.ElmValueAsPineValue(
                         item,
                         encodedDict,
                         reportNewEncoding:

@@ -1,5 +1,5 @@
 using Pine.Core;
-using Pine.ElmInteractive;
+using Pine.Core.Elm;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
