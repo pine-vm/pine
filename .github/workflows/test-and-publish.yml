@@ -69,7 +69,7 @@ jobs:
           ./implement/**/TestResults/**/*.json
 
     - name: dotnet publish Pine
-      run: dotnet publish -c Debug -r ${{ matrix.publish-runtime-id }} --self-contained true -p:PublishSingleFile=true  -p:PublishReadyToRun=true -p:PublishReadyToRunShowWarnings=true  --output ./dotnet-build  ./implement/pine
+      run: dotnet publish -c Debug -r ${{ matrix.publish-runtime-id }} --self-contained true -p:PublishSingleFile=true  --output ./dotnet-build  ./implement/pine
 
     - name: Copy artifacts to publish
       shell: pwsh

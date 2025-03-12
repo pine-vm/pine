@@ -47,7 +47,7 @@ jobs:
         dotnet  run  --project ./prebuild/prebuild.csproj
 
     - name: dotnet publish
-      run: dotnet publish -c Release -r ${{ matrix.publish-runtime-id }} --self-contained true -p:PublishSingleFile=true -p:PublishReadyToRun=true -p:PublishReadyToRunShowWarnings=true  --output ./dotnet-build  ./implement/pine
+      run: dotnet publish -c Release -r ${{ matrix.publish-runtime-id }} --self-contained true -p:PublishSingleFile=true  --output ./dotnet-build  ./implement/pine
 
     - name: Copy artifacts to publish
       shell: pwsh
