@@ -2,7 +2,6 @@
 using System.Collections.Immutable;
 using System.Linq;
 using ElmTime.ElmInteractive;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine;
 using Pine.Core;
 
@@ -57,10 +56,14 @@ public class SelfTest
 
         foreach (var expectedFileNameAndHash in expectedFilesNamesAndHashes)
         {
-            Assert.IsTrue(
-                loadedFilesNamesAndHashes.Contains(expectedFileNameAndHash),
-                "Collection of loaded files contains a file named '" + expectedFileNameAndHash.fileName +
-                "' with hash " + expectedFileNameAndHash.fileHash + ".");
+            if (loadedFilesNamesAndHashes.Contains(expectedFileNameAndHash))
+            {
+                throw new Exception(
+                    "Collection of loaded files contains a file named '" +
+                    expectedFileNameAndHash.fileName +
+                    "' with hash " +
+                    expectedFileNameAndHash.fileHash + ".");
+            }
         }
 
         return 0;
