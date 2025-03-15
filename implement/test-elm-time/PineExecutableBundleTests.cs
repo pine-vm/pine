@@ -18,7 +18,7 @@ public class PineExecutableBundleTests
             Pine.Elm.ElmCompiler.ElmCompilerFileTreeFromBundledFileTree(compilerSourceFiles);
 
         var elmCompilerFromBundleValue =
-            Pine.Core.Elm.BundledElmEnvironments.BundledElmEnvironmentFromFileTree(combinedSourceFiles);
+            BundledElmEnvironments.BundledElmEnvironmentFromFileTree(combinedSourceFiles);
 
         Assert.IsNotNull(elmCompilerFromBundleValue);
 
@@ -61,7 +61,7 @@ public class PineExecutableBundleTests
     public void Bundled_environment_contains_Elm_syntax_parser()
     {
         var elmCompilerFromBundle =
-            Pine.Core.Elm.BundledElmEnvironments.BundledElmCompilerCompiledEnvValue();
+            BundledElmEnvironments.BundledElmCompilerCompiledEnvValue();
 
         Assert.IsNotNull(
             elmCompilerFromBundle,
@@ -157,7 +157,7 @@ public class PineExecutableBundleTests
             Pine.Elm.ElmCompiler.ElmCompilerFileTreeFromBundledFileTree(compilerSourceFiles);
 
         var elmCompilerFromBundleValue =
-            Pine.Core.Elm.BundledElmEnvironments.BundledElmEnvironmentFromFileTree(combinedSourceFiles);
+            BundledElmEnvironments.BundledElmEnvironmentFromFileTree(combinedSourceFiles);
 
         return elmCompilerFromBundleValue;
     }

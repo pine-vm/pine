@@ -1,10 +1,17 @@
+using ElmTime.ElmInteractive;
+using FluentAssertions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Pine.CompilePineToDotNet;
 using Pine.Core;
+using Pine.Elm;
+using Pine.PineVM;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using System.Text;
 
 namespace TestElmTime;
 
@@ -35,7 +42,7 @@ public class CompilePineToDotNetTests
             .ToImmutableList();
 
         var orderedValues =
-            Pine.CompilePineToDotNet.CSharpDeclarationOrder.OrderValuesForDeclaration(listBeforeOrdering)
+            CSharpDeclarationOrder.OrderValuesForDeclaration(listBeforeOrdering)
             .ToImmutableList();
 
         CollectionAssert.AreEqual(
@@ -53,7 +60,7 @@ public class CompilePineToDotNetTests
     public void Test_compile_syntax_for_type_declared_in_type()
     {
         var syntax =
-            Pine.CompilePineToDotNet.CompileTypeSyntax.TypeSyntaxFromType(
+            CompileTypeSyntax.TypeSyntaxFromType(
                 typeof(EvalExprDelegate),
                 usings: []);
 
@@ -66,7 +73,7 @@ public class CompilePineToDotNetTests
     public void Test_compile_syntax_for_generic_type()
     {
         var syntax =
-            Pine.CompilePineToDotNet.CompileTypeSyntax.TypeSyntaxFromType(
+            CompileTypeSyntax.TypeSyntaxFromType(
                 typeof(Result<string, int>),
                 usings: []);
 
@@ -79,7 +86,7 @@ public class CompilePineToDotNetTests
     public void Test_compile_syntax_for_generic_IReadOnlyDictionary()
     {
         var syntax =
-            Pine.CompilePineToDotNet.CompileTypeSyntax.TypeSyntaxFromType(
+            CompileTypeSyntax.TypeSyntaxFromType(
                 typeof(IReadOnlyDictionary<PineValue, string>),
                 usings: []);
 
@@ -100,13 +107,13 @@ public class CompilePineToDotNetTests
         var compiledFormattedExpression =
             CompiledFormattedCSharp(
                 pineExpression,
-                new Pine.CompilePineToDotNet.FunctionCompilationEnv(
-                    new Pine.CompilePineToDotNet.ExprFunctionCompilationInterface(
+                new FunctionCompilationEnv(
+                    new ExprFunctionCompilationInterface(
                         EnvItemsParamNames: [([], "environment")],
                         ArgumentEvalGenericName: "eval"),
-                    CompilationUnit: new Pine.CompilePineToDotNet.CompilationUnitEnv(
-                        AvailableExpr: ImmutableDictionary<Expression, Pine.CompilePineToDotNet.CompilationUnitEnvExprEntry>.Empty,
-                        DefaultInterface: new Pine.CompilePineToDotNet.ExprFunctionCompilationInterface(EnvItemsParamNames: [], ArgumentEvalGenericName: "eval"))));
+                    CompilationUnit: new CompilationUnitEnv(
+                        AvailableExpr: ImmutableDictionary<Expression, CompilationUnitEnvExprEntry>.Empty,
+                        DefaultInterface: new ExprFunctionCompilationInterface(EnvItemsParamNames: [], ArgumentEvalGenericName: "eval"))));
 
         var expectedSyntaxText = """
             environment switch
@@ -136,16 +143,16 @@ public class CompilePineToDotNetTests
             compiledFormattedExpression.Syntax.ToFullString());
     }
 
-    static Pine.CompilePineToDotNet.CompiledExpression CompiledFormattedCSharp(
+    static CompiledExpression CompiledFormattedCSharp(
         Expression expression,
-        Pine.CompilePineToDotNet.FunctionCompilationEnv environment)
+        FunctionCompilationEnv environment)
     {
         var compiledExpression =
-            Pine.CompilePineToDotNet.CompileToCSharp.CompileToCSharpExpression(
+            CompileToCSharp.CompileToCSharpExpression(
                 expression,
-                new Pine.CompilePineToDotNet.ExpressionCompilationEnvironment(
+                new ExpressionCompilationEnvironment(
                     environment,
-                    LetBindings: Pine.CompilePineToDotNet.CompiledExpression.NoLetBindings,
+                    LetBindings: CompiledExpression.NoLetBindings,
                     ParentEnvironment: null,
                     EnvConstraint: null),
                 createLetBindingsForCse: false)
@@ -156,7 +163,7 @@ public class CompilePineToDotNetTests
             with
             {
                 Syntax =
-                Pine.CompilePineToDotNet.FormatCSharpSyntaxRewriter.FormatSyntaxTree(compiledExpression.Syntax)
+                FormatCSharpSyntaxRewriter.FormatSyntaxTree(compiledExpression.Syntax)
                 .NormalizeWhitespace()
             };
     }
@@ -167,7 +174,7 @@ public class CompilePineToDotNetTests
         var testCases = new[]
         {
             ((Expression)new Expression.Environment(),
-            (Pine.PineVM.ExprMappedToParentEnv?)new Pine.PineVM.ExprMappedToParentEnv.PathInParentEnv([])),
+            (ExprMappedToParentEnv?)new ExprMappedToParentEnv.PathInParentEnv([])),
 
             (Expression.ListInstance([]),
             null),
@@ -175,14 +182,14 @@ public class CompilePineToDotNetTests
             (new Expression.KernelApplication(
                 function: nameof(KernelFunction.head),
                 input: new Expression.Environment()),
-                new Pine.PineVM.ExprMappedToParentEnv.PathInParentEnv([0])),
+                new ExprMappedToParentEnv.PathInParentEnv([0])),
 
             (new Expression.KernelApplication(
                 function: nameof(KernelFunction.head),
                 input: new Expression.KernelApplication(
                     function: nameof(KernelFunction.head),
                     input: new Expression.Environment())),
-                new Pine.PineVM.ExprMappedToParentEnv.PathInParentEnv([0, 0])),
+                new ExprMappedToParentEnv.PathInParentEnv([0, 0])),
 
             (new Expression.KernelApplication(
                 function: nameof(KernelFunction.head),
@@ -192,7 +199,7 @@ public class CompilePineToDotNetTests
                         [ Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(13)),
                         Expression.EnvironmentInstance
                         ]))),
-                new Pine.PineVM.ExprMappedToParentEnv.PathInParentEnv([13])),
+                new ExprMappedToParentEnv.PathInParentEnv([13])),
 
             (new Expression.KernelApplication(
                 function: nameof(KernelFunction.head),
@@ -209,7 +216,7 @@ public class CompilePineToDotNetTests
                                     new Expression.Environment()
                                     ])))
                         ]))),
-                new Pine.PineVM.ExprMappedToParentEnv.PathInParentEnv([17,21])),
+                new ExprMappedToParentEnv.PathInParentEnv([17,21])),
 
             (new Expression.KernelApplication(
                 function: nameof(KernelFunction.head),
@@ -221,12 +228,12 @@ public class CompilePineToDotNetTests
                             function: nameof(KernelFunction.head),
                             input: new Expression.Environment())
                         ]))),
-                new Pine.PineVM.ExprMappedToParentEnv.PathInParentEnv([0,23])),
+                new ExprMappedToParentEnv.PathInParentEnv([0,23])),
         };
 
         foreach (var (expression, expected) in testCases)
         {
-            var result = Pine.PineVM.CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(expression);
+            var result = CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(expression);
 
             Assert.AreEqual(expected, result);
         }
@@ -236,12 +243,12 @@ public class CompilePineToDotNetTests
     public void Test_ExprMappedToParentEnv_PathInParentEnv_equality()
     {
         Assert.AreEqual(
-            new Pine.PineVM.ExprMappedToParentEnv.PathInParentEnv([]),
-            new Pine.PineVM.ExprMappedToParentEnv.PathInParentEnv([]));
+            new ExprMappedToParentEnv.PathInParentEnv([]),
+            new ExprMappedToParentEnv.PathInParentEnv([]));
 
         Assert.AreEqual(
-            new Pine.PineVM.ExprMappedToParentEnv.PathInParentEnv([1, 3]),
-            new Pine.PineVM.ExprMappedToParentEnv.PathInParentEnv([1, 3]));
+            new ExprMappedToParentEnv.PathInParentEnv([1, 3]),
+            new ExprMappedToParentEnv.PathInParentEnv([1, 3]));
     }
 
     [TestMethod]
@@ -256,8 +263,8 @@ public class CompilePineToDotNetTests
                 new Expression.Environment(),
 
                 envConstraint =
-                Pine.PineVM.EnvConstraintId.Create(
-                    envClass: new Pine.PineVM.ExpressionEnvClass.ConstrainedEnv([]),
+                EnvConstraintId.Create(
+                    envClass: new ExpressionEnvClass.ConstrainedEnv([]),
                     PineValue.EmptyList,
                     skipUnavailableItems: false),
 
@@ -272,8 +279,8 @@ public class CompilePineToDotNetTests
                     input: new Expression.Environment()),
 
                 envConstraint =
-                Pine.PineVM.EnvConstraintId.Create(
-                    envClass: new Pine.PineVM.ExpressionEnvClass.ConstrainedEnv([]),
+                EnvConstraintId.Create(
+                    envClass: new ExpressionEnvClass.ConstrainedEnv([]),
                     PineValue.EmptyList,
                     skipUnavailableItems: false),
 
@@ -295,8 +302,8 @@ public class CompilePineToDotNetTests
                             ]))),
 
                 envConstraint =
-                Pine.PineVM.EnvConstraintId.Create(
-                    envClass: new Pine.PineVM.ExpressionEnvClass.ConstrainedEnv([]),
+                EnvConstraintId.Create(
+                    envClass: new ExpressionEnvClass.ConstrainedEnv([]),
                     PineValue.EmptyList,
                     skipUnavailableItems: false),
 
@@ -307,7 +314,7 @@ public class CompilePineToDotNetTests
         foreach (var testCase in testCases)
         {
             var paths =
-                Pine.CompilePineToDotNet.FunctionCompilationEnv.CompileEnvItemsPathsForExprFunction(
+                FunctionCompilationEnv.CompileEnvItemsPathsForExprFunction(
                     testCase.expr,
                     testCase.envConstraint);
 
@@ -318,5 +325,138 @@ public class CompilePineToDotNetTests
                 Assert.IsTrue(paths[i].SequenceEqual(testCase.expectedPaths[i]), "Path " + i);
             }
         }
+    }
+
+    [TestMethod]
+    public void Compile_from_Elm_to_CSharp()
+    {
+        const string elmModuleText =
+            """
+            module Common exposing (..)
+
+
+            simpleFunction : Int -> Int
+            simpleFunction n =
+                n + 1
+
+            """;
+
+        var elmJsonFile =
+            """
+            {
+                "type": "application",
+                "source-directories": [
+                    "src"
+                ],
+                "elm-version": "0.19.1",
+                "dependencies": {
+                    "direct": {
+                        "elm/bytes": "1.0.8",
+                        "elm/core": "1.0.5"
+                    },
+                    "indirect": {
+                    }
+                },
+                "test-dependencies": {
+                    "direct": {
+                        "elm-explorations/test": "2.2.0"
+                    },
+                    "indirect": {
+                    }
+                }
+            }
+            """;
+
+        const string expectedCSharp =
+            """
+            using Pine.Core;
+            using Pine.PineVM;
+            using System;
+            using System.Collections.Generic;
+            using System.Collections.Immutable;
+            using System.Linq;
+
+            public static class Common
+            {
+                public static PineValue simpleFunction(PineValue env)
+                {
+                    var stack_0 =
+                        env;
+
+                    var stack_1 =
+                        KernelFunction.skip(
+                            1,
+                            stack_0);
+
+                    var stack_2 =
+                        KernelFunction.head(
+                            stack_1);
+
+                    var stack_2_as_int =
+                        KernelFunction.SignedIntegerFromValueRelaxed(
+                            stack_2);
+
+                    var stack_3_as_int =
+                        stack_2_as_int + 1L;
+
+                    if (stack_3_as_int is { } stack_3_as_int_not_null)
+                    {
+                        return PineValueAsInteger.ValueFromSignedInteger(
+                                stack_3_as_int_not_null);
+                    }
+
+                    return PineValue.EmptyList;
+                }
+            }
+            """;
+
+        var appCodeTree =
+            TreeNodeWithStringPath.EmptyTree
+            .SetNodeAtPathSorted(
+                ["elm.json"],
+                TreeNodeWithStringPath.Blob(Encoding.UTF8.GetBytes(elmJsonFile)))
+            .SetNodeAtPathSorted(
+                ["src", "Common.elm"],
+                TreeNodeWithStringPath.Blob(Encoding.UTF8.GetBytes(elmModuleText)));
+
+        var compiledEnv =
+            ElmCompiler.CompileInteractiveEnvironment(
+                appCodeTree,
+                rootFilePaths: [["src", "Common.elm"]],
+                skipLowering: true,
+                skipFilteringForSourceDirs: false)
+            .Extract(err => throw new System.Exception(err));
+
+        var parsedEnv =
+            ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnv)
+            .Extract(err => throw new System.Exception(err));
+
+        var compiledModuleCommon =
+            parsedEnv.Modules.Single(m => m.moduleName is "Common");
+
+        var compiledModuleCommonCSharp =
+            Pine.Pine.CompilePineToDotNet.CompileModuleToCSharp.BuildCSharpClassStringFromModule(
+                compiledModuleCommon.moduleValue,
+                containerConfig:
+                new SyntaxContainerConfig(
+                    ContainerTypeName: "Common",
+                    DictionaryMemberName: ""));
+
+        var compilationUnitSyntax =
+            SyntaxFactory.CompilationUnit()
+            .WithUsings([.. compiledModuleCommonCSharp.UsingDirectives])
+            .WithMembers(
+            SyntaxFactory.List<MemberDeclarationSyntax>(
+                [compiledModuleCommonCSharp.ClassDeclarationSyntax]));
+
+        var formattedNode =
+            FormatCSharpSyntaxRewriter.FormatSyntaxTree(
+                compilationUnitSyntax.NormalizeWhitespace(eol: "\n"));
+
+        var formattedNodeText =
+            formattedNode.ToFullString()
+            .Trim();
+
+        formattedNodeText.Should().Be(expectedCSharp.Trim());
     }
 }

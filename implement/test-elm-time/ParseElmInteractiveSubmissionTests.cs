@@ -85,7 +85,7 @@ public class ParseElmInteractiveSubmissionTests
     public static Result<string, PineValue> ParseElmInteractiveSubmissionTextToPineValue(string submissionText)
     {
         var elmCompilerFromBundle =
-            Pine.Core.Elm.BundledElmEnvironments.BundledElmCompilerCompiledEnvValue();
+            BundledElmEnvironments.BundledElmCompilerCompiledEnvValue();
 
         Assert.IsNotNull(
             elmCompilerFromBundle,

@@ -456,7 +456,7 @@ public class ParseElmModuleTextToPineValueTests
     public static Result<string, PineValue> ParseElmModuleTextToPineValue(string elmModuleText)
     {
         var elmCompilerFromBundle =
-            Pine.Core.Elm.BundledElmEnvironments.BundledElmCompilerCompiledEnvValue();
+            BundledElmEnvironments.BundledElmCompilerCompiledEnvValue();
 
         Assert.IsNotNull(
             elmCompilerFromBundle,
