@@ -36,8 +36,8 @@ public class SelfTest
 
         var loadFromGithubResult =
             LoadFromGitHubOrGitLab.LoadFromUrl(
-                    "https://github.com/pine-vm/pine/blob/30c482748f531899aac2b2d4895e5f0e52258be7/")
-                .Extract(error => throw new Exception("Failed to load from GitHub: " + error));
+                "https://github.com/pine-vm/pine/blob/30c482748f531899aac2b2d4895e5f0e52258be7/")
+            .Extract(error => throw new Exception("Failed to load from GitHub: " + error));
 
         var loadedFilesNamesAndContents =
             loadFromGithubResult.tree.EnumerateBlobsTransitive()
@@ -56,7 +56,7 @@ public class SelfTest
 
         foreach (var expectedFileNameAndHash in expectedFilesNamesAndHashes)
         {
-            if (loadedFilesNamesAndHashes.Contains(expectedFileNameAndHash))
+            if (!loadedFilesNamesAndHashes.Contains(expectedFileNameAndHash))
             {
                 throw new Exception(
                     "Collection of loaded files contains a file named '" +
