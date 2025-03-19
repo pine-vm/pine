@@ -693,196 +693,6 @@ processEvent config hostEvent stateBefore =
                 |> ListExposedFunctionsShimResponse
             )
 
-        ApplyFunctionShimRequest applyFunction ->
-            let
-                returnError errorText =
-                    ( stateBefore
-                    , errorText
-                        |> Err
-                        |> ApplyFunctionShimResponse
-                    )
-            in
-            case config.exposedFunctions |> Dict.get applyFunction.functionName of
-                Nothing ->
-                    returnError
-                        ("None of the exposed functions matches name '"
-                            ++ applyFunction.functionName
-                            ++ "'. This app only exposes the following "
-                            ++ String.fromInt (Dict.size config.exposedFunctions)
-                            ++ " functions: "
-                            ++ String.join ", " (Dict.keys config.exposedFunctions)
-                        )
-
-                Just exposedFunction ->
-                    let
-                        resolveStateSourceResult =
-                            applyFunction.arguments.stateArgument
-                                |> Maybe.map (resolveStateSource config stateBefore >> Result.map Just)
-                                |> Maybe.withDefault (Ok Nothing)
-                    in
-                    case resolveStateSourceResult of
-                        Err err ->
-                            returnError ("Failed to resolve state source: " ++ err)
-
-                        Ok stateArgument ->
-                            case
-                                exposedFunction.handler
-                                    { stateArgument = stateArgument
-                                    , serializedArgumentsJson = applyFunction.arguments.serializedArgumentsJson
-                                    }
-                            of
-                                Err err ->
-                                    returnError err
-
-                                Ok ( maybeFunctionResultState, maybeFunctionResultOther ) ->
-                                    let
-                                        producedStateDifferentFromStateArgument =
-                                            (maybeFunctionResultState /= Nothing)
-                                                && (maybeFunctionResultState /= stateArgument)
-
-                                        updateStateResult =
-                                            case applyFunction.stateDestinationBranches of
-                                                [] ->
-                                                    Ok stateBefore
-
-                                                destBranches ->
-                                                    case maybeFunctionResultState of
-                                                        Nothing ->
-                                                            Err "Function did not return a new state"
-
-                                                        Just newAppState ->
-                                                            stateBefore
-                                                                |> setStateOnBranches destBranches newAppState
-                                                                |> Ok
-                                    in
-                                    case updateStateResult of
-                                        Err err ->
-                                            returnError err
-
-                                        Ok state ->
-                                            ( state
-                                            , ApplyFunctionShimResponse
-                                                (Ok
-                                                    { resultLessStateJson = maybeFunctionResultOther
-                                                    , producedStateDifferentFromStateArgument = producedStateDifferentFromStateArgument
-                                                    }
-                                                )
-                                            )
-
-        SerializeStateShimRequest stateSource ->
-            case resolveStateSource config stateBefore stateSource of
-                Err err ->
-                    ( stateBefore
-                    , ("Failed to resolve state source: " ++ err)
-                        |> Err
-                        |> SerializeStateShimResponse
-                    )
-
-                Ok appState ->
-                    ( stateBefore
-                    , appState
-                        |> config.appStateLessShim
-                        |> config.jsonEncodeAppState
-                        |> Ok
-                        |> SerializeStateShimResponse
-                    )
-
-        SetBranchesStateShimRequest stateSource branches ->
-            case resolveStateSource config stateBefore stateSource of
-                Err err ->
-                    ( stateBefore
-                    , ("Failed to resolve state source: " ++ err)
-                        |> Err
-                        |> SetBranchesStateShimResponse
-                    )
-
-                Ok appState ->
-                    ( setStateOnBranches branches appState stateBefore
-                    , "" |> Ok |> SetBranchesStateShimResponse
-                    )
-
-        EstimateSerializedStateLengthShimRequest stateSource ->
-            case resolveStateSource config stateBefore stateSource of
-                Err err ->
-                    ( stateBefore
-                    , ("Failed to resolve state source: " ++ err)
-                        |> Err
-                        |> EstimateSerializedStateLengthShimResponse
-                    )
-
-                Ok appState ->
-                    ( stateBefore
-                    , appState
-                        |> config.appStateLessShim
-                        |> config.estimateJsonEncodeAppStateLength
-                        |> Ok
-                        |> EstimateSerializedStateLengthShimResponse
-                    )
-
-        ListBranchesShimRequest ->
-            ( stateBefore
-            , stateBefore.branches
-                |> Dict.keys
-                |> ListBranchesShimResponse
-            )
-
-        RemoveBranchesShimRequest branchesToRemove ->
-            let
-                branches =
-                    stateBefore.branches
-                        |> Dict.filter (List.member >> (|>) branchesToRemove >> not >> always)
-
-                removedCount =
-                    Dict.size stateBefore.branches - Dict.size branches
-            in
-            ( { stateBefore | branches = branches }
-            , RemoveBranchesShimResponse { removedCount = removedCount }
-            )
-
-        TestAreStatesEqualRequest statesSources ->
-            statesSources
-                |> List.map (resolveStateSource config stateBefore)
-                |> List.foldr (Result.map2 (::)) (Ok [])
-                |> Result.mapError ((++) "Failed to resolve state source: ")
-                |> Result.map (\\states ->
-                    case states of
-                        [] ->
-                            True
-
-                        first :: others ->
-                            List.all ((==) first) others)
-                |> TestAreStatesEqualResponse
-                |> Tuple.pair stateBefore
-
-
-setStateOnBranches : List String -> appState -> StateShimState appState -> StateShimState appState
-setStateOnBranches branches appState stateBefore =
-    { stateBefore
-        | branches =
-            branches
-                |> List.foldl
-                    (\\branchName -> Dict.insert branchName appState)
-                    stateBefore.branches
-    }
-
-
-resolveStateSource : StateShimConfig appState appStateLessShim -> StateShimState appState -> StateSource -> Result String appState
-resolveStateSource config shimState stateSource =
-    case stateSource of
-        JsonStateSource stateJson ->
-            stateJson
-                |> Json.Decode.decodeValue config.jsonDecodeAppState
-                |> Result.map config.initAppShimState
-                |> Result.mapError (Json.Decode.errorToString >> (++) "Failed to decode: ")
-
-        BranchStateSource branchName ->
-            case Dict.get branchName shimState.branches of
-                Nothing ->
-                    Err ("Branch named '" ++ branchName ++ "' does not exist")
-
-                Just appState ->
-                    Ok appState
-
 
 exposedFunctionExpectingSingleArgument :
     Json.Decode.Decoder arg
@@ -949,42 +759,16 @@ type alias ResponseOverSerialInterface =
 
 type StateShimRequest
     = ListExposedFunctionsShimRequest
-    | ApplyFunctionShimRequest ApplyFunctionShimRequestStruct
-    | SerializeStateShimRequest StateSource
-    | SetBranchesStateShimRequest StateSource (List String)
-    | EstimateSerializedStateLengthShimRequest StateSource
-    | ListBranchesShimRequest
-    | RemoveBranchesShimRequest (List String)
-    | TestAreStatesEqualRequest (List StateSource)
 
 
 type StateShimResponse
     = ListExposedFunctionsShimResponse (List { functionName : String, functionDescription : ExposedFunctionDescription })
-    | ApplyFunctionShimResponse (Result String FunctionApplicationResult)
-    | SerializeStateShimResponse (Result String Json.Encode.Value)
-    | SetBranchesStateShimResponse (Result String String)
-    | EstimateSerializedStateLengthShimResponse (Result String Int)
-    | ListBranchesShimResponse (List String)
-    | RemoveBranchesShimResponse { removedCount : Int }
-    | TestAreStatesEqualResponse (Result String Bool)
-
-
-type alias ApplyFunctionShimRequestStruct =
-    { functionName : String
-    , arguments : ApplyFunctionArguments (Maybe StateSource)
-    , stateDestinationBranches : List String
-    }
 
 
 type alias ApplyFunctionArguments state =
     { stateArgument : state
     , serializedArgumentsJson : List Json.Encode.Value
     }
-
-
-type StateSource
-    = JsonStateSource Json.Encode.Value
-    | BranchStateSource String
 
 
 type alias ExposedFunctionDescription =

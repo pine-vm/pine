@@ -39,11 +39,6 @@ public abstract record StateShimResponseStruct
         : StateShimResponseStruct;
 }
 
-public record ApplyFunctionShimRequestStruct(
-    string functionName,
-    ApplyFunctionArguments<Maybe<StateSource>> arguments,
-    IReadOnlyList<string> stateDestinationBranches);
-
 public record ApplyFunctionArguments<StateT>(
     StateT stateArgument,
     IReadOnlyList<JsonElement> serializedArgumentsJson)
