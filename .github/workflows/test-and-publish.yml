@@ -101,3 +101,6 @@ jobs:
       # elm: security: createProcess: runInteractiveProcess: exec: does not exist (No such file or directory)
       if: ${{ !contains( matrix.environment, 'macos') }}
       run: ./publish/pine  elm-test-rs  ./implement/pine/Elm/elm-compiler
+
+    - name: dotnet  build-server  shutdown
+      run: dotnet  build-server  shutdown
