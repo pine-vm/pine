@@ -1,16 +1,11 @@
-using ElmTime.Elm019;
-using ElmTime.JavaScript;
-using Pine;
 using Pine.Core;
 using Pine.Core.Elm;
 using Pine.Elm;
 using Pine.Elm019;
-using Pine.ElmInteractive;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.Json.Serialization;
@@ -20,282 +15,8 @@ namespace ElmTime.ElmInteractive;
 
 public class ElmInteractive
 {
-    public static IFileStore CompiledModulesCacheFileStoreDefault =>
-        new FileStoreFromSystemIOFile(
-            Path.Combine(Filesystem.CacheDirectory, "elm-interactive-compiled-modules", Program.AppVersionId));
-
-    public static ICompiledModulesCache CompiledModulesCacheDefault =>
-        new CompiledModulesFileCache(CompiledModulesCacheFileStoreDefault);
-
     public static readonly ConcurrentDictionary<TreeNodeWithStringPath, System.Threading.Tasks.Task<string>>
         JavaScriptToEvaluateElmFromCompilerTask = new();
-
-    public static System.Threading.Tasks.Task<string> JavaScriptToEvaluateElmFromCompilerCachedTask(
-        TreeNodeWithStringPath compileElmProgramCodeFiles) =>
-        JavaScriptToEvaluateElmFromCompilerTask.GetOrAdd(
-            compileElmProgramCodeFiles,
-            valueFactory:
-            compileElmProgramCodeFiles =>
-            System.Threading.Tasks.Task.Run(() => PrepareJavaScriptToEvaluateElm(compileElmProgramCodeFiles)));
-
-    public static Result<string, EvaluatedStruct> EvaluateSubmissionAndGetResultingValue(
-        IJavaScriptEngine evalElmPreparedJavaScriptEngine,
-        TreeNodeWithStringPath? appCodeTree,
-        string submission,
-        IReadOnlyList<string>? previousLocalSubmissions = null)
-    {
-        var modulesTexts =
-            appCodeTree is null
-            ?
-            []
-            :
-            ModulesTextsFromAppCodeTree(
-                appCodeTree,
-                skipLowering: false,
-                rootFilePaths: []);
-
-        var argumentsJson = System.Text.Json.JsonSerializer.Serialize(
-            new
-            {
-                modulesTexts = modulesTexts ?? [],
-                submission = submission,
-                previousLocalSubmissions = previousLocalSubmissions ?? [],
-            }
-        );
-
-        var responseJson =
-            evalElmPreparedJavaScriptEngine.CallFunction("evaluateSubmissionInInteractive", argumentsJson).ToString()!;
-
-        var responseStructure =
-            System.Text.Json.JsonSerializer.Deserialize<EvaluateSubmissionResponseStructure>(responseJson)!;
-
-        if (responseStructure.DecodedArguments is null)
-            throw new Exception("Failed to decode arguments: " + responseStructure.FailedToDecodeArguments);
-
-        if (responseStructure.DecodedArguments.Evaluated is null)
-            return responseStructure.DecodedArguments.FailedToEvaluate!;
-
-        return
-            responseStructure.DecodedArguments.Evaluated;
-    }
-
-    public static IReadOnlyList<string> GetDefaultElmCoreModulesTexts(
-        IJavaScriptEngine evalElmPreparedJavaScriptEngine)
-    {
-        var responseJson =
-            evalElmPreparedJavaScriptEngine.CallFunction("getDefaultElmCoreModulesTexts", 0).ToString()!;
-
-        return
-            System.Text.Json.JsonSerializer.Deserialize<IReadOnlyList<string>>(responseJson)!;
-    }
-
-    public static Result<string, (PineValue compileResult, CompilationCache compilationCache)> CompileInteractiveEnvironment(
-        TreeNodeWithStringPath? appCodeTree,
-        IReadOnlyList<IReadOnlyList<string>> rootFilePaths,
-        bool skipLowering,
-        CompilationCache compilationCacheBefore)
-    {
-        var includedModulesTexts =
-            /*
-            GetDefaultElmCoreModulesTexts(evalElmPreparedJavaScriptEngine)
-            .Concat(ModulesTextsFromAppCodeTree(appCodeTree) ?? [])
-            .ToImmutableList();
-            */
-            ModulesTextsFromAppCodeTree(
-                appCodeTree ?? TreeNodeWithStringPath.EmptyTree,
-                skipLowering,
-                rootFilePaths: rootFilePaths);
-
-        return
-            CompileInteractiveEnvironmentForModulesCachingIncrements(
-                elmModulesTextsBeforeSort: includedModulesTexts,
-                compilationCacheBefore)
-            .Map(compileResultAndCache =>
-            (compileResult: compileResultAndCache.compileResult.environmentPineValue,
-            compileResultAndCache.compilationCache));
-    }
-
-    private static Result<string, (CompileInteractiveEnvironmentResult compileResult, CompilationCache compilationCache)>
-        CompileInteractiveEnvironmentForModulesCachingIncrements(
-        IReadOnlyList<string> elmModulesTextsBeforeSort,
-        CompilationCache compilationCacheBefore)
-    {
-        var elmModulesTexts =
-            ElmSyntax.ElmModule.ModulesTextOrderedForCompilationByDependencies(elmModulesTextsBeforeSort)
-            .ToImmutableList();
-
-        var baseResults =
-            compilationCacheBefore.CompileInteractiveEnvironmentResults
-            .Where(cachedResult =>
-            {
-                var cachedResultAllModules = cachedResult.AllModulesTextsList;
-
-                return elmModulesTexts.Take(cachedResultAllModules.Count).SequenceEqual(cachedResultAllModules);
-            })
-            .ToImmutableList();
-
-        var closestBaseInMemory =
-            baseResults
-            .OrderByDescending(c => c.AllModulesTextsList.Count)
-            .OfType<CompileInteractiveEnvironmentResult?>()
-            .FirstOrDefault();
-
-        var elmModulesTextsFromBaseInMemory =
-            closestBaseInMemory is null ?
-            elmModulesTexts :
-            [.. elmModulesTexts.Skip(closestBaseInMemory.AllModulesTextsList.Count)];
-
-        var closestBaseFromFile =
-            CompiledModulesCacheDefault.GetClosestBase(elmModulesTexts);
-
-        var elmModulesTextsFromBaseFromFile =
-            closestBaseFromFile.HasValue ?
-            [.. elmModulesTexts.Skip(closestBaseFromFile.Value.CompiledModules.Count)] :
-            elmModulesTexts;
-
-        using var evalElmPreparedJavaScriptEngine =
-            JavaScriptEngineFromElmCompilerSourceFiles(
-                ElmCompiler.CompilerSourceContainerFilesDefault.Value);
-
-        Result<string, (CompileInteractiveEnvironmentResult compileResult, CompilationCache compilationCache)> chooseInitResult()
-        {
-            if (closestBaseFromFile.HasValue)
-            {
-                return
-                    (new CompileInteractiveEnvironmentResult(
-                        lastIncrementModulesTexts: closestBaseFromFile.Value.CompiledModules,
-                        environmentPineValueJson: closestBaseFromFile.Value.CompiledValueJson,
-                        environmentPineValue: closestBaseFromFile.Value.CompiledValue,
-                        environmentDictionary: ImmutableDictionary<string, PineValue>.Empty,
-                        parent: null),
-                    compilationCacheBefore);
-            }
-
-            if (closestBaseInMemory is not null)
-            {
-                return (closestBaseInMemory, compilationCacheBefore);
-            }
-
-            return
-                CompileInteractiveEnvironmentForModules(
-                    elmModulesTexts: [],
-                    evalElmPreparedJavaScriptEngine: evalElmPreparedJavaScriptEngine,
-                    parentEnvironment: null,
-                    compilationCacheBefore: compilationCacheBefore);
-        }
-
-        return
-            chooseInitResult()
-            .AndThen(seed =>
-            {
-                var elmModulesTextsFromBase =
-                    elmModulesTexts
-                    .Skip(seed.compileResult.AllModulesTextsList.Count)
-                    .ToImmutableList();
-
-                return
-                    ResultExtension.AggregateExitingOnFirstError(
-                        sequence: elmModulesTextsFromBase,
-                        aggregateFunc: (prev, elmCoreModuleText) =>
-                        {
-                            var resultBeforeCache =
-                            CompileInteractiveEnvironmentForModules(
-                                elmModulesTexts: [elmCoreModuleText],
-                                evalElmPreparedJavaScriptEngine: evalElmPreparedJavaScriptEngine,
-                                parentEnvironment: prev.compileResult,
-                                compilationCacheBefore: prev.compilationCache);
-
-                            return
-                            resultBeforeCache
-                            .Map(beforeCache =>
-                            {
-                                CompiledModulesCacheDefault.Set(
-                                    beforeCache.compileResult.AllModulesTextsList,
-                                    beforeCache.compileResult.environmentPineValue);
-
-                                var compileInteractiveEnvironmentResults =
-                                beforeCache.compilationCache.CompileInteractiveEnvironmentResults.Add(beforeCache.compileResult);
-
-                                var cache = beforeCache.compilationCache
-                                with
-                                {
-                                    CompileInteractiveEnvironmentResults = compileInteractiveEnvironmentResults
-                                };
-
-                                return (beforeCache.compileResult, cache);
-                            });
-                        },
-                        aggregateSeed: seed);
-            });
-    }
-
-    public static IJavaScriptEngine JavaScriptEngineFromElmCompilerSourceFiles(
-        TreeNodeWithStringPath compilerSourceFiles)
-    {
-        var javaScriptEngine =
-            JavaScriptEngineJintOptimizedForElmApps.Create();
-
-        PrepareJavaScriptEngineToEvaluateElm(
-            compileElmProgramCodeFiles: compilerSourceFiles,
-            javaScriptEngine);
-
-        return javaScriptEngine;
-    }
-
-    private static Result<string, (CompileInteractiveEnvironmentResult compileResult, CompilationCache compilationCache)>
-        CompileInteractiveEnvironmentForModules(
-        IReadOnlyList<string> elmModulesTexts,
-        CompileInteractiveEnvironmentResult? parentEnvironment,
-        IJavaScriptEngine evalElmPreparedJavaScriptEngine,
-        CompilationCache compilationCacheBefore)
-    {
-        var environmentBefore =
-            parentEnvironment is null ?
-            FromPineValueWithoutBuildingDictionary(PineValue.EmptyList) :
-            parentEnvironment.environmentPineValueJson;
-
-        var argumentsJson = System.Text.Json.JsonSerializer.Serialize(
-            new CompileElmInteractiveEnvironmentRequest(
-                modulesTexts: elmModulesTexts,
-                environmentBefore: environmentBefore),
-            options: compilerInterfaceJsonSerializerOptions);
-
-        var responseJson =
-            evalElmPreparedJavaScriptEngine.CallFunction("compileInteractiveEnvironment", argumentsJson).ToString()!;
-
-        var responseStructure =
-            System.Text.Json.JsonSerializer.Deserialize<Result<string, PineValueJson>>(
-                responseJson,
-                compilerInterfaceJsonSerializerOptions)!;
-
-        return
-            responseStructure
-            .Map(fromJson =>
-            {
-                var parentEnvDictionary =
-                MergePineValueFromJsonDictionary(
-                    environmentBefore!,
-                    parentEnvironment?.environmentDictionary.ToImmutableDictionary());
-
-                var environmentPineValue =
-                ParsePineValueFromJson(
-                    fromJson!,
-                    parentDictionary: parentEnvDictionary);
-
-                var (environmentJson, compilationCacheTask) =
-                FromPineValueBuildingDictionary(
-                    environmentPineValue, compilationCache: compilationCacheBefore);
-
-                return
-                (new CompileInteractiveEnvironmentResult(
-                    lastIncrementModulesTexts: [.. elmModulesTexts],
-                    environmentPineValueJson: environmentJson.json,
-                    environmentPineValue: environmentPineValue,
-                    environmentDictionary: environmentJson.dictionary,
-                    parent: parentEnvironment),
-                    compilationCacheTask.Result);
-            });
-    }
 
     public static long EstimatePineValueMemoryUsage(PineValue pineValue)
     {
@@ -356,123 +77,6 @@ public class ElmInteractive
         }
     }
 
-    internal static Result<string, (PineValue compiledValue, CompilationCache cache)> CompileInteractiveSubmission(
-        IJavaScriptEngine evalElmPreparedJavaScriptEngine,
-        PineValue environment,
-        string submission,
-        Action<string>? addInspectionLogEntry,
-        CompilationCache compilationCacheBefore)
-    {
-        var clock = System.Diagnostics.Stopwatch.StartNew();
-
-        void logDuration(string label) =>
-            addInspectionLogEntry?.Invoke(
-                label + " duration: " + CommandLineInterface.FormatIntegerForDisplay(clock.ElapsedMilliseconds) + " ms");
-
-        var (environmentJson, compilationCacheTask) =
-            FromPineValueBuildingDictionary(environment, compilationCacheBefore);
-
-        var requestJson =
-            System.Text.Json.JsonSerializer.Serialize(
-                new CompileInteractiveSubmissionRequest
-                (
-                    environment: environmentJson.json,
-                    submission: submission
-                ),
-                options: compilerInterfaceJsonSerializerOptions);
-
-        logDuration("Serialize to JSON (" + CommandLineInterface.FormatIntegerForDisplay(requestJson.Length) + " chars)");
-
-        clock.Restart();
-
-        var responseJson =
-            evalElmPreparedJavaScriptEngine.CallFunction("compileInteractiveSubmission", requestJson).ToString()!;
-
-        logDuration("JavaScript function");
-
-        clock.Restart();
-
-        var responseStructure =
-            System.Text.Json.JsonSerializer.Deserialize<Result<string, PineValueJson>>(
-                responseJson,
-                options: compilerInterfaceJsonSerializerOptions)!;
-
-        var response =
-            responseStructure
-            .Map(fromJson => ParsePineValueFromJson(
-                fromJson,
-                parentDictionary: environmentJson.dictionary.ToImmutableDictionary()));
-
-        logDuration("Deserialize (from " + CommandLineInterface.FormatIntegerForDisplay(responseJson.Length) + " chars) and " + nameof(ParsePineValueFromJson));
-
-        return response.Map(value => (value, compilationCacheTask.Result));
-    }
-
-
-    public static Result<string, PineValue> ParseInteractiveSubmission(
-        IJavaScriptEngine evalElmPreparedJavaScriptEngine,
-        string submission,
-        Action<string>? addInspectionLogEntry)
-    {
-        var clock = System.Diagnostics.Stopwatch.StartNew();
-
-        void logDuration(string label) =>
-            addInspectionLogEntry?.Invoke(
-                label + " duration: " + CommandLineInterface.FormatIntegerForDisplay(clock.ElapsedMilliseconds) + " ms");
-
-        clock.Restart();
-
-        var responseJson =
-            evalElmPreparedJavaScriptEngine.CallFunction("parseInteractiveSubmissionToPineValue", submission).ToString()!;
-
-        logDuration("JavaScript function");
-
-        clock.Restart();
-
-        var responseStructure =
-            System.Text.Json.JsonSerializer.Deserialize<Result<string, PineValueJson>>(
-                responseJson,
-                options: compilerInterfaceJsonSerializerOptions)!;
-
-        var response =
-            responseStructure
-            .Map(fromJson => ParsePineValueFromJson(
-                fromJson,
-                parentDictionary: null));
-
-        logDuration(
-            "Deserialize (from " + CommandLineInterface.FormatIntegerForDisplay(responseJson.Length) +
-            " chars) and " + nameof(ParsePineValueFromJson));
-
-        return response;
-    }
-
-    public static Result<string, PineValue> ParseElmModuleTextToPineValue(
-        string elmModuleText,
-        IJavaScriptEngine compilerJavaScriptEngine)
-    {
-        var jsonEncodedElmModuleText =
-            System.Text.Json.JsonSerializer.Serialize(elmModuleText);
-
-        var responseJson =
-            compilerJavaScriptEngine.CallFunction(
-                "parseElmModuleTextToPineValue",
-                jsonEncodedElmModuleText)
-            .ToString()!;
-
-        var responseResultStructure =
-            System.Text.Json.JsonSerializer.Deserialize<Result<string, PineValueJson>>(
-                responseJson,
-                compilerInterfaceJsonSerializerOptions)!;
-
-        return
-            responseResultStructure
-            .Map(responseStructure =>
-            ParsePineValueFromJson(
-                responseStructure,
-                parentDictionary: null));
-    }
-
     public record CompilationCache(
         IImmutableDictionary<PineValue, PineValueMappedForTransport> ValueMappedForTransportCache,
         IImmutableDictionary<PineValue, (PineValueJson, IReadOnlyDictionary<string, PineValue>)> ValueJsonCache,
@@ -483,31 +87,6 @@ public class ElmInteractive
                 ImmutableDictionary<PineValue, PineValueMappedForTransport>.Empty,
                 ImmutableDictionary<PineValue, (PineValueJson, IReadOnlyDictionary<string, PineValue>)>.Empty,
                 ImmutableHashSet<CompileInteractiveEnvironmentResult>.Empty);
-    }
-
-    private record CompileElmInteractiveEnvironmentRequest(
-        PineValueJson environmentBefore,
-        IReadOnlyList<string> modulesTexts);
-
-    private record CompileInteractiveSubmissionRequest(
-        PineValueJson environment,
-        string submission);
-
-    public static Result<string, EvaluatedStruct> SubmissionResponseFromResponsePineValue(
-        IJavaScriptEngine evalElmPreparedJavaScriptEngine,
-        PineValue response)
-    {
-        var responseJson =
-            evalElmPreparedJavaScriptEngine.CallFunction(
-                "submissionResponseFromResponsePineValue",
-                System.Text.Json.JsonSerializer.Serialize(
-                    FromPineValueWithoutBuildingDictionary(response),
-                    options: compilerInterfaceJsonSerializerOptions)).ToString()!;
-
-        var responseStructure =
-            System.Text.Json.JsonSerializer.Deserialize<Result<string, EvaluatedStruct>>(responseJson)!;
-
-        return responseStructure;
     }
 
     public static Result<string, EvaluatedStruct> SubmissionResponseFromResponsePineValue(
@@ -630,9 +209,6 @@ public class ElmInteractive
                 Origin: pineValue);
         }
     }
-
-    public static PineValueJson FromPineValueWithoutBuildingDictionary(PineValue pineValue) =>
-        FromPineValueWithoutBuildingDictionary(PineValueMappedForTransport.FromPineValue(pineValue, cache: null));
 
     private static PineValueJson FromPineValueWithoutBuildingDictionary(
         PineValueMappedForTransport pineValue,
@@ -820,7 +396,6 @@ public class ElmInteractive
         throw new NotImplementedException("Unexpected shape of Pine value from JSON");
     }
 
-
     public static ImmutableDictionary<string, PineValue>? MergePineValueFromJsonDictionary(
         PineValueJson fromJson,
         ImmutableDictionary<string, PineValue>? parentDictionary)
@@ -838,33 +413,6 @@ public class ElmInteractive
         }
 
         return dictionary;
-    }
-
-    public static IReadOnlyList<string> ModulesTextsFromAppCodeTree(
-        TreeNodeWithStringPath appCodeTree,
-        bool skipLowering,
-        IReadOnlyList<IReadOnlyList<string>> rootFilePaths)
-    {
-        var allModules =
-            ModulesFilePathsAndTextsFromAppCodeTree(
-                appCodeTree,
-                skipLowering,
-                entryPointsFilePaths: rootFilePaths.ToImmutableHashSet(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>()),
-                skipFilteringForSourceDirs: false,
-                mergeKernelModules: true)
-            .Where(file => !ShouldIgnoreSourceFile(file.filePath, file.fileContent))
-            .ToImmutableArray();
-
-        var rootModules =
-            allModules
-            .Where(c => rootFilePaths.Count is 0 || rootFilePaths.Any(rootFilePath => c.filePath.SequenceEqual(rootFilePath)))
-            .ToImmutableArray();
-
-        return
-            ElmSyntax.ElmModule.ModulesTextOrderedForCompilationByDependencies(
-                rootModulesTexts:
-                [.. rootModules.Select(m => m.moduleText)],
-                [.. allModules.Select(m => m.moduleText)]);
     }
 
     public static bool ShouldIgnoreSourceFile(IReadOnlyList<string> filePath, ReadOnlyMemory<byte> fileContent)
@@ -978,85 +526,6 @@ public class ElmInteractive
                 },
                 fromOk: compilationOk => SortedTreeFromSetOfBlobsWithStringPath(compilationOk.result.compiledFiles));
     }
-
-    public static IJavaScriptEngine PrepareJavaScriptEngineToEvaluateElm(
-        TreeNodeWithStringPath compileElmProgramCodeFiles) =>
-        PrepareJavaScriptEngineToEvaluateElm(
-            compileElmProgramCodeFiles,
-            javaScriptEngine: JavaScriptEngineJintOptimizedForElmApps.Create());
-
-    public static IJavaScriptEngine PrepareJavaScriptEngineToEvaluateElm(
-        TreeNodeWithStringPath compileElmProgramCodeFiles,
-        IJavaScriptEngine javaScriptEngine)
-    {
-        javaScriptEngine.Evaluate(JavaScriptToEvaluateElmFromCompilerCachedTask(compileElmProgramCodeFiles).Result);
-
-        return javaScriptEngine;
-    }
-
-    public static string PrepareJavaScriptToEvaluateElm(TreeNodeWithStringPath compileElmProgramCodeFiles) =>
-        PrepareJavaScriptToEvaluateElm(TreeToFlatDictionaryWithPathComparer(compileElmProgramCodeFiles));
-
-    public static string PrepareJavaScriptToEvaluateElm(
-        IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> compileElmProgramCodeFiles)
-    {
-        var elmMakeResult =
-            Elm019Binaries.ElmMakeToJavascript(
-                compileElmProgramCodeFiles,
-                workingDirectoryRelative: null,
-                ["src", "ElmInteractiveMain.elm"]);
-
-        var javascriptFromElmMake =
-            Encoding.UTF8.GetString(
-                elmMakeResult.Extract(err => throw new Exception("Failed elm make: " + err)).producedFile.Span);
-
-        var javascriptMinusCrashes = ProcessFromElm019Code.JavascriptMinusCrashes(javascriptFromElmMake);
-
-        var listFunctionToPublish =
-            new[]
-            {
-                (functionNameInElm: "ElmInteractiveMain.evaluateSubmissionInInteractive",
-                publicName: "evaluateSubmissionInInteractive",
-                arity: 1),
-
-                (functionNameInElm: "ElmInteractiveMain.getDefaultElmCoreModulesTexts",
-                publicName: "getDefaultElmCoreModulesTexts",
-                arity: 1),
-
-                (functionNameInElm: "ElmInteractiveMain.compileInteractiveEnvironment",
-                publicName: "compileInteractiveEnvironment",
-                arity: 1),
-
-                (functionNameInElm: "ElmInteractiveMain.parseInteractiveSubmissionToPineValue",
-                publicName: "parseInteractiveSubmissionToPineValue",
-                arity: 1),
-
-                (functionNameInElm: "ElmInteractiveMain.compileInteractiveSubmission",
-                publicName: "compileInteractiveSubmission",
-                arity: 1),
-
-                (functionNameInElm: "ElmInteractiveMain.submissionResponseFromResponsePineValue",
-                publicName: "submissionResponseFromResponsePineValue",
-                arity: 1),
-
-                (functionNameInElm: "ElmInteractiveMain.parseElmModuleTextToPineValue",
-                publicName: "parseElmModuleTextToPineValue",
-                arity: 1),
-            };
-
-        return
-            ProcessFromElm019Code.PublishFunctionsFromJavascriptFromElmMake(
-                javascriptMinusCrashes,
-                listFunctionToPublish);
-    }
-
-    private record EvaluateSubmissionResponseStructure
-        (string? FailedToDecodeArguments = null,
-        DecodedArgumentsStruct? DecodedArguments = null);
-
-    private record DecodedArgumentsStruct(
-        string? FailedToEvaluate = null,
-        EvaluatedStruct? Evaluated = null);
 
     public record EvaluatedStruct(
         string DisplayText);

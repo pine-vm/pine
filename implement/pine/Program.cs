@@ -2633,9 +2633,6 @@ public class Program
         ElmEngineTypeCLI elmEngineTypeCLI) =>
         elmEngineTypeCLI switch
         {
-            ElmEngineTypeCLI.JavaScript_Jint =>
-            new ElmEngineType.JavaScript_Jint(),
-
             ElmEngineTypeCLI.Pine =>
             new ElmEngineType.Pine(
                 Caching: true,

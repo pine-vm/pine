@@ -341,10 +341,6 @@ public class CompileElmCompilerTests
 
         var compilerProgram = ElmCompiler.CompilerSourceContainerFilesDefault.Value;
 
-        using var compileJavaScriptEngine =
-            ElmInteractive.PrepareJavaScriptEngineToEvaluateElm(
-                compileElmProgramCodeFiles: compilerProgram);
-
         var compilerPackageSourcesTrees =
             CompilerPackageSources
             .Select(LoadFromGitHubOrGitLab.LoadFromUrl)
@@ -363,7 +359,8 @@ public class CompileElmCompilerTests
             .ToImmutableArray();
 
         var elmCoreLibraryModulesTexts =
-            ElmInteractive.GetDefaultElmCoreModulesTexts(compileJavaScriptEngine);
+            ElmCompiler.ElmCoreAndKernelModulesByName.Value
+            .Select(kv => kv.Value);
 
         var elmModulesTexts = elmCoreLibraryModulesTexts;
 
@@ -468,13 +465,23 @@ public class CompileElmCompilerTests
                 declarationValueAsElmValue);
         }
 
-        Result<string, KeyValuePair<IReadOnlyList<string>, (string moduleText, PineValue parsed)>> TryParseModuleText(string moduleText)
+        var elmCompilerFromBundle =
+            BundledElmEnvironments.BundledElmCompilerCompiledEnvValue()
+            ??
+            throw new Exception("Failed to load Elm compiler from bundle.");
+
+        var bundledElmCompiler =
+            ElmCompiler.ElmCompilerFromEnvValue(elmCompilerFromBundle)
+            .Extract(err => throw new Exception(err));
+
+        Result<string, KeyValuePair<IReadOnlyList<string>, (string moduleText, PineValue parsed)>> TryParseModuleText(
+            string moduleText)
         {
             return
                 ElmTime.ElmSyntax.ElmModule.ParseModuleName(moduleText)
                 .MapError(err => "Failed parsing name for module " + moduleText.Split('\n', '\r').FirstOrDefault())
                 .AndThen(moduleName =>
-                ElmInteractive.ParseElmModuleTextToPineValue(moduleText, compileJavaScriptEngine)
+                bundledElmCompiler.ParseElmModuleText(moduleText, pineVM)
                 .MapError(err => "Failed parsing module " + moduleName + ": " + err)
                 .Map(parsedModule => new KeyValuePair<IReadOnlyList<string>, (string moduleText, PineValue parsed)>(
                     moduleName, (moduleText, parsedModule))));

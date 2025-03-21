@@ -17,11 +17,6 @@ public interface IInteractiveSession : IDisposable
         ElmEngineType engineType) =>
         engineType switch
         {
-            ElmEngineType.JavaScript_Jint =>
-            new InteractiveSessionJavaScript(
-                compileElmProgramCodeFiles: compilerSourceFiles,
-                appCodeTree: appCodeTree),
-
             ElmEngineType.Pine pineConfig =>
             new InteractiveSessionPine(
                 compilerSourceFiles: compilerSourceFiles,
@@ -42,16 +37,12 @@ public interface IInteractiveSession : IDisposable
 
 public enum ElmEngineTypeCLI
 {
-    JavaScript_Jint = 1,
     Pine = 4,
     Pine_without_cache = 4001
 }
 
 public abstract record ElmEngineType
 {
-    public record JavaScript_Jint
-        : ElmEngineType;
-
     public record Pine(
         bool Caching,
         DynamicPGOShare? DynamicPGOShare)

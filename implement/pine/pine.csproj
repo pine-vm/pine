@@ -40,7 +40,6 @@
 
   <ItemGroup>
     <PackageReference Include="certes" Version="3.0.4" />
-    <PackageReference Include="Jint" Version="3.0.2" />
     <PackageReference Include="LibGit2Sharp" Version="0.28.0" />
     <PackageReference Include="McMaster.Extensions.CommandLineUtils" Version="4.1.1" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="4.13.0" />
