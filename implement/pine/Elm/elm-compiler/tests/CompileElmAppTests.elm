@@ -178,37 +178,37 @@ parse_elm_type_annotation : Test.Test
 parse_elm_type_annotation =
     [ { testName = "Leaf String"
       , modulesTexts = []
-      , expectedResult = Ok ( CompileElmApp.LeafElmType CompileElmApp.StringLeaf, Dict.empty )
+      , expectedResult = Ok ( CompileElmApp.LeafElmType CompileElmApp.StringLeaf, [] )
       , rootTypeAnnotationText = "String"
       }
     , { testName = "Leaf Int"
       , modulesTexts = []
-      , expectedResult = Ok ( CompileElmApp.LeafElmType CompileElmApp.IntLeaf, Dict.empty )
+      , expectedResult = Ok ( CompileElmApp.LeafElmType CompileElmApp.IntLeaf, [] )
       , rootTypeAnnotationText = "Int"
       }
     , { testName = "Leaf Bool"
       , modulesTexts = []
-      , expectedResult = Ok ( CompileElmApp.LeafElmType CompileElmApp.BoolLeaf, Dict.empty )
+      , expectedResult = Ok ( CompileElmApp.LeafElmType CompileElmApp.BoolLeaf, [] )
       , rootTypeAnnotationText = "Bool"
       }
     , { testName = "Leaf Float"
       , modulesTexts = []
-      , expectedResult = Ok ( CompileElmApp.LeafElmType CompileElmApp.FloatLeaf, Dict.empty )
+      , expectedResult = Ok ( CompileElmApp.LeafElmType CompileElmApp.FloatLeaf, [] )
       , rootTypeAnnotationText = "Float"
       }
     , { testName = "Leaf Bytes"
       , modulesTexts = []
-      , expectedResult = Ok ( CompileElmApp.LeafElmType CompileElmApp.BytesLeaf, Dict.empty )
+      , expectedResult = Ok ( CompileElmApp.LeafElmType CompileElmApp.BytesLeaf, [] )
       , rootTypeAnnotationText = "Bytes.Bytes"
       }
     , { testName = "Unit"
       , modulesTexts = []
-      , expectedResult = Ok ( CompileElmApp.UnitType, Dict.empty )
+      , expectedResult = Ok ( CompileElmApp.UnitType, [] )
       , rootTypeAnnotationText = " () "
       }
     , { testName = "Empty Record"
       , modulesTexts = []
-      , expectedResult = Ok ( CompileElmApp.RecordElmType { fields = [] }, Dict.empty )
+      , expectedResult = Ok ( CompileElmApp.RecordElmType { fields = [] }, [] )
       , rootTypeAnnotationText = " {  } "
       }
     , { testName = "Record with simple fields"
@@ -221,7 +221,7 @@ parse_elm_type_annotation =
                         , ( "b", CompileElmApp.LeafElmType CompileElmApp.StringLeaf )
                         ]
                     }
-                , Dict.empty
+                , []
                 )
       , rootTypeAnnotationText = " { a : Int, b : String } "
       }
@@ -236,7 +236,7 @@ parse_elm_type_annotation =
                         , CompileElmApp.LeafElmType CompileElmApp.IntLeaf
                         ]
                     }
-                , Dict.empty
+                , []
                 )
       , rootTypeAnnotationText = " Result String Int "
       }
@@ -251,7 +251,7 @@ parse_elm_type_annotation =
       , expectedResult =
             Ok
                 ( CompileElmApp.LeafElmType CompileElmApp.IntLeaf
-                , Dict.empty
+                , []
                 )
       , rootTypeAnnotationText = " WithAlias.OurAlias "
       }
@@ -265,8 +265,8 @@ parse_elm_type_annotation =
             ]
       , expectedResult =
             Ok
-                ( CompileElmApp.ChoiceElmType "WithChoice.ChoiceType"
-                , [ ( "WithChoice.ChoiceType"
+                ( CompileElmApp.ChoiceElmType ( [ "WithChoice" ], "ChoiceType" )
+                , [ ( ( [ "WithChoice" ], "ChoiceType" )
                     , { parameters = []
                       , tags =
                             [ ( "TagA", [] )
@@ -275,7 +275,6 @@ parse_elm_type_annotation =
                       }
                     )
                   ]
-                    |> Dict.fromList
                 )
       , rootTypeAnnotationText = " WithChoice.ChoiceType "
       }
@@ -289,8 +288,8 @@ parse_elm_type_annotation =
             ]
       , expectedResult =
             Ok
-                ( CompileElmApp.ChoiceElmType "WithChoice.ChoiceType"
-                , [ ( "WithChoice.ChoiceType"
+                ( CompileElmApp.ChoiceElmType ( [ "WithChoice" ], "ChoiceType" )
+                , [ ( ( [ "WithChoice" ], "ChoiceType" )
                     , { parameters = []
                       , tags =
                             [ ( "TagA"
@@ -318,7 +317,6 @@ parse_elm_type_annotation =
                       }
                     )
                   ]
-                    |> Dict.fromList
                 )
       , rootTypeAnnotationText = " WithChoice.ChoiceType "
       }
@@ -332,17 +330,20 @@ parse_elm_type_annotation =
             ]
       , expectedResult =
             Ok
-                ( CompileElmApp.ChoiceElmType "WithChoice.RecursiveType"
-                , [ ( "WithChoice.RecursiveType"
+                ( CompileElmApp.ChoiceElmType ( [ "WithChoice" ], "RecursiveType" )
+                , [ ( ( [ "WithChoice" ], "RecursiveType" )
                     , { parameters = []
                       , tags =
-                            [ ( "TagTerminate", [ CompileElmApp.LeafElmType CompileElmApp.IntLeaf ] )
-                            , ( "TagRecurse", [ CompileElmApp.ChoiceElmType "WithChoice.RecursiveType" ] )
+                            [ ( "TagTerminate"
+                              , [ CompileElmApp.LeafElmType CompileElmApp.IntLeaf ]
+                              )
+                            , ( "TagRecurse"
+                              , [ CompileElmApp.ChoiceElmType ( [ "WithChoice" ], "RecursiveType" ) ]
+                              )
                             ]
                       }
                     )
                   ]
-                    |> Dict.fromList
                 )
       , rootTypeAnnotationText = " WithChoice.RecursiveType "
       }
@@ -357,10 +358,10 @@ parse_elm_type_annotation =
       , expectedResult =
             Ok
                 ( CompileElmApp.InstanceElmType
-                    { instantiated = CompileElmApp.ChoiceElmType "WithChoice.ChoiceType"
+                    { instantiated = CompileElmApp.ChoiceElmType ( [ "WithChoice" ], "ChoiceType" )
                     , arguments = [ CompileElmApp.LeafElmType CompileElmApp.IntLeaf ]
                     }
-                , [ ( "WithChoice.ChoiceType"
+                , [ ( ( [ "WithChoice" ], "ChoiceType" )
                     , { parameters = [ "a" ]
                       , tags =
                             [ ( "TagA", [ CompileElmApp.GenericType "a" ] )
@@ -369,7 +370,6 @@ parse_elm_type_annotation =
                       }
                     )
                   ]
-                    |> Dict.fromList
                 )
       , rootTypeAnnotationText = " WithChoice.ChoiceType Int "
       }
@@ -387,7 +387,7 @@ parse_elm_type_annotation =
                 ( CompileElmApp.RecordElmType
                     { fields = [ ( "parameterized_field", CompileElmApp.LeafElmType CompileElmApp.IntLeaf ) ]
                     }
-                , Dict.empty
+                , []
                 )
       }
     , { testName = "Record field List instance"
@@ -410,18 +410,17 @@ parse_elm_type_annotation =
                         [ ( "field_list"
                           , CompileElmApp.InstanceElmType
                                 { instantiated = CompileElmApp.LeafElmType CompileElmApp.ListLeaf
-                                , arguments = [ CompileElmApp.ChoiceElmType "OtherModule.OurType" ]
+                                , arguments = [ CompileElmApp.ChoiceElmType ( [ "OtherModule" ], "OurType" ) ]
                                 }
                           )
                         ]
                     }
-                , [ ( "OtherModule.OurType"
+                , [ ( ( [ "OtherModule" ], "OurType" )
                     , { parameters = []
                       , tags = [ ( "TagA", [] ) ]
                       }
                     )
                   ]
-                    |> Dict.fromList
                 )
       , rootTypeAnnotationText = " Main.OurAlias "
       }
@@ -442,15 +441,14 @@ parse_elm_type_annotation =
             Ok
                 ( CompileElmApp.InstanceElmType
                     { instantiated = CompileElmApp.LeafElmType CompileElmApp.ListLeaf
-                    , arguments = [ CompileElmApp.ChoiceElmType "Namespace.SomeModule.OurType" ]
+                    , arguments = [ CompileElmApp.ChoiceElmType ( [ "Namespace", "SomeModule" ], "OurType" ) ]
                     }
-                , [ ( "Namespace.SomeModule.OurType"
+                , [ ( ( [ "Namespace", "SomeModule" ], "OurType" )
                     , { parameters = []
                       , tags = [ ( "TagA", [] ) ]
                       }
                     )
                   ]
-                    |> Dict.fromList
                 )
       , rootTypeAnnotationText = " Main.OurAlias "
       }
@@ -481,11 +479,15 @@ type alias MixedRecord =
             Ok
                 ( CompileElmApp.RecordElmType
                     { fields =
-                        [ ( "int", CompileElmApp.LeafElmType CompileElmApp.IntLeaf )
-                        , ( "opaqueChoiceType", CompileElmApp.ChoiceElmType "OpaqueChoiceType.OpaqueChoiceType" )
+                        [ ( "int"
+                          , CompileElmApp.LeafElmType CompileElmApp.IntLeaf
+                          )
+                        , ( "opaqueChoiceType"
+                          , CompileElmApp.ChoiceElmType ( [ "OpaqueChoiceType" ], "OpaqueChoiceType" )
+                          )
                         ]
                     }
-                , [ ( "OpaqueChoiceType.OpaqueChoiceType"
+                , [ ( ( [ "OpaqueChoiceType" ], "OpaqueChoiceType" )
                     , { parameters = []
                       , tags =
                             [ ( "TagA", [] )
@@ -494,7 +496,6 @@ type alias MixedRecord =
                       }
                     )
                   ]
-                    |> Dict.fromList
                 )
       , rootTypeAnnotationText = " Structures.MixedRecord "
       }
@@ -814,7 +815,7 @@ Json.Decode.map3 (\\item_0 item_1 item_2 -> ( item_0, item_1, item_2 ))
     , { testName = "Instance of generic choice type"
       , typeAnnotation =
             CompileElmApp.InstanceElmType
-                { instantiated = CompileElmApp.ChoiceElmType "OwnModule.ChoiceType"
+                { instantiated = CompileElmApp.ChoiceElmType ( [ "OwnModule" ], "ChoiceType" )
                 , arguments =
                     [ CompileElmApp.LeafElmType CompileElmApp.BoolLeaf
                     ]
@@ -840,7 +841,7 @@ Json.Decode.map3 (\\item_0 item_1 item_2 -> ( item_0, item_1, item_2 ))
 emit_json_coding_expression_from_choice_type : Test.Test
 emit_json_coding_expression_from_choice_type =
     [ { testName = "One tag without parameters"
-      , choiceTypeName = "ModuleName.ChoiceType"
+      , choiceTypeName = ( [ "ModuleName" ], "ChoiceType" )
       , choiceType =
             { parameters = []
             , tags = [ ( "TagA", [] ) ]
@@ -861,12 +862,16 @@ jsonDecode_ModuleName_ChoiceType =
             }
       }
     , { testName = "Recursive type"
-      , choiceTypeName = "ModuleName.RecursiveType"
+      , choiceTypeName = ( [ "ModuleName" ], "RecursiveType" )
       , choiceType =
             { parameters = []
             , tags =
-                [ ( "TagRecurse", [ CompileElmApp.ChoiceElmType "ModuleName.RecursiveType" ] )
-                , ( "TagTerminate", [ CompileElmApp.LeafElmType CompileElmApp.IntLeaf ] )
+                [ ( "TagRecurse"
+                  , [ CompileElmApp.ChoiceElmType ( [ "ModuleName" ], "RecursiveType" ) ]
+                  )
+                , ( "TagTerminate"
+                  , [ CompileElmApp.LeafElmType CompileElmApp.IntLeaf ]
+                  )
                 ]
             }
       , expectedResult =
@@ -888,7 +893,7 @@ jsonDecode_ModuleName_RecursiveType =
             }
       }
     , { testName = "Tag with generic type instance"
-      , choiceTypeName = "ModuleName.TypeName"
+      , choiceTypeName = ( [ "ModuleName" ], "TypeName" )
       , choiceType =
             { parameters = []
             , tags =
@@ -917,7 +922,7 @@ jsonDecode_ModuleName_TypeName =
             }
       }
     , { testName = "One tag with two parameters"
-      , choiceTypeName = "ModuleName.TypeName"
+      , choiceTypeName = ( [ "ModuleName" ], "TypeName" )
       , choiceType =
             { parameters = []
             , tags =
@@ -944,7 +949,7 @@ jsonDecode_ModuleName_TypeName =
             }
       }
     , { testName = "One tag with generic parameter"
-      , choiceTypeName = "ModuleName.TypeName"
+      , choiceTypeName = ( [ "ModuleName" ], "TypeName" )
       , choiceType =
             { parameters = [ "test" ]
             , tags =
@@ -970,7 +975,7 @@ jsonDecode_ModuleName_TypeName jsonDecode_type_parameter_test =
             }
       }
     , { testName = "ListDict"
-      , choiceTypeName = "ListDict.Dict"
+      , choiceTypeName = ( [ "ListDict" ], "Dict" )
       , choiceType =
             { parameters = [ "key", "value" ]
             , tags =

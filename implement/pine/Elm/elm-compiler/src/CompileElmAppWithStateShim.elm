@@ -14,7 +14,6 @@ import CompileElmApp
         , SourceDirectories
         , SourceParsedElmModule
         , addModulesFromTextToAppFiles
-        , buildEstimateJsonEncodeLengthFunctionForTypeAnnotation
         , buildJsonConverterFunctionsForTypeAnnotation
         , buildTypeAnnotationText
         , fileContentFromString
@@ -98,13 +97,13 @@ type alias StateShimConfigJsonConverterConfig =
 type alias StateShimConfigJsonConverter =
     { isDecoder : Bool
     , typeAnnotation : ElmTypeAnnotation
-    , dependencies : Dict.Dict String ElmChoiceTypeStruct
+    , dependencies : Dict.Dict ( List String, String ) ElmChoiceTypeStruct
     }
 
 
 type alias StateShimConfigSupportingType =
     { typeAnnotation : ElmTypeAnnotation
-    , dependencies : Dict.Dict String ElmChoiceTypeStruct
+    , dependencies : Dict.Dict ( List String, String ) ElmChoiceTypeStruct
     }
 
 
@@ -126,188 +125,177 @@ loweredForAppInStateManagementShim sourceDirs stateShimConfig config sourceFiles
                 String.join "." (config.interfaceToHostRootModuleName ++ [ "interfaceToHost_processEvent" ])
             }
     in
-    config.originalSourceModules
-        |> supportingTypesModules sourceDirs stateShimConfig
-        |> Result.mapError
-            (mapLocatedInSourceFiles
-                ((++) "Failed to prepare supporting types modules: " >> OtherCompilationError)
-                >> List.singleton
-            )
-        |> Result.map
-            (\supportingTypes ->
-                let
-                    appStateType : StateShimConfigSupportingType
-                    appStateType =
-                        stateShimConfig.appStateType
+    case
+        supportingTypesModules
+            sourceDirs
+            stateShimConfig
+            config.originalSourceModules
+    of
+        Err err ->
+            Err
+                [ mapLocatedInSourceFiles
+                    ((++) "Failed to prepare supporting types modules: " >> OtherCompilationError)
+                    err
+                ]
 
-                    jsonConverterDeclarations : Dict.Dict String StateShimConfigJsonConverter
-                    jsonConverterDeclarations =
-                        supportingTypes.jsonConverterDeclarations
-                            |> Dict.union stateShimConfig.jsonConverterDeclarations
+        Ok supportingTypes ->
+            let
+                appStateType : StateShimConfigSupportingType
+                appStateType =
+                    stateShimConfig.appStateType
 
-                    supportingJsonConverterFunctionsDependencies : Dict.Dict String ElmChoiceTypeStruct
-                    supportingJsonConverterFunctionsDependencies =
-                        jsonConverterDeclarations
-                            |> Dict.values
-                            |> List.concatMap (.dependencies >> Dict.toList)
-                            |> Dict.fromList
+                jsonConverterDeclarations : Dict.Dict String StateShimConfigJsonConverter
+                jsonConverterDeclarations =
+                    supportingTypes.jsonConverterDeclarations
+                        |> Dict.union stateShimConfig.jsonConverterDeclarations
 
-                    jsonConvertedTypesDependencies : Dict.Dict String ElmChoiceTypeStruct
-                    jsonConvertedTypesDependencies =
-                        appStateType.dependencies
-                            |> Dict.union (Tuple.second supportingTypes.stateShimRequestType)
-                            |> Dict.union (Tuple.second supportingTypes.stateShimResponseResultType)
-                            |> Dict.union supportingJsonConverterFunctionsDependencies
+                supportingJsonConverterFunctionsDependencies : List ( ( List String, String ), ElmChoiceTypeStruct )
+                supportingJsonConverterFunctionsDependencies =
+                    jsonConverterDeclarations
+                        |> Dict.values
+                        |> List.concatMap (.dependencies >> Dict.toList)
 
-                    typeToGenerateSerializersFor : List ElmTypeAnnotation
-                    typeToGenerateSerializersFor =
-                        appStateType.typeAnnotation
-                            :: Tuple.first supportingTypes.stateShimRequestType
-                            :: Tuple.first supportingTypes.stateShimResponseResultType
-                            :: (jsonConverterDeclarations
-                                    |> Dict.values
-                                    |> List.map .typeAnnotation
-                               )
-
-                    modulesToAdd : List String
-                    modulesToAdd =
-                        List.concat
-                            [ modulesToAddForBase64Coding
-                            , List.map
-                                (\( _, supportingModule ) -> supportingModule.fileText)
-                                supportingTypes.modules
-                            ]
-
-                    ( appFiles, generateSerializersResult ) =
-                        sourceFiles
-                            |> addModulesFromTextToAppFiles sourceDirs modulesToAdd
-                            |> mapAppFilesToSupportJsonConverters
-                                { generatedModuleNamePrefix = config.interfaceToHostRootModuleName
-                                , sourceDirs = sourceDirs
-                                }
-                                typeToGenerateSerializersFor
-                                jsonConvertedTypesDependencies
-
-                    modulesToImport : List (List String)
-                    modulesToImport =
-                        List.concat
-                            [ generateSerializersResult.modulesToImport
-                            , stateShimConfig.modulesToImport
-                            , List.map
-                                (\( _, supportingModule ) -> supportingModule.moduleName)
-                                supportingTypes.modules
-                            ]
-
-                    stateShimRequestFunctionsNamesInGeneratedModules : { encodeFunction : { name : String, text : String }, decodeFunction : { name : String, text : String } }
-                    stateShimRequestFunctionsNamesInGeneratedModules =
-                        buildJsonConverterFunctionsForTypeAnnotation (Tuple.first supportingTypes.stateShimRequestType)
-
-                    stateShimResponseResultFunctionsNamesInGeneratedModules : { encodeFunction : { name : String, text : String }, decodeFunction : { name : String, text : String } }
-                    stateShimResponseResultFunctionsNamesInGeneratedModules =
-                        buildJsonConverterFunctionsForTypeAnnotation (Tuple.first supportingTypes.stateShimResponseResultType)
-
-                    stateShimRequestDecodeFunction : ( List String, String )
-                    stateShimRequestDecodeFunction =
-                        ( generateSerializersResult.generatedModuleName
-                        , stateShimRequestFunctionsNamesInGeneratedModules.decodeFunction.name
-                        )
-
-                    stateShimResponseEncodeSerialFunction : ( List String, String )
-                    stateShimResponseEncodeSerialFunction =
-                        ( generateSerializersResult.generatedModuleName
-                        , stateShimResponseResultFunctionsNamesInGeneratedModules.encodeFunction.name
-                        )
-
-                    supportingJsonConverterFunctions : Dict.Dict String ( List String, String )
-                    supportingJsonConverterFunctions =
-                        jsonConverterDeclarations
-                            |> Dict.map
-                                (\_ jsonConverter ->
-                                    let
-                                        jsonConverterFunctionNames =
-                                            buildJsonConverterFunctionsForTypeAnnotation jsonConverter.typeAnnotation
-
-                                        getEncodeOrDecode =
-                                            if jsonConverter.isDecoder then
-                                                .decodeFunction
-
-                                            else
-                                                .encodeFunction
-                                    in
-                                    ( generateSerializersResult.generatedModuleName
-                                    , jsonConverterFunctionNames |> getEncodeOrDecode |> .name
-                                    )
-                                )
-
-                    appRootDeclarationModuleName : String
-                    appRootDeclarationModuleName =
-                        config.compilationRootModule.parsedSyntax.moduleDefinition
-                            |> Elm.Syntax.Node.value
-                            |> Elm.Syntax.Module.moduleName
-                            |> String.join "."
-
-                    exposedFunctionsListSyntax : String
-                    exposedFunctionsListSyntax =
-                        stateShimConfig.exposedFunctions
-                            |> Dict.toList
-                            |> List.map composeExposedFunctionListEntrySyntax
-                            |> String.join "\n,"
-
-                    exposedFunctionsRootModuleSupportingFunction : String
-                    exposedFunctionsRootModuleSupportingFunction =
-                        [ "config_exposedFunctions ="
-                        , [ "[" ++ exposedFunctionsListSyntax
-                          , "]"
-                          , "|> Dict.fromList"
-                          ]
-                            |> String.join "\n"
-                            |> indentElmCodeLines 1
+                jsonConvertedTypesDependencies : List ( ( List String, String ), ElmChoiceTypeStruct )
+                jsonConvertedTypesDependencies =
+                    List.concat
+                        [ Dict.toList appStateType.dependencies
+                        , Tuple.second supportingTypes.stateShimRequestType
+                        , Tuple.second supportingTypes.stateShimResponseResultType
+                        , supportingJsonConverterFunctionsDependencies
                         ]
-                            |> String.join "\n"
+                        |> Common.listUnique
 
-                    estimateJsonEncodeStateLengthGenerated : { generatedFunctions : List CompileElmApp.GenerateFunctionFromTypeResult, modulesToImportForChoiceTypes : List (List String) }
-                    estimateJsonEncodeStateLengthGenerated =
-                        CompileElmApp.buildEstimateJsonEncodeLengthFunctionsForMultipleTypes
-                            [ appStateType.typeAnnotation ]
-                            appStateType.dependencies
+                typeToGenerateSerializersFor : List ElmTypeAnnotation
+                typeToGenerateSerializersFor =
+                    appStateType.typeAnnotation
+                        :: Tuple.first supportingTypes.stateShimRequestType
+                        :: Tuple.first supportingTypes.stateShimResponseResultType
+                        :: (jsonConverterDeclarations
+                                |> Dict.values
+                                |> List.map .typeAnnotation
+                           )
 
-                    estimateAppStateJsonEncodeLengthFunctionName : String
-                    estimateAppStateJsonEncodeLengthFunctionName =
-                        (buildEstimateJsonEncodeLengthFunctionForTypeAnnotation appStateType.typeAnnotation).name
-
-                    estimateJsonEncodeLengthSupportingFunctionsText =
-                        [ """
-estimateJsonEncodeAppStateLength : AppState -> Int
-estimateJsonEncodeAppStateLength = """ ++ estimateAppStateJsonEncodeLengthFunctionName
+                modulesToAdd : List String
+                modulesToAdd =
+                    List.concat
+                        [ modulesToAddForBase64Coding
+                        , List.map
+                            (\( _, supportingModule ) -> supportingModule.fileText)
+                            supportingTypes.modules
                         ]
-                            ++ List.map .functionText estimateJsonEncodeStateLengthGenerated.generatedFunctions
 
-                    rootElmModuleText : String
-                    rootElmModuleText =
-                        composeRootElmModuleTextWithStateShim
-                            { interfaceToHostRootModuleName = String.join "." config.interfaceToHostRootModuleName
-                            , appRootDeclarationModuleName = appRootDeclarationModuleName
-                            , appStateTypeAnnotation = appStateType.typeAnnotation
-                            , modulesToImport = modulesToImport
-                            , stateShimRequestDecodeFunction = stateShimRequestDecodeFunction
-                            , stateShimResponseEncodeSerialFunction = stateShimResponseEncodeSerialFunction
-                            , supportingJsonConverterFunctions = supportingJsonConverterFunctions
-                            , otherSupportingFunctions =
-                                exposedFunctionsRootModuleSupportingFunction
-                                    :: stateShimConfig.rootModuleSupportingFunctions
-                                    ++ estimateJsonEncodeLengthSupportingFunctionsText
-                            , appStateWithPlatformShimTypeAnnotationFromAppStateAnnotation =
-                                stateShimConfig.appStateWithPlatformShimTypeAnnotationFromAppStateAnnotation
-                            , stateShimConfigExpression = stateShimConfig.stateShimConfigExpression
+                ( appFiles, generateSerializersResult ) =
+                    sourceFiles
+                        |> addModulesFromTextToAppFiles sourceDirs modulesToAdd
+                        |> mapAppFilesToSupportJsonConverters
+                            { generatedModuleNamePrefix = config.interfaceToHostRootModuleName
+                            , sourceDirs = sourceDirs
                             }
-                in
+                            typeToGenerateSerializersFor
+                            jsonConvertedTypesDependencies
+
+                modulesToImport : List (List String)
+                modulesToImport =
+                    List.concat
+                        [ generateSerializersResult.modulesToImport
+                        , stateShimConfig.modulesToImport
+                        , List.map
+                            (\( _, supportingModule ) -> supportingModule.moduleName)
+                            supportingTypes.modules
+                        ]
+
+                stateShimRequestFunctionsNamesInGeneratedModules : { encodeFunction : { name : String, text : String }, decodeFunction : { name : String, text : String } }
+                stateShimRequestFunctionsNamesInGeneratedModules =
+                    buildJsonConverterFunctionsForTypeAnnotation (Tuple.first supportingTypes.stateShimRequestType)
+
+                stateShimResponseResultFunctionsNamesInGeneratedModules : { encodeFunction : { name : String, text : String }, decodeFunction : { name : String, text : String } }
+                stateShimResponseResultFunctionsNamesInGeneratedModules =
+                    buildJsonConverterFunctionsForTypeAnnotation (Tuple.first supportingTypes.stateShimResponseResultType)
+
+                stateShimRequestDecodeFunction : ( List String, String )
+                stateShimRequestDecodeFunction =
+                    ( generateSerializersResult.generatedModuleName
+                    , stateShimRequestFunctionsNamesInGeneratedModules.decodeFunction.name
+                    )
+
+                stateShimResponseEncodeSerialFunction : ( List String, String )
+                stateShimResponseEncodeSerialFunction =
+                    ( generateSerializersResult.generatedModuleName
+                    , stateShimResponseResultFunctionsNamesInGeneratedModules.encodeFunction.name
+                    )
+
+                supportingJsonConverterFunctions : Dict.Dict String ( List String, String )
+                supportingJsonConverterFunctions =
+                    jsonConverterDeclarations
+                        |> Dict.map
+                            (\_ jsonConverter ->
+                                let
+                                    jsonConverterFunctionNames =
+                                        buildJsonConverterFunctionsForTypeAnnotation jsonConverter.typeAnnotation
+
+                                    getEncodeOrDecode =
+                                        if jsonConverter.isDecoder then
+                                            .decodeFunction
+
+                                        else
+                                            .encodeFunction
+                                in
+                                ( generateSerializersResult.generatedModuleName
+                                , jsonConverterFunctionNames |> getEncodeOrDecode |> .name
+                                )
+                            )
+
+                appRootDeclarationModuleName : String
+                appRootDeclarationModuleName =
+                    config.compilationRootModule.parsedSyntax.moduleDefinition
+                        |> Elm.Syntax.Node.value
+                        |> Elm.Syntax.Module.moduleName
+                        |> String.join "."
+
+                exposedFunctionsListSyntax : String
+                exposedFunctionsListSyntax =
+                    stateShimConfig.exposedFunctions
+                        |> Dict.toList
+                        |> List.map composeExposedFunctionListEntrySyntax
+                        |> String.join "\n,"
+
+                exposedFunctionsRootModuleSupportingFunction : String
+                exposedFunctionsRootModuleSupportingFunction =
+                    [ "config_exposedFunctions ="
+                    , [ "[" ++ exposedFunctionsListSyntax
+                      , "]"
+                      , "|> Dict.fromList"
+                      ]
+                        |> String.join "\n"
+                        |> indentElmCodeLines 1
+                    ]
+                        |> String.join "\n"
+
+                rootElmModuleText : String
+                rootElmModuleText =
+                    composeRootElmModuleTextWithStateShim
+                        { interfaceToHostRootModuleName = String.join "." config.interfaceToHostRootModuleName
+                        , appRootDeclarationModuleName = appRootDeclarationModuleName
+                        , appStateTypeAnnotation = appStateType.typeAnnotation
+                        , modulesToImport = modulesToImport
+                        , stateShimRequestDecodeFunction = stateShimRequestDecodeFunction
+                        , stateShimResponseEncodeSerialFunction = stateShimResponseEncodeSerialFunction
+                        , supportingJsonConverterFunctions = supportingJsonConverterFunctions
+                        , otherSupportingFunctions =
+                            exposedFunctionsRootModuleSupportingFunction
+                                :: stateShimConfig.rootModuleSupportingFunctions
+                        , appStateWithPlatformShimTypeAnnotationFromAppStateAnnotation =
+                            stateShimConfig.appStateWithPlatformShimTypeAnnotationFromAppStateAnnotation
+                        , stateShimConfigExpression = stateShimConfig.stateShimConfigExpression
+                        }
+            in
+            Ok
                 ( appFiles
                     |> updateFileContentAtPath
                         (always (fileContentFromString rootElmModuleText))
                         interfaceToHostRootFilePath
                 , entryPoint
                 )
-            )
 
 
 composeExposedFunctionListEntrySyntax : ( String, ExposedFunctionConfig ) -> String
@@ -374,15 +362,17 @@ supportingTypesModules :
         Result
             (LocatedInSourceFiles String)
             { modules : List ( List String, SourceParsedElmModule )
-            , stateShimRequestType : ( ElmTypeAnnotation, Dict.Dict String ElmChoiceTypeStruct )
-            , stateShimResponseResultType : ( ElmTypeAnnotation, Dict.Dict String ElmChoiceTypeStruct )
+            , stateShimRequestType : ( ElmTypeAnnotation, List ( ( List String, String ), ElmChoiceTypeStruct ) )
+            , stateShimResponseResultType : ( ElmTypeAnnotation, List ( ( List String, String ), ElmChoiceTypeStruct ) )
             , jsonConverterDeclarations : Dict.Dict String StateShimConfigJsonConverter
             }
 supportingTypesModules sourceDirs stateShimConfig originalSourceModules =
-    [ stateShimTypesModuleText
-    , stateShimModuleText
-    ]
-        ++ stateShimConfig.supportingModules
+    List.concat
+        [ [ stateShimTypesModuleText
+          , stateShimModuleText
+          ]
+        , stateShimConfig.supportingModules
+        ]
         |> CompileElmApp.elmModulesDictFromModuleTexts (CompileElmApp.filePathFromElmModuleName sourceDirs)
         |> Result.mapError
             (LocatedInSourceFiles
@@ -458,7 +448,7 @@ supportingTypesModules sourceDirs stateShimConfig originalSourceModules =
                                                 (\( typeAnnotation, dependencies ) ->
                                                     { isDecoder = converterConfig.isDecoder
                                                     , typeAnnotation = typeAnnotation
-                                                    , dependencies = dependencies
+                                                    , dependencies = Dict.fromList dependencies
                                                     }
                                                 )
 
@@ -651,7 +641,6 @@ type alias StateShimConfig appState appStateLessShim =
     , jsonDecodeAppState : Json.Decode.Decoder appStateLessShim
     , initAppShimState : appStateLessShim -> appState
     , appStateLessShim : appState -> appStateLessShim
-    , estimateJsonEncodeAppStateLength : appStateLessShim -> Int
     }
 
 

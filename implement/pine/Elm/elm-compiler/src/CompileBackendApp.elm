@@ -47,7 +47,7 @@ import Elm.Syntax.TypeAnnotation
 type alias MigrationConfig =
     { inputType : ElmTypeAnnotation
     , returnType : ElmTypeAnnotation
-    , dependencies : Dict.Dict String ElmChoiceTypeStruct
+    , dependencies : Dict.Dict ( List String, String ) ElmChoiceTypeStruct
     , migrateFunctionModuleName : List String
     , migrateFunctionDeclarationLocalName : String
     , jsonConverterDeclarations : Dict.Dict String StateShimConfigJsonConverter
@@ -319,7 +319,6 @@ Backend.Generated.StateShim.exposedFunctionExpectingSingleArgumentAndAppState
 , exposedFunctions = config_exposedFunctions
 , initAppShimState = Backend.Generated.WebServiceShim.initWebServiceShimState
 , appStateLessShim = .stateLessFramework
-, estimateJsonEncodeAppStateLength = estimateJsonEncodeAppStateLength
 }"""
                                                     in
                                                     case
@@ -461,7 +460,7 @@ parseAppStateElmTypeAndDependenciesRecursively :
         Result
             (LocatedInSourceFiles String)
             { stateTypeAnnotation : ElmTypeAnnotation
-            , dependencies : Dict.Dict String ElmChoiceTypeStruct
+            , dependencies : Dict.Dict ( List String, String ) ElmChoiceTypeStruct
             , instantiatedConfigTypeName : List String
             }
 parseAppStateElmTypeAndDependenciesRecursively rootFunctionDeclaration sourceModules ( parsedModuleFilePath, parsedModule ) =
@@ -485,7 +484,7 @@ parseAppStateElmTypeAndDependenciesRecursively rootFunctionDeclaration sourceMod
                                     stateTypeAnnotation.instantiated
                             in
                             { stateTypeAnnotation = stateType
-                            , dependencies = dependencies
+                            , dependencies = Dict.fromList dependencies
                             , instantiatedConfigTypeName =
                                 Tuple.first instantiatedName
                                     ++ [ Tuple.second instantiatedName ]
@@ -497,7 +496,12 @@ parseAppStateElmTypeAndDependenciesRecursively rootFunctionDeclaration sourceMod
 parseAppStateMigrateElmTypeAndDependenciesRecursively :
     List ( List String, SourceParsedElmModule )
     -> ( List String, Elm.Syntax.File.File )
-    -> Result (LocatedInSourceFiles String) ( ( ElmTypeAnnotation, ElmTypeAnnotation ), Dict.Dict String ElmChoiceTypeStruct )
+    ->
+        Result
+            (LocatedInSourceFiles String)
+            ( ( ElmTypeAnnotation, ElmTypeAnnotation )
+            , Dict.Dict ( List String, String ) ElmChoiceTypeStruct
+            )
 parseAppStateMigrateElmTypeAndDependenciesRecursively sourceModules ( parsedModuleFilePath, parsedModule ) =
     migrateStateTypeAnnotationFromElmModule parsedModule
         |> Result.mapError
@@ -517,7 +521,12 @@ parseAppStateMigrateElmTypeAndDependenciesRecursively sourceModules ( parsedModu
                                 |> Result.map
                                     (\( destinationTypeAnnotation, destinationTypeDependencies ) ->
                                         ( ( originTypeAnnotation, destinationTypeAnnotation )
-                                        , originTypeDependencies |> Dict.union destinationTypeDependencies
+                                        , Dict.fromList
+                                            (List.concat
+                                                [ originTypeDependencies
+                                                , destinationTypeDependencies
+                                                ]
+                                            )
                                         )
                                     )
                         )
@@ -803,7 +812,8 @@ parseExposeFunctionsToAdminConfigFromDeclaration { originalSourceModules, interf
                                                     (\( { isDecoder }, typeAnnotation ) ->
                                                         { isDecoder = isDecoder
                                                         , typeAnnotation = typeAnnotation
-                                                        , dependencies = Tuple.second exposedFunctionTypeAnnotation
+                                                        , dependencies =
+                                                            Dict.fromList (Tuple.second exposedFunctionTypeAnnotation)
                                                         }
                                                     )
                                                 )
