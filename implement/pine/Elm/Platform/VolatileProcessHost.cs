@@ -224,16 +224,7 @@ public class VolatileProcessHost(
             var volatileProcess =
                 new VolatileProcessNative(
                     GetBlobWithSHA256,
-                    new ElmTime.Platform.WebService.InterfaceToHost.CreateVolatileProcessNativeStruct(
-                        new ElmTime.Platform.WebService.InterfaceToHost.LoadDependencyStruct(
-                            hashSha256Base16: createVolatileProcess.ExecutableFile.HashSha256Base16,
-                            hintUrls: [.. createVolatileProcess.ExecutableFile.HintUrls]),
-                        arguments: createVolatileProcess.Arguments,
-                        environmentVariables:
-                        [..createVolatileProcess.EnvironmentVariables
-                        .Select(ev =>
-                        new ElmTime.Platform.WebService.InterfaceToHost.ProcessEnvironmentVariable(
-                            key: ev.Key, value: ev.Value))]));
+                    createVolatileProcess);
 
             var volatileProcessId =
                 System.Threading.Interlocked.Increment(ref createVolatileProcessAttempts).ToString();

@@ -1,4 +1,5 @@
 using Pine.Core;
+using Pine.Elm.Platform;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -31,14 +32,14 @@ public class VolatileProcessNative : VolatileProcess, IDisposable
 
     public VolatileProcessNative(
         Func<byte[], byte[]?>? getFileFromHashSHA256,
-        ElmTime.Platform.WebService.InterfaceToHost.CreateVolatileProcessNativeStruct createRequest)
+        WebServiceInterface.CreateVolatileProcessNativeRequestStruct createRequest)
     {
         var executableFile =
             LoadBlob(
                 loadedTreesFromUrl: loadedTreesFromUrl,
                 getFileFromHashSHA256: getFileFromHashSHA256,
-                hashSha256Base16: createRequest.executableFile.hashSha256Base16,
-                hintUrls: createRequest.executableFile.hintUrls)
+                hashSha256Base16: createRequest.ExecutableFile.HashSha256Base16,
+                hintUrls: createRequest.ExecutableFile.HintUrls)
             .Extract(err => throw new Exception("Failed to load executable file: " + err));
 
         containerDirectory = Filesystem.CreateRandomDirectoryInTempDirectory();
@@ -59,7 +60,7 @@ public class VolatileProcessNative : VolatileProcess, IDisposable
             {
                 WorkingDirectory = containerDirectory,
                 FileName = mainExecutableFilePathAbsolute,
-                Arguments = createRequest.arguments,
+                Arguments = createRequest.Arguments,
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -68,8 +69,8 @@ public class VolatileProcessNative : VolatileProcess, IDisposable
             },
         };
 
-        foreach (var envString in createRequest.environmentVariables)
-            process.StartInfo.Environment[envString.key] = envString.value;
+        foreach (var envString in createRequest.EnvironmentVariables)
+            process.StartInfo.Environment[envString.Key] = envString.Value;
 
         process.Start();
 
