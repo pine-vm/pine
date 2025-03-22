@@ -94,8 +94,8 @@ public class VolatileProcessNative : VolatileProcess, IDisposable
 
     public ReadAllFromNativeProcess ReadAll()
     {
-        var stdOut = CommonConversion.Concat(stdOutQueue.DequeueAllEnumerable().ToList());
-        var stdErr = CommonConversion.Concat(stdErrQueue.DequeueAllEnumerable().ToList());
+        var stdOut = BytesConversions.Concat(stdOutQueue.DequeueAllEnumerable().ToList());
+        var stdErr = BytesConversions.Concat(stdErrQueue.DequeueAllEnumerable().ToList());
 
         var exitCode =
             process.HasExited ? (int?)process.ExitCode : null;
@@ -119,7 +119,7 @@ public class VolatileProcessNative : VolatileProcess, IDisposable
             buffers.Add(buffer);
         }
 
-        return CommonConversion.Concat(buffers);
+        return BytesConversions.Concat(buffers);
     }
 
     public static async Task<long> ReadFromStreamToQueueLoopAsync(

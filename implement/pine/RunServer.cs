@@ -50,7 +50,7 @@ public class RunServer
                 SetFileContentDelegate: file => files[file.path] = file.fileContent,
                 AppendFileContentDelegate: file => files.AddOrUpdate(
                     file.path, _ => file.fileContent,
-                    (_, fileBefore) => CommonConversion.Concat(fileBefore.Span, file.fileContent.Span)),
+                    (_, fileBefore) => BytesConversions.Concat(fileBefore.Span, file.fileContent.Span)),
                 DeleteFileDelegate: path => files.Remove(path, out var _)
             );
 
@@ -125,7 +125,7 @@ public class RunServer
             var appConfigValueInFile =
                 new Platform.WebService.ProcessStoreSupportingMigrations.ValueInFileStructure
                 {
-                    HashBase16 = CommonConversion.StringBase16(PineValueHashTree.ComputeHash(appConfigComponent))
+                    HashBase16 = Convert.ToHexStringLower(PineValueHashTree.ComputeHash(appConfigComponent).Span)
                 };
 
             var initElmAppState =
@@ -198,7 +198,7 @@ public class RunServer
             PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(restoreFiles);
 
         var processHistoryComponentHash = PineValueHashTree.ComputeHashNotSorted(processHistoryTree);
-        var processHistoryComponentHashBase16 = CommonConversion.StringBase16(processHistoryComponentHash);
+        var processHistoryComponentHashBase16 = Convert.ToHexStringLower(processHistoryComponentHash.Span);
 
         var processHistoryZipArchive = ZipArchive.ZipArchiveFromEntries(restoreFiles);
 

@@ -50,7 +50,7 @@ public interface IProcessStoreReader
                     fileContentBefore = originalFileStore.GetFileContent(pathAndFileContent.path) ?? ReadOnlyMemory<byte>.Empty;
 
                 projectedFiles[pathAndFileContent.path] =
-                CommonConversion.Concat(fileContentBefore.Span, pathAndFileContent.fileContent.Span);
+                BytesConversions.Concat(fileContentBefore.Span, pathAndFileContent.fileContent.Span);
             },
             DeleteFileDelegate: _ => throw new Exception("Unexpected operation delete file.")
         );
@@ -145,7 +145,7 @@ public record CompositionLogRecordInFile(
     public static string? CompositionLogFirstRecordParentHashBase16 => null;
 
     public static string HashBase16FromCompositionRecord(ReadOnlyMemory<byte> compositionRecord) =>
-        CommonConversion.StringBase16(HashFromCompositionRecord(compositionRecord));
+        Convert.ToHexStringLower(HashFromCompositionRecord(compositionRecord).Span);
 
     public static ReadOnlyMemory<byte> HashFromCompositionRecord(ReadOnlyMemory<byte> compositionRecord) =>
         PineValueHashTree.ComputeHash(PineValue.Blob(compositionRecord));
@@ -256,7 +256,7 @@ public class ProcessStoreReaderInFileStore(
     protected IFileStoreReader CompositionLogLiteralFileStore => fileStore.ForSubdirectory(CompositionLogLiteralPath);
 
     private ReadOnlyMemory<byte>? LoadComponentSerialRepresentationForHash(ReadOnlyMemory<byte> componentHash) =>
-        LoadComponentSerialRepresentationForHash(CommonConversion.StringBase16(componentHash));
+        LoadComponentSerialRepresentationForHash(Convert.ToHexStringLower(componentHash.Span));
 
     private ReadOnlyMemory<byte>? LoadComponentSerialRepresentationForHash(string componentHashBase16)
     {
@@ -270,7 +270,7 @@ public class ProcessStoreReaderInFileStore(
             var deflatedFile = DeflatedLiteralElementFileStore.GetFileContent(filePath);
 
             if (deflatedFile is not null)
-                return CommonConversion.Inflate(deflatedFile.Value);
+                return BytesConversions.Inflate(deflatedFile.Value);
         }
 
         return originalFile;
@@ -289,7 +289,7 @@ public class ProcessStoreReaderInFileStore(
                 fromErr: error => throw new Exception("Failed to load component " + componentHashBase16 + ": " + error),
                 fromOk: loadComponentResult =>
                 {
-                    if (CommonConversion.StringBase16(hashCache.ComputeHash(loadComponentResult)) != componentHashBase16)
+                    if (Convert.ToHexStringLower(hashCache.ComputeHash(loadComponentResult).Span) != componentHashBase16)
                         throw new Exception("Unexpected content in file " + componentHashBase16 + ": Content hash does not match.");
 
                     return loadComponentResult;
@@ -426,7 +426,7 @@ public class ProcessStoreReaderInFileStore(
         if (1000 < compositionHeadHash.Value.Length)
             throw new Exception("Content of file for head hash is corrupted: File length is " + compositionHeadHash.Value.Length);
 
-        var nextHashBase16 = CommonConversion.StringBase16(compositionHeadHash.Value);
+        var nextHashBase16 = Convert.ToHexStringLower(compositionHeadHash.Value.Span);
 
         while (nextHashBase16 != CompositionLogRecordInFile.CompositionLogFirstRecordParentHashBase16 && nextHashBase16 != null)
         {
@@ -539,10 +539,10 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
             var compositionLogRecordSerialized = GetCompositionLogRecordSerialized(compositionLogRecordStructure);
 
             var recordHash = CompositionLogRecordInFile.HashFromCompositionRecord(compositionLogRecordSerialized);
-            var recordHashBase16 = CommonConversion.StringBase16(recordHash);
+            var recordHashBase16 = Convert.ToHexStringLower(recordHash.Span);
 
             var compositionLogRecordSerializedWithDelimiter =
-                CommonConversion.Concat(
+                BytesConversions.Concat(
                     compositionLogRecordSerialized,
                     compositionLogEntryDelimiter.Span);
 
@@ -590,15 +590,15 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
         var (serialRepresentation, dependencies) =
             PineValueHashTree.ComputeHashTreeNodeSerialRepresentation(component, DelegateGetHashOfComponent);
 
-        var hash = CommonConversion.HashSHA256(serialRepresentation);
+        var hash = System.Security.Cryptography.SHA256.HashData(serialRepresentation.Span);
 
-        var hashBase16 = CommonConversion.StringBase16(hash);
+        var hashBase16 = Convert.ToHexStringLower(hash);
 
         void storeSelf()
         {
             if (TryDeflateSizeThreshold <= serialRepresentation.Length)
             {
-                var deflated = CommonConversion.Deflate(serialRepresentation);
+                var deflated = BytesConversions.Deflate(serialRepresentation);
 
                 if (deflated.Length * 10 < serialRepresentation.Length * 8)
                 {

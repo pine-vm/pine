@@ -182,7 +182,8 @@ ResponseStructure GetResponseFromRequest(RequestStructure request)
 
                     var composition = PineValueComposition.FromTreeWithStringPath(loadFromGitOk.tree);
 
-                    var compositionId = CommonConversion.StringBase16(PineValueHashTree.ComputeHash(composition));
+                    var compositionId =
+                        Convert.ToHexStringLower(PineValueHashTree.ComputeHash(composition).Span);
 
                     var blobs =
                         loadFromGitOk.tree.EnumerateBlobsTransitive()
@@ -368,10 +369,10 @@ string MakePlatformSpecificPath(IReadOnlyList<string> path) =>
     string.Join(System.IO.Path.DirectorySeparatorChar.ToString(), path);
 
 static public byte[] GetElmExecutableFile =>
-    CommonConversion.DecompressGzip(GetElmExecutableFileCompressedGzip).ToArray();
+    BytesConversions.DecompressGzip(GetElmExecutableFileCompressedGzip).ToArray();
 
 static public byte[] GetElmExecutableFileCompressedGzip =>
-    Pine.BlobLibrary.GetBlobWithSHA256(CommonConversion.ByteArrayFromStringBase16(
+    Pine.BlobLibrary.GetBlobWithSHA256(Convert.FromHexString(
         System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Linux)
         ?
         /*

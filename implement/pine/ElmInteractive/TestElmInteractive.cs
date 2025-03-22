@@ -85,7 +85,8 @@ public class TestElmInteractive
             PineValueComposition.FromTreeWithStringPath(scenariosTree);
 
         var scenariosTreeCompositionHash =
-            CommonConversion.StringBase16(PineValueHashTree.ComputeHash(scenariosTreeComposition));
+            Convert.ToHexStringLower(
+                PineValueHashTree.ComputeHash(scenariosTreeComposition).Span);
 
         var namedDistinctScenarios =
             scenariosTree switch

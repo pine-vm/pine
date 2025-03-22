@@ -1951,7 +1951,7 @@ public class PineVM : IPineVM
                                         "Parse and eval count limit exceeded: " +
                                         CommandLineInterface.FormatIntegerForDisplay(limit) +
                                         "\nLast stack frames expressions:\n" +
-                                        string.Join("\n", stackTraceHashes.Select(hash => CommonConversion.StringBase16(hash)[..8]));
+                                        string.Join("\n", stackTraceHashes.Select(hash => Convert.ToHexStringLower(hash.Span)[..8]));
                                 }
                             }
 
@@ -2187,12 +2187,12 @@ public class PineVM : IPineVM
         var exprHash =
             mutableCache.ComputeHash(expressionValue);
 
-        var exprHashBase16 = CommonConversion.StringBase16(exprHash);
+        var exprHashBase16 = Convert.ToHexStringLower(exprHash.Span);
 
         var envHash =
             mutableCache.ComputeHash(errorReport.EnvironmentValue);
 
-        var envHashBase16 = CommonConversion.StringBase16(envHash);
+        var envHashBase16 = Convert.ToHexStringLower(envHash.Span);
 
         yield return
             "Instruction " + errorReport.FrameInstructionPointer +

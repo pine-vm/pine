@@ -8,6 +8,7 @@ using Pine.CompilePineToDotNet;
 using Pine.Core;
 using Pine.Elm;
 using Pine.PineVM;
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -38,7 +39,7 @@ public class CompilePineToDotNetTests
 
         var listWithHashes =
             listBeforeOrdering
-            .Select(value => (value, hash: CommonConversion.StringBase16(PineValueHashTree.ComputeHash(value))))
+            .Select(value => (value, hash: Convert.ToHexStringLower(PineValueHashTree.ComputeHash(value).Span)))
             .ToImmutableList();
 
         var orderedValues =

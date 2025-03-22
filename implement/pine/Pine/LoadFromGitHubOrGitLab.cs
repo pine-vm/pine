@@ -263,8 +263,7 @@ public static class LoadFromGitHubOrGitLab
                                         //  (https://github.com/git/git/blob/74583d89127e21255c12dd3c8a3bf60b497d7d03/Documentation/technical/hash-function-transition.txt)
                                         //  (https://www.youtube.com/watch?v=qHERDFUSa14)
                                         var loadedBlobSHA1Base16Lower =
-                                            BitConverter.ToString(GitBlobSHAFromBlobContent(blobContent)).Replace("-", "")
-                                            .ToLowerInvariant();
+                                            Convert.ToHexStringLower(GitBlobSHAFromBlobContent(blobContent));
 
                                         if (loadedBlobSHA1Base16Lower != expectedSHA)
                                             throw new Exception("Unexpected content for git object : SHA is " + loadedBlobSHA1Base16Lower + " instead of " + expectedSHA);

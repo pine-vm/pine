@@ -51,7 +51,7 @@ namespace Pine
                     {
                         return (
                             originalBlobRemainingBytes[reuseBytes.Value..],
-                            CommonConversion.Concat(changedBlobBytes.Span, originalBlobRemainingBytes[..reuseBytes.Value].Span));
+                            BytesConversions.Concat(changedBlobBytes.Span, originalBlobRemainingBytes[..reuseBytes.Value].Span));
                     }
 
                     if (removeBytes != null)
@@ -67,7 +67,7 @@ namespace Pine
 
                         return (
                             originalBlobRemainingBytes,
-                            CommonConversion.Concat(changedBlobBytes.Span, [.. bytes]));
+                            BytesConversions.Concat(changedBlobBytes.Span, [.. bytes]));
                     }
 
                     throw new Exception("Unexpected shape of BlobChangeSequenceElement");
@@ -134,7 +134,7 @@ namespace Pine
                 {
                     projectStateString ??=
                         projectStateDeflateBase64String == null ? null :
-                        Encoding.UTF8.GetString(CommonConversion.Inflate(Convert.FromBase64String(projectStateDeflateBase64String)).Span);
+                        Encoding.UTF8.GetString(BytesConversions.Inflate(Convert.FromBase64String(projectStateDeflateBase64String)).Span);
                 }
                 catch { }
 

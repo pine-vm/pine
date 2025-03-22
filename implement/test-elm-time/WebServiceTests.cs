@@ -1667,7 +1667,7 @@ public class WebServiceTests
 
             Assert.AreEqual(
                 deployReport.filteredSourceCompositionId,
-                CommonConversion.StringBase16(PineValueHashTree.ComputeHash(restoredProcessLastDeployedAppComponent)),
+                Convert.ToHexStringLower(PineValueHashTree.ComputeHash(restoredProcessLastDeployedAppComponent).Span),
                 "App ID in restored process equals app ID from deployment report.");
         }
 

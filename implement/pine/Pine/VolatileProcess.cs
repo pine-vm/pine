@@ -14,7 +14,7 @@ public class VolatileProcess
         string hashSha256Base16,
         IEnumerable<string> hintUrls)
     {
-        var hash = CommonConversion.ByteArrayFromStringBase16(hashSha256Base16);
+        var hash = Convert.FromHexString(hashSha256Base16);
 
         IReadOnlyDictionary<string, string>? errorFromHintUrl = null;
 
@@ -57,7 +57,7 @@ public class VolatileProcess
             return returnError("Did not find blob");
 
         if (!PineValueHashTree.ComputeHash(PineValue.Blob(blob)).Span.SequenceEqual(hash) &&
-            !CommonConversion.HashSHA256(blob).Span.SequenceEqual(hash))
+            !System.Security.Cryptography.SHA256.HashData(blob).AsSpan().SequenceEqual(hash))
             return returnError("Selected blob hash does not match " + hashSha256Base16);
 
         return

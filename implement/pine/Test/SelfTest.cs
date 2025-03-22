@@ -50,8 +50,9 @@ public class SelfTest
             loadedFilesNamesAndContents
                 .Select(fileNameAndContent =>
                     (fileNameAndContent.fileName,
-                        fileHash: CommonConversion.StringBase16(
-                            CommonConversion.HashSHA256(fileNameAndContent.fileContent)).ToLowerInvariant()))
+                        fileHash:
+                        Convert.ToHexStringLower(
+                            System.Security.Cryptography.SHA256.HashData(fileNameAndContent.fileContent.Span))))
                 .ToImmutableArray();
 
         foreach (var expectedFileNameAndHash in expectedFilesNamesAndHashes)

@@ -1,23 +1,16 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Security.Cryptography;
 
 namespace Pine.Core;
 
-public class CommonConversion
+/// <summary>
+/// Functions for common conversions around streams or sequences of bytes.
+/// </summary>
+public class BytesConversions
 {
-    public static byte[] ByteArrayFromStringBase16(string base16) =>
-        [.. Enumerable.Range(0, base16.Length / 2).Select(octetIndex => Convert.ToByte(base16.Substring(octetIndex * 2, 2), 16))];
-
-    public static string StringBase16FromByteArray(IReadOnlyList<byte> bytes) =>
-        BitConverter.ToString(bytes as byte[] ?? [.. bytes]).Replace("-", "").ToLowerInvariant();
-
-    public static string StringBase16(ReadOnlyMemory<byte> bytes) =>
-        BitConverter.ToString(bytes.ToArray()).Replace("-", "").ToLowerInvariant();
-
-    public static ReadOnlyMemory<byte> HashSHA256(ReadOnlyMemory<byte> input) => SHA256.HashData(input.Span);
-
+    /// <summary>
+    /// Compresses a memory segment using the <see href="https://en.wikipedia.org/wiki/Gzip">GZIP</see> algorithm.
+    /// </summary>
     public static ReadOnlyMemory<byte> CompressGzip(ReadOnlyMemory<byte> original)
     {
         using var compressedStream = new System.IO.MemoryStream();
@@ -30,16 +23,26 @@ public class CommonConversion
         return compressedStream.ToArray();
     }
 
+    /// <summary>
+    /// Decompresses a memory segment that was compressed using the <see href="https://en.wikipedia.org/wiki/Gzip">GZIP</see> algorithm.
+    /// </summary>
+    /// <param name="compressed"></param>
+    /// <returns></returns>
     public static ReadOnlyMemory<byte> DecompressGzip(ReadOnlyMemory<byte> compressed)
     {
         using var decompressStream = new System.IO.Compression.GZipStream(
             new System.IO.MemoryStream(compressed.ToArray()), System.IO.Compression.CompressionMode.Decompress);
 
-        var decompressedStream = new System.IO.MemoryStream();
+        using var decompressedStream = new System.IO.MemoryStream();
+
         decompressStream.CopyTo(decompressedStream);
+
         return decompressedStream.ToArray();
     }
 
+    /// <summary>
+    /// Compresses a memory segment using the <see href="https://en.wikipedia.org/wiki/Deflate">DEFLATE</see> algorithm.
+    /// </summary>
     public static ReadOnlyMemory<byte> Deflate(ReadOnlyMemory<byte> input)
     {
         using var deflatedStream = new System.IO.MemoryStream();
@@ -48,10 +51,15 @@ public class CommonConversion
             deflatedStream, System.IO.Compression.CompressionMode.Compress);
 
         compressor.Write(input.Span);
+        
         compressor.Close();
+
         return deflatedStream.ToArray();
     }
 
+    /// <summary>
+    /// Decompresses a memory segment using the <see href="https://en.wikipedia.org/wiki/Deflate">DEFLATE</see> algorithm.
+    /// </summary>
     public static ReadOnlyMemory<byte> Inflate(ReadOnlyMemory<byte> input)
     {
         using var inflatedStream = new System.IO.MemoryStream();
@@ -67,14 +75,22 @@ public class CommonConversion
     public static string TimeStringViewForReport(DateTimeOffset time) =>
         time.ToString("yyyy-MM-ddTHH-mm-ss");
 
+    /// <summary>
+    /// Concatenates two memory segments into a single memory segment.
+    /// </summary>
     public static ReadOnlyMemory<T> Concat<T>(ReadOnlySpan<T> s1, ReadOnlySpan<T> s2)
     {
         var array = new T[s1.Length + s2.Length];
+
         s1.CopyTo(array);
         s2.CopyTo(array.AsSpan(s1.Length));
+        
         return array;
     }
 
+    /// <summary>
+    /// Concatenates a list of memory segments into a single memory segment.
+    /// </summary>
     public static ReadOnlyMemory<T> Concat<T>(IReadOnlyList<ReadOnlyMemory<T>> list)
     {
         var aggregateLength = 0;
@@ -96,18 +112,5 @@ public class CommonConversion
         }
 
         return destArray;
-    }
-
-    public static Result<ExceptionT, OkT> CatchExceptionAsResultErr<ExceptionT, OkT>(Func<OkT> func)
-        where ExceptionT : Exception
-    {
-        try
-        {
-            return func();
-        }
-        catch (ExceptionT e)
-        {
-            return e;
-        }
     }
 }

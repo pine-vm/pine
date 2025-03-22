@@ -71,7 +71,7 @@ public class LoadCompositionTests
                     .ToImmutableList();
 
                 var composition = PineValueComposition.FromTreeWithStringPath(loaded.tree);
-                var compositionId = CommonConversion.StringBase16(PineValueHashTree.ComputeHash(composition));
+                var compositionId = Convert.ToHexStringLower(PineValueHashTree.ComputeHash(composition).Span);
 
                 Assert.AreEqual(testCase.expectedCompositionId, compositionId);
             }

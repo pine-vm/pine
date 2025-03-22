@@ -405,7 +405,7 @@ public class VolatileProcessHost(
             if (matchFromSourceComposition is not PineValue.BlobValue matchFromSourceCompositionBlobs)
             {
                 throw new Exception(
-                    CommonConversion.StringBase16FromByteArray(sha256) + " is not a blob");
+                    Convert.ToHexStringLower(sha256) + " is not a blob");
             }
 
             return matchFromSourceCompositionBlobs.Bytes.ToArray();

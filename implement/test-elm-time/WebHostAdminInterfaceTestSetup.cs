@@ -170,7 +170,8 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
                 DeployAppConfigAndInitElmAppState =
                     new ElmTime.Platform.WebService.ProcessStoreSupportingMigrations.ValueInFileStructure
                     {
-                        HashBase16 = CommonConversion.StringBase16(PineValueHashTree.ComputeHash(deployAppAndInitElmState))
+                        HashBase16 =
+                        Convert.ToHexStringLower(PineValueHashTree.ComputeHash(deployAppAndInitElmState).Span)
                     }
             };
 

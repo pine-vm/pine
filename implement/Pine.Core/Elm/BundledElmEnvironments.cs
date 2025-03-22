@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.IO.Compression;
@@ -32,7 +33,7 @@ public class BundledElmEnvironments
 
         var hash = PineValueHashTree.ComputeHash(pineValue);
 
-        return CommonConversion.StringBase16(hash[..16]);
+        return Convert.ToHexStringLower(hash[..16].Span);
     }
 
     public const string EmbeddedResourceFilePath = "prebuilt-artifact/compiled-elm-environments.json.gzip";

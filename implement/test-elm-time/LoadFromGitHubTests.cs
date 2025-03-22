@@ -43,8 +43,8 @@ public class LoadFromGitHubTests
             loadedFilesNamesAndContents
             .Select(fileNameAndContent =>
                 (fileNameAndContent.fileName,
-                    CommonConversion.StringBase16(
-                        CommonConversion.HashSHA256(fileNameAndContent.fileContent)).ToLowerInvariant()))
+                    Convert.ToHexStringLower(
+                        SHA256.HashData(fileNameAndContent.fileContent.Span))))
             .ToImmutableList();
 
         CollectionAssert.AreEquivalent(
@@ -77,8 +77,9 @@ public class LoadFromGitHubTests
             loadedFilesNamesAndContents
             .Select(fileNameAndContent =>
                 (fileNameAndContent.fileName,
-                    fileHash: CommonConversion.StringBase16(
-                        CommonConversion.HashSHA256(fileNameAndContent.fileContent)).ToLowerInvariant()))
+                    fileHash:
+                    Convert.ToHexStringLower(
+                        SHA256.HashData(fileNameAndContent.fileContent.Span))))
             .ToImmutableList();
 
         foreach (var expectedFileNameAndHash in expectedFilesNamesAndHashes)
@@ -107,7 +108,7 @@ public class LoadFromGitHubTests
         Assert.IsNotNull(blobContent, "Found blobContent.");
 
         Assert.AreEqual(expectedFileHash,
-            CommonConversion.StringBase16FromByteArray(SHA256.HashData(blobContent.Span))
+            Convert.ToHexStringLower(SHA256.HashData(blobContent.Span))
             .ToLowerInvariant(),
             "Loaded blob content hash equals expected hash.");
     }
@@ -214,7 +215,7 @@ public class LoadFromGitHubTests
                 Assert.IsNotNull(blobContent, "Found blobContent.");
 
                 Assert.AreEqual("e80817b2aa00350dff8f00207083b3b21b0726166dd695475be512ce86507238",
-                    CommonConversion.StringBase16FromByteArray(SHA256.HashData(blobContent.Span))
+                    Convert.ToHexStringLower(SHA256.HashData(blobContent.Span))
                     .ToLowerInvariant(),
                     "Loaded blob content hash equals expected hash.");
             }
@@ -236,7 +237,7 @@ public class LoadFromGitHubTests
                 Assert.IsNotNull(blobContent, "Found blobContent.");
 
                 Assert.AreEqual("a328195ad75edf2bcc8df48b3d59db93ecc19b95b6115597c282900e1cf18cbc",
-                    CommonConversion.StringBase16FromByteArray(SHA256.HashData(blobContent.Span))
+                    Convert.ToHexStringLower(SHA256.HashData(blobContent.Span))
                     .ToLowerInvariant(),
                     "Loaded blob content hash equals expected hash.");
 

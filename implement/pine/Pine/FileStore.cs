@@ -325,7 +325,7 @@ public class RecordingFileStoreWriter : IFileStoreWriter
 
                         if (filePath.SequenceEqual(appendPath))
                         {
-                            return CommonConversion.Concat(
+                            return BytesConversions.Concat(
                                 (previousFileContent ?? ReadOnlyMemory<byte>.Empty).Span,
                                 AppendFileContent.Value.fileContent.Span);
                         }

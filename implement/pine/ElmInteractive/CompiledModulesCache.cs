@@ -25,7 +25,7 @@ public class CompiledModulesFileCache(IFileStore fileStore)
     {
         var hash = ComputeHashForModulesList(modulesTexts);
 
-        return CommonConversion.StringBase16(hash);
+        return Convert.ToHexStringLower(hash.Span);
     }
 
     public static string ComputeFileNameForModulesList(IReadOnlyList<string> modulesTexts)

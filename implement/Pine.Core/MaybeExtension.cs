@@ -1,24 +1,29 @@
-using System.Collections.Generic;
+using System;
 
 namespace Pine.Core;
 
+/// <summary>
+/// Extension methods for <see cref="Maybe{JustT}"/>.
+/// </summary>
 public static class MaybeExtension
 {
-    public static Maybe<IReadOnlyList<JustT>> ListCombine<JustT>(this IEnumerable<Maybe<JustT>> list)
-    {
-        var justList = new List<JustT>();
-
-        foreach (var item in list)
+    /// <summary>
+    /// Convert a <see cref="Maybe{JustT}"/> to a <see cref="Result{ErrT, JustT}"/> with a default error value.
+    /// </summary>
+    /// <param name="self"><see cref="Maybe{JustT}"/> to convert.</param>"
+    /// <param name="defaultErr">Error value to use if the Maybe is Nothing.</param>
+    public static Result<ErrT, JustT> ToResult<JustT, ErrT>(
+        this Maybe<JustT> self,
+        ErrT defaultErr) =>
+        self switch
         {
-            if (item is Maybe<JustT>.Nothing)
-                return Maybe<IReadOnlyList<JustT>>.nothing();
+            Maybe<JustT>.Nothing =>
+            Result<ErrT, JustT>.err(defaultErr),
 
-            if (item is not Maybe<JustT>.Just just)
-                return Maybe<IReadOnlyList<JustT>>.nothing();
+            Maybe<JustT>.Just just =>
+            Result<ErrT, JustT>.ok(just.Value),
 
-            justList.Add(just.Value);
-        }
-
-        return Maybe<IReadOnlyList<JustT>>.just(justList);
-    }
+            _ =>
+            throw new NotImplementedException()
+        };
 }

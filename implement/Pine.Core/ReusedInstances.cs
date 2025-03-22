@@ -6,6 +6,12 @@ using System.Linq;
 
 namespace Pine.Core;
 
+/// <summary>
+/// Holds references to instances of <see cref="PineValue"/>s and <see cref="ElmValue"/>s
+/// reused in popular transformations across the .NET Pine implementation.
+/// 
+/// This reuse happens solely to improve runtime efficiency, reducing memory usage, heap allocations, and equality checks.
+/// </summary>
 public record ReusedInstances(
     System.Func<IEnumerable<Expression>> LoadExpressionRootsSource)
 {
@@ -632,8 +638,32 @@ public record ReusedInstances(
             .ToFrozenDictionary();
     }
 
+    /// <summary>
+    /// Test for internal consistency in the reused instances. Only to be invoked for the purpose of testing.
+    /// </summary>
     public void AssertReferenceEquality()
     {
+        var ListValues =
+            this.ListValues ?? throw new System.NullReferenceException();
+
+        var ElmValues =
+            this.ElmValues ?? throw new System.NullReferenceException();
+
+        var Expressions =
+            this.Expressions ?? throw new System.NullReferenceException();
+
+        var ExpressionEncodings =
+            this.ExpressionEncodings ?? throw new System.NullReferenceException();
+
+        var ExpressionDecodings =
+            this.ExpressionDecodings ?? throw new System.NullReferenceException();
+
+        var ElmValueDecodedAsInElmCompiler =
+            this.ElmValueDecodedAsInElmCompiler ?? throw new System.NullReferenceException();
+
+        var ElmValueEncodedAsInElmCompiler =
+            this.ElmValueEncodedAsInElmCompiler ?? throw new System.NullReferenceException();
+
         static void AssertReferenceEqual<T>(T? refA, T? refB)
             where T : class
         {
@@ -718,7 +748,7 @@ public record ReusedInstances(
         }
     }
 
-    public PineValue? ReusedInstance(PineValue pineValue)
+    private PineValue? ReusedInstance(PineValue pineValue)
     {
         if (pineValue is PineValue.BlobValue blobValue)
         {
@@ -730,6 +760,9 @@ public record ReusedInstances(
 
         if (pineValue is PineValue.ListValue listValue)
         {
+            var ListValues =
+                this.ListValues ?? throw new System.NullReferenceException();
+
             if (ListValues.TryGetValue(new PineValue.ListValue.ListValueStruct(listValue.Elements), out var reused))
                 return reused;
 
@@ -740,7 +773,7 @@ public record ReusedInstances(
             "Unexpected type: " + pineValue.GetType());
     }
 
-    public ElmValue? ReusedInstance(ElmValue elmValue)
+    private ElmValue? ReusedInstance(ElmValue elmValue)
     {
         if (ElmValues?.TryGetValue(elmValue, out var reusedInstance) ?? false)
         {
@@ -750,6 +783,9 @@ public record ReusedInstances(
         return elmValue;
     }
 
+    /// <summary>
+    /// Collect all <see cref="ElmValue"/> instances reachable from the given roots.
+    /// </summary>
     public static IReadOnlySet<ElmValue> CollectAllComponentsFromRoots(
         IEnumerable<ElmValue> roots)
     {

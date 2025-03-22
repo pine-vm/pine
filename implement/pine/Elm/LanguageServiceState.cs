@@ -24,7 +24,7 @@ public class LanguageServiceState(
             ElmCompiler.ElmCompilerFileTreeFromBundledFileTree(compilerSourceFiles);
 
         var elmCompilerFromBundleValue =
-            Core.Elm.BundledElmEnvironments.BundledElmEnvironmentFromFileTree(combinedSourceFiles);
+            BundledElmEnvironments.BundledElmEnvironmentFromFileTree(combinedSourceFiles);
 
         if (elmCompilerFromBundleValue is null)
         {

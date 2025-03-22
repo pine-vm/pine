@@ -11,12 +11,12 @@ namespace Pine;
 public class DependenciesLoader
 {
     public static Result<string, ReadOnlyMemory<byte>> ResolveHashReferenceWithoutCache(
-    ConcurrentDictionary<string, IEnumerable<TreeNodeWithStringPath>> loadedTreesFromUrl,
-    string hashBase16,
-    IEnumerable<string> hintUrls,
-    Func<byte[], byte[]?>? getFileFromHashSHA256)
+        ConcurrentDictionary<string, IEnumerable<TreeNodeWithStringPath>> loadedTreesFromUrl,
+        string hashBase16,
+        IEnumerable<string> hintUrls,
+        Func<byte[], byte[]?>? getFileFromHashSHA256)
     {
-        var hash = CommonConversion.ByteArrayFromStringBase16(hashBase16);
+        var hash = Convert.FromHexString(hashBase16);
 
         IReadOnlyDictionary<string, string>? errorFromHintUrl = null;
 
@@ -48,19 +48,21 @@ public class DependenciesLoader
                 "Failed loading from " + errorFromHintUrl.Count + " hint URL(s):\n" +
                 string.Join("\n", errorFromHintUrl.Select(hintUrlAndError => hintUrlAndError.Key + ": " + hintUrlAndError.Value));
 
-            return
-                Result<string, ReadOnlyMemory<byte>>.err(
-                    string.Join("\n", new[] { error, errorFromDictionary }.WhereNotNull()));
+            return string.Join("\n", new[] { error, errorFromDictionary }.WhereNotNull());
         }
 
-        var assembly = assemblyFromCacheOrLink?.content.ToArray() ?? getFileFromHashSHA256?.Invoke(hash);
+        var assembly =
+            assemblyFromCacheOrLink?.content.ToArray() ??
+            getFileFromHashSHA256?.Invoke(hash);
 
         if (assembly is null)
             return returnError("Did not find assembly image");
 
         if (!PineValueHashTree.ComputeHash(PineValue.Blob(assembly)).Span.SequenceEqual(hash) &&
-            !CommonConversion.HashSHA256(assembly).Span.SequenceEqual(hash))
+            !SHA256.HashData(assembly).SequenceEqual(hash))
+        {
             return returnError("Selected assembly image hash does not match " + hashBase16);
+        }
 
         return
             Result<string, ReadOnlyMemory<byte>>.ok(assembly);
@@ -130,7 +132,7 @@ public class DependenciesLoader
                     "Searched " + searchedTrees.Count + " tree nodes but none of those contained a matching blob:\n" +
                     string.Join("\n",
                     searchedTrees.Select((tree, treeIndex) => "Node " + treeIndex + " " +
-                    CommonConversion.StringBase16(PineValueHashTree.ComputeHashNotSorted(tree)) + " " +
+                    Convert.ToHexStringLower(PineValueHashTree.ComputeHashNotSorted(tree).Span) + " " +
                     DescribeBlobOrTreeContentsForErrorMessage(tree))).Trim('\n'));
         }
 
@@ -164,6 +166,6 @@ public class DependenciesLoader
         string.Join("\n",
             tree.EnumerateBlobsTransitive().Select(blobAtPath =>
             "Found " +
-            CommonConversion.StringBase16(SHA256.HashData(blobAtPath.blobContent.Span)) +
+            Convert.ToHexStringLower(SHA256.HashData(blobAtPath.blobContent.Span)) +
             " at " + string.Join("/", blobAtPath.path)));
 }

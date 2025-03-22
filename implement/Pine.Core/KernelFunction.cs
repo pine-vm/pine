@@ -308,7 +308,7 @@ public static class KernelFunction
                 blobs.Add(blobValue.Bytes);
             }
 
-            return PineValue.Blob(CommonConversion.Concat(blobs));
+            return PineValue.Blob(BytesConversions.Concat(blobs));
         }
 
         throw new NotImplementedException(
@@ -351,7 +351,7 @@ public static class KernelFunction
                 return valueA;
             }
 
-            return PineValue.Blob(CommonConversion.Concat(blobA.Bytes.Span, blobB.Bytes.Span));
+            return PineValue.Blob(BytesConversions.Concat(blobA.Bytes.Span, blobB.Bytes.Span));
         }
 
         throw new NotImplementedException(

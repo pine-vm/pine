@@ -690,7 +690,7 @@ public partial class CompileToCSharp
                             var subexpressionValue =
                             ExpressionEncoding.EncodeExpressionAsValue(subexpression);
 
-                            var expressionHash = CommonConversion.StringBase16(compilerCache.ComputeHash(subexpressionValue));
+                            var expressionHash = Convert.ToHexStringLower(compilerCache.ComputeHash(subexpressionValue).Span);
 
                             var declarationName = "bind_" + expressionHash[..10];
 
@@ -1042,7 +1042,7 @@ public partial class CompileToCSharp
             ExpressionEncoding.EncodeExpressionAsValue(parseAndEvalExpr);
 
         var parseAndEvalExprHash =
-            CommonConversion.StringBase16(compilerCache.ComputeHash(parseAndEvalExprValue));
+            Convert.ToHexStringLower(compilerCache.ComputeHash(parseAndEvalExprValue).Span);
 
         var childPathEnvMap = CodeAnalysis.BuildPathMapFromChildToParentEnv(parseAndEvalExpr.Environment);
 
@@ -1400,7 +1400,7 @@ public partial class CompileToCSharp
 
     public static CompiledExpressionId CompiledExpressionId(PineValue expressionValue)
     {
-        var expressionHash = CommonConversion.StringBase16(compilerCache.ComputeHash(expressionValue));
+        var expressionHash = Convert.ToHexStringLower(compilerCache.ComputeHash(expressionValue).Span);
 
         return
             new CompiledExpressionId(
@@ -1495,7 +1495,7 @@ public partial class CompileToCSharp
     }
 
     public static string DeclarationNameForValue(PineValue pineValue) =>
-        "value_" + CommonConversion.StringBase16(compilerCache.ComputeHash(pineValue))[..10];
+        "value_" + Convert.ToHexStringLower(compilerCache.ComputeHash(pineValue).Span)[..10];
 
     public static Result<string, CompiledExpression> CompileToCSharpExpression(
         Expression.StringTag stringTagExpression,
@@ -1731,7 +1731,7 @@ public partial class CompileToCSharp
 
         var hash = SHA256.HashData(utf8);
 
-        return CommonConversion.StringBase16(hash)[..10];
+        return Convert.ToHexStringLower(hash)[..10];
     }
 
     public record ExpressionUsageCount(

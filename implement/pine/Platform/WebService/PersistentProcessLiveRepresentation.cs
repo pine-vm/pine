@@ -160,7 +160,7 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
         storeWriter.StoreComponent(elmAppState);
 
         var elmAppStateHash =
-            CommonConversion.StringBase16(hashCache.ComputeHash(elmAppState));
+            Convert.ToHexStringLower(hashCache.ComputeHash(elmAppState).Span);
 
         storeWriter.StoreComponent(lastAppConfig.appConfigComponent);
 
@@ -185,7 +185,8 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
                 appConfig:
                 new ValueInFileStructure(
                     HashBase16:
-                    CommonConversion.StringBase16(hashCache.ComputeHash(lastAppConfig.appConfigComponent)))));
+                    Convert.ToHexStringLower(
+                        hashCache.ComputeHash(lastAppConfig.appConfigComponent).Span))));
 
         lastAppStatePersisted =
             (elmAppState, compositionEvent, recordHash.recordHashBase16);
@@ -444,7 +445,7 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
     private static Result<string, PersistentProcessLiveRepresentationDuringRestore> ApplyCompositionEvent(
         CompositionEventWithResolvedDependencies compositionEvent,
         PersistentProcessLiveRepresentationDuringRestore processBefore,
-        Pine.Core.PineVM.IPineVM pineVM,
+        IPineVM pineVM,
         ElmAppInterfaceConfig? overrideElmAppInterfaceConfig)
     {
         /*

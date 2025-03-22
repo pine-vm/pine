@@ -26,20 +26,6 @@ public abstract record Maybe<JustT>
     public static implicit operator Maybe<JustT>(JustT just) =>
         Maybe<JustT>.just(just);
 
-    public bool IsNothing() =>
-        this switch
-        {
-            Nothing _ => true,
-            _ => false
-        };
-
-    public bool IsJust() =>
-        this switch
-        {
-            Just _ => true,
-            _ => false
-        };
-
     /// <summary>
     /// A <see cref="Maybe{JustT}"/> that is Nothing.
     /// </summary>
@@ -50,28 +36,39 @@ public abstract record Maybe<JustT>
     /// </summary>
     public record Just(JustT Value) : Maybe<JustT>;
 
+    /// <summary>
+    /// Transform a Maybe value with a given function.
+    /// </summary>
     public Maybe<MappedT> Map<MappedT>(Func<JustT, MappedT> map) =>
         this switch
         {
-            Nothing _ => Maybe<MappedT>.nothing(),
-            Just just => Maybe<MappedT>.just(map(just.Value)),
-            _ => throw new NotImplementedException()
+            Nothing _ =>
+            Maybe<MappedT>.nothing(),
+
+            Just just =>
+            Maybe<MappedT>.just(map(just.Value)),
+
+            _ =>
+            throw new NotImplementedException()
         };
 
-    public Maybe<MappedT> AndThen<MappedT>(Func<JustT, Maybe<MappedT>> map) =>
+    /// <summary>
+    /// Chain a Maybe value with a given method.
+    /// The <paramref name="map"/> method is only invoked if the current instance is a <see cref="Just"/>.
+    /// Returns <see cref="Nothing" /> if either the current instance is <see cref="Nothing" /> or the <paramref name="map"/> method returns <see cref="Nothing" />.
+    /// </summary>
+    public Maybe<MappedT> AndThen<MappedT>(
+        Func<JustT, Maybe<MappedT>> map) =>
         this switch
         {
-            Nothing _ => Maybe<MappedT>.nothing(),
-            Just just => map(just.Value),
-            _ => throw new NotImplementedException()
-        };
+            Nothing =>
+            Maybe<MappedT>.nothing(),
 
-    public Result<ErrT, JustT> ToResult<ErrT>(ErrT defaultErr) =>
-        this switch
-        {
-            Nothing _ => Result<ErrT, JustT>.err(defaultErr),
-            Just just => Result<ErrT, JustT>.ok(just.Value),
-            _ => throw new NotImplementedException()
+            Just just =>
+            map(just.Value),
+
+            _ =>
+            throw new NotImplementedException()
         };
 
     /// <summary>
@@ -91,13 +88,26 @@ public abstract record Maybe<JustT>
         };
 }
 
+/// <summary>
+/// Namespace for static generic functions to work with <see cref="Maybe{JustT}"/>.
+/// </summary>
 public static class Maybe
 {
+    /// <summary>
+    /// Convert a .NET nullable reference type to a <see cref="Maybe{JustT}"/>.
+    /// </summary>
     public static Maybe<ClassJustT> NothingFromNull<ClassJustT>(ClassJustT? maybeNull)
         where ClassJustT : class =>
-        maybeNull is { } notNull ? Maybe<ClassJustT>.just(notNull) : Maybe<ClassJustT>.nothing();
+        maybeNull is { } notNull ?
+        Maybe<ClassJustT>.just(notNull) :
+        Maybe<ClassJustT>.nothing();
 
+    /// <summary>
+    /// Convert a .NET nullable value type to a <see cref="Maybe{JustT}"/>.
+    /// </summary>
     public static Maybe<StructJustT> NothingFromNull<StructJustT>(StructJustT? maybeNull)
         where StructJustT : struct =>
-        maybeNull is { } notNull ? Maybe<StructJustT>.just(notNull) : Maybe<StructJustT>.nothing();
+        maybeNull is { } notNull ?
+        Maybe<StructJustT>.just(notNull) :
+        Maybe<StructJustT>.nothing();
 }

@@ -97,7 +97,7 @@ public record EnvConstraintId
                 envItem.Value]))];
 
         var hashBase16 =
-            CommonConversion.StringBase16(compilerCache.ComputeHash(PineValue.List(parsedEnvItemsPineValues)));
+            Convert.ToHexStringLower(compilerCache.ComputeHash(PineValue.List(parsedEnvItemsPineValues)).Span);
 
         return new EnvConstraintId(
             parsedEnvItems.ToImmutableSortedDictionary(keyComparer: IntPathComparer.Instance),

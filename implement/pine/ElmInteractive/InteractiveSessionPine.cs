@@ -1144,8 +1144,8 @@ public class InteractiveSessionPine : IInteractiveSession
             var envHash = ComputeHash(environment);
 
             return
-                CommonConversion.StringBase16(exprHash[..8]) + "_x_" +
-                CommonConversion.StringBase16(envHash[..8]);
+                Convert.ToHexStringLower(exprHash[..8].Span) + "_x_" +
+                Convert.ToHexStringLower(envHash[..8].Span);
         }
 
         readonly ConcurrentDictionary<Expression, PineValue> encodedExprCache = new();

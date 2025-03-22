@@ -83,8 +83,9 @@ public static class Elm019Binaries
         IFileStore? resultCacheFileStore)
     {
         var elmCodeFilesHash =
-            CommonConversion.StringBase16(
-                PineValueHashTree.ComputeHashSorted(PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(elmCodeFiles)));
+            Convert.ToHexStringLower(
+                PineValueHashTree.ComputeHashSorted(
+                    PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(elmCodeFiles)).Span);
 
         var requestIdentifier = new ElmMakeRequestIdentifier(
             elmCodeFilesHash: elmCodeFilesHash,
@@ -93,8 +94,9 @@ public static class Elm019Binaries
             elmMakeCommandAppendix: elmMakeCommandAppendix);
 
         var requestHash =
-            CommonConversion.StringBase16(
-                CommonConversion.HashSHA256(System.Text.Encoding.UTF8.GetBytes(System.Text.Json.JsonSerializer.Serialize(requestIdentifier))));
+            Convert.ToHexStringLower(
+                System.Security.Cryptography.SHA256.HashData(
+                    System.Text.Encoding.UTF8.GetBytes(System.Text.Json.JsonSerializer.Serialize(requestIdentifier))));
 
         var cacheEntryPath = ImmutableList.Create(requestHash);
 

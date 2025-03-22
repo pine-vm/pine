@@ -346,7 +346,7 @@ public class PGOTests
 
                     Console.WriteLine(
                         "\nEnvironment class [" + i + "] " + envClass.HashBase16[..8] +
-                        " for expr " + CommonConversion.StringBase16(exprValueHash)[..8] +
+                        " for expr " + Convert.ToHexStringLower(exprValueHash.Span)[..8] +
                         " has " + envClass.ParsedEnvItems.Count + " env items:");
 
                     var envItems = envClass.ParsedEnvItems.ToArray();
@@ -358,7 +358,7 @@ public class PGOTests
                         var envItemValueHash = PineValueHashTree.ComputeHash(envItem.Value);
 
                         var envItemDisplayText =
-                            CommonConversion.StringBase16(envItemValueHash)[..8] +
+                            Convert.ToHexStringLower(envItemValueHash.Span)[..8] +
                             " - " +
                             ElmValueEncoding.PineValueAsElmValue(envItem.Value, null, null)
                             .Unpack(
@@ -949,7 +949,7 @@ public class PGOTests
 
                     Console.WriteLine(
                         "\nEnvironment class [" + i + "] " + envClass.HashBase16[..8] +
-                        " for expr " + CommonConversion.StringBase16(exprValueHash)[..8] +
+                        " for expr " + Convert.ToHexStringLower(exprValueHash.Span)[..8] +
                         " has " + envClass.ParsedEnvItems.Count + " env items:");
 
                     var envItems = envClass.ParsedEnvItems.ToArray();
@@ -961,7 +961,7 @@ public class PGOTests
                         var envItemValueHash = PineValueHashTree.ComputeHash(envItem.Value);
 
                         var envItemDisplayText =
-                            CommonConversion.StringBase16(envItemValueHash)[..8] +
+                            Convert.ToHexStringLower(envItemValueHash.Span)[..8] +
                             " - " +
                             ElmValueEncoding.PineValueAsElmValue(envItem.Value, null, null)
                             .Unpack(
@@ -1121,9 +1121,11 @@ public class PGOTests
 
                 Console.WriteLine(
                     "\nFunction " + functionToInspect.moduleName + "." + functionToInspect.declarationName + " has hash " +
-                    CommonConversion.StringBase16(functionValueHash)[..8] + " and " +
+                    Convert.ToHexStringLower(functionValueHash.Span)[..8] + " and " +
                     functionRecord.envFunctions.Length + " env functions:\n" +
-                    string.Join("\n", envFunctionsHashes.Select(envFunctionHash => CommonConversion.StringBase16(envFunctionHash)[..8])));
+                    string.Join(
+                        "\n",
+                        envFunctionsHashes.Select(envFunctionHash => Convert.ToHexStringLower(envFunctionHash.Span)[..8])));
             }
         }
 
@@ -1354,7 +1356,7 @@ public class PGOTests
 
                     Console.WriteLine(
                         "\nEnvironment class [" + i + "] " + envClass.HashBase16[..8] +
-                        " for expr " + CommonConversion.StringBase16(exprValueHash)[..8] +
+                        " for expr " + Convert.ToHexStringLower(exprValueHash.Span)[..8] +
                         " has " + envClass.ParsedEnvItems.Count + " env items:");
 
                     var envItems = envClass.ParsedEnvItems.ToArray();
@@ -1366,7 +1368,7 @@ public class PGOTests
                         var envItemValueHash = PineValueHashTree.ComputeHash(envItem.Value);
 
                         var envItemDisplayText =
-                            CommonConversion.StringBase16(envItemValueHash)[..8] +
+                            Convert.ToHexStringLower(envItemValueHash.Span)[..8] +
                             " - " +
                             ElmValueEncoding.PineValueAsElmValue(envItem.Value, null, null)
                             .Unpack(
@@ -1553,9 +1555,11 @@ public class PGOTests
 
                 Console.WriteLine(
                     "\nFunction " + functionToInspect.moduleName + "." + functionToInspect.declarationName + " has hash " +
-                    CommonConversion.StringBase16(functionValueHash)[..8] + " and " +
+                    Convert.ToHexStringLower(functionValueHash.Span)[..8] + " and " +
                     functionRecord.envFunctions.Length + " env functions:\n" +
-                    string.Join("\n", envFunctionsHashes.Select(envFunctionHash => CommonConversion.StringBase16(envFunctionHash)[..8])));
+                    string.Join(
+                        "\n",
+                        envFunctionsHashes.Select(envFunctionHash => Convert.ToHexStringLower(envFunctionHash.Span)[..8])));
             }
         }
 
@@ -1738,7 +1742,7 @@ public class PGOTests
 
                     Console.WriteLine(
                         "\nEnvironment class [" + i + "] " + envClass.HashBase16[..8] +
-                        " for expr " + CommonConversion.StringBase16(exprValueHash)[..8] +
+                        " for expr " + Convert.ToHexStringLower(exprValueHash.Span)[..8] +
                         " has " + envClass.ParsedEnvItems.Count + " env items:");
 
                     var envItems = envClass.ParsedEnvItems.ToArray();
@@ -1750,7 +1754,7 @@ public class PGOTests
                         var envItemValueHash = PineValueHashTree.ComputeHash(envItem.Value);
 
                         var envItemDisplayText =
-                            CommonConversion.StringBase16(envItemValueHash)[..8] +
+                            Convert.ToHexStringLower(envItemValueHash.Span)[..8] +
                             " - " +
                             ElmValueEncoding.PineValueAsElmValue(envItem.Value, null, null)
                             .Unpack(

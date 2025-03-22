@@ -46,7 +46,7 @@ public class PineVMEncodeExpressionTests
                 ExpressionEncoding.EncodeExpressionAsValue(testCase);
 
             var decoded =
-                ExpressionEncoding.ParseExpressionFromValueDefault(encoded)
+                ExpressionEncoding.ParseExpressionFromValue(encoded)
                 .Extract(err => throw new System.Exception("Failed to decode expression: " + err));
 
             Assert.AreEqual(testCase, decoded);

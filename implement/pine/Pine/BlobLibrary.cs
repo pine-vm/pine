@@ -29,7 +29,7 @@ public class BlobLibrary
         if (hashAndRemoteSource.hash == null)
             throw new Exception("Unknown OS: " + RuntimeInformation.OSDescription);
 
-        var hash = CommonConversion.ByteArrayFromStringBase16(hashAndRemoteSource.hash);
+        var hash = Convert.FromHexString(hashAndRemoteSource.hash);
 
         return GetBlobWithSHA256Cached(
             hash,
@@ -57,7 +57,7 @@ public class BlobLibrary
         catch (Exception e)
         {
             throw new Exception(
-                "Did not find blob with hash " + CommonConversion.StringBase16(sha256),
+                "Did not find blob with hash " + Convert.ToHexStringLower(sha256.Span),
                 innerException: e);
         }
     }
@@ -72,7 +72,7 @@ public class BlobLibrary
     {
         var sha256DirectoryName = "by-sha256";
 
-        var fileName = BitConverter.ToString(sha256.ToArray()).Replace("-", "").ToLowerInvariant();
+        var fileName = Convert.ToHexStringLower(sha256.ToArray());
 
         var cacheFilePath = Path.Combine(cacheDirectory, sha256DirectoryName, fileName);
 
@@ -324,7 +324,7 @@ public class BlobLibrary
 
             try
             {
-                fromTarArchive = TarArchive.TreeWithStringPathFromTarArchive(CommonConversion.DecompressGzip(blobContent));
+                fromTarArchive = TarArchive.TreeWithStringPathFromTarArchive(BytesConversions.DecompressGzip(blobContent));
             }
             catch { }
 
@@ -337,7 +337,7 @@ public class BlobLibrary
 
             try
             {
-                fromGzip = CommonConversion.DecompressGzip(blobContent);
+                fromGzip = BytesConversions.DecompressGzip(blobContent);
             }
             catch { }
 

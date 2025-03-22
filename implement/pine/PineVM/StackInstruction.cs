@@ -1,4 +1,5 @@
 using Pine.Core;
+using System;
 using System.Collections.Generic;
 using System.Numerics;
 
@@ -418,7 +419,7 @@ public record StackInstruction(
             (PineValueAsInteger.SignedIntegerFromBlobValueRelaxed(blob.Bytes.Span).IsOkOrNullable() is { } asInt ?
             "int " + asInt
             :
-            "0x" + CommonConversion.StringBase16(blob.Bytes))
+            "0x" + Convert.ToHexStringLower(blob.Bytes.Span))
             +
             ")",
 

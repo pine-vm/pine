@@ -96,7 +96,7 @@ public class ProfilingPineVM
                 funcApplReport =>
                 {
                     var originalExpression =
-                    ExpressionEncoding.ParseExpressionFromValueDefault(funcApplReport.ExpressionValue)
+                    ExpressionEncoding.ParseExpressionFromValue(funcApplReport.ExpressionValue)
                     .Extract(err => throw new System.Exception(err));
 
                     // if (DynamicPGOShare.ShouldIncludeExpressionInCompilation(expression))

@@ -23,18 +23,6 @@ public record ValueInFile(
     */
 }
 
-public record CompositionRecord(
-    byte[] ParentHash,
-    string? SetStateLiteralString,
-    IReadOnlyList<string>? AppendedEventsLiteralString);
-
-public record CompositionRecordInFile(
-    string ParentHashBase16,
-    ValueInFile? SetState = default,
-    IReadOnlyList<ValueInFile>? AppendedEvents = default)
-{
-    public static byte[] HashFromSerialRepresentation(byte[] serialized) => CommonConversion.HashSHA256(serialized).ToArray();
-}
 
 public record ReductionRecord(
     byte[] ReducedCompositionHash,
@@ -108,7 +96,8 @@ public class ProcessStoreReaderInFileStore(IFileStore fileStore)
 
     public ReductionRecord? GetReduction(byte[] reducedCompositionHash)
     {
-        var reducedCompositionHashBase16 = CommonConversion.StringBase16FromByteArray(reducedCompositionHash);
+        var reducedCompositionHashBase16 =
+            Convert.ToHexStringLower(reducedCompositionHash);
 
         var filePath = ImmutableList.Create(reducedCompositionHashBase16);
 
@@ -194,7 +183,7 @@ public class ProcessStoreWriterInFileStore(
 
             compositionFileStoreWriter.AppendFileContent(
                 compositionLogFilePath,
-                CommonConversion.Concat<byte>(record, Encoding.UTF8.GetBytes("\n")));
+                BytesConversions.Concat<byte>(record, Encoding.UTF8.GetBytes("\n")));
 
             appendSerializedCompositionRecordLastFilePath = compositionLogFilePath;
         }
@@ -204,8 +193,11 @@ public class ProcessStoreWriterInFileStore(
     {
         var recordInFile = new ReductionRecordInFile
         (
-            ReducedCompositionHashBase16: CommonConversion.StringBase16FromByteArray(record.ReducedCompositionHash),
-            ReducedValue: new ValueInFile(LiteralString: record.ReducedValueLiteralString)
+            ReducedCompositionHashBase16:
+            Convert.ToHexStringLower(record.ReducedCompositionHash),
+
+            ReducedValue:
+            new ValueInFile(LiteralString: record.ReducedValueLiteralString)
         );
 
         var fileName = recordInFile.ReducedCompositionHashBase16;

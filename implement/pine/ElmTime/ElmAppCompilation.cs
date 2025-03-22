@@ -85,15 +85,21 @@ namespace ElmTime
 
 
             var sourceFilesHash =
-                CommonConversion.StringBase16(PineValueHashTree.ComputeHashSorted(PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(sourceFiles)));
+                Convert.ToHexStringLower(
+                    PineValueHashTree.ComputeHashSorted(
+                        PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(sourceFiles)).Span);
 
             var compilationHash =
-                CommonConversion.StringBase16(CommonConversion.HashSHA256(Encoding.UTF8.GetBytes(
-                    System.Text.Json.JsonSerializer.Serialize(new
-                    {
-                        sourceFilesHash,
-                        interfaceConfig,
-                    }))));
+                System.Security.Cryptography.SHA256.HashData(
+                    Encoding.UTF8.GetBytes(
+                        System.Text.Json.JsonSerializer.Serialize(new
+                        {
+                            sourceFilesHash,
+                            interfaceConfig,
+                        })));
+
+            var compilationHashBase16 =
+                Convert.ToHexStringLower(compilationHash);
 
             CompilationResult compileNew() =>
                 AsCompletelyLoweredElmApp(
@@ -117,7 +123,7 @@ namespace ElmTime
 
             var (compilationResult, _) =
                 ElmAppCompilationCache.AddOrUpdate(
-                    compilationHash,
+                    compilationHashBase16,
                     _ => BuildNextCacheEntry(null),
                     (_, previousEntry) => BuildNextCacheEntry(previousEntry.compilationResult));
 

@@ -5,11 +5,15 @@ using System.Linq;
 namespace Pine.Core;
 
 /// <summary>
-/// The standard encoding of Pine expressions as Pine values.
+/// The standard encoding of Pine expression as Pine value.
 /// This is the encoding used to map from data to code when evaluating a <see cref="Expression.ParseAndEval"/> expression.
 /// </summary>
 public static class ExpressionEncoding
 {
+    /// <summary>
+    /// The standard encoding of Pine expression as Pine value.
+    /// This is the encoding used to map from data to code when evaluating a <see cref="Expression.ParseAndEval"/> expression.
+    /// </summary>
     public static PineValue.ListValue EncodeExpressionAsValue(Expression expression) =>
         ReusedInstances.Instance.ExpressionEncodings?.TryGetValue(expression, out var encoded) ?? false && encoded is not null
         ?
@@ -47,22 +51,27 @@ public static class ExpressionEncoding
             throw new Exception("Unsupported expression type: " + expression.GetType().FullName)
         };
 
-    public static Result<string, Expression> ParseExpressionFromValueDefault(
+    /// <summary>
+    /// Parse a Pine value as Pine expression.
+    /// 
+    /// Inverse of <see cref="EncodeExpressionAsValue"/>.
+    /// </summary>
+    public static Result<string, Expression> ParseExpressionFromValue(
         PineValue value)
     {
         if (value is PineValue.ListValue listValue)
         {
-            if (ReusedInstances.Instance.ExpressionDecodings?.TryGetValue(listValue, out var popularExpression) ?? false)
-                return popularExpression;
+            if (ReusedInstances.Instance.ExpressionDecodings?.TryGetValue(listValue, out var reusedInstance) ?? false)
+                return reusedInstance;
         }
 
         return
             ParseExpressionFromValueDefault(
                 value,
-                generalParser: ParseExpressionFromValueDefault);
+                generalParser: ParseExpressionFromValue);
     }
 
-    public static Result<string, Expression> ParseExpressionFromValueDefault(
+    private static Result<string, Expression> ParseExpressionFromValueDefault(
         PineValue value,
         Func<PineValue, Result<string, Expression>> generalParser) =>
         value switch
@@ -176,7 +185,7 @@ public static class ExpressionEncoding
             "Unexpected value type, not a list: " + other.GetType().FullName
         };
 
-    public static PineValue.ListValue EncodeParseAndEval(Expression.ParseAndEval parseAndEval) =>
+    private static PineValue.ListValue EncodeParseAndEval(Expression.ParseAndEval parseAndEval) =>
         EncodeChoiceTypeVariantAsPineValue("ParseAndEval",
             PineValue.List(
                 [
@@ -184,10 +193,10 @@ public static class ExpressionEncoding
                 EncodeExpressionAsValue(parseAndEval.Environment)
                 ]));
 
-    public static Result<string, Expression.ParseAndEval> ParseParseAndEval(
+    private static Result<string, Expression.ParseAndEval> ParseParseAndEval(
         Func<PineValue, Result<string, Expression>> generalParser,
         ReadOnlyMemory<PineValue> arguments) =>
-        arguments.Length < 2
+        arguments.Length is not 2
         ?
         "Expected two arguments under parse and eval, but got " + arguments.Length
         :
@@ -196,7 +205,10 @@ public static class ExpressionEncoding
         generalParser(arguments.Span[1])
         .Map(environment => new Expression.ParseAndEval(encoded: encoded, environment: environment)));
 
-    public static PineValue.ListValue EncodeKernelApplication(
+    /// <summary>
+    /// Encodes a kernel application expression as a Pine value.
+    /// </summary>
+    private static PineValue.ListValue EncodeKernelApplication(
         Expression.KernelApplication kernelApplicationExpression) =>
         EncodeChoiceTypeVariantAsPineValue(
             "KernelApplication",
@@ -206,10 +218,10 @@ public static class ExpressionEncoding
                 EncodeExpressionAsValue(kernelApplicationExpression.Input)
                 ]));
 
-    public static Result<string, Expression.KernelApplication> ParseKernelApplication(
+    private static Result<string, Expression.KernelApplication> ParseKernelApplication(
         Func<PineValue, Result<string, Expression>> generalParser,
         ReadOnlyMemory<PineValue> arguments) =>
-        arguments.Length < 2
+        arguments.Length is not 2
         ?
         "Expected two arguments under kernel application, but got " + arguments.Length
         :
@@ -220,7 +232,7 @@ public static class ExpressionEncoding
             function: function,
             input: input)));
 
-    public static PineValue.ListValue EncodeConditional(
+    private static PineValue.ListValue EncodeConditional(
         Expression.Conditional conditionalExpression) =>
         EncodeChoiceTypeVariantAsPineValue(
             "Conditional",
@@ -231,10 +243,10 @@ public static class ExpressionEncoding
                 EncodeExpressionAsValue(conditionalExpression.TrueBranch)
                 ]));
 
-    public static Result<string, Expression.Conditional> ParseConditional(
+    private static Result<string, Expression.Conditional> ParseConditional(
         Func<PineValue, Result<string, Expression>> generalParser,
         ReadOnlyMemory<PineValue> arguments) =>
-        arguments.Length < 3
+        arguments.Length is not 3
         ?
         "Expected 3 arguments under conditional, but got " + arguments.Length
         :
@@ -249,10 +261,10 @@ public static class ExpressionEncoding
                 falseBranch: falseBranch,
                 trueBranch: trueBranch))));
 
-    public static Result<string, Expression.StringTag> ParseStringTag(
+    private static Result<string, Expression.StringTag> ParseStringTag(
         Func<PineValue, Result<string, Expression>> generalParser,
         ReadOnlyMemory<PineValue> arguments) =>
-        arguments.Length < 2
+        arguments.Length is not 2
         ?
         "Expected 2 arguments under string tag, but got " + arguments.Length
         :
@@ -278,12 +290,12 @@ public static class ExpressionEncoding
             throw new NotImplementedException("Unexpected result type: " + other.GetType().FullName)
         };
 
-    public static Result<ErrT, IReadOnlyList<MappedOkT>> ResultListMapCombine<ErrT, OkT, MappedOkT>(
+    private static Result<ErrT, IReadOnlyList<MappedOkT>> ResultListMapCombine<ErrT, OkT, MappedOkT>(
         IReadOnlyList<OkT> list,
         Func<OkT, Result<ErrT, MappedOkT>> mapElement) =>
         list.Select(mapElement).ListCombine();
 
-    public static Result<string, Record> ParseRecord3FromPineValue<FieldA, FieldB, FieldC, Record>(
+    private static Result<string, Record> ParseRecord3FromPineValue<FieldA, FieldB, FieldC, Record>(
         PineValue value,
         (string name, Func<PineValue, Result<string, FieldA>> decode) fieldA,
         (string name, Func<PineValue, Result<string, FieldB>> decode) fieldB,
@@ -352,7 +364,7 @@ public static class ExpressionEncoding
             throw new NotImplementedException("Unexpected result type: " + other.GetType().FullName)
         };
 
-    public static Result<string, Record> DecodeRecord2FromPineValue<FieldA, FieldB, Record>(
+    private static Result<string, Record> DecodeRecord2FromPineValue<FieldA, FieldB, Record>(
         PineValue value,
         (string name, Func<PineValue, Result<string, FieldA>> decode) fieldA,
         (string name, Func<PineValue, Result<string, FieldB>> decode) fieldB,
@@ -403,7 +415,7 @@ public static class ExpressionEncoding
             throw new NotImplementedException("Unexpected result type: " + other.GetType().FullName)
         };
 
-    public static PineValue.ListValue EncodeRecordToPineValue(
+    private static PineValue.ListValue EncodeRecordToPineValue(
         params (string fieldName, PineValue fieldValue)[] fields) =>
         PineValue.List(
             [..fields.Select(field => PineValue.List(
@@ -413,7 +425,7 @@ public static class ExpressionEncoding
                 ]))]);
 
 
-    public static Result<string, IReadOnlyDictionary<string, PineValue>> ParseRecordFromPineValue(PineValue value)
+    private static Result<string, IReadOnlyDictionary<string, PineValue>> ParseRecordFromPineValue(PineValue value)
     {
         if (ParsePineListValue(value) is not Result<string, ReadOnlyMemory<PineValue>>.Ok listResult)
             return "Failed to parse as list";
@@ -439,14 +451,14 @@ public static class ExpressionEncoding
         return recordFields;
     }
 
-    public static PineValue.ListValue EncodeChoiceTypeVariantAsPineValue(string tagName, PineValue tagArguments) =>
+    private static PineValue.ListValue EncodeChoiceTypeVariantAsPineValue(string tagName, PineValue tagArguments) =>
         PineValue.List(
             [
                 PineValueAsString.ValueFromString(tagName),
                 tagArguments,
             ]);
 
-    public static Result<string, T> ParseChoiceFromPineValue<T>(
+    private static Result<string, T> ParseChoiceFromPineValue<T>(
         Func<PineValue, Result<string, T>> generalParser,
         IReadOnlyDictionary<PineValue, Func<Func<PineValue, Result<string, T>>, PineValue, Result<string, T>>> variants,
         PineValue value) =>
@@ -489,7 +501,7 @@ public static class ExpressionEncoding
             throw new NotImplementedException("Unexpected result type: " + other.GetType().FullName)
         };
 
-    public static Result<string, ReadOnlyMemory<PineValue>> ParsePineListValue(PineValue value)
+    private static Result<string, ReadOnlyMemory<PineValue>> ParsePineListValue(PineValue value)
     {
         if (value is not PineValue.ListValue listValue)
             return "Not a list";
@@ -498,7 +510,7 @@ public static class ExpressionEncoding
             Result<string, ReadOnlyMemory<PineValue>>.ok(listValue.Elements);
     }
 
-    public static Result<string, (T, T)> ParseListWithExactlyTwoElements<T>(ReadOnlyMemory<T> list)
+    private static Result<string, (T, T)> ParseListWithExactlyTwoElements<T>(ReadOnlyMemory<T> list)
     {
         if (list.Length is not 2)
             return "Unexpected number of items in list: Not 2 but " + list.Length;

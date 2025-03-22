@@ -1,4 +1,4 @@
-﻿using Pine;
+using Pine;
 using Pine.Core;
 using System;
 using System.IO;
@@ -13,7 +13,7 @@ public class NativeDependencies
         string cacheDirectory,
         DependencyFile dependency)
     {
-        var hash = CommonConversion.ByteArrayFromStringBase16(dependency.HashBase16);
+        var hash = Convert.FromHexString(dependency.HashBase16);
 
         var fileAbsolutePath = Path.Combine(cacheDirectory, dependency.ExpectedFileName);
 

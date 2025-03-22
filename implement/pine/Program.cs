@@ -545,7 +545,7 @@ public class Program
                 readKey();
             }
 
-            var asStandardInput = CommonConversion.Concat(keys);
+            var asStandardInput = BytesConversions.Concat(keys);
 
             processStandardInput(asStandardInput);
 
@@ -1033,7 +1033,7 @@ public class Program
                     0;
 
                     Console.WriteLine(
-                        "Compiled source tree " + CommonConversion.StringBase16(sourceTreeHash).Substring(0, 8) +
+                        "Compiled source tree " + Convert.ToHexStringLower(sourceTreeHash.Span).Substring(0, 8) +
                         " containing " + sourceTreeAllFiles.Length +
                         " files and " + sourceTreeElmModules.Length +
                         " Elm modules into environment with " +
@@ -1258,7 +1258,7 @@ public class Program
 
         var report = new CompileAppReport
         (
-            beginTime: CommonConversion.TimeStringViewForReport(DateTimeOffset.UtcNow),
+            beginTime: BytesConversions.TimeStringViewForReport(DateTimeOffset.UtcNow),
             engineVersion: AppVersionId,
             sourcePath: sourcePath,
             sourceCompositionId: null,
@@ -1378,7 +1378,7 @@ public class Program
 
                         var compiledTree = PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(compiledAppFiles);
                         var compiledComposition = PineValueComposition.FromTreeWithStringPath(compiledTree);
-                        var compiledCompositionId = CommonConversion.StringBase16(PineValueHashTree.ComputeHash(compiledComposition));
+                        var compiledCompositionId = Convert.ToHexStringLower(PineValueHashTree.ComputeHash(compiledComposition).Span);
 
                         compilationStopwatch.Stop();
 
@@ -1563,7 +1563,7 @@ public class Program
                             {
                                 var asComposition = PineValueComposition.FromTreeWithStringPath(loadedScenario.component);
 
-                                var hashBase16 = CommonConversion.StringBase16(PineValueHashTree.ComputeHash(asComposition));
+                                var hashBase16 = Convert.ToHexStringLower(PineValueHashTree.ComputeHash(asComposition).Span);
 
                                 return new
                                 {
@@ -1712,7 +1712,7 @@ public class Program
 
                         var interactiveConfig = new InteractiveSessionConfig(
                             CompilerId:
-                            CommonConversion.StringBase16(PineValueHashTree.ComputeHashSorted(compileElmProgramCodeFiles))[..8],
+                            Convert.ToHexStringLower(PineValueHashTree.ComputeHashSorted(compileElmProgramCodeFiles).Span)[..8],
                             newInteractiveSessionFromAppCode);
 
                         {
@@ -1966,7 +1966,7 @@ public class Program
 
                 var composition = PineValueComposition.FromTreeWithStringPath(loadCompositionResult.tree);
 
-                var compositionId = CommonConversion.StringBase16(PineValueHashTree.ComputeHash(composition));
+                var compositionId = Convert.ToHexStringLower(PineValueHashTree.ComputeHash(composition).Span);
 
                 Console.WriteLine("Loaded composition " + compositionId + " from '" + sourcePath + "'.");
 
@@ -2223,7 +2223,7 @@ public class Program
                     },
                     fromOk: loadSourceFilesOk =>
                     {
-                        var inputHash = CommonConversion.StringBase16(PineValueHashTree.ComputeHashSorted(loadSourceFilesOk.sourceFiles));
+                        var inputHash = Convert.ToHexStringLower(PineValueHashTree.ComputeHashSorted(loadSourceFilesOk.sourceFiles).Span);
 
                         Console.WriteLine(
                             "Loaded " + inputHash[..10] + " as input: " +
@@ -2457,7 +2457,7 @@ public class Program
                         blobs.Select(blobAtPath =>
                         string.Join("/", blobAtPath.path) + " : " +
                         blobAtPath.blobContent.Length + " bytes, " +
-                        CommonConversion.StringBase16(PineValueHashTree.ComputeHash(PineValue.Blob(blobAtPath.blobContent)))[..10]));
+                        Convert.ToHexStringLower(PineValueHashTree.ComputeHash(PineValue.Blob(blobAtPath.blobContent)).Span)[..10]));
 
             yield break;
         }
@@ -2471,7 +2471,7 @@ public class Program
                 foreach (var extractedTree in BlobLibrary.ExtractTreesFromNamedBlob(extractBlobName, blob.Bytes))
                 {
                     var extractedTreeCompositionId =
-                        CommonConversion.StringBase16(PineValueHashTree.ComputeHashNotSorted(extractedTree));
+                        Convert.ToHexStringLower(PineValueHashTree.ComputeHashNotSorted(extractedTree).Span);
 
                     var compositionDescription =
                         string.Join(
@@ -2667,7 +2667,7 @@ public class Program
 
     private static (string compositionId, SourceSummaryStructure summary) CompileSourceSummary(TreeNodeWithStringPath sourceTree)
     {
-        var compositionId = CommonConversion.StringBase16(PineValueHashTree.ComputeHashSorted(sourceTree));
+        var compositionId = Convert.ToHexStringLower(PineValueHashTree.ComputeHashSorted(sourceTree).Span);
 
         var allBlobs = sourceTree.EnumerateBlobsTransitive().ToImmutableList();
 
@@ -2727,7 +2727,7 @@ public class Program
         bool initElmAppState,
         bool promptForPasswordOnConsole)
     {
-        var beginTime = CommonConversion.TimeStringViewForReport(DateTimeOffset.UtcNow);
+        var beginTime = BytesConversions.TimeStringViewForReport(DateTimeOffset.UtcNow);
 
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
@@ -2742,9 +2742,9 @@ public class Program
         var appConfigZipArchive = buildResult.configZipArchive;
 
         var compiledCompositionId =
-            CommonConversion.StringBase16(
+            Convert.ToHexStringLower(
                 PineValueHashTree.ComputeHashSorted(PineValueComposition.SortedTreeFromSetOfBlobsWithCommonFilePath(
-                    ZipArchive.EntriesFromZipArchive(appConfigZipArchive))));
+                    ZipArchive.EntriesFromZipArchive(appConfigZipArchive))).Span);
 
         Console.WriteLine("Built app config " + compiledCompositionId + " from " + sourceCompositionId + ".");
 
@@ -2826,7 +2826,7 @@ public class Program
                 var appConfigValueInFile =
                     new Platform.WebService.ProcessStoreSupportingMigrations.ValueInFileStructure
                     {
-                        HashBase16 = CommonConversion.StringBase16(PineValueHashTree.ComputeHash(appConfigComponent))
+                        HashBase16 = Convert.ToHexStringLower(PineValueHashTree.ComputeHash(appConfigComponent).Span)
                     };
 
                 var compositionLogEvent =
@@ -2873,7 +2873,7 @@ public class Program
         string? siteDefaultPassword,
         bool promptForPasswordOnConsole)
     {
-        var beginTime = CommonConversion.TimeStringViewForReport(DateTimeOffset.UtcNow);
+        var beginTime = BytesConversions.TimeStringViewForReport(DateTimeOffset.UtcNow);
 
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
@@ -2925,7 +2925,7 @@ public class Program
         string? siteDefaultPassword,
         bool promptForPasswordOnConsole)
     {
-        var beginTime = CommonConversion.TimeStringViewForReport(DateTimeOffset.UtcNow);
+        var beginTime = BytesConversions.TimeStringViewForReport(DateTimeOffset.UtcNow);
 
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
@@ -3139,7 +3139,7 @@ public class Program
         (
             source: source,
             destination: destination,
-            beginTime: CommonConversion.TimeStringViewForReport(DateTimeOffset.UtcNow)
+            beginTime: BytesConversions.TimeStringViewForReport(DateTimeOffset.UtcNow)
         );
 
         CopyElmAppStateReport returnWithErrorMessage(string error)
@@ -3172,7 +3172,7 @@ public class Program
         }
 
         var appStateComponent = PineValue.Blob(appStateSerial);
-        var appStateId = CommonConversion.StringBase16(PineValueHashTree.ComputeHash(appStateComponent));
+        var appStateId = Convert.ToHexStringLower(PineValueHashTree.ComputeHash(appStateComponent).Span);
 
         report = report with { appStateSummary = new AppStateSummary(hash: appStateId, length: appStateSerial.Length) };
 
@@ -3227,13 +3227,13 @@ public class Program
         byte[] elmAppStateSerialized,
         bool promptForPasswordOnConsole)
     {
-        var beginTime = CommonConversion.TimeStringViewForReport(DateTimeOffset.UtcNow);
+        var beginTime = BytesConversions.TimeStringViewForReport(DateTimeOffset.UtcNow);
 
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         var elmAppStateComponent = PineValue.Blob(elmAppStateSerialized);
 
-        var elmAppStateId = CommonConversion.StringBase16(PineValueHashTree.ComputeHash(elmAppStateComponent));
+        var elmAppStateId = Convert.ToHexStringLower(PineValueHashTree.ComputeHash(elmAppStateComponent).Span);
 
         var httpResponse = AttemptHttpRequest(() =>
             {
@@ -3278,7 +3278,7 @@ public class Program
         string? siteDefaultPassword,
         bool promptForPasswordOnConsole)
     {
-        var beginTime = CommonConversion.TimeStringViewForReport(DateTimeOffset.UtcNow);
+        var beginTime = BytesConversions.TimeStringViewForReport(DateTimeOffset.UtcNow);
 
         var httpResponse = AttemptHttpRequest(() =>
             {
@@ -3296,7 +3296,7 @@ public class Program
         var elmAppStateSerialized = httpResponse.Content.ReadAsByteArrayAsync().Result;
 
         var elmAppStateComponent = PineValue.Blob(elmAppStateSerialized);
-        var elmAppStateId = CommonConversion.StringBase16(PineValueHashTree.ComputeHash(elmAppStateComponent));
+        var elmAppStateId = Convert.ToHexStringLower(PineValueHashTree.ComputeHash(elmAppStateComponent).Span);
 
         return elmAppStateSerialized;
     }
@@ -3312,7 +3312,7 @@ public class Program
         string? siteDefaultPassword,
         bool promptForPasswordOnConsole)
     {
-        var beginTime = CommonConversion.TimeStringViewForReport(DateTimeOffset.UtcNow);
+        var beginTime = BytesConversions.TimeStringViewForReport(DateTimeOffset.UtcNow);
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         var requestUrl =
@@ -3448,7 +3448,7 @@ public class Program
 
     private static void WriteReportToFileInReportDirectory(string reportContent, string reportKind)
     {
-        var fileName = CommonConversion.TimeStringViewForReport(programStartTime) + "_" + reportKind;
+        var fileName = BytesConversions.TimeStringViewForReport(programStartTime) + "_" + reportKind;
 
         var filePath = Path.Combine(ReportFilePath, fileName);
 

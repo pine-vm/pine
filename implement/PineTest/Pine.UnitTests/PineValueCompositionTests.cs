@@ -197,8 +197,9 @@ public class PineValueCompositionTests
             new
             {
                 input = PineValue.Blob([0,1,2]),
-                expectedHashBase16 = CommonConversion.StringBase16(
-                    CommonConversion.HashSHA256("blob 3\0"u8.ToArray().Concat(new byte[]{0,1,2}).ToArray()))
+                expectedHashBase16 =
+                Convert.ToHexStringLower(
+                    System.Security.Cryptography.SHA256.HashData("blob 3\0"u8.ToArray().Concat(new byte[]{0,1,2}).ToArray()))
             },
         };
 
@@ -206,7 +207,7 @@ public class PineValueCompositionTests
         {
             var hash = PineValueHashTree.ComputeHash(testCase.input);
 
-            Assert.AreEqual(testCase.expectedHashBase16, CommonConversion.StringBase16(hash), ignoreCase: true);
+            Assert.AreEqual(testCase.expectedHashBase16, Convert.ToHexStringLower(hash.Span), ignoreCase: true);
         }
     }
 

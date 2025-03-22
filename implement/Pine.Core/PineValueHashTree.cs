@@ -74,7 +74,7 @@ public static class PineValueHashTree
                     var prefix = System.Text.Encoding.ASCII.GetBytes("list " + elementsHashes.Length + "\0");
 
                     return
-                        (serialRepresentation: CommonConversion.Concat([(ReadOnlyMemory<byte>)prefix, .. elementsHashes]),
+                        (serialRepresentation: BytesConversions.Concat([(ReadOnlyMemory<byte>)prefix, .. elementsHashes]),
                             dependencies: listValue.Elements.ToArray());
                 }
 
@@ -140,14 +140,14 @@ public static class PineValueHashTree
             {
                 var loadedElementSerialRepresentation = loadSerializedValueByHash(elementHash);
 
-                if (loadedElementSerialRepresentation == null)
+                if (loadedElementSerialRepresentation is null)
                     return
-                        "Failed to load list element " + CommonConversion.StringBase16(elementHash);
+                        "Failed to load list element " + Convert.ToHexStringLower(elementHash.Span);
 
                 if (!SHA256.HashData(loadedElementSerialRepresentation.Value.Span).AsSpan()
                         .SequenceEqual(elementHash.Span))
                     return
-                        "Hash for loaded element does not match " + CommonConversion.StringBase16(elementHash);
+                        "Hash for loaded element does not match " + Convert.ToHexStringLower(elementHash.Span);
 
                 return DeserializeFromHashTree(loadedElementSerialRepresentation.Value, loadSerializedValueByHash);
             }
@@ -164,7 +164,7 @@ public static class PineValueHashTree
                 {
                     return
                         "Failed to load element " +
-                        CommonConversion.StringBase16(elementHash) + ": " + err;
+                        Convert.ToHexStringLower(elementHash.Span) + ": " + err;
                 }
 
                 if (loadResult.IsOkOrNull() is not { } ok)

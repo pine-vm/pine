@@ -486,7 +486,7 @@ public class StartupAdminInterface
 
                 var deploymentPineValue = PineValueComposition.FromTreeWithStringPath(deploymentTree);
 
-                var deploymentHashBase16 = CommonConversion.StringBase16(PineValueHashTree.ComputeHash(deploymentPineValue));
+                var deploymentHashBase16 = Convert.ToHexStringLower(PineValueHashTree.ComputeHash(deploymentPineValue).Span);
 
                 logger.LogInformation("Got request to deploy app " + deploymentHashBase16);
 
@@ -571,7 +571,7 @@ public class StartupAdminInterface
                                 return;
                             }
 
-                            var appConfigHashBase16 = CommonConversion.StringBase16(PineValueHashTree.ComputeHash(appConfig));
+                            var appConfigHashBase16 = Convert.ToHexStringLower(PineValueHashTree.ComputeHash(appConfig).Span);
 
                             var appConfigTreeResult = PineValueComposition.ParseAsTreeWithStringPath(appConfig);
 
@@ -623,7 +623,7 @@ public class StartupAdminInterface
                         .Add("post", async (context, publicAppHost) =>
                         {
                             var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
-                            var beginTime = CommonConversion.TimeStringViewForReport(DateTimeOffset.UtcNow);
+                            var beginTime = BytesConversions.TimeStringViewForReport(DateTimeOffset.UtcNow);
 
                             var elmAppStateToSet = await System.Text.Json.JsonSerializer.DeserializeAsync<System.Text.Json.JsonElement>(context.Request.Body);
 
@@ -828,7 +828,7 @@ public class StartupAdminInterface
 
             TruncateProcessHistoryReport truncateProcessHistory(TimeSpan productionBlockDurationLimit)
             {
-                var beginTime = CommonConversion.TimeStringViewForReport(DateTimeOffset.UtcNow);
+                var beginTime = BytesConversions.TimeStringViewForReport(DateTimeOffset.UtcNow);
 
                 var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
@@ -1117,7 +1117,7 @@ public class StartupAdminInterface
         IFileStore processStoreFileStore,
         Action<string>? testContinueLogger = null)
     {
-        var beginTime = CommonConversion.TimeStringViewForReport(DateTimeOffset.UtcNow);
+        var beginTime = BytesConversions.TimeStringViewForReport(DateTimeOffset.UtcNow);
 
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
 

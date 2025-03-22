@@ -13,7 +13,7 @@ namespace Pine.Core;
 /// For conversion between the generic value type and common data types, see <see cref="PineValueAsInteger"/>, <see cref="PineValueAsString"/>, and <see cref="PineValueComposition"/>.
 /// <para/>
 /// There is also a standard representation of program code and expressions as Pine values, 
-/// and you can see a reference implementation of this encoding at <see cref="ExpressionEncoding.ParseExpressionFromValueDefault(PineValue)"/>.
+/// and you can see a reference implementation of this encoding at <see cref="ExpressionEncoding.ParseExpressionFromValue(PineValue)"/>.
 /// </summary>
 public abstract record PineValue : IEquatable<PineValue>
 {
