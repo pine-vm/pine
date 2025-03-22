@@ -1797,18 +1797,118 @@ public class WebServiceTests
     }
 
     [TestMethod]
-    public void Volatile_process_from_local_blob()
+    public async System.Threading.Tasks.Task Event_resulting_in_same_state_incurs_no_storage_expenses()
     {
-        var appSourceFiles = TestSetup.GetElmAppFromSubdirectoryName("volatile-process-from-local-blob");
+        var fileStoreWriter = new RecordingFileStoreWriter();
 
-        using var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppAndInitElmState: TestSetup.AppConfigComponentFromFiles(appSourceFiles));
+        int fileStoreHistoryCountAllOperations() =>
+            fileStoreWriter.History.Count();
+
+        IFileStoreReader getCurrentFileStoreReader() =>
+            fileStoreWriter.Apply(new EmptyFileStoreReader());
+
+        var fileStoreReader = new DelegatingFileStoreReader
+        (
+            GetFileContentDelegate:
+            path => getCurrentFileStoreReader().GetFileContent(path),
+
+            ListFilesInDirectoryDelegate:
+            path => getCurrentFileStoreReader().ListFilesInDirectory(path)
+        );
+
+        var fileStore = new FileStoreFromWriterAndReader(fileStoreWriter, fileStoreReader);
+
+        using var testSetup =
+            WebHostAdminInterfaceTestSetup.Setup(
+                fileStore: fileStore,
+                deployAppAndInitElmState: ElmWebServiceAppTests.CounterWebApp);
+
+        using var server = testSetup.StartWebHost();
+
+        using var publicAppClient = testSetup.BuildPublicAppHttpClient();
+
+        {
+            // Warmup
+
+            var httpResponse =
+                await publicAppClient.PostAsync(
+                    "",
+                    System.Net.Http.Json.JsonContent.Create(new { addition = 0 }));
+        }
+
+        {
+            var storeOperationCountBefore =
+                fileStoreHistoryCountAllOperations();
+
+            var httpResponse =
+                await publicAppClient.PostAsync(
+                    "",
+                    System.Net.Http.Json.JsonContent.Create(new { addition = 13 }));
+
+            var httpResponseContent =
+                await httpResponse.Content.ReadAsStringAsync();
+
+            Assert.AreEqual(
+                "13",
+                httpResponseContent,
+                false,
+                "server response");
+
+            var storeOperationCountIncrease =
+                fileStoreHistoryCountAllOperations() - storeOperationCountBefore;
+
+            Assert.IsTrue(
+                0 < storeOperationCountIncrease,
+                "Store operations increase");
+        }
+
+
+        {
+            var storeOperationCountBefore =
+                fileStoreHistoryCountAllOperations();
+
+            var httpResponse =
+                await publicAppClient.PostAsync(
+                    "",
+                    System.Net.Http.Json.JsonContent.Create(new { addition = 0 }));
+
+            var httpResponseContent =
+                await httpResponse.Content.ReadAsStringAsync();
+
+            Assert.AreEqual(
+                "13",
+                httpResponseContent,
+                false,
+                "server response");
+
+            var storeOperationCountIncrease =
+                fileStoreHistoryCountAllOperations() - storeOperationCountBefore;
+
+            Assert.AreEqual(
+                0,
+                storeOperationCountIncrease,
+                "Store operations increase");
+        }
+    }
+
+    [TestMethod]
+    public async System.Threading.Tasks.Task Volatile_process_from_local_blob()
+    {
+        var appSourceFiles =
+            TestSetup.GetElmAppFromSubdirectoryName("volatile-process-from-local-blob");
+
+        using var testSetup =
+            WebHostAdminInterfaceTestSetup.Setup(
+                deployAppAndInitElmState: TestSetup.AppConfigComponentFromFiles(appSourceFiles));
+
         using var server = testSetup.StartWebHost();
         using var publicAppClient = testSetup.BuildPublicAppHttpClient();
 
-        var httpResponse = publicAppClient.GetAsync("").Result;
+        var httpResponse =
+            await publicAppClient.GetAsync("");
 
         var responseContent =
-            httpResponse.Content.ReadAsStringAsync().Result;
+            await httpResponse.Content.ReadAsStringAsync();
 
         Assert.AreEqual("value from local assembly", responseContent);
     }
