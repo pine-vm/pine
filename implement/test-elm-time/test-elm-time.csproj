@@ -14,18 +14,18 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="FluentAssertions" Version="8.1.1" />
-    <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="9.0.2" />
+    <PackageReference Include="FluentAssertions" Version="8.2.0" />
+    <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="9.0.3" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.13.0" />
     <PackageReference Include="morelinq" Version="4.4.0" />
-    <PackageReference Include="MSTest.TestAdapter" Version="3.8.2" />
-    <PackageReference Include="MSTest.TestFramework" Version="3.8.2" />
+    <PackageReference Include="MSTest.TestAdapter" Version="3.8.3" />
+    <PackageReference Include="MSTest.TestFramework" Version="3.8.3" />
     <PackageReference Include="coverlet.collector" Version="6.0.4">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="SharpCompress" Version="0.39.0" />
-    <PackageReference Include="StreamJsonRpc" Version="2.21.10" />
+    <PackageReference Include="StreamJsonRpc" Version="2.21.69" />
   </ItemGroup>
 
   <ItemGroup>
