@@ -303,13 +303,6 @@ public class Program
             var copyProcessOption = runServerCommand.Option("--copy-process", "Path to a process to copy. Can be a URL to an admin interface of a server or a path to an archive containing files representing the process state. This option also implies '--delete-previous-process'.", CommandOptionType.SingleValue);
             var deployOption = runServerCommand.Option("--deploy", "Path to an app to deploy on startup, analogous to the 'source' path on the `deploy` command. Can be combined with '--copy-process'.", CommandOptionType.SingleValue);
 
-            var elmEngineOption =
-            AddElmEngineOptionOnCommand(
-                dynamicPGOShare: null,
-                runServerCommand,
-                defaultFromEnvironmentVariablePrefix: "web_server",
-                defaultEngineConsideringEnvironmentVariable: fromEnv => fromEnv ?? ElmEngineTypeCLI.Pine);
-
             runServerCommand.OnExecute(() =>
             {
                 var processStorePath = processStoreOption.Value();
@@ -318,22 +311,20 @@ public class Program
                     publicAppUrlsOption.Value()?.Split(',').Select(url => url.Trim()).ToArray() ??
                     PublicWebHostUrlsDefault;
 
-                var elmEngineType = elmEngineOption.parseElmEngineTypeFromOption();
-
                 var adminInterfaceUrls = adminUrlsOption.Value() ?? adminUrlsDefault;
 
-                var webHost = RunServer.BuildWebHostToRunServer(
+                var webHost =
+                RunServer.BuildWebHostToRunServer(
                     processStorePath: processStorePath,
                     processStoreReadonlyPath: processStoreReadonlyOption.Value(),
                     adminInterfaceUrls: adminInterfaceUrls,
                     adminPassword: adminPasswordOption.Value(),
                     publicAppUrls: publicAppUrls,
-                    elmEngineType: elmEngineType,
                     deletePreviousProcess: deletePreviousProcessOption.HasValue(),
                     copyProcess: copyProcessOption.Value(),
                     deployApp: deployOption.Value());
 
-                Console.WriteLine("Starting web server with admin interface (using engine " + elmEngineType + ")...");
+                Console.WriteLine("Starting web server with admin interface...");
 
                 webHost.Start();
 

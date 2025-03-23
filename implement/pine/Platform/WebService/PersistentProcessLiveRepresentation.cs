@@ -868,6 +868,8 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
 
                 mutatingWebServiceApp.ResetAppState(appStateReturned);
 
+                EnsurePersisted();
+
                 committedResultingState = true;
             }
 
@@ -879,8 +881,6 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
                     producedStateDifferentFromStateArgument = !appStateReturned.Equals(appState);
                 }
             }
-
-            EnsurePersisted();
 
             Maybe<JsonElement> resultLessStateJson =
                 applyFunctionOk.ResponseJsonValue is { } responseJsonValue

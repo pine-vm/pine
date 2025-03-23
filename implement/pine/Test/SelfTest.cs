@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Immutable;
 using System.Linq;
 using ElmTime.ElmInteractive;
@@ -81,7 +81,6 @@ public class SelfTest
                 adminInterfaceUrls: null,
                 adminPassword: null,
                 publicAppUrls: ["http://localhost:" + serverHttpPort],
-                elmEngineType: new ElmEngineType.Pine(Caching: true, DynamicPGOShare: null),
                 deletePreviousProcess: false,
                 copyProcess: null,
                 deployApp: "https://github.com/pine-vm/pine/tree/1b8d4ff50a3ae94921f9e0f3357abf2bc1a696f3/implement/example-apps/minimal-backend-hello-world");

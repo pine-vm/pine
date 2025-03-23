@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.IO;
@@ -20,7 +20,6 @@ public class RunServer
         string? adminInterfaceUrls,
         string? adminPassword,
         IReadOnlyList<string>? publicAppUrls,
-        ElmInteractive.ElmEngineType elmEngineType,
         bool deletePreviousProcess,
         string? copyProcess,
         string? deployApp)
@@ -38,8 +37,17 @@ public class RunServer
         IFileStore buildProcessStoreFileStore()
         {
             if (processStorePath is not null)
+            {
+                var retryOptions =
+                    new FileStoreFromSystemIOFile.FileStoreRetryOptions(
+                        InitialRetryDelay: TimeSpan.FromMilliseconds(100),
+                        MaxRetryDelay: TimeSpan.FromSeconds(4),
+                        MaxRetryAttempts: 10);
+
                 return new FileStoreFromSystemIOFile(
-                    processStorePath);
+                    processStorePath,
+                    retryOptions: retryOptions);
+            }
 
             Console.WriteLine("I got no path to a persistent store for the process. This process will not be persisted!");
 
@@ -73,7 +81,6 @@ public class RunServer
             );
 
             return new FileStoreFromWriterAndReader(fileStoreWriter, fileStoreReader);
-
         }
 
         var processStoreFileStore = buildProcessStoreFileStore();
