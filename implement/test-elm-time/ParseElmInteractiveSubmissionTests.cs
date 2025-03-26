@@ -45,8 +45,7 @@ public class ParseElmInteractiveSubmissionTests
         {
             var testCase = testCases[i];
 
-            var responseAsElmValue =
-                TestParsingSubmissionText(testCase.SubmissionText, testCase.ExpectedResponse);
+            TestParsingSubmissionText(testCase.SubmissionText, testCase.ExpectedResponse);
         }
     }
 
@@ -77,7 +76,7 @@ public class ParseElmInteractiveSubmissionTests
         Assert.AreEqual(
             expectedExpressionString,
             responseAsExpression,
-            "Module parsed as expression syntax");
+            "Submission parsed as expression syntax");
 
         return responseAsElmValue;
     }
