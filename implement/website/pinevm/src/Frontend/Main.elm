@@ -180,7 +180,7 @@ view state =
     let
         title =
             if state.selectedPage == HomePage then
-                "Pine, the Elm runtime environment"
+                "Pine — Run Elm Everywhere"
 
             else
                 String.join " — " [ titleFromPage state.selectedPage, "Pine" ]

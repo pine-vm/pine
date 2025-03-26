@@ -48,7 +48,7 @@ frontendHtmlDocument { debug } =
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Pine, the Elm runtime environment</title>
+  <title>Pine — Run Elm Everywhere</title>
   <link rel="icon" type="image/x-icon" href="/favicon.ico">
   <script type="text/javascript" src="""
         ++ elmMadeScriptFileName
