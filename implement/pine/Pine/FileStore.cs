@@ -379,3 +379,70 @@ public class EmptyFileStoreReader : IFileStoreReader
     public IEnumerable<IImmutableList<string>> ListFilesInDirectory(IImmutableList<string> directoryPath) =>
         [];
 }
+
+public class FileStoreFromConcurrentDictionary : IFileStoreWriter, IFileStoreReader
+{
+    private readonly ConcurrentDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> files =
+        new(EnumerableExtension.EqualityComparer<IImmutableList<string>>());
+
+    public void AppendFileContent(IImmutableList<string> path, ReadOnlyMemory<byte> fileContent)
+    {
+        files.AddOrUpdate(
+            path,
+            addValueFactory:
+            _ => fileContent,
+            updateValueFactory:
+            (_, fileBefore) => BytesConversions.Concat(fileBefore.Span, fileContent.Span));
+    }
+
+    public void DeleteFile(IImmutableList<string> path)
+    {
+        files.TryRemove(path, out _);
+    }
+
+    public ReadOnlyMemory<byte>? GetFileContent(IImmutableList<string> path)
+    {
+        if (!files.TryGetValue(path, out var fileContent))
+        {
+            return null;
+        }
+
+        return fileContent;
+    }
+
+    public IEnumerable<IImmutableList<string>> ListFilesInDirectory(IImmutableList<string> directoryPath)
+    {
+        foreach (var file in files)
+        {
+            if (file.Key.Count < directoryPath.Count)
+            {
+                continue;
+            }
+
+            bool isMismatch = false;
+
+            for (var i = 0; i < directoryPath.Count; i++)
+            {
+                if (file.Key[i] != directoryPath[i])
+                {
+                    isMismatch = true;
+                    break;
+                }
+            }
+
+            if (isMismatch)
+            {
+                continue;
+            }
+
+            var relativePath = file.Key.Skip(directoryPath.Count).ToImmutableList();
+
+            yield return relativePath;
+        }
+    }
+
+    public void SetFileContent(IImmutableList<string> path, ReadOnlyMemory<byte> fileContent)
+    {
+        files[path] = fileContent;
+    }
+}
