@@ -88,48 +88,64 @@ public static class PineValueHashTree
 
     public static Result<string, PineValue> DeserializeFromHashTree(
         ReadOnlyMemory<byte> serializedValue,
-        Func<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>> loadSerializedValueByHash) =>
-        DeserializeFromHashTree(serializedValue, loadSerializedValueByHash);
-
-    public static Result<string, PineValue> DeserializeFromHashTree(
-        ReadOnlyMemory<byte> serializedValue,
         Func<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>?> loadSerializedValueByHash)
     {
-        var asciiStringUpToNull =
-            System.Text.Encoding.ASCII.GetString(serializedValue.Span).Split('\0').First();
+        int charSpaceIndex = 0;
+        int charNullIndex = 0;
+
+        for (var i = 0; i < serializedValue.Length; i++)
+        {
+            var currentByte = serializedValue.Span[i];
+
+            if (charSpaceIndex is 0)
+            {
+                if (currentByte is 32)
+                {
+                    charSpaceIndex = i;
+                }
+            }
+            else if (currentByte is 0)
+            {
+                charNullIndex = i;
+                break;
+            }
+        }
 
         var asciiStringUpToFirstSpace =
-            asciiStringUpToNull.Split(' ').First();
+            System.Text.Encoding.ASCII.GetString(serializedValue.Span[..charSpaceIndex]);
+
+        var asciiStringDigits =
+            System.Text.Encoding.ASCII.GetString(
+                serializedValue.Span[(charSpaceIndex + 1)..charNullIndex]);
 
         if (asciiStringUpToFirstSpace is "blob")
         {
-            var beginningToRemoveLength = asciiStringUpToNull.Length + 1;
+            var expectedCount = serializedValue.Length - charNullIndex - 1;
 
-            var expectedCount = serializedValue.Length - beginningToRemoveLength;
-
-            var count = int.Parse(asciiStringUpToNull.Split(' ').ElementAt(1));
+            var count = int.Parse(asciiStringDigits);
 
             if (count != expectedCount)
                 return "Unexpected count: got " + count + ", but I expected " + expectedCount;
 
-            return PineValue.Blob(serializedValue[beginningToRemoveLength..]);
+            return PineValue.Blob(serializedValue[(charNullIndex + 1)..]);
         }
 
         if (asciiStringUpToFirstSpace is "list")
         {
-            var beginningToRemoveLength = asciiStringUpToNull.Length + 1;
+            var remainingBytes = serializedValue[(charNullIndex + 1)..];
 
-            var remainingBytes = serializedValue[beginningToRemoveLength..];
-
-            var parsedElementCount = int.Parse(asciiStringUpToNull.Split(' ').ElementAt(1));
+            var parsedElementCount = int.Parse(asciiStringDigits);
 
             var elementHashLength = 32;
 
             var expectedRemainingLength = parsedElementCount * elementHashLength;
 
             if (remainingBytes.Length != expectedRemainingLength)
+            {
                 return
-                    "Unexpected remaining length: " + remainingBytes.Length + " instead of " + expectedRemainingLength;
+                    "Unexpected remaining length: " + remainingBytes.Length +
+                    " instead of " + expectedRemainingLength;
+            }
 
             var elementsHashes =
                 Enumerable.Range(0, parsedElementCount)
@@ -141,15 +157,22 @@ public static class PineValueHashTree
                 var loadedElementSerialRepresentation = loadSerializedValueByHash(elementHash);
 
                 if (loadedElementSerialRepresentation is null)
+                {
                     return
                         "Failed to load list element " + Convert.ToHexStringLower(elementHash.Span);
+                }
 
                 if (!SHA256.HashData(loadedElementSerialRepresentation.Value.Span).AsSpan()
-                        .SequenceEqual(elementHash.Span))
+                    .SequenceEqual(elementHash.Span))
+                {
                     return
                         "Hash for loaded element does not match " + Convert.ToHexStringLower(elementHash.Span);
+                }
 
-                return DeserializeFromHashTree(loadedElementSerialRepresentation.Value, loadSerializedValueByHash);
+                return
+                    DeserializeFromHashTree(
+                        loadedElementSerialRepresentation.Value,
+                        loadSerializedValueByHash);
             }
 
             var loadElementsResults = new PineValue[elementsHashes.Count];
