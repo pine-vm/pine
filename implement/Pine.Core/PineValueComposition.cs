@@ -140,12 +140,16 @@ public static class PineValueComposition
             seed: TreeNodeWithStringPath.EmptyTree,
             func: Union);
 
-    public static TreeNodeWithStringPath Union(TreeNodeWithStringPath treeA, TreeNodeWithStringPath treeB) =>
+    public static TreeNodeWithStringPath Union(
+        TreeNodeWithStringPath treeA,
+        TreeNodeWithStringPath treeB) =>
         treeA.EnumerateBlobsTransitive()
         .Aggregate(
             seed: treeB,
             (tree, blobPathAndContent) =>
-            tree.SetNodeAtPathSorted(blobPathAndContent.path, TreeNodeWithStringPath.Blob(blobPathAndContent.blobContent)));
+            tree.SetNodeAtPathSorted(
+                blobPathAndContent.path,
+                TreeNodeWithStringPath.Blob(blobPathAndContent.blobContent)));
 
     public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>
         TreeToFlatDictionaryWithPathComparer(

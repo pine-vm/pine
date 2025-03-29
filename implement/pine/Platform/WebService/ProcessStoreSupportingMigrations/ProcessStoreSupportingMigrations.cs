@@ -1,6 +1,7 @@
 using Pine;
 using Pine.Core;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -38,7 +39,7 @@ public interface IProcessStoreReader
         CompositionLogRecordInFile.CompositionEvent compositionLogEvent)
     {
         var projectedFiles =
-            new System.Collections.Concurrent.ConcurrentDictionary<IImmutableList<string>, ReadOnlyMemory<byte>>(
+            new ConcurrentDictionary<IImmutableList<string>, ReadOnlyMemory<byte>>(
                 comparer: EnumerableExtension.EqualityComparer<IImmutableList<string>>());
 
         var fileStoreWriter = new DelegatingFileStoreWriter
@@ -55,11 +56,12 @@ public interface IProcessStoreReader
             DeleteFileDelegate: _ => throw new Exception("Unexpected operation delete file.")
         );
 
-        var processStoreWriter = new ProcessStoreWriterInFileStore(
-            originalFileStore,
-            getTimeForCompositionLogBatch: () => DateTimeOffset.UtcNow,
-            fileStoreWriter,
-            skipWritingComponentSecondTime: false);
+        var processStoreWriter =
+            new ProcessStoreWriterInFileStore(
+                originalFileStore,
+                getTimeForCompositionLogBatch: () => DateTimeOffset.UtcNow,
+                fileStoreWriter,
+                skipWritingComponentSecondTime: true);
 
         processStoreWriter.AppendCompositionLogRecord(compositionLogEvent);
 
@@ -228,9 +230,11 @@ public class ProcessStoreInFileStore
     public static IImmutableList<string> GetFilePathForComponentInComponentFileStore(string componentHash) =>
         ImmutableList.Create(componentHash[..2], componentHash);
 
-    private static readonly IComparer<IImmutableList<string>> CompositionLogFileOrderPathComparer = EnumerableExtension.Comparer<IImmutableList<string>>();
+    private static readonly IComparer<IImmutableList<string>> CompositionLogFileOrderPathComparer =
+        EnumerableExtension.Comparer<IImmutableList<string>>();
 
-    protected static IEnumerable<IImmutableList<string>> CompositionLogFileOrder(IEnumerable<IImmutableList<string>> logFilesPaths) =>
+    protected static IEnumerable<IImmutableList<string>> CompositionLogFileOrder(
+        IEnumerable<IImmutableList<string>> logFilesPaths) =>
         logFilesPaths.OrderBy(filePath => filePath, CompositionLogFileOrderPathComparer);
 
     public static byte[] Serialize(CompositionLogRecordInFile record) =>
@@ -247,25 +251,56 @@ public class ProcessStoreReaderInFileStore(
 {
     private readonly Pine.CompilePineToDotNet.CompilerMutableCache hashCache = new();
 
-    protected IFileStoreReader LiteralElementFileStore => fileStore.ForSubdirectory(LiteralElementSubdirectory);
+    private readonly ConcurrentDictionary<string, ReadOnlyMemory<byte>> componentSerialRepresentationCache = new();
 
-    protected IFileStoreReader DeflatedLiteralElementFileStore => fileStore.ForSubdirectory(DeflatedLiteralElementSubdirectory);
+    private readonly ConcurrentDictionary<string, PineValue> componentFromHashCache = new();
 
-    protected IFileStoreReader ProvisionalReductionFileStore => fileStore.ForSubdirectory(ProvisionalReductionSubdirectory);
+    protected IFileStoreReader LiteralElementFileStore =>
+        fileStore.ForSubdirectory(LiteralElementSubdirectory);
 
-    protected IFileStoreReader CompositionLogLiteralFileStore => fileStore.ForSubdirectory(CompositionLogLiteralPath);
+    protected IFileStoreReader DeflatedLiteralElementFileStore =>
+        fileStore.ForSubdirectory(DeflatedLiteralElementSubdirectory);
 
-    private ReadOnlyMemory<byte>? LoadComponentSerialRepresentationForHash(ReadOnlyMemory<byte> componentHash) =>
-        LoadComponentSerialRepresentationForHash(Convert.ToHexStringLower(componentHash.Span));
+    protected IFileStoreReader ProvisionalReductionFileStore =>
+        fileStore.ForSubdirectory(ProvisionalReductionSubdirectory);
+
+    protected IFileStoreReader CompositionLogLiteralFileStore =>
+        fileStore.ForSubdirectory(CompositionLogLiteralPath);
+
+    private (string hashBase16, ReadOnlyMemory<byte>? content)
+        LoadComponentSerialRepresentationForHash(ReadOnlyMemory<byte> componentHash)
+    {
+        var componentHashBase16 = Convert.ToHexStringLower(componentHash.Span);
+
+        return
+            (componentHashBase16,
+            LoadComponentSerialRepresentationForHash(componentHashBase16));
+    }
 
     private ReadOnlyMemory<byte>? LoadComponentSerialRepresentationForHash(string componentHashBase16)
+    {
+        if (componentSerialRepresentationCache.TryGetValue(componentHashBase16, out var fromCache))
+            return fromCache;
+
+        var loaded =
+            LoadComponentSerialRepresentationForHashIgnoringCache(componentHashBase16);
+
+        if (loaded is not null)
+        {
+            componentSerialRepresentationCache[componentHashBase16] = loaded.Value;
+        }
+
+        return loaded;
+    }
+
+    private ReadOnlyMemory<byte>? LoadComponentSerialRepresentationForHashIgnoringCache(string componentHashBase16)
     {
         var filePath =
             GetFilePathForComponentInComponentFileStore(componentHashBase16);
 
         var originalFile = LiteralElementFileStore.GetFileContent(filePath);
 
-        if (originalFile == null)
+        if (originalFile is null)
         {
             var deflatedFile = DeflatedLiteralElementFileStore.GetFileContent(filePath);
 
@@ -280,11 +315,25 @@ public class ProcessStoreReaderInFileStore(
     {
         var fromComponentStore = LoadComponentSerialRepresentationForHash(componentHashBase16);
 
-        if (fromComponentStore == null)
+        if (fromComponentStore is null)
             return null;
 
         return
-            PineValueHashTree.DeserializeFromHashTree(fromComponentStore.Value, LoadComponentSerialRepresentationForHash)
+            PineValueHashTree.DeserializeFromHashTree(
+                fromComponentStore.Value,
+                LoadComponentSerialRepresentationForHash,
+                valueFromCache:
+                componentHashBase16 =>
+                {
+                    componentFromHashCache.TryGetValue(componentHashBase16, out var fromCache);
+
+                    return fromCache;
+                },
+                valueLoadedForHash:
+                (componentHashBase16, componentValue) =>
+                {
+                    componentFromHashCache[componentHashBase16] = componentValue;
+                })
             .Unpack(
                 fromErr: error => throw new Exception("Failed to load component " + componentHashBase16 + ": " + error),
                 fromOk: loadComponentResult =>
@@ -485,7 +534,7 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
 
     private readonly bool skipWritingComponentSecondTime;
 
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<PineValue, object?> componentsWritten = new();
+    private readonly ConcurrentDictionary<PineValue, object?> componentsWritten = new();
 
     public ProcessStoreWriterInFileStore(
         IFileStoreReader fileStoreReader,

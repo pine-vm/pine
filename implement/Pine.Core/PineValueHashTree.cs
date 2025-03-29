@@ -88,7 +88,9 @@ public static class PineValueHashTree
 
     public static Result<string, PineValue> DeserializeFromHashTree(
         ReadOnlyMemory<byte> serializedValue,
-        Func<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>?> loadSerializedValueByHash)
+        Func<string, ReadOnlyMemory<byte>?> loadSerializedValueByHash,
+        Func<string, PineValue?>? valueFromCache,
+        Action<string, PineValue>? valueLoadedForHash)
     {
         int charSpaceIndex = 0;
         int charNullIndex = 0;
@@ -147,37 +149,57 @@ public static class PineValueHashTree
                     " instead of " + expectedRemainingLength;
             }
 
-            var elementsHashes =
-                Enumerable.Range(0, parsedElementCount)
-                    .Select(elementIndex => remainingBytes.Slice(elementIndex * elementHashLength, elementHashLength))
-                    .ToImmutableList();
+            var elementsHashes = new ReadOnlyMemory<byte>[parsedElementCount];
+
+            for (var i = 0; i < parsedElementCount; i++)
+            {
+                elementsHashes[i] =
+                    remainingBytes.Slice(i * elementHashLength, elementHashLength);
+            }
 
             Result<string, PineValue> TryLoadElementForHash(ReadOnlyMemory<byte> elementHash)
             {
-                var loadedElementSerialRepresentation = loadSerializedValueByHash(elementHash);
+                var elementHashBase16 = Convert.ToHexStringLower(elementHash.Span);
+
+                if (valueFromCache?.Invoke(elementHashBase16) is { } cachedValue)
+                {
+                    return cachedValue;
+                }
+
+                var loadedElementSerialRepresentation =
+                    loadSerializedValueByHash(elementHashBase16);
 
                 if (loadedElementSerialRepresentation is null)
                 {
                     return
-                        "Failed to load list element " + Convert.ToHexStringLower(elementHash.Span);
+                        "Failed to load list element " + elementHashBase16;
                 }
 
                 if (!SHA256.HashData(loadedElementSerialRepresentation.Value.Span).AsSpan()
                     .SequenceEqual(elementHash.Span))
                 {
                     return
-                        "Hash for loaded element does not match " + Convert.ToHexStringLower(elementHash.Span);
+                        "Hash for loaded element does not match " + elementHashBase16;
                 }
 
-                return
+                var loadItemResult =
                     DeserializeFromHashTree(
                         loadedElementSerialRepresentation.Value,
-                        loadSerializedValueByHash);
+                        loadSerializedValueByHash,
+                        valueFromCache,
+                        valueLoadedForHash);
+
+                if (loadItemResult.IsOkOrNull() is { } loadedItem)
+                {
+                    valueLoadedForHash?.Invoke(elementHashBase16, loadedItem);
+                }
+
+                return loadItemResult;
             }
 
-            var loadElementsResults = new PineValue[elementsHashes.Count];
+            var loadElementsResults = new PineValue[elementsHashes.Length];
 
-            for (var i = 0; i < elementsHashes.Count; i++)
+            for (var i = 0; i < elementsHashes.Length; i++)
             {
                 var elementHash = elementsHashes[i];
 
