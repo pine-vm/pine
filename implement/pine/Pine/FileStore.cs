@@ -149,10 +149,18 @@ public class FileStoreFromSystemIOFile(
 
         return ExecuteWithRetry<ReadOnlyMemory<byte>?>(() =>
         {
-            if (!File.Exists(filePath))
+            try
+            {
+                return File.ReadAllBytes(filePath);
+            }
+            catch (FileNotFoundException)
+            {
                 return null;
-
-            return File.ReadAllBytes(filePath);
+            }
+            catch (DirectoryNotFoundException)
+            {
+                return null;
+            }
         });
     }
 
