@@ -102,20 +102,6 @@ public class FileStoreFromSystemIOFile(
         return Path.Combine([directoryPath, .. path]);
     }
 
-    private static void EnsureDirectoryExists(string directoryPath)
-    {
-        if (!(0 < directoryPath?.Length))
-            return;
-
-        var parentDirectory = Path.GetDirectoryName(directoryPath);
-
-        if (parentDirectory != null)
-            EnsureDirectoryExists(parentDirectory);
-
-        if (!Directory.Exists(directoryPath))
-            Directory.CreateDirectory(directoryPath);
-    }
-
     public void SetFileContent(
         IImmutableList<string> path,
         ReadOnlyMemory<byte> fileContent)
@@ -124,11 +110,11 @@ public class FileStoreFromSystemIOFile(
 
         var directoryPath = Path.GetDirectoryName(filePath);
 
+        if (directoryPath is not null)
+            Directory.CreateDirectory(directoryPath);
+
         ExecuteWithRetry(() =>
         {
-            if (directoryPath is not null)
-                EnsureDirectoryExists(directoryPath);
-
             using var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write);
 
             fileStream.Write(fileContent.Span);
@@ -147,7 +133,7 @@ public class FileStoreFromSystemIOFile(
         var directoryPath = Path.GetDirectoryName(filePath);
 
         if (directoryPath is not null)
-            EnsureDirectoryExists(directoryPath);
+            Directory.CreateDirectory(directoryPath);
 
         using var fileStream = new FileStream(filePath, FileMode.Append, FileAccess.Write);
 
