@@ -24,6 +24,7 @@ public abstract record TreeNodeWithStringPath : IEquatable<TreeNodeWithStringPat
             slimHashCode = hash.ToHashCode();
         }
 
+        /// <inheritdoc/>
         public virtual bool Equals(BlobNode? other)
         {
             if (other is null)
@@ -34,6 +35,7 @@ public abstract record TreeNodeWithStringPath : IEquatable<TreeNodeWithStringPat
                 Bytes.Span.SequenceEqual(other.Bytes.Span);
         }
 
+        /// <inheritdoc/>
         public override int GetHashCode() => slimHashCode;
     }
 
@@ -57,6 +59,7 @@ public abstract record TreeNodeWithStringPath : IEquatable<TreeNodeWithStringPat
             slimHashCode = hash.ToHashCode();
         }
 
+        /// <inheritdoc/>
         public virtual bool Equals(TreeNode? other)
         {
             if (other is null)
@@ -68,10 +71,12 @@ public abstract record TreeNodeWithStringPath : IEquatable<TreeNodeWithStringPat
                 Elements.SequenceEqual(other.Elements);
         }
 
+        /// <inheritdoc/>
         public override int GetHashCode() => slimHashCode;
     }
 
-    public static readonly IComparer<(string name, TreeNodeWithStringPath component)> TreeEntryDefaultComparer = new TreeEntryDefaultComparerClass();
+    public static readonly IComparer<(string name, TreeNodeWithStringPath component)> TreeEntryDefaultComparer =
+        new TreeEntryDefaultComparerClass();
 
     public static TreeNodeWithStringPath Blob(ReadOnlyMemory<byte> blobContent) =>
         new BlobNode(blobContent);
@@ -85,93 +90,220 @@ public abstract record TreeNodeWithStringPath : IEquatable<TreeNodeWithStringPat
     public static readonly TreeNodeWithStringPath EmptyTree = new TreeNode([]);
 
 
-    public IEnumerable<(IImmutableList<string> path, ReadOnlyMemory<byte> blobContent)> EnumerateBlobsTransitive() =>
-        this switch
-        {
-            BlobNode blob => [(ImmutableList<string>.Empty, blob.Bytes)],
-
-            TreeNode tree => tree.Elements.SelectMany(treeEntry =>
-            treeEntry.component.EnumerateBlobsTransitive()
-            .Select(child => (child.path.Insert(0, treeEntry.name), child.blobContent)))
-            .ToImmutableList(),
-
-            _ => throw new NotImplementedException()
-        };
-
-    public TreeNodeWithStringPath? GetNodeAtPath(IReadOnlyList<string> path)
+    public IEnumerable<(IImmutableList<string> path, ReadOnlyMemory<byte> blobContent)> EnumerateBlobsTransitive()
     {
-        if (path.Count == 0)
+        var stack = new Stack<(IImmutableList<string> path, TreeNodeWithStringPath node)>();
+
+        stack.Push((ImmutableList<string>.Empty, this));
+
+        while (stack.Count > 0)
+        {
+            var (path, node) = stack.Pop();
+
+            switch (node)
+            {
+                case BlobNode blob:
+                    yield return (path, blob.Bytes);
+                    break;
+
+                case TreeNode tree:
+                    foreach (var (name, component) in tree.Elements)
+                    {
+                        stack.Push((path.Add(name), component));
+                    }
+                    break;
+
+                default:
+                    throw new NotImplementedException(
+                        "Unexpected node type: " + node.GetType());
+            }
+        }
+    }
+
+    public TreeNodeWithStringPath? GetNodeAtPath(IReadOnlyList<string> path) =>
+        GetNodeAtPath([.. path]);
+
+    public TreeNodeWithStringPath? GetNodeAtPath(ReadOnlySpan<string> path)
+    {
+        if (path.Length is 0)
             return this;
 
         var pathFirstElement = path[0];
 
-        return
-            this switch
+        if (this is TreeNode treeNode)
+        {
+            for (var i = 0; i < treeNode.Elements.Count; i++)
             {
-                TreeNode tree => tree.Elements
-                .Where(treeNode => treeNode.name == pathFirstElement)
-                .Select(treeNode => treeNode.component.GetNodeAtPath([.. path.Skip(1)]))
-                .FirstOrDefault(),
+                var (name, component) = treeNode.Elements[i];
 
-                _ => null
-            };
+                if (name == pathFirstElement)
+                {
+                    return component.GetNodeAtPath(path.Slice(1));
+                }
+            }
+        }
+
+        return null;
     }
 
-    public TreeNodeWithStringPath? RemoveNodeAtPath(IReadOnlyList<string> path)
+    public TreeNodeWithStringPath? RemoveNodeAtPath(IReadOnlyList<string> path) =>
+        RemoveNodeAtPath([.. path]);
+
+    public TreeNodeWithStringPath? RemoveNodeAtPath(ReadOnlySpan<string> path)
     {
-        if (path.Count == 0)
+        if (path.Length is 0)
             return null;
 
         if (this is not TreeNode tree)
-            return null;
+            return this;
 
         var pathFirstElement = path[0];
 
-        var treeContent =
-            tree.Elements.SelectMany(treeNode =>
+        if (tree.Elements.FirstOrDefault(treeNode => treeNode.name == pathFirstElement) is { } childNodeBefore &&
+            childNodeBefore.component is not null)
+        {
+            var childNodeAfterRemoval =
+                childNodeBefore.component.RemoveNodeAtPath(path[1..]);
+
+            if (childNodeAfterRemoval is null)
             {
-                if (treeNode.name != pathFirstElement)
-                    return ImmutableList.Create(treeNode);
+                var items =
+                    new (string name, TreeNodeWithStringPath component)[tree.Elements.Count - 1];
 
-                if (path.Count == 1)
-                    return [];
+                bool removed = false;
 
-                var componentAfterRemoval =
-                    treeNode.component.RemoveNodeAtPath([.. path.Skip(1)]);
+                for (var i = 0; i < tree.Elements.Count; i++)
+                {
+                    var prevPositionItem = tree.Elements[i];
 
-                if (componentAfterRemoval == null)
-                    return [];
+                    if (prevPositionItem.name == pathFirstElement)
+                    {
+                        removed = true;
+                        continue;
+                    }
+                    else
+                    {
+                        items[removed ? i - 1 : i] = prevPositionItem;
+                    }
+                }
 
-                return ImmutableList.Create((treeNode.name, componentAfterRemoval));
-            }).ToImmutableList();
+                return new TreeNode(items);
+            }
+            else
+            {
+                var items =
+                    new (string name, TreeNodeWithStringPath component)[tree.Elements.Count];
 
-        return SortedTree(treeContent);
+                for (var i = 0; i < tree.Elements.Count; i++)
+                {
+                    items[i] =
+                        tree.Elements[i].name == pathFirstElement
+                        ?
+                        (pathFirstElement, childNodeAfterRemoval)
+                        :
+                        tree.Elements[i];
+                }
+
+                return new TreeNode(items);
+            }
+        }
+
+        return this;
     }
 
-    public TreeNodeWithStringPath SetNodeAtPathSorted(IReadOnlyList<string> path, TreeNodeWithStringPath node)
+    public TreeNodeWithStringPath SetNodeAtPathSorted(
+        IReadOnlyList<string> path,
+        TreeNodeWithStringPath node) =>
+        SetNodeAtPathSorted([.. path], node);
+
+    public TreeNodeWithStringPath SetNodeAtPathSorted(
+        ReadOnlySpan<string> path,
+        TreeNodeWithStringPath node)
     {
-        if (path.Count is 0)
+        if (path.Length is 0)
             return node;
 
         var pathFirstElement = path[0];
 
-        var childNodeBefore = GetNodeAtPath([pathFirstElement]);
+        if (this is BlobNode)
+        {
+            var childNode =
+                EmptyTree.SetNodeAtPathSorted(path[1..], node);
 
-        var childNode =
-            (childNodeBefore ?? EmptyTree).SetNodeAtPathSorted([.. path.Skip(1)], node);
+            return
+                new TreeNode(
+                    ImmutableList.Create((pathFirstElement, childNode)));
+        }
 
-        var treeEntries =
-            (this switch
+        if (this is TreeNode treeNode)
+        {
+            if (treeNode.Elements.FirstOrDefault(treeNode => treeNode.name == pathFirstElement) is { } childNodeBefore &&
+                childNodeBefore.component is not null)
             {
-                TreeNode tree => tree.Elements,
-                _ => []
-            })
-            .Where(treeNode => treeNode.name != pathFirstElement)
-            .Concat([(pathFirstElement, childNode)])
-            .Order(TreeEntryDefaultComparer)
-            .ToImmutableList();
+                var childNode =
+                    childNodeBefore.component.SetNodeAtPathSorted(path[1..], node);
 
-        return SortedTree(treeEntries);
+                var items =
+                    new (string name, TreeNodeWithStringPath component)[treeNode.Elements.Count];
+
+                for (var i = 0; i < treeNode.Elements.Count; i++)
+                {
+                    items[i] =
+                        treeNode.Elements[i].name == pathFirstElement
+                        ?
+                        (pathFirstElement, childNode)
+                        :
+                        treeNode.Elements[i];
+                }
+
+                return new TreeNode(items);
+            }
+
+            {
+                var childNode =
+                    EmptyTree.SetNodeAtPathSorted(path[1..], node);
+
+                var items =
+                    new (string name, TreeNodeWithStringPath component)[treeNode.Elements.Count + 1];
+
+                bool inserted = false;
+
+                for (var i = 0; i < treeNode.Elements.Count; i++)
+                {
+                    if (inserted)
+                    {
+                        items[i] = treeNode.Elements[i - 1];
+                        continue;
+                    }
+
+                    var prevPositionItem = treeNode.Elements[i];
+
+                    if (string.CompareOrdinal(prevPositionItem.name, pathFirstElement) > 0)
+                    {
+                        items[i] = (pathFirstElement, childNode);
+                        inserted = true;
+                    }
+                    else
+                    {
+                        items[i] = prevPositionItem;
+                    }
+                }
+
+                if (inserted)
+                {
+                    items[^1] = treeNode.Elements[^1];
+                }
+                else
+                {
+                    items[^1] = (pathFirstElement, childNode);
+                }
+
+                return new TreeNode(items);
+            }
+        }
+
+        throw new NotImplementedException(
+            "Unexpected node type: " + GetType());
     }
 
     public static TreeNodeWithStringPath MergeBlobs(
