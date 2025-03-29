@@ -8,7 +8,6 @@ using Pine.CompilePineToDotNet;
 using Pine.Core;
 using Pine.Elm;
 using Pine.PineVM;
-using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -39,7 +38,7 @@ public class CompilePineToDotNetTests
 
         var listWithHashes =
             listBeforeOrdering
-            .Select(value => (value, hash: Convert.ToHexStringLower(PineValueHashTree.ComputeHash(value).Span)))
+            .Select(value => (value, hash: System.Convert.ToHexStringLower(PineValueHashTree.ComputeHash(value).Span)))
             .ToImmutableList();
 
         var orderedValues =
@@ -331,17 +330,6 @@ public class CompilePineToDotNetTests
     [TestMethod]
     public void Compile_from_Elm_to_CSharp()
     {
-        const string elmModuleText =
-            """
-            module Common exposing (..)
-
-
-            simpleFunction : Int -> Int
-            simpleFunction n =
-                n + 1
-
-            """;
-
         var elmJsonFile =
             """
             {
@@ -368,96 +356,200 @@ public class CompilePineToDotNetTests
             }
             """;
 
-        const string expectedCSharp =
-            """
-            using Pine.Core;
-            using Pine.PineVM;
-            using System;
-            using System.Collections.Generic;
-            using System.Collections.Immutable;
-            using System.Linq;
+        IReadOnlyList<TestCase> testCases =
+        [
+            new TestCase
+            (
+                InputModuleText:
+                """
+                module Common exposing (..)
 
-            public static class Common
-            {
-                public static PineValue simpleFunction(PineValue env)
+
+                simpleFunction : Int -> Int
+                simpleFunction n =
+                    n + 1
+
+                """,
+
+                ExpectedText:
+                """
+                using Pine.Core;
+                using Pine.PineVM;
+                using System;
+                using System.Collections.Generic;
+                using System.Collections.Immutable;
+                using System.Linq;
+
+                public static class Common
                 {
-                    var stack_0 =
-                        env;
-
-                    var stack_1 =
-                        KernelFunction.skip(
-                            1,
-                            stack_0);
-
-                    var stack_2 =
-                        KernelFunction.head(
-                            stack_1);
-
-                    var stack_2_as_int =
-                        KernelFunction.SignedIntegerFromValueRelaxed(
-                            stack_2);
-
-                    var stack_3_as_int =
-                        stack_2_as_int + 1L;
-
-                    if (stack_3_as_int is { } stack_3_as_int_not_null)
+                    public static PineValue simpleFunction(PineValue env)
                     {
-                        return PineValueAsInteger.ValueFromSignedInteger(
+                        var stack_0 =
+                            env;
+
+                        var stack_1 =
+                            KernelFunction.skip(
+                                1,
+                                stack_0);
+
+                        var stack_2 =
+                            KernelFunction.head(
+                                stack_1);
+
+                        var stack_2_as_int =
+                            KernelFunction.SignedIntegerFromValueRelaxed(
+                                stack_2);
+
+                        var stack_3_as_int =
+                            stack_2_as_int + 1L;
+
+                        PineValue stack_3 =
+                            PineValue.EmptyList;
+
+                        if (stack_3_as_int is { } stack_3_as_int_not_null)
+                        {
+                            stack_3 = PineValueAsInteger.ValueFromSignedInteger(
                                 stack_3_as_int_not_null);
+                        }
+
+                        return stack_3;
                     }
-
-                    return PineValue.EmptyList;
                 }
+                """
+            ),
+
+            new TestCase
+            (
+                InputModuleText:
+                """
+                module Common exposing (..)
+
+
+                simpleFunction : Int -> Int
+                simpleFunction n =
+                    n * 3 + 1
+
+                """,
+
+                ExpectedText:
+                """
+                using Pine.Core;
+                using Pine.PineVM;
+                using System;
+                using System.Collections.Generic;
+                using System.Collections.Immutable;
+                using System.Linq;
+
+                public static class Common
+                {
+                    public static PineValue simpleFunction(PineValue env)
+                    {
+                        var stack_0 =
+                            env;
+
+                        var stack_1 =
+                            KernelFunction.skip(
+                                1,
+                                stack_0);
+
+                        var stack_2 =
+                            KernelFunction.head(
+                                stack_1);
+
+                        var stack_2_as_int =
+                            KernelFunction.SignedIntegerFromValueRelaxed(
+                                stack_2);
+
+                        var stack_3_as_int =
+                            stack_2_as_int * 3L;
+
+                        var stack_4_as_int =
+                            stack_3_as_int + 1L;
+
+                        PineValue stack_4 =
+                            PineValue.EmptyList;
+
+                        if (stack_4_as_int is { } stack_4_as_int_not_null)
+                        {
+                            stack_4 = PineValueAsInteger.ValueFromSignedInteger(
+                                stack_4_as_int_not_null);
+                        }
+
+                        return stack_4;
+                    }
+                }
+                """
+            ),
+
+        ];
+
+        for (int testCaseIndex = 0; testCaseIndex < testCases.Count; ++testCaseIndex)
+        {
+            var testCase = testCases[testCaseIndex];
+
+            try
+            {
+                var appCodeTree =
+                    TreeNodeWithStringPath.EmptyTree
+                    .SetNodeAtPathSorted(
+                        ["elm.json"],
+                        TreeNodeWithStringPath.Blob(Encoding.UTF8.GetBytes(elmJsonFile)))
+                    .SetNodeAtPathSorted(
+                        ["src", "Common.elm"],
+                        TreeNodeWithStringPath.Blob(Encoding.UTF8.GetBytes(testCase.InputModuleText)));
+
+                var compiledEnv =
+                    ElmCompiler.CompileInteractiveEnvironment(
+                        appCodeTree,
+                        rootFilePaths: [["src", "Common.elm"]],
+                        skipLowering: true,
+                        skipFilteringForSourceDirs: false)
+                    .Extract(err => throw new System.Exception(err));
+
+                var parsedEnv =
+                    ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnv)
+                    .Extract(err => throw new System.Exception(err));
+
+                var compiledModuleCommon =
+                    parsedEnv.Modules.Single(m => m.moduleName is "Common");
+
+                var compiledModuleCommonCSharp =
+                    Pine.Pine.CompilePineToDotNet.CompileModuleToCSharp.BuildCSharpClassStringFromModule(
+                        compiledModuleCommon.moduleValue,
+                        containerConfig:
+                        new SyntaxContainerConfig(
+                            ContainerTypeName: "Common",
+                            DictionaryMemberName: ""));
+
+                var compilationUnitSyntax =
+                    SyntaxFactory.CompilationUnit()
+                    .WithUsings([.. compiledModuleCommonCSharp.UsingDirectives])
+                    .WithMembers(
+                    SyntaxFactory.List<MemberDeclarationSyntax>(
+                        [compiledModuleCommonCSharp.ClassDeclarationSyntax]));
+
+                var formattedNode =
+                    FormatCSharpSyntaxRewriter.FormatSyntaxTree(
+                        compilationUnitSyntax.NormalizeWhitespace(eol: "\n"));
+
+                var formattedNodeText =
+                    formattedNode.ToFullString()
+                    .Trim();
+
+                formattedNodeText.Should().Be(testCase.ExpectedText.Trim());
             }
-            """;
-
-        var appCodeTree =
-            TreeNodeWithStringPath.EmptyTree
-            .SetNodeAtPathSorted(
-                ["elm.json"],
-                TreeNodeWithStringPath.Blob(Encoding.UTF8.GetBytes(elmJsonFile)))
-            .SetNodeAtPathSorted(
-                ["src", "Common.elm"],
-                TreeNodeWithStringPath.Blob(Encoding.UTF8.GetBytes(elmModuleText)));
-
-        var compiledEnv =
-            ElmCompiler.CompileInteractiveEnvironment(
-                appCodeTree,
-                rootFilePaths: [["src", "Common.elm"]],
-                skipLowering: true,
-                skipFilteringForSourceDirs: false)
-            .Extract(err => throw new System.Exception(err));
-
-        var parsedEnv =
-            ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnv)
-            .Extract(err => throw new System.Exception(err));
-
-        var compiledModuleCommon =
-            parsedEnv.Modules.Single(m => m.moduleName is "Common");
-
-        var compiledModuleCommonCSharp =
-            Pine.Pine.CompilePineToDotNet.CompileModuleToCSharp.BuildCSharpClassStringFromModule(
-                compiledModuleCommon.moduleValue,
-                containerConfig:
-                new SyntaxContainerConfig(
-                    ContainerTypeName: "Common",
-                    DictionaryMemberName: ""));
-
-        var compilationUnitSyntax =
-            SyntaxFactory.CompilationUnit()
-            .WithUsings([.. compiledModuleCommonCSharp.UsingDirectives])
-            .WithMembers(
-            SyntaxFactory.List<MemberDeclarationSyntax>(
-                [compiledModuleCommonCSharp.ClassDeclarationSyntax]));
-
-        var formattedNode =
-            FormatCSharpSyntaxRewriter.FormatSyntaxTree(
-                compilationUnitSyntax.NormalizeWhitespace(eol: "\n"));
-
-        var formattedNodeText =
-            formattedNode.ToFullString()
-            .Trim();
-
-        formattedNodeText.Should().Be(expectedCSharp.Trim());
+            catch (System.Exception e)
+            {
+                throw new System.Exception(
+                    "Failed for test case " + testCaseIndex + ": " + e.Message +
+                    "\nTest case module text:\n" +
+                    testCase.InputModuleText,
+                    e);
+            }
+        }
     }
+
+    private record TestCase(
+        string InputModuleText,
+        string ExpectedText);
 }

@@ -100,7 +100,18 @@ public static class CompileModuleToCSharp
                         .Any(
                             dep =>
                                 dep.sourceIndex == instruction.AssignmentIndex &&
-                                dep.usageType == EmitType.Integer));
+                                dep.usageType is EmitType.Integer));
+
+            var usedAlsoAsGeneric =
+                instruction == ssaInstructions.Last() ||
+                ssaInstructions
+                .Any(
+                    otherInstruction =>
+                        otherInstruction.Dependencies
+                        .Any(
+                            dep =>
+                                dep.sourceIndex == instruction.AssignmentIndex &&
+                                dep.usageType is null));
 
             if (instruction.ReturnType is null && usedAlsoAsInt)
             {
@@ -143,6 +154,57 @@ public static class CompileModuleToCSharp
                                                         SyntaxFactory.IdentifierName(declName))))))))));
 
                 yield return statementAsInt;
+            }
+
+            if (instruction.ReturnType is EmitType.Integer && usedAlsoAsGeneric)
+            {
+                var genericDeclName =
+                    IdentifierNameFromAssignment(
+                        instruction.AssignmentIndex);
+
+                var asIntDeclName =
+                    IdentifierNameFromAssignment(
+                        instruction.AssignmentIndex,
+                        EmitType.Integer);
+
+                var declStatement =
+                    SyntaxFactory.LocalDeclarationStatement(
+                        SyntaxFactory.VariableDeclaration(
+                            SyntaxFactory.IdentifierName("PineValue"))
+                        .WithVariables(
+                            SyntaxFactory.SingletonSeparatedList<VariableDeclaratorSyntax>(
+                                SyntaxFactory.VariableDeclarator(
+                                    SyntaxFactory.Identifier(genericDeclName))
+                                .WithInitializer(
+                                    SyntaxFactory.EqualsValueClause(
+                                        PineCSharpSyntaxFactory.PineValueEmptyListSyntax)))));
+
+                var ifStatement =
+                    SyntaxFactory.IfStatement(
+                        SyntaxFactory.IsPatternExpression(
+                            SyntaxFactory.IdentifierName(asIntDeclName),
+                            SyntaxFactory.RecursivePattern()
+                            .WithPropertyPatternClause(
+                                SyntaxFactory.PropertyPatternClause())
+                            .WithDesignation(
+                                SyntaxFactory.SingleVariableDesignation(
+                                    SyntaxFactory.Identifier(asIntDeclName + "_not_null")))),
+                        SyntaxFactory.Block(
+                            SyntaxFactory.SingletonList<StatementSyntax>(
+                                SyntaxFactory.ExpressionStatement(
+                                    SyntaxFactory.AssignmentExpression(
+                                        SyntaxKind.SimpleAssignmentExpression,
+                                        SyntaxFactory.IdentifierName(genericDeclName),
+                                        SyntaxFactory.InvocationExpression(
+                                            ValueFromSignedIntegerFunctionRef)
+                                        .WithArgumentList(
+                                            SyntaxFactory.ArgumentList(
+                                                SyntaxFactory.SingletonSeparatedList<ArgumentSyntax>(
+                                                    SyntaxFactory.Argument(
+                                                        SyntaxFactory.IdentifierName(asIntDeclName + "_not_null"))))))))));
+
+                yield return declStatement;
+                yield return ifStatement;
             }
         }
 
@@ -201,55 +263,16 @@ public static class CompileModuleToCSharp
             var lastAssignmentIndex =
                 lastAssignmentStatement.AssignmentIndex;
 
-            var lastAssignmentName =
+            var lastAssignmentNameAsGeneric =
                 IdentifierNameFromAssignment(
                     lastAssignmentIndex,
-                    lastAssignmentStatement.ReturnType);
+                    null);
 
-            if (lastAssignmentStatement.ReturnType is EmitType.Integer)
-            {
-                var ifBlockDeclName =
-                    lastAssignmentName + "_not_null";
+            var returnStatement =
+                SyntaxFactory.ReturnStatement(
+                    SyntaxFactory.IdentifierName(lastAssignmentNameAsGeneric));
 
-                var ifBlock =
-                    SyntaxFactory.IfStatement(
-                    SyntaxFactory.IsPatternExpression(
-                        SyntaxFactory.IdentifierName(lastAssignmentName),
-                        SyntaxFactory.RecursivePattern()
-                        .WithPropertyPatternClause(
-                            SyntaxFactory.PropertyPatternClause())
-                        .WithDesignation(
-                            SyntaxFactory.SingleVariableDesignation(
-                                SyntaxFactory.Identifier(ifBlockDeclName)))),
-                    SyntaxFactory.Block(
-                        SyntaxFactory.SingletonList<StatementSyntax>(
-                            SyntaxFactory.ReturnStatement(
-                                SyntaxFactory.InvocationExpression(
-                                    ValueFromSignedIntegerFunctionRef)
-                                .WithArgumentList(
-                                    SyntaxFactory.ArgumentList(
-                                        SyntaxFactory.SingletonSeparatedList(
-                                            SyntaxFactory.Argument(
-                                                SyntaxFactory.IdentifierName(ifBlockDeclName)))))))));
-
-                var returnStatementFallback =
-                    SyntaxFactory.ReturnStatement(
-                        PineCSharpSyntaxFactory.PineValueEmptyListSyntax);
-
-                rootStatements.AddRange(
-                    [
-                    ifBlock,
-                    returnStatementFallback
-                    ]);
-            }
-            else
-            {
-                var returnStatement =
-                    SyntaxFactory.ReturnStatement(
-                        SyntaxFactory.IdentifierName(lastAssignmentName));
-
-                rootStatements.Add(returnStatement);
-            }
+            rootStatements.Add(returnStatement);
         }
 
         var methodBody =
@@ -354,11 +377,34 @@ public static class CompileModuleToCSharp
                         SyntaxFactory.Literal(integerLiteralInt64)));
         }
 
+        if (stackInstruction.Kind is StackInstructionKind.Int_Mul_Const)
+        {
+            var integerLiteral =
+                stackInstruction.IntegerLiteral
+                ??
+                throw new Exception("Integer literal not set for int add const instruction.");
+
+            var argName =
+                IdentifierNameFromAssignment(
+                    instruction.Dependencies[0]);
+
+            var integerLiteralInt64 =
+                (long)integerLiteral;
+
+            return
+                SyntaxFactory.BinaryExpression(
+                    SyntaxKind.MultiplyExpression,
+                    SyntaxFactory.IdentifierName(argName),
+                    SyntaxFactory.LiteralExpression(
+                        SyntaxKind.NumericLiteralExpression,
+                        SyntaxFactory.Literal(integerLiteralInt64)));
+        }
+
         throw new NotImplementedException(
             "Instruction type not implemented: " + stackInstruction);
     }
 
-    private record SSAInstruction(
+    private sealed record SSAInstruction(
         StackInstruction StackInstruction,
         int AssignmentIndex,
         EmitType? ReturnType,
@@ -449,6 +495,24 @@ public static class CompileModuleToCSharp
         }
 
         if (stackInstruction.Kind is StackInstructionKind.Int_Add_Binary)
+        {
+            return
+                new DependenciesAndReturnType(
+                    Dependencies:
+                    [(ssaOffset - 1, EmitType.Integer), (ssaOffset, EmitType.Integer)],
+                    ReturnType: EmitType.Integer);
+        }
+
+        if (stackInstruction.Kind is StackInstructionKind.Int_Mul_Const)
+        {
+            return
+                new DependenciesAndReturnType(
+                    Dependencies:
+                    [(ssaOffset, EmitType.Integer)],
+                    ReturnType: EmitType.Integer);
+        }
+
+        if (stackInstruction.Kind is StackInstructionKind.Int_Mul_Binary)
         {
             return
                 new DependenciesAndReturnType(
