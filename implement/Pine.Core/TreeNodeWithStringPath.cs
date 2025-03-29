@@ -148,30 +148,94 @@ public abstract record TreeNodeWithStringPath : IEquatable<TreeNodeWithStringPat
         return SortedTree(treeContent);
     }
 
-    public TreeNodeWithStringPath SetNodeAtPathSorted(IReadOnlyList<string> path, TreeNodeWithStringPath node)
+    public TreeNodeWithStringPath SetNodeAtPathSorted(
+        IReadOnlyList<string> path,
+        TreeNodeWithStringPath node)
     {
         if (path.Count is 0)
             return node;
 
         var pathFirstElement = path[0];
 
-        var childNodeBefore = GetNodeAtPath([pathFirstElement]);
+        if (this is BlobNode)
+        {
+            var childNode =
+                EmptyTree.SetNodeAtPathSorted([.. path.Skip(1)], node);
 
-        var childNode =
-            (childNodeBefore ?? EmptyTree).SetNodeAtPathSorted([.. path.Skip(1)], node);
+            return
+                new TreeNode(
+                    ImmutableList.Create((pathFirstElement, childNode)));
+        }
 
-        var treeEntries =
-            (this switch
+        if (this is TreeNode treeNode)
+        {
+            if (treeNode.Elements.FirstOrDefault(treeNode => treeNode.name == pathFirstElement) is { } childNodeBefore &&
+                childNodeBefore.component is not null)
             {
-                TreeNode tree => tree.Elements,
-                _ => []
-            })
-            .Where(treeNode => treeNode.name != pathFirstElement)
-            .Concat([(pathFirstElement, childNode)])
-            .Order(TreeEntryDefaultComparer)
-            .ToImmutableList();
+                var childNode =
+                    childNodeBefore.component.SetNodeAtPathSorted([.. path.Skip(1)], node);
 
-        return SortedTree(treeEntries);
+                var items =
+                    new (string name, TreeNodeWithStringPath component)[treeNode.Elements.Count];
+
+                for (var i = 0; i < treeNode.Elements.Count; i++)
+                {
+                    items[i] =
+                        treeNode.Elements[i].name == pathFirstElement
+                        ?
+                        (pathFirstElement, childNode)
+                        :
+                        treeNode.Elements[i];
+                }
+
+                return new TreeNode(items);
+            }
+
+            {
+                var childNode =
+                    EmptyTree.SetNodeAtPathSorted([.. path.Skip(1)], node);
+
+                var items =
+                    new (string name, TreeNodeWithStringPath component)[treeNode.Elements.Count + 1];
+
+                bool inserted = false;
+
+                for (var i = 0; i < treeNode.Elements.Count; i++)
+                {
+                    if (inserted)
+                    {
+                        items[i] = treeNode.Elements[i - 1];
+                        continue;
+                    }
+
+                    var prevPositionItem = treeNode.Elements[i];
+
+                    if (string.CompareOrdinal(prevPositionItem.name, pathFirstElement) > 0)
+                    {
+                        items[i] = (pathFirstElement, childNode);
+                        inserted = true;
+                    }
+                    else
+                    {
+                        items[i] = prevPositionItem;
+                    }
+                }
+
+                if (inserted)
+                {
+                    items[^1] = treeNode.Elements[^1];
+                }
+                else
+                {
+                    items[^1] = (pathFirstElement, childNode);
+                }
+
+                return new TreeNode(items);
+            }
+        }
+
+        throw new NotImplementedException(
+            "Unexpected node type: " + GetType());
     }
 
     public static TreeNodeWithStringPath MergeBlobs(
