@@ -23,7 +23,7 @@
             "elm-community/result-extra": "2.4.0",
             "ianmackenzie/elm-geometry": "4.0.0",
             "ianmackenzie/elm-units": "2.10.0",
-            "lattyware/elm-fontawesome": "7.0.0",
+            "lattyware/elm-fontawesome": "7.2.0",
             "mdgriffith/elm-ui": "1.1.8",
             "rtfeldman/elm-hex": "1.0.0"
         },
