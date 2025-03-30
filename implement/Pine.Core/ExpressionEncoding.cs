@@ -27,11 +27,10 @@ public static class ExpressionEncoding
                 PineValue.List([literal.Value])),
 
             Expression.Environment =>
-            EncodeChoiceTypeVariantAsPineValue("Environment", PineValue.EmptyList),
+            EnvironmentExpressionValue,
 
             Expression.List list =>
-            EncodeChoiceTypeVariantAsPineValue(
-                "List", PineValue.List([PineValue.List([.. list.items.Select(EncodeExpressionAsValue)])])),
+            EncodeListExpressionAsValue(list),
 
             Expression.Conditional conditional =>
             EncodeConditional(conditional),
@@ -45,11 +44,33 @@ public static class ExpressionEncoding
             Expression.StringTag stringTag =>
             EncodeChoiceTypeVariantAsPineValue(
                 "StringTag",
-                PineValue.List([PineValueAsString.ValueFromString(stringTag.Tag), EncodeExpressionAsValue(stringTag.Tagged)])),
+                PineValue.List(
+                    [PineValueAsString.ValueFromString(stringTag.Tag),
+                    EncodeExpressionAsValue(stringTag.Tagged)
+                    ])),
 
             _ =>
-            throw new Exception("Unsupported expression type: " + expression.GetType().FullName)
+            throw new Exception(
+                "Unsupported expression type: " + expression.GetType().FullName)
         };
+
+    private static readonly PineValue.ListValue EnvironmentExpressionValue =
+        EncodeChoiceTypeVariantAsPineValue("Environment", PineValue.EmptyList);
+
+    private static PineValue.ListValue EncodeListExpressionAsValue(Expression.List list)
+    {
+        var encodedItems = new PineValue[list.items.Count];
+
+        for (var i = 0; i < list.items.Count; ++i)
+        {
+            encodedItems[i] = EncodeExpressionAsValue(list.items[i]);
+        }
+
+        return
+            EncodeChoiceTypeVariantAsPineValue(
+                "List",
+                PineValue.List([PineValue.List(encodedItems)]));
+    }
 
     /// <summary>
     /// Parse a Pine value as Pine expression.
@@ -73,117 +94,98 @@ public static class ExpressionEncoding
 
     private static Result<string, Expression> ParseExpressionFromValueDefault(
         PineValue value,
-        Func<PineValue, Result<string, Expression>> generalParser) =>
-        value switch
+        Func<PineValue, Result<string, Expression>> generalParser)
+    {
+        if (value is not PineValue.ListValue rootList)
+            return "Unexpected value type, not a list: " + value.GetType().FullName;
+
+        if (rootList.Elements.Length is not 2)
+            return "Unexpected number of items in list: Not 2 but " + rootList.Elements.Length;
+
+        var parseTagResult = PineValueAsString.StringFromValue(rootList.Elements.Span[0]);
+
         {
-            PineValue.ListValue rootList =>
-            rootList.Elements.Length is not 2
-            ?
-            "Unexpected number of items in list: Not 2 but " + rootList.Elements.Length
-            :
-            PineValueAsString.StringFromValue(rootList.Elements.Span[0]) switch
+            if (parseTagResult.IsErrOrNull() is { } err)
+                return "Failed to parse tag as string: " + err;
+        }
+
+        if (parseTagResult.IsOkOrNull() is not { } tag)
+        {
+            throw new NotImplementedException(
+                "Unexpected result type: " + parseTagResult.GetType().FullName);
+        }
+
+        if (rootList.Elements.Span[1] is not PineValue.ListValue tagArguments)
+        {
+            return "Unexpected shape of tag argument value: Not a list";
+        }
+
+        return
+            tag switch
             {
-                Result<string, string>.Err err =>
-                err.Value,
-
-                Result<string, string>.Ok tag =>
-                rootList.Elements.Span[1] is not PineValue.ListValue tagArguments
+                "Literal" =>
+                tagArguments.Elements.Length < 1
                 ?
-                "Unexpected shape of tag argument value: Not a list"
+                "Expected one argument for literal but got zero"
                 :
-                tag.Value switch
-                {
-                    "Literal" =>
-                    tagArguments.Elements.Length < 1
-                    ?
-                    "Expected one argument for literal but got zero"
-                    :
-                    Expression.LiteralInstance(tagArguments.Elements.Span[0]),
+                Expression.LiteralInstance(tagArguments.Elements.Span[0]),
 
-                    "List" =>
-                    tagArguments.Elements.Length < 1
-                    ?
-                    "Expected one argument for list but got zero"
-                    :
-                    ParsePineListValue(tagArguments.Elements.Span[0]) switch
-                    {
-                        Result<string, ReadOnlyMemory<PineValue>>.Err err =>
-                        (Result<string, Expression>)err.Value,
+                "List" =>
+                tagArguments.Elements.Length is not 1
+                ?
+                "Unexpected number of arguments for list: Not 1 but " + tagArguments.Elements.Length
+                :
+                ParseExpressionList(tagArguments.Elements.Span[0]),
 
-                        Result<string, ReadOnlyMemory<PineValue>>.Ok list =>
-                        ResultListMapCombine(list.Value.ToArray(), generalParser) switch
-                        {
-                            Result<string, IReadOnlyList<Expression>>.Err err =>
-                            (Result<string, Expression>)err.Value,
+                "ParseAndEval" =>
+                ParseParseAndEval(generalParser, tagArguments.Elements),
 
-                            Result<string, IReadOnlyList<Expression>>.Ok expressionList =>
-                            Result<string, Expression>.ok(Expression.ListInstance(expressionList.Value)),
+                "KernelApplication" =>
+                ParseKernelApplication(generalParser, tagArguments.Elements),
 
-                            var other =>
-                            throw new NotImplementedException("Unexpected result type: " + other.GetType().FullName)
-                        },
+                "Conditional" =>
+                ParseConditional(generalParser, tagArguments.Elements),
 
-                        var other =>
-                        throw new NotImplementedException("Unexpected result type: " + other.GetType().FullName)
-                    },
+                "Environment" =>
+                Expression.EnvironmentInstance,
 
-                    "ParseAndEval" =>
-                    ParseParseAndEval(generalParser, tagArguments.Elements) switch
-                    {
-                        Result<string, Expression.ParseAndEval>.Err err =>
-                        (Result<string, Expression>)err.Value,
+                "StringTag" =>
+                ParseStringTag(generalParser, tagArguments.Elements),
 
-                        Result<string, Expression.ParseAndEval>.Ok parseAndEval =>
-                        (Result<string, Expression>)parseAndEval.Value,
+                var otherTag =>
+                "Tag name does not match any known expression variant: " + otherTag
+            };
+    }
 
-                        var other =>
-                        throw new NotImplementedException("Unexpected result type: " + other.GetType().FullName)
-                    },
+    private static Result<string, Expression> ParseExpressionList(PineValue pineValue)
+    {
+        if (pineValue is not PineValue.ListValue listValue)
+            return "Expected list value";
 
-                    "KernelApplication" =>
-                    ParseKernelApplication(generalParser, tagArguments.Elements) switch
-                    {
-                        Result<string, Expression.KernelApplication>.Err err =>
-                        (Result<string, Expression>)err.Value,
+        var expressions = new Expression[listValue.Elements.Length];
 
-                        Result<string, Expression.KernelApplication>.Ok kernelApplication =>
-                        (Result<string, Expression>)kernelApplication.Value,
+        for (var i = 0; i < listValue.Elements.Length; ++i)
+        {
+            var itemValue = listValue.Elements.Span[i];
 
-                        var other =>
-                        throw new NotImplementedException("Unexpected result type: " + other.GetType().FullName)
-                    },
+            var parseItemResult = ParseExpressionFromValue(itemValue);
 
-                    "Conditional" =>
-                    ParseConditional(generalParser, tagArguments.Elements) switch
-                    {
-                        Result<string, Expression.Conditional>.Err err =>
-                        (Result<string, Expression>)err.Value,
+            if (parseItemResult.IsErrOrNull() is { } err)
+            {
+                return "Failed to parse list item at index " + i + ": " + err;
+            }
 
-                        Result<string, Expression.Conditional>.Ok conditional =>
-                        (Result<string, Expression>)conditional.Value,
+            if (parseItemResult.IsOkOrNull() is not { } itemExpr)
+            {
+                throw new NotImplementedException(
+                    "Unexpected result type: " + parseItemResult.GetType().FullName);
+            }
 
-                        var other =>
-                        throw new NotImplementedException("Unexpected result type: " + other.GetType().FullName)
-                    },
+            expressions[i] = itemExpr;
+        }
 
-                    "Environment" =>
-                    Expression.EnvironmentInstance,
-
-                    "StringTag" =>
-                    ParseStringTag(generalParser, tagArguments.Elements)
-                    .Map(stringTag => (Expression)stringTag),
-
-                    var otherTag =>
-                    "Tag name does not match any known expression variant: " + otherTag
-                },
-
-                var other =>
-                "Unexpected result type: " + other.GetType().FullName
-            },
-
-            var other =>
-            "Unexpected value type, not a list: " + other.GetType().FullName
-        };
+        return Expression.ListInstance(expressions);
+    }
 
     private static PineValue.ListValue EncodeParseAndEval(Expression.ParseAndEval parseAndEval) =>
         EncodeChoiceTypeVariantAsPineValue("ParseAndEval",
@@ -193,17 +195,43 @@ public static class ExpressionEncoding
                 EncodeExpressionAsValue(parseAndEval.Environment)
                 ]));
 
-    private static Result<string, Expression.ParseAndEval> ParseParseAndEval(
+    private static Result<string, Expression> ParseParseAndEval(
         Func<PineValue, Result<string, Expression>> generalParser,
-        ReadOnlyMemory<PineValue> arguments) =>
-        arguments.Length is not 2
-        ?
-        "Expected two arguments under parse and eval, but got " + arguments.Length
-        :
-        generalParser(arguments.Span[0])
-        .AndThen(encoded =>
-        generalParser(arguments.Span[1])
-        .Map(environment => new Expression.ParseAndEval(encoded: encoded, environment: environment)));
+        ReadOnlyMemory<PineValue> arguments)
+    {
+        if (arguments.Length is not 2)
+        {
+            return "Unexpected number of arguments under parse and eval, not two but " + arguments.Length;
+        }
+
+        var parseEncodedResult = generalParser(arguments.Span[0]);
+
+        {
+            if (parseEncodedResult.IsErrOrNull() is { } err)
+                return err;
+        }
+
+        if (parseEncodedResult.IsOkOrNull() is not { } encoded)
+        {
+            throw new NotImplementedException(
+                "Unexpected result type: " + parseEncodedResult.GetType().FullName);
+        }
+
+        var parseEnvironmentResult = generalParser(arguments.Span[1]);
+
+        {
+            if (parseEnvironmentResult.IsErrOrNull() is { } err)
+                return err;
+        }
+
+        if (parseEnvironmentResult.IsOkOrNull() is not { } environment)
+        {
+            throw new NotImplementedException(
+                "Unexpected result type: " + parseEnvironmentResult.GetType().FullName);
+        }
+
+        return new Expression.ParseAndEval(encoded: encoded, environment: environment);
+    }
 
     /// <summary>
     /// Encodes a kernel application expression as a Pine value.
@@ -218,19 +246,44 @@ public static class ExpressionEncoding
                 EncodeExpressionAsValue(kernelApplicationExpression.Input)
                 ]));
 
-    private static Result<string, Expression.KernelApplication> ParseKernelApplication(
+    private static Result<string, Expression> ParseKernelApplication(
         Func<PineValue, Result<string, Expression>> generalParser,
-        ReadOnlyMemory<PineValue> arguments) =>
-        arguments.Length is not 2
-        ?
-        "Expected two arguments under kernel application, but got " + arguments.Length
-        :
-        PineValueAsString.StringFromValue(arguments.Span[0])
-        .AndThen(function =>
-        generalParser(arguments.Span[1])
-        .Map(input => new Expression.KernelApplication(
-            function: function,
-            input: input)));
+        ReadOnlyMemory<PineValue> arguments)
+    {
+        if (arguments.Length is not 2)
+        {
+            return "Unexpected number of arguments under kernel application, not two but " + arguments.Length;
+        }
+
+        var parseFunctionResult =
+            PineValueAsString.StringFromValue(arguments.Span[0]);
+
+        {
+            if (parseFunctionResult.IsErrOrNull() is { } err)
+                return err;
+        }
+
+        if (parseFunctionResult.IsOkOrNull() is not { } function)
+        {
+            throw new NotImplementedException(
+                "Unexpected result type: " + parseFunctionResult.GetType().FullName);
+        }
+
+        var parseInputResult = generalParser(arguments.Span[1]);
+
+        {
+            if (parseInputResult.IsErrOrNull() is { } err)
+                return err;
+        }
+
+        if (parseInputResult.IsOkOrNull() is not { } input)
+        {
+            throw new NotImplementedException(
+                "Unexpected result type: " + parseInputResult.GetType().FullName);
+        }
+
+        return new Expression.KernelApplication(function: function, input: input);
+    }
 
     private static PineValue.ListValue EncodeConditional(
         Expression.Conditional conditionalExpression) =>
@@ -243,30 +296,66 @@ public static class ExpressionEncoding
                 EncodeExpressionAsValue(conditionalExpression.TrueBranch)
                 ]));
 
-    private static Result<string, Expression.Conditional> ParseConditional(
+    private static Result<string, Expression> ParseConditional(
         Func<PineValue, Result<string, Expression>> generalParser,
-        ReadOnlyMemory<PineValue> arguments) =>
-        arguments.Length is not 3
-        ?
-        "Expected 3 arguments under conditional, but got " + arguments.Length
-        :
-        generalParser(arguments.Span[0])
-        .AndThen(condition =>
-        generalParser(arguments.Span[1])
-        .AndThen(falseBranch =>
-        generalParser(arguments.Span[2])
-        .Map(trueBranch =>
-            Expression.ConditionalInstance(
-                condition: condition,
-                falseBranch: falseBranch,
-                trueBranch: trueBranch))));
+        ReadOnlyMemory<PineValue> arguments)
+    {
+        if (arguments.Length is not 3)
+        {
+            return "Unexpected number of arguments under conditional, not three but " + arguments.Length;
+        }
 
-    private static Result<string, Expression.StringTag> ParseStringTag(
+        var parseConditionResult = generalParser(arguments.Span[0]);
+        
+        {
+            if (parseConditionResult.IsErrOrNull() is { } err)
+                return err;
+        }
+        
+        if (parseConditionResult.IsOkOrNull() is not { } condition)
+        {
+            throw new NotImplementedException(
+                "Unexpected result type: " + parseConditionResult.GetType().FullName);
+        }
+
+        var parseFalseBranchResult = generalParser(arguments.Span[1]);
+        
+        {
+            if (parseFalseBranchResult.IsErrOrNull() is { } err)
+                return err;
+        }
+        
+        if (parseFalseBranchResult.IsOkOrNull() is not { } falseBranch)
+        {
+            throw new NotImplementedException(
+                "Unexpected result type: " + parseFalseBranchResult.GetType().FullName);
+        }
+
+        var parseTrueBranchResult = generalParser(arguments.Span[2]);
+
+        {
+            if (parseTrueBranchResult.IsErrOrNull() is { } err)
+                return err;
+        }
+
+        if (parseTrueBranchResult.IsOkOrNull() is not { } trueBranch)
+        {
+            throw new NotImplementedException(
+                "Unexpected result type: " + parseTrueBranchResult.GetType().FullName);
+        }
+
+        return Expression.ConditionalInstance(
+            condition: condition,
+            falseBranch: falseBranch,
+            trueBranch: trueBranch);
+    }
+
+    private static Result<string, Expression> ParseStringTag(
         Func<PineValue, Result<string, Expression>> generalParser,
         ReadOnlyMemory<PineValue> arguments) =>
         arguments.Length is not 2
         ?
-        "Expected 2 arguments under string tag, but got " + arguments.Length
+        "Unexpected number of arguments under string tag, not two but " + arguments.Length
         :
         PineValueAsString.StringFromValue(arguments.Span[0]) switch
         {
