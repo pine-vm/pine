@@ -113,7 +113,7 @@ public class ElmAppDependencyResolution
             })
             .ToImmutableDictionary();
 
-        var packagesToIncludeNames =
+        var packagesToIncludeRootsNames =
             remainingElmModulesImports
             .Select(importedModuleName =>
             {
@@ -157,6 +157,11 @@ public class ElmAppDependencyResolution
                 }
             }
         }
+
+        var packagesToIncludeNames =
+            packagesToIncludeRootsNames
+            .Concat(packagesToIncludeRootsNames.SelectMany(enumeratePackageDependenciesTransitive))
+            .ToImmutableHashSet();
 
         var packagesToInclude =
             packages
