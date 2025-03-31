@@ -1703,7 +1703,7 @@ public class LanguageServer(
 
             if (documentUriNormalized.StartsWith(packageDirectoryNormalized))
             {
-                var modulePathFlat = documentUriNormalized.Substring(packageDirectoryNormalized.Length);
+                var modulePathFlat = documentUriNormalized[packageDirectoryNormalized.Length..];
 
                 var modulePathItems = modulePathFlat.Split('/');
 

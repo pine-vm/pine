@@ -69,13 +69,8 @@ type alias CompilationIterationSuccess =
 
 
 type ElmMakeEntryPointKind
-    = ClassicMakeEntryPoint ElmMakeEntryPointStruct
-    | BlobMakeEntryPoint ElmMakeEntryPointStruct
-
-
-type alias ElmMakeEntryPointStruct =
-    { elmMakeJavaScriptFunctionName : String
-    }
+    = ClassicMakeEntryPoint
+    | BlobMakeEntryPoint
 
 
 type alias AppFiles =
@@ -229,32 +224,18 @@ defaultEntryPoints : List EntryPointClass
 defaultEntryPoints =
     [ entryPointClassFromSetOfEquallyProcessedFunctionNames
         [ "blobMain" ]
-        (\_ entryPointConfig ->
-            loweredForBlobEntryPoint entryPointConfig
-                >> Result.map
-                    (\( compiledFiles, entryPoint ) ->
-                        { compiledFiles = compiledFiles
-                        , rootModuleEntryPointKind = BlobMakeEntryPoint entryPoint
-                        }
-                    )
+        (\_ _ compiledFiles ->
+            Ok
+                { compiledFiles = compiledFiles
+                , rootModuleEntryPointKind = BlobMakeEntryPoint
+                }
         )
     , entryPointClassFromSetOfEquallyProcessedFunctionNames
         [ "main" ]
-        (\_ entryPointConfig compiledFiles ->
-            let
-                (Elm.Syntax.Node.Node _ moduleDefinition) =
-                    entryPointConfig.compilationRootModule.parsedSyntax.moduleDefinition
-            in
+        (\_ _ compiledFiles ->
             Ok
                 { compiledFiles = compiledFiles
-                , rootModuleEntryPointKind =
-                    ClassicMakeEntryPoint
-                        { elmMakeJavaScriptFunctionName =
-                            (Elm.Syntax.Module.moduleName moduleDefinition
-                                ++ [ "main" ]
-                            )
-                                |> String.join "."
-                        }
+                , rootModuleEntryPointKind = ClassicMakeEntryPoint
                 }
         )
     ]
@@ -290,35 +271,30 @@ entryPointClassFromSetOfEquallyProcessedNames :
     -> (Elm.Syntax.Declaration.Declaration -> ProcessEntryPoint)
     -> EntryPointClass
 entryPointClassFromSetOfEquallyProcessedNames supportedDeclarationNames processEntryPoint sourceModule =
-    let
-        declarationsNames : List ( String, Elm.Syntax.Declaration.Declaration )
-        declarationsNames =
-            sourceModule.parsedSyntax.declarations
-                |> List.filterMap
-                    (\(Elm.Syntax.Node.Node _ declaration) ->
-                        case declaration of
-                            Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
-                                let
-                                    (Elm.Syntax.Node.Node _ functionDeclarationDecl) =
-                                        functionDeclaration.declaration
+    case
+        sourceModule.parsedSyntax.declarations
+            |> Common.listMapFind
+                (\(Elm.Syntax.Node.Node _ declaration) ->
+                    case declaration of
+                        Elm.Syntax.Declaration.FunctionDeclaration functionDeclaration ->
+                            let
+                                (Elm.Syntax.Node.Node _ functionDeclarationDecl) =
+                                    functionDeclaration.declaration
 
-                                    (Elm.Syntax.Node.Node _ functionDeclarationName) =
-                                        functionDeclarationDecl.name
-                                in
+                                (Elm.Syntax.Node.Node _ functionDeclarationName) =
+                                    functionDeclarationDecl.name
+                            in
+                            if List.member functionDeclarationName supportedDeclarationNames then
                                 Just
                                     ( functionDeclarationName
                                     , declaration
                                     )
 
-                            _ ->
+                            else
                                 Nothing
-                    )
-    in
-    case
-        declarationsNames
-            |> Common.listFind
-                (\( name, _ ) ->
-                    List.member name supportedDeclarationNames
+
+                        _ ->
+                            Nothing
                 )
     of
         Nothing ->
@@ -724,28 +700,6 @@ loweredForCompilationRoot entryPointClasses config sourceFiles =
                                 , rootModuleEntryPointKind = Ok buildEntryPointOk.rootModuleEntryPointKind
                                 }
                             )
-
-
-loweredForBlobEntryPoint :
-    CompileEntryPointConfig
-    -> AppFiles
-    -> Result (List (LocatedInSourceFiles CompilationError)) ( AppFiles, ElmMakeEntryPointStruct )
-loweredForBlobEntryPoint { compilationRootFilePath, compilationRootModule } sourceFiles =
-    let
-        (Elm.Syntax.Node.Node _ moduleDefinition) =
-            compilationRootModule.parsedSyntax.moduleDefinition
-
-        moduleName : List String
-        moduleName =
-            Elm.Syntax.Module.moduleName moduleDefinition
-    in
-    Ok
-        ( sourceFiles
-        , { elmMakeJavaScriptFunctionName =
-                (moduleName ++ [ "blobMain" ])
-                    |> String.join "."
-          }
-        )
 
 
 sourceFileFunctionNameStart : String

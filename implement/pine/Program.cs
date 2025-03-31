@@ -1024,7 +1024,7 @@ public class Program
                     0;
 
                     Console.WriteLine(
-                        "Compiled source tree " + Convert.ToHexStringLower(sourceTreeHash.Span).Substring(0, 8) +
+                        "Compiled source tree " + Convert.ToHexStringLower(sourceTreeHash.Span)[..8] +
                         " containing " + sourceTreeAllFiles.Length +
                         " files and " + sourceTreeElmModules.Length +
                         " Elm modules into environment with " +
@@ -2324,8 +2324,7 @@ public class Program
                     elmMakeCommandAppendix: elmMakeCommandAppendix);
         }
 
-        Result<string, Elm019Binaries.ElmMakeOk> continueWithBlobEntryPoint(
-            CompilerSerialInterface.ElmMakeEntryPointStruct entryPointStruct)
+        Result<string, Elm019Binaries.ElmMakeOk> continueWithBlobEntryPoint()
         {
             var sourceFilesWithMergedPackages =
                 ElmAppDependencyResolution.AppCompilationUnitsForEntryPoint(
@@ -2419,7 +2418,7 @@ public class Program
                         continueWithClassicEntryPoint(),
 
                     CompilerSerialInterface.ElmMakeEntryPointKind.BlobMakeEntryPoint blob =>
-                        continueWithBlobEntryPoint(blob.EntryPointStruct),
+                        continueWithBlobEntryPoint(),
 
                     _ =>
                     throw new NotImplementedException(

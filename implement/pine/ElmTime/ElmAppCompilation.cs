@@ -1284,52 +1284,15 @@ namespace ElmTime
 
             if (tagName is "ClassicMakeEntryPoint")
             {
-                var arguments = asElmTag.Arguments;
-
-                if (arguments.Count is not 1)
-                {
-                    throw new Exception("Expected tag with one argument, got: " + arguments.Count);
-                }
-
-                var elmMakeEntryPointStruct = ParseElmMakeEntryPointStruct(arguments[0]);
-
-                return new CompilerSerialInterface.ElmMakeEntryPointKind.ClassicMakeEntryPoint(elmMakeEntryPointStruct);
+                return new CompilerSerialInterface.ElmMakeEntryPointKind.ClassicMakeEntryPoint();
             }
 
             if (tagName is "BlobMakeEntryPoint")
             {
-                var arguments = asElmTag.Arguments;
-
-                if (arguments.Count is not 1)
-                {
-                    throw new Exception("Expected tag with one argument, got: " + arguments.Count);
-                }
-
-                var elmMakeEntryPointStruct = ParseElmMakeEntryPointStruct(arguments[0]);
-
-                return new CompilerSerialInterface.ElmMakeEntryPointKind.BlobMakeEntryPoint(elmMakeEntryPointStruct);
+                return new CompilerSerialInterface.ElmMakeEntryPointKind.BlobMakeEntryPoint();
             }
 
             throw new Exception("Unexpected tag name: " + tagName);
-        }
-
-        private static CompilerSerialInterface.ElmMakeEntryPointStruct ParseElmMakeEntryPointStruct(
-            ElmValue elmValue)
-        {
-            if (elmValue is not ElmValue.ElmRecord asElmRecord)
-            {
-                throw new Exception("Expected Elm record value, got: " + elmValue);
-            }
-
-            var elmMakeJavaScriptFunctionNameValue = asElmRecord["elmMakeJavaScriptFunctionName"];
-
-            if (elmMakeJavaScriptFunctionNameValue is not ElmValue.ElmString elmMakeJavaScriptFunctionNameString)
-            {
-                throw new Exception("Expected Elm string value, got: " + elmMakeJavaScriptFunctionNameValue);
-            }
-
-            return new CompilerSerialInterface.ElmMakeEntryPointStruct(
-                elmMakeJavaScriptFunctionName: elmMakeJavaScriptFunctionNameString.Value);
         }
 
         private static PineValue PineListValueForElmListString(IEnumerable<string> strings) =>
@@ -1343,9 +1306,6 @@ namespace ElmTime
 
             return ["src", .. directoryNames, fileName];
         }
-
-        public static IImmutableList<string> FilePathFromModuleName(string moduleName) =>
-            FilePathFromModuleName(moduleName.Split('.'));
 
         public static string InterfaceToHostRootModuleName => "Backend.InterfaceToHost_Root";
 
@@ -1410,20 +1370,8 @@ namespace ElmTime
         }
 
         private static long EstimateCacheItemSizeInMemory(
-            CompilationIterationResult item) =>
-            item.Unpack(
-                fromErr: err => err.Sum(EstimateCacheItemSizeInMemory),
-                fromOk: EstimateCacheItemSizeInMemory);
-
-        private static long EstimateCacheItemSizeInMemory(
             CompilationIterationSuccess compilationIterationSuccess) =>
             EstimateCacheItemSizeInMemory(compilationIterationSuccess.compiledFiles);
-
-        private static long EstimateCacheItemSizeInMemory(CompilerSerialInterface.LocatedCompilationError compilationError) =>
-            100 + (compilationError.location?.filePath.Sum(e => e.Length) ?? 0) + EstimateCacheItemSizeInMemory(compilationError.error);
-
-        private static long EstimateCacheItemSizeInMemory(CompilerSerialInterface.CompilationError compilationError) =>
-            compilationError?.MissingDependencyError?.Sum(EstimateCacheItemSizeInMemory) ?? 0;
 
         private static long EstimateCacheItemSizeInMemory(CompilationResult item) =>
             item.Unpack(
@@ -1437,16 +1385,11 @@ namespace ElmTime
             item?.Sum(file => file.Key.Sum(e => e.Length) + file.Value.Length) ?? 0;
 
         private static long EstimateCacheItemSizeInMemory(LocatedCompilationError compilationError) =>
-            100 + (compilationError.location?.filePath.Sum(e => e.Length) ?? 0) + EstimateCacheItemSizeInMemory(compilationError.error);
+            100 + (compilationError.location?.filePath.Sum(e => e.Length) ?? 0) +
+            EstimateCacheItemSizeInMemory(compilationError.error);
 
         private static long EstimateCacheItemSizeInMemory(CompilationError compilationError) =>
             compilationError.DependencyError != null ? compilationError.DependencyError.Length * 2 : 0;
-
-        private static long EstimateCacheItemSizeInMemory(CompilerSerialInterface.DependencyKey dependencyKey) =>
-            dependencyKey.ElmMakeDependency?.Sum(EstimateCacheItemSizeInMemory) ?? 0;
-
-        private static long EstimateCacheItemSizeInMemory(CompilerSerialInterface.ElmMakeRequestStructure elmMakeRequest) =>
-            elmMakeRequest?.files?.Sum(file => file.content.AsBase64.Length) ?? 0;
 
         public record CompilationIterationReport(
             CompilationIterationCompilationReport compilation,
@@ -1496,33 +1439,29 @@ namespace ElmTime
 
     namespace CompilerSerialInterface
     {
-        public record CompilationIterationSuccess(
-            IReadOnlyList<AppCodeEntry> compiledFiles,
-            Result<string, ElmMakeEntryPointKind> rootModuleEntryPointKind);
-
         [System.Text.Json.Serialization.JsonConverter(typeof(JsonConverterForChoiceType))]
         public abstract record ElmMakeEntryPointKind
         {
-            public record ClassicMakeEntryPoint(
-                ElmMakeEntryPointStruct EntryPointStruct)
+            public record ClassicMakeEntryPoint
                 : ElmMakeEntryPointKind;
 
-            public record BlobMakeEntryPoint(
-                ElmMakeEntryPointStruct EntryPointStruct)
+            public record BlobMakeEntryPoint
                 : ElmMakeEntryPointKind;
         }
-
-        public record ElmMakeEntryPointStruct(string elmMakeJavaScriptFunctionName);
 
         public record CompilationError(
             IReadOnlyList<string>? OtherCompilationError = null,
             IReadOnlyList<DependencyKey>? MissingDependencyError = null);
 
-        public record LocatedInSourceFilesRecord(LocationInSourceFiles location);
+        public record LocatedInSourceFilesRecord(
+            LocationInSourceFiles location);
 
-        public record LocatedCompilationError(LocationInSourceFiles location, CompilationError error);
+        public record LocatedCompilationError(
+            LocationInSourceFiles location,
+            CompilationError error);
 
-        public record LocationInSourceFiles(IReadOnlyList<string> filePath);
+        public record LocationInSourceFiles(
+            IReadOnlyList<string> filePath);
 
         public record DependencyKey(
             IReadOnlyList<ElmMakeRequestStructure> ElmMakeDependency,

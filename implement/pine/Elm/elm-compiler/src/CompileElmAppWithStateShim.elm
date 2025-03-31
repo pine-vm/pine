@@ -8,7 +8,6 @@ import CompileElmApp
         , CompileEntryPointConfig
         , ElmChoiceTypeStruct
         , ElmMakeEntryPointKind(..)
-        , ElmMakeEntryPointStruct
         , ElmTypeAnnotation
         , LocatedInSourceFiles(..)
         , SourceDirectories
@@ -112,18 +111,12 @@ loweredForAppInStateManagementShim :
     -> StateShimConfig
     -> CompileEntryPointConfig
     -> AppFiles
-    -> Result (List (LocatedInSourceFiles CompilationError)) ( AppFiles, ElmMakeEntryPointStruct )
+    -> Result (List (LocatedInSourceFiles CompilationError)) AppFiles
 loweredForAppInStateManagementShim sourceDirs stateShimConfig config sourceFiles =
     let
         interfaceToHostRootFilePath : List String
         interfaceToHostRootFilePath =
             filePathFromElmModuleName sourceDirs config.interfaceToHostRootModuleName
-
-        entryPoint : { elmMakeJavaScriptFunctionName : String }
-        entryPoint =
-            { elmMakeJavaScriptFunctionName =
-                String.join "." (config.interfaceToHostRootModuleName ++ [ "interfaceToHost_processEvent" ])
-            }
     in
     case
         supportingTypesModules
@@ -290,11 +283,10 @@ loweredForAppInStateManagementShim sourceDirs stateShimConfig config sourceFiles
                         }
             in
             Ok
-                ( appFiles
+                (appFiles
                     |> updateFileContentAtPath
                         (always (fileContentFromString rootElmModuleText))
                         interfaceToHostRootFilePath
-                , entryPoint
                 )
 
 

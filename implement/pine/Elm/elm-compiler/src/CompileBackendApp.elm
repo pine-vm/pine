@@ -8,7 +8,6 @@ import CompileElmApp
         , CompileEntryPointConfig
         , ElmChoiceTypeStruct
         , ElmMakeEntryPointKind(..)
-        , ElmMakeEntryPointStruct
         , ElmTypeAnnotation
         , EntryPointClass
         , LocatedInSourceFiles(..)
@@ -89,14 +88,16 @@ entryPoints : List EntryPointClass
 entryPoints =
     [ entryPointClassFromSetOfEquallyProcessedFunctionNames
         [ "webServiceMain", "webServerMain", "backendMain" ]
-        (\functionDeclaration entryPointConfig ->
-            loweredForBackendApp functionDeclaration entryPointConfig
-                >> Result.map
-                    (\( compiledFiles, entryPoint ) ->
+        (\functionDeclaration entryPointConfig sourceFiles ->
+            case loweredForBackendApp functionDeclaration entryPointConfig sourceFiles of
+                Err err ->
+                    Err err
+
+                Ok compiledFiles ->
+                    Ok
                         { compiledFiles = compiledFiles
-                        , rootModuleEntryPointKind = ClassicMakeEntryPoint entryPoint
+                        , rootModuleEntryPointKind = ClassicMakeEntryPoint
                         }
-                    )
         )
     ]
 
@@ -105,7 +106,7 @@ loweredForBackendApp :
     Elm.Syntax.Expression.Function
     -> CompileEntryPointConfig
     -> AppFiles
-    -> Result (List (LocatedInSourceFiles CompilationError)) ( AppFiles, ElmMakeEntryPointStruct )
+    -> Result (List (LocatedInSourceFiles CompilationError)) AppFiles
 loweredForBackendApp appDeclaration config sourceFiles =
     case
         findSourceDirectories
@@ -136,7 +137,7 @@ loweredForBackendApp appDeclaration config sourceFiles =
             in
             if Common.assocListGet interfaceToHostRootFilePath sourceFiles /= Nothing then
                 -- Support integrating applications supplying their own lowered version.
-                Ok ( sourceFiles, entryPoint )
+                Ok sourceFiles
 
             else
                 parseAppStateElmTypeAndDependenciesRecursively

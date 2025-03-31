@@ -2,10 +2,8 @@ module Main exposing (..)
 
 import Base64
 import Bytes
-import CompileBackendApp
 import CompileElmApp exposing (CompilationArguments, ElmMakeEntryPointKind(..), EntryPointClass)
 import CompileElmAppMain
-import Dict
 import Elm.Syntax.Range
 import Json.Decode
 import Json.Encode
@@ -18,11 +16,20 @@ type alias CompilationResponse =
 
 lowerSerialized : String -> String
 lowerSerialized argumentsJson =
-    Json.Decode.decodeString jsonDecodeCompilationArguments argumentsJson
-        |> Result.mapError (Json.Decode.errorToString >> (++) "Failed to decode arguments: ")
-        |> Result.map (CompileElmApp.asCompletelyLoweredElmApp defaultEntryPoints)
-        |> jsonEncodeLowerForSourceFilesResponse
-        |> Json.Encode.encode 0
+    case Json.Decode.decodeString jsonDecodeCompilationArguments argumentsJson of
+        Err err ->
+            Json.Encode.encode 0
+                (jsonEncodeLowerForSourceFilesResponse
+                    (Err ("Failed to decode arguments: " ++ Json.Decode.errorToString err))
+                )
+
+        Ok arguments ->
+            Json.Encode.encode 0
+                (jsonEncodeLowerForSourceFilesResponse
+                    (Ok
+                        (CompileElmApp.asCompletelyLoweredElmApp defaultEntryPoints arguments)
+                    )
+                )
 
 
 defaultEntryPoints : List EntryPointClass
@@ -34,7 +41,10 @@ jsonEncodeLowerForSourceFilesResponse : CompilationResponse -> Json.Encode.Value
 jsonEncodeLowerForSourceFilesResponse =
     json_encode_Result
         Json.Encode.string
-        (json_encode_Result (Json.Encode.list jsonEncodeLocatedCompilationError) jsonEncodeCompilationIterationSuccess)
+        (json_encode_Result
+            (Json.Encode.list jsonEncodeLocatedCompilationError)
+            jsonEncodeCompilationIterationSuccess
+        )
 
 
 jsonDecodeCompilationArguments : Json.Decode.Decoder CompilationArguments
@@ -101,30 +111,21 @@ jsonEncodeCompilationIterationSuccess success =
 jsonEncodeElmMakeEntryPointKind : CompileElmApp.ElmMakeEntryPointKind -> Json.Encode.Value
 jsonEncodeElmMakeEntryPointKind kind =
     case kind of
-        CompileElmApp.ClassicMakeEntryPoint entryPoint ->
+        CompileElmApp.ClassicMakeEntryPoint ->
             Json.Encode.object
                 [ ( "ClassicMakeEntryPoint"
-                  , [ jsonEncodeElmMakeEntryPointStruct entryPoint ]
+                  , []
                         |> Json.Encode.list identity
                   )
                 ]
 
-        CompileElmApp.BlobMakeEntryPoint entryPoint ->
+        CompileElmApp.BlobMakeEntryPoint ->
             Json.Encode.object
                 [ ( "BlobMakeEntryPoint"
-                  , [ jsonEncodeElmMakeEntryPointStruct entryPoint ]
+                  , []
                         |> Json.Encode.list identity
                   )
                 ]
-
-
-jsonEncodeElmMakeEntryPointStruct : CompileElmApp.ElmMakeEntryPointStruct -> Json.Encode.Value
-jsonEncodeElmMakeEntryPointStruct struct =
-    Json.Encode.object
-        [ ( "elmMakeJavaScriptFunctionName"
-          , Json.Encode.string struct.elmMakeJavaScriptFunctionName
-          )
-        ]
 
 
 jsonEncodeCompilationError : CompileElmApp.CompilationError -> Json.Encode.Value
