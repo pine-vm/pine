@@ -146,6 +146,7 @@ type InterfaceBlobSingleEncoding
     = Base64Encoding
     | Utf8Encoding
     | BytesEncoding
+    | Uint32Uint8Encoding
 
 
 type alias InterfaceSourceFilesFunctionConfig =
@@ -179,12 +180,12 @@ type alias RecordTreeEmitInterfaceModule =
 
 
 type alias RecordTreeEmitValueModule =
-    Bytes.Bytes -> Result String (Dict.Dict String { expression : String })
+    Bytes.Bytes -> Result String (List ( String, { expression : String } ))
 
 
 type alias RecordTreeEmitBlobIntermediateResult =
     { interfaceModule : { sourceExpression : String } -> String
-    , valueModule : { fieldName : String, buildExpression : Bytes.Bytes -> Result String String }
+    , valueModule : { fieldName : String, encoding : InterfaceBlobSingleEncoding }
     }
 
 
@@ -3645,14 +3646,15 @@ prepareReplaceFunctionInSourceFilesModuleText :
     -> ( List String, Elm.Syntax.File.File )
     -> Elm.Syntax.Node.Node Elm.Syntax.Expression.Function
     -> Result String { valueFunctionText : String, updateInterfaceModuleText : { generatedModuleName : List String } -> String -> Result String String }
-prepareReplaceFunctionInSourceFilesModuleText sourceDirs sourceFiles currentModule originalFunctionDeclaration =
+prepareReplaceFunctionInSourceFilesModuleText sourceDirs sourceFiles currentModule (Elm.Syntax.Node.Node _ originalFunctionDeclaration) =
     let
-        functionName : String
-        functionName =
-            Elm.Syntax.Node.value
-                (Elm.Syntax.Node.value (Elm.Syntax.Node.value originalFunctionDeclaration).declaration).name
+        (Elm.Syntax.Node.Node _ originalFunctionDeclarationDecl) =
+            originalFunctionDeclaration.declaration
+
+        (Elm.Syntax.Node.Node _ functionName) =
+            originalFunctionDeclarationDecl.name
     in
-    case parseSourceFileFunction currentModule (Elm.Syntax.Node.value originalFunctionDeclaration) of
+    case parseSourceFileFunction currentModule originalFunctionDeclaration of
         Err error ->
             Err ("Failed to parse function: " ++ error)
 
@@ -3675,6 +3677,7 @@ prepareReplaceFunctionInSourceFilesModuleText sourceDirs sourceFiles currentModu
                                     expressionFromFileContent =
                                         valueModuleRecordExpressionFromEncodings prepareOk.valueModule
 
+                                    expressionFromFileTreeNode : FileTree.FileTreeNode Bytes.Bytes -> Result String String
                                     expressionFromFileTreeNode fileTreeNode =
                                         case fileTreeNode of
                                             FileTree.BlobNode blob ->
@@ -3708,6 +3711,7 @@ prepareReplaceFunctionInSourceFilesModuleText sourceDirs sourceFiles currentModu
                                                                     )
                                                         )
 
+                                    expressionResult : Result String ( List String, String )
                                     expressionResult =
                                         case config.variant of
                                             SourceFile ->
@@ -3749,9 +3753,11 @@ prepareReplaceFunctionInSourceFilesModuleText sourceDirs sourceFiles currentModu
                                     |> Result.map
                                         (\( fileNameComponents, expression ) ->
                                             let
+                                                valueFunctionName : String
                                                 valueFunctionName =
                                                     String.join "_" fileNameComponents
 
+                                                valueFunctionText : String
                                                 valueFunctionText =
                                                     valueFunctionName
                                                         ++ " =\n"
@@ -3761,6 +3767,7 @@ prepareReplaceFunctionInSourceFilesModuleText sourceDirs sourceFiles currentModu
                                             , updateInterfaceModuleText =
                                                 \{ generatedModuleName } moduleText ->
                                                     let
+                                                        fileExpression : String
                                                         fileExpression =
                                                             case config.variant of
                                                                 SourceFile ->
@@ -3910,7 +3917,7 @@ prepareReplaceFunctionInElmMakeModuleText dependencies sourceDirs sourceFiles cu
                             leaves : List { emitBlob : RecordTreeEmitElmMake, valueFunctionName : String }
                             leaves =
                                 mappedTree
-                                    |> enumerateLeavesFromRecordTree
+                                    |> enumerateLeavesFromRecordTree []
                                     |> List.map Tuple.second
 
                             valueFunctions : List { functionName : String, functionText : String }
@@ -4056,12 +4063,14 @@ interfaceModuleRecordExpression interfaceModuleTree context =
 
 valueModuleRecordExpressionFromEncodings : RecordTreeEmitValueModule -> Bytes.Bytes -> Result String String
 valueModuleRecordExpressionFromEncodings encodings blob =
-    encodings blob
-        |> Result.map
-            (\fieldsDict ->
-                "{ "
+    case encodings blob of
+        Err err ->
+            Err err
+
+        Ok fieldsDict ->
+            Ok
+                ("{ "
                     ++ (fieldsDict
-                            |> Dict.toList
                             |> List.map
                                 (\( fieldName, field ) ->
                                     fieldName ++ " = " ++ field.expression
@@ -4069,7 +4078,7 @@ valueModuleRecordExpressionFromEncodings encodings blob =
                             |> String.join "\n, "
                        )
                     ++ " }"
-            )
+                )
 
 
 recordTreeEmitElmMake : RecordTreeEmit -> Bytes.Bytes -> Result String RecordTreeEmitElmMake
@@ -4707,13 +4716,12 @@ parseSourceFileFunctionName functionName =
             )
 
 
-encodingFromSourceFileFieldName : Dict.Dict String InterfaceBlobSingleEncoding
+encodingFromSourceFileFieldName : List ( String, InterfaceBlobSingleEncoding )
 encodingFromSourceFileFieldName =
     [ ( "base64", Base64Encoding )
     , ( "utf8", Utf8Encoding )
     , ( "bytes", BytesEncoding )
     ]
-        |> Dict.fromList
 
 
 parseElmMakeModuleFunction :
@@ -4779,10 +4787,10 @@ parseSourceFileFunctionEncodingFromDeclaration currentModule functionDeclaration
         Nothing ->
             Err "Missing signature"
 
-        Just signature ->
+        Just (Elm.Syntax.Node.Node _ signature) ->
             parseSourceFileFunctionEncodingFromElmTypeAnnotation
                 currentModule
-                (Elm.Syntax.Node.value signature).typeAnnotation
+                signature.typeAnnotation
 
 
 parseElmMakeFunctionConfigFromTypeAnnotation :
@@ -4790,21 +4798,32 @@ parseElmMakeFunctionConfigFromTypeAnnotation :
     -> Elm.Syntax.Node.Node Elm.Syntax.TypeAnnotation.TypeAnnotation
     -> Result String InterfaceElmMakeFunctionConfig
 parseElmMakeFunctionConfigFromTypeAnnotation currentModule typeAnnotationNode =
-    case parseElmTypeAndDependenciesRecursivelyFromAnnotation [] ( currentModule, typeAnnotationNode ) of
+    case
+        parseElmTypeAndDependenciesRecursivelyFromAnnotation
+            []
+            ( currentModule, typeAnnotationNode )
+    of
         Err (LocatedInSourceFiles _ error) ->
             Err ("Failed to parse type annotation: " ++ error)
 
         Ok ( typeAnnotation, _ ) ->
-            parseInterfaceRecordTree
-                identity
-                (always Ok)
-                typeAnnotation
-                ()
-                |> Result.mapError (\( path, error ) -> "Failed at path " ++ String.join "." path ++ ": " ++ error)
-                |> Result.andThen parseElmMakeFunctionConfigFromRecordTree
+            case
+                parseInterfaceRecordTree
+                    identity
+                    (always Ok)
+                    typeAnnotation
+                    ()
+            of
+                Err ( path, error ) ->
+                    Err ("Failed at path " ++ String.join "." path ++ ": " ++ error)
+
+                Ok recordTree ->
+                    parseElmMakeFunctionConfigFromRecordTree recordTree
 
 
-parseElmMakeFunctionConfigFromRecordTree : CompilationInterfaceRecordTreeNode a -> Result String InterfaceElmMakeFunctionConfig
+parseElmMakeFunctionConfigFromRecordTree :
+    CompilationInterfaceRecordTreeNode a
+    -> Result String InterfaceElmMakeFunctionConfig
 parseElmMakeFunctionConfigFromRecordTree =
     parseElmMakeFunctionConfigFromRecordTreeInternal
         { enableDebug = False
@@ -4859,22 +4878,22 @@ prepareRecordTreeEmitForTreeOrBlobUnderPath :
     -> Result String RecordTreeEmit
 prepareRecordTreeEmitForTreeOrBlobUnderPath pathPrefix tree =
     let
-        mappingBase64 : { fieldName : String, valueModuleBuildExpression : Bytes.Bytes -> Result String String }
+        mappingBase64 : { fieldName : String, encoding : InterfaceBlobSingleEncoding }
         mappingBase64 =
             { fieldName = "base64"
-            , valueModuleBuildExpression = buildBase64ElmExpression
+            , encoding = Base64Encoding
             }
 
-        mappingUtf8 : { fieldName : String, valueModuleBuildExpression : Bytes.Bytes -> Result String String }
+        mappingUtf8 : { fieldName : String, encoding : InterfaceBlobSingleEncoding }
         mappingUtf8 =
             { fieldName = "utf8"
-            , valueModuleBuildExpression = buildUtf8ElmExpression
+            , encoding = Utf8Encoding
             }
 
-        mappingUint32Uint8 : { fieldName : String, valueModuleBuildExpression : Bytes.Bytes -> Result String String }
+        mappingUint32Uint8 : { fieldName : String, encoding : InterfaceBlobSingleEncoding }
         mappingUint32Uint8 =
             { fieldName = "uint32_uint8"
-            , valueModuleBuildExpression = buildUint32Uint8ElmExpression
+            , encoding = Uint32Uint8Encoding
             }
 
         fromUint32Uint8ToBytes : String
@@ -4886,7 +4905,7 @@ prepareRecordTreeEmitForTreeOrBlobUnderPath pathPrefix tree =
 
         mappingBytes :
             ( { fieldName : String
-              , valueModuleBuildExpression : Bytes.Bytes -> Result String String
+              , encoding : InterfaceBlobSingleEncoding
               }
             , Maybe String
             )
@@ -4896,7 +4915,7 @@ prepareRecordTreeEmitForTreeOrBlobUnderPath pathPrefix tree =
         mapToValueDict :
             List
                 ( List String
-                , ( { fieldName : String, valueModuleBuildExpression : Bytes.Bytes -> Result String String }, Maybe String )
+                , ( { fieldName : String, encoding : InterfaceBlobSingleEncoding }, Maybe String )
                 )
         mapToValueDict =
             [ ( [ "base64" ], ( mappingBase64, Nothing ) )
@@ -4935,7 +4954,7 @@ prepareRecordTreeEmitForTreeOrBlobUnderPath pathPrefix tree =
                                         "(" ++ beforeMapping ++ ") " ++ mappingInInterfaceModule
                         , valueModule =
                             { fieldName = valueModule.fieldName
-                            , buildExpression = valueModule.valueModuleBuildExpression
+                            , encoding = valueModule.encoding
                             }
                         }
     in
@@ -4957,10 +4976,10 @@ prepareRecordTreeEmitForTreeOrBlobUnderPath pathPrefix tree =
                 , valueModule =
                     \valueBytes ->
                         mappedTree
-                            |> enumerateLeavesFromRecordTree
+                            |> enumerateLeavesFromRecordTree []
                             |> Common.resultListMapCombine
                                 (\( _, leaf ) ->
-                                    case leaf.valueModule.buildExpression valueBytes of
+                                    case buildBlobExpression leaf.valueModule.encoding valueBytes of
                                         Err err ->
                                             Err
                                                 ("Failed to build expression for field '"
@@ -4972,8 +4991,23 @@ prepareRecordTreeEmitForTreeOrBlobUnderPath pathPrefix tree =
                                         Ok expression ->
                                             Ok ( leaf.valueModule.fieldName, { expression = expression } )
                                 )
-                            |> Result.map Dict.fromList
                 }
+
+
+buildBlobExpression : InterfaceBlobSingleEncoding -> Bytes.Bytes -> Result String String
+buildBlobExpression encoding bytes =
+    case encoding of
+        Base64Encoding ->
+            buildBase64ElmExpression bytes
+
+        Utf8Encoding ->
+            buildUtf8ElmExpression bytes
+
+        BytesEncoding ->
+            buildUint32Uint8ElmExpression bytes
+
+        Uint32Uint8Encoding ->
+            buildUint32Uint8ElmExpression bytes
 
 
 integrateElmMakeFunctionRecordFieldName : String -> InterfaceElmMakeConfig -> Result String InterfaceElmMakeConfig
@@ -5088,7 +5122,7 @@ integrateSourceFilesFunctionRecordFieldName :
     -> Result String InterfaceBlobSingleEncoding
 integrateSourceFilesFunctionRecordFieldName fieldName configBefore =
     -- TODO: Aggregate different encodings
-    case Dict.get fieldName encodingFromSourceFileFieldName of
+    case Common.assocListGet fieldName encodingFromSourceFileFieldName of
         Just encoding ->
             Ok encoding
 
@@ -5286,16 +5320,21 @@ parseInterfaceRecordTree errorFromString integrateFieldName typeAnnotation seed 
             Ok (RecordTreeBranch [])
 
 
-enumerateLeavesFromRecordTree : CompilationInterfaceRecordTreeNode a -> List ( List String, a )
-enumerateLeavesFromRecordTree node =
+enumerateLeavesFromRecordTree :
+    List String
+    -> CompilationInterfaceRecordTreeNode a
+    -> List ( List String, a )
+enumerateLeavesFromRecordTree prefix node =
     case node of
         RecordTreeLeaf leaf ->
-            [ ( [], leaf ) ]
+            [ ( prefix, leaf ) ]
 
         RecordTreeBranch children ->
             List.concatMap
                 (\( fieldName, child ) ->
-                    child |> enumerateLeavesFromRecordTree |> List.map (Tuple.mapFirst ((::) fieldName))
+                    enumerateLeavesFromRecordTree
+                        (List.concat [ prefix, [ fieldName ] ])
+                        child
                 )
                 children
 
