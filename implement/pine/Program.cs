@@ -2387,7 +2387,37 @@ public class Program
                 throw new Exception("Unexpected parse result type: " + parseFromEnvResult);
             }
 
-            var parseDeclResult = ElmValueEncoding.PineValueAsElmValue(parseFromEnvOk.declValue, null, null);
+            PineValue elmBytesValue = parseFromEnvOk.declValue;
+
+            if (parseFromEnvOk.functionRecord.functionParameterCount is 1)
+            {
+                /*
+                 * Support alternative form as following to avoid eager (expensive) evaluation in the compiler:
+                 * 
+                 * blobMain : () -> Bytes.Bytes
+                 * */
+
+                var applyMainResult =
+                    ElmInteractiveEnvironment.ApplyFunction(
+                        pineVM,
+                        functionRecord: parseFromEnvOk.functionRecord,
+                        arguments: [PineValue.EmptyList]);
+
+                if (applyMainResult.IsErrOrNull() is { } applyErr)
+                {
+                    return "Failed to apply Elm function: " + applyErr;
+                }
+
+                if (applyMainResult.IsOkOrNull() is not { } applyOk)
+                {
+                    throw new Exception("Unexpected apply result type: " + applyMainResult);
+                }
+
+                elmBytesValue = applyOk;
+            }
+
+            var parseDeclResult =
+                ElmValueEncoding.PineValueAsElmValue(elmBytesValue, null, null);
 
             if (parseDeclResult.IsErrOrNull() is { } parseDeclErr)
             {
