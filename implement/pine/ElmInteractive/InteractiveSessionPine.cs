@@ -714,18 +714,65 @@ public class InteractiveSessionPine : IInteractiveSession
         ElmCompiler elmCompiler,
         IPineVM pineVM)
     {
-        return
-            ElmSyntax.ElmModule.ParseModuleName(moduleText)
-            .MapError(err => "Failed parsing name for module " + moduleText.Split('\n', '\r').FirstOrDefault())
-            .AndThen(moduleName =>
-            /*
-             * 2024-12-31: Remove dependency on JavaScript for parsing Elm module syntax.
-             * 
-            ElmInteractive.ParseElmModuleTextToPineValue(moduleText, ParseSubmissionOrCompileDefaultJavaScriptEngine)
-            */
-            elmCompiler.ParseElmModuleText(moduleText, pineVM)
-            .MapError(err => "Failed parsing module " + string.Join(".", moduleName) + ": " + err)
-            .Map(parsedModule => new KeyValuePair<IReadOnlyList<string>, PineValue>(moduleName, parsedModule)));
+        var parseNameResult =
+            ElmSyntax.ElmModule.ParseModuleName(moduleText);
+
+        {
+            if (parseNameResult.IsErrOrNull() is { } parseNameErr)
+            {
+                return
+                    "Failed parsing name for module " +
+                    moduleText.Split('\n', '\r').FirstOrDefault() + ": " + parseNameErr;
+            }
+        }
+
+        if (parseNameResult.IsOkOrNull() is not { } moduleName)
+        {
+            throw new NotImplementedException(
+                "Unexpected result type: " + parseNameResult.GetType());
+        }
+
+        {
+            if (moduleName.Contains("CompilationInterface") &&
+                moduleName.Any(i => i.Contains("Generated")))
+            {
+                var fromDotnetResult =
+                    Pine.ElmSyntax.ElmSyntaxParser.ParseModuleTextAsElmSyntaxElmValue(moduleText);
+
+                // .NET based implementation of ElmSyntaxParser does not yet cover all syntax.
+
+                if (fromDotnetResult.IsOkOrNull() is { } parsedOk)
+                {
+                    var asPineValue =
+                        ElmValueEncoding.ElmValueAsPineValue(parsedOk);
+
+                    return
+                        new KeyValuePair<IReadOnlyList<string>, PineValue>(
+                            moduleName,
+                            asPineValue);
+                }
+            }
+        }
+
+        var parseModuleResult =
+            elmCompiler.ParseElmModuleText(moduleText, pineVM);
+
+        {
+            if (parseModuleResult.IsErrOrNull() is { } parseModuleErr)
+            {
+                return
+                    "Failed parsing module " +
+                    string.Join(".", moduleName) + ": " + parseModuleErr;
+            }
+        }
+
+        if (parseModuleResult.IsOkOrNull() is not { } parsedModule)
+        {
+            throw new NotImplementedException(
+                "Unexpected result type: " + parseModuleResult.GetType());
+        }
+
+        return new KeyValuePair<IReadOnlyList<string>, PineValue>(moduleName, parsedModule);
     }
 
     public static Result<string, PineValue> CompileOneElmModule(
@@ -771,7 +818,11 @@ public class InteractiveSessionPine : IInteractiveSession
         }
 
         if (parseAsTagOk.tagArguments.Length is not 1)
-            return "Failed to extract environment: Expected one element in the list, got " + parseAsTagOk.tagArguments.Length;
+        {
+            return
+                "Failed to extract environment: Expected one element in the list, got " +
+                parseAsTagOk.tagArguments.Length;
+        }
 
         var parseAsRecordResult =
             ElmValueEncoding.ParsePineValueAsRecordTagged(parseAsTagOk.tagArguments.Span[0]);

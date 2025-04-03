@@ -221,7 +221,10 @@ public class ParseElmModuleTextToPineValueTests
             ];
 
         var responseAsElmValue =
-            TestParsingModuleText(elmModuleText, expectedExpressionStringChunks);
+            TestParsingModuleText(
+                elmModuleText,
+                expectedExpressionStringChunks,
+                alsoTestDotnetParser: false);
 
 
         var moduleDefinitionNode =
@@ -400,14 +403,56 @@ public class ParseElmModuleTextToPineValueTests
             ", moduleDefinition = Node { end = { column = 34, row = 1 }, start = { column = 1, row = 1 } } (NormalModule { exposingList = Node { end = { column = 34, row = 1 }, start = { column = 21, row = 1 } } (All { end = { column = 33, row = 1 }, start = { column = 31, row = 1 } }), moduleName = Node { end = { column = 20, row = 1 }, start = { column = 8, row = 1 } } [\"Bytes\",\"Decode\"] }) }"
             ];
 
-        TestParsingModuleText(elmModuleText, expectedExpressionStringChunks);
+        TestParsingModuleText(
+            elmModuleText,
+            expectedExpressionStringChunks,
+            alsoTestDotnetParser: false);
+    }
+
+    [TestMethod]
+    public void Dotnet_parser_results_in_same_expression_as_Elm_parser()
+    {
+        var elmModuleText =
+            """
+            module CompilationInterface.SourceFiles.Generated_SourceFiles exposing (..)
+
+
+            type FileTreeNode blobStructure
+                = BlobNode blobStructure
+                | TreeNode (List ( String, FileTreeNode blobStructure ))
+
+
+            file__src_Backend_VolatileProcess_csx =
+                { utf8 = "#r \"netstandard\"\n#r \"System\"\n#r \"System.Collections.Immutable\"\n#r \"System.Net\"----truncated" }
+
+            file_tree_node_elm_core_modules_explicit_import =
+                TreeNode
+                    [( "Array.elm"
+                    , BlobNode ({ utf8 = "module Array\n    exposing\n        ----truncated" })
+                    )
+                    ,( "Bitwise.elm"
+                    , BlobNode ({ utf8 = "module Bitwise exposing\n  ----truncated" })
+                    )]
+            
+            """;
+
+        IReadOnlyList<string> expectedExpressionStringChunks =
+            [
+            "{ comments = [], declarations = [Node { end = { column = 61, row = 6 }, start = { column = 1, row = 4 } } (CustomTypeDeclaration { constructors = [Node { end = { column = 29, row = 5 }, start = { column = 7, row = 5 } } { arguments = [Node { end = { column = 29, row = 5 }, start = { column = 16, row = 5 } } (GenericType \"blobStructure\")], name = Node { end = { column = 15, row = 5 }, start = { column = 7, row = 5 } } \"BlobNode\" },Node { end = { column = 61, row = 6 }, start = { column = 7, row = 6 } } { arguments = [Node { end = { column = 61, row = 6 }, start = { column = 16, row = 6 } } (Typed (Node { end = { column = 21, row = 6 }, start = { column = 17, row = 6 } } ([],\"List\")) [Node { end = { column = 60, row = 6 }, start = { column = 22, row = 6 } } (Tupled [Node { end = { column = 30, row = 6 }, start = { column = 24, row = 6 } } (Typed (Node { end = { column = 30, row = 6 }, start = { column = 24, row = 6 } } ([],\"String\")) []),Node { end = { column = 58, row = 6 }, start = { column = 32, row = 6 } } (Typed (Node { end = { column = 44, row = 6 }, start = { column = 32, row = 6 } } ([],\"FileTreeNode\")) [Node { end = { column = 58, row = 6 }, start = { column = 45, row = 6 } } (GenericType \"blobStructure\")])])])], name = Node { end = { column = 15, row = 6 }, start = { column = 7, row = 6 } } \"TreeNode\" }], documentation = Nothing, generics = [Node { end = { column = 32, row = 4 }, start = { column = 19, row = 4 } } \"blobStructure\"], name = Node { end = { column = 18, row = 4 }, start = { column = 6, row = 4 } } \"FileTreeNode\" }),Node { end = { column = 120, row = 10 }, start = { column = 1, row = 9 } } (FunctionDeclaration { declaration = Node { end = { column = 120, row = 10 }, start = { column = 1, row = 9 } } { arguments = [], expression = Node { end = { column = 120, row = 10 }, start = { column = 5, row = 10 } } (RecordExpr [Node { end = { column = 118, row = 10 }, start = { column = 7, row = 10 } } [Node { end = { column = 11, row = 10 }, start = { column = 7, row = 10 } } \"utf8\",Node { end = { column = 118, row = 10 }, start = { column = 14, row = 10 } } (Literal \"#r \\\"netstandard\\\"\n#r \\\"System\\\"\n#r \\\"System.Collections.Immutable\\\"\n#r \\\"System.Net\\\"----truncated\")]]), name = Node { end = { column = 38, row = 9 }, start = { column = 1, row = 9 } } \"file__src_Backend_VolatileProcess_csx\" }, documentation = Nothing, signature = Nothing }),Node { end = { column = 11, row = 19 }, start = { column = 1, row = 12 } } (FunctionDeclaration { declaration = Node { end = { column = 11, row = 19 }, start = { column = 1, row = 12 } } { arguments = [], expression = Node { end = { column = 11, row = 19 }, start = { column = 5, row = 13 } } (Application [Node { end = { column = 13, row = 13 }, start = { column = 5, row = 13 } } (FunctionOrValue [] \"TreeNode\"),Node { end = { column = 11, row = 19 }, start = { column = 9, row = 14 } } (ListExpr [Node { end = { column = 10, row = 16 }, start = { column = 10, row = 14 } } (TupledExpression [Node { end = { column = 23, row = 14 }, start = { column = 12, row = 14 } } (Literal \"Array.elm\"),Node { end = { column = 84, row = 15 }, start = { column = 11, row = 15 } } (Application [Node { end = { column = 19, row = 15 }, start = { column = 11, row = 15 } } (FunctionOrValue [] \"BlobNode\"),Node { end = { column = 84, row = 15 }, start = { column = 20, row = 15 } } (ParenthesizedExpression (Node { end = { column = 83, row = 15 }, start = { column = 21, row = 15 } } (RecordExpr [Node { end = { column = 81, row = 15 }, start = { column = 23, row = 15 } } [Node { end = { column = 27, row = 15 }, start = { column = 23, row = 15 } } \"utf8\",Node { end = { column = 81, row = 15 }, start = { column = 30, row = 15 } } (Literal \"module Array\n    exposing\n        ----truncated\")]])))])]),Node { end = { column = 10, row = 19 }, start = { column = 10, row = 17 } } (TupledExpression [Node { end = { column = 25, row = 17 }, start = { column = 12, row = 17 } } (Literal \"Bitwise.elm\"),Node { end = { column = 75, row = 18 }, start = { column = 11, row = 18 } } (Application [Node { end = { column = 19, row = 18 }, start = { column = 11, row = 18 } } (FunctionOrValue [] \"BlobNode\"),Node { end = { column = 75, row = 18 }, start = { column = 20, row = 18 } } (ParenthesizedExpression (Node { end = { column = 74, row = 18 }, start = { column = 21, row = 18 } } (RecordExpr [Node { end = { column = 72, row = 18 }, start = { column = 23, row = 18 } } [Node { end = { column = 27, row = 18 }, start = { column = 23, row = 18 } } \"utf8\",Node { end = { column = 72, row = 18 }, start = { column = 30, row = 18 } } (Literal \"module Bitwise exposing\n  ----truncated\")]])))])])])]), name = Node { end = { column = 48, row = 12 }, start = { column = 1, row = 12 } } \"file_tree_node_elm_core_modules_explicit_import\" }, documentation = Nothing, signature = Nothing })], imports = [], moduleDefinition = Node { end = { column = 76, row = 1 }, start = { column = 1, row = 1 } } (NormalModule { exposingList = Node { end = { column = 76, row = 1 }, start = { column = 63, row = 1 } } (All { end = { column = 75, row = 1 }, start = { column = 73, row = 1 } }), moduleName = Node { end = { column = 62, row = 1 }, start = { column = 8, row = 1 } } [\"CompilationInterface\",\"SourceFiles\",\"Generated_SourceFiles\"] }) }"
+            ];
+
+        TestParsingModuleText(
+            elmModuleText,
+            expectedExpressionStringChunks,
+            alsoTestDotnetParser: true);
     }
 
     static readonly ElmCompilerCache elmCompilerCache = new();
 
     public static ElmValue TestParsingModuleText(
         string elmModuleText,
-        IReadOnlyList<string> expectedExpressionStringChunks)
+        IReadOnlyList<string> expectedExpressionStringChunks,
+        bool alsoTestDotnetParser)
     {
         var expectedExpressionString =
             string.Concat(expectedExpressionStringChunks);
@@ -450,27 +495,62 @@ public class ParseElmModuleTextToPineValueTests
             responseAsExpression,
             "Module parsed as expression syntax");
 
+        if (alsoTestDotnetParser)
+        {
+            var fromDotnetResult =
+                Pine.ElmSyntax.ElmSyntaxParser.ParseModuleTextAsElmSyntaxElmValue(elmModuleText);
+
+            if (fromDotnetResult.IsErrOrNull() is { } err)
+            {
+                Assert.Fail("Failed to parse Elm module text as Elm syntax: " + err);
+            }
+
+            if (fromDotnetResult.IsOkOrNull() is not { } fromDotnetOk)
+            {
+                throw new Exception("Unexpected result type: " + fromDotnetResult);
+            }
+
+            var fromDotnetExpression =
+                ElmValue.RenderAsElmExpression(fromDotnetOk).expressionString;
+
+            if (Testing.CompareStringsChunkwiseAndReportFirstDifference(
+                expectedExpressionStringChunks,
+                fromDotnetExpression) is { } firstDifference)
+            {
+                Console.WriteLine(firstDifference);
+
+                Assert.Fail(
+                    "Dotnet parser produced different expression syntax: " +
+                    firstDifference);
+            }
+
+        }
+
         return responseAsElmValue;
     }
 
     public static Result<string, PineValue> ParseElmModuleTextToPineValue(string elmModuleText)
     {
-        var elmCompilerFromBundle =
-            BundledElmEnvironments.BundledElmCompilerCompiledEnvValue();
-
-        Assert.IsNotNull(
-            elmCompilerFromBundle,
-            message: "Elm compiler environment not found in bundled environments");
-
-        var elmCompiler =
-            ElmCompiler.ElmCompilerFromEnvValue(elmCompilerFromBundle)
-            .Extract(err => throw new Exception(err));
-
         var pineVMCache = new Pine.PineVM.PineVMCache();
 
         var pineVM =
             new Pine.PineVM.PineVM(evalCache: pineVMCache.EvalCache);
 
-        return elmCompiler.ParseElmModuleText(elmModuleText, pineVM);
+        return bundledElmCompiler.Value.ParseElmModuleText(elmModuleText, pineVM);
     }
+
+    private static readonly Lazy<ElmCompiler> bundledElmCompiler =
+        new(() =>
+        {
+            var elmCompilerFromBundle =
+                BundledElmEnvironments.BundledElmCompilerCompiledEnvValue();
+
+            Assert.IsNotNull(
+                elmCompilerFromBundle,
+                message: "Elm compiler environment not found in bundled environments");
+
+            return
+            ElmCompiler.ElmCompilerFromEnvValue(elmCompilerFromBundle)
+            .Extract(err => throw new Exception(err));
+        });
 }
