@@ -495,6 +495,29 @@ public class Precompiled
         }
 
         {
+            var listIntersperseHelpExpression =
+                popularExpressionDictionary["List.intersperseHelp"];
+
+            var listIntersperseHelpExpressionValue =
+                ExpressionEncoding.EncodeExpressionAsValue(listIntersperseHelpExpression);
+
+            var envClass =
+                EnvConstraintId.Create(
+                    [
+                    new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                    [0, 0],
+                    listIntersperseHelpExpressionValue)
+                    ]);
+
+            yield return
+                new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
+                    listIntersperseHelpExpression,
+                    [new PrecompiledEntry(
+                        envClass,
+                        ListIntersperseHelp)]);
+        }
+
+        {
             var stringSliceEnvClass =
                 EnvConstraintId.Create(
                     [
@@ -3802,6 +3825,93 @@ public class Precompiled
                         Expression: functionRecordOk.Value.innerFunction,
                         EnvironmentValue: environmentForItem(itemsListValue.Elements.Span[itemIndex]),
                         Callback: step)));
+    }
+
+    private static PrecompiledResult.FinalValue? ListIntersperseHelp(
+        PineValue environment,
+        PineVMParseCache parseCache)
+    {
+        /*
+        intersperseHelp : List a -> Int -> a -> List a -> List a
+        intersperseHelp acc offset sep xs =
+            case Pine_kernel.take [ 1, Pine_kernel.skip [ offset, xs ] ] of
+                [ x ] ->
+                    intersperseHelp
+                        (Pine_kernel.concat [ acc, [ sep, x ] ])
+                        (offset + 1)
+                        sep
+                        xs
+
+                _ ->
+                    acc
+         * */
+
+        var accValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+
+        var offsetValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
+
+        var sepValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 2]);
+
+        var sourceListValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 3]);
+
+        if (sourceListValue is not PineValue.ListValue sourceList)
+        {
+            return null;
+        }
+
+        if (accValue is not PineValue.ListValue accList)
+        {
+            return null;
+        }
+
+        if (sourceList.Elements.Length is 0)
+        {
+            return
+                new PrecompiledResult.FinalValue(
+                    accValue,
+                    StackFrameCount: 0);
+        }
+
+        if (KernelFunction.SignedIntegerFromValueRelaxed(offsetValue) is not { } offset)
+        {
+            return null;
+        }
+
+        int offsetIndex = (int)offset;
+
+        var aggregateLength =
+            accList.Elements.Length
+            +
+            (sourceList.Elements.Length - offsetIndex) * 2;
+
+        var aggregate = new PineValue[aggregateLength];
+
+        var aggregateIndex = 0;
+
+        for (var i = 0; i < offsetIndex; ++i)
+        {
+            aggregate[aggregateIndex] = accList.Elements.Span[i];
+
+            ++aggregateIndex;
+        }
+
+        for (var i = offsetIndex; i < sourceList.Elements.Length; ++i)
+        {
+            aggregate[aggregateIndex] = sepValue;
+            ++aggregateIndex;
+
+            aggregate[aggregateIndex] = sourceList.Elements.Span[i];
+            ++aggregateIndex;
+        }
+
+        return
+            new PrecompiledResult.FinalValue(
+                PineValue.List(aggregate),
+                StackFrameCount: 0);
     }
 
     static Func<PrecompiledResult>? StringSlice(
