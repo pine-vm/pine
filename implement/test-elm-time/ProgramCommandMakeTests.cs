@@ -1,4 +1,4 @@
-﻿using ElmTime;
+using ElmTime;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using System;
@@ -74,6 +74,70 @@ public class ProgramCommandMakeTests
         CollectionAssert.AreEqual(new byte[] { 0, 1, 3, 4, 71 }, outputBlob.Span.ToArray());
     }
 
+    [TestMethod]
+    public void TestCommandMake_with_blobMain_as_thunk()
+    {
+        var projectFiles = new[]
+        {
+            new
+            {
+                path = ImmutableList.Create("elm.json"),
+                content =
+                """
+                {
+                    "type": "application",
+                    "source-directories": [
+                        "src"
+                    ],
+                    "elm-version": "0.19.1",
+                    "dependencies": {
+                        "direct": {
+                            "TSFoster/elm-bytes-extra": "1.3.0",
+                            "elm/bytes": "1.0.8",
+                            "elm/core": "1.0.5",
+                            "elm/json": "1.1.3"
+                        },
+                        "indirect": {
+                        }
+                    },
+                    "test-dependencies": {
+                        "direct": {},
+                        "indirect": {}
+                    }
+                }
+                """,
+            },
+            new
+            {
+                path = ImmutableList.Create("src","Build.elm"),
+                content =
+                """
+                module Build exposing (..)
+
+                import Bytes
+                import Bytes.Extra
+
+
+                blobMain : () -> Bytes.Bytes
+                blobMain () =
+                    Bytes.Extra.fromByteValues [ 0, 13, 17, 31, 71 ]
+
+                """,
+            },
+        };
+
+        var outputBlob =
+            GetOutputFileContentForCommandMake(
+                projectFiles:
+                [.. projectFiles
+                .Select(file => ((IReadOnlyList<string>)file.path, (ReadOnlyMemory<byte>)Encoding.UTF8.GetBytes(file.content)))],
+                entryPointFilePath: ["src", "Build.elm"]);
+
+        CollectionAssert.AreEqual(
+            new byte[] { 0, 13, 17, 31, 71 },
+            outputBlob.Span.ToArray());
+    }
+
     private static ReadOnlyMemory<byte> GetOutputFileContentForCommandMake(
         IReadOnlyList<(IReadOnlyList<string> path, ReadOnlyMemory<byte> content)> projectFiles,
         IReadOnlyList<string> entryPointFilePath) =>
@@ -96,6 +160,9 @@ public class ProgramCommandMakeTests
                 outputFileName: "should-not-matter",
                 elmMakeCommandAppendix: null);
 
-        return makeResult.Extract(fromErr: err => throw new Exception("Failed make command:\n" + err)).producedFile;
+        return
+            makeResult
+            .Extract(fromErr: err => throw new Exception("Failed make command:\n" + err))
+            .producedFile;
     }
 }
