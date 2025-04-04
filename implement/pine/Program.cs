@@ -1365,7 +1365,7 @@ public class Program
                     },
                     fromOk: compilationOk =>
                     {
-                        var compiledAppFiles = compilationOk.result.compiledFiles;
+                        var compiledAppFiles = compilationOk.Result.CompiledFiles;
 
                         var compiledTree = PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(compiledAppFiles);
                         var compiledComposition = PineValueComposition.FromTreeWithStringPath(compiledTree);
@@ -1379,7 +1379,7 @@ public class Program
 
                         return (report with
                         {
-                            compilationIterationsReports = compilationOk.iterationsReports,
+                            compilationIterationsReports = compilationOk.IterationsReports,
                             compiledCompositionId = compiledCompositionId,
                             totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds
                         }, compiledAppFiles);
@@ -2311,7 +2311,7 @@ public class Program
             throw new Exception("Unexpected lowering result type: " + loweringResult);
         }
 
-        var sourceFilesAfterLowering = loweringOk.result.compiledFiles;
+        var sourceFilesAfterLowering = loweringOk.Result.CompiledFiles;
 
         Result<string, Elm019Binaries.ElmMakeOk> continueWithClassicEntryPoint()
         {
@@ -2439,7 +2439,7 @@ public class Program
         }
 
         return
-            loweringOk.result.rootModuleEntryPointKind
+            loweringOk.Result.RootModuleEntryPointKind
             .MapError(err => "Failed to get entry point main declaration: " + err)
             .AndThen(rootModuleEntryPointKind =>
                 rootModuleEntryPointKind switch

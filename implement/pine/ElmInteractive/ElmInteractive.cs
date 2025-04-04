@@ -524,7 +524,7 @@ public class ElmInteractive
 
                     throw new Exception(errorMessage);
                 },
-                fromOk: compilationOk => SortedTreeFromSetOfBlobsWithStringPath(compilationOk.result.compiledFiles));
+                fromOk: compilationOk => SortedTreeFromSetOfBlobsWithStringPath(compilationOk.Result.CompiledFiles));
     }
 
     public record EvaluatedStruct(

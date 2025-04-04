@@ -113,6 +113,6 @@ public class TestSetup
                 ElmAppInterfaceConfig.Default with { compilationRootFilePath = compilationRootFilePath })
             .Extract(error => throw new Exception(ElmAppCompilation.CompileCompilationErrorsDisplayText(error)));
 
-        return compilationResult.result.compiledFiles;
+        return compilationResult.Result.CompiledFiles;
     }
 }

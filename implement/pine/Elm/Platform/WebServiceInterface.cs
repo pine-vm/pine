@@ -2140,7 +2140,7 @@ type alias TerminateVolatileProcessStruct =
         }
 
         var loweredTree =
-            PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(loweringOk.result.compiledFiles);
+            PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(loweringOk.Result.CompiledFiles);
 
         var loweredTreeCleaned =
             ElmTimeJsonAdapter.CleanUpFromLoweredForJavaScript(loweredTree);

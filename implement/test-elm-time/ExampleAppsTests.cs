@@ -311,7 +311,7 @@ public class ExampleAppsTests
         }
 
         var loweredTree =
-            PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(loweringOk.result.compiledFiles);
+            PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(loweringOk.Result.CompiledFiles);
 
         var loweredTreeValue =
             PineValueComposition.FromTreeWithStringPath(loweredTree);

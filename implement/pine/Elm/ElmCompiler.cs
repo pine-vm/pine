@@ -317,7 +317,7 @@ public class ElmCompiler
             }
 
             var loweredTree =
-                PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(loweringOk.result.compiledFiles);
+                PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(loweringOk.Result.CompiledFiles);
 
             var loweredTreeCleaned =
                 ElmTime.ElmTimeJsonAdapter.CleanUpFromLoweredForJavaScript(loweredTree);

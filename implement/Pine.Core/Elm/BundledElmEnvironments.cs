@@ -86,7 +86,7 @@ public class BundledElmEnvironments
         {
             return LoadBundledCompiledEnvironments(readStream, gzipDecompress: true);
         }
-        catch (System.Exception e)
+        catch (Exception e)
         {
             return "Failed to load bundled Elm environments from embedded resource: " + e.Message;
         }
@@ -152,7 +152,7 @@ public class BundledElmEnvironments
     }
 
     public static void CompressAndWriteBundleFile(
-        System.ReadOnlyMemory<byte> fileContent)
+        ReadOnlyMemory<byte> fileContent)
     {
         System.Console.WriteLine(
             "Current working directory: " + System.Environment.CurrentDirectory);
@@ -174,8 +174,8 @@ public class BundledElmEnvironments
             "Saved the prebuilt dictionary to " + absolutePath);
     }
 
-    public static System.ReadOnlyMemory<byte> CompressResourceFile(
-        System.ReadOnlyMemory<byte> beforeCompression)
+    public static ReadOnlyMemory<byte> CompressResourceFile(
+        ReadOnlyMemory<byte> beforeCompression)
     {
         using var memoryStream = new System.IO.MemoryStream();
 
@@ -188,7 +188,7 @@ public class BundledElmEnvironments
         return memoryStream.ToArray();
     }
 
-    public static (IReadOnlyList<PineValueCompactBuild.ListEntry>, System.ReadOnlyMemory<byte>) BuildBundleResourceFileJsonUtf8(
+    public static (IReadOnlyList<PineValueCompactBuild.ListEntry>, ReadOnlyMemory<byte>) BuildBundleResourceFileJsonUtf8(
         IReadOnlyDictionary<TreeNodeWithStringPath, PineValue> compiledEnvironments)
     {
         IReadOnlyList<PineValueCompactBuild.ListEntry> allEntries =
@@ -218,7 +218,7 @@ public class BundledElmEnvironments
 
                 if (compiledEnvironment.Value is not PineValue.ListValue compiledListValue)
                 {
-                    throw new System.NotImplementedException(
+                    throw new NotImplementedException(
                         "Unexpected value type for compiled Elm environment: " + compiledEnvironment.GetType());
                 }
 

@@ -430,7 +430,7 @@ public record StackInstruction(
             CommandLineInterface.FormatIntegerForDisplay(list.NodesCount) +
             ")",
 
-            _ => throw new System.NotImplementedException(
+            _ => throw new NotImplementedException(
                 "Unknown PineValue: " + value)
         };
 
@@ -447,7 +447,7 @@ public record StackInstruction(
 
     public static InstructionDetails GetDetails(
         StackInstruction instruction,
-        System.Func<PineValue, string> literalDisplayString) =>
+        Func<PineValue, string> literalDisplayString) =>
         instruction.Kind switch
         {
             StackInstructionKind.Push_Literal =>
@@ -455,7 +455,7 @@ public record StackInstruction(
                     PopCount: 0,
                     PushCount: 1,
                     [literalDisplayString(instruction.Literal
-                    ?? throw new System.Exception(
+                    ?? throw new Exception(
                         "Missing Literal for PushLiteral instruction")
                     )]),
 
@@ -470,7 +470,7 @@ public record StackInstruction(
                     PopCount: 0,
                     PushCount: 0,
                     [instruction.LocalIndex?.ToString()
-                    ?? throw new System.Exception(
+                    ?? throw new Exception(
                         "Missing LocalIndex for LocalSet instruction")]),
 
             StackInstructionKind.Local_Get =>
@@ -478,7 +478,7 @@ public record StackInstruction(
                     PopCount: 0,
                     PushCount: 1,
                     [instruction.LocalIndex?.ToString()
-                    ?? throw new System.Exception(
+                    ?? throw new Exception(
                         "Missing LocalIndex for LocalGet instruction")]),
 
             StackInstructionKind.Pop =>
@@ -523,7 +523,7 @@ public record StackInstruction(
                     PushCount: 1,
                     [instruction.TakeCount?.ToString()
                     ??
-                    throw new System.Exception(
+                    throw new Exception(
                         "Missing TakeCount for SliceSkipVarTakeConst instruction")]),
 
             StackInstructionKind.Skip_Generic =>
@@ -562,7 +562,7 @@ public record StackInstruction(
                     PushCount: 1,
                     [instruction.SkipCount?.ToString()
                     ??
-                    throw new System.Exception(
+                    throw new Exception(
                         "Missing SkipCount for SkipHeadConst instruction")]),
 
             StackInstructionKind.Head_Generic =>
@@ -581,11 +581,11 @@ public record StackInstruction(
                 new InstructionDetails(
                     PopCount:
                     instruction.TakeCount
-                        ?? throw new System.Exception(
+                        ?? throw new Exception(
                             "Missing TakeCount for BuildList instruction"),
                     PushCount: 1,
                     [instruction.TakeCount?.ToString()
-                        ?? throw new System.Exception(
+                        ?? throw new Exception(
                             "Missing TakeCount for BuildList instruction")]),
 
             StackInstructionKind.Equal_Binary =>
@@ -605,7 +605,7 @@ public record StackInstruction(
                     PopCount: 1,
                     PushCount: 1,
                     [literalDisplayString(instruction.Literal
-                    ?? throw new System.Exception(
+                    ?? throw new Exception(
                         "Missing Literal for EqualBinaryConst instruction")
                     )]),
 
@@ -614,7 +614,7 @@ public record StackInstruction(
                     PopCount: 1,
                     PushCount: 1,
                     [literalDisplayString(instruction.Literal
-                    ?? throw new System.Exception(
+                    ?? throw new Exception(
                         "Missing Literal for NotEqualBinaryConst instruction")
                     )]),
 
@@ -654,7 +654,7 @@ public record StackInstruction(
                     PopCount: 1,
                     PushCount: 1,
                     [instruction.IntegerLiteral?.ToString()
-                    ?? throw new System.Exception(
+                    ?? throw new Exception(
                         "Missing IntegerLiteral for IntLessThanConst instruction")]),
 
             StackInstructionKind.Int_Less_Than_Or_Equal_Const =>
@@ -662,7 +662,7 @@ public record StackInstruction(
                     PopCount: 1,
                     PushCount: 1,
                     [instruction.IntegerLiteral?.ToString()
-                    ?? throw new System.Exception(
+                    ?? throw new Exception(
                         "Missing IntegerLiteral for IntLessThanOrEqualConst instruction")]),
 
             StackInstructionKind.Jump_If_True_Const =>
@@ -670,7 +670,7 @@ public record StackInstruction(
                     PopCount: 1,
                     PushCount: 0,
                     [instruction.JumpOffset?.ToString()
-                    ?? throw new System.Exception(
+                    ?? throw new Exception(
                         "Missing JumpOffset for JumpIfTrueConst instruction")]),
 
             StackInstructionKind.Jump_Const =>
@@ -678,7 +678,7 @@ public record StackInstruction(
                     PopCount: 0,
                     PushCount: 0,
                     [instruction.JumpOffset?.ToString()
-                    ?? throw new System.Exception(
+                    ?? throw new Exception(
                         "Missing JumpOffset for JumpConst instruction")]),
 
 
@@ -706,7 +706,7 @@ public record StackInstruction(
                     PopCount: 1,
                     PushCount: 1,
                     [instruction.IntegerLiteral?.ToString()
-                    ?? throw new System.Exception(
+                    ?? throw new Exception(
                         "Missing IntegerLiteral for IntAddConst instruction")]),
 
             StackInstructionKind.Int_Add_Generic =>
@@ -732,7 +732,7 @@ public record StackInstruction(
                     PopCount: 1,
                     PushCount: 1,
                     [instruction.IntegerLiteral?.ToString()
-                    ?? throw new System.Exception(
+                    ?? throw new Exception(
                         "Missing IntegerLiteral for IntMulConst instruction")]),
 
             StackInstructionKind.Int_Mul_Generic =>
@@ -758,7 +758,7 @@ public record StackInstruction(
                     PopCount: 1,
                     PushCount: 1,
                     [instruction.IntegerLiteral?.ToString()
-                    ?? throw new System.Exception(
+                    ?? throw new Exception(
                         "Missing IntegerLiteral for BitAndConst instruction")]),
 
             StackInstructionKind.Bit_Or_Generic =>
@@ -778,7 +778,7 @@ public record StackInstruction(
                     PopCount: 1,
                     PushCount: 1,
                     [instruction.IntegerLiteral?.ToString()
-                    ?? throw new System.Exception(
+                    ?? throw new Exception(
                         "Missing IntegerLiteral for BitOrConst instruction")]),
 
             StackInstructionKind.Bit_Xor_Generic =>
@@ -810,7 +810,7 @@ public record StackInstruction(
                     PopCount: 1,
                     PushCount: 1,
                     [instruction.ShiftCount?.ToString()
-                    ?? throw new System.Exception(
+                    ?? throw new Exception(
                         "Missing ShiftCount for BitShiftLeftConst instruction")]),
 
             StackInstructionKind.Bit_Shift_Left_Generic =>
@@ -830,7 +830,7 @@ public record StackInstruction(
                     PopCount: 1,
                     PushCount: 1,
                     [instruction.ShiftCount?.ToString()
-                    ?? throw new System.Exception(
+                    ?? throw new Exception(
                         "Missing ShiftCount for BitShiftRightConst instruction")]),
 
             StackInstructionKind.Bit_Shift_Right_Generic =>
@@ -840,7 +840,7 @@ public record StackInstruction(
                     []),
 
             var otherKind =>
-            throw new System.NotImplementedException(
+            throw new NotImplementedException(
                 "Unknown StackInstructionKind: " + otherKind)
         };
 }
