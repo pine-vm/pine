@@ -43,7 +43,6 @@ type alias StateShimConfig =
     , rootModuleSupportingFunctions : List String
     , modulesToImport : List (List String)
     , appStateWithPlatformShimTypeAnnotationFromAppStateAnnotation : String -> String
-    , stateShimConfigExpression : String
     }
 
 
@@ -57,7 +56,6 @@ type alias RootModuleConfig =
     , supportingJsonConverterFunctions : Dict.Dict String ( List String, String )
     , otherSupportingFunctions : List String
     , appStateWithPlatformShimTypeAnnotationFromAppStateAnnotation : String -> String
-    , stateShimConfigExpression : String
     }
 
 
@@ -279,7 +277,6 @@ loweredForAppInStateManagementShim sourceDirs stateShimConfig config sourceFiles
                                 :: stateShimConfig.rootModuleSupportingFunctions
                         , appStateWithPlatformShimTypeAnnotationFromAppStateAnnotation =
                             stateShimConfig.appStateWithPlatformShimTypeAnnotationFromAppStateAnnotation
-                        , stateShimConfigExpression = stateShimConfig.stateShimConfigExpression
                         }
             in
             Ok
@@ -556,60 +553,12 @@ type alias AppStateWithPlatformShim =
         ++ """
 
 
-config_stateShim =
-    """
-        ++ indentElmCodeLines 1 config.stateShimConfigExpression
-        ++ """
-
-
 type alias State =
     StateShimState AppStateWithPlatformShim
 
 
 interfaceToHost_initState =
     Backend.Generated.StateShim.init
-
-
-interfaceToHost_processEvent : String -> State -> ( State, String )
-interfaceToHost_processEvent =
-    wrapForSerialInterface_processEvent config_stateShim
-
-
-{-| Support function-level dead code elimination (<https://elm-lang.org/blog/small-assets-without-the-headache>) Elm code needed to inform the Elm compiler about our entry points.
--}
-main : Program Int () String
-main =
-    Platform.worker
-        { init = always ( (), Cmd.none )
-        , update =
-            { a = interfaceToHost_processEvent
-            , b = interfaceToHost_initState
-            }
-                |> always ( (), Cmd.none )
-                |> always
-                |> always
-        , subscriptions = always Sub.none
-        }
-
-
-wrapForSerialInterface_processEvent :
-    StateShimConfig appState appStateLessShim
-    -> String
-    -> StateShimState appState
-    -> ( StateShimState appState, String )
-wrapForSerialInterface_processEvent config serializedEvent stateBefore =
-    (case serializedEvent |> Json.Decode.decodeString jsonDecodeStateShimRequest of
-        Err error ->
-            ( stateBefore
-            , Err ("Failed to deserialize event: " ++ Json.Decode.errorToString error)
-            )
-
-        Ok hostEvent ->
-            stateBefore
-                |> Backend.Generated.StateShim.processEvent config hostEvent
-                |> Tuple.mapSecond Ok
-    )
-        |> Tuple.mapSecond (jsonEncodeStateShimResultResponse >> Json.Encode.encode 0)
 
 
 """

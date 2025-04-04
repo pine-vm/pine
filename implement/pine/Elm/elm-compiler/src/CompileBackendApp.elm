@@ -128,12 +128,6 @@ loweredForBackendApp appDeclaration config sourceFiles =
                 interfaceToHostRootFilePath : List String
                 interfaceToHostRootFilePath =
                     filePathFromElmModuleName sourceDirs config.interfaceToHostRootModuleName
-
-                entryPoint : { elmMakeJavaScriptFunctionName : String }
-                entryPoint =
-                    { elmMakeJavaScriptFunctionName =
-                        String.join "." (config.interfaceToHostRootModuleName ++ [ "interfaceToHost_processEvent" ])
-                    }
             in
             if Common.assocListGet interfaceToHostRootFilePath sourceFiles /= Nothing then
                 -- Support integrating applications supplying their own lowered version.
@@ -246,57 +240,6 @@ loweredForBackendApp appDeclaration config sourceFiles =
                                                                 |> Maybe.map .modulesToImport
                                                                 |> Maybe.withDefault []
 
-                                                        exposedFunctionsGeneral =
-                                                            [ ( "init"
-                                                              , { description =
-                                                                    { returnType = { sourceCodeText = "", containsAppStateType = True }
-                                                                    , parameters = []
-                                                                    }
-                                                                , handlerExpression = """
-config_init
-    |> (\\( appState, commands ) ->
-            Backend.Generated.WebServiceShim.backendEventResponseFromRuntimeTasksAndSubscriptions
-                config_subscriptions
-                commands
-                (Backend.Generated.WebServiceShim.initWebServiceShimState appState)
-        )
-    |> Tuple.mapSecond jsonEncodeBackendEventResponse
-    |> Tuple.mapFirst Just
-    |> Tuple.mapSecond Just
-    |> Ok
-    |> always
-"""
-                                                                }
-                                                              )
-                                                            , ( "processEvent"
-                                                              , { description =
-                                                                    { returnType = { sourceCodeText = "", containsAppStateType = True }
-                                                                    , parameters =
-                                                                        [ { patternSourceCodeText = "event"
-                                                                          , typeSourceCodeText = ""
-                                                                          , typeIsAppStateType = False
-                                                                          }
-                                                                        , { patternSourceCodeText = "stateBefore"
-                                                                          , typeSourceCodeText = ""
-                                                                          , typeIsAppStateType = True
-                                                                          }
-                                                                        ]
-                                                                    }
-                                                                , handlerExpression = """
-Backend.Generated.StateShim.exposedFunctionExpectingSingleArgumentAndAppState
-    jsonDecodeBackendEvent
-    (\\backendEvent ->
-        Backend.Generated.WebServiceShim.processWebServiceEvent config_subscriptions backendEvent
-            >> Tuple.mapFirst Just
-            >> Tuple.mapSecond (jsonEncodeBackendEventResponse >> Just)
-            >> Ok
-    )
-"""
-                                                                }
-                                                              )
-                                                            ]
-                                                                |> Dict.fromList
-
                                                         exposedFunctionsMigrate =
                                                             maybeMigrationConfig
                                                                 |> Maybe.map exposedFunctionsFromMigrationConfig
@@ -308,19 +251,8 @@ Backend.Generated.StateShim.exposedFunctionExpectingSingleArgumentAndAppState
                                                                 |> Maybe.withDefault Dict.empty
 
                                                         exposedFunctions =
-                                                            exposedFunctionsGeneral
-                                                                |> Dict.union exposedFunctionsMigrate
+                                                            exposedFunctionsMigrate
                                                                 |> Dict.union exposedFunctionsToAdmin
-
-                                                        stateShimConfigExpression =
-                                                            String.trim
-                                                                """
-{ jsonDecodeAppState = jsonDecodeAppState
-, jsonEncodeAppState = jsonEncodeAppState
-, exposedFunctions = config_exposedFunctions
-, initAppShimState = Backend.Generated.WebServiceShim.initWebServiceShimState
-, appStateLessShim = .stateLessFramework
-}"""
                                                     in
                                                     case
                                                         config.originalSourceModules
@@ -365,7 +297,6 @@ Backend.Generated.StateShim.exposedFunctionExpectingSingleArgumentAndAppState
                                                                     , modulesToImport = modulesToImportMigrate ++ modulesToImportExposeFunctionsToAdmin
                                                                     , appStateWithPlatformShimTypeAnnotationFromAppStateAnnotation =
                                                                         (++) "Backend.Generated.WebServiceShimTypes.WebServiceShimState "
-                                                                    , stateShimConfigExpression = stateShimConfigExpression
                                                                     }
                                                             in
                                                             loweredForAppInStateManagementShim

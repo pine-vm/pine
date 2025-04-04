@@ -385,46 +385,64 @@ asCompletelyLoweredElmApp entryPointClasses arguments =
                TODO: Reorder lowering so that one lowering stage can reuse results from another one.
                This will require building a dependency graph of lowering stages.
             -}
-            arguments.sourceFiles
-                |> addModulesFromTextToAppFiles sourceDirs modulesToAdd
-                |> applyLoweringUnderPrefixes
-                    (mapSourceFilesModuleText sourceDirs)
-                    { prefixes = List.map (String.split ".") arguments.compilationInterfaceElmModuleNamePrefixes
-                    , moduleNameEnd = [ "SourceFiles" ]
-                    }
-                    locatedInSourceFilesFromJustFilePath
-                    sourceDirs
-                |> Result.andThen
-                    (applyLoweringUnderPrefixes
-                        (mapJsonConvertersModuleText { originalSourceModules = sourceModules, sourceDirs = sourceDirs })
+            case
+                arguments.sourceFiles
+                    |> addModulesFromTextToAppFiles sourceDirs modulesToAdd
+                    |> applyLoweringUnderPrefixes
+                        (mapSourceFilesModuleText
+                            sourceDirs
+                        )
                         { prefixes = List.map (String.split ".") arguments.compilationInterfaceElmModuleNamePrefixes
-                        , moduleNameEnd = [ "GenerateJsonConverters" ]
+                        , moduleNameEnd = [ "SourceFiles" ]
                         }
                         locatedInSourceFilesFromJustFilePath
                         sourceDirs
-                    )
-                |> Result.mapError (mapLocatedInSourceFiles OtherCompilationError >> List.singleton)
-                |> Result.andThen
-                    (applyLoweringUnderPrefixes
-                        (mapElmMakeModuleText sourceDirs arguments.dependencies)
-                        { prefixes = List.map (String.split ".") arguments.compilationInterfaceElmModuleNamePrefixes
-                        , moduleNameEnd = [ "ElmMake" ]
-                        }
-                        (\context ->
-                            OtherCompilationError
-                                >> locatedInSourceFilesFromJustFilePath context
-                                >> List.singleton
-                        )
-                        sourceDirs
-                    )
-                |> Result.andThen
-                    (loweredForCompilationRoot
-                        entryPointClasses
-                        { originalSourceModules = sourceModules
-                        , compilationRootFilePath = arguments.compilationRootFilePath
-                        , interfaceToHostRootModuleName = arguments.interfaceToHostRootModuleName
-                        }
-                    )
+            of
+                Err err ->
+                    Err
+                        [ mapLocatedInSourceFiles OtherCompilationError err ]
+
+                Ok loweredSourceFiles ->
+                    case
+                        applyLoweringUnderPrefixes
+                            (mapJsonConvertersModuleText { originalSourceModules = sourceModules, sourceDirs = sourceDirs })
+                            { prefixes = List.map (String.split ".") arguments.compilationInterfaceElmModuleNamePrefixes
+                            , moduleNameEnd = [ "GenerateJsonConverters" ]
+                            }
+                            locatedInSourceFilesFromJustFilePath
+                            sourceDirs
+                            loweredSourceFiles
+                    of
+                        Err err ->
+                            Err
+                                [ mapLocatedInSourceFiles OtherCompilationError err ]
+
+                        Ok loweredJsonConverters ->
+                            case
+                                applyLoweringUnderPrefixes
+                                    (mapElmMakeModuleText sourceDirs arguments.dependencies)
+                                    { prefixes = List.map (String.split ".") arguments.compilationInterfaceElmModuleNamePrefixes
+                                    , moduleNameEnd = [ "ElmMake" ]
+                                    }
+                                    (\context ->
+                                        OtherCompilationError
+                                            >> locatedInSourceFilesFromJustFilePath context
+                                            >> List.singleton
+                                    )
+                                    sourceDirs
+                                    loweredJsonConverters
+                            of
+                                Err err ->
+                                    Err err
+
+                                Ok loweredElmMakeFiles ->
+                                    loweredForCompilationRoot
+                                        entryPointClasses
+                                        { originalSourceModules = sourceModules
+                                        , compilationRootFilePath = arguments.compilationRootFilePath
+                                        , interfaceToHostRootModuleName = arguments.interfaceToHostRootModuleName
+                                        }
+                                        loweredElmMakeFiles
 
 
 compilationInterfaceModuleDependencies : List ( String, List String )
@@ -1218,163 +1236,176 @@ mapSourceFilesModuleText sourceDirs ( sourceFiles, moduleFilePath, moduleText ) 
                 )
 
         Ok parsedModule ->
-            (parsedModule.declarations
-                -- TODO: Also share the 'map all functions' part with `mapJsonConvertersModuleText`
-                -- Remember: The module to interface with git services will probably use similar functionality.
-                |> List.filterMap declarationWithRangeAsFunctionDeclaration
-                |> List.filter
-                    (Elm.Syntax.Node.value
-                        >> .declaration
-                        >> Elm.Syntax.Node.value
-                        >> .name
-                        >> Elm.Syntax.Node.value
-                        >> (\functionName -> not (List.member functionName sourceFilesInterfaceModuleAddedFunctionsNames))
-                    )
-                |> Common.resultListMapCombine
-                    (\functionDeclaration ->
-                        prepareReplaceFunctionInSourceFilesModuleText
-                            sourceDirs
-                            sourceFiles
-                            ( moduleFilePath, parsedModule )
-                            functionDeclaration
-                            |> Result.mapError (mapErrorStringForFunctionDeclaration functionDeclaration)
-                            |> Result.map (Tuple.pair functionDeclaration)
-                            |> Result.mapError (Elm.Syntax.Node.Node (Elm.Syntax.Node.range functionDeclaration))
-                    )
-                |> Result.andThen
-                    (\preparedFunctions ->
-                        let
-                            (Elm.Syntax.Node.Node _ moduleDefinition) =
-                                parsedModule.moduleDefinition
+            (case
+                parsedModule.declarations
+                    -- TODO: Also share the 'map all functions' part with `mapJsonConvertersModuleText`
+                    -- Remember: The module to interface with git services will probably use similar functionality.
+                    |> List.filterMap declarationWithRangeAsFunctionDeclaration
+                    |> List.filter
+                        (Elm.Syntax.Node.value
+                            >> .declaration
+                            >> Elm.Syntax.Node.value
+                            >> .name
+                            >> Elm.Syntax.Node.value
+                            >> (\functionName ->
+                                    not (List.member functionName sourceFilesInterfaceModuleAddedFunctionsNames)
+                               )
+                        )
+                    |> Common.resultListMapCombine
+                        (\((Elm.Syntax.Node.Node functionDeclarationRange _) as functionDeclaration) ->
+                            case
+                                prepareReplaceFunctionInSourceFilesModuleText
+                                    sourceDirs
+                                    sourceFiles
+                                    ( moduleFilePath, parsedModule )
+                                    functionDeclaration
+                            of
+                                Err err ->
+                                    Err
+                                        (Elm.Syntax.Node.Node
+                                            functionDeclarationRange
+                                            (mapErrorStringForFunctionDeclaration functionDeclaration err)
+                                        )
 
-                            interfaceModuleName : Elm.Syntax.ModuleName.ModuleName
-                            interfaceModuleName =
-                                Elm.Syntax.Module.moduleName moduleDefinition
+                                Ok inte ->
+                                    Ok ( functionDeclaration, inte )
+                        )
+             of
+                Err err ->
+                    Err err
 
-                            generatedModuleTypeDeclarations : List String
-                            generatedModuleTypeDeclarations =
-                                [ """
+                Ok preparedFunctions ->
+                    let
+                        (Elm.Syntax.Node.Node _ moduleDefinition) =
+                            parsedModule.moduleDefinition
+
+                        interfaceModuleName : Elm.Syntax.ModuleName.ModuleName
+                        interfaceModuleName =
+                            Elm.Syntax.Module.moduleName moduleDefinition
+
+                        generatedModuleTypeDeclarations : List String
+                        generatedModuleTypeDeclarations =
+                            [ """
 type FileTreeNode blobStructure
     = BlobNode blobStructure
     | TreeNode (List ( String, FileTreeNode blobStructure ))
 """
+                            ]
+
+                        generatedModuleDeclarationsBeforeRemovingDuplicates =
+                            generatedModuleTypeDeclarations
+                                ++ List.map (Tuple.second >> .valueFunctionText) preparedFunctions
+
+                        generatedModuleDeclarations : Set.Set String
+                        generatedModuleDeclarations =
+                            Set.fromList generatedModuleDeclarationsBeforeRemovingDuplicates
+
+                        generatedModuleTextWithoutModuleDeclaration : String
+                        generatedModuleTextWithoutModuleDeclaration =
+                            String.join "\n\n" (Set.toList generatedModuleDeclarations)
+
+                        generatedModuleName : Elm.Syntax.ModuleName.ModuleName
+                        generatedModuleName =
+                            List.concat
+                                [ interfaceModuleName
+                                , [ "Generated_SourceFiles" ]
                                 ]
 
-                            generatedModuleDeclarationsBeforeRemovingDuplicates =
-                                generatedModuleTypeDeclarations
-                                    ++ List.map (Tuple.second >> .valueFunctionText) preparedFunctions
+                        generatedModulePath : List String
+                        generatedModulePath =
+                            filePathFromElmModuleName sourceDirs generatedModuleName
 
-                            generatedModuleDeclarations : Set.Set String
-                            generatedModuleDeclarations =
-                                Set.fromList generatedModuleDeclarationsBeforeRemovingDuplicates
+                        generatedModuleText : String
+                        generatedModuleText =
+                            [ "module " ++ String.join "." generatedModuleName ++ " exposing (..)"
+                            , generatedModuleTextWithoutModuleDeclaration
+                            ]
+                                |> String.join "\n\n"
 
-                            generatedModuleTextWithoutModuleDeclaration : String
-                            generatedModuleTextWithoutModuleDeclaration =
-                                String.join "\n\n" (Set.toList generatedModuleDeclarations)
+                        appFiles : AppFiles
+                        appFiles =
+                            sourceFiles
+                                |> updateFileContentAtPath
+                                    (always (fileContentFromString generatedModuleText))
+                                    generatedModulePath
 
-                            generatedModuleName : Elm.Syntax.ModuleName.ModuleName
-                            generatedModuleName =
-                                List.concat
-                                    [ interfaceModuleName
-                                    , [ "Generated_SourceFiles" ]
-                                    ]
+                        interfaceModuleDeclaresTypeFileTreeNode : Bool
+                        interfaceModuleDeclaresTypeFileTreeNode =
+                            parsedModule.declarations
+                                |> List.any
+                                    (\(Elm.Syntax.Node.Node _ declaration) ->
+                                        case declaration of
+                                            Elm.Syntax.Declaration.CustomTypeDeclaration choiceTypeDeclaration ->
+                                                Elm.Syntax.Node.value choiceTypeDeclaration.name == "FileTreeNode"
 
-                            generatedModulePath : List String
-                            generatedModulePath =
-                                filePathFromElmModuleName sourceDirs generatedModuleName
-
-                            generatedModuleText : String
-                            generatedModuleText =
-                                [ "module " ++ String.join "." generatedModuleName ++ " exposing (..)"
-                                , generatedModuleTextWithoutModuleDeclaration
-                                ]
-                                    |> String.join "\n\n"
-
-                            appFiles : AppFiles
-                            appFiles =
-                                sourceFiles
-                                    |> updateFileContentAtPath
-                                        (always (fileContentFromString generatedModuleText))
-                                        generatedModulePath
-
-                            interfaceModuleDeclaresTypeFileTreeNode : Bool
-                            interfaceModuleDeclaresTypeFileTreeNode =
-                                parsedModule.declarations
-                                    |> List.any
-                                        (\(Elm.Syntax.Node.Node _ declaration) ->
-                                            case declaration of
-                                                Elm.Syntax.Declaration.CustomTypeDeclaration choiceTypeDeclaration ->
-                                                    Elm.Syntax.Node.value choiceTypeDeclaration.name == "FileTreeNode"
-
-                                                _ ->
-                                                    False
-                                        )
-
-                            addMappingFunctionIfTypeIsPresent : String -> Result String String
-                            addMappingFunctionIfTypeIsPresent =
-                                if interfaceModuleDeclaresTypeFileTreeNode then
-                                    \moduleTextBefore ->
-                                        List.foldl
-                                            (\addedFunction previousResult ->
-                                                previousResult
-                                                    |> Result.andThen
-                                                        (addOrUpdateFunctionInElmModuleText
-                                                            { functionName = addedFunction.functionName
-                                                            , mapFunctionLines = addedFunction.mapFunctionLines { generatedModuleName = generatedModuleName }
-                                                            }
-                                                        )
-                                            )
-                                            (Ok moduleTextBefore)
-                                            sourceFilesInterfaceModuleAddedFunctions
-
-                                else
-                                    Ok
-                        in
-                        case
-                            addImportsInElmModuleText
-                                [ encodingModuleImportBytes
-                                , ( generatedModuleName, Nothing )
-                                ]
-                                moduleText
-                        of
-                            Err err ->
-                                Err
-                                    (Elm.Syntax.Node.Node
-                                        (syntaxRangeCoveringCompleteString moduleText)
-                                        err
+                                            _ ->
+                                                False
                                     )
 
-                            Ok addImportsOk ->
-                                case addMappingFunctionIfTypeIsPresent addImportsOk of
-                                    Err err ->
-                                        Err
-                                            (Elm.Syntax.Node.Node
-                                                (syntaxRangeCoveringCompleteString moduleText)
-                                                err
+                        addMappingFunctionIfTypeIsPresent : String -> Result String String
+                        addMappingFunctionIfTypeIsPresent =
+                            if interfaceModuleDeclaresTypeFileTreeNode then
+                                \moduleTextBefore ->
+                                    List.foldl
+                                        (\addedFunction previousResult ->
+                                            previousResult
+                                                |> Result.andThen
+                                                    (addOrUpdateFunctionInElmModuleText
+                                                        { functionName = addedFunction.functionName
+                                                        , mapFunctionLines = addedFunction.mapFunctionLines { generatedModuleName = generatedModuleName }
+                                                        }
+                                                    )
+                                        )
+                                        (Ok moduleTextBefore)
+                                        sourceFilesInterfaceModuleAddedFunctions
+
+                            else
+                                Ok
+                    in
+                    case
+                        addImportsInElmModuleText
+                            [ encodingModuleImportBytes
+                            , ( generatedModuleName, Nothing )
+                            ]
+                            moduleText
+                    of
+                        Err err ->
+                            Err
+                                (Elm.Syntax.Node.Node
+                                    (syntaxRangeCoveringCompleteString moduleText)
+                                    err
+                                )
+
+                        Ok addImportsOk ->
+                            case addMappingFunctionIfTypeIsPresent addImportsOk of
+                                Err err ->
+                                    Err
+                                        (Elm.Syntax.Node.Node
+                                            (syntaxRangeCoveringCompleteString moduleText)
+                                            err
+                                        )
+
+                                Ok addMappingFunctionOk ->
+                                    preparedFunctions
+                                        |> listFoldlToAggregateResult
+                                            (\( functionDeclaration, replaceFunction ) previousAggregate ->
+                                                case
+                                                    replaceFunction.updateInterfaceModuleText
+                                                        { generatedModuleName = generatedModuleName }
+                                                        previousAggregate
+                                                of
+                                                    Err err ->
+                                                        Err
+                                                            (Elm.Syntax.Node.Node
+                                                                (syntaxRangeCoveringCompleteString moduleText)
+                                                                (mapErrorStringForFunctionDeclaration functionDeclaration err)
+                                                            )
+
+                                                    Ok updatedModuleText ->
+                                                        Ok updatedModuleText
                                             )
-
-                                    Ok addMappingFunctionOk ->
-                                        preparedFunctions
-                                            |> listFoldlToAggregateResult
-                                                (\( functionDeclaration, replaceFunction ) previousAggregate ->
-                                                    case
-                                                        replaceFunction.updateInterfaceModuleText
-                                                            { generatedModuleName = generatedModuleName }
-                                                            previousAggregate
-                                                    of
-                                                        Err err ->
-                                                            Err
-                                                                (Elm.Syntax.Node.Node
-                                                                    (syntaxRangeCoveringCompleteString moduleText)
-                                                                    (mapErrorStringForFunctionDeclaration functionDeclaration err)
-                                                                )
-
-                                                        Ok updatedModuleText ->
-                                                            Ok updatedModuleText
-                                                )
-                                                (Ok addMappingFunctionOk)
-                                            |> Result.map (Tuple.pair appFiles)
-                    )
+                                            (Ok addMappingFunctionOk)
+                                        |> Result.map (Tuple.pair appFiles)
             )
                 |> Result.mapError (locatedInSourceFilesFromRange moduleFilePath)
 
@@ -1408,7 +1439,8 @@ mapElmMakeModuleText sourceDirs dependencies ( sourceFiles, moduleFilePath, modu
 
                                 Just (Elm.Syntax.Node.Node declarationRange declaration) ->
                                     case
-                                        prepareReplaceFunctionInElmMakeModuleText dependencies
+                                        prepareReplaceFunctionInElmMakeModuleText
+                                            dependencies
                                             sourceDirs
                                             sourceFiles
                                             ( moduleFilePath, parsedModule )
@@ -3669,134 +3701,139 @@ prepareReplaceFunctionInSourceFilesModuleText sourceDirs sourceFiles currentModu
                     Err ("Failed to identify file for '" ++ filePathRepresentation ++ "': " ++ error)
 
                 Ok ( pathMatchInfo, fileTreeContent ) ->
-                    prepareRecordTreeEmitForTreeOrBlobUnderPath [] config.encoding
-                        |> Result.andThen
-                            (\prepareOk ->
-                                let
-                                    expressionFromFileContent : Bytes.Bytes -> Result String String
-                                    expressionFromFileContent =
-                                        valueModuleRecordExpressionFromEncodings prepareOk.valueModule
+                    case
+                        prepareRecordTreeEmitForTreeOrBlobUnderPath
+                            []
+                            config.encoding
+                    of
+                        Err err ->
+                            Err err
 
-                                    expressionFromFileTreeNode : FileTree.FileTreeNode Bytes.Bytes -> Result String String
-                                    expressionFromFileTreeNode fileTreeNode =
-                                        case fileTreeNode of
-                                            FileTree.BlobNode blob ->
-                                                expressionFromFileContent blob
-                                                    |> Result.map (\expression -> "BlobNode (" ++ expression ++ ")")
+                        Ok prepareOk ->
+                            let
+                                expressionFromFileContent : Bytes.Bytes -> Result String String
+                                expressionFromFileContent =
+                                    valueModuleRecordExpressionFromEncodings prepareOk.valueModule
 
-                                            FileTree.TreeNode tree ->
-                                                let
-                                                    buildTreeEntryExpression ( entryName, entryNode ) =
-                                                        expressionFromFileTreeNode entryNode
-                                                            |> Result.map
-                                                                (\entryNodeExpr ->
-                                                                    [ "( \"" ++ entryName ++ "\""
-                                                                    , ", " ++ entryNodeExpr
-                                                                    , ")"
-                                                                    ]
-                                                                        |> String.join "\n"
+                                expressionFromFileTreeNode : FileTree.FileTreeNode Bytes.Bytes -> Result String String
+                                expressionFromFileTreeNode fileTreeNode =
+                                    case fileTreeNode of
+                                        FileTree.BlobNode blob ->
+                                            expressionFromFileContent blob
+                                                |> Result.map (\expression -> "BlobNode (" ++ expression ++ ")")
+
+                                        FileTree.TreeNode tree ->
+                                            let
+                                                buildTreeEntryExpression ( entryName, entryNode ) =
+                                                    expressionFromFileTreeNode entryNode
+                                                        |> Result.map
+                                                            (\entryNodeExpr ->
+                                                                [ "( \"" ++ entryName ++ "\""
+                                                                , ", " ++ entryNodeExpr
+                                                                , ")"
+                                                                ]
+                                                                    |> String.join "\n"
+                                                            )
+                                            in
+                                            tree
+                                                |> Common.resultListMapCombine buildTreeEntryExpression
+                                                |> Result.map
+                                                    (\entriesExpressions ->
+                                                        "TreeNode\n"
+                                                            ++ indentElmCodeLines 1
+                                                                ([ "["
+                                                                    ++ String.join "\n," entriesExpressions
+                                                                    ++ "]"
+                                                                 ]
+                                                                    |> String.join "\n"
                                                                 )
-                                                in
-                                                tree
-                                                    |> Common.resultListMapCombine buildTreeEntryExpression
-                                                    |> Result.map
-                                                        (\entriesExpressions ->
-                                                            "TreeNode\n"
-                                                                ++ indentElmCodeLines 1
-                                                                    ([ "["
-                                                                        ++ String.join "\n," entriesExpressions
-                                                                        ++ "]"
-                                                                     ]
-                                                                        |> String.join "\n"
-                                                                    )
+                                                    )
+
+                                expressionResult : Result String ( List String, String )
+                                expressionResult =
+                                    case config.variant of
+                                        SourceFile ->
+                                            case fileTreeContent of
+                                                FileTree.TreeNode _ ->
+                                                    Err
+                                                        ("This pattern matches path '"
+                                                            ++ String.join "/" pathMatchInfo.absolutePath
+                                                            ++ "' but the node here is a tree, not a file"
                                                         )
 
-                                    expressionResult : Result String ( List String, String )
-                                    expressionResult =
-                                        case config.variant of
-                                            SourceFile ->
-                                                case fileTreeContent of
-                                                    FileTree.TreeNode _ ->
-                                                        Err
-                                                            ("This pattern matches path '"
-                                                                ++ String.join "/" pathMatchInfo.absolutePath
-                                                                ++ "' but the node here is a tree, not a file"
+                                                FileTree.BlobNode fileContent ->
+                                                    expressionFromFileContent fileContent
+                                                        |> Result.map
+                                                            (\expression ->
+                                                                ( [ "file_"
+                                                                  , filePathRepresentation
+                                                                  ]
+                                                                , expression
+                                                                )
                                                             )
 
-                                                    FileTree.BlobNode fileContent ->
-                                                        expressionFromFileContent fileContent
-                                                            |> Result.map
-                                                                (\expression ->
-                                                                    ( [ "file_"
-                                                                      , filePathRepresentation
-                                                                      ]
-                                                                    , expression
-                                                                    )
-                                                                )
+                                        SourceFileTree ->
+                                            expressionFromFileTreeNode fileTreeContent
+                                                |> Result.map
+                                                    (Tuple.pair
+                                                        [ "file_tree_node"
+                                                        , filePathRepresentation
+                                                        ]
+                                                    )
 
-                                            SourceFileTree ->
-                                                expressionFromFileTreeNode fileTreeContent
-                                                    |> Result.map
-                                                        (Tuple.pair
-                                                            [ "file_tree_node"
-                                                            , filePathRepresentation
-                                                            ]
-                                                        )
+                                fileEncodingTreeExpression : String -> String
+                                fileEncodingTreeExpression sourceExpression =
+                                    interfaceModuleRecordExpression
+                                        prepareOk.interfaceModule
+                                        { sourceExpression = sourceExpression }
+                            in
+                            expressionResult
+                                |> Result.map
+                                    (\( fileNameComponents, expression ) ->
+                                        let
+                                            valueFunctionName : String
+                                            valueFunctionName =
+                                                String.join "_" fileNameComponents
 
-                                    fileEncodingTreeExpression : String -> String
-                                    fileEncodingTreeExpression sourceExpression =
-                                        interfaceModuleRecordExpression
-                                            prepareOk.interfaceModule
-                                            { sourceExpression = sourceExpression }
-                                in
-                                expressionResult
-                                    |> Result.map
-                                        (\( fileNameComponents, expression ) ->
-                                            let
-                                                valueFunctionName : String
-                                                valueFunctionName =
-                                                    String.join "_" fileNameComponents
+                                            valueFunctionText : String
+                                            valueFunctionText =
+                                                valueFunctionName
+                                                    ++ " =\n"
+                                                    ++ indentElmCodeLines 1 expression
+                                        in
+                                        { valueFunctionText = valueFunctionText
+                                        , updateInterfaceModuleText =
+                                            \{ generatedModuleName } moduleText ->
+                                                let
+                                                    fileExpression : String
+                                                    fileExpression =
+                                                        case config.variant of
+                                                            SourceFile ->
+                                                                fileEncodingTreeExpression
+                                                                    (String.join "." generatedModuleName ++ "." ++ valueFunctionName)
 
-                                                valueFunctionText : String
-                                                valueFunctionText =
-                                                    valueFunctionName
-                                                        ++ " =\n"
-                                                        ++ indentElmCodeLines 1 expression
-                                            in
-                                            { valueFunctionText = valueFunctionText
-                                            , updateInterfaceModuleText =
-                                                \{ generatedModuleName } moduleText ->
-                                                    let
-                                                        fileExpression : String
-                                                        fileExpression =
-                                                            case config.variant of
-                                                                SourceFile ->
-                                                                    fileEncodingTreeExpression
-                                                                        (String.join "." generatedModuleName ++ "." ++ valueFunctionName)
+                                                            SourceFileTree ->
+                                                                [ String.join "." generatedModuleName ++ "." ++ valueFunctionName
+                                                                , sourceFilesInterfaceModuleAddedFunctionMapNode.functionName
+                                                                , sourceFilesInterfaceModuleAddedFunctionMapBlobs.functionName
+                                                                    ++ """(\\blobValue -> """
+                                                                    ++ fileEncodingTreeExpression "blobValue"
+                                                                    ++ ")"
+                                                                ]
+                                                                    |> String.join "\n|>"
 
-                                                                SourceFileTree ->
-                                                                    [ String.join "." generatedModuleName ++ "." ++ valueFunctionName
-                                                                    , sourceFilesInterfaceModuleAddedFunctionMapNode.functionName
-                                                                    , sourceFilesInterfaceModuleAddedFunctionMapBlobs.functionName
-                                                                        ++ """(\\blobValue -> """
-                                                                        ++ fileEncodingTreeExpression "blobValue"
-                                                                        ++ ")"
-                                                                    ]
-                                                                        |> String.join "\n|>"
-
-                                                        buildNewFunctionLines : List String -> List String
-                                                        buildNewFunctionLines previousFunctionLines =
-                                                            List.take 2 previousFunctionLines
-                                                                ++ [ indentElmCodeLines 1 fileExpression ]
-                                                    in
-                                                    addOrUpdateFunctionInElmModuleText
-                                                        { functionName = functionName
-                                                        , mapFunctionLines = Maybe.withDefault [] >> buildNewFunctionLines
-                                                        }
-                                                        moduleText
-                                            }
-                                        )
-                            )
+                                                    buildNewFunctionLines : List String -> List String
+                                                    buildNewFunctionLines previousFunctionLines =
+                                                        List.take 2 previousFunctionLines
+                                                            ++ [ indentElmCodeLines 1 fileExpression ]
+                                                in
+                                                addOrUpdateFunctionInElmModuleText
+                                                    { functionName = functionName
+                                                    , mapFunctionLines = Maybe.withDefault [] >> buildNewFunctionLines
+                                                    }
+                                                    moduleText
+                                        }
+                                    )
 
 
 sourceFilesInterfaceModuleAddedFunctions : List { functionName : String, mapFunctionLines : { generatedModuleName : List String } -> Maybe (List String) -> List String }
@@ -3858,10 +3895,11 @@ prepareReplaceFunctionInElmMakeModuleText :
             }
 prepareReplaceFunctionInElmMakeModuleText dependencies sourceDirs sourceFiles currentModule originalFunctionDeclaration =
     let
-        functionName : String
-        functionName =
-            Elm.Syntax.Node.value
-                (Elm.Syntax.Node.value originalFunctionDeclaration.declaration).name
+        (Elm.Syntax.Node.Node _ originalFunctionDeclarationDecl) =
+            originalFunctionDeclaration.declaration
+
+        (Elm.Syntax.Node.Node _ functionName) =
+            originalFunctionDeclarationDecl.name
     in
     case parseElmMakeModuleFunction currentModule originalFunctionDeclaration of
         Err error ->
@@ -3869,7 +3907,9 @@ prepareReplaceFunctionInElmMakeModuleText dependencies sourceDirs sourceFiles cu
 
         Ok ( filePathRepresentation, elmMakeTree ) ->
             let
-                continueMapResult : ElmMakeRecordTreeLeafEmit -> Result String { emitBlob : RecordTreeEmitElmMake, valueFunctionName : String }
+                continueMapResult :
+                    ElmMakeRecordTreeLeafEmit
+                    -> Result String { emitBlob : RecordTreeEmitElmMake, valueFunctionName : String }
                 continueMapResult leafBeforeApplyBytes =
                     recordTreeEmitElmMake leafBeforeApplyBytes.emitBlob leafBeforeApplyBytes.blob
                         |> Result.map
@@ -4730,10 +4770,11 @@ parseElmMakeModuleFunction :
     -> Result String ( String, InterfaceElmMakeFunctionConfig )
 parseElmMakeModuleFunction currentModule functionDeclaration =
     let
-        functionName : String
-        functionName =
-            Elm.Syntax.Node.value
-                (Elm.Syntax.Node.value functionDeclaration.declaration).name
+        (Elm.Syntax.Node.Node _ declaration) =
+            functionDeclaration.declaration
+
+        (Elm.Syntax.Node.Node _ functionName) =
+            declaration.name
     in
     case parseElmMakeModuleFunctionName functionName of
         Err error ->
