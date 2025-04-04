@@ -142,23 +142,21 @@ type alias TerminateVolatileProcessStruct =
 
     public record WebServiceEventResponse(
         PineValue State,
-        IReadOnlyList<Command> Commands);
+        IReadOnlyList<(PineValue cmdValue, Command cmdParsed)> Commands);
 
     public record WebServiceConfig(
         WebServiceEventResponse Init,
         ElmInteractiveEnvironment.FunctionRecord Subscriptions,
         ElmTimeJsonAdapter.Parsed JsonAdapter)
     {
-        public static WebServiceEventResponse
+        public static ApplyFunctionInput
             EventHttpRequest(
             Subscriptions subscriptions,
-            HttpRequestEventStruct httpRequest,
-            PineValue stateBefore,
-            IPineVM pineVM)
+            HttpRequestEventStruct httpRequest)
         {
             var functionRecord = subscriptions.HttpRequest;
 
-            if (functionRecord.functionParameterCount is not 2)
+            if (functionRecord.Parsed.ParameterCount is not 2)
             {
                 throw new Exception("Expected httpRequest function to have two parameters.");
             }
@@ -166,43 +164,9 @@ type alias TerminateVolatileProcessStruct =
             var inputEncoded = EncodeHttpRequest(httpRequest);
 
             return
-                ApplyUpdate(functionRecord, [inputEncoded], stateBefore, pineVM);
-        }
-
-        public static WebServiceEventResponse?
-            EventPosixTime(
-            Subscriptions subscriptions,
-            long posixTimeMilli,
-            PineValue stateBefore,
-            IPineVM pineVM)
-        {
-            if (subscriptions.PosixTimeIsPast is not { } posixTimeSub)
-            {
-                return null;
-            }
-
-            if (posixTimeMilli < posixTimeSub.MinimumPosixTimeMilli)
-            {
-                return null;
-            }
-
-            var functionRecord = posixTimeSub.Update;
-
-            if (functionRecord.functionParameterCount is not 2)
-            {
-                throw new Exception("Expected posixTimeIsPast function to have two parameters.");
-            }
-
-            var inputEncoded =
-                ElmValueEncoding.ElmValueAsPineValue(
-                    new ElmValue.ElmRecord(
-                        [
-                        ("currentPosixTimeMilli",
-                        ElmValue.Integer(posixTimeMilli))
-                        ]));
-
-            return
-                ApplyUpdate(functionRecord, [inputEncoded], stateBefore, pineVM);
+                new ApplyFunctionInput(
+                    functionRecord,
+                    [inputEncoded]);
         }
 
         public static Subscriptions ParseSubscriptions(
@@ -253,7 +217,8 @@ type alias TerminateVolatileProcessStruct =
                     invalid: err => throw new Exception("Failed parsing posixTimeIsPast: " + err));
 
             return new Subscriptions(
-                HttpRequest: httpRequestFunctionRecord,
+                HttpRequest:
+                FunctionRecordValueAndParsed.ParseOrThrow(httpRequestFieldValue, parseCache),
                 PosixTimeIsPast: posixTimeIsPastSubscription);
         }
 
@@ -287,12 +252,9 @@ type alias TerminateVolatileProcessStruct =
             }
 
             var updateFunctionRecord =
-                ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(
-                    updateField,
-                    parseCache)
-                .Extract(err => throw new Exception("Failed parsing update function record: " + err));
+                FunctionRecordValueAndParsed.ParseOrThrow(updateField, parseCache);
 
-            if (updateFunctionRecord.functionParameterCount is not 2)
+            if (updateFunctionRecord.Parsed.ParameterCount is not 2)
             {
                 throw new Exception("Expected posixTimeIsPast function to have one parameter.");
             }
@@ -302,9 +264,9 @@ type alias TerminateVolatileProcessStruct =
                 Update: updateFunctionRecord);
         }
 
-        public static WebServiceEventResponse
+        public static ApplyUpdateReport<Command>
             ApplyUpdate(
-            ElmInteractiveEnvironment.FunctionRecord functionRecord,
+            FunctionRecordValueAndParsed updateFunction,
             IReadOnlyList<PineValue> argumentsBeforeState,
             PineValue stateBefore,
             IPineVM pineVM)
@@ -312,7 +274,7 @@ type alias TerminateVolatileProcessStruct =
             var responseValue =
                 ElmInteractiveEnvironment.ApplyFunction(
                     pineVM,
-                    functionRecord,
+                    updateFunction.Parsed,
                     [.. argumentsBeforeState, stateBefore])
                 .Extract(err => throw new Exception("Failed applying function: " + err));
 
@@ -332,7 +294,14 @@ type alias TerminateVolatileProcessStruct =
                     "Unexpected return type: " + parseResponseResult);
             }
 
-            return response;
+            return
+                new ApplyUpdateReport<Command>(
+                    Input:
+                    new ApplyFunctionInput(
+                        updateFunction,
+                        argumentsBeforeState),
+                    ResponseState: response.State,
+                    ResponseCommands: response.Commands);
         }
     }
 
@@ -451,7 +420,7 @@ type alias TerminateVolatileProcessStruct =
     }
 
     public record ReadRuntimeInformationCommandStruct(
-        ElmInteractiveEnvironment.FunctionRecord Update);
+        FunctionRecordValueAndParsed Update);
 
     public record ReadAllFromVolatileProcessNativeSuccessStruct(
         string StdOutBase64,
@@ -460,7 +429,7 @@ type alias TerminateVolatileProcessStruct =
 
     public record CreateVolatileProcessNativeCommandStruct(
         CreateVolatileProcessNativeRequestStruct Request,
-        ElmInteractiveEnvironment.FunctionRecord Update);
+        FunctionRecordValueAndParsed Update);
 
     public record CreateVolatileProcessNativeRequestStruct(
         LoadDependencyStruct ExecutableFile,
@@ -480,7 +449,7 @@ type alias TerminateVolatileProcessStruct =
         string? OsPlatform);
 
     public record Subscriptions(
-        ElmInteractiveEnvironment.FunctionRecord HttpRequest,
+        FunctionRecordValueAndParsed HttpRequest,
         PosixTimeIsPastSubscription? PosixTimeIsPast);
 
     public record HttpRequestEventStruct(
@@ -491,7 +460,7 @@ type alias TerminateVolatileProcessStruct =
 
     public record PosixTimeIsPastSubscription(
         long MinimumPosixTimeMilli,
-        ElmInteractiveEnvironment.FunctionRecord Update);
+        FunctionRecordValueAndParsed Update);
 
     public record HttpRequestContext(
         string? ClientAddress);
@@ -517,21 +486,21 @@ type alias TerminateVolatileProcessStruct =
 
     public record CreateVolatileProcessStruct(
         string ProgramCode,
-        ElmInteractiveEnvironment.FunctionRecord Update);
+        FunctionRecordValueAndParsed Update);
 
     public record RequestToVolatileProcessStruct(
         string ProcessId,
         string Request,
-        ElmInteractiveEnvironment.FunctionRecord Update);
+        FunctionRecordValueAndParsed Update);
 
     public record WriteToVolatileProcessNativeStdInStruct(
         string ProcessId,
         string StdInBase64,
-        ElmInteractiveEnvironment.FunctionRecord Update);
+        FunctionRecordValueAndParsed Update);
 
     public record ReadAllFromVolatileProcessNativeStruct(
         string ProcessId,
-        ElmInteractiveEnvironment.FunctionRecord Update);
+        FunctionRecordValueAndParsed Update);
 
     public record CreateVolatileProcessErrorStruct(
         string ExceptionToString);
@@ -825,7 +794,8 @@ type alias TerminateVolatileProcessStruct =
             return "Expected list value for commands but got: " + commandsValue;
         }
 
-        var commands = new Command[commandsListValue.Elements.Length];
+        var commands =
+            new (PineValue, Command)[commandsListValue.Elements.Length];
 
         for (var i = 0; i < commands.Length; i++)
         {
@@ -844,13 +814,14 @@ type alias TerminateVolatileProcessStruct =
                 }
             }
 
-            if (parsedCommandResult.IsOkOrNull() is not { } command)
+            if (parsedCommandResult.IsOkOrNull() is not { } commandParsed)
             {
                 throw new NotImplementedException(
                     "Unexpected return type: " + parsedCommandResult);
             }
 
-            commands[i] = command;
+            commands[i] =
+                (commandValue, commandParsed);
         }
 
         return new WebServiceEventResponse(stateValue, commands);
@@ -1082,25 +1053,14 @@ type alias TerminateVolatileProcessStruct =
         ParseRuntimeInformationRecord(
         PineValue pineValue)
     {
-        var parseUpdateResult =
-            ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(pineValue, parseCache);
-
-        {
-            if (parseUpdateResult.IsErrOrNull() is { } err)
-            {
-                return err;
-            }
-        }
-
-        if (parseUpdateResult.IsOkOrNull() is not { } parseUpdateOk)
-        {
-            throw new NotImplementedException(
-                "Unexpected return type: " + parseUpdateResult);
-        }
+        var parseUpdateOk =
+            FunctionRecordValueAndParsed.ParseOrThrow(
+                pineValue,
+                parseCache);
 
         var remainingParamCount =
-            parseUpdateOk.functionParameterCount -
-            parseUpdateOk.argumentsAlreadyCollected.Length;
+            parseUpdateOk.Parsed.ParameterCount -
+            parseUpdateOk.Parsed.ArgumentsAlreadyCollected.Length;
 
         if (remainingParamCount is not 2)
         {
@@ -1167,31 +1127,20 @@ type alias TerminateVolatileProcessStruct =
         }
 
         var parsedUpdate =
-            ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(updateValue, parseCache);
-
-        {
-            if (parsedUpdate.IsErrOrNull() is { } err)
-            {
-                return "Failed to parse update: " + err;
-            }
-        }
-
-        if (parsedUpdate.IsOkOrNull() is not { } update)
-        {
-            throw new NotImplementedException(
-                "Unexpected return type: " + parsedUpdate);
-        }
+            FunctionRecordValueAndParsed.ParseOrThrow(
+                updateValue,
+                parseCache);
 
         var remainingParamCount =
-            update.functionParameterCount -
-            update.argumentsAlreadyCollected.Length;
+            parsedUpdate.Parsed.ParameterCount -
+            parsedUpdate.Parsed.ArgumentsAlreadyCollected.Length;
 
         if (remainingParamCount is not 2)
         {
             return "Expected function to have two remaining parameters but got: " + remainingParamCount;
         }
 
-        return new CreateVolatileProcessNativeCommandStruct(request, update);
+        return new CreateVolatileProcessNativeCommandStruct(request, parsedUpdate);
     }
 
     public static Result<string, CreateVolatileProcessNativeRequestStruct>
@@ -1686,25 +1635,14 @@ type alias TerminateVolatileProcessStruct =
             return "Missing field: update";
         }
 
-        var parseUpdateResult =
-            ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(updateValue.fieldValue, parseCache);
-
-        {
-            if (parseUpdateResult.IsErrOrNull() is { } err)
-            {
-                return "Failed to parse update: " + err;
-            }
-        }
-
-        if (parseUpdateResult.IsOkOrNull() is not { } update)
-        {
-            throw new NotImplementedException(
-                "Unexpected return type: " + parseUpdateResult);
-        }
+        var parsedUpdate =
+            FunctionRecordValueAndParsed.ParseOrThrow(
+                updateValue.fieldValue,
+                parseCache);
 
         return new CreateVolatileProcessStruct(
             programCodeString.Value,
-            update);
+            parsedUpdate);
     }
 
     public static Result<string, RequestToVolatileProcessStruct> ParseRequestToVolatileProcessStruct(
@@ -1793,25 +1731,15 @@ type alias TerminateVolatileProcessStruct =
             return "Missing field: update";
         }
 
-        var parseUpdateResult =
-            ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(updateValue.fieldValue, parseCache);
-        {
-            if (parseUpdateResult.IsErrOrNull() is { } err)
-            {
-                return "Failed to parse update: " + err;
-            }
-        }
-
-        if (parseUpdateResult.IsOkOrNull() is not { } update)
-        {
-            throw new NotImplementedException(
-                "Unexpected return type: " + parseUpdateResult);
-        }
+        var parsedUpdate =
+            FunctionRecordValueAndParsed.ParseOrThrow(
+                updateValue.fieldValue,
+                parseCache);
 
         return new RequestToVolatileProcessStruct(
             processIdString.Value,
             requestString.Value,
-            update);
+            Update: parsedUpdate);
     }
 
     public static Result<string, WriteToVolatileProcessNativeStdInStruct> ParseWriteToVolatileProcessNativeStdInStruct(
@@ -1866,7 +1794,8 @@ type alias TerminateVolatileProcessStruct =
             return "Unexpected type in processId: " + processIdElmValue;
         }
 
-        var stdInBase64Value = record.FirstOrDefault(field => field.fieldName is "stdInBase64");
+        var stdInBase64Value =
+            record.FirstOrDefault(field => field.fieldName is "stdInBase64");
 
         if (stdInBase64Value.fieldValue is null)
         {
@@ -1900,25 +1829,15 @@ type alias TerminateVolatileProcessStruct =
             return "Missing field: update";
         }
 
-        var parseUpdateResult =
-            ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(updateValue.fieldValue, parseCache);
-        {
-            if (parseUpdateResult.IsErrOrNull() is { } err)
-            {
-                return "Failed to parse update: " + err;
-            }
-        }
-
-        if (parseUpdateResult.IsOkOrNull() is not { } update)
-        {
-            throw new NotImplementedException(
-                "Unexpected return type: " + parseUpdateResult);
-        }
+        var parsedUpdate =
+            FunctionRecordValueAndParsed.ParseOrThrow(
+                updateValue.fieldValue,
+                parseCache);
 
         return new WriteToVolatileProcessNativeStdInStruct(
             processIdString.Value,
             stdInBase64String.Value,
-            update);
+            parsedUpdate);
     }
 
     public static Result<string, ReadAllFromVolatileProcessNativeStruct> ParseReadAllFromVolatileProcessNativeStruct(
@@ -1980,24 +1899,14 @@ type alias TerminateVolatileProcessStruct =
             return "Missing field: update";
         }
 
-        var parseUpdateResult =
-            ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(updateValue.fieldValue, parseCache);
-        {
-            if (parseUpdateResult.IsErrOrNull() is { } err)
-            {
-                return "Failed to parse update: " + err;
-            }
-        }
-
-        if (parseUpdateResult.IsOkOrNull() is not { } update)
-        {
-            throw new NotImplementedException(
-                "Unexpected return type: " + parseUpdateResult);
-        }
+        var parsedUpdate =
+            FunctionRecordValueAndParsed.ParseOrThrow(
+                updateValue.fieldValue,
+                parseCache);
 
         return new ReadAllFromVolatileProcessNativeStruct(
             processIdString.Value,
-            update);
+            parsedUpdate);
     }
 
     public static Result<string, Result<RequestToVolatileProcessError, RequestToVolatileProcessComplete>>
@@ -2243,16 +2152,28 @@ type alias TerminateVolatileProcessStruct =
 
         PineValue build()
         {
-            using var interactiveSession =
-                new InteractiveSessionPine(
-                    ElmCompiler.CompilerSourceContainerFilesDefault.Value,
-                    appCodeTree: compilationUnitsPrepared.files,
-                    overrideSkipLowering: true,
-                    entryPointsFilePaths: null,
+            var pineVMAndCache =
+                InteractiveSessionPine.BuildPineVM(
                     caching: true,
                     autoPGO: null);
 
-            return interactiveSession.CurrentEnvironmentValue();
+            var elmCompilerFromBundle =
+                BundledElmEnvironments.BundledElmCompilerCompiledEnvValue()
+                ??
+                throw new Exception("Failed to load Elm compiler from bundle.");
+
+            var elmCompiler =
+                ElmCompiler.ElmCompilerFromEnvValue(elmCompilerFromBundle)
+                .Extract(err => throw new Exception("Failed to load Elm compiler: " + err));
+
+            return
+                InteractiveSessionPine.CompileInteractiveEnvironment(
+                    appCodeTree: compilationUnitsPrepared.files,
+                    overrideSkipLowering: true,
+                    entryPointsFilePaths: null,
+                    skipFilteringForSourceDirs: false,
+                    elmCompiler)
+                .Extract(err => throw new Exception("Failed to compile interactive environment: " + err));
         }
 
         var compiledModulesValue = build();

@@ -80,7 +80,7 @@ public static class CompileModuleToCSharp
     {
         var irCompilationResult =
             PineIRCompiler.CompileExpression(
-                functionRecord.innerFunction,
+                functionRecord.InnerFunction,
                 rootExprAlternativeForms: [],
                 envClass: null,
                 parseCache: parseCache);
@@ -172,7 +172,7 @@ public static class CompileModuleToCSharp
                         SyntaxFactory.VariableDeclaration(
                             SyntaxFactory.IdentifierName("PineValue"))
                         .WithVariables(
-                            SyntaxFactory.SingletonSeparatedList<VariableDeclaratorSyntax>(
+                            SyntaxFactory.SingletonSeparatedList(
                                 SyntaxFactory.VariableDeclarator(
                                     SyntaxFactory.Identifier(genericDeclName))
                                 .WithInitializer(
@@ -199,7 +199,7 @@ public static class CompileModuleToCSharp
                                             ValueFromSignedIntegerFunctionRef)
                                         .WithArgumentList(
                                             SyntaxFactory.ArgumentList(
-                                                SyntaxFactory.SingletonSeparatedList<ArgumentSyntax>(
+                                                SyntaxFactory.SingletonSeparatedList(
                                                     SyntaxFactory.Argument(
                                                         SyntaxFactory.IdentifierName(asIntDeclName + "_not_null"))))))))));
 

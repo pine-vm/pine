@@ -16,7 +16,7 @@ namespace TestElmTime;
 [TestClass]
 public class PGOTests
 {
-    static readonly PineVMParseCache ParseCache = new PineVMParseCache();
+    static readonly PineVMParseCache ParseCache = new();
 
     [TestMethod]
     public void PGO_reduces_Elm_record_access()
@@ -263,7 +263,7 @@ public class PGOTests
                 return
                 ElmInteractiveEnvironment.ApplyFunctionArgumentsForEvalExpr(
                         usingRecordAccessFunction,
-                        arguments:
+                        appendArguments:
                         [
                             ElmValueEncoding.ElmValueAsPineValue(scenario.record),
                             PineValueAsInteger.ValueFromSignedInteger(scenario.fieldId)
@@ -865,7 +865,7 @@ public class PGOTests
                 return
                 ElmInteractiveEnvironment.ApplyFunctionArgumentsForEvalExpr(
                     usingRecordUpdateFunction,
-                    arguments:
+                    appendArguments:
                     [
                         ElmValueEncoding.ElmValueAsPineValue(scenario.record),
                         PineValueAsInteger.ValueFromSignedInteger(scenario.fieldId),
@@ -1114,7 +1114,7 @@ public class PGOTests
                 var functionValueHash = PineValueHashTree.ComputeHash(functionValue);
 
                 var envFunctionsHashes =
-                    functionRecord.envFunctions
+                    functionRecord.EnvFunctions
                     .ToArray()
                     .Select(envFunction => PineValueHashTree.ComputeHash(envFunction))
                     .ToArray();
@@ -1122,7 +1122,7 @@ public class PGOTests
                 Console.WriteLine(
                     "\nFunction " + functionToInspect.moduleName + "." + functionToInspect.declarationName + " has hash " +
                     Convert.ToHexStringLower(functionValueHash.Span)[..8] + " and " +
-                    functionRecord.envFunctions.Length + " env functions:\n" +
+                    functionRecord.EnvFunctions.Length + " env functions:\n" +
                     string.Join(
                         "\n",
                         envFunctionsHashes.Select(envFunctionHash => Convert.ToHexStringLower(envFunctionHash.Span)[..8])));
@@ -1272,7 +1272,7 @@ public class PGOTests
             return
                 ElmInteractiveEnvironment.ApplyFunctionArgumentsForEvalExpr(
                     usingListMapFunction,
-                    arguments:
+                    appendArguments:
                     [
                         ElmValueEncoding.ElmValueAsPineValue(scenarioList),
                         PineValueAsInteger.ValueFromSignedInteger(scenarioFunctionId),
@@ -1548,7 +1548,7 @@ public class PGOTests
                 var functionValueHash = PineValueHashTree.ComputeHash(functionValue);
 
                 var envFunctionsHashes =
-                    functionRecord.envFunctions
+                    functionRecord.EnvFunctions
                     .ToArray()
                     .Select(envFunction => PineValueHashTree.ComputeHash(envFunction))
                     .ToArray();
@@ -1556,7 +1556,7 @@ public class PGOTests
                 Console.WriteLine(
                     "\nFunction " + functionToInspect.moduleName + "." + functionToInspect.declarationName + " has hash " +
                     Convert.ToHexStringLower(functionValueHash.Span)[..8] + " and " +
-                    functionRecord.envFunctions.Length + " env functions:\n" +
+                    functionRecord.EnvFunctions.Length + " env functions:\n" +
                     string.Join(
                         "\n",
                         envFunctionsHashes.Select(envFunctionHash => Convert.ToHexStringLower(envFunctionHash.Span)[..8])));
@@ -1639,7 +1639,7 @@ public class PGOTests
             return
                 ElmInteractiveEnvironment.ApplyFunctionArgumentsForEvalExpr(
                     usingDictFoldFunction,
-                    arguments:
+                    appendArguments:
                     [
                         scenarioDict,
                         PineValueAsInteger.ValueFromSignedInteger(scenarioFunctionId),

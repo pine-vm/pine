@@ -263,12 +263,19 @@ public class FileStoreFromWriterAndReader(
 
 public class RecordingFileStoreWriter : IFileStoreWriter
 {
-    private readonly ConcurrentQueue<WriteOperation> history = new();
+    private readonly System.Threading.Lock @lock = new();
 
-    public IEnumerable<WriteOperation> History => history;
+    private (ImmutableList<WriteOperation> history, TreeNodeWithStringPath latestVersion) historyAndReduction =
+        ([], TreeNodeWithStringPath.EmptyTree);
+
+    public IEnumerable<WriteOperation> History =>
+        historyAndReduction.history;
 
     public IFileStoreReader Apply(IFileStoreReader fileStoreReader) =>
-        WriteOperation.Apply(history, fileStoreReader);
+        WriteOperation.Apply(History, fileStoreReader);
+
+    public IFileStoreReader ReaderFromAppliedOperationsOnEmptyStore() =>
+        new FileStoreReaderFromTreeNodeWithStringPath(historyAndReduction.latestVersion);
 
     public record WriteOperation(
         (IImmutableList<string> path, ReadOnlyMemory<byte> fileContent)? SetFileContent = null,
@@ -278,6 +285,84 @@ public class RecordingFileStoreWriter : IFileStoreWriter
         public static IFileStoreReader Apply(IEnumerable<WriteOperation> writeOperations, IFileStoreReader fileStoreReader) =>
             writeOperations.Aggregate(fileStoreReader, (previousState, writeOperation) => writeOperation.Apply(previousState));
 
+        public static IFileStoreReader ReaderFromAppliedOperationsOnEmptyStore(
+            IEnumerable<WriteOperation> writeOperations)
+        {
+            var store = new FileStoreFromConcurrentDictionary();
+
+            ApplyOperationsOnWriter(writeOperations, store);
+
+            return store;
+        }
+
+        public static void ApplyOperationsOnWriter(
+            IEnumerable<WriteOperation> writeOperations,
+            IFileStoreWriter fileStoreWriter)
+        {
+            foreach (var writeOperation in writeOperations)
+            {
+                if (writeOperation.SetFileContent is { } setFileContent)
+                {
+                    fileStoreWriter.SetFileContent(setFileContent.path, setFileContent.fileContent);
+                }
+
+                if (writeOperation.AppendFileContent is { } appendFileContent)
+                {
+                    fileStoreWriter.AppendFileContent(appendFileContent.path, appendFileContent.fileContent);
+                }
+
+                if (writeOperation.DeleteFile is { } deleteFile)
+                {
+                    fileStoreWriter.DeleteFile(deleteFile);
+                }
+            }
+        }
+
+        public TreeNodeWithStringPath Apply(TreeNodeWithStringPath previousState)
+        {
+            if (SetFileContent is { } setFileContent)
+            {
+                return
+                    previousState.SetNodeAtPathSorted(
+                        setFileContent.path,
+                        TreeNodeWithStringPath.Blob(setFileContent.fileContent));
+            }
+
+            if (AppendFileContent is { } appendFileContent)
+            {
+                var previousNode =
+                    previousState.GetNodeAtPath(appendFileContent.path);
+
+                if (previousNode is null)
+                {
+                    return
+                        previousState.SetNodeAtPathSorted(
+                            appendFileContent.path,
+                            TreeNodeWithStringPath.Blob(appendFileContent.fileContent));
+                }
+
+                if (previousNode is not TreeNodeWithStringPath.BlobNode previousBlob)
+                {
+                    throw new InvalidOperationException(
+                        "Invalid operation: Cannot append to non-blob node");
+                }
+
+                return
+                    previousState.SetNodeAtPathSorted(
+                        appendFileContent.path,
+                        TreeNodeWithStringPath.Blob(
+                            BytesConversions.Concat(previousBlob.Bytes.Span, appendFileContent.fileContent.Span)));
+            }
+
+            if (DeleteFile is { } deleteFile)
+            {
+                return
+                    previousState.RemoveNodeAtPath(deleteFile);
+            }
+
+            throw new Exception("Invalid construction");
+        }
+
         public IFileStoreReader Apply(IFileStoreReader previousState)
         {
             if (SetFileContent?.path is { } setFilePath)
@@ -286,12 +371,12 @@ public class RecordingFileStoreWriter : IFileStoreWriter
                 (
                     GetFileContentDelegate: filePath =>
                     {
-                        var previousFileContent = previousState.GetFileContent(filePath);
-
                         if (filePath.SequenceEqual(setFilePath))
                         {
                             return SetFileContent.Value.fileContent;
                         }
+
+                        var previousFileContent = previousState.GetFileContent(filePath);
 
                         return previousFileContent;
                     },
@@ -340,7 +425,7 @@ public class RecordingFileStoreWriter : IFileStoreWriter
                 );
             }
 
-            if (DeleteFile != null)
+            if (DeleteFile is not null)
             {
                 return new DelegatingFileStoreReader
                 (
@@ -351,6 +436,7 @@ public class RecordingFileStoreWriter : IFileStoreWriter
 
                         return previousState.GetFileContent(filePath);
                     },
+
                     ListFilesInDirectoryDelegate: directoryPath =>
                        previousState
                        .ListFilesInDirectory(directoryPath)
@@ -362,14 +448,25 @@ public class RecordingFileStoreWriter : IFileStoreWriter
         }
     }
 
+    private void AppendToHistory(WriteOperation writeOperation)
+    {
+        lock (@lock)
+        {
+            var newTree = writeOperation.Apply(historyAndReduction.latestVersion);
+
+            historyAndReduction =
+                (historyAndReduction.history.Add(writeOperation), newTree);
+        }
+    }
+
     public void SetFileContent(IImmutableList<string> path, ReadOnlyMemory<byte> fileContent) =>
-        history.Enqueue(new WriteOperation { SetFileContent = (path, fileContent) });
+        AppendToHistory(new WriteOperation { SetFileContent = (path, fileContent) });
 
     public void AppendFileContent(IImmutableList<string> path, ReadOnlyMemory<byte> fileContent) =>
-        history.Enqueue(new WriteOperation { AppendFileContent = (path, fileContent) });
+        AppendToHistory(new WriteOperation { AppendFileContent = (path, fileContent) });
 
     public void DeleteFile(IImmutableList<string> path) =>
-        history.Enqueue(new WriteOperation { DeleteFile = path });
+        AppendToHistory(new WriteOperation { DeleteFile = path });
 }
 
 public class EmptyFileStoreReader : IFileStoreReader
@@ -378,6 +475,42 @@ public class EmptyFileStoreReader : IFileStoreReader
 
     public IEnumerable<IImmutableList<string>> ListFilesInDirectory(IImmutableList<string> directoryPath) =>
         [];
+}
+
+public class FileStoreReaderFromTreeNodeWithStringPath(
+    TreeNodeWithStringPath root)
+    : IFileStoreReader
+{
+    public ReadOnlyMemory<byte>? GetFileContent(IImmutableList<string> path)
+    {
+        var node = root.GetNodeAtPath(path);
+
+        if (node is TreeNodeWithStringPath.BlobNode blobNode)
+        {
+            return blobNode.Bytes;
+        }
+
+        return null;
+    }
+
+    public IEnumerable<IImmutableList<string>> ListFilesInDirectory(IImmutableList<string> directoryPath)
+    {
+        var directoryNode = root.GetNodeAtPath(directoryPath);
+
+        if (directoryNode is null)
+        {
+            return [];
+        }
+
+        if (directoryNode is TreeNodeWithStringPath.TreeNode directory)
+        {
+            return
+                directory.EnumerateBlobsTransitive()
+                .Select(blob => blob.path);
+        }
+
+        return [[]];
+    }
 }
 
 public class FileStoreFromConcurrentDictionary : IFileStoreWriter, IFileStoreReader

@@ -21,7 +21,7 @@ public class ProcessStoreSupportingMigrationsTests
             originalFileStore: new EmptyFileStoreReader(),
             compositionLogEvent: compositionLogEvent);
 
-        var processStoreReader = new ProcessStoreReaderInFileStore(projectionResult.projectedReader);
+        var processStoreReader = new ProcessStoreReaderInFileStore(projectionResult.ProjectedReader);
 
         var compositionLogRecords =
             processStoreReader.EnumerateSerializedCompositionLogRecordsReverse().ToImmutableList();

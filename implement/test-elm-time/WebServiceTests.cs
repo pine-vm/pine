@@ -24,7 +24,6 @@ namespace TestElmTime;
 public class WebServiceTests
 {
     [TestMethod]
-    [Ignore("Current simplified persistence stores reduction on every event")]
     public async System.Threading.Tasks.Task Web_host_stores_process_reduction_every_ten_minutes_by_default()
     {
         var persistentProcessHostDateTime =
@@ -87,28 +86,27 @@ public class WebServiceTests
             {
                 letTimePassInPersistentProcessHost(TimeSpan.FromSeconds(4));
 
-                using (var client = testSetup.BuildPublicAppHttpClient())
-                {
-                    var httpResponse =
-                        await client.PostAsync(
-                            "",
-                            new StringContent(serializedEvent, System.Text.Encoding.UTF8));
+                using var client = testSetup.BuildPublicAppHttpClient();
 
-                    var httpResponseContent =
-                        await httpResponse.Content.ReadAsStringAsync();
+                var httpResponse =
+                    await client.PostAsync(
+                        "",
+                        new StringContent(serializedEvent, System.Text.Encoding.UTF8));
 
-                    Assert.AreEqual(
-                        expectedResponse,
-                        httpResponseContent,
-                        false,
-                        "server response");
-                }
+                var httpResponseContent =
+                    await httpResponse.Content.ReadAsStringAsync();
 
                 Assert.AreEqual(
-                    beforeBatchStoredReductionsCount + 1,
-                    ReadStoredReductionFileRelativePaths().Count(),
-                    "Number of stored reductions has increased by one since previous batch.");
+                    expectedResponse,
+                    httpResponseContent,
+                    false,
+                    "server response");
             }
+
+            Assert.AreEqual(
+                beforeBatchStoredReductionsCount + 1,
+                ReadStoredReductionFileRelativePaths().Count(),
+                "Number of stored reductions has increased by one since previous batch.");
         }
     }
 
@@ -214,7 +212,7 @@ public class WebServiceTests
             .Count(op => op.AppendFileContent is not null);
 
         IFileStoreReader getCurrentFileStoreReader() =>
-            fileStoreWriter.Apply(new EmptyFileStoreReader());
+            fileStoreWriter.ReaderFromAppliedOperationsOnEmptyStore();
 
         var fileStoreReader = new DelegatingFileStoreReader
         (
@@ -846,9 +844,12 @@ public class WebServiceTests
                         StartupAdminInterface.PathApiDeployAndMigrateAppState,
                         new ByteArrayContent(deploymentZipArchive));
 
+                var deployHttpResponseBody =
+                    await deployHttpResponse.Content.ReadAsStringAsync();
+
                 Assert.IsTrue(
                     deployHttpResponse.IsSuccessStatusCode,
-                    "deploy response IsSuccessStatusCode");
+                    "deploy response IsSuccessStatusCode (response body: " + deployHttpResponseBody + ")");
             }
 
             foreach (var (serializedEvent, expectedResponse) in eventsAndExpectedResponsesBatch)
@@ -1548,7 +1549,8 @@ public class WebServiceTests
 
         var fileStoreWriter = new RecordingFileStoreWriter();
 
-        IFileStoreReader getCurrentFileStoreReader() => fileStoreWriter.Apply(new EmptyFileStoreReader());
+        IFileStoreReader getCurrentFileStoreReader() =>
+            fileStoreWriter.ReaderFromAppliedOperationsOnEmptyStore();
 
         var fileStoreReader = new DelegatingFileStoreReader
         (
@@ -1621,7 +1623,7 @@ public class WebServiceTests
             });
 
         var fileStoreReaderAfterCrash =
-            RecordingFileStoreWriter.WriteOperation.Apply(storeHistoryWithCrash, new EmptyFileStoreReader());
+            RecordingFileStoreWriter.WriteOperation.ReaderFromAppliedOperationsOnEmptyStore(storeHistoryWithCrash);
 
         using (var testSetupAfterCrash = WebHostAdminInterfaceTestSetup.Setup(
             fileStore: new FileStoreFromWriterAndReader(fileStoreWriter, fileStoreReaderAfterCrash),
@@ -1805,7 +1807,7 @@ public class WebServiceTests
             fileStoreWriter.History.Count();
 
         IFileStoreReader getCurrentFileStoreReader() =>
-            fileStoreWriter.Apply(new EmptyFileStoreReader());
+            fileStoreWriter.ReaderFromAppliedOperationsOnEmptyStore();
 
         var fileStoreReader = new DelegatingFileStoreReader
         (

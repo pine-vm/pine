@@ -12,8 +12,8 @@ using System.Text.Json.Serialization;
 namespace ElmTime.Platform.WebService.ProcessStoreSupportingMigrations;
 
 public record FileStoreReaderProjectionResult(
-    IEnumerable<(IImmutableList<string> filePath, ReadOnlyMemory<byte> fileContent)> projectedFiles,
-    IFileStoreReader projectedReader);
+    IEnumerable<(IImmutableList<string> filePath, ReadOnlyMemory<byte> fileContent)> ProjectedFiles,
+    IFileStoreReader ProjectedReader);
 
 public interface IProcessStoreWriter
 {
@@ -44,16 +44,26 @@ public interface IProcessStoreReader
 
         var fileStoreWriter = new DelegatingFileStoreWriter
         (
-            SetFileContentDelegate: pathAndFileContent => projectedFiles[pathAndFileContent.path] = pathAndFileContent.fileContent,
-            AppendFileContentDelegate: pathAndFileContent =>
+            SetFileContentDelegate:
+            pathAndFileContent =>
+            projectedFiles[pathAndFileContent.path] = pathAndFileContent.fileContent,
+            
+            AppendFileContentDelegate:
+            pathAndFileContent =>
             {
                 if (!projectedFiles.TryGetValue(pathAndFileContent.path, out var fileContentBefore))
-                    fileContentBefore = originalFileStore.GetFileContent(pathAndFileContent.path) ?? ReadOnlyMemory<byte>.Empty;
+                {
+                    fileContentBefore =
+                    originalFileStore.GetFileContent(pathAndFileContent.path) ??
+                    ReadOnlyMemory<byte>.Empty;
+                }
 
                 projectedFiles[pathAndFileContent.path] =
                 BytesConversions.Concat(fileContentBefore.Span, pathAndFileContent.fileContent.Span);
             },
-            DeleteFileDelegate: _ => throw new Exception("Unexpected operation delete file.")
+            
+            DeleteFileDelegate:
+            _ => throw new Exception("Unexpected operation delete file.")
         );
 
         var processStoreWriter =
@@ -91,8 +101,8 @@ public interface IProcessStoreReader
         );
 
         return new FileStoreReaderProjectionResult(
-            projectedFiles: projectedFiles.Select(filePathAndContent => (filePathAndContent.Key, filePathAndContent.Value)),
-            projectedReader: projectedFileStoreReader);
+            ProjectedFiles: projectedFiles.Select(filePathAndContent => (filePathAndContent.Key, filePathAndContent.Value)),
+            ProjectedReader: projectedFileStoreReader);
     }
 
     public static IProcessStoreReader EmptyProcessStoreReader()
@@ -153,11 +163,6 @@ public record CompositionLogRecordInFile(
         PineValueHashTree.ComputeHash(PineValue.Blob(compositionRecord));
 
     public record CompositionEvent(
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    ValueInFileStructure? UpdateElmAppStateForEvent = null,
-
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    ValueInFileStructure? ApplyFunctionOnElmAppState = null,
 
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     ValueInFileStructure? SetElmAppState = null,
@@ -167,6 +172,9 @@ public record CompositionLogRecordInFile(
 
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     ValueInFileStructure? DeployAppConfigAndMigrateElmAppState = null,
+
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        ApplyFunctionOnLiteralAndStateEvent? ApplyFunctionOnLiteralAndState = null,
 
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     ValueInFileStructure? RevertProcessTo = null)
@@ -187,9 +195,9 @@ public record CompositionLogRecordInFile(
             };
     }
 
-    public record ApplyFunctionOnStateEvent(
-        string functionName,
-        IReadOnlyList<string> serializedArgumentsJson);
+    public record ApplyFunctionOnLiteralAndStateEvent(
+        ValueInFileStructure Function,
+        ValueInFileStructure Arguments);
 }
 
 public record ProvisionalReductionRecordInFile(
@@ -221,6 +229,9 @@ public class ProcessStoreInFileStore
     protected static string LiteralElementSubdirectory => "literal-element";
 
     protected static string DeflatedLiteralElementSubdirectory => "deflated-literal-element";
+
+    protected static IReadOnlyList<string> ValueJsonDeflatedSubdirectory =
+        ["value", "json", "deflated"];
 
     protected static string ProvisionalReductionSubdirectory => "provisional-reduction";
 
@@ -260,6 +271,9 @@ public class ProcessStoreReaderInFileStore(
 
     protected IFileStoreReader DeflatedLiteralElementFileStore =>
         fileStore.ForSubdirectory(DeflatedLiteralElementSubdirectory);
+
+    protected IFileStoreReader ValueJsonDeflatedFileStore =>
+        fileStore.ForSubdirectory(ValueJsonDeflatedSubdirectory);
 
     protected IFileStoreReader ProvisionalReductionFileStore =>
         fileStore.ForSubdirectory(ProvisionalReductionSubdirectory);
@@ -312,6 +326,19 @@ public class ProcessStoreReaderInFileStore(
     }
 
     public PineValue? LoadComponent(string componentHashBase16)
+    {
+        if (ValueJsonDeflatedFileStore.GetFileContent(
+            GetFilePathForComponentInComponentFileStore(componentHashBase16)) is { } fileContentJsonDeflated)
+        {
+            var jsonBytes = BytesConversions.Inflate(fileContentJsonDeflated);
+
+            return DeserializeValueFromJsonString(Encoding.UTF8.GetString(jsonBytes.Span));
+        }
+
+        return LoadComponentNormalized(componentHashBase16);
+    }
+
+    public PineValue? LoadComponentNormalized(string componentHashBase16)
     {
         var fromComponentStore = LoadComponentSerialRepresentationForHash(componentHashBase16);
 
@@ -408,11 +435,13 @@ public class ProcessStoreReaderInFileStore(
             {
                 var fileContent = CompositionLogLiteralFileStore.GetFileContent(filePath);
 
-                if (fileContent == null)
+                if (fileContent is null)
                     return ImmutableList<(IImmutableList<string>, ReadOnlyMemory<byte>)>.Empty;
 
                 return
-                    SplitFileContentIntoCompositionLogRecords(fileContent.Value).Select(record => (filePath, record)).Reverse();
+                    SplitFileContentIntoCompositionLogRecords(fileContent.Value)
+                    .Select(record => (filePath, record))
+                    .Reverse();
             });
 
         string? revertToHashBase16 = null;
@@ -465,44 +494,37 @@ public class ProcessStoreReaderInFileStore(
         }
     }
 
-    public IEnumerable<ReadOnlyMemory<byte>> EnumerateSerializedCompositionLogRecordsReverse_Before_2021_07()
+    public static PineValue DeserializeValueFromJsonString(string serialized)
     {
-        var compositionHeadHash = fileStore.GetFileContent(CompositionHeadHashFilePath);
+        var dictionaryEntries =
+            JsonSerializer.Deserialize<IReadOnlyList<PineValueCompactBuild.ListEntry>>(serialized)
+            ??
+            throw new Exception("Failed to deserialize dictionary entries from string: " + serialized);
 
-        if (compositionHeadHash == null)
-            yield break;
+        var sharedDictionary =
+            PineValueCompactBuild.BuildDictionaryFromEntries(dictionaryEntries);
 
-        if (1000 < compositionHeadHash.Value.Length)
-            throw new Exception("Content of file for head hash is corrupted: File length is " + compositionHeadHash.Value.Length);
+        PineValue largestValue = sharedDictionary.First().Value;
 
-        var nextHashBase16 = Convert.ToHexStringLower(compositionHeadHash.Value.Span);
-
-        while (nextHashBase16 != CompositionLogRecordInFile.CompositionLogFirstRecordParentHashBase16 && nextHashBase16 != null)
+        foreach (var entry in sharedDictionary)
         {
-            var compositionRecordComponent = LoadComponent(nextHashBase16);
-
-            if (compositionRecordComponent == null)
-                throw new Exception("Failed to load composition record component " + nextHashBase16);
-
-            if (compositionRecordComponent is not PineValue.BlobValue compositionRecordComponentBlob)
-                throw new Exception("Unexpected content for composition record component " + nextHashBase16);
-
-            var compositionRecordBytes = compositionRecordComponentBlob.Bytes;
-
-            yield return compositionRecordBytes;
-
-            var recordStructure = JsonSerializer.Deserialize<CompositionLogRecordInFile>(
-                Encoding.UTF8.GetString(compositionRecordBytes.Span))!;
-
-            if (recordStructure.compositionEvent?.RevertProcessTo != null)
+            if (entry.Value is PineValue.ListValue entryList)
             {
-                nextHashBase16 = recordStructure.compositionEvent.RevertProcessTo.HashBase16;
-            }
-            else
-            {
-                nextHashBase16 = recordStructure.parentHashBase16?.ToLowerInvariant();
+                if (largestValue is PineValue.ListValue largestList)
+                {
+                    if (largestList.NodesCount < entryList.NodesCount)
+                    {
+                        largestValue = entry.Value;
+                    }
+                }
+                else
+                {
+                    largestValue = entry.Value;
+                }
             }
         }
+
+        return largestValue;
     }
 }
 
@@ -520,6 +542,9 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
     protected IFileStoreWriter DeflatedLiteralElementFileStore =>
         fileStore.ForSubdirectory(DeflatedLiteralElementSubdirectory);
 
+    protected IFileStoreWriter ValueJsonDeflatedFileStore =>
+        fileStore.ForSubdirectory(ValueJsonDeflatedSubdirectory);
+
     protected IFileStoreWriter ProvisionalReductionFileStore =>
         fileStore.ForSubdirectory(ProvisionalReductionSubdirectory);
 
@@ -535,6 +560,8 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
     private readonly bool skipWritingComponentSecondTime;
 
     private readonly ConcurrentDictionary<PineValue, object?> componentsWritten = new();
+
+    private readonly ConcurrentDictionary<string, object?> componentsWrittenHash = new();
 
     public ProcessStoreWriterInFileStore(
         IFileStoreReader fileStoreReader,
@@ -627,6 +654,33 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
                 return;
         }
 
+        if (component is PineValue.ListValue)
+        {
+            var componentHash = hashCache.ComputeHash(component);
+
+            var componentHashBase16 = Convert.ToHexStringLower(componentHash.Span);
+
+            if (skipWritingComponentSecondTime)
+            {
+                if (componentsWrittenHash.ContainsKey(componentHashBase16))
+                    return;
+            }
+
+            var asJsonString = SerializeValueToJsonString(component);
+
+            var asJsonBytes = Encoding.UTF8.GetBytes(asJsonString);
+
+            var deflated = BytesConversions.Deflate(asJsonBytes);
+
+            ValueJsonDeflatedFileStore.SetFileContent(
+                GetFilePathForComponentInComponentFileStore(componentHashBase16),
+                deflated.ToArray());
+
+            componentsWrittenHash.TryAdd(componentHashBase16, null);
+
+            return;
+        }
+
         StoreComponentAndGetHashRecursive(component);
     }
 
@@ -682,6 +736,22 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
         }
 
         return (hash, hashBase16);
+    }
+
+    public static string SerializeValueToJsonString(PineValue value)
+    {
+        var (listValues, blobValues) =
+            PineValue.CollectAllComponentsFromRoots([value]);
+
+        var sharedValuesDict =
+            PineValueCompactBuild.PrebuildListEntries(
+                blobValues: blobValues,
+                listValues: listValues);
+
+        var asJson =
+            JsonSerializer.Serialize(sharedValuesDict.listEntries);
+
+        return asJson;
     }
 }
 

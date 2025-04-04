@@ -1,4 +1,3 @@
-using ElmTime.ElmInteractive;
 using Pine.Core;
 using Pine.Core.Elm;
 using Pine.Core.PineVM;
@@ -26,6 +25,11 @@ public class MutatingWebServiceApp
 
     public PineValue AppState => appStateAndSubscriptions.appState;
 
+    private readonly ConcurrentQueue<ApplyUpdateReport<WebServiceInterface.Command>> applyFunctionReports = new();
+
+    public IReadOnlyList<ApplyUpdateReport<WebServiceInterface.Command>> DequeueApplyFunctionReports() =>
+        [.. applyFunctionReports.DequeueAllEnumerable()];
+
     public IPineVM PineVM => pineVM;
 
     public long? PosixTimeSubscriptionMinimumTime =>
@@ -48,6 +52,23 @@ public class MutatingWebServiceApp
         SetAppState(appState);
     }
 
+    private void TrackAppliedFunction(
+        ApplyUpdateReport<WebServiceInterface.Command> applyFunctionReport,
+        bool discardIfResultingStateSame)
+    {
+        lock (stateLock)
+        {
+            if (discardIfResultingStateSame && applyFunctionReport.ResponseState == AppState)
+            {
+                return;
+            }
+
+            applyFunctionReports.Enqueue(applyFunctionReport);
+
+            SetAppState(applyFunctionReport.ResponseState);
+        }
+    }
+
     private void SetAppState(PineValue appState)
     {
         lock (stateLock)
@@ -66,58 +87,72 @@ public class MutatingWebServiceApp
 
         pineVM = new PineVM.PineVM(pineVMCache.EvalCache);
 
-        SetAppState(appConfig.Init.State);
+        ResetAppState(appConfig.Init.State);
 
-        foreach (var command in appConfig.Init.Commands)
+        foreach (var (_, cmdParsed) in appConfig.Init.Commands)
         {
-            commands.Enqueue(command);
+            commands.Enqueue(cmdParsed);
         }
     }
 
-    public WebServiceInterface.WebServiceEventResponse EventHttpRequest(
+    public ApplyUpdateReport<WebServiceInterface.Command> EventHttpRequest(
         WebServiceInterface.HttpRequestEventStruct httpRequest)
     {
         lock (stateLock)
         {
-            var eventResponse =
+            var eventConfig =
                 WebServiceInterface.WebServiceConfig.EventHttpRequest(
                     appStateAndSubscriptions.subscriptions,
-                    httpRequest,
-                    AppState,
-                    pineVM);
+                    httpRequest);
 
-            SetAppState(eventResponse.State);
-
-            MutateConsolidatingAppResponse(eventResponse);
-
-            return eventResponse;
+            return ApplyUpdate(eventConfig);
         }
     }
 
-    public WebServiceInterface.WebServiceEventResponse? UpdateForPosixTime(
-        long posixTimeMilli)
+    public ApplyUpdateReport<WebServiceInterface.Command>? UpdateForPosixTime(long posixTimeMilli)
     {
-        lock (stateLock)
+        if (appStateAndSubscriptions.subscriptions.PosixTimeIsPast is not { } posixTimeSub)
         {
-            var eventResponse =
-                WebServiceInterface.WebServiceConfig.EventPosixTime(
-                    subscriptions: appStateAndSubscriptions.subscriptions,
-                    posixTimeMilli,
-                    AppState,
-                    pineVM);
-
-            if (eventResponse is not null)
-            {
-                SetAppState(eventResponse.State);
-                MutateConsolidatingAppResponse(eventResponse);
-            }
-
-            return eventResponse;
+            return null;
         }
+
+        if (posixTimeMilli < posixTimeSub.MinimumPosixTimeMilli)
+        {
+            return null;
+        }
+
+        var functionRecord = posixTimeSub.Update;
+
+        if (functionRecord.Parsed.ParameterCount is not 2)
+        {
+            throw new Exception("Expected posixTimeIsPast function to have two parameters.");
+        }
+
+        var inputEncoded =
+            ElmValueEncoding.ElmValueAsPineValue(
+                new ElmValue.ElmRecord(
+                    [
+                    ("currentPosixTimeMilli",
+                    ElmValue.Integer(posixTimeMilli))
+                    ]));
+
+        return
+            ApplyUpdate(
+                functionRecord,
+                [inputEncoded]);
     }
 
-    public WebServiceInterface.WebServiceEventResponse ApplyUpdate(
-        ElmInteractiveEnvironment.FunctionRecord updateFunction,
+    public ApplyUpdateReport<WebServiceInterface.Command> ApplyUpdate(
+        ApplyFunctionInput applyFunctionInput)
+    {
+        return
+            ApplyUpdate(
+                applyFunctionInput.AppliedFunction,
+                applyFunctionInput.ArgsBeforeState);
+    }
+
+    public ApplyUpdateReport<WebServiceInterface.Command> ApplyUpdate(
+        FunctionRecordValueAndParsed updateFunction,
         IReadOnlyList<PineValue> updateArgsBeforeState)
     {
         lock (stateLock)
@@ -129,7 +164,9 @@ public class MutatingWebServiceApp
                     AppState,
                     pineVM);
 
-            SetAppState(eventResponse.State);
+            TrackAppliedFunction(
+                eventResponse,
+                discardIfResultingStateSame: true);
 
             MutateConsolidatingAppResponse(eventResponse);
 
@@ -137,17 +174,18 @@ public class MutatingWebServiceApp
         }
     }
 
-    private void MutateConsolidatingAppResponse(WebServiceInterface.WebServiceEventResponse eventResponse)
+    private void MutateConsolidatingAppResponse(
+        ApplyUpdateReport<WebServiceInterface.Command> eventResponse)
     {
-        foreach (var cmd in eventResponse.Commands)
+        foreach (var (_, cmdParsed) in eventResponse.ResponseCommands)
         {
-            if (cmd is WebServiceInterface.Command.RespondToHttpRequest httpResponseCmd)
+            if (cmdParsed is WebServiceInterface.Command.RespondToHttpRequest httpResponseCmd)
             {
                 httpResponses.Enqueue(httpResponseCmd);
             }
             else
             {
-                commands.Enqueue(cmd);
+                commands.Enqueue(cmdParsed);
             }
         }
     }

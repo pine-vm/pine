@@ -1151,7 +1151,7 @@ public class StartupAdminInterface
                 )),
                 fromOk: testContinueOk =>
                 {
-                    foreach (var (filePath, fileContent) in testContinueOk.projectedFiles)
+                    foreach (var (filePath, fileContent) in testContinueOk.ProjectedFiles)
                         processStoreFileStore.SetFileContent(filePath, fileContent);
 
                     return (statusCode: 200, new AttemptContinueWithCompositionEventReport

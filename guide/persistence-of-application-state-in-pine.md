@@ -1,4 +1,4 @@
-# Persistence of application state in Pine
+# Persistence of Application State in Pine
 
 This guide assumes you already know how state changes work in [Elm](https://elm-lang.org). To learn about the role of the `update` function as used here, have a look at [The Elm Architecture (TEA) animation](https://medium.com/@l.mugnaini/the-elm-architecture-tea-animation-3efc555e8faf) by lucamug. Note that his illustration contains 'view' and 'DOM' parts which are specific to client-side applications and not used here. The persistence functionality only applies to the backend.
 

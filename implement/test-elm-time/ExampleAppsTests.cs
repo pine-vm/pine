@@ -81,9 +81,9 @@ public class ExampleAppsTests
                     )
                 ));
 
-        var responseCommand = eventResponse.Commands.Single();
+        var responseCommand = eventResponse.ResponseCommands.Single();
 
-        if (responseCommand is not WebServiceInterface.Command.RespondToHttpRequest httpResponseCommand)
+        if (responseCommand.cmdParsed is not WebServiceInterface.Command.RespondToHttpRequest httpResponseCommand)
         {
             throw new Exception("Expected a HTTP response command.");
         }

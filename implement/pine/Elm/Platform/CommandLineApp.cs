@@ -305,7 +305,7 @@ public record CommandLineAppConfig(
                 parseCache)
             .Extract(err => throw new Exception("Failed parsing stdIn function record: " + err));
 
-        if (functionRecord.functionParameterCount is not 2)
+        if (functionRecord.ParameterCount is not 2)
         {
             throw new Exception("Expected stdIn function to have two parameters.");
         }

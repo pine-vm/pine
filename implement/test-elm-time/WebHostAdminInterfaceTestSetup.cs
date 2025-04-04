@@ -3,12 +3,9 @@ using Microsoft.AspNetCore.Hosting;
 using Pine;
 using Pine.Core;
 using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Net.Http.Headers;
 using System.Text;
-using System.Text.Json;
 
 namespace TestElmTime;
 
@@ -192,39 +189,4 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
 
     public ElmTime.Platform.WebService.ProcessStoreSupportingMigrations.ProcessStoreReaderInFileStore BuildProcessStoreReaderInFileDirectory() =>
         new(BuildProcessStoreFileStoreReaderInFileDirectory());
-
-    public IEnumerable<ElmTime.Platform.WebService.InterfaceToHost.BackendEventStruct> EnumerateStoredUpdateElmAppStateForEvents()
-    {
-        var processStoreReader = BuildProcessStoreReaderInFileDirectory();
-
-        ElmTime.Platform.WebService.InterfaceToHost.BackendEventStruct eventLogEntry(
-            ElmTime.Platform.WebService.ProcessStoreSupportingMigrations.ValueInFileStructure logEntry)
-        {
-            var component =
-                logEntry.LiteralStringUtf8 != null
-                ?
-                PineValue.Blob(Encoding.UTF8.GetBytes(logEntry.LiteralStringUtf8))
-                :
-                processStoreReader.LoadComponent(logEntry.HashBase16!);
-
-            if (component is null)
-                throw new Exception("component is null");
-
-            if (component is not PineValue.BlobValue blobComponent)
-                throw new Exception("component is not a blob");
-
-            var eventString = Encoding.UTF8.GetString(blobComponent.Bytes.Span);
-
-            return JsonSerializer.Deserialize<ElmTime.Platform.WebService.InterfaceToHost.BackendEventStruct>(eventString)!;
-        }
-
-        return
-            BuildProcessStoreReaderInFileDirectory()
-            .EnumerateSerializedCompositionLogRecordsReverse()
-            .Select(Encoding.UTF8.GetString)
-            .Select(r => JsonSerializer.Deserialize<ElmTime.Platform.WebService.ProcessStoreSupportingMigrations.CompositionLogRecordInFile>(r)!)
-            .Select(compositionLogRecord => compositionLogRecord.compositionEvent?.UpdateElmAppStateForEvent)
-            .WhereNotNull()
-            .Select(eventLogEntry);
-    }
 }

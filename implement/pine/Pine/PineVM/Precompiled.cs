@@ -3181,8 +3181,8 @@ public class Precompiled
         }
 
         var functionRecordRemainingParamCount =
-            functionRecordOk.Value.functionParameterCount -
-            functionRecordOk.Value.argumentsAlreadyCollected.Length;
+            functionRecordOk.Value.ParameterCount -
+            functionRecordOk.Value.ArgumentsAlreadyCollected.Length;
 
         if (functionRecordRemainingParamCount is not 1)
         {
@@ -3190,13 +3190,13 @@ public class Precompiled
         }
 
         var environmentFunctionsEntry =
-            PineValue.List(functionRecordOk.Value.envFunctions);
+            PineValue.List(functionRecordOk.Value.EnvFunctions);
 
         PineValue environmentForItem(PineValue itemValue)
         {
-            var argumentsItems = new PineValue[functionRecordOk.Value.argumentsAlreadyCollected.Length + 1];
+            var argumentsItems = new PineValue[functionRecordOk.Value.ArgumentsAlreadyCollected.Length + 1];
 
-            functionRecordOk.Value.argumentsAlreadyCollected.CopyTo(argumentsItems);
+            functionRecordOk.Value.ArgumentsAlreadyCollected.CopyTo(argumentsItems);
 
             argumentsItems[^1] = itemValue;
 
@@ -3219,7 +3219,7 @@ public class Precompiled
             {
                 return
                     new PineVM.ApplyStepwise.StepResult.Continue(
-                        Expression: functionRecordOk.Value.innerFunction,
+                        Expression: functionRecordOk.Value.InnerFunction,
                         EnvironmentValue: environmentForItem(remainingItemsListValue.Elements.Span[itemIndex]),
                         Callback: step);
             }
@@ -3235,7 +3235,7 @@ public class Precompiled
                 new PineVM.ApplyStepwise(
                     start:
                     new PineVM.ApplyStepwise.StepResult.Continue(
-                        Expression: functionRecordOk.Value.innerFunction,
+                        Expression: functionRecordOk.Value.InnerFunction,
                         EnvironmentValue: environmentForItem(remainingItemsListValue.Elements.Span[itemIndex]),
                         Callback: step)));
     }
@@ -3266,18 +3266,18 @@ public class Precompiled
             return null;
         }
 
-        if (functionRecordOk.Value.functionParameterCount is not 1)
+        if (functionRecordOk.Value.ParameterCount is not 1)
         {
             return null;
         }
 
-        if (functionRecordOk.Value.argumentsAlreadyCollected.Length is not 0)
+        if (functionRecordOk.Value.ArgumentsAlreadyCollected.Length is not 0)
         {
             return null;
         }
 
         var environmentFunctionsEntry =
-            PineValue.List(functionRecordOk.Value.envFunctions);
+            PineValue.List(functionRecordOk.Value.EnvFunctions);
 
         PineValue environmentForItem(PineValue itemValue)
         {
@@ -3300,7 +3300,7 @@ public class Precompiled
             {
                 return
                     new PineVM.ApplyStepwise.StepResult.Continue(
-                        Expression: functionRecordOk.Value.innerFunction,
+                        Expression: functionRecordOk.Value.InnerFunction,
                         EnvironmentValue: environmentForItem(itemsListValue.Elements.Span[itemIndex]),
                         Callback: step);
             }
@@ -3315,7 +3315,7 @@ public class Precompiled
                 new PineVM.ApplyStepwise(
                     start:
                     new PineVM.ApplyStepwise.StepResult.Continue(
-                        Expression: functionRecordOk.Value.innerFunction,
+                        Expression: functionRecordOk.Value.InnerFunction,
                         EnvironmentValue: environmentForItem(itemsListValue.Elements.Span[itemIndex]),
                         Callback: step)));
     }
@@ -3350,8 +3350,8 @@ public class Precompiled
         }
 
         var functionRecordRemainingParamCount =
-            functionRecordOk.Value.functionParameterCount -
-            functionRecordOk.Value.argumentsAlreadyCollected.Length;
+            functionRecordOk.Value.ParameterCount -
+            functionRecordOk.Value.ArgumentsAlreadyCollected.Length;
 
         if (functionRecordRemainingParamCount is not 2)
         {
@@ -3359,13 +3359,13 @@ public class Precompiled
         }
 
         var environmentFunctionsEntry =
-            PineValue.List(functionRecordOk.Value.envFunctions);
+            PineValue.List(functionRecordOk.Value.EnvFunctions);
 
         PineValue environmentForItem(PineValue aggregate, PineValue itemValue)
         {
-            var argumentsItems = new PineValue[functionRecordOk.Value.argumentsAlreadyCollected.Length + 2];
+            var argumentsItems = new PineValue[functionRecordOk.Value.ArgumentsAlreadyCollected.Length + 2];
 
-            functionRecordOk.Value.argumentsAlreadyCollected.CopyTo(argumentsItems);
+            functionRecordOk.Value.ArgumentsAlreadyCollected.CopyTo(argumentsItems);
 
             argumentsItems[^2] = itemValue;
 
@@ -3390,7 +3390,7 @@ public class Precompiled
             {
                 return
                     new PineVM.ApplyStepwise.StepResult.Continue(
-                        Expression: functionRecordOk.Value.innerFunction,
+                        Expression: functionRecordOk.Value.InnerFunction,
                         EnvironmentValue: environmentForItem(mutatedAggregate, itemsListValue.Elements.Span[itemIndex]),
                         Callback: step);
             }
@@ -3420,7 +3420,7 @@ public class Precompiled
                 new PineVM.ApplyStepwise(
                     start:
                     new PineVM.ApplyStepwise.StepResult.Continue(
-                        Expression: functionRecordOk.Value.innerFunction,
+                        Expression: functionRecordOk.Value.InnerFunction,
                         EnvironmentValue: environmentForItem(mutatedAggregate, itemsListValue.Elements.Span[itemIndex]),
                         Callback: step)));
     }
@@ -3458,8 +3458,8 @@ public class Precompiled
         }
 
         var functionRecordRemainingParamCount =
-            functionRecordOk.Value.functionParameterCount -
-            functionRecordOk.Value.argumentsAlreadyCollected.Length;
+            functionRecordOk.Value.ParameterCount -
+            functionRecordOk.Value.ArgumentsAlreadyCollected.Length;
 
         if (functionRecordRemainingParamCount is not 1)
         {
@@ -3467,13 +3467,13 @@ public class Precompiled
         }
 
         var environmentFunctionsEntry =
-            PineValue.List(functionRecordOk.Value.envFunctions);
+            PineValue.List(functionRecordOk.Value.EnvFunctions);
 
         PineValue environmentForItem(PineValue itemValue)
         {
-            var argumentsItems = new PineValue[functionRecordOk.Value.argumentsAlreadyCollected.Length + 1];
+            var argumentsItems = new PineValue[functionRecordOk.Value.ArgumentsAlreadyCollected.Length + 1];
 
-            functionRecordOk.Value.argumentsAlreadyCollected.CopyTo(argumentsItems);
+            functionRecordOk.Value.ArgumentsAlreadyCollected.CopyTo(argumentsItems);
 
             argumentsItems[^1] = itemValue;
 
@@ -3502,7 +3502,7 @@ public class Precompiled
             {
                 return
                     new PineVM.ApplyStepwise.StepResult.Continue(
-                        Expression: functionRecordOk.Value.innerFunction,
+                        Expression: functionRecordOk.Value.InnerFunction,
                         EnvironmentValue: environmentForItem(itemsList.Elements.Span[itemIndex]),
                         Callback: step);
             }
@@ -3520,7 +3520,7 @@ public class Precompiled
                 new PineVM.ApplyStepwise(
                     start:
                     new PineVM.ApplyStepwise.StepResult.Continue(
-                        Expression: functionRecordOk.Value.innerFunction,
+                        Expression: functionRecordOk.Value.InnerFunction,
                         EnvironmentValue: environmentForItem(itemsList.Elements.Span[itemIndex]),
                         Callback: step)));
     }
@@ -3575,8 +3575,8 @@ public class Precompiled
         }
 
         var functionRecordRemainingParamCount =
-            functionRecordOk.Value.functionParameterCount -
-            functionRecordOk.Value.argumentsAlreadyCollected.Length;
+            functionRecordOk.Value.ParameterCount -
+            functionRecordOk.Value.ArgumentsAlreadyCollected.Length;
 
         if (functionRecordRemainingParamCount is not 1)
         {
@@ -3584,13 +3584,13 @@ public class Precompiled
         }
 
         var environmentFunctionsEntry =
-            PineValue.List(functionRecordOk.Value.envFunctions);
+            PineValue.List(functionRecordOk.Value.EnvFunctions);
 
         PineValue environmentForItem(PineValue itemValue)
         {
-            var argumentsItems = new PineValue[functionRecordOk.Value.argumentsAlreadyCollected.Length + 1];
+            var argumentsItems = new PineValue[functionRecordOk.Value.ArgumentsAlreadyCollected.Length + 1];
 
-            functionRecordOk.Value.argumentsAlreadyCollected.CopyTo(argumentsItems);
+            functionRecordOk.Value.ArgumentsAlreadyCollected.CopyTo(argumentsItems);
 
             argumentsItems[^1] = itemValue;
 
@@ -3632,7 +3632,7 @@ public class Precompiled
             {
                 return
                     new PineVM.ApplyStepwise.StepResult.Continue(
-                        Expression: functionRecordOk.Value.innerFunction,
+                        Expression: functionRecordOk.Value.InnerFunction,
                         EnvironmentValue: environmentForItem(itemsList.Elements.Span[itemIndex]),
                         Callback: step);
             }
@@ -3650,7 +3650,7 @@ public class Precompiled
                 new PineVM.ApplyStepwise(
                     start:
                     new PineVM.ApplyStepwise.StepResult.Continue(
-                        Expression: functionRecordOk.Value.innerFunction,
+                        Expression: functionRecordOk.Value.InnerFunction,
                         EnvironmentValue: environmentForItem(itemsList.Elements.Span[itemIndex]),
                         Callback: step)));
     }
@@ -3682,8 +3682,8 @@ public class Precompiled
         }
 
         var functionRecordRemainingParamCount =
-            functionRecordOk.Value.functionParameterCount -
-            functionRecordOk.Value.argumentsAlreadyCollected.Length;
+            functionRecordOk.Value.ParameterCount -
+            functionRecordOk.Value.ArgumentsAlreadyCollected.Length;
 
         if (functionRecordRemainingParamCount is not 1)
         {
@@ -3691,13 +3691,13 @@ public class Precompiled
         }
 
         var environmentFunctionsEntry =
-            PineValue.List(functionRecordOk.Value.envFunctions);
+            PineValue.List(functionRecordOk.Value.EnvFunctions);
 
         PineValue environmentForItem(PineValue itemValue)
         {
-            var argumentsItems = new PineValue[functionRecordOk.Value.argumentsAlreadyCollected.Length + 1];
+            var argumentsItems = new PineValue[functionRecordOk.Value.ArgumentsAlreadyCollected.Length + 1];
 
-            functionRecordOk.Value.argumentsAlreadyCollected.CopyTo(argumentsItems);
+            functionRecordOk.Value.ArgumentsAlreadyCollected.CopyTo(argumentsItems);
 
             argumentsItems[^1] = itemValue;
 
@@ -3722,7 +3722,7 @@ public class Precompiled
             {
                 return
                     new PineVM.ApplyStepwise.StepResult.Continue(
-                        Expression: functionRecordOk.Value.innerFunction,
+                        Expression: functionRecordOk.Value.InnerFunction,
                         EnvironmentValue: environmentForItem(itemsListValue.Elements.Span[itemIndex]),
                         Callback: step);
             }
@@ -3736,7 +3736,7 @@ public class Precompiled
                 new PineVM.ApplyStepwise(
                     start:
                     new PineVM.ApplyStepwise.StepResult.Continue(
-                        Expression: functionRecordOk.Value.innerFunction,
+                        Expression: functionRecordOk.Value.InnerFunction,
                         EnvironmentValue: environmentForItem(itemsListValue.Elements.Span[itemIndex]),
                         Callback: step)));
     }
@@ -3768,8 +3768,8 @@ public class Precompiled
         }
 
         var functionRecordRemainingParamCount =
-            functionRecordOk.Value.functionParameterCount -
-            functionRecordOk.Value.argumentsAlreadyCollected.Length;
+            functionRecordOk.Value.ParameterCount -
+            functionRecordOk.Value.ArgumentsAlreadyCollected.Length;
 
         if (functionRecordRemainingParamCount is not 1)
         {
@@ -3777,13 +3777,13 @@ public class Precompiled
         }
 
         var environmentFunctionsEntry =
-            PineValue.List(functionRecordOk.Value.envFunctions);
+            PineValue.List(functionRecordOk.Value.EnvFunctions);
 
         PineValue environmentForItem(PineValue itemValue)
         {
-            var argumentsItems = new PineValue[functionRecordOk.Value.argumentsAlreadyCollected.Length + 1];
+            var argumentsItems = new PineValue[functionRecordOk.Value.ArgumentsAlreadyCollected.Length + 1];
 
-            functionRecordOk.Value.argumentsAlreadyCollected.CopyTo(argumentsItems);
+            functionRecordOk.Value.ArgumentsAlreadyCollected.CopyTo(argumentsItems);
 
             argumentsItems[^1] = itemValue;
 
@@ -3808,7 +3808,7 @@ public class Precompiled
             {
                 return
                     new PineVM.ApplyStepwise.StepResult.Continue(
-                        Expression: functionRecordOk.Value.innerFunction,
+                        Expression: functionRecordOk.Value.InnerFunction,
                         EnvironmentValue: environmentForItem(itemsListValue.Elements.Span[itemIndex]),
                         Callback: step);
             }
@@ -3822,7 +3822,7 @@ public class Precompiled
                 new PineVM.ApplyStepwise(
                     start:
                     new PineVM.ApplyStepwise.StepResult.Continue(
-                        Expression: functionRecordOk.Value.innerFunction,
+                        Expression: functionRecordOk.Value.InnerFunction,
                         EnvironmentValue: environmentForItem(itemsListValue.Elements.Span[itemIndex]),
                         Callback: step)));
     }

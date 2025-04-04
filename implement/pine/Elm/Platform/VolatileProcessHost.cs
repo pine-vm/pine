@@ -1,4 +1,3 @@
-using ElmTime.ElmInteractive;
 using Pine.Core;
 using System;
 using System.Collections.Concurrent;
@@ -30,10 +29,11 @@ public class VolatileProcessHost(
     private readonly ConcurrentDictionary<Task<TaskResult>, object?> tasks = [];
 
     record TaskResult(
-        ElmInteractiveEnvironment.FunctionRecord UpdateFunction,
+        FunctionRecordValueAndParsed UpdateFunction,
         PineValue ResponseValue);
 
-    public async Task ExchangeAsync(MutatingWebServiceApp webServiceApp)
+    public async Task<IReadOnlyList<ApplyUpdateReport<WebServiceInterface.Command>>> ExchangeAsync(
+        MutatingWebServiceApp webServiceApp)
     {
         var tasksSnapshot = tasks.ToArray();
 
@@ -42,6 +42,9 @@ public class VolatileProcessHost(
             .Where(task => task.Key.IsCompleted)
             .ToArray();
 
+        var updateReports =
+            new List<ApplyUpdateReport<WebServiceInterface.Command>>();
+
         foreach (var task in completedTasks)
         {
             if (!tasks.TryRemove(task.Key, out _))
@@ -49,9 +52,12 @@ public class VolatileProcessHost(
 
             var taskResult = await task.Key;
 
-            webServiceApp.ApplyUpdate(
-                taskResult.UpdateFunction,
-                [taskResult.ResponseValue]);
+            var updateReport =
+                webServiceApp.ApplyUpdate(
+                    taskResult.UpdateFunction,
+                    [taskResult.ResponseValue]);
+
+            updateReports.Add(updateReport);
         }
 
         foreach (var cmd in webServiceApp.DequeueCommands())
@@ -65,6 +71,8 @@ public class VolatileProcessHost(
                 commands.Enqueue(cmd);
             }
         }
+
+        return updateReports;
     }
 
     private Task<TaskResult>? TaskForCmdAsync(WebServiceInterface.Command cmd)
@@ -158,7 +166,7 @@ public class VolatileProcessHost(
     }
 
     private static Task<TaskResult> CreateTaskAsync(
-        ElmInteractiveEnvironment.FunctionRecord updateFunction,
+        FunctionRecordValueAndParsed updateFunction,
         Func<PineValue> responseDelegate)
     {
         return Task.Run(

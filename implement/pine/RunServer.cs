@@ -122,7 +122,7 @@ public class RunServer
                 fileStoreReader: processStoreFileStore)
             .Extract(error => throw new Exception("Attempt to deploy app config failed: " + error));
 
-            foreach (var (filePath, fileContent) in testDeployResult.projectedFiles)
+            foreach (var (filePath, fileContent) in testDeployResult.ProjectedFiles)
                 processStoreFileStore.SetFileContent(filePath, fileContent);
         }
 

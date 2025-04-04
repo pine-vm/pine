@@ -2389,7 +2389,7 @@ public class Program
 
             PineValue elmBytesValue = parseFromEnvOk.declValue;
 
-            if (parseFromEnvOk.functionRecord.functionParameterCount is 1)
+            if (parseFromEnvOk.functionRecord.ParameterCount is 1)
             {
                 /*
                  * Support alternative form as following to avoid eager (expensive) evaluation in the compiler:

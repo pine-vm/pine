@@ -31,28 +31,28 @@ public static class ElmInteractiveEnvironment
                 .AndThen(functionValueAndRecord =>
                 {
                     var combinedArguments =
-                        functionValueAndRecord.functionRecord.argumentsAlreadyCollected
+                        functionValueAndRecord.functionRecord.ArgumentsAlreadyCollected
                         .ToArray()
                         .Concat(arguments)
                         .ToArray();
 
-                    if (combinedArguments.Length != functionValueAndRecord.functionRecord.functionParameterCount)
+                    if (combinedArguments.Length != functionValueAndRecord.functionRecord.ParameterCount)
                     {
                         return
                         (Result<string, PineValue>)
                             ("Partial application not implemented yet. Got " +
                             combinedArguments.Length +
                             " arguments, expected " +
-                            functionValueAndRecord.functionRecord.functionParameterCount);
+                            functionValueAndRecord.functionRecord.ParameterCount);
                     }
 
                     var combinedEnvironment =
-                    PineValue.List([PineValue.List(functionValueAndRecord.functionRecord.envFunctions),
+                    PineValue.List([PineValue.List(functionValueAndRecord.functionRecord.EnvFunctions),
                         PineValue.List(combinedArguments)]);
 
                     return
                     pineVM.EvaluateExpression(
-                        functionValueAndRecord.functionRecord.innerFunction,
+                        functionValueAndRecord.functionRecord.InnerFunction,
                         environment: combinedEnvironment);
                 });
     }
@@ -81,7 +81,7 @@ public static class ElmInteractiveEnvironment
             parsedEnv.Modules
             .FirstOrDefault(moduleNameAndContent => moduleNameAndContent.moduleName == moduleName);
 
-        if (selectedModule.moduleContent is null)
+        if (selectedModule.moduleContent is not { } moduleContent)
         {
             return
                 "Did not find module '" + moduleName + "' (there are " +
@@ -90,15 +90,15 @@ public static class ElmInteractiveEnvironment
         }
 
         var functionDeclaration =
-            selectedModule.moduleContent.FunctionDeclarations
+            moduleContent.FunctionDeclarations
             .FirstOrDefault(fd => fd.Key == declarationName);
 
-        if (functionDeclaration.Value is null)
+        if (functionDeclaration.Value is not { } funcDeclValue)
             return "declaration " + declarationName + " not found";
 
         return
-        ParseFunctionRecordFromValueTagged(functionDeclaration.Value, parseCache)
-        .Map(parsedRecord => (functionDeclaration.Value, parsedRecord));
+        ParseFunctionRecordFromValueTagged(funcDeclValue, parseCache)
+        .Map(parsedRecord => (funcDeclValue, parsedRecord));
     }
 
     public static Result<string, PineValue> ApplyFunction(
@@ -116,31 +116,30 @@ public static class ElmInteractiveEnvironment
 
     public static Result<string, (Expression expression, PineValue environment)> ApplyFunctionArgumentsForEvalExpr(
         FunctionRecord functionRecord,
-        IReadOnlyList<PineValue> arguments)
+        IReadOnlyList<PineValue> appendArguments)
     {
-        var combinedArguments =
-            functionRecord.argumentsAlreadyCollected
-            .ToArray()
-            .Concat(arguments)
-            .ToArray();
+        ReadOnlySpan<PineValue> combinedArguments =
+            [..functionRecord.ArgumentsAlreadyCollected.Span,
+            ..appendArguments
+            ];
 
-        if (combinedArguments.Length != functionRecord.functionParameterCount)
+        if (combinedArguments.Length != functionRecord.ParameterCount)
         {
             return
                 "Partial application not implemented yet. Got " +
                 combinedArguments.Length +
                 " arguments, expected " +
-                functionRecord.functionParameterCount;
+                functionRecord.ParameterCount;
         }
 
         var combinedEnvironment =
             PineValue.List(
                 [
-                PineValue.List(functionRecord.envFunctions),
-                PineValue.List(combinedArguments)
+                PineValue.List(functionRecord.EnvFunctions),
+                PineValue.List([..combinedArguments])
                 ]);
 
-        return (functionRecord.innerFunction, combinedEnvironment);
+        return (functionRecord.InnerFunction, combinedEnvironment);
     }
 
     public record ElmModule(
@@ -148,10 +147,10 @@ public static class ElmInteractiveEnvironment
         IReadOnlyDictionary<string, PineValue> TypeDeclarations);
 
     public record FunctionRecord(
-        Expression innerFunction,
-        int functionParameterCount,
-        ReadOnlyMemory<PineValue> envFunctions,
-        ReadOnlyMemory<PineValue> argumentsAlreadyCollected);
+        Expression InnerFunction,
+        int ParameterCount,
+        ReadOnlyMemory<PineValue> EnvFunctions,
+        ReadOnlyMemory<PineValue> ArgumentsAlreadyCollected);
 
     /// <summary>
     /// Analog to the 'parseFunctionRecordFromValueTagged' function in FirCompiler.elm
@@ -173,11 +172,25 @@ public static class ElmInteractiveEnvironment
             If the declaration has zero parameters, it could be encoded as plain PineValue without wrapping in a 'Function' record.
             */
             new FunctionRecord(
-                innerFunction: Expression.LiteralInstance(pineValue),
-                functionParameterCount: 0,
-                envFunctions: ReadOnlyMemory<PineValue>.Empty,
-                argumentsAlreadyCollected: ReadOnlyMemory<PineValue>.Empty)
+                InnerFunction: Expression.LiteralInstance(pineValue),
+                ParameterCount: 0,
+                EnvFunctions: ReadOnlyMemory<PineValue>.Empty,
+                ArgumentsAlreadyCollected: ReadOnlyMemory<PineValue>.Empty)
             );
+    }
+
+    /// <summary>
+    /// Inverse of <see cref="ParseFunctionRecordFromValueTagged"/>
+    /// </summary>
+    public static PineValue EncodeFunctionRecordInValueTagged(
+        FunctionRecord functionRecord)
+    {
+        return
+            PineValue.List(
+                [
+                PineValueAsString.ValueFromString("Function"),
+                EncodeFunctionRecordInValue(functionRecord)
+                ]);
     }
 
     /// <summary>
@@ -187,59 +200,89 @@ public static class ElmInteractiveEnvironment
         PineValue pineValue,
         PineVMParseCache parseCache)
     {
-        return
-            pineValue switch
+        if (pineValue is not PineValue.ListValue functionRecordListItems)
+            return "Function record is not a list";
+
+        if (functionRecordListItems.Elements.Length is not 4)
+        {
+            return
+                "Unexpected number of elements in function record: Not 4 but " +
+                functionRecordListItems.Elements.Length;
+        }
+
+        var parseInnerExprResult =
+            parseCache.ParseExpression(functionRecordListItems.Elements.Span[0]);
+
+        {
+            if (parseInnerExprResult.IsErrOrNull() is { } err)
             {
-                PineValue.ListValue functionRecordListItems =>
-                functionRecordListItems.Elements.Length is 4
-                ?
-                parseCache.ParseExpression(functionRecordListItems.Elements.Span[0])
-                .AndThen(innerFunction =>
-                PineValueAsInteger.SignedIntegerFromValueStrict(functionRecordListItems.Elements.Span[1])
-                .MapError(err => "Failed to decode function parameter count: " + err)
-                .AndThen(functionParameterCount =>
-                {
-                    return
-                    (functionRecordListItems.Elements.Span[2] switch
-                    {
-                        PineValue.ListValue listValue =>
-                        Result<string, ReadOnlyMemory<PineValue>>.ok(listValue.Elements),
+                return "Failed to parse inner function: " + err;
+            }
+        }
 
-                        _ =>
-                        (Result<string, ReadOnlyMemory<PineValue>>)
-                        "envFunctionsValue is not a list"
-                    })
-                    .AndThen(envFunctions =>
-                    {
-                        return
-                        (functionRecordListItems.Elements.Span[3] switch
-                        {
-                            PineValue.ListValue listValue =>
-                            Result<string, ReadOnlyMemory<PineValue>>.ok(listValue.Elements),
+        if (parseInnerExprResult.IsOkOrNull() is not { } innerFunction)
+        {
+            throw new NotImplementedException(
+                "Unexpected result type: " + parseInnerExprResult.GetType());
+        }
 
-                            _ =>
-                            (Result<string, ReadOnlyMemory<PineValue>>)
-                            "argumentsAlreadyCollectedValue is not a list"
-                        })
-                        .AndThen(argumentsAlreadyCollected =>
-                        {
-                            return
-                            Result<string, FunctionRecord>.ok(
-                                new FunctionRecord(
-                                    innerFunction: innerFunction,
-                                    functionParameterCount: (int)functionParameterCount,
-                                    envFunctions: envFunctions.ToArray(),
-                                    argumentsAlreadyCollected: argumentsAlreadyCollected.ToArray()));
-                        });
-                    });
-                }
-                ))
-                :
-                "List does not have the expected number of items: " + functionRecordListItems.Elements.Length,
+        var parseFunctionParameterCountResult =
+            PineValueAsInteger.SignedIntegerFromValueStrict(functionRecordListItems.Elements.Span[1]);
 
-                _ =>
-                "Is not a list but a blob"
-            };
+        {
+            if (parseFunctionParameterCountResult.IsErrOrNull() is { } err)
+            {
+                return "Failed to decode function parameter count: " + err;
+            }
+        }
+
+        if (parseFunctionParameterCountResult.IsOkOrNullable() is not { } functionParameterCount)
+        {
+            throw new NotImplementedException(
+                "Unexpected result type: " + parseFunctionParameterCountResult.GetType());
+        }
+
+        var envFunctionsAggregateValue =
+            functionRecordListItems.Elements.Span[2];
+
+        if (envFunctionsAggregateValue is not PineValue.ListValue envFunctionsList)
+        {
+            return "envFunctionsValue is not a list";
+        }
+
+        var argumentsAlreadyCollectedAggregateValue =
+            functionRecordListItems.Elements.Span[3];
+
+        if (argumentsAlreadyCollectedAggregateValue is not PineValue.ListValue argumentsAlreadyCollectedList)
+        {
+            return "argumentsAlreadyCollectedValue is not a list";
+        }
+
+        return
+            new FunctionRecord(
+                InnerFunction: innerFunction,
+                ParameterCount: (int)functionParameterCount,
+                EnvFunctions: envFunctionsList.Elements.ToArray(),
+                ArgumentsAlreadyCollected: argumentsAlreadyCollectedList.Elements.ToArray());
+    }
+
+    /// <summary>
+    /// Inverse of <see cref="ParseFunctionRecordFromValue"/>"/>
+    /// </summary>
+    public static PineValue EncodeFunctionRecordInValue(
+        FunctionRecord functionRecord)
+    {
+        var innerFunctionValue =
+            ExpressionEncoding.EncodeExpressionAsValue(functionRecord.InnerFunction);
+
+        return
+            PineValue.List(
+                [
+                innerFunctionValue,
+                PineValueAsInteger.ValueFromSignedInteger(functionRecord.ParameterCount),
+                PineValue.List(functionRecord.EnvFunctions.ToArray()),
+                PineValue.List(functionRecord.ArgumentsAlreadyCollected.ToArray())
+                ]);
     }
 
     public static Result<string, ParsedInteractiveEnvironment> ParseInteractiveEnvironment(
