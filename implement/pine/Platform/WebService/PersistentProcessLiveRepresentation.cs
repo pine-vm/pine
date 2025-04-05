@@ -375,7 +375,8 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
         storeWriter.StoreComponent(elmAppState);
 
         var elmAppStateHash =
-            Convert.ToHexStringLower(hashCache.ComputeHash(elmAppState).Span);
+            Convert.ToHexStringLower(
+                new Pine.CompilePineToDotNet.CompilerMutableCache().ComputeHash(elmAppState).Span);
 
         storeWriter.StoreComponent(lastAppConfig.appConfigComponent);
 
