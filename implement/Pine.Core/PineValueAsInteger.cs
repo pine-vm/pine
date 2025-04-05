@@ -25,10 +25,32 @@ public static class PineValueAsInteger
         [..Enumerable.Range(0, 10_000)
         .Select(Range => ValueFromUnsignedInteger(Range).Extract(err => throw new Exception(err)))];
 
+    /// <summary>
+    /// Returns a reused instance of a <see cref="PineValue"/> encoding <paramref name="integer"/> in unsigned form.
+    /// Returns null the set of unsigned reused instances does not cover the given integer.
+    /// </summary>
+    public static PineValue? ReusedInstanceForUnsignedInteger(int integer)
+    {
+        if (integer < 0 || ReusedValueFromUnsignedInteger is not { } reused)
+            return null;
+
+        if (integer < reused.Count)
+            return reused[integer];
+
+        return null;
+    }
+
     public static Result<string, ReadOnlyMemory<byte>> BlobValueFromUnsignedInteger(System.Numerics.BigInteger integer)
     {
         if (integer < 0)
             return "Argument is a negative integer.";
+
+        if (ReusedValueFromUnsignedInteger is { } reusedUnsigned &&
+            integer < reusedUnsigned.Count)
+        {
+            if (reusedUnsigned[(int)integer] is PineValue.BlobValue blob)
+                return Result<string, ReadOnlyMemory<byte>>.ok(blob.Bytes);
+        }
 
         var array = integer.ToByteArray(isUnsigned: true, isBigEndian: true);
 

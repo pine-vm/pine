@@ -33,6 +33,9 @@ public static class PineValueAsString
         return PineValue.List(ListValueFromString(str));
     }
 
+    /// <summary>
+    /// Converts a .NET string to a list of Pine values containing one element for each character in the input string.
+    /// </summary>
     public static ReadOnlyMemory<PineValue> ListValueFromString(string str)
     {
         var codePoints = ToCodePoints(str);
@@ -41,7 +44,15 @@ public static class PineValueAsString
 
         for (var index = 0; index < codePoints.Count; index++)
         {
-            var charAsInteger = new System.Numerics.BigInteger(codePoints[index]);
+            var codePoint = codePoints[index];
+
+            if (PineValueAsInteger.ReusedInstanceForUnsignedInteger(codePoint) is { } reused)
+            {
+                pineValues[index] = reused;
+                continue;
+            }
+
+            var charAsInteger = new System.Numerics.BigInteger(codePoint);
 
             var charAsIntegerResult = PineValueAsInteger.ValueFromUnsignedInteger(charAsInteger);
 
