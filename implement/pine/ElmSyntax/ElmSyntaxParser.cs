@@ -246,7 +246,7 @@ public class ElmSyntaxParser
 
         if (parseResult.IsOkOrNull() is not { } parseOk)
         {
-            throw new Exception(
+            throw new NotImplementedException(
                 "Unexpected parse result type: " + parseResult.GetType().Name);
         }
 
@@ -290,7 +290,7 @@ public class ElmSyntaxParser
                 ]),
 
             _ =>
-            throw new Exception(
+            throw new NotImplementedException(
                 "Unexpected module type: " + module.GetType().Name),
         };
     }
@@ -312,7 +312,7 @@ public class ElmSyntaxParser
                     [EncodeRange(range.Range)]),
 
             _ =>
-            throw new Exception(
+            throw new NotImplementedException(
                 "Unexpected exposing type: " + exposing.GetType().Name),
         };
     }
@@ -332,7 +332,7 @@ public class ElmSyntaxParser
                     [EncodeTypeStruct(typeDeclaration.TypeDeclaration)]),
 
             _ =>
-            throw new Exception(
+            throw new NotImplementedException(
                 "Unexpected declaration type: " + declaration.GetType().Name),
         };
     }
@@ -408,7 +408,7 @@ public class ElmSyntaxParser
                         [..tupled.TypeAnnotations.Select(a => EncodeNode(EncodeTypeAnnotation, a))])]),
 
             _ =>
-            throw new Exception(
+            throw new NotImplementedException(
                 "Unexpected type annotation type: " + type.GetType().Name),
         };
     }
@@ -456,7 +456,7 @@ public class ElmSyntaxParser
                     [EncodeString(name.Name)]),
 
             _ =>
-            throw new Exception(
+            throw new NotImplementedException(
                 "Unexpected pattern type: " + pattern.GetType().Name),
         };
     }
@@ -515,7 +515,7 @@ public class ElmSyntaxParser
                         [..fields.Fields.Select(rs => EncodeNode(EncodeRecordSetter, rs))])]),
 
             _ =>
-                throw new Exception(
+                throw new NotImplementedException(
                     "Unexpected expression type: " + expression.GetType().Name),
         };
     }
@@ -604,20 +604,17 @@ public class ElmSyntaxParser
         private int _line = 1;
         private int _column = 1;
 
-        public List<Token> Tokenize()
+        public IEnumerable<Token> Tokenize()
         {
-            var tokens = new List<Token>();
-
             while (!IsAtEnd())
             {
                 var token = NextToken();
+             
                 if (token != null)
                 {
-                    tokens.Add(token);
+                    yield return token;
                 }
             }
-
-            return tokens;
         }
 
         private bool IsAtEnd() =>
@@ -834,10 +831,8 @@ public class ElmSyntaxParser
         }
     }
 
-    private class Parser(IEnumerable<Token> tokens)
+    private class Parser(ReadOnlyMemory<Token> tokens)
     {
-        private readonly List<Token> _tokens = [.. tokens];
-
         private int _current = 0;
 
         // Entry point: parse the entire file and return a File record.
@@ -875,13 +870,7 @@ public class ElmSyntaxParser
         {
             // Expect the "module" keyword (this could be a token with Type Identifier "module")
 
-            var keywordToken =
-                Consume(TokenType.Identifier, "Expected 'module' keyword.");
-
-            if (keywordToken.Lexeme is not "module")
-            {
-                throw new Exception("Expected 'module' keyword.");
-            }
+            var keywordToken = ConsumeKeyword("module");
 
             ConsumeAllWhitespace(true);
 
@@ -889,16 +878,15 @@ public class ElmSyntaxParser
             var moduleNameParts = new List<string>();
 
             var firstModuleNamePart =
-                Consume(TokenType.Identifier, "Expected module name.");
+                ConsumeAnyIdentifier("module name");
 
             moduleNameParts.Add(firstModuleNamePart.Lexeme);
 
             while (Peek().Type is TokenType.Dot)
             {
-                Consume(TokenType.Dot, "Expected '.' in module name.");
+                Consume(TokenType.Dot);
 
-                var moduleNamePart =
-                    Consume(TokenType.Identifier, "Expected module name part.");
+                var moduleNamePart = ConsumeAnyIdentifier("module name part");
 
                 moduleNameParts.Add(moduleNamePart.Lexeme);
             }
@@ -923,41 +911,32 @@ public class ElmSyntaxParser
         {
             ConsumeAllWhitespace(true);
 
-            var keyword = Advance();
-
-            if (keyword.Lexeme is not "exposing")
-            {
-                throw new Exception("Expected 'exposing' keyword.");
-            }
+            var keyword = ConsumeKeyword("exposing");
 
             ConsumeAllWhitespace(false);
 
-            var openParen =
-                Consume(TokenType.OpenParen, "Expected '(' after 'exposing' keyword.");
+            Consume(TokenType.OpenParen);
 
             ConsumeAllWhitespace(true);
 
             if (Peek().Type is TokenType.Dot)
             {
-                var allFirstDot =
-                    Consume(TokenType.Dot, "Expected '.' after '('.");
+                var allFirstDot = Consume(TokenType.Dot);
 
                 // Next token should be a dot as well
 
-                var allSecondDot =
-                    Consume(TokenType.Dot, "Expected '.' after '.'.");
+                var allSecondDot = Consume(TokenType.Dot);
 
                 ConsumeAllWhitespace(true);
 
-                var closeParen =
-                    Consume(TokenType.CloseParen, "Expected ')' after '.'.");
+                var closeParen = Consume(TokenType.CloseParen);
 
                 return new Node<Exposing>(
                     new Range(keyword.Start, closeParen.End),
                     new Exposing.All(new Range(allFirstDot.Start, allSecondDot.End)));
             }
 
-            throw new Exception("Unsupported exposing clause.");
+            throw ExceptionForCurrentLocation("Unsupported exposing clause.");
         }
 
         // Parses a declaration (e.g. a function declaration)
@@ -966,9 +945,7 @@ public class ElmSyntaxParser
             // For example, a function declaration might start with a function name.
             Token start = Peek();
 
-            // Consume function name
-            Token identifierToken =
-                Consume(TokenType.Identifier, "Expected function name.");
+            Token identifierToken = ConsumeAnyIdentifier("function name");
 
             if (identifierToken.Lexeme is "type")
             {
@@ -984,8 +961,7 @@ public class ElmSyntaxParser
 
                 // Parse type name
 
-                Token typeNameToken =
-                    Consume(TokenType.Identifier, "Expected type name.");
+                Token typeNameToken = ConsumeAnyIdentifier("type name");
 
                 ConsumeAllWhitespace(true);
 
@@ -997,8 +973,7 @@ public class ElmSyntaxParser
                 {
                     if (Peek().Lexeme is "alias")
                     {
-                        // Consume the "alias" keyword
-                        Consume(TokenType.Identifier, "Expected 'alias' keyword.");
+                        ConsumeKeyword("alias");
 
                         throw new NotImplementedException(
                             "Type alias not implemented.");
@@ -1007,8 +982,7 @@ public class ElmSyntaxParser
                     // Parse type parameters
                     while (Peek().Type is TokenType.Identifier)
                     {
-                        var typeParameterToken =
-                            Consume(TokenType.Identifier, "Expected type parameter.");
+                        var typeParameterToken = ConsumeAnyIdentifier("type parameter");
 
                         typeParameters.Add(
                             new Node<string>(
@@ -1020,7 +994,7 @@ public class ElmSyntaxParser
                 }
 
                 // Parse the equal sign
-                Consume(TokenType.Equal, "Expected '=' after type name.");
+                Consume(TokenType.Equal);
 
                 ConsumeAllWhitespace(true);
 
@@ -1031,15 +1005,9 @@ public class ElmSyntaxParser
                 while (true)
                 {
                     ConsumeAllWhitespace(true);
-
-                    // Parse a constructor name
-
-                    var constructorNameToken =
-                        Consume(TokenType.Identifier, "Expected constructor name.");
+                    var constructorNameToken = ConsumeAnyIdentifier("constructor name");
 
                     ConsumeAllWhitespace(true);
-
-                    // Parse constructor arguments
 
                     var constructorArguments = new List<Node<TypeAnnotation>>();
 
@@ -1073,7 +1041,7 @@ public class ElmSyntaxParser
 
                     if (Peek().Type is TokenType.Pipe)
                     {
-                        Consume(TokenType.Pipe, "Expected '|' after constructor.");
+                        Consume(TokenType.Pipe);
                     }
                     else
                     {
@@ -1097,7 +1065,7 @@ public class ElmSyntaxParser
 
             // In a full implementation, you would parse parameters here.
             // Expect an '=' token.
-            Consume(TokenType.Equal, "Expected '=' after function name.");
+            Consume(TokenType.Equal);
 
             ConsumeAllWhitespace(true);
 
@@ -1127,8 +1095,7 @@ public class ElmSyntaxParser
             {
                 // Is either Tupled or Typed
 
-                var openToken =
-                    Consume(TokenType.OpenParen, "Expected '(' to start type annotation.");
+                var openToken = Consume(TokenType.OpenParen);
 
                 ConsumeAllWhitespace(true);
 
@@ -1140,7 +1107,7 @@ public class ElmSyntaxParser
                 {
                     // | Tupled (List (Node TypeAnnotation))
 
-                    Consume(TokenType.Comma, "Expected ',' in type annotation.");
+                    Consume(TokenType.Comma);
 
                     ConsumeAllWhitespace(true);
 
@@ -1159,8 +1126,7 @@ public class ElmSyntaxParser
                         ConsumeAllWhitespace(true);
                     }
 
-                    var closingToken =
-                        Consume(TokenType.CloseParen, "Expected ')' to end type annotation.");
+                    var closingToken = Consume(TokenType.CloseParen);
 
                     var range =
                         new Range(openToken.Start, closingToken.End);
@@ -1181,7 +1147,7 @@ public class ElmSyntaxParser
 
                     if (firstTypeAnnotation.Value is not TypeAnnotation.Typed instantiatedName)
                     {
-                        throw new Exception(
+                        throw ExceptionForCurrentLocation(
                             "Expected Typed type annotation.");
                     }
 
@@ -1199,8 +1165,7 @@ public class ElmSyntaxParser
                         ConsumeAllWhitespace(true);
                     }
 
-                    var closingToken =
-                        Consume(TokenType.CloseParen, "Expected ')' to end type annotation.");
+                    var closingToken = Consume(TokenType.CloseParen);
 
                     var range =
                         new Range(openToken.Start, closingToken.End);
@@ -1225,7 +1190,7 @@ public class ElmSyntaxParser
             if (start.Type is TokenType.Identifier)
             {
                 var firstIdentifierToken =
-                    Consume(TokenType.Identifier, "Expected identifier.");
+                    ConsumeAnyIdentifier("first identifier");
 
                 if (char.IsLower(firstIdentifierToken.Lexeme.First()))
                 {
@@ -1244,10 +1209,9 @@ public class ElmSyntaxParser
 
                 while (Peek().Type is TokenType.Dot)
                 {
-                    Consume(TokenType.Dot, "Expected '.' in type annotation.");
+                    Consume(TokenType.Dot);
 
-                    var namespaceToken =
-                        Consume(TokenType.Identifier, "Expected namespace in type annotation.");
+                    var namespaceToken = ConsumeAnyIdentifier("namespace item");
 
                     namespaces.Add(namespaceToken);
                 }
@@ -1310,7 +1274,7 @@ public class ElmSyntaxParser
                             typeArguments));
             }
 
-            throw new Exception(
+            throw ExceptionForCurrentLocation(
                 "Unsupported type annotation type: " + start.Type +
                 " at " + start.Start.Row + ":" + start.Start.Column +
                 " - " + start.End.Row + ":" + start.End.Column +
@@ -1339,8 +1303,7 @@ public class ElmSyntaxParser
 
             if (start.Type is TokenType.Identifier)
             {
-                var firstIdentifierToken =
-                    Consume(TokenType.Identifier, "Expected identifier.");
+                var firstIdentifierToken = ConsumeAnyIdentifier("first identifier");
 
                 // | FunctionOrValue ModuleName String
                 // | Application (List (Node Expression))
@@ -1357,10 +1320,10 @@ public class ElmSyntaxParser
 
                 while (Peek().Type is TokenType.Dot)
                 {
-                    Consume(TokenType.Dot, "Expected '.' in function or value name.");
+                    Consume(TokenType.Dot);
 
                     var furtherNamePart =
-                        Consume(TokenType.Identifier, "Expected function or value name part.");
+                        ConsumeAnyIdentifier("function or value name part");
 
                     furtherIdentifiers.Add(furtherNamePart);
                 }
@@ -1425,7 +1388,7 @@ public class ElmSyntaxParser
                 // | ListExpr (List (Node Expression))
 
                 var listOpenToken =
-                    Consume(TokenType.OpenBracket, "Expected '[' to start list expression.");
+                    Consume(TokenType.OpenBracket);
 
                 ConsumeAllWhitespace(true);
 
@@ -1441,12 +1404,12 @@ public class ElmSyntaxParser
 
                     if (Peek().Type is TokenType.Comma)
                     {
-                        Consume(TokenType.Comma, "Expected ',' after list element.");
+                        Consume(TokenType.Comma);
                     }
                 }
 
                 var listCloseToken =
-                    Consume(TokenType.CloseBracket, "Expected ']' to end list expression.");
+                    Consume(TokenType.CloseBracket);
 
                 var listRange =
                     new Range(listOpenToken.Start, listCloseToken.End);
@@ -1466,7 +1429,7 @@ public class ElmSyntaxParser
                  * */
 
                 var parenOpenToken =
-                    Consume(TokenType.OpenParen, "Expected '(' to start expression.");
+                    Consume(TokenType.OpenParen);
 
                 ConsumeAllWhitespace(true);
 
@@ -1478,7 +1441,7 @@ public class ElmSyntaxParser
 
                 while (Peek().Type is TokenType.Comma)
                 {
-                    Consume(TokenType.Comma, "Expected ',' in expression.");
+                    Consume(TokenType.Comma);
 
                     ConsumeAllWhitespace(true);
 
@@ -1490,7 +1453,7 @@ public class ElmSyntaxParser
                 }
 
                 var parenCloseToken =
-                    Consume(TokenType.CloseParen, "Expected ')' to end expression.");
+                    Consume(TokenType.CloseParen);
 
                 var parenRange =
                     new Range(parenOpenToken.Start, parenCloseToken.End);
@@ -1510,7 +1473,7 @@ public class ElmSyntaxParser
                 return new Node<Expression>(parenRange, tupledExpr);
             }
 
-            throw new Exception(
+            throw ExceptionForCurrentLocation(
                 "Unsupported expression type: " + start.Type +
                 " at " + start.Start.Row + ":" + start.Start.Column +
                 " - " + start.End.Row + ":" + start.End.Column +
@@ -1521,7 +1484,7 @@ public class ElmSyntaxParser
         {
             Token start = Peek();
 
-            Consume(TokenType.OpenBrace, "Expected '{' to start record expression.");
+            Consume(TokenType.OpenBrace);
 
             var fields = new List<Node<(Node<string> fieldName, Node<Expression> valueExpr)>>();
 
@@ -1531,12 +1494,11 @@ public class ElmSyntaxParser
             {
                 ConsumeAllWhitespace(true);
 
-                var fieldName =
-                    Consume(TokenType.Identifier, "Expected field name in record expression.");
+                var fieldName = ConsumeAnyIdentifier("field name");
 
                 ConsumeAllWhitespace(true);
 
-                Consume(TokenType.Equal, "Expected '=' after field name.");
+                Consume(TokenType.Equal);
 
                 ConsumeAllWhitespace(true);
 
@@ -1551,13 +1513,13 @@ public class ElmSyntaxParser
 
                 if (Peek().Type is TokenType.Comma)
                 {
-                    Consume(TokenType.Comma, "Expected ',' after field.");
+                    Consume(TokenType.Comma);
                 }
             }
 
             var end = Peek();
 
-            Consume(TokenType.CloseBrace, "Expected '}' to end record expression.");
+            Consume(TokenType.CloseBrace);
 
             return new Node<Expression>(
                 new Range(start.Start, end.End),
@@ -1567,25 +1529,76 @@ public class ElmSyntaxParser
         // Helper methods
 
         private bool IsAtEnd() =>
-            _current >= _tokens.Count;
+            _current >= tokens.Length;
 
         private Token Peek() =>
-            _tokens[_current];
+            tokens.Span[_current];
 
         private Token Advance() =>
-            _tokens[_current++];
+            tokens.Span[_current++];
+
+        private Token ConsumeKeyword(string expectedLexeme)
+        {
+            return
+                Consume(TokenType.Identifier, expectedLexeme);
+        }
+
+        private Token ConsumeAnyIdentifier(string description)
+        {
+            return
+                Consume(
+                    TokenType.Identifier,
+                    expectedLexeme: null,
+                    tokenDescription: description);
+        }
 
         // Consume a token of a given type, throwing an error if the token does not match.
-        private Token Consume(TokenType type, string errorMessage)
+        private Token Consume(
+            TokenType expectedType,
+            string? expectedLexeme = null,
+            string? tokenDescription = null)
         {
-            if (Peek().Type == type)
+            var nextToken = Peek();
+
+            if (nextToken.Type != expectedType)
             {
-                return Advance();
+                throw new ElmSyntaxParserException(
+                    "Expected " + (tokenDescription ?? "token") + " of type " + expectedType +
+                    " but found " + nextToken.Type,
+                    lineNumber: nextToken.Start.Row,
+                    columnNumber: nextToken.Start.Column);
             }
 
-            throw new Exception(
-                errorMessage + " Found: " + Peek().Lexeme +
-                " at " + Peek().Start.Row + ":" + Peek().Start.Column);
+            if (expectedLexeme is not null && nextToken.Lexeme != expectedLexeme)
+            {
+                var errorDescription =
+                    (expectedType is TokenType.Identifier
+                    ?
+                    "Expected keyword '" + expectedLexeme
+                    :
+                    "Expected token with lexeme " + expectedLexeme) +
+                    "' but found '" + nextToken.Lexeme + "'";
+
+                throw new ElmSyntaxParserException(
+                    errorDescription,
+                    lineNumber: nextToken.Start.Row,
+                    columnNumber: nextToken.Start.Column);
+            }
+
+            return Advance();
+        }
+
+        private ElmSyntaxParserException ExceptionForCurrentLocation(string message)
+        {
+            var token =
+                IsAtEnd() ?
+                tokens.Span[tokens.Length - 1] :
+                Peek();
+
+            return new ElmSyntaxParserException(
+                message,
+                lineNumber: token.Start.Row,
+                columnNumber: token.Start.Column);
         }
 
         private IReadOnlyList<Token> ConsumeAllWhitespace(
@@ -1614,7 +1627,7 @@ public class ElmSyntaxParser
     {
         var tokenizer = new Tokenizer(elmModuleText);
 
-        var tokens = tokenizer.Tokenize();
+        var tokens = tokenizer.Tokenize().ToArray();
 
         var parser = new Parser(tokens);
 
