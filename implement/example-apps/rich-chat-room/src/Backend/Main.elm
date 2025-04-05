@@ -112,12 +112,12 @@ processPendingHttpRequests stateBefore =
                                         { httpRequestId = pendingHttpRequestId
                                         , response =
                                             { statusCode = 200
-                                            , bodyAsBase64 =
+                                            , body =
                                                 responseToClient
                                                     |> GenerateJsonConverters.jsonEncodeMessageToClient
                                                     |> Json.Encode.encode 0
                                                     |> encodeStringToBytes
-                                                    |> Base64.fromBytes
+                                                    |> Just
                                             , headersToAdd = []
                                             }
                                                 |> addCookieUserSessionId pendingHttpRequest.userSessionId
@@ -163,8 +163,8 @@ updateForHttpRequestEventWithoutPendingHttpRequests httpRequestEvent stateBefore
                     { httpRequestId = httpRequestEvent.httpRequestId
                     , response =
                         { statusCode = 200
-                        , bodyAsBase64 =
-                            Just
+                        , body =
+                            Base64.toBytes
                                 (if enableInspector then
                                     CompilationInterface.ElmMake.elm_make____src_Frontend_Main_elm.debug.base64
 
@@ -190,8 +190,8 @@ updateForHttpRequestEventWithoutPendingHttpRequests httpRequestEvent stateBefore
 
         Just FrontendBackendInterface.ApiRoute ->
             case
-                httpRequestEvent.request.bodyAsBase64
-                    |> Maybe.map (Base64.toBytes >> Maybe.map (decodeBytesToString >> Maybe.withDefault "Failed to decode bytes to string") >> Maybe.withDefault "Failed to decode from base64")
+                httpRequestEvent.request.body
+                    |> Maybe.map (decodeBytesToString >> Maybe.withDefault "Failed to decode bytes to string")
                     |> Maybe.withDefault "Missing HTTP body"
                     |> Json.Decode.decodeString GenerateJsonConverters.jsonDecodeRequestFromUser
             of
@@ -201,10 +201,10 @@ updateForHttpRequestEventWithoutPendingHttpRequests httpRequestEvent stateBefore
                             { httpRequestId = httpRequestEvent.httpRequestId
                             , response =
                                 { statusCode = 400
-                                , bodyAsBase64 =
+                                , body =
                                     ("Failed to decode request: " ++ (decodeError |> Json.Decode.errorToString))
                                         |> encodeStringToBytes
-                                        |> Base64.fromBytes
+                                        |> Just
                                 , headersToAdd = []
                                 }
                             }
@@ -252,20 +252,24 @@ updateForHttpRequestEventWithoutPendingHttpRequests httpRequestEvent stateBefore
         Just (FrontendBackendInterface.StaticContentRoute contentName) ->
             let
                 httpResponse =
-                    case availableStaticContent |> Dict.get contentName of
+                    case Dict.get contentName availableStaticContent of
                         Nothing ->
                             { statusCode = 404
-                            , bodyAsBase64 =
+                            , body =
                                 ("Found no content with the name " ++ contentName)
                                     |> encodeStringToBytes
-                                    |> Base64.fromBytes
+                                    |> Just
                             , headersToAdd = []
                             }
 
                         Just content ->
                             { statusCode = 200
-                            , bodyAsBase64 = content |> Base64.fromBytes
-                            , headersToAdd = [ { name = "Cache-Control", values = [ "public, max-age=31536000" ] } ]
+                            , body = Just content
+                            , headersToAdd =
+                                [ { name = "Cache-Control"
+                                  , values = [ "public, max-age=31536000" ]
+                                  }
+                                ]
                             }
             in
             ( stateBefore

@@ -7,6 +7,8 @@ For the latest version of the documentation, see <https://pine-vm.org>
 
 -}
 
+import Bytes
+
 
 {-| Use the type `WebServiceConfig` on a declaration named `webServiceMain` to declare a web service program in an Elm module.
 A web service can subscribe to incoming HTTP requests and respond to them. It can also start and manage volatile processes to integrate other software.
@@ -54,7 +56,7 @@ type alias HttpRequestContext =
 type alias HttpRequestProperties =
     { method : String
     , uri : String
-    , bodyAsBase64 : Maybe String
+    , body : Maybe Bytes.Bytes
     , headers : List HttpHeader
     }
 
@@ -67,7 +69,7 @@ type alias RespondToHttpRequestStruct =
 
 type alias HttpResponse =
     { statusCode : Int
-    , bodyAsBase64 : Maybe String
+    , body : Maybe Bytes.Bytes
     , headersToAdd : List HttpHeader
     }
 

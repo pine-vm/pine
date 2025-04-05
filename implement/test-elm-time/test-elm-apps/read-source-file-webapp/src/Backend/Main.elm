@@ -33,10 +33,11 @@ subscriptions _ =
 updateForHttpRequestEvent : Platform.WebService.HttpRequestEventStruct -> State -> ( State, Platform.WebService.Commands State )
 updateForHttpRequestEvent httpRequestEvent stateBefore =
     let
+        response : Platform.WebService.HttpResponse
         response =
             if (httpRequestEvent.request.method |> String.toLower) /= "get" then
                 { statusCode = 405
-                , bodyAsBase64 = Nothing
+                , body = Nothing
                 , headersToAdd = []
                 }
 
@@ -44,11 +45,11 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
                 case Url.fromString httpRequestEvent.request.uri of
                     Nothing ->
                         { statusCode = 500
-                        , bodyAsBase64 =
+                        , body =
                             "Failed to parse URL"
                                 |> Bytes.Encode.string
                                 |> Bytes.Encode.encode
-                                |> Base64.fromBytes
+                                |> Just
                         , headersToAdd = []
                         }
 
@@ -56,11 +57,11 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
                         case httpRequestEvent.request.uri |> String.split "/" |> List.reverse |> List.head of
                             Just "readme-md" ->
                                 { statusCode = 200
-                                , bodyAsBase64 =
+                                , body =
                                     CompilationInterface.SourceFiles.file____README_md.utf8
                                         |> Bytes.Encode.string
                                         |> Bytes.Encode.encode
-                                        |> Base64.fromBytes
+                                        |> Just
                                 , headersToAdd =
                                     [ { name = "Cache-Control", values = [ "public, max-age=3600" ] }
                                     ]
@@ -68,11 +69,11 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
 
                             Just "alpha-file-via-other-interface-module" ->
                                 { statusCode = 200
-                                , bodyAsBase64 =
+                                , body =
                                     CompilationInterface.CustomName.SourceFiles.file____static_content_alpha_file_in_directory_txt.utf8
                                         |> Bytes.Encode.string
                                         |> Bytes.Encode.encode
-                                        |> Base64.fromBytes
+                                        |> Just
                                 , headersToAdd =
                                     [ { name = "Cache-Control", values = [ "public, max-age=3600" ] }
                                     ]
@@ -88,7 +89,7 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
                                 of
                                     Just ( _, matchingFile ) ->
                                         { statusCode = 200
-                                        , bodyAsBase64 = Just matchingFile.base64
+                                        , body = Base64.toBytes matchingFile.base64
                                         , headersToAdd =
                                             [ { name = "Cache-Control", values = [ "public, max-age=3600" ] }
                                             ]
@@ -96,7 +97,7 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
 
                                     Nothing ->
                                         { statusCode = 404
-                                        , bodyAsBase64 = Nothing
+                                        , body = Nothing
                                         , headersToAdd = []
                                         }
 

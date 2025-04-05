@@ -3,7 +3,8 @@ module Backend.Main exposing
     , webServiceMain
     )
 
-import Base64
+import Bytes
+import Bytes.Decode
 import Bytes.Encode
 import Platform.WebService
 
@@ -251,7 +252,7 @@ continueWithVolatileProcess { volatileProcessId } httpRequestEvent stateBefore =
             ( stateBefore, [] )
 
         Nothing ->
-            case httpRequestEvent.request.bodyAsBase64 of
+            case httpRequestEvent.request.body of
                 Nothing ->
                     ( stateBefore
                     , [ httpResponseCommandInternalServerError
@@ -260,8 +261,8 @@ continueWithVolatileProcess { volatileProcessId } httpRequestEvent stateBefore =
                       ]
                     )
 
-                Just bodyAsBase64 ->
-                    case Base64.toString bodyAsBase64 of
+                Just body ->
+                    case Bytes.Decode.decode (Bytes.Decode.string (Bytes.width body)) body of
                         Nothing ->
                             ( stateBefore
                             , [ httpResponseCommandInternalServerError
@@ -280,7 +281,7 @@ continueWithVolatileProcess { volatileProcessId } httpRequestEvent stateBefore =
                               }
                             , [ Platform.WebService.WriteToVolatileProcessNativeStdInCommand
                                     { processId = volatileProcessId
-                                    , stdInBase64 = bodyAsBase64
+                                    , stdInBytes = body
                                     , update = updateForWriteToVolatileProcess httpRequestEvent
                                     }
                               ]
@@ -321,6 +322,7 @@ updateForReadFromVolatileProcess :
     -> ( State, Platform.WebService.Commands State )
 updateForReadFromVolatileProcess pendingHttpRequest readFromProcessResponse stateBefore =
     let
+        httpResponse : Platform.WebService.HttpResponse
         httpResponse =
             case readFromProcessResponse of
                 Err Platform.WebService.ProcessNotFound ->
@@ -336,15 +338,10 @@ updateForReadFromVolatileProcess pendingHttpRequest readFromProcessResponse stat
                                 ("Process exited unexpected with code " ++ String.fromInt processExitCode)
 
                         Nothing ->
-                            case Base64.toString readOk.stdOutBase64 of
-                                Nothing ->
-                                    httpResponseInternalServerError "Failed to decode stdout as Base64"
-
-                                Just stdoutString ->
-                                    { statusCode = 200
-                                    , bodyAsBase64 = bodyFromString stdoutString
-                                    , headersToAdd = []
-                                    }
+                            { statusCode = 200
+                            , body = Just readOk.stdOutBytes
+                            , headersToAdd = []
+                            }
     in
     ( stateBefore
     , [ Platform.WebService.RespondToHttpRequest
@@ -369,11 +366,11 @@ httpResponseCommandInternalServerError requestEvent errorMessage =
 httpResponseInternalServerError : String -> Platform.WebService.HttpResponse
 httpResponseInternalServerError errorMessage =
     { statusCode = 500
-    , bodyAsBase64 = bodyFromString errorMessage
+    , body = Just (bodyFromString errorMessage)
     , headersToAdd = []
     }
 
 
-bodyFromString : String -> Maybe String
+bodyFromString : String -> Bytes.Bytes
 bodyFromString =
-    Bytes.Encode.string >> Bytes.Encode.encode >> Base64.fromBytes
+    Bytes.Encode.string >> Bytes.Encode.encode

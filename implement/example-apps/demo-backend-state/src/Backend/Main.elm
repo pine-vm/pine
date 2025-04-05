@@ -56,13 +56,15 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
                     |> Maybe.withDefault False
             then
                 { statusCode = 200
-                , bodyAsBase64 = Just CompilationInterface.ElmMake.elm_make____src_Frontend_Main_elm.debug.base64
+                , body =
+                    CompilationInterface.ElmMake.elm_make____src_Frontend_Main_elm.debug.base64
+                        |> Base64.toBytes
                 , headersToAdd = []
                 }
 
             else
                 { statusCode = 200
-                , bodyAsBase64 =
+                , body =
                     [ String.trimLeft Common.describeApp
                     , "I received "
                         ++ (state.httpRequestsCount |> String.fromInt)
@@ -73,7 +75,7 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
                         |> String.join "\n"
                         |> Bytes.Encode.string
                         |> Bytes.Encode.encode
-                        |> Base64.fromBytes
+                        |> Just
                 , headersToAdd = []
                 }
     in

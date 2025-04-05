@@ -627,6 +627,7 @@ public static class PopularValues
         "uri",
         "headers",
         "bodyAsBase64",
+        "body",
 
         "Commands",
         "Command",

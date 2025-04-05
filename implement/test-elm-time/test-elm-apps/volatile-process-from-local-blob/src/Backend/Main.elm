@@ -3,7 +3,7 @@ module Backend.Main exposing
     , webServiceMain
     )
 
-import Base64
+import Bytes
 import Bytes.Encode
 import CompilationInterface.SourceFiles
 import Platform.WebService
@@ -69,7 +69,9 @@ updateForCreateVolatileProcess pendingHttpRequest createVolatileProcessResponse 
             ( stateBefore
             , [ Platform.WebService.RespondToHttpRequest
                     { httpRequestId = pendingHttpRequest.httpRequestId
-                    , response = httpResponseInternalServerError ("Error creating volatile process: " ++ exceptionToString)
+                    , response =
+                        httpResponseInternalServerError
+                            ("Error creating volatile process: " ++ exceptionToString)
                     }
               ]
             )
@@ -85,19 +87,28 @@ updateForCreateVolatileProcess pendingHttpRequest createVolatileProcessResponse 
 updateForRequestToVolatileProcess : Platform.WebService.HttpRequestEventStruct -> Platform.WebService.RequestToVolatileProcessResult -> State -> ( State, Platform.WebService.Commands State )
 updateForRequestToVolatileProcess pendingHttpRequest requestToVolatileProcessResponse stateBefore =
     let
+        httpResponse : Platform.WebService.HttpResponse
         httpResponse =
             case requestToVolatileProcessResponse of
                 Err Platform.WebService.ProcessNotFound ->
                     httpResponseInternalServerError "Error running in volatile process: ProcessNotFound"
 
+                Err (Platform.WebService.RequestToVolatileProcessOtherError err) ->
+                    httpResponseInternalServerError
+                        ("Error running in volatile process: " ++ err)
+
                 Ok requestToVolatileProcessComplete ->
                     case requestToVolatileProcessComplete.exceptionToString of
                         Just exceptionToString ->
-                            httpResponseInternalServerError ("Error running in volatile process: Exception: " ++ exceptionToString)
+                            httpResponseInternalServerError
+                                ("Error running in volatile process: Exception: " ++ exceptionToString)
 
                         Nothing ->
                             { statusCode = 200
-                            , bodyAsBase64 = Maybe.andThen bodyFromString requestToVolatileProcessComplete.returnValueToString
+                            , body =
+                                Maybe.map
+                                    bodyFromString
+                                    requestToVolatileProcessComplete.returnValueToString
                             , headersToAdd = []
                             }
     in
@@ -113,11 +124,11 @@ updateForRequestToVolatileProcess pendingHttpRequest requestToVolatileProcessRes
 httpResponseInternalServerError : String -> Platform.WebService.HttpResponse
 httpResponseInternalServerError errorMessage =
     { statusCode = 500
-    , bodyAsBase64 = bodyFromString errorMessage
+    , body = Just (bodyFromString errorMessage)
     , headersToAdd = []
     }
 
 
-bodyFromString : String -> Maybe String
+bodyFromString : String -> Bytes.Bytes
 bodyFromString =
-    Bytes.Encode.string >> Bytes.Encode.encode >> Base64.fromBytes
+    Bytes.Encode.string >> Bytes.Encode.encode

@@ -5,6 +5,7 @@ module Backend.Main exposing
 
 import Base64
 import Build
+import Bytes
 import Bytes.Encode
 import FileTree
 import Platform.WebService
@@ -35,9 +36,6 @@ updateForHttpRequestEvent :
     -> ( State, Platform.WebService.Commands State )
 updateForHttpRequestEvent httpRequestEvent stateBefore =
     let
-        bodyFromString =
-            Bytes.Encode.string >> Bytes.Encode.encode >> Base64.fromBytes
-
         staticContentHttpHeaders { contentType, contentEncoding } =
             { cacheMaxAgeMinutes = Just (60 * 24)
             , contentType = contentType
@@ -45,11 +43,13 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
             }
 
         httpResponseOkWithStringContent stringContent httpResponseHeaders =
-            httpResponseOkWithBodyAsBase64 (bodyFromString stringContent) httpResponseHeaders
+            httpResponseOkWithBody
+                (Just (bodyFromString stringContent))
+                httpResponseHeaders
 
-        httpResponseOkWithBodyAsBase64 bodyAsBase64 contentConfig =
+        httpResponseOkWithBody body contentConfig =
             { statusCode = 200
-            , bodyAsBase64 = bodyAsBase64
+            , body = body
             , headersToAdd =
                 [ ( "Cache-Control"
                   , contentConfig.cacheMaxAgeMinutes
@@ -104,9 +104,9 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
                             _ ->
                                 Nothing
 
-        cachedResponse { filePath } bodyAsBase64 =
+        cachedResponse { filePath } body =
             { statusCode = 200
-            , bodyAsBase64 = bodyAsBase64
+            , body = body
             , headersToAdd =
                 [ [ { name = "Cache-Control", values = [ "public, max-age=3600" ] }
                   ]
@@ -117,10 +117,11 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
                     |> List.concat
             }
 
+        response : Platform.WebService.HttpResponse
         response =
             if (httpRequestEvent.request.method |> String.toLower) /= "get" then
                 { statusCode = 405
-                , bodyAsBase64 = Nothing
+                , body = Nothing
                 , headersToAdd = []
                 }
 
@@ -128,11 +129,11 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
                 case Url.fromString httpRequestEvent.request.uri of
                     Nothing ->
                         { statusCode = 500
-                        , bodyAsBase64 =
+                        , body =
                             "Failed to parse URL"
                                 |> Bytes.Encode.string
                                 |> Bytes.Encode.encode
-                                |> Base64.fromBytes
+                                |> Just
                         , headersToAdd = []
                         }
 
@@ -145,7 +146,7 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
                         of
                             Just ( filePath, matchingFile ) ->
                                 matchingFile.base64
-                                    |> Just
+                                    |> Base64.toBytes
                                     |> cachedResponse { filePath = filePath }
 
                             Nothing ->
@@ -159,3 +160,8 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
     ( stateBefore
     , [ Platform.WebService.RespondToHttpRequest httpResponse ]
     )
+
+
+bodyFromString : String -> Bytes.Bytes
+bodyFromString =
+    Bytes.Encode.string >> Bytes.Encode.encode

@@ -188,10 +188,10 @@ public class PublicAppState(
                 return
                     new WebServiceInterface.HttpResponse(
                         StatusCode: 500,
-                        BodyAsBase64: Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
+                        Body: System.Text.Encoding.UTF8.GetBytes(
                             "The app did not return an HTTP response within " +
                             (int)waitForHttpResponseClock.Elapsed.TotalSeconds +
-                            " seconds.")),
+                            " seconds."),
                         HeadersToAdd: []);
             }
 
@@ -227,38 +227,7 @@ public class PublicAppState(
 
             context.Response.Headers.XPoweredBy = "Pine";
 
-            ReadOnlyMemory<byte>? contentAsByteArray = null;
-
-            if (httpResponse.BodyAsBase64 is { } responseBodyAsBase64)
-            {
-                var responseBodyAsBase64Utf8 = System.Text.Encoding.UTF8.GetBytes(responseBodyAsBase64);
-
-                var buffer = new byte[responseBodyAsBase64.Length * 3 / 4];
-
-                contentAsByteArray =
-                    System.Buffers.Text.Base64.DecodeFromUtf8(
-                        responseBodyAsBase64Utf8,
-                        buffer,
-                        out var bytesConsumed,
-                        out var bytesWritten)
-                    switch
-                    {
-                        System.Buffers.OperationStatus.Done =>
-                        buffer.AsMemory(0, bytesWritten),
-
-                        System.Buffers.OperationStatus.InvalidData =>
-                            throw new FormatException(
-                                "Failed to convert from base64. bytesConsumed=" + bytesConsumed +
-                                ", bytesWritten=" + bytesWritten +
-                                ", input.length=" + responseBodyAsBase64.Length + ", input:\n" +
-                                System.Text.Json.JsonSerializer.Serialize(responseBodyAsBase64)),
-
-                        var otherStatus =>
-                        throw new NotImplementedException("Unexpected OperationStatus: " + otherStatus)
-                    };
-
-                contentAsByteArray = buffer.AsMemory(0, bytesWritten);
-            }
+            ReadOnlyMemory<byte>? contentAsByteArray = httpResponse.Body;
 
             context.Response.ContentLength = contentAsByteArray?.Length ?? 0;
 
@@ -277,7 +246,7 @@ public class PublicAppState(
             .Select(header => header.Name.Length + header.Values.Sum(value => value.Length))
             .Sum();
 
-        var bodySize = httpRequest.BodyAsBase64?.Length ?? 0;
+        var bodySize = httpRequest.Body?.Length ?? 0;
 
         return
             httpRequest.Method.Length +

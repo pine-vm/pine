@@ -32,13 +32,14 @@ updateForHttpRequestEvent :
     -> ( State, Platform.WebService.Commands State )
 updateForHttpRequestEvent httpRequestEvent state =
     let
+        httpResponse : Platform.WebService.HttpResponse
         httpResponse =
             { statusCode = 200
-            , bodyAsBase64 =
+            , body =
                 "Hello, World!"
                     |> Bytes.Encode.string
                     |> Bytes.Encode.encode
-                    |> Base64.fromBytes
+                    |> Just
             , headersToAdd = []
             }
     in

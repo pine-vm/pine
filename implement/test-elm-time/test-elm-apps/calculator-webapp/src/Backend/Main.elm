@@ -4,7 +4,6 @@ module Backend.Main exposing
     )
 
 import Backend.State
-import Base64
 import Bytes
 import Bytes.Decode
 import Bytes.Encode
@@ -49,8 +48,8 @@ updateForHttpRequestEvent httpRequestEvent stateBeforeCountHttpRequest =
 
         ( state, result ) =
             case
-                httpRequestEvent.request.bodyAsBase64
-                    |> Maybe.map (Base64.toBytes >> Maybe.map (decodeBytesToString >> Maybe.withDefault "Failed to decode bytes to string") >> Maybe.withDefault "Failed to decode from base64")
+                httpRequestEvent.request.body
+                    |> Maybe.map (decodeBytesToString >> Maybe.withDefault "Failed to decode bytes to string")
                     |> Maybe.withDefault "Missing HTTP body"
                     |> Json.Decode.decodeString CompilationInterface.GenerateJsonConverters.jsonDecodeCalculatorOperation
             of
@@ -95,7 +94,11 @@ updateForHttpRequestEvent httpRequestEvent stateBeforeCountHttpRequest =
             { httpRequestId = httpRequestEvent.httpRequestId
             , response =
                 { statusCode = httpResponseCode
-                , bodyAsBase64 = httpResponseBodyString |> Bytes.Encode.string |> Bytes.Encode.encode |> Base64.fromBytes
+                , body =
+                    httpResponseBodyString
+                        |> Bytes.Encode.string
+                        |> Bytes.Encode.encode
+                        |> Just
                 , headersToAdd = []
                 }
             }

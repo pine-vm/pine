@@ -6,19 +6,6 @@ using Pine.Core;
 
 namespace ElmTime.Platform.WebService.InterfaceToHost;
 
-[JsonConverter(typeof(JsonConverterForChoiceType))]
-public abstract record BackendEventStruct
-{
-    public record PosixTimeHasArrivedEvent(PosixTimeHasArrivedEventStruct Structure)
-        : BackendEventStruct;
-
-    public record HttpRequestEvent(HttpRequestEventStruct Struct)
-        : BackendEventStruct;
-
-    public record TaskCompleteEvent(ResultFromTaskWithId Result)
-        : BackendEventStruct;
-}
-
 public record BackendEventResponseStruct(
     Maybe<NotifyWhenPosixTimeHasArrivedRequestStruct> notifyWhenPosixTimeHasArrived,
     StartTask[] startTasks,

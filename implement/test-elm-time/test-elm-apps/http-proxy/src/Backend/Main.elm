@@ -5,6 +5,7 @@ module Backend.Main exposing
 
 import Backend.HttpViaVolatileProcess as HttpViaVolatileProcess
 import Base64
+import Bytes
 import Bytes.Encode
 import Json.Decode
 import Platform.WebService
@@ -64,9 +65,11 @@ httpRequestForwardRequestsFromState state =
                         { httpRequestId = httpRequestToForward.httpRequestId
                         , response =
                             { statusCode = 500
-                            , bodyAsBase64 =
-                                bodyBase64FromString
-                                    ("Failed to create volatile process: " ++ createVolatileProcessErr)
+                            , body =
+                                Just
+                                    (bodyFromString
+                                        ("Failed to create volatile process: " ++ createVolatileProcessErr)
+                                    )
                             , headersToAdd = []
                             }
                         }
@@ -88,11 +91,11 @@ httpRequestForwardRequestsFromState state =
                                 { httpRequestId = httpRequestToForward.httpRequestId
                                 , response =
                                     { statusCode = 400
-                                    , bodyAsBase64 =
-                                        "Where to should I forward this HTTP request? Use the 'forward-to' HTTP header to specify a destination."
-                                            |> Bytes.Encode.string
-                                            |> Bytes.Encode.encode
-                                            |> Base64.fromBytes
+                                    , body =
+                                        Just
+                                            (bodyFromString
+                                                "Where to should I forward this HTTP request? Use the 'forward-to' HTTP header to specify a destination."
+                                            )
                                     , headersToAdd = []
                                     }
                                 }
@@ -104,7 +107,13 @@ httpRequestForwardRequestsFromState state =
                                     { uri = forwardTo
                                     , method = httpRequestToForward.request.method
                                     , headers = httpRequestToForward.request.headers
-                                    , bodyAsBase64 = httpRequestToForward.request.bodyAsBase64
+                                    , bodyAsBase64 =
+                                        case httpRequestToForward.request.body of
+                                            Nothing ->
+                                                Nothing
+
+                                            Just body ->
+                                                Base64.fromBytes body
                                     }
                             in
                             [ Platform.WebService.RequestToVolatileProcess
@@ -136,11 +145,20 @@ updateForRequestToVolatileProcess requestToVolatileProcessResponse stateBefore =
 
         Just httpRequestToForward ->
             let
+                httpResponse : Platform.WebService.HttpResponse
                 httpResponse =
                     case requestToVolatileProcessResponse of
                         Err Platform.WebService.ProcessNotFound ->
                             { statusCode = 500
-                            , bodyAsBase64 = bodyBase64FromString "Error running in volatile process: ProcessNotFound"
+                            , body =
+                                Just (bodyFromString "Error running in volatile process: ProcessNotFound")
+                            , headersToAdd = []
+                            }
+
+                        Err (Platform.WebService.RequestToVolatileProcessOtherError err) ->
+                            { statusCode = 500
+                            , body =
+                                Just (bodyFromString ("Error running in volatile process: " ++ err))
                             , headersToAdd = []
                             }
 
@@ -148,7 +166,8 @@ updateForRequestToVolatileProcess requestToVolatileProcessResponse stateBefore =
                             case requestToVolatileProcessComplete.exceptionToString of
                                 Just exceptionToString ->
                                     { statusCode = 500
-                                    , bodyAsBase64 = bodyBase64FromString ("Exception in volatile process: " ++ exceptionToString)
+                                    , body =
+                                        Just (bodyFromString ("Exception in volatile process: " ++ exceptionToString))
                                     , headersToAdd = []
                                     }
 
@@ -162,8 +181,13 @@ updateForRequestToVolatileProcess requestToVolatileProcessResponse stateBefore =
                                     case returnValueAsHttpResponseResult of
                                         Err decodeError ->
                                             { statusCode = 500
-                                            , bodyAsBase64 =
-                                                bodyBase64FromString ("Error decoding response from volatile process: " ++ (decodeError |> Json.Decode.errorToString))
+                                            , body =
+                                                Just
+                                                    (bodyFromString
+                                                        ("Error decoding response from volatile process: "
+                                                            ++ (decodeError |> Json.Decode.errorToString)
+                                                        )
+                                                    )
                                             , headersToAdd = []
                                             }
 
@@ -174,7 +198,13 @@ updateForRequestToVolatileProcess requestToVolatileProcessResponse stateBefore =
                                                         |> List.filter (.name >> String.toLower >> (/=) "transfer-encoding")
                                             in
                                             { statusCode = 200
-                                            , bodyAsBase64 = volatileProcessHttpResponse.bodyAsBase64
+                                            , body =
+                                                case volatileProcessHttpResponse.bodyAsBase64 of
+                                                    Nothing ->
+                                                        Nothing
+
+                                                    Just bodyAsBase64 ->
+                                                        Base64.toBytes bodyAsBase64
                                             , headersToAdd = headersToAdd
                                             }
             in
@@ -187,6 +217,6 @@ updateForRequestToVolatileProcess requestToVolatileProcessResponse stateBefore =
             )
 
 
-bodyBase64FromString : String -> Maybe String
-bodyBase64FromString =
-    Bytes.Encode.string >> Bytes.Encode.encode >> Base64.fromBytes
+bodyFromString : String -> Bytes.Bytes
+bodyFromString =
+    Bytes.Encode.string >> Bytes.Encode.encode

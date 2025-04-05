@@ -76,7 +76,7 @@ public class ExampleAppsTests
                     (
                         Method: "GET",
                         Uri: "/",
-                        BodyAsBase64: null,
+                        Body: null,
                         Headers: []
                     )
                 ));
@@ -88,19 +88,16 @@ public class ExampleAppsTests
             throw new Exception("Expected a HTTP response command.");
         }
 
-        var responseBodyBase64 =
-            httpResponseCommand.Respond.Response.BodyAsBase64;
+        var responseBody =
+            httpResponseCommand.Respond.Response.Body;
 
-        if (responseBodyBase64 is null)
+        if (responseBody is null)
         {
             throw new Exception("Expected a response body.");
         }
 
-        var responseBody =
-            Convert.FromBase64String(responseBodyBase64);
-
         var responseContentAsString =
-            System.Text.Encoding.UTF8.GetString(responseBody);
+            System.Text.Encoding.UTF8.GetString(responseBody.Value.Span);
 
         Assert.AreEqual(
             200,
@@ -180,7 +177,7 @@ public class ExampleAppsTests
                     (
                         Method: "POST",
                         Uri: "http://demohost/api",
-                        BodyAsBase64: null,
+                        Body: null,
                         Headers: []
                     )
                 ));
@@ -211,10 +208,9 @@ public class ExampleAppsTests
                 (
                     Method: "POST",
                     Uri: "http://demohost/api",
-                    BodyAsBase64:
-                    Convert.ToBase64String(
-                        System.Text.Encoding.UTF8.GetBytes(
-                            System.Text.Json.JsonSerializer.Serialize(formatRequest))),
+                    Body:
+                    System.Text.Encoding.UTF8.GetBytes(
+                        System.Text.Json.JsonSerializer.Serialize(formatRequest)),
                     Headers: []
                 )
             ));
@@ -239,19 +235,16 @@ public class ExampleAppsTests
                 httpResponses.Count + " HTTP response commands.");
         }
 
-        var formatHttpResponseBodyBase64 =
-            formatResponseCommand.Respond.Response.BodyAsBase64;
+        var formatHttpResponseBody =
+            formatResponseCommand.Respond.Response.Body;
 
-        if (formatHttpResponseBodyBase64 is null)
+        if (formatHttpResponseBody is null)
         {
             throw new Exception("Expected a response body.");
         }
 
-        var formatHttpResponseBody =
-            Convert.FromBase64String(formatHttpResponseBodyBase64);
-
         var formatResponseContentAsString =
-            System.Text.Encoding.UTF8.GetString(formatHttpResponseBody);
+            System.Text.Encoding.UTF8.GetString(formatHttpResponseBody.Value.Span);
 
         Assert.AreEqual(
             200,

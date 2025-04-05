@@ -51,8 +51,9 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
                     |> Maybe.withDefault False
             then
                 { statusCode = 200
-                , bodyAsBase64 =
-                    Just CompilationInterface.ElmMake.elm_make____src_Frontend_Main_elm.debug.base64
+                , body =
+                    CompilationInterface.ElmMake.elm_make____src_Frontend_Main_elm.debug.base64
+                        |> Base64.toBytes
                 , headersToAdd =
                     [ { name = "Content-Type", values = [ "text/html" ] }
                     ]
@@ -60,7 +61,7 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
 
             else
                 { statusCode = 200
-                , bodyAsBase64 =
+                , body =
                     [ CompilationInterface.SourceFiles.file____README_md.utf8
                     , ""
                     , "This backend process received "
@@ -70,7 +71,7 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
                         |> String.join "\n"
                         |> Bytes.Encode.string
                         |> Bytes.Encode.encode
-                        |> Base64.fromBytes
+                        |> Just
                 , headersToAdd = []
                 }
     in

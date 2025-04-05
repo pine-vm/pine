@@ -546,7 +546,13 @@ public class WebServiceTests
                     new ElmTime.Platform.WebService.InterfaceToHost.HttpRequest(
                         method: requestRecord.Method,
                         uri: requestRecord.Uri,
-                        bodyAsBase64: Maybe.NothingFromNull(requestRecord.BodyAsBase64),
+                        bodyAsBase64:
+                        Maybe.NothingFromNull(
+                            requestRecord.Body is { } body
+                            ?
+                            Convert.ToBase64String(body.Span)
+                            :
+                            null),
                         headers:
                         [..requestRecord.Headers
                         .Select(h => new ElmTime.Platform.WebService.InterfaceToHost.HttpHeader(
@@ -1763,7 +1769,7 @@ public class WebServiceTests
                 new WebServiceInterface.HttpRequestProperties(
                     Method: "POST",
                     Uri: "/test",
-                    BodyAsBase64: null,
+                    Body: null,
                     Headers:
                     [new WebServiceInterface.HttpHeader(
                         Name: "delay-milliseconds",

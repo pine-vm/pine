@@ -5,6 +5,7 @@ module Backend.Main exposing
 
 import Backend.State
 import Base64
+import Bytes
 import Bytes.Encode
 import CompilationInterface.ElmMake
 import CompilationInterface.GenerateJsonConverters
@@ -49,9 +50,9 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
             , contentEncoding = contentEncoding
             }
 
-        httpResponseOkWithBodyAsBase64 bodyAsBase64 contentConfig =
+        httpResponseOkWithBody body contentConfig =
             { statusCode = 200
-            , bodyAsBase64 = bodyAsBase64
+            , body = body
             , headersToAdd =
                 [ ( "Cache-Control"
                   , contentConfig.cacheMaxAgeMinutes
@@ -69,8 +70,8 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
             }
 
         frontendHtmlDocumentResponse frontendConfig =
-            httpResponseOkWithBodyAsBase64
-                (Just (frontendHtmlDocumentBase64 frontendConfig))
+            httpResponseOkWithBody
+                (Base64.toBytes (frontendHtmlDocumentBase64 frontendConfig))
                 (staticContentHttpHeaders { contentType = "text/html", contentEncoding = Nothing })
 
         continueWithStaticHttpResponse httpResponse =
@@ -91,22 +92,29 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
             case maybeEntryId of
                 Nothing ->
                     let
+                        responseDict : List ( Int, { length : Int } )
                         responseDict =
                             stateBefore.store
-                                |> Dict.map (\_ entry -> { length = (String.length entry.entryBase64 // 4) * 3 })
+                                |> Dict.toList
+                                |> List.map
+                                    (\( entryId, entry ) ->
+                                        ( entryId
+                                        , { length = Bytes.width entry.entryBytes }
+                                        )
+                                    )
                     in
                     ( stateBefore
                     , [ Platform.WebService.RespondToHttpRequest
                             { httpRequestId = httpRequestEvent.httpRequestId
                             , response =
                                 { statusCode = 200
-                                , bodyAsBase64 =
+                                , body =
                                     responseDict
                                         |> CompilationInterface.GenerateJsonConverters.jsonEncodeGetDirectoryResponse
                                         |> Json.Encode.encode 0
                                         |> Bytes.Encode.string
                                         |> Bytes.Encode.encode
-                                        |> Base64.fromBytes
+                                        |> Just
                                 , headersToAdd = []
                                 }
                             }
@@ -123,7 +131,7 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
                                             { httpRequestId = httpRequestEvent.httpRequestId
                                             , response =
                                                 { statusCode = 404
-                                                , bodyAsBase64 = Nothing
+                                                , body = Nothing
                                                 , headersToAdd = []
                                                 }
                                             }
@@ -135,7 +143,8 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
                                     , [ Platform.WebService.RespondToHttpRequest
                                             { httpRequestId = httpRequestEvent.httpRequestId
                                             , response =
-                                                httpResponseOkWithBodyAsBase64 (Just entry.entryBase64)
+                                                httpResponseOkWithBody
+                                                    (Just entry.entryBytes)
                                                     { cacheMaxAgeMinutes = Nothing
                                                     , contentType = "text/html"
                                                     , contentEncoding = Nothing
@@ -145,31 +154,34 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
                                     )
 
                         "post" ->
-                            case httpRequestEvent.request.bodyAsBase64 of
+                            case httpRequestEvent.request.body of
                                 Nothing ->
                                     ( stateBefore
                                     , [ Platform.WebService.RespondToHttpRequest
                                             { httpRequestId = httpRequestEvent.httpRequestId
                                             , response =
                                                 { statusCode = 400
-                                                , bodyAsBase64 = Nothing
+                                                , body = Nothing
                                                 , headersToAdd = []
                                                 }
                                             }
                                       ]
                                     )
 
-                                Just entryContentBase64 ->
+                                Just entryBytes ->
                                     let
                                         store =
-                                            stateBefore.store |> Dict.insert entryId { entryBase64 = entryContentBase64 }
+                                            Dict.insert
+                                                entryId
+                                                { entryBytes = entryBytes }
+                                                stateBefore.store
                                     in
                                     ( { stateBefore | store = store }
                                     , [ Platform.WebService.RespondToHttpRequest
                                             { httpRequestId = httpRequestEvent.httpRequestId
                                             , response =
                                                 { statusCode = 200
-                                                , bodyAsBase64 = Nothing
+                                                , body = Nothing
                                                 , headersToAdd = []
                                                 }
                                             }
@@ -182,7 +194,7 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
                                     { httpRequestId = httpRequestEvent.httpRequestId
                                     , response =
                                         { statusCode = 405
-                                        , bodyAsBase64 = Nothing
+                                        , body = Nothing
                                         , headersToAdd = []
                                         }
                                     }

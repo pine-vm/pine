@@ -3,7 +3,6 @@ module Backend.Main exposing
     , webServiceMain
     )
 
-import Base64
 import Bytes
 import Bytes.Decode
 import Bytes.Encode
@@ -39,8 +38,8 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
                 "post" ->
                     let
                         addition =
-                            httpRequestEvent.request.bodyAsBase64
-                                |> Maybe.map (Base64.toBytes >> Maybe.map (decodeBytesToString >> Maybe.withDefault "Failed to decode bytes to string") >> Maybe.withDefault "Failed to decode from base64")
+                            httpRequestEvent.request.body
+                                |> Maybe.map (decodeBytesToString >> Maybe.withDefault "Failed to decode bytes to string")
                                 |> Maybe.withDefault ""
                     in
                     stateBefore ++ addition
@@ -48,11 +47,16 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
                 _ ->
                     stateBefore
 
+        httpResponse : Platform.WebService.RespondToHttpRequestStruct
         httpResponse =
             { httpRequestId = httpRequestEvent.httpRequestId
             , response =
                 { statusCode = 200
-                , bodyAsBase64 = state |> Bytes.Encode.string |> Bytes.Encode.encode |> Base64.fromBytes
+                , body =
+                    state
+                        |> Bytes.Encode.string
+                        |> Bytes.Encode.encode
+                        |> Just
                 , headersToAdd = []
                 }
             }

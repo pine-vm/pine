@@ -92,7 +92,7 @@ public static class Asp
         (
             Method: httpRequest.Method,
             Uri: httpRequest.GetDisplayUrl(),
-            BodyAsBase64: Convert.ToBase64String(httpRequestBody.Span),
+            Body: httpRequestBody,
             Headers: httpHeaders
         );
     }

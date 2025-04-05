@@ -75,9 +75,8 @@ public class ElmWebServiceUsingVolatileProcessNativeTest
                 (
                     Method: "POST",
                     Uri: "http://demohost/api",
-                    BodyAsBase64:
-                    Convert.ToBase64String(
-                        System.Text.Encoding.UTF8.GetBytes("[ 1,  3, 4 ]\n")),
+                    Body:
+                    System.Text.Encoding.UTF8.GetBytes("[ 1,  3, 4 ]\n"),
                     Headers: []
                 )
             ));
@@ -110,19 +109,16 @@ public class ElmWebServiceUsingVolatileProcessNativeTest
                 httpResponses.Count + " HTTP response commands.");
         }
 
-        var formatHttpResponseBodyBase64 =
-            formatResponseCommand.Respond.Response.BodyAsBase64;
+        var formatHttpResponseBody =
+            formatResponseCommand.Respond.Response.Body;
 
-        if (formatHttpResponseBodyBase64 is null)
+        if (formatHttpResponseBody is null)
         {
             throw new Exception("Expected a response body.");
         }
 
-        var formatHttpResponseBody =
-            Convert.FromBase64String(formatHttpResponseBodyBase64);
-
         var formatResponseContentAsString =
-            System.Text.Encoding.UTF8.GetString(formatHttpResponseBody);
+            System.Text.Encoding.UTF8.GetString(formatHttpResponseBody.Value.Span);
 
         Assert.AreEqual(
             200,

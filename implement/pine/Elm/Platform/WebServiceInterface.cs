@@ -23,6 +23,8 @@ For the latest version of the documentation, see <https://pine-vm.org>
 
 -}
 
+import Bytes
+
 
 {-| Use the type `WebServiceConfig` on a declaration named `webServiceMain` to declare a web service program in an Elm module.
 A web service can subscribe to incoming HTTP requests and respond to them. It can also start and manage volatile processes to integrate other software.
@@ -50,7 +52,15 @@ type alias Commands state =
 type Command state
     = RespondToHttpRequest RespondToHttpRequestStruct
     | CreateVolatileProcess (CreateVolatileProcessStruct state)
+      {-
+         We use the `runtimeIdentifier` and `osPlatform` properties to select the right executable files when creating a (native) volatile process.
+         The properties returned by this command comes from the `RuntimeInformation` documented at <https://learn.microsoft.com/en-us/dotnet/api/system.runtime.interopservices.runtimeinformation>
+      -}
+    | ReadRuntimeInformationCommand (ReadRuntimeInformationCommandStruct state)
+    | CreateVolatileProcessNativeCommand (CreateVolatileProcessNativeCommandStruct state)
     | RequestToVolatileProcess (RequestToVolatileProcessStruct state)
+    | WriteToVolatileProcessNativeStdInCommand (WriteToVolatileProcessNativeStdInStruct state)
+    | ReadAllFromVolatileProcessNativeCommand (ReadAllFromVolatileProcessNativeStruct state)
     | TerminateVolatileProcess TerminateVolatileProcessStruct
 
 
@@ -70,7 +80,7 @@ type alias HttpRequestContext =
 type alias HttpRequestProperties =
     { method : String
     , uri : String
-    , bodyAsBase64 : Maybe String
+    , body : Maybe Bytes.Bytes
     , headers : List HttpHeader
     }
 
@@ -83,7 +93,7 @@ type alias RespondToHttpRequestStruct =
 
 type alias HttpResponse =
     { statusCode : Int
-    , bodyAsBase64 : Maybe String
+    , body : Maybe Bytes.Bytes
     , headersToAdd : List HttpHeader
     }
 
@@ -97,6 +107,29 @@ type alias HttpHeader =
 type alias CreateVolatileProcessStruct state =
     { programCode : String
     , update : CreateVolatileProcessResult -> state -> ( state, Commands state )
+    }
+
+
+type alias ReadRuntimeInformationCommandStruct state =
+    Result String RuntimeInformationRecord -> state -> ( state, Commands state )
+
+
+type alias RuntimeInformationRecord =
+    { runtimeIdentifier : String
+    , osPlatform : Maybe String
+    }
+
+
+type alias CreateVolatileProcessNativeCommandStruct state =
+    { request : CreateVolatileProcessNativeRequestStruct
+    , update : CreateVolatileProcessResult -> state -> ( state, Commands state )
+    }
+
+
+type alias CreateVolatileProcessNativeRequestStruct =
+    { executableFile : LoadDependencyStruct
+    , arguments : String
+    , environmentVariables : List ProcessEnvironmentVariableStruct
     }
 
 
@@ -120,12 +153,39 @@ type alias RequestToVolatileProcessStruct state =
     }
 
 
+type alias WriteToVolatileProcessNativeStdInStruct state =
+    { processId : String
+    , stdInBytes : Bytes.Bytes
+    , update :
+        Result RequestToVolatileProcessError ()
+        -> state
+        -> ( state, Commands state )
+    }
+
+
+type alias ReadAllFromVolatileProcessNativeStruct state =
+    { processId : String
+    , update :
+        Result RequestToVolatileProcessError ReadAllFromVolatileProcessNativeSuccessStruct
+        -> state
+        -> ( state, Commands state )
+    }
+
+
 type alias RequestToVolatileProcessResult =
     Result RequestToVolatileProcessError RequestToVolatileProcessComplete
 
 
+type alias ReadAllFromVolatileProcessNativeSuccessStruct =
+    { stdOutBytes : Bytes.Bytes
+    , stdErrBytes : Bytes.Bytes
+    , exitCode : Maybe Int
+    }
+
+
 type RequestToVolatileProcessError
     = ProcessNotFound
+    | RequestToVolatileProcessOtherError String
 
 
 type alias RequestToVolatileProcessComplete =
@@ -137,6 +197,18 @@ type alias RequestToVolatileProcessComplete =
 
 type alias TerminateVolatileProcessStruct =
     { processId : String }
+
+
+type alias ProcessEnvironmentVariableStruct =
+    { key : String
+    , value : String
+    }
+
+
+type alias LoadDependencyStruct =
+    { hashSha256Base16 : String
+    , hintUrls : List String
+    }
 
      * */
 
@@ -309,13 +381,14 @@ type alias TerminateVolatileProcessStruct =
     {
         /*
          * 
+
         type Command state
             = RespondToHttpRequest RespondToHttpRequestStruct
             | CreateVolatileProcess (CreateVolatileProcessStruct state)
-              {-
-                 We use the `runtimeIdentifier` and `osPlatform` properties to select the right executable files when creating a (native) volatile process.
-                 The properties returned by this command comes from the `RuntimeInformation` documented at <https://learn.microsoft.com/en-us/dotnet/api/system.runtime.interopservices.runtimeinformation>
-              -}
+            {-
+                We use the `runtimeIdentifier` and `osPlatform` properties to select the right executable files when creating a (native) volatile process.
+                The properties returned by this command comes from the `RuntimeInformation` documented at <https://learn.microsoft.com/en-us/dotnet/api/system.runtime.interopservices.runtimeinformation>
+            -}
             | ReadRuntimeInformationCommand (ReadRuntimeInformationCommandStruct state)
             | CreateVolatileProcessNativeCommand (CreateVolatileProcessNativeCommandStruct state)
             | RequestToVolatileProcess (RequestToVolatileProcessStruct state)
@@ -347,21 +420,29 @@ type alias TerminateVolatileProcessStruct =
             }
 
 
-        type alias ProcessEnvironmentVariableStruct =
-            { key : String
-            , value : String
+        type alias CreateVolatileProcessResult =
+            Result CreateVolatileProcessErrorStruct CreateVolatileProcessComplete
+
+
+        type alias CreateVolatileProcessErrorStruct =
+            { exceptionToString : String
             }
 
 
-        type alias LoadDependencyStruct =
-            { hashSha256Base16 : String
-            , hintUrls : List String
+        type alias CreateVolatileProcessComplete =
+            { processId : String }
+
+
+        type alias RequestToVolatileProcessStruct state =
+            { processId : String
+            , request : String
+            , update : RequestToVolatileProcessResult -> state -> ( state, Commands state )
             }
 
 
         type alias WriteToVolatileProcessNativeStdInStruct state =
             { processId : String
-            , stdInBase64 : String
+            , stdInBytes : Bytes.Bytes
             , update :
                 Result RequestToVolatileProcessError ()
                 -> state
@@ -379,8 +460,8 @@ type alias TerminateVolatileProcessStruct =
 
 
         type alias ReadAllFromVolatileProcessNativeSuccessStruct =
-            { stdOutBase64 : String
-            , stdErrBase64 : String
+            { stdOutBytes : Bytes.Bytes
+            , stdErrBytes : Bytes.Bytes
             , exitCode : Maybe Int
             }
 
@@ -423,8 +504,8 @@ type alias TerminateVolatileProcessStruct =
         FunctionRecordValueAndParsed Update);
 
     public record ReadAllFromVolatileProcessNativeSuccessStruct(
-        string StdOutBase64,
-        string StdErrBase64,
+        ReadOnlyMemory<byte> StdOut,
+        ReadOnlyMemory<byte> StdErr,
         int? ExitCode);
 
     public record CreateVolatileProcessNativeCommandStruct(
@@ -468,7 +549,7 @@ type alias TerminateVolatileProcessStruct =
     public record HttpRequestProperties(
         string Method,
         string Uri,
-        string? BodyAsBase64,
+        ReadOnlyMemory<byte>? Body,
         IReadOnlyList<HttpHeader> Headers);
 
     public record RespondToHttpRequestStruct(
@@ -477,7 +558,7 @@ type alias TerminateVolatileProcessStruct =
 
     public record HttpResponse(
         int StatusCode,
-        string? BodyAsBase64,
+        ReadOnlyMemory<byte>? Body,
         IReadOnlyList<HttpHeader> HeadersToAdd);
 
     public record HttpHeader(
@@ -495,7 +576,7 @@ type alias TerminateVolatileProcessStruct =
 
     public record WriteToVolatileProcessNativeStdInStruct(
         string ProcessId,
-        string StdInBase64,
+        ReadOnlyMemory<byte> StdIn,
         FunctionRecordValueAndParsed Update);
 
     public record ReadAllFromVolatileProcessNativeStruct(
@@ -560,9 +641,9 @@ type alias TerminateVolatileProcessStruct =
                 [
                 ("method", ElmValue.StringInstance(request.Method)),
                 ("uri", ElmValue.StringInstance(request.Uri)),
-                ("bodyAsBase64", request.BodyAsBase64 is null
-                    ? ElmValue.TagInstance("Nothing", [])
-                    : ElmValue.TagInstance("Just", [ElmValue.StringInstance(request.BodyAsBase64)])),
+                ("body", request.Body is { } body
+                    ? ElmValue.TagInstance("Just", [new ElmValue.ElmBytes(body)])
+                    : ElmValue.TagInstance("Nothing", [])),
                 ("headers", new ElmValue.ElmList([.. request.Headers.Select(EncodeHttpHeader)]))
                 ]);
         return asElmValue;
@@ -752,8 +833,8 @@ type alias TerminateVolatileProcessStruct =
         var asElmValue =
             new ElmValue.ElmRecord(
                 [
-                ("stdOutBase64", ElmValue.StringInstance(complete.StdOutBase64)),
-                ("stdErrBase64", ElmValue.StringInstance(complete.StdErrBase64)),
+                ("stdOutBytes", new ElmValue.ElmBytes(complete.StdOut)),
+                ("stdErrBytes", new ElmValue.ElmBytes(complete.StdErr)),
                 ("exitCode", complete.ExitCode is null
                     ? ElmValue.TagInstance("Nothing", [])
                     : ElmValue.TagInstance("Just", [ElmValue.Integer(complete.ExitCode.Value)]))
@@ -1447,37 +1528,37 @@ type alias TerminateVolatileProcessStruct =
             return "Unexpected type in statusCode: " + statusCodeValue;
         }
 
-        var bodyAsBase64Value = elmRecordValue["bodyAsBase64"];
+        var bodyValue = elmRecordValue["body"];
 
-        if (bodyAsBase64Value is null)
+        if (bodyValue is null)
         {
-            return "Missing field: bodyAsBase64";
+            return "Missing field: body";
         }
 
-        if (bodyAsBase64Value is not ElmValue.ElmTag bodyAsBase64Tag)
+        if (bodyValue is not ElmValue.ElmTag bodyTag)
         {
-            return "Unexpected type in bodyAsBase64: " + bodyAsBase64Value;
+            return "Unexpected type in body: " + bodyValue;
         }
 
-        string? bodyAsBase64 = null;
+        ReadOnlyMemory<byte>? body = null;
 
-        if (bodyAsBase64Tag.TagName is "Just")
+        if (bodyTag.TagName is "Just")
         {
-            if (bodyAsBase64Tag.Arguments.Count is not 1)
+            if (bodyTag.Arguments.Count is not 1)
             {
-                return "Unexpected number of arguments in Just: " + bodyAsBase64Tag.Arguments.Count;
+                return "Unexpected number of arguments in Just: " + bodyTag.Arguments.Count;
             }
 
-            if (bodyAsBase64Tag.Arguments[0] is not ElmValue.ElmString elmStringValue)
+            if (bodyTag.Arguments[0] is not ElmValue.ElmBytes bodyBytes)
             {
-                return "Unexpected argument type in Just: " + bodyAsBase64Tag.Arguments[0];
+                return "Unexpected argument type in Just: " + bodyTag.Arguments[0];
             }
 
-            bodyAsBase64 = elmStringValue.Value;
+            body = bodyBytes.Value;
         }
-        else if (bodyAsBase64Tag.TagName is not "Nothing")
+        else if (bodyTag.TagName is not "Nothing")
         {
-            return "Unexpected tag in bodyAsBase64: " + bodyAsBase64Tag.TagName;
+            return "Unexpected tag in body: " + bodyTag.TagName;
         }
 
         var headersToAddValue = elmRecordValue["headersToAdd"];
@@ -1517,7 +1598,7 @@ type alias TerminateVolatileProcessStruct =
 
         return new HttpResponse(
             (int)statusCodeInt.Value,
-            bodyAsBase64,
+            body,
             headersToAdd);
     }
 
@@ -1794,32 +1875,32 @@ type alias TerminateVolatileProcessStruct =
             return "Unexpected type in processId: " + processIdElmValue;
         }
 
-        var stdInBase64Value =
-            record.FirstOrDefault(field => field.fieldName is "stdInBase64");
+        var stdInBytesValue =
+            record.FirstOrDefault(field => field.fieldName is "stdInBytes");
 
-        if (stdInBase64Value.fieldValue is null)
+        if (stdInBytesValue.fieldValue is null)
         {
-            return "Missing field: stdInBase64";
+            return "Missing field: stdInBytes";
         }
 
-        var stdInBase64AsElmValue =
-            elmCompilerCache.PineValueDecodedAsElmValue(stdInBase64Value.fieldValue);
+        var stdInAsElmValue =
+            elmCompilerCache.PineValueDecodedAsElmValue(stdInBytesValue.fieldValue);
         {
-            if (stdInBase64AsElmValue.IsErrOrNull() is { } err)
+            if (stdInAsElmValue.IsErrOrNull() is { } err)
             {
-                return "Failed to decode stdInBase64: " + err;
+                return "Failed to decode stdInBytes: " + err;
             }
         }
 
-        if (stdInBase64AsElmValue.IsOkOrNull() is not { } stdInBase64ElmValue)
+        if (stdInAsElmValue.IsOkOrNull() is not { } stdInElmValue)
         {
             throw new NotImplementedException(
-                "Unexpected return type: " + stdInBase64AsElmValue);
+                "Unexpected return type: " + stdInAsElmValue);
         }
 
-        if (stdInBase64ElmValue is not ElmValue.ElmString stdInBase64String)
+        if (stdInElmValue is not ElmValue.ElmBytes stdInBytes)
         {
-            return "Unexpected type in stdInBase64: " + stdInBase64ElmValue;
+            return "Unexpected type in stdInBytes: " + stdInElmValue;
         }
 
         var updateValue = record.FirstOrDefault(field => field.fieldName is "update");
@@ -1836,7 +1917,7 @@ type alias TerminateVolatileProcessStruct =
 
         return new WriteToVolatileProcessNativeStdInStruct(
             processIdString.Value,
-            stdInBase64String.Value,
+            stdInBytes.Value,
             parsedUpdate);
     }
 

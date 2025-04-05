@@ -129,10 +129,16 @@ update event stateBefore =
 
         UserInputAppendBatch batchConfig ->
             let
+                lastEntryId : Maybe Int
                 lastEntryId =
-                    stateBefore.getDirectoryResult
-                        |> Maybe.andThen Result.toMaybe
-                        |> Maybe.andThen (Dict.keys >> List.maximum)
+                    case stateBefore.getDirectoryResult of
+                        Just (Ok directory) ->
+                            directory
+                                |> List.map Tuple.first
+                                |> List.maximum
+
+                        _ ->
+                            Nothing
 
                 postEntryCmds =
                     List.range 0 (batchConfig.count - 1)
@@ -192,11 +198,14 @@ viewDirectory state =
 
                 Ok directory ->
                     let
+                        aggregateSize : Int
                         aggregateSize =
-                            directory |> Dict.values |> List.map .length |> List.sum
+                            directory
+                                |> List.map (\( _, entryInfo ) -> entryInfo.length)
+                                |> List.sum
                     in
                     ("Directory contains "
-                        ++ (directory |> Dict.size |> String.fromInt)
+                        ++ (directory |> List.length |> String.fromInt)
                         ++ " items with an aggregate size of "
                         ++ (aggregateSize |> String.fromInt)
                     )

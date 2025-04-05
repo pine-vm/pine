@@ -3,7 +3,6 @@ module Backend.Main exposing
     , webServiceMain
     )
 
-import Base64
 import Bytes
 import Bytes.Decode
 import Bytes.Encode
@@ -36,8 +35,8 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
     let
         ( state, result ) =
             case
-                httpRequestEvent.request.bodyAsBase64
-                    |> Maybe.map (Base64.toBytes >> Maybe.map (decodeBytesToString >> Maybe.withDefault "Failed to decode bytes to string") >> Maybe.withDefault "Failed to decode from base64")
+                httpRequestEvent.request.body
+                    |> Maybe.map (decodeBytesToString >> Maybe.withDefault "Failed to decode bytes to string")
                     |> Maybe.withDefault "Missing HTTP body"
                     |> Json.Decode.decodeString GenerateJsonConverters.jsonDecodeClientRequest
                     |> Result.mapError Json.Decode.errorToString
@@ -56,11 +55,16 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
                 Ok message ->
                     ( 200, message )
 
+        httpResponse : Platform.WebService.RespondToHttpRequestStruct
         httpResponse =
             { httpRequestId = httpRequestEvent.httpRequestId
             , response =
                 { statusCode = httpResponseCode
-                , bodyAsBase64 = httpResponseBodyString |> Bytes.Encode.string |> Bytes.Encode.encode |> Base64.fromBytes
+                , body =
+                    httpResponseBodyString
+                        |> Bytes.Encode.string
+                        |> Bytes.Encode.encode
+                        |> Just
                 , headersToAdd = []
                 }
             }

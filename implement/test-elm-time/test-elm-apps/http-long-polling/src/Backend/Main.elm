@@ -3,7 +3,6 @@ module Backend.Main exposing
     , webServiceMain
     )
 
-import Base64
 import Bytes
 import Bytes.Encode
 import Platform.WebService
@@ -57,11 +56,7 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
 updateForHttpResponses : State -> ( State, Platform.WebService.Commands State )
 updateForHttpResponses stateBefore =
     let
-        httpResponses :
-            List
-                { httpRequestId : String
-                , response : { statusCode : number, bodyAsBase64 : Maybe String, headersToAdd : List a }
-                }
+        httpResponses : List Platform.WebService.RespondToHttpRequestStruct
         httpResponses =
             stateBefore
                 |> getHttpRequestsWithCompletionTimes
@@ -79,10 +74,10 @@ updateForHttpResponses stateBefore =
                         { httpRequestId = requestEvent.httpRequestId
                         , response =
                             { statusCode = 200
-                            , bodyAsBase64 =
+                            , body =
                                 ("Completed in " ++ (ageInMilliseconds |> String.fromInt) ++ " milliseconds.")
                                     |> encodeStringToBytes
-                                    |> Base64.fromBytes
+                                    |> Just
                             , headersToAdd = []
                             }
                         }
@@ -103,8 +98,9 @@ updateForHttpResponses stateBefore =
             }
     in
     ( state
-    , httpResponses
-        |> List.map Platform.WebService.RespondToHttpRequest
+    , List.map
+        Platform.WebService.RespondToHttpRequest
+        httpResponses
     )
 
 

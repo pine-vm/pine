@@ -341,10 +341,7 @@ public class VolatileProcessHost(
 
         try
         {
-            var stdIn =
-                Convert.FromBase64String(writeToVolatileProcessNativeStdIn.StdInBase64);
-
-            volatileProcessNative.WriteToStdIn(stdIn);
+            volatileProcessNative.WriteToStdIn(writeToVolatileProcessNativeStdIn.StdIn);
 
             return new object();
         }
@@ -388,8 +385,8 @@ public class VolatileProcessHost(
 
             return
                 new WebServiceInterface.ReadAllFromVolatileProcessNativeSuccessStruct(
-                    StdOutBase64: Convert.ToBase64String(read.StdOut.Span),
-                    StdErrBase64: Convert.ToBase64String(read.StdErr.Span),
+                    StdOut: read.StdOut,
+                    StdErr: read.StdErr,
                     ExitCode: read.ExitCode);
         }
         catch (Exception readAllFromVolatileProcessNativeException)

@@ -6,6 +6,8 @@ module Backend.Main exposing
 import Backend.Route
 import Backend.VolatileProcess as VolatileProcess
 import Base64
+import Bytes
+import Bytes.Decode
 import Bytes.Encode
 import Common
 import CompilationInterface.ElmMake
@@ -146,9 +148,17 @@ updatePartRequestsToVolatileProcess stateBefore =
                             Platform.WebService.RequestToVolatileProcess
                                 { processId = volatileProcessId
                                 , request =
-                                    httpRequestEvent.request.bodyAsBase64
-                                        |> Maybe.andThen Common.decodeBase64ToString
-                                        |> Maybe.withDefault "Error decoding base64"
+                                    case httpRequestEvent.request.body of
+                                        Nothing ->
+                                            "Error: No body in request"
+
+                                        Just body ->
+                                            case Bytes.Decode.decode (Bytes.Decode.string (Bytes.width body)) body of
+                                                Nothing ->
+                                                    "Error: Failed to decode body"
+
+                                                Just bodyString ->
+                                                    bodyString
                                 , update =
                                     \requestToVolatileProcessResponse state ->
                                         processEvent
@@ -189,11 +199,11 @@ updateForHttpRequestEventExceptRequestsToVolatileProcess :
     -> ( State, Platform.WebService.Commands State )
 updateForHttpRequestEventExceptRequestsToVolatileProcess httpRequestEvent stateBeforeUpdatingTime =
     let
+        stateBefore : State
         stateBefore =
-            { stateBeforeUpdatingTime | posixTimeMilli = httpRequestEvent.posixTimeMilli }
-
-        bodyFromString =
-            Bytes.Encode.string >> Bytes.Encode.encode >> Base64.fromBytes
+            { stateBeforeUpdatingTime
+                | posixTimeMilli = httpRequestEvent.posixTimeMilli
+            }
 
         staticContentHttpHeaders { contentType, contentEncoding } =
             { cacheMaxAgeMinutes = Just (60 * 24)
@@ -201,12 +211,17 @@ updateForHttpRequestEventExceptRequestsToVolatileProcess httpRequestEvent stateB
             , contentEncoding = contentEncoding
             }
 
-        httpResponseOkWithStringContent stringContent httpResponseHeaders =
-            httpResponseOkWithBodyAsBase64 (bodyFromString stringContent) httpResponseHeaders
-
-        httpResponseOkWithBodyAsBase64 bodyAsBase64 contentConfig =
+        httpResponseOkWithBody :
+            Maybe Bytes.Bytes
+            ->
+                { contentType : String
+                , contentEncoding : Maybe String
+                , cacheMaxAgeMinutes : Maybe Int
+                }
+            -> Platform.WebService.HttpResponse
+        httpResponseOkWithBody body contentConfig =
             { statusCode = 200
-            , bodyAsBase64 = bodyAsBase64
+            , body = body
             , headersToAdd =
                 [ ( "Cache-Control"
                   , contentConfig.cacheMaxAgeMinutes
@@ -222,6 +237,17 @@ updateForHttpRequestEventExceptRequestsToVolatileProcess httpRequestEvent stateB
                                 |> Maybe.withDefault []
                         )
             }
+
+        httpResponseOkWithStringContent :
+            String
+            ->
+                { contentType : String
+                , contentEncoding : Maybe String
+                , cacheMaxAgeMinutes : Maybe Int
+                }
+            -> Platform.WebService.HttpResponse
+        httpResponseOkWithStringContent stringContent httpResponseHeaders =
+            httpResponseOkWithBody (Just (bodyFromString stringContent)) httpResponseHeaders
 
         frontendHtmlDocumentResponse frontendConfig =
             httpResponseOkWithStringContent (frontendHtmlDocument frontendConfig)
@@ -240,11 +266,13 @@ updateForHttpRequestEventExceptRequestsToVolatileProcess httpRequestEvent stateB
         Nothing ->
             continueWithStaticHttpResponse
                 { statusCode = 500
-                , bodyAsBase64 =
-                    bodyFromString
-                        ("Failed to parse URL ("
-                            ++ httpRequestEvent.request.uri
-                            ++ ")"
+                , body =
+                    Just
+                        (bodyFromString
+                            ("Failed to parse URL ("
+                                ++ httpRequestEvent.request.uri
+                                ++ ")"
+                            )
                         )
                 , headersToAdd = []
                 }
@@ -259,6 +287,7 @@ updateForHttpRequestEventExceptRequestsToVolatileProcess httpRequestEvent stateB
             of
                 Just ( filePath, matchingFile ) ->
                     let
+                        contentType : String
                         contentType =
                             filePath
                                 |> List.concatMap (String.split ".")
@@ -267,8 +296,8 @@ updateForHttpRequestEventExceptRequestsToVolatileProcess httpRequestEvent stateB
                                 |> Maybe.andThen (Dict.get >> (|>) contentTypeFromStaticFileExtensionDict)
                                 |> Maybe.withDefault ""
                     in
-                    httpResponseOkWithBodyAsBase64
-                        (Just matchingFile.base64)
+                    httpResponseOkWithBody
+                        (Base64.toBytes matchingFile.base64)
                         (staticContentHttpHeaders { contentType = contentType, contentEncoding = Nothing })
                         |> continueWithStaticHttpResponse
 
@@ -283,16 +312,16 @@ updateForHttpRequestEventExceptRequestsToVolatileProcess httpRequestEvent stateB
                                 |> continueWithStaticHttpResponse
 
                         Just (Backend.Route.StaticFileRoute (Backend.Route.FrontendElmJavascriptRoute { debug })) ->
-                            httpResponseOkWithBodyAsBase64
-                                (Just
-                                    CompilationInterface.ElmMake.elm_make____src_Frontend_Main_elm.javascript.base64
+                            httpResponseOkWithBody
+                                (CompilationInterface.ElmMake.elm_make____src_Frontend_Main_elm.javascript.base64
+                                    |> Base64.toBytes
                                 )
                                 (staticContentHttpHeaders { contentType = "text/javascript", contentEncoding = Nothing })
                                 |> continueWithStaticHttpResponse
 
                         Just (Backend.Route.StaticFileRoute Backend.Route.FrontendLanguageServiceWorkerJavaScriptRoute) ->
-                            httpResponseOkWithBodyAsBase64
-                                (Just (languageServiceWorkerJavaScriptBase64 ()))
+                            httpResponseOkWithBody
+                                (Base64.toBytes (languageServiceWorkerJavaScriptBase64 ()))
                                 (staticContentHttpHeaders { contentType = "text/javascript", contentEncoding = Nothing })
                                 |> continueWithStaticHttpResponse
 
@@ -302,6 +331,13 @@ updateForHttpRequestEventExceptRequestsToVolatileProcess httpRequestEvent stateB
                               }
                             , []
                             )
+
+
+bodyFromString : String -> Bytes.Bytes
+bodyFromString string =
+    string
+        |> Bytes.Encode.string
+        |> Bytes.Encode.encode
 
 
 languageServiceWorkerJavaScript : () -> String
@@ -354,12 +390,9 @@ updateForRequestToVolatileProcessResult taskId requestToVolatileProcessResult st
 
         Just httpRequestEvent ->
             let
-                bodyFromString =
-                    Bytes.Encode.string >> Bytes.Encode.encode >> Base64.fromBytes
-
                 httpResponseInternalServerError errorMessage =
                     { statusCode = 500
-                    , bodyAsBase64 = bodyFromString errorMessage
+                    , body = Just (bodyFromString errorMessage)
                     , headersToAdd = []
                     }
 
@@ -388,7 +421,13 @@ updateForRequestToVolatileProcessResult taskId requestToVolatileProcessResult st
                                     case requestToVolatileProcessComplete.exceptionToString of
                                         Just exceptionToString ->
                                             ( { statusCode = 500
-                                              , bodyAsBase64 = bodyFromString ("Exception in volatile process:\n" ++ exceptionToString)
+                                              , body =
+                                                    Just
+                                                        (bodyFromString
+                                                            ("Exception in volatile process:\n"
+                                                                ++ exceptionToString
+                                                            )
+                                                        )
                                               , headersToAdd = []
                                               }
                                             , Nothing
@@ -396,24 +435,18 @@ updateForRequestToVolatileProcessResult taskId requestToVolatileProcessResult st
 
                                         Nothing ->
                                             let
-                                                ( headersToAdd, bodyAsBase64 ) =
+                                                ( headersToAdd, body ) =
                                                     case requestToVolatileProcessComplete.returnValueToString of
                                                         Nothing ->
                                                             ( [], Nothing )
 
                                                         Just returnValueToString ->
-                                                            let
-                                                                deflateEncodedBody =
-                                                                    returnValueToString
-                                                                        |> Bytes.Encode.string
-                                                                        |> Bytes.Encode.encode
-                                                            in
                                                             ( []
-                                                            , deflateEncodedBody |> Base64.fromBytes
+                                                            , Just (bodyFromString returnValueToString)
                                                             )
                                             in
                                             ( { statusCode = 200
-                                              , bodyAsBase64 = bodyAsBase64
+                                              , body = body
                                               , headersToAdd = headersToAdd
                                               }
                                             , Nothing
@@ -448,12 +481,13 @@ updateForCreateVolatileProcessResult createVolatileProcessResult stateBefore =
     case createVolatileProcessResult of
         Err createVolatileProcessError ->
             let
-                bodyFromString =
-                    Bytes.Encode.string >> Bytes.Encode.encode >> Base64.fromBytes
-
                 httpResponse =
                     { statusCode = 500
-                    , bodyAsBase64 = bodyFromString ("Failed to create volatile process: " ++ createVolatileProcessError.exceptionToString)
+                    , body =
+                        Just
+                            (bodyFromString
+                                ("Failed to create volatile process: " ++ createVolatileProcessError.exceptionToString)
+                            )
                     , headersToAdd = []
                     }
 
