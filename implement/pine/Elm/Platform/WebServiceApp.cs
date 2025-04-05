@@ -37,12 +37,12 @@ public class MutatingWebServiceApp
 
     public ElmTime.ElmTimeJsonAdapter.Parsed JsonAdapter => appConfig.JsonAdapter;
 
-    private readonly ConcurrentQueue<WebServiceInterface.Command.RespondToHttpRequest> httpResponses = new();
+    private readonly ConcurrentDictionary<string, WebServiceInterface.Command.RespondToHttpRequest> httpResponses = new();
 
     private readonly ConcurrentQueue<WebServiceInterface.Command> commands = new();
 
     public IReadOnlyList<WebServiceInterface.Command.RespondToHttpRequest> CopyHttpResponses() =>
-        [.. httpResponses];
+        [.. httpResponses.Values];
 
     public IReadOnlyList<WebServiceInterface.Command> DequeueCommands() =>
         [.. commands.DequeueAllEnumerable()];
@@ -181,7 +181,7 @@ public class MutatingWebServiceApp
         {
             if (cmdParsed is WebServiceInterface.Command.RespondToHttpRequest httpResponseCmd)
             {
-                httpResponses.Enqueue(httpResponseCmd);
+                httpResponses[httpResponseCmd.Respond.HttpRequestId] = httpResponseCmd;
             }
             else
             {
@@ -203,12 +203,11 @@ public class MutatingWebServiceApp
                 {
                     cancellationToken.ThrowIfCancellationRequested();
 
-                    foreach (var httpResponse in httpResponses)
+                    if (httpResponses.TryRemove(
+                        httpRequest.HttpRequestId,
+                        out var httpResponse))
                     {
-                        if (httpResponse.Respond.HttpRequestId == httpRequest.HttpRequestId)
-                        {
-                            return httpResponse.Respond.Response;
-                        }
+                        return httpResponse.Respond.Response;
                     }
 
                     await System.Threading.Tasks.Task.Delay(TimeSpan.FromMilliseconds(100));
