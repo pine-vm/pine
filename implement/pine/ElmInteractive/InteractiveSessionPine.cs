@@ -1160,6 +1160,8 @@ public class InteractiveSessionPine : IInteractiveSession
 
             var evalResult = pineVM.EvaluateExpression(expression, environment);
 
+            vmEvalCache.Clear();
+
             if (evalResult.IsOkOrNull() is { } evalOk)
             {
                 evalCache[(expression, environment)] = evalOk;

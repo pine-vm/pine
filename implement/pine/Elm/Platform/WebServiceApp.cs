@@ -15,9 +15,20 @@ public class MutatingWebServiceApp
 {
     private readonly System.Threading.Lock stateLock = new();
 
-    private readonly PineVMCache pineVMCache = new();
+    private record CacheAndVM(
+        PineVMCache PineVMCache,
+        PineVM.PineVM PineVM)
+    {
+        public static CacheAndVM Create()
+        {
+            var pineVMCache = new PineVMCache();
+            var pineVM = new PineVM.PineVM(pineVMCache.EvalCache);
 
-    private readonly PineVM.PineVM pineVM;
+            return new CacheAndVM(pineVMCache, pineVM);
+        }
+    }
+
+    private readonly CacheAndVM cacheAndVM = CacheAndVM.Create();
 
     private readonly WebServiceInterface.WebServiceConfig appConfig;
 
@@ -30,7 +41,7 @@ public class MutatingWebServiceApp
     public IReadOnlyList<ApplyUpdateReport<WebServiceInterface.Command>> DequeueApplyFunctionReports() =>
         [.. applyFunctionReports.DequeueAllEnumerable()];
 
-    public IPineVM PineVM => pineVM;
+    public IPineVM PineVM => cacheAndVM.PineVM;
 
     public long? PosixTimeSubscriptionMinimumTime =>
         appStateAndSubscriptions.subscriptions?.PosixTimeIsPast?.MinimumPosixTimeMilli;
@@ -74,7 +85,7 @@ public class MutatingWebServiceApp
         lock (stateLock)
         {
             var subscriptions =
-                WebServiceInterface.WebServiceConfig.ParseSubscriptions(appConfig, appState, pineVM);
+                WebServiceInterface.WebServiceConfig.ParseSubscriptions(appConfig, appState, cacheAndVM.PineVM);
 
             appStateAndSubscriptions = (appState, subscriptions);
         }
@@ -84,8 +95,6 @@ public class MutatingWebServiceApp
         WebServiceInterface.WebServiceConfig appConfig)
     {
         this.appConfig = appConfig;
-
-        pineVM = new PineVM.PineVM(pineVMCache.EvalCache);
 
         ResetAppState(appConfig.Init.State);
 
@@ -162,13 +171,22 @@ public class MutatingWebServiceApp
                     updateFunction,
                     updateArgsBeforeState,
                     AppState,
-                    pineVM);
+                    cacheAndVM.PineVM);
 
             TrackAppliedFunction(
                 eventResponse,
                 discardIfResultingStateSame: true);
 
             MutateConsolidatingAppResponse(eventResponse);
+
+            {
+                // TODO: Use overlap and warmup to reduce response delays.
+
+                if (cacheAndVM.PineVMCache.EvalCache.Count > 10_000)
+                {
+                    cacheAndVM.PineVMCache.EvalCache.Clear();
+                }
+            }
 
             return eventResponse;
         }

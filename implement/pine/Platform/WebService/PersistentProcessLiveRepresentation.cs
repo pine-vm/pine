@@ -372,20 +372,18 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
         StoreAppStateResetAndReduction(
         PineValue elmAppState)
     {
-        storeWriter.StoreComponent(elmAppState);
+        var appStateHash =
+            storeWriter.StoreComponent(elmAppState);
 
-        var elmAppStateHash =
-            Convert.ToHexStringLower(
-                new Pine.CompilePineToDotNet.CompilerMutableCache().ComputeHash(elmAppState).Span);
-
-        storeWriter.StoreComponent(lastAppConfig.appConfigComponent);
+        var appConfigHash =
+            storeWriter.StoreComponent(lastAppConfig.appConfigComponent);
 
         var compositionEvent =
             new CompositionLogRecordInFile.CompositionEvent
             {
                 SetElmAppState = new ValueInFileStructure
                 {
-                    HashBase16 = elmAppStateHash
+                    HashBase16 = appStateHash.hashBase16
                 }
             };
 
@@ -405,8 +403,7 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
             }
         }
 
-        var recordHashBase16 =
-            storeCompositionRecord();
+        var recordHashBase16 = storeCompositionRecord();
 
         System.Threading.Tasks.Task taskStoringReduction =
             System.Threading.Tasks.Task.Run(() =>
@@ -416,12 +413,11 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
                         reducedCompositionHashBase16: recordHashBase16,
                         elmAppState:
                         new ValueInFileStructure(
-                            HashBase16: elmAppStateHash),
+                            HashBase16: appStateHash.hashBase16),
                         appConfig:
                         new ValueInFileStructure(
                             HashBase16:
-                            Convert.ToHexStringLower(
-                                hashCache.ComputeHash(lastAppConfig.appConfigComponent).Span))));
+                            appConfigHash.hashBase16)));
             });
 
         var report =

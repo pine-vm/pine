@@ -22,7 +22,7 @@ public interface IProcessStoreWriter
 
     void StoreProvisionalReduction(ProvisionalReductionRecordInFile reduction);
 
-    void StoreComponent(PineValue component);
+    (ReadOnlyMemory<byte> hash, string hashBase16) StoreComponent(PineValue component);
 }
 
 public interface IProcessStoreReader
@@ -47,7 +47,7 @@ public interface IProcessStoreReader
             SetFileContentDelegate:
             pathAndFileContent =>
             projectedFiles[pathAndFileContent.path] = pathAndFileContent.fileContent,
-            
+
             AppendFileContentDelegate:
             pathAndFileContent =>
             {
@@ -61,7 +61,7 @@ public interface IProcessStoreReader
                 projectedFiles[pathAndFileContent.path] =
                 BytesConversions.Concat(fileContentBefore.Span, pathAndFileContent.fileContent.Span);
             },
-            
+
             DeleteFileDelegate:
             _ => throw new Exception("Unexpected operation delete file.")
         );
@@ -133,13 +133,13 @@ internal record DelegatingProcessStoreReader(
 
 public record DelegatingProcessStoreWriter(
     Func<CompositionLogRecordInFile.CompositionEvent, (ReadOnlyMemory<byte> recordHash, string recordHashBase16)> AppendCompositionLogRecordDelegate,
-    Action<PineValue> StoreComponentDelegate,
+    Func<PineValue, (ReadOnlyMemory<byte> hash, string hashBase16)> StoreComponentDelegate,
     Action<ProvisionalReductionRecordInFile> StoreProvisionalReductionDelegate) : IProcessStoreWriter
 {
     public (ReadOnlyMemory<byte> recordHash, string recordHashBase16) AppendCompositionLogRecord(CompositionLogRecordInFile.CompositionEvent compositionEvent) =>
         AppendCompositionLogRecordDelegate(compositionEvent);
 
-    public void StoreComponent(PineValue component) =>
+    public (ReadOnlyMemory<byte> hash, string hashBase16) StoreComponent(PineValue component) =>
         StoreComponentDelegate(component);
 
     public void StoreProvisionalReduction(ProvisionalReductionRecordInFile reduction) =>
@@ -559,7 +559,7 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
 
     private readonly bool skipWritingComponentSecondTime;
 
-    private readonly ConcurrentDictionary<PineValue, object?> componentsWritten = new();
+    private readonly ConcurrentDictionary<PineValue, (ReadOnlyMemory<byte> hash, string hashBase16)> componentsWritten = new();
 
     private readonly ConcurrentDictionary<string, object?> componentsWrittenHash = new();
 
@@ -646,24 +646,25 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
             Encoding.UTF8.GetBytes(JsonSerializer.Serialize(reductionRecord, recordSerializationSettings)));
     }
 
-    public void StoreComponent(PineValue component)
+    public (ReadOnlyMemory<byte> hash, string hashBase16) StoreComponent(PineValue component)
     {
         if (skipWritingComponentSecondTime)
         {
-            if (componentsWritten.ContainsKey(component))
-                return;
+            if (componentsWritten.TryGetValue(component, out var componentHashAndBase16))
+                return componentHashAndBase16;
         }
 
         if (component is PineValue.ListValue)
         {
-            var componentHash = hashCache.ComputeHash(component);
+            var componentHash =
+                ComputeHashBytesAndRememberRecent(component);
 
             var componentHashBase16 = Convert.ToHexStringLower(componentHash.Span);
 
             if (skipWritingComponentSecondTime)
             {
                 if (componentsWrittenHash.ContainsKey(componentHashBase16))
-                    return;
+                    return (componentHash, componentHashBase16);
             }
 
             var asJsonString = SerializeValueToJsonString(component);
@@ -678,10 +679,10 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
 
             componentsWrittenHash.TryAdd(componentHashBase16, null);
 
-            return;
+            return (componentHash, componentHashBase16);
         }
 
-        StoreComponentAndGetHashRecursive(component);
+        return StoreComponentAndGetHashRecursive(component);
     }
 
     private ReadOnlyMemory<byte>? DelegateGetHashOfComponent(PineValue pineValue) =>
@@ -709,7 +710,9 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
                         GetFilePathForComponentInComponentFileStore(hashBase16),
                         deflated.ToArray());
 
-                    componentsWritten.TryAdd(component, null);
+                    componentsWritten.TryAdd(
+                        component,
+                        (hash, hashBase16));
 
                     return;
                 }
@@ -719,7 +722,9 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
                 GetFilePathForComponentInComponentFileStore(hashBase16),
                 serialRepresentation.ToArray());
 
-            componentsWritten.TryAdd(component, null);
+            componentsWritten.TryAdd(
+                component,
+                (hash, hashBase16));
         }
 
         storeSelf();
@@ -736,6 +741,52 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
         }
 
         return (hash, hashBase16);
+    }
+
+
+    readonly Queue<KeyValuePair<PineValue, ReadOnlyMemory<byte>>> componentsWrittenHashQueue = new();
+
+    private ReadOnlyMemory<byte> ComputeHashBytesAndRememberRecent(PineValue pineValue)
+    {
+        var hashBytes =
+            componentsWrittenHashQueue.FirstOrDefault(c => c.Key == pineValue).Value;
+
+        if (hashBytes.IsEmpty)
+        {
+            hashBytes = PineValueHashTree.ComputeHash(pineValue, ComputeAndCacheHashBytesForSmallValues);
+        }
+
+        componentsWrittenHashQueue.Enqueue(
+            new KeyValuePair<PineValue, ReadOnlyMemory<byte>>(pineValue, hashBytes));
+
+        while (componentsWrittenHashQueue.Count > 100)
+        {
+            componentsWrittenHashQueue.Dequeue();
+        }
+
+        return hashBytes;
+    }
+
+    private ReadOnlyMemory<byte>? ComputeAndCacheHashBytesForSmallValues(PineValue pineValue)
+    {
+        if (pineValue is PineValue.BlobValue blobValue)
+        {
+            if (blobValue.Bytes.Length < 3 ||
+                (blobValue.Bytes.Span[0] is 4 && blobValue.Bytes.Length < 4))
+            {
+                return hashCache.ComputeHash(pineValue);
+            }
+        }
+
+        if (pineValue is PineValue.ListValue listValue)
+        {
+            if (listValue.NodesCount is 0 && listValue.BlobsBytesCount < 3)
+            {
+                return hashCache.ComputeHash(pineValue);
+            }
+        }
+
+        return null;
     }
 
     public static string SerializeValueToJsonString(PineValue value)
@@ -761,9 +812,13 @@ public class DiscardingStoreWriter : IProcessStoreWriter
         CompositionLogRecordInFile.CompositionEvent compositionEvent) =>
         (ReadOnlyMemory<byte>.Empty, "");
 
-    public void StoreComponent(PineValue component)
+    public (ReadOnlyMemory<byte> hash, string hashBase16) StoreComponent(PineValue component)
     {
+        var hash = PineValueHashTree.ComputeHash(component);
+
+        return (hash, Convert.ToHexStringLower(hash.Span));
     }
+
     public void StoreProvisionalReduction(ProvisionalReductionRecordInFile reduction)
     {
     }
