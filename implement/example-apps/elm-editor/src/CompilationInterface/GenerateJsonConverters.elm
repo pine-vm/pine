@@ -10,83 +10,98 @@ import Json.Decode
 import Json.Encode
 import LanguageServiceInterface
 import WorkspaceState_2021_01
+import CompilationInterface.GenerateJsonConverters.Generated_JsonConverters
+import Dict
+import Set
+import Array
+import Json.Decode
+import Json.Encode
+import Bytes
+import Bytes.Decode
+import Bytes.Encode
+import FrontendBackendInterface
+import Frontend.MonacoEditor
+import Frontend.ContainerHtml
+import FileTree
+import WorkspaceState_2021_01
+import LanguageServiceInterface
 
 
 jsonEncodeRequestStructure : FrontendBackendInterface.RequestStructure -> Json.Encode.Value
 jsonEncodeRequestStructure =
-    always (Json.Encode.string "The compiler replaces this declaration.")
+    CompilationInterface.GenerateJsonConverters.Generated_JsonConverters.jsonEncode_2548601546
 
 
 jsonDecodeRequestStructure : Json.Decode.Decoder FrontendBackendInterface.RequestStructure
 jsonDecodeRequestStructure =
-    Json.Decode.fail "The compiler replaces this declaration."
+    CompilationInterface.GenerateJsonConverters.Generated_JsonConverters.jsonDecode_2548601546
 
 
 jsonDecodeResponseStructure : Json.Decode.Decoder FrontendBackendInterface.ResponseStructure
 jsonDecodeResponseStructure =
-    Json.Decode.fail "The compiler replaces this declaration."
+    CompilationInterface.GenerateJsonConverters.Generated_JsonConverters.jsonDecode_536068732
 
 
 jsonEncodeMessageToMonacoEditor : Frontend.MonacoEditor.MessageToEditor -> Json.Encode.Value
 jsonEncodeMessageToMonacoEditor =
-    always (Json.Encode.string "The compiler replaces this declaration.")
+    CompilationInterface.GenerateJsonConverters.Generated_JsonConverters.jsonEncode_3939936410
 
 
 jsonDecodeMessageFromMonacoEditor : Json.Decode.Decoder Frontend.MonacoEditor.MessageFromEditor
 jsonDecodeMessageFromMonacoEditor =
-    Json.Decode.fail "The compiler replaces this declaration."
+    CompilationInterface.GenerateJsonConverters.Generated_JsonConverters.jsonDecode_834299063
 
 
 jsonDecodeMessageFromContainerHtml : Json.Decode.Decoder Frontend.ContainerHtml.Message
 jsonDecodeMessageFromContainerHtml =
-    Json.Decode.fail "The compiler replaces this declaration."
+    CompilationInterface.GenerateJsonConverters.Generated_JsonConverters.jsonDecode_360248148
 
 
 jsonEncodeFileTreeNode : FrontendBackendInterface.FileTreeNode -> Json.Encode.Value
 jsonEncodeFileTreeNode =
-    always (Json.Encode.string "The compiler replaces this declaration.")
+    CompilationInterface.GenerateJsonConverters.Generated_JsonConverters.jsonEncode_2146051484
 
 
 jsonDecodeFileTreeNode : Json.Decode.Decoder FrontendBackendInterface.FileTreeNode
 jsonDecodeFileTreeNode =
-    Json.Decode.fail "The compiler replaces this declaration."
+    CompilationInterface.GenerateJsonConverters.Generated_JsonConverters.jsonDecode_2146051484
 
 
 jsonEncodeWorkspaceState_2021_01 : WorkspaceState_2021_01.WorkspaceState -> Json.Encode.Value
 jsonEncodeWorkspaceState_2021_01 =
-    always (Json.Encode.string "The compiler replaces this declaration.")
+    CompilationInterface.GenerateJsonConverters.Generated_JsonConverters.jsonEncode_2130805252
 
 
 jsonDecodeWorkspaceState_2021_01 : Json.Decode.Decoder WorkspaceState_2021_01.WorkspaceState
 jsonDecodeWorkspaceState_2021_01 =
-    Json.Decode.fail "The compiler replaces this declaration."
+    CompilationInterface.GenerateJsonConverters.Generated_JsonConverters.jsonDecode_2130805252
 
 
 jsonEncodeWorkspaceStateDiff_2021_01 : WorkspaceState_2021_01.WorkspaceStateDifference -> Json.Encode.Value
 jsonEncodeWorkspaceStateDiff_2021_01 =
-    always (Json.Encode.string "The compiler replaces this declaration.")
+    CompilationInterface.GenerateJsonConverters.Generated_JsonConverters.jsonEncode_500977338
 
 
 jsonDecodeWorkspaceStateDiff_2021_01 : Json.Decode.Decoder WorkspaceState_2021_01.WorkspaceStateDifference
 jsonDecodeWorkspaceStateDiff_2021_01 =
-    Json.Decode.fail "The compiler replaces this declaration."
+    CompilationInterface.GenerateJsonConverters.Generated_JsonConverters.jsonDecode_500977338
 
 
 jsonEncodeLanguageServiceRequestInWorkspace : LanguageServiceInterface.RequestInWorkspaceWithId -> Json.Encode.Value
 jsonEncodeLanguageServiceRequestInWorkspace =
-    always (Json.Encode.string "The compiler replaces this declaration.")
+    CompilationInterface.GenerateJsonConverters.Generated_JsonConverters.jsonEncode_423741305
 
 
 jsonDecodeLanguageServiceRequestInWorkspace : Json.Decode.Decoder LanguageServiceInterface.RequestInWorkspaceWithId
 jsonDecodeLanguageServiceRequestInWorkspace =
-    Json.Decode.fail "The compiler replaces this declaration."
+    CompilationInterface.GenerateJsonConverters.Generated_JsonConverters.jsonDecode_423741305
 
 
 jsonEncodeLanguageServiceResponse : LanguageServiceInterface.ResponseWithId -> Json.Encode.Value
 jsonEncodeLanguageServiceResponse =
-    always (Json.Encode.string "The compiler replaces this declaration.")
+    CompilationInterface.GenerateJsonConverters.Generated_JsonConverters.jsonEncode_3746757247
 
 
 jsonDecodeLanguageServiceResponse : Json.Decode.Decoder LanguageServiceInterface.ResponseWithId
 jsonDecodeLanguageServiceResponse =
-    Json.Decode.fail "The compiler replaces this declaration."
+    CompilationInterface.GenerateJsonConverters.Generated_JsonConverters.jsonDecode_3746757247
