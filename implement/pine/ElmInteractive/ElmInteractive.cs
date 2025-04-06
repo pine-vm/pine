@@ -511,7 +511,7 @@ public class ElmInteractive
         var compilationResult = ElmAppCompilation.AsCompletelyLoweredElmApp(
             sourceFiles: TreeToFlatDictionaryWithPathComparer(sourceTree),
             workingDirectoryRelative: [],
-            ElmAppInterfaceConfig.Default with { compilationRootFilePath = compilationRootFilePath });
+            ElmAppInterfaceConfig.Default with { CompilationRootFilePath = compilationRootFilePath });
 
         return
             compilationResult

@@ -26,20 +26,16 @@ using Pine.Core.Elm;
 
 namespace ElmTime
 {
-    public record ElmAppInterfaceConfig(IReadOnlyList<string> compilationRootFilePath)
+    public record ElmAppInterfaceConfig(IReadOnlyList<string> CompilationRootFilePath)
     {
         public static ElmAppInterfaceConfig Default => new
         (
-            compilationRootFilePath: ["src", "Backend", "Main.elm"]
+            CompilationRootFilePath: ["src", "Backend", "Main.elm"]
         );
     }
 
     public struct ElmAppInterfaceConvention
     {
-        public const string InitialStateFunctionName = "interfaceToHost_initState";
-
-        public const string ProcessSerializedEventFunctionName = "interfaceToHost_processEvent";
-
         public static ImmutableList<string> CompilationInterfaceModuleNamePrefixes => ["CompilationInterface"];
     }
 
@@ -104,7 +100,7 @@ namespace ElmTime
                 AsCompletelyLoweredElmApp(
                     sourceFiles,
                     workingDirectoryRelative: workingDirectoryRelative,
-                    compilationRootFilePath: interfaceConfig.compilationRootFilePath,
+                    compilationRootFilePath: interfaceConfig.CompilationRootFilePath,
                     interfaceToHostRootModuleName: [.. InterfaceToHostRootModuleName.Split('.')],
                     elmCompiler,
                     parseCache,

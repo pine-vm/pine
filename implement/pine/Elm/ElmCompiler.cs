@@ -301,7 +301,7 @@ public class ElmCompiler
                     ElmTime.ElmAppInterfaceConfig.Default
                     with
                     {
-                        compilationRootFilePath = rootFilePaths.Single()
+                        CompilationRootFilePath = rootFilePaths.Single()
                     });
 
             if (loweringResult.IsErrOrNull() is { } loweringErr)

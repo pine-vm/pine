@@ -1328,9 +1328,9 @@ public class Program
             }
 
             var compilationRootFilePath =
-                sourceFiles.ContainsKey(ElmAppInterfaceConfig.Default.compilationRootFilePath)
+                sourceFiles.ContainsKey(ElmAppInterfaceConfig.Default.CompilationRootFilePath)
                 ?
-                ElmAppInterfaceConfig.Default.compilationRootFilePath
+                ElmAppInterfaceConfig.Default.CompilationRootFilePath
                 :
                 sourceFiles
                 .Where(c => c.Key[c.Key.Count - 1].EndsWith(".elm", StringComparison.OrdinalIgnoreCase))
@@ -1342,7 +1342,7 @@ public class Program
             var interfaceConfig =
                 ElmAppInterfaceConfig.Default with
                 {
-                    compilationRootFilePath = compilationRootFilePath
+                    CompilationRootFilePath = compilationRootFilePath
                 };
 
             var compilationResult = ElmAppCompilation.AsCompletelyLoweredElmApp(
@@ -2276,7 +2276,7 @@ public class Program
             ElmAppCompilation.AsCompletelyLoweredElmApp(
                 sourceFiles: sourceFiles.ToImmutableDictionary(),
                 workingDirectoryRelative: workingDirectoryRelative,
-                interfaceConfig: new ElmAppInterfaceConfig(compilationRootFilePath: pathToFileWithElmEntryPoint));
+                interfaceConfig: new ElmAppInterfaceConfig(CompilationRootFilePath: pathToFileWithElmEntryPoint));
 
         var entryPointSourceFile =
             sourceFiles[pathToFileWithElmEntryPoint];

@@ -858,7 +858,7 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
         ElmAppInterfaceConfig? overrideElmAppInterfaceConfig)
     {
         var compilationRootFilePath =
-            overrideElmAppInterfaceConfig?.compilationRootFilePath
+            overrideElmAppInterfaceConfig?.CompilationRootFilePath
             ??
             ["src", "Backend", "Main.elm"];
 

@@ -2205,7 +2205,7 @@ type alias LoadDependencyStruct =
                 ElmAppInterfaceConfig.Default
                 with
                 {
-                    compilationRootFilePath = entryFileName
+                    CompilationRootFilePath = entryFileName
                 });
 
         if (loweringResult.IsErrOrNull() is { } loweringErr)

@@ -51,8 +51,6 @@ type alias RootModuleConfig =
     , appRootDeclarationModuleName : String
     , appStateTypeAnnotation : ElmTypeAnnotation
     , modulesToImport : List (List String)
-    , stateShimRequestDecodeFunction : ( List String, String )
-    , stateShimResponseEncodeSerialFunction : ( List String, String )
     , supportingJsonConverterFunctions : Dict.Dict String ( List String, String )
     , otherSupportingFunctions : List String
     , appStateWithPlatformShimTypeAnnotationFromAppStateAnnotation : String -> String
@@ -203,18 +201,6 @@ loweredForAppInStateManagementShim sourceDirs stateShimConfig config sourceFiles
                 stateShimResponseResultFunctionsNamesInGeneratedModules =
                     buildJsonConverterFunctionsForTypeAnnotation (Tuple.first supportingTypes.stateShimResponseResultType)
 
-                stateShimRequestDecodeFunction : ( List String, String )
-                stateShimRequestDecodeFunction =
-                    ( generateSerializersResult.generatedModuleName
-                    , stateShimRequestFunctionsNamesInGeneratedModules.decodeFunction.name
-                    )
-
-                stateShimResponseEncodeSerialFunction : ( List String, String )
-                stateShimResponseEncodeSerialFunction =
-                    ( generateSerializersResult.generatedModuleName
-                    , stateShimResponseResultFunctionsNamesInGeneratedModules.encodeFunction.name
-                    )
-
                 supportingJsonConverterFunctions : Dict.Dict String ( List String, String )
                 supportingJsonConverterFunctions =
                     jsonConverterDeclarations
@@ -269,8 +255,6 @@ loweredForAppInStateManagementShim sourceDirs stateShimConfig config sourceFiles
                         , appRootDeclarationModuleName = appRootDeclarationModuleName
                         , appStateTypeAnnotation = appStateType.typeAnnotation
                         , modulesToImport = modulesToImport
-                        , stateShimRequestDecodeFunction = stateShimRequestDecodeFunction
-                        , stateShimResponseEncodeSerialFunction = stateShimResponseEncodeSerialFunction
                         , supportingJsonConverterFunctions = supportingJsonConverterFunctions
                         , otherSupportingFunctions =
                             exposedFunctionsRootModuleSupportingFunction
@@ -491,16 +475,7 @@ composeRootElmModuleTextWithStateShim config =
 
         functionAliases : List ( String, ( List String, String ) )
         functionAliases =
-            List.concat
-                [ [ ( "jsonDecodeStateShimRequest"
-                    , config.stateShimRequestDecodeFunction
-                    )
-                  , ( "jsonEncodeStateShimResultResponse"
-                    , config.stateShimResponseEncodeSerialFunction
-                    )
-                  ]
-                , supportingJsonConverterFunctionsAliases
-                ]
+            supportingJsonConverterFunctionsAliases
 
         supportingFunctionsText : String
         supportingFunctionsText =
@@ -555,10 +530,6 @@ type alias AppStateWithPlatformShim =
 
 type alias State =
     StateShimState AppStateWithPlatformShim
-
-
-interfaceToHost_initState =
-    Backend.Generated.StateShim.init
 
 
 """
