@@ -15,9 +15,6 @@ namespace ElmTime.ElmInteractive;
 
 public class ElmInteractive
 {
-    public static readonly ConcurrentDictionary<TreeNodeWithStringPath, System.Threading.Tasks.Task<string>>
-        JavaScriptToEvaluateElmFromCompilerTask = new();
-
     public static long EstimatePineValueMemoryUsage(PineValue pineValue)
     {
         if (pineValue is PineValue.ListValue listValue)

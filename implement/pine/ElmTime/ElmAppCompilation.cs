@@ -198,9 +198,9 @@ namespace ElmTime
 
             var currentIterationReport = new CompilationIterationReport
             (
-                compilation: compilationReport,
-                dependenciesReports: null,
-                totalTimeSpentMilli: (int)totalStopwatch.ElapsedMilliseconds
+                Compilation: compilationReport,
+                DependenciesReports: null,
+                TotalTimeSpentMilli: (int)totalStopwatch.ElapsedMilliseconds
             );
 
             return
@@ -276,7 +276,7 @@ namespace ElmTime
                                 var dependencyTotalStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
                                 TimedReport<CompilationIterationDependencyReport> completeDependencyReport(CompilationIterationDependencyReport dependencyReport) =>
-                                    new(report: dependencyReport, totalTimeSpentMilli: (int)dependencyTotalStopwatch.ElapsedMilliseconds);
+                                    new(Report: dependencyReport, TotalTimeSpentMilli: (int)dependencyTotalStopwatch.ElapsedMilliseconds);
 
                                 var dependencyKey = error.dependencyKey;
 
@@ -311,7 +311,7 @@ namespace ElmTime
 
                                     return (
                                         (key: dependencyKey, result: buildResultValue()),
-                                        completeDependencyReport(new CompilationIterationDependencyReport(dependencyKeySummary: "ElmMake")));
+                                        completeDependencyReport(new CompilationIterationDependencyReport(DependencyKeySummary: "ElmMake")));
                                 }
 
                                 throw new Exception("Protocol error: Unknown type of dependency: " + DescribeCompilationError(error.error));
@@ -321,8 +321,8 @@ namespace ElmTime
                         currentIterationReport =
                             currentIterationReport with
                             {
-                                dependenciesReports = [.. newDependencies.Select(depAndReport => depAndReport.Item2)],
-                                totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds
+                                DependenciesReports = [.. newDependencies.Select(depAndReport => depAndReport.Item2)],
+                                TotalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds
                             };
 
                         var newDependenciesWithError =
@@ -340,7 +340,7 @@ namespace ElmTime
                                     location: null,
                                     error: new CompilationError(
                                         DependencyError:
-                                        dep.Item2.report.dependencyKeySummary + " " +
+                                        dep.Item2.Report.DependencyKeySummary + " " +
                                         dep.Item1.result.Unpack(
                                             fromErr: error => error,
                                             fromOk: _ => throw new NotImplementedException()))))
@@ -381,7 +381,6 @@ namespace ElmTime
             ElmCompilerCache elmCompilerCache)
         {
             var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
-            var serializeStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
             /*
              * 
@@ -568,13 +567,7 @@ namespace ElmTime
                 (compilationResult,
                 new CompilationIterationCompilationReport
                 (
-                    serializeTimeSpentMilli: (int)serializeStopwatch.ElapsedMilliseconds,
-                    prepareJavaScriptEngineTimeSpentMilli: null,
-                    argumentsJsonHash: "",
-                    argumentsToJavaScriptEngineSerializedLength: null,
-                    inJavaScriptEngineTimeSpentMilli: null,
-                    deserializeTimeSpentMilli: null,
-                    totalTimeSpentMilli: (int)totalStopwatch.ElapsedMilliseconds
+                    TotalTimeSpentMilli: (int)totalStopwatch.ElapsedMilliseconds
                 ));
         }
 
@@ -1386,22 +1379,17 @@ namespace ElmTime
             0;
 
         public record CompilationIterationReport(
-            CompilationIterationCompilationReport compilation,
-            IReadOnlyList<TimedReport<CompilationIterationDependencyReport>>? dependenciesReports,
-            int? totalTimeSpentMilli);
+            CompilationIterationCompilationReport Compilation,
+            IReadOnlyList<TimedReport<CompilationIterationDependencyReport>>? DependenciesReports,
+            int? TotalTimeSpentMilli);
 
         public record CompilationIterationCompilationReport(
-            int serializeTimeSpentMilli,
-            int? prepareJavaScriptEngineTimeSpentMilli,
-            string? argumentsJsonHash,
-            int? argumentsToJavaScriptEngineSerializedLength,
-            int? inJavaScriptEngineTimeSpentMilli,
-            int? deserializeTimeSpentMilli,
-            int totalTimeSpentMilli);
+            int TotalTimeSpentMilli);
 
-        public record CompilationIterationDependencyReport(string dependencyKeySummary);
+        public record CompilationIterationDependencyReport(
+            string DependencyKeySummary);
 
-        public record TimedReport<T>(T report, int totalTimeSpentMilli);
+        public record TimedReport<T>(T Report, int TotalTimeSpentMilli);
 
         public record CompilationError(
             string? DependencyError = null,
