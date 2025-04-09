@@ -46,18 +46,11 @@ public class ElmLanguageServiceTests
             ElmCompiler.ElmCompilerFromEnvValue(elmCompilerFromBundleValue)
             .Extract(err => throw new Exception(err));
 
-        var pineVMCache =
-            new Pine.PineVM.PineVMCache();
-
-        var pineVM =
-            new Pine.PineVM.PineVM(evalCache: pineVMCache.EvalCache);
-
         AssertHover(
             workspace: TreeNodeWithStringPath.EmptyTree,
             filePathOpenedInEditor: ["src", "Main.elm"],
             elmModuleText,
-            expectedHoverText: "    init : State",
-            pineVM);
+            expectedHoverText: "    init : State");
     }
 
     [TestMethod]
@@ -142,16 +135,14 @@ public class ElmLanguageServiceTests
                     Kind: new Pine.Elm.MonacoEditor.CompletionItemKind.FunctionCompletionItemKind(),
                     Documentation: "    from_alfa",
                     InsertText: "from_alfa")
-            ],
-            pineVM);
+            ]);
     }
 
     private static void AssertHover(
         TreeNodeWithStringPath workspace,
         IReadOnlyList<string> filePathOpenedInEditor,
         string elmModuleTextWithSplitSymbol,
-        string expectedHoverText,
-        IPineVM pineVM)
+        string expectedHoverText)
     {
         var split = elmModuleTextWithSplitSymbol.Split("👈🚁");
 
@@ -185,7 +176,7 @@ public class ElmLanguageServiceTests
                 new TreeNodeWithStringPath.BlobNode(Encoding.UTF8.GetBytes(elmModuleText)));
 
         var languageService =
-            LanguageServiceState.InitLanguageServiceState(pineVM)
+            LanguageServiceState.InitLanguageServiceState()
             .Extract(err => throw new Exception(err));
 
         MutateServiceAddingFiles(mergedWorkspace, languageService);
@@ -236,8 +227,7 @@ public class ElmLanguageServiceTests
         IReadOnlyList<string> filePathOpenedInEditor,
         string elmModuleTextBefore,
         string elmModuleTextWithSplitSymbol,
-        IReadOnlyList<Pine.Elm.MonacoEditor.MonacoCompletionItem> expectedCompletionItems,
-        IPineVM pineVM)
+        IReadOnlyList<Pine.Elm.MonacoEditor.MonacoCompletionItem> expectedCompletionItems)
     {
         var split =
             elmModuleTextWithSplitSymbol.Split("✂➕");
@@ -248,7 +238,7 @@ public class ElmLanguageServiceTests
         var (beforeCursor, afterCursor) = (split[0], split[1]);
 
         var languageService =
-            LanguageServiceState.InitLanguageServiceState(pineVM)
+            LanguageServiceState.InitLanguageServiceState()
             .Extract(err => throw new Exception(err));
 
         var mergedWorkspaceBefore =

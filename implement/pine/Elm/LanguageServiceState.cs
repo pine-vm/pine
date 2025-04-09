@@ -10,13 +10,19 @@ namespace Pine.Elm;
 public class LanguageServiceState(
     ElmCompiler.LanguageServiceInterfaceStruct languageServiceInterface,
     PineValue initState,
+    PineVM.PineVMCache pineVMCache,
     IPineVM pineVM)
 {
     private PineValue state = initState;
 
-    public static Result<string, LanguageServiceState> InitLanguageServiceState(
-        IPineVM pineVM)
+    public static Result<string, LanguageServiceState> InitLanguageServiceState()
     {
+        var pineVMCache =
+            new PineVM.PineVMCache();
+
+        var pineVM =
+            new PineVM.PineVM(evalCache: pineVMCache.EvalCache);
+
         var compilerSourceFiles =
             ElmCompiler.CompilerSourceFilesDefault.Value;
 
@@ -87,6 +93,7 @@ public class LanguageServiceState(
         return new LanguageServiceState(
             languageServiceInterface,
             initOk,
+            pineVMCache,
             pineVM);
     }
 
@@ -258,6 +265,16 @@ public class LanguageServiceState(
                         requestEncoded,
                         state,
                     ]);
+
+            {
+                // TODO: Use overlap and warmup to reduce response delays.
+
+                if (pineVMCache.EvalCache.Count > 10_000)
+                {
+                    pineVMCache.EvalCache.Clear();
+                }
+            }
+
 
             {
                 if (handleRequestResult.IsErrOrNull() is { } err)

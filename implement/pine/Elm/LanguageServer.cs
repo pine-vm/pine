@@ -2,11 +2,9 @@ using ElmTime.ElmSyntax;
 using Interface = Pine.Elm.LanguageServiceInterface;
 using Pine.Core;
 using Pine.Core.LanguageServerProtocol;
-using Pine.Core.PineVM;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
-using Pine.PineVM;
 using Pine.Elm019;
 using System.Collections.Immutable;
 
@@ -40,10 +38,10 @@ public class LanguageServer(
         LanguageServiceState languageServiceState)
     {
         public static Result<string, WorkspaceState> Init(
-            IReadOnlyList<WorkspaceFolder> workspaceFolders,
-            IPineVM pineVM)
+            IReadOnlyList<WorkspaceFolder> workspaceFolders)
         {
-            var initServiceStateResult = LanguageServiceState.InitLanguageServiceState(pineVM);
+            var initServiceStateResult =
+                LanguageServiceState.InitLanguageServiceState();
 
             if (initServiceStateResult.IsErrOrNull() is { } err)
             {
@@ -221,11 +219,7 @@ public class LanguageServer(
 
         languageServiceStateTask = System.Threading.Tasks.Task.Run(() =>
         {
-            var vmCache = new PineVMCache();
-
-            var pineVM = new PineVM.PineVM(evalCache: vmCache.EvalCache);
-
-            var initResult = WorkspaceState.Init(workspaceFolders, pineVM);
+            var initResult = WorkspaceState.Init(workspaceFolders);
 
             if (initResult.IsErrOrNull() is { } err)
             {
