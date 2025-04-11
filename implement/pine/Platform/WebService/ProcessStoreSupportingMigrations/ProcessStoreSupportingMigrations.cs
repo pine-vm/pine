@@ -230,8 +230,11 @@ public class ProcessStoreInFileStore
 
     protected static string DeflatedLiteralElementSubdirectory => "deflated-literal-element";
 
-    protected static IReadOnlyList<string> ValueJsonDeflatedSubdirectory =
+    protected static readonly IReadOnlyList<string> ValueJsonDeflatedSubdirectory =
         ["value", "json", "deflated"];
+
+    protected static readonly IReadOnlyList<string> ValueBinaryDeflatedSubdirectory =
+        ["value", "binary", "deflated"];
 
     protected static string ProvisionalReductionSubdirectory => "provisional-reduction";
 
@@ -274,6 +277,9 @@ public class ProcessStoreReaderInFileStore(
 
     protected IFileStoreReader ValueJsonDeflatedFileStore =>
         fileStore.ForSubdirectory(ValueJsonDeflatedSubdirectory);
+
+    protected IFileStoreReader ValueBinaryDeflatedFileStore =>
+        fileStore.ForSubdirectory(ValueBinaryDeflatedSubdirectory);
 
     protected IFileStoreReader ProvisionalReductionFileStore =>
         fileStore.ForSubdirectory(ProvisionalReductionSubdirectory);
@@ -327,6 +333,14 @@ public class ProcessStoreReaderInFileStore(
 
     public PineValue? LoadComponent(string componentHashBase16)
     {
+        if (ValueBinaryDeflatedFileStore.GetFileContent(
+            GetFilePathForComponentInComponentFileStore(componentHashBase16)) is { } fileContentBinaryDeflated)
+        {
+            var binaryBytes = BytesConversions.Inflate(fileContentBinaryDeflated);
+
+            return PineValueBinaryEncoding.DecodeRoot(binaryBytes);
+        }
+
         if (ValueJsonDeflatedFileStore.GetFileContent(
             GetFilePathForComponentInComponentFileStore(componentHashBase16)) is { } fileContentJsonDeflated)
         {
@@ -545,6 +559,9 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
     protected IFileStoreWriter ValueJsonDeflatedFileStore =>
         fileStore.ForSubdirectory(ValueJsonDeflatedSubdirectory);
 
+    protected IFileStoreWriter ValueBinaryDeflatedFileStore =>
+        fileStore.ForSubdirectory(ValueBinaryDeflatedSubdirectory);
+
     protected IFileStoreWriter ProvisionalReductionFileStore =>
         fileStore.ForSubdirectory(ProvisionalReductionSubdirectory);
 
@@ -667,6 +684,9 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
                     return (componentHash, componentHashBase16);
             }
 
+            /*
+             * 2025-04-10: Switch to new binary representation.
+             * 
             var asJsonString = SerializeValueToJsonString(component);
 
             var asJsonBytes = Encoding.UTF8.GetBytes(asJsonString);
@@ -676,6 +696,25 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
             ValueJsonDeflatedFileStore.SetFileContent(
                 GetFilePathForComponentInComponentFileStore(componentHashBase16),
                 deflated.ToArray());
+            */
+
+            using var stream = new System.IO.MemoryStream();
+
+            using var deflateStream =
+                new System.IO.Compression.DeflateStream(
+                    stream,
+                    System.IO.Compression.CompressionLevel.Optimal,
+                    leaveOpen: true);
+
+            PineValueBinaryEncoding.Encode(deflateStream, component);
+
+            deflateStream.Flush();
+
+            var deflated = stream.ToArray();
+
+            ValueBinaryDeflatedFileStore.SetFileContent(
+                GetFilePathForComponentInComponentFileStore(componentHashBase16),
+                deflated);
 
             componentsWrittenHash.TryAdd(componentHashBase16, null);
 
