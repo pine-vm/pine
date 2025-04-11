@@ -97,7 +97,29 @@ public class JsonConverterForPineValueTests
         Assert.AreEqual(
             $$"""{"ListAsString":"stringValue 789"}""",
             serializePineValue(
-                PineValueAsString.ValueFromString("stringValue 789")));
+                PineValueAsString.BlobValueFromString("stringValue 789")));
+
+        Assert.AreEqual(
+            "[]",
+            serializePineValue(PineValue.EmptyList));
+    }
+
+    [TestMethod]
+    public void JSON_serialize_pine_value_to_native_string_2024()
+    {
+        var jsonSerializerOptions = new JsonSerializerOptions { };
+
+        jsonSerializerOptions.Converters.Add(new JsonConverterForPineValue());
+
+        string serializePineValue(PineValue pineValue) =>
+            JsonSerializer.Serialize(
+                pineValue,
+                options: jsonSerializerOptions);
+
+        Assert.AreEqual(
+            $$"""{"ListAsString_2024":"stringValue 789"}""",
+            serializePineValue(
+                PineValueAsString.ValueFromString_2024("stringValue 789")));
 
         Assert.AreEqual(
             "[]",

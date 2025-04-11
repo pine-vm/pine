@@ -566,7 +566,7 @@
                                         {
                                           "List": [
                                             [
-                                              { "Literal": [ { "ListAsString": "Elm_Bytes" } ] },
+                                              { "Literal": [ { "ListAsString_2024": "Elm_Bytes" } ] },
                                               {
                                                 "KernelApplication": [
                                                   "head",
@@ -602,7 +602,7 @@
                                     },
                                     {
                                       "ParseAndEval": [
-                                        { "Literal": [ { "ListAsString": "Error in case-of block: No matching branch." } ] },
+                                        { "Literal": [ { "ListAsString_2024": "Error in case-of block: No matching branch." } ] },
                                         {
                                           "KernelApplication": [
                                             "head",

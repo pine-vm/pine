@@ -1068,8 +1068,31 @@ stringFromValue value =
             ListValue charsValues ->
                 stringFromListValue charsValues
 
+            BlobValue bytes ->
+                stringFromUtf32Bytes [] bytes
+
+
+stringFromUtf32Bytes : List Char -> List Int -> Result String String
+stringFromUtf32Bytes chars remainingBytes =
+    if remainingBytes == [] then
+        Ok (String.fromList chars)
+
+    else
+        case List.take 4 (List.drop (List.length chars * 4) remainingBytes) of
+            [ b1, b2, b3, b4 ] ->
+                let
+                    charCode : Int
+                    charCode =
+                        (b1 * 16777216) + (b2 * 65536) + (b3 * 256) + b4
+                in
+                stringFromUtf32Bytes (Char.fromCode charCode :: chars) (List.drop 4 remainingBytes)
+
             _ ->
-                Err "Not a list"
+                Err
+                    ("Failed to map to char at index "
+                        ++ String.fromInt (List.length chars * 4)
+                        ++ " - not enough bytes available."
+                    )
 
 
 stringFromListValue : List Value -> Result String String

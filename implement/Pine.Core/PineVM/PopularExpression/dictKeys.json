@@ -6,7 +6,7 @@
         {
           "List": [
             [
-              { "Literal": [ { "ListAsString": "RBEmpty_elm_builtin" } ] },
+              { "Literal": [ { "ListAsString_2024": "RBEmpty_elm_builtin" } ] },
               {
                 "KernelApplication": [
                   "head",
@@ -48,7 +48,7 @@
             {
               "List": [
                 [
-                  { "Literal": [ { "ListAsString": "RBNode_elm_builtin" } ] },
+                  { "Literal": [ { "ListAsString_2024": "RBNode_elm_builtin" } ] },
                   {
                     "KernelApplication": [
                       "head",
@@ -84,7 +84,7 @@
         },
         {
           "ParseAndEval": [
-            { "Literal": [ { "ListAsString": "Error in case-of block: No matching branch." } ] },
+            { "Literal": [ { "ListAsString_2024": "Error in case-of block: No matching branch." } ] },
             {
               "KernelApplication": [
                 "head",
