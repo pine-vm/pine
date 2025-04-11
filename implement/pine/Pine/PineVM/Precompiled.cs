@@ -1711,7 +1711,7 @@ public class Precompiled
 
         var stringTagName = stringList.Elements.Span[0];
 
-        if (stringTagName != ElmValue.ElmStringTypeTagNameAsValue)
+        if (stringTagName != ElmValue.ElmStringTypeTagNameAsValue_2024)
         {
             return null;
         }
@@ -1726,12 +1726,8 @@ public class Precompiled
             return null;
         }
 
-        if (stringTagArguments.Elements.Span[0] is not PineValue.ListValue stringCharsList)
-        {
-            return null;
-        }
-
-        var asStringResult = PineValueAsString.StringFromListValue(stringCharsList);
+        var asStringResult =
+            PineValueAsString.StringFromValue(stringTagArguments.Elements.Span[0]);
 
         if (asStringResult.IsOkOrNull() is not { } dotnetString)
         {
@@ -1750,7 +1746,7 @@ public class Precompiled
         var bytesValue =
             PineValue.List(
             [
-                ElmValue.ElmBytesTypeTagNameAsValue,
+                ElmValue.ElmBytesTypeTagNameAsValue_2024,
                 PineValue.List([PineValue.Blob(dotnetBytesBuffer.AsMemory(start:0, length: bytesWritten))])
             ]);
 
@@ -1796,7 +1792,7 @@ public class Precompiled
             return null;
         }
 
-        if (argBytesList.Elements.Span[0] != ElmValue.ElmBytesTypeTagNameAsValue)
+        if (argBytesList.Elements.Span[0] != ElmValue.ElmBytesTypeTagNameAsValue_2024)
         {
             return null;
         }
@@ -1859,7 +1855,7 @@ public class Precompiled
                     PineVM.ValueFromPathInValueOrEmptyList(b, [1, 0]));
         }
 
-        if (aTag == ElmValue.ElmFloatTypeTagNameAsValue && bTag == ElmValue.ElmFloatTypeTagNameAsValue)
+        if (aTag == ElmValue.ElmFloatTypeTagNameAsValue_2024 && bTag == ElmValue.ElmFloatTypeTagNameAsValue_2024)
         {
             var aTagArgs = PineVM.ValueFromPathInValueOrEmptyList(a, [1]);
             var bTagArgs = PineVM.ValueFromPathInValueOrEmptyList(b, [1]);
@@ -1886,7 +1882,7 @@ public class Precompiled
             return Tag_GT_Value;
         }
 
-        if (aTag == ElmValue.ElmFloatTypeTagNameAsValue)
+        if (aTag == ElmValue.ElmFloatTypeTagNameAsValue_2024)
         {
             var aTagArgs = PineVM.ValueFromPathInValueOrEmptyList(a, [1]);
 
@@ -1908,7 +1904,7 @@ public class Precompiled
             return Tag_GT_Value;
         }
 
-        if (bTag == ElmValue.ElmFloatTypeTagNameAsValue)
+        if (bTag == ElmValue.ElmFloatTypeTagNameAsValue_2024)
         {
             var bTagArgs = PineVM.ValueFromPathInValueOrEmptyList(b, [1]);
 
@@ -2087,7 +2083,7 @@ public class Precompiled
         var aTagArgs = PineVM.ValueFromPathInValueOrEmptyList(a, [1]);
         var bTagArgs = PineVM.ValueFromPathInValueOrEmptyList(b, [1]);
 
-        if (aTag == ElmValue.ElmFloatTypeTagNameAsValue &&
+        if (aTag == ElmValue.ElmFloatTypeTagNameAsValue_2024 &&
             aTagArgs is PineValue.ListValue argsList && argsList.Elements.Length is 2)
         {
             var numAValue = argsList.Elements.Span[0];
@@ -2096,7 +2092,7 @@ public class Precompiled
             return (numAValue == b && denAValue == IntegerOneValue, 0);
         }
 
-        if (bTag == ElmValue.ElmFloatTypeTagNameAsValue &&
+        if (bTag == ElmValue.ElmFloatTypeTagNameAsValue_2024 &&
             bTagArgs is PineValue.ListValue argsListB && argsListB.Elements.Length is 2)
         {
             var numBValue = argsListB.Elements.Span[0];
@@ -2118,12 +2114,12 @@ public class Precompiled
                     return (false, 0);
                 }
 
-                if (aTag == ElmValue.ElmStringTypeTagNameAsValue)
+                if (aTag == ElmValue.ElmStringTypeTagNameAsValue_2024)
                 {
                     return (false, 0);
                 }
 
-                if (aTag == ElmValue.ElmDictNotEmptyTagNameAsValue)
+                if (aTag == ElmValue.ElmDictNotEmptyTagNameAsValue_2024)
                 {
                     var dictAList = DictToListRecursive(a);
                     var dictBList = DictToListRecursive(b);
@@ -2132,7 +2128,7 @@ public class Precompiled
                         (PineValue.List(dictAList) == PineValue.List(dictBList), dictAList.Length + dictBList.Length);
                 }
 
-                if (aTag == ElmValue.ElmSetTypeTagNameAsValue)
+                if (aTag == ElmValue.ElmSetTypeTagNameAsValue_2024)
                 {
                     var dictA = PineVM.ValueFromPathInValueOrEmptyList(a, [1, 0]);
                     var dictB = PineVM.ValueFromPathInValueOrEmptyList(b, [1, 0]);
@@ -2155,12 +2151,12 @@ public class Precompiled
     {
         var tag = PineVM.ValueFromPathInValueOrEmptyList(dict, [0]);
 
-        if (tag == ElmValue.ElmDictEmptyTagNameAsValue)
+        if (tag == ElmValue.ElmDictEmptyTagNameAsValue_2024)
         {
             return ReadOnlyMemory<PineValue>.Empty;
         }
 
-        if (tag == ElmValue.ElmDictNotEmptyTagNameAsValue)
+        if (tag == ElmValue.ElmDictNotEmptyTagNameAsValue_2024)
         {
             var dictNotEmptyArgs = PineVM.ValueFromPathInValueOrEmptyList(dict, [1]);
 
@@ -2190,12 +2186,12 @@ public class Precompiled
     {
         var tag = PineVM.ValueFromPathInValueOrEmptyList(dict, [0]);
 
-        if (tag == ElmValue.ElmDictEmptyTagNameAsValue)
+        if (tag == ElmValue.ElmDictEmptyTagNameAsValue_2024)
         {
             return ReadOnlyMemory<PineValue>.Empty;
         }
 
-        if (tag == ElmValue.ElmDictNotEmptyTagNameAsValue)
+        if (tag == ElmValue.ElmDictNotEmptyTagNameAsValue_2024)
         {
             var dictNotEmptyArgs = PineVM.ValueFromPathInValueOrEmptyList(dict, [1]);
 
@@ -2449,12 +2445,12 @@ public class Precompiled
     {
         var dictTag = PineVM.ValueFromPathInValueOrEmptyList(dict, [0]);
 
-        if (dictTag == ElmValue.ElmDictEmptyTagNameAsValue)
+        if (dictTag == ElmValue.ElmDictEmptyTagNameAsValue_2024)
         {
             return Tag_Nothing_Value;
         }
 
-        if (dictTag == ElmValue.ElmDictNotEmptyTagNameAsValue)
+        if (dictTag == ElmValue.ElmDictNotEmptyTagNameAsValue_2024)
         {
             var dictNotEmptyArgs = PineVM.ValueFromPathInValueOrEmptyList(dict, [1]);
 
@@ -2494,12 +2490,12 @@ public class Precompiled
         {
             var dictTag = PineVM.ValueFromPathInValueOrEmptyList(dict, [0]);
 
-            if (dictTag == ElmValue.ElmDictEmptyTagNameAsValue)
+            if (dictTag == ElmValue.ElmDictEmptyTagNameAsValue_2024)
             {
                 return n;
             }
 
-            if (dictTag == ElmValue.ElmDictNotEmptyTagNameAsValue)
+            if (dictTag == ElmValue.ElmDictNotEmptyTagNameAsValue_2024)
             {
                 var dictNotEmptyArgs = PineVM.ValueFromPathInValueOrEmptyList(dict, [1]);
 
