@@ -16,9 +16,11 @@ module ElmCompiler exposing
     , compileParsedInteractiveSubmission
     , elmBytesTypeTagNameAsValue
     , elmFloatTypeTagName
+    , elmFloatTypeTagNameAsValue
     , elmRecordTypeTagName
     , elmRecordTypeTagNameAsValue
     , elmStringTypeTagName
+    , elmStringTypeTagNameAsValue
     , emitTypeDeclarationValue
     , expandElmInteractiveEnvironmentWithModules
     , expressionForDeconstructions
@@ -169,6 +171,11 @@ elmBytesTypeTagNameAsValue =
 elmFloatTypeTagName : String
 elmFloatTypeTagName =
     "Elm_Float"
+
+
+elmFloatTypeTagNameAsValue : Pine.Value
+elmFloatTypeTagNameAsValue =
+    Pine.valueFromString elmFloatTypeTagName
 
 
 autoImportedModulesNames : List (List String)

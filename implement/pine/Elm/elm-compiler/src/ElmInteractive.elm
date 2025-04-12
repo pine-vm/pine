@@ -10,9 +10,9 @@ import ElmCompiler
     exposing
         ( ProjectParsedElmFile
         , elmBytesTypeTagNameAsValue
-        , elmFloatTypeTagName
-        , elmRecordTypeTagName
-        , elmStringTypeTagName
+        , elmFloatTypeTagNameAsValue
+        , elmRecordTypeTagNameAsValue
+        , elmStringTypeTagNameAsValue
         , stringStartsWithUpper
         )
 import FirCompiler exposing (Expression(..))
@@ -306,65 +306,7 @@ pineValueAsElmValue pineValue =
                                 Err ("Failed to combine list: " ++ error)
 
                             Ok listValues ->
-                                let
-                                    resultAsList =
-                                        Ok (ElmList listValues)
-                                in
-                                if listValues == [] then
-                                    resultAsList
-
-                                else
-                                    case listValues of
-                                        [ ElmList tagNameChars, ElmList tagArguments ] ->
-                                            case tryMapElmValueToString tagNameChars of
-                                                Just tagName ->
-                                                    if stringStartsWithUpper tagName then
-                                                        if tagName == elmRecordTypeTagName then
-                                                            (case tagArguments of
-                                                                [ recordValue ] ->
-                                                                    elmValueAsElmRecord recordValue
-
-                                                                _ ->
-                                                                    Err ("Wrong number of tag arguments: " ++ String.fromInt (List.length tagArguments))
-                                                            )
-                                                                |> Result.mapError ((++) "Failed to extract value under record tag: ")
-
-                                                        else if tagName == elmStringTypeTagName then
-                                                            (case tagArguments of
-                                                                [ ElmList charsList ] ->
-                                                                    charsList
-                                                                        |> tryMapElmValueToString
-                                                                        |> Maybe.map (ElmString >> Ok)
-                                                                        |> Maybe.withDefault (Err "Failed to map chars")
-
-                                                                _ ->
-                                                                    Err
-                                                                        ("Unexpected shape of tag arguments ("
-                                                                            ++ String.fromInt (List.length tagArguments)
-                                                                            ++ "): "
-                                                                        )
-                                                            )
-                                                                |> Result.mapError ((++) "Failed to extract value under String tag: ")
-
-                                                        else if tagName == elmFloatTypeTagName then
-                                                            case tagArguments of
-                                                                [ ElmInteger numerator, ElmInteger denominator ] ->
-                                                                    Ok (ElmFloat numerator denominator)
-
-                                                                _ ->
-                                                                    Err "Unexpected shape under Float tag"
-
-                                                        else
-                                                            Ok (ElmTag tagName tagArguments)
-
-                                                    else
-                                                        resultAsList
-
-                                                Nothing ->
-                                                    resultAsList
-
-                                        _ ->
-                                            resultAsList
+                                Ok (ElmList listValues)
                 in
                 case list of
                     [ tagValue, Pine.ListValue tagArguments ] ->
@@ -376,53 +318,102 @@ pineValueAsElmValue pineValue =
                                 _ ->
                                     genericList ()
 
+                        else if tagValue == elmStringTypeTagNameAsValue then
+                            case tagArguments of
+                                [ stringValue ] ->
+                                    case Pine.stringFromValue stringValue of
+                                        Err error ->
+                                            Err ("Failed to parse value under String tag: " ++ error)
+
+                                        Ok string ->
+                                            Ok (ElmString string)
+
+                                _ ->
+                                    Err "Unexpected shape under String tag"
+
+                        else if tagValue == elmRecordTypeTagNameAsValue then
+                            case tagArguments of
+                                [ recordValue ] ->
+                                    case pineValueAsElmRecord recordValue of
+                                        Err error ->
+                                            Err ("Failed to parse value under Record tag: " ++ error)
+
+                                        Ok recordElmValue ->
+                                            Ok recordElmValue
+
+                                _ ->
+                                    Err "Unexpected shape under Record tag"
+
+                        else if tagValue == elmFloatTypeTagNameAsValue then
+                            case tagArguments of
+                                [ Pine.BlobValue numeratorValue, Pine.BlobValue denominatorValue ] ->
+                                    case Pine.bigIntFromBlobValue numeratorValue of
+                                        Err error ->
+                                            Err ("Failed to parse numerator: " ++ error)
+
+                                        Ok numerator ->
+                                            case Pine.bigIntFromBlobValue denominatorValue of
+                                                Err error ->
+                                                    Err ("Failed to parse denominator: " ++ error)
+
+                                                Ok denominator ->
+                                                    Ok (ElmFloat numerator denominator)
+
+                                _ ->
+                                    Err "Unexpected shape under Float tag"
+
                         else
-                            genericList ()
+                            case Pine.stringFromValue tagValue of
+                                Err _ ->
+                                    genericList ()
+
+                                Ok tagName ->
+                                    if stringStartsWithUpper tagName then
+                                        case
+                                            Common.resultListMapCombine pineValueAsElmValue tagArguments
+                                        of
+                                            Err error ->
+                                                Err ("Failed to combine list: " ++ error)
+
+                                            Ok listValues ->
+                                                Ok (ElmTag tagName listValues)
+
+                                    else
+                                        genericList ()
 
                     _ ->
                         genericList ()
 
 
-elmValueAsElmRecord : ElmValue -> Result String ElmValue
-elmValueAsElmRecord elmValue =
+pineValueAsElmRecord : Pine.Value -> Result String ElmValue
+pineValueAsElmRecord value =
     let
-        tryMapToRecordField : ElmValue -> Result String ( String, ElmValue )
+        tryMapToRecordField : Pine.Value -> Result String ( String, ElmValue )
         tryMapToRecordField possiblyRecordField =
             case possiblyRecordField of
-                ElmList fieldListItems ->
+                Pine.ListValue fieldListItems ->
                     case fieldListItems of
                         [ fieldNameValue, fieldValue ] ->
-                            let
-                                continueWithFieldName fieldName =
+                            case Pine.stringFromValue fieldNameValue of
+                                Err error ->
+                                    Err ("Failed to parse field name: " ++ error)
+
+                                Ok fieldName ->
                                     if not (stringStartsWithUpper fieldName) then
-                                        Ok ( fieldName, fieldValue )
+                                        case pineValueAsElmValue fieldValue of
+                                            Err error ->
+                                                Err
+                                                    ("Failed to parse value under field '"
+                                                        ++ fieldName
+                                                        ++ "': "
+                                                        ++ error
+                                                    )
+
+                                            Ok fieldValueAsElmValue ->
+                                                Ok ( fieldName, fieldValueAsElmValue )
 
                                     else
                                         Err ("Field name does start with uppercase: '" ++ fieldName ++ "'")
-                            in
-                            case fieldNameValue of
-                                ElmList fieldNameValueList ->
-                                    case tryMapElmValueToString fieldNameValueList of
-                                        Just fieldName ->
-                                            continueWithFieldName fieldName
-
-                                        Nothing ->
-                                            Err "Failed parsing field name value."
-
-                                ElmString fieldName ->
-                                    continueWithFieldName fieldName
-
-                                ElmTag tagName arguments ->
-                                    Err
-                                        ("Unexpected type in field name value: Tag "
-                                            ++ tagName
-                                            ++ " with "
-                                            ++ String.fromInt (List.length arguments)
-                                            ++ " arguments."
-                                        )
-
-                                _ ->
-                                    Err "Unexpected type in field name value."
 
                         _ ->
                             Err ("Unexpected number of list items: " ++ String.fromInt (List.length fieldListItems))
@@ -430,8 +421,8 @@ elmValueAsElmRecord elmValue =
                 _ ->
                     Err "Not a list."
     in
-    case elmValue of
-        ElmList recordFieldList ->
+    case value of
+        Pine.ListValue recordFieldList ->
             case
                 recordFieldList
                     |> Common.resultListMapCombine tryMapToRecordField
