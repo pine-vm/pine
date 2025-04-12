@@ -859,4 +859,39 @@ public class ElmCompiler
 
         return false;
     }
+
+    public static Result<string, ElmCompiler> LoadCompilerFromBundleFile(string filePath)
+    {
+        using var sourceFile =
+            new System.IO.FileStream(
+                path: filePath,
+                System.IO.FileMode.Open,
+                System.IO.FileAccess.Read);
+
+        var envDictResult =
+            BundledElmEnvironments.LoadBundledCompiledEnvironments(
+                sourceFile,
+                gzipDecompress: filePath.EndsWith(".gzip", StringComparison.OrdinalIgnoreCase));
+
+        {
+            if (envDictResult.IsErrOrNull() is { } err)
+            {
+                return "Failed loading Elm compiler from bundle: " + err;
+            }
+        }
+
+        if (envDictResult.IsOkOrNull() is not { } envDict)
+        {
+            throw new NotImplementedException(
+                "Unexpected result type: " + envDictResult.GetType());
+        }
+
+        var compiledEnv =
+            envDict.Values
+            .OfType<PineValue.ListValue>()
+            .OrderByDescending(list => list.NodesCount)
+            .First();
+
+        return ElmCompilerFromEnvValue(compiledEnv);
+    }
 }

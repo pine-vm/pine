@@ -935,6 +935,12 @@ public class Program
                 description: "Apply gzip compression",
                 optionType: CommandOptionType.NoValue);
 
+            var overrideCompilerOption =
+            compileCommand.Option(
+                "--override-compiler",
+                description: "Load the Elm compiler from the specified source",
+                optionType: CommandOptionType.SingleValue);
+
             compileCommand.OnExecute(() =>
             {
                 IReadOnlyList<IReadOnlyList<string>> rootFilePaths =
@@ -987,6 +993,24 @@ public class Program
                         ", ",
                         rootFilePaths.Select(path => string.Join("/", path))));
 
+                ElmCompiler? overrideElmCompiler = null;
+
+                if (overrideCompilerOption.Value() is { } overrideCompilerPath)
+                {
+                    Console.WriteLine("Using Elm compiler from " + overrideCompilerPath);
+
+                    overrideElmCompiler =
+                    ElmCompiler.LoadCompilerFromBundleFile(overrideCompilerPath)
+                    .Extract(err => throw new Exception("Failed to load Elm compiler from " + overrideCompilerPath + ": " + err));
+
+                    var elmCompilerHash =
+                    new Pine.CompilePineToDotNet.CompilerMutableCache()
+                    .ComputeHash(overrideElmCompiler.CompilerEnvironment);
+
+                    Console.WriteLine(
+                        "Loaded Elm compiler with hash " + Convert.ToHexStringLower(elmCompilerHash.Span)[..8]);
+                }
+
                 var compiledEnvironments =
                 environmentsSourceTrees
                 .Select(sourceTree =>
@@ -995,7 +1019,8 @@ public class Program
                     ElmCompiler.LoadOrCompileInteractiveEnvironment(
                         sourceTree,
                         rootFilePaths: rootFilePaths,
-                        skipLowering: skipLowering)
+                        skipLowering: skipLowering,
+                        overrideElmCompiler: overrideElmCompiler)
                     .Extract(err => throw new Exception("Failed compilation: " + err));
 
                     return new KeyValuePair<TreeNodeWithStringPath, PineValue>(sourceTree, compiledEnv);

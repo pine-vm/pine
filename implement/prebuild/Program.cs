@@ -64,24 +64,8 @@ public class Program
 
     public static ElmCompiler LoadPreviousCompiler()
     {
-        using var sourceFile =
-            new System.IO.FileStream(
-                path: PreviousCompilerFilePath,
-                System.IO.FileMode.Open,
-                System.IO.FileAccess.Read);
-
-        var envDict =
-            BundledElmEnvironments.LoadBundledCompiledEnvironments(sourceFile, gzipDecompress: true)
-            .Extract(err => throw new Exception(err));
-
-        var compiledEnv =
-            envDict.Values
-            .OfType<PineValue.ListValue>()
-            .OrderByDescending(list => list.NodesCount)
-            .First();
-
         return
-            ElmCompiler.ElmCompilerFromEnvValue(compiledEnv)
+            ElmCompiler.LoadCompilerFromBundleFile(PreviousCompilerFilePath)
             .Extract(err => throw new Exception(err));
     }
 
