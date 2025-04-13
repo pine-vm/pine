@@ -94,7 +94,14 @@ public static class ElmInteractiveEnvironment
             .FirstOrDefault(fd => fd.Key == declarationName);
 
         if (functionDeclaration.Value is not { } funcDeclValue)
-            return "declaration " + declarationName + " not found";
+        {
+            return
+                "Did not find function '" + declarationName + "' in module '" +
+                moduleName + "' (there are " +
+                moduleContent.FunctionDeclarations.Count + " functions declarations and " +
+                moduleContent.TypeDeclarations.Count + " type declarations in this module: " +
+                string.Join(", ", moduleContent.FunctionDeclarations.Select(fd => fd.Key)) + ")";
+        }
 
         return
         ParseFunctionRecordFromValueTagged(funcDeclValue, parseCache)
