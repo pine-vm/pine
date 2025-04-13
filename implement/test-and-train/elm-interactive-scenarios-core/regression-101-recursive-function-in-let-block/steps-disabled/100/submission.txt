@@ -1,0 +1,36 @@
+let
+    updateRecordFieldInner ( newFieldName, newFieldValue ) fieldsCompleted fieldsRemaining =
+        case fieldsRemaining of
+            [] ->
+                Pine_kernel.concat
+                    [ fieldsCompleted
+                    , [ ( newFieldName, newFieldValue ) ]
+                    ]
+
+            ( fieldName, fieldValue ) :: remainingFields ->
+                if Pine_kernel.equal [ fieldName, newFieldName ] then
+                    Pine_kernel.concat
+                        [ fieldsCompleted
+                        , [ ( newFieldName, newFieldValue ) ]
+                        , remainingFields
+                        ]
+
+                else
+                    updateRecordFieldInner
+                        ( newFieldName, newFieldValue )
+                        (Pine_kernel.concat [ fieldsCompleted, [ ( fieldName, fieldValue ) ] ])
+                        remainingFields
+
+    updateRecordField ( newFieldName, newFieldValue ) record =
+        case record of
+            Elm_Record recordFields ->
+                -- Extract the 'record' tag from a record value to use as packaging
+                [ Pine_kernel.head {}
+                , [ updateRecordFieldInner
+                        ( String.toList newFieldName, newFieldValue )
+                        []
+                        recordFields
+                    ]
+                ]
+in
+updateRecordField ( "alfa", 21 ) { alfa = 11 }

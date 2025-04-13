@@ -303,7 +303,7 @@
                         ],
                         [
                           { "ListAsString": "Literal" },
-                          [ { "ListAsString": "\uFFFD\u0401" } ]
+                          [ { "ListAsString_2024": "\uFFFD\u0401" } ]
                         ],
                         [
                           { "ListAsString": "List" },
@@ -568,7 +568,7 @@
                                                             ],
                                                             [
                                                               { "ListAsString": "Literal" },
-                                                              { "ListAsString": "\uD8C4\uDC00" }
+                                                              { "ListAsString_2024": "\uD8C4\uDC00" }
                                                             ]
                                                           ]
                                                         ]
@@ -1010,7 +1010,7 @@
                                                         ],
                                                         [
                                                           { "ListAsString": "Literal" },
-                                                          { "ListAsString": "\uD8C4\uDC00" }
+                                                          { "ListAsString_2024": "\uD8C4\uDC00" }
                                                         ]
                                                       ]
                                                     ]

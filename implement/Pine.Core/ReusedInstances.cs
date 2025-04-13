@@ -374,7 +374,7 @@ public record ReusedInstances(
             BuildListValuesFromBundledListValues(loadedPineListValues.PineValueLists);
 
         var valuesExpectedInCompilerSorted =
-            PineValue.ReusedBlobs
+            PineValue.ReusedBlobInstances
             .Cast<PineValue>()
             .Concat(loadedPineListValues.ValuesExpectedInCompilerBlobs)
             .Concat(loadedPineListValues.ValuesExpectedInCompilerLists.OrderBy(listValue => listValue.NodesCount))
@@ -627,7 +627,7 @@ public record ReusedInstances(
          * */
         var pineListValuesFromStrings =
             PopularValues.PopularStrings
-            .Select(PineValueAsString.ValueFromString)
+            .Select(PineValueAsString.ValueFromString_2024)
             .Cast<PineValue.ListValue>()
             .ToFrozenDictionary(
                 keySelector: sv => new PineValue.ListValue.ListValueStruct(sv),
@@ -752,7 +752,7 @@ public record ReusedInstances(
     {
         if (pineValue is PineValue.BlobValue blobValue)
         {
-            if (PineValue.ReusedBlobs.TryGetValue(blobValue, out var reused))
+            if (PineValue.ReusedBlobInstances.TryGetValue(blobValue, out var reused))
                 return reused;
 
             return null;

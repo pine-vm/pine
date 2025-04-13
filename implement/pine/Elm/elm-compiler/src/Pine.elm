@@ -8,7 +8,8 @@ module Pine exposing
     , bigIntFromUnsignedBlobValue
     , bigIntFromValue
     , blobValueFromBigInt
-    , computeValueFromStringRecursive
+    , computeValueFromString_2024
+    , computeValueFromString_2025
     , countValueContent
     , displayStringFromPineError
     , emptyEvalEnvironment
@@ -24,6 +25,8 @@ module Pine exposing
     , listValue_Empty
     , parseExpressionFromValue
     , stringAsValue_Function
+    , stringAsValue_Function_2024
+    , stringAsValue_Function_2025
     , stringAsValue_List
     , stringAsValue_Literal
     , stringFromListValue
@@ -32,6 +35,7 @@ module Pine exposing
     , valueFromBigInt
     , valueFromBool
     , valueFromChar
+    , valueFromChar_2024
     , valueFromContextExpansionWithName
     , valueFromInt
     , valueFromString
@@ -197,7 +201,7 @@ evaluateListExpression completedItems context remainingItems =
 
 valueFromContextExpansionWithName : ( String, Value ) -> Value
 valueFromContextExpansionWithName ( declName, declValue ) =
-    ListValue [ valueFromString declName, declValue ]
+    ListValue [ computeValueFromString_2025 declName, declValue ]
 
 
 kernelFunctions : Dict.Dict String KernelFunction
@@ -934,6 +938,7 @@ describeValue maxDepth value =
 
         ListValue list ->
             let
+                standard : String
                 standard =
                     "["
                         ++ (if maxDepth < 0 then
@@ -941,8 +946,8 @@ describeValue maxDepth value =
 
                             else
                                 String.join ", " (List.map (describeValue (maxDepth - 1)) list)
-                                    ++ "]"
                            )
+                        ++ "]"
             in
             String.join " "
                 [ "ListValue"
@@ -1014,27 +1019,69 @@ valueFromString string =
             stringAsValue_StringTag
 
         _ ->
-            computeValueFromString string
+            computeValueFromString_2025 string
 
 
 computeValueFromString : String -> Value
 computeValueFromString string =
-    computeValueFromStringRecursive [] (String.toList string)
+    computeValueFromString_2025 string
 
 
-computeValueFromStringRecursive : List Value -> List Char -> Value
-computeValueFromStringRecursive mappedChars string =
+computeValueFromString_2025 : String -> Value
+computeValueFromString_2025 string =
+    let
+        charsBytes : List (List Int)
+        charsBytes =
+            List.map blobBytesFromChar (String.toList string)
+    in
+    BlobValue
+        (List.concat charsBytes)
+
+
+computeValueFromString_2024 : String -> Value
+computeValueFromString_2024 string =
+    computeValueFromString_2024_recursive [] (String.toList string)
+
+
+computeValueFromString_2024_recursive : List Value -> List Char -> Value
+computeValueFromString_2024_recursive mappedChars string =
     case string of
         [] ->
             ListValue (List.reverse mappedChars)
 
         nextChar :: restOfChars ->
-            computeValueFromStringRecursive (valueFromChar nextChar :: mappedChars) restOfChars
+            computeValueFromString_2024_recursive
+                (valueFromChar nextChar :: mappedChars)
+                restOfChars
 
 
 valueFromChar : Char -> Value
 valueFromChar char =
+    valueFromChar_2024 char
+
+
+valueFromChar_2024 : Char -> Value
+valueFromChar_2024 char =
     BlobValue (unsafeUnsignedBlobValueFromInt (Char.toCode char))
+
+
+valueFromChar_2025 : Char -> Value
+valueFromChar_2025 char =
+    BlobValue (blobBytesFromChar char)
+
+
+blobBytesFromChar : Char -> List Int
+blobBytesFromChar char =
+    let
+        charCode : Int
+        charCode =
+            Char.toCode char
+    in
+    [ modBy 0x0100 (charCode // 0x01000000)
+    , modBy 0x0100 (charCode // 0x00010000)
+    , modBy 0x0100 (charCode // 0x0100)
+    , modBy 0x0100 charCode
+    ]
 
 
 stringFromValue : Value -> Result String String
@@ -1068,8 +1115,34 @@ stringFromValue value =
             ListValue charsValues ->
                 stringFromListValue charsValues
 
-            _ ->
-                Err "Not a list"
+            BlobValue bytes ->
+                stringFromUtf32Bytes [] bytes
+
+
+stringFromUtf32Bytes : List Char -> List Int -> Result String String
+stringFromUtf32Bytes chars bytes =
+    case List.take 4 (List.drop (List.length chars * 4) bytes) of
+        [] ->
+            Ok (String.fromList (List.reverse chars))
+
+        [ b1, b2, b3, b4 ] ->
+            let
+                charCode : Int
+                charCode =
+                    (b1 * 16777216) + (b2 * 65536) + (b3 * 256) + b4
+            in
+            stringFromUtf32Bytes
+                (Char.fromCode charCode :: chars)
+                bytes
+
+        lessBytes ->
+            Err
+                ("Failed to map to char at index "
+                    ++ String.fromInt (List.length chars * 4)
+                    ++ " - "
+                    ++ String.fromInt (List.length lessBytes)
+                    ++ " bytes left"
+                )
 
 
 stringFromListValue : List Value -> Result String String
@@ -1363,7 +1436,7 @@ encodeExpressionAsValue expression =
     case expression of
         LiteralExpression literal ->
             encodeUnionToPineValue
-                stringAsValue_Literal
+                stringAsValue_Literal_2025
                 (ListValue [ literal ])
 
         ListExpression listExpr ->
@@ -1371,7 +1444,7 @@ encodeExpressionAsValue expression =
 
         ParseAndEvalExpression encodedExpr envExpr ->
             encodeUnionToPineValue
-                stringAsValue_ParseAndEval
+                stringAsValue_ParseAndEval_2025
                 (ListValue
                     [ encodeExpressionAsValue encodedExpr
                     , encodeExpressionAsValue envExpr
@@ -1380,16 +1453,16 @@ encodeExpressionAsValue expression =
 
         KernelApplicationExpression functionName input ->
             encodeUnionToPineValue
-                stringAsValue_KernelApplication
+                stringAsValue_KernelApplication_2025
                 (ListValue
-                    [ valueFromString functionName
+                    [ computeValueFromString_2025 functionName
                     , encodeExpressionAsValue input
                     ]
                 )
 
         ConditionalExpression condition falseBranch trueBranch ->
             encodeUnionToPineValue
-                stringAsValue_Conditional
+                stringAsValue_Conditional_2025
                 (ListValue
                     [ encodeExpressionAsValue condition
                     , encodeExpressionAsValue falseBranch
@@ -1402,7 +1475,7 @@ encodeExpressionAsValue expression =
 
         StringTagExpression tag tagged ->
             encodeUnionToPineValue
-                stringAsValue_StringTag
+                stringAsValue_StringTag_2025
                 (ListValue
                     [ valueFromString tag
                     , encodeExpressionAsValue tagged
@@ -1415,7 +1488,7 @@ encodeListExpressionAsValueReversed encodedItems list =
     case list of
         [] ->
             encodeUnionToPineValue
-                stringAsValue_List
+                stringAsValue_List_2025
                 (ListValue [ ListValue encodedItems ])
 
         itemExpr :: remaining ->
@@ -1427,7 +1500,7 @@ encodeListExpressionAsValueReversed encodedItems list =
 environmentExpressionAsValue : Value
 environmentExpressionAsValue =
     encodeUnionToPineValue
-        stringAsValue_Environment
+        stringAsValue_Environment_2025
         listValue_Empty
 
 
@@ -1709,9 +1782,19 @@ stringAsValue_Literal =
     computeValueFromString "Literal"
 
 
+stringAsValue_Literal_2025 : Value
+stringAsValue_Literal_2025 =
+    computeValueFromString_2025 "Literal"
+
+
 stringAsValue_List : Value
 stringAsValue_List =
     computeValueFromString "List"
+
+
+stringAsValue_List_2025 : Value
+stringAsValue_List_2025 =
+    computeValueFromString_2025 "List"
 
 
 stringAsValue_ParseAndEval : Value
@@ -1719,9 +1802,19 @@ stringAsValue_ParseAndEval =
     computeValueFromString "ParseAndEval"
 
 
+stringAsValue_ParseAndEval_2025 : Value
+stringAsValue_ParseAndEval_2025 =
+    computeValueFromString_2025 "ParseAndEval"
+
+
 stringAsValue_KernelApplication : Value
 stringAsValue_KernelApplication =
     computeValueFromString "KernelApplication"
+
+
+stringAsValue_KernelApplication_2025 : Value
+stringAsValue_KernelApplication_2025 =
+    computeValueFromString_2025 "KernelApplication"
 
 
 stringAsValue_Conditional : Value
@@ -1729,9 +1822,19 @@ stringAsValue_Conditional =
     computeValueFromString "Conditional"
 
 
+stringAsValue_Conditional_2025 : Value
+stringAsValue_Conditional_2025 =
+    computeValueFromString_2025 "Conditional"
+
+
 stringAsValue_Environment : Value
 stringAsValue_Environment =
     computeValueFromString "Environment"
+
+
+stringAsValue_Environment_2025 : Value
+stringAsValue_Environment_2025 =
+    computeValueFromString_2025 "Environment"
 
 
 stringAsValue_Function : Value
@@ -1739,9 +1842,24 @@ stringAsValue_Function =
     computeValueFromString "Function"
 
 
+stringAsValue_Function_2025 : Value
+stringAsValue_Function_2025 =
+    computeValueFromString_2025 "Function"
+
+
+stringAsValue_Function_2024 : Value
+stringAsValue_Function_2024 =
+    computeValueFromString_2024 "Function"
+
+
 stringAsValue_StringTag : Value
 stringAsValue_StringTag =
     computeValueFromString "StringTag"
+
+
+stringAsValue_StringTag_2025 : Value
+stringAsValue_StringTag_2025 =
+    computeValueFromString_2025 "StringTag"
 
 
 stringAsValue_String : Value

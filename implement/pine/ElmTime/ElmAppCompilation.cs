@@ -653,7 +653,8 @@ namespace ElmTime
 
             var tagNameValue = list.Elements.Span[0];
 
-            if (tagNameValue != ValueFromString_LocatedInSourceFiles)
+            if (tagNameValue != ValueFromString_LocatedInSourceFiles &&
+                tagNameValue != ValueFromString_LocatedInSourceFiles_2024)
             {
                 throw new Exception(
                     "Expected first element to be 'LocatedInSourceFiles', got: " + tagNameValue);
@@ -1067,7 +1068,8 @@ namespace ElmTime
 
             var tagNameValue = list.Elements.Span[0];
 
-            if (tagNameValue != ValueFromString_CompilationIterationSuccess)
+            if (tagNameValue != ValueFromString_CompilationIterationSuccess &&
+                tagNameValue != ValueFromString_CompilationIterationSuccess_2024)
             {
                 throw new Exception(
                     "Expected first element to be 'CompilationIterationSuccess', got: " + tagNameValue);
@@ -1184,10 +1186,17 @@ namespace ElmTime
         }
 
         private static readonly PineValue ValueFromString_CompilationIterationSuccess =
-            PineValueAsString.ValueFromString("CompilationIterationSuccess");
+            PineValueAsString.BlobValueFromString("CompilationIterationSuccess");
 
         private static readonly PineValue ValueFromString_LocatedInSourceFiles =
-            PineValueAsString.ValueFromString("LocatedInSourceFiles");
+            PineValueAsString.BlobValueFromString("LocatedInSourceFiles");
+
+
+        private static readonly PineValue ValueFromString_CompilationIterationSuccess_2024 =
+            PineValueAsString.ValueFromString_2024("CompilationIterationSuccess");
+
+        private static readonly PineValue ValueFromString_LocatedInSourceFiles_2024 =
+            PineValueAsString.ValueFromString_2024("LocatedInSourceFiles");
 
         private static Result<string, CompilerSerialInterface.ElmMakeEntryPointKind> ParseElmMakeEntryPointKindResult(
             PineValue pineValue,

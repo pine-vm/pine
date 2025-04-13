@@ -65,7 +65,7 @@
                       ],
                       [
                         { "ListAsString": "Literal" },
-                        [ { "ListAsString": " " } ]
+                        [ { "ListAsString_2024": " " } ]
                       ]
                     ]
                   ]
@@ -135,7 +135,7 @@
                           ],
                           [
                             { "ListAsString": "Literal" },
-                            [ { "ListAsString": "\n" } ]
+                            [ { "ListAsString_2024": "\n" } ]
                           ]
                         ]
                       ]
@@ -205,7 +205,7 @@
                               ],
                               [
                                 { "ListAsString": "Literal" },
-                                [ { "ListAsString": "\r" } ]
+                                [ { "ListAsString_2024": "\r" } ]
                               ]
                             ]
                           ]

@@ -358,6 +358,7 @@ expandEnvWithModulesOrdered environmentBefore newParsedElmModules =
                                     List.foldr
                                         (\( moduleName, moduleStruct ) aggregate ->
                                             let
+                                                moduleValue : Pine.Value
                                                 moduleValue =
                                                     emitModuleValue moduleStruct
                                             in
@@ -1058,7 +1059,7 @@ compileElmSyntaxExpression stackBefore elmExpression =
             Ok (LiteralExpression (valueFromString literal))
 
         Elm.Syntax.Expression.CharLiteral char ->
-            Ok (LiteralExpression (Pine.valueFromChar char))
+            Ok (LiteralExpression (Pine.valueFromChar_2024 char))
 
         Elm.Syntax.Expression.Integer integer ->
             Ok (LiteralExpression (Pine.valueFromInt integer))
@@ -1975,7 +1976,7 @@ compileCaseBlockInline stack caseBlockExpr caseBlockCases =
 
 stringAsValue_errorNoMatchingBranch : Pine.Value
 stringAsValue_errorNoMatchingBranch =
-    Pine.valueFromString "Error in case-of block: No matching branch."
+    Pine.computeValueFromString_2025 "Error in case-of block: No matching branch."
 
 
 compileElmSyntaxCaseBlockCase :
@@ -2296,7 +2297,7 @@ compileElmSyntaxPattern compilation elmPattern =
                                 )
 
         Elm.Syntax.Pattern.CharPattern char ->
-            compilePatternOnlyEqualsCondition (LiteralExpression (Pine.valueFromChar char))
+            compilePatternOnlyEqualsCondition (LiteralExpression (Pine.valueFromChar_2024 char))
 
         Elm.Syntax.Pattern.IntPattern int ->
             compilePatternOnlyEqualsCondition (LiteralExpression (Pine.valueFromInt int))
@@ -2423,7 +2424,7 @@ elmSyntaxListPatternAsLiteral processedItems listItems =
 
                 Elm.Syntax.Pattern.CharPattern char ->
                     elmSyntaxListPatternAsLiteral
-                        (Pine.valueFromChar char :: processedItems)
+                        (Pine.valueFromChar_2024 char :: processedItems)
                         followingItems
 
                 Elm.Syntax.Pattern.ListPattern innerListItems ->
@@ -3468,7 +3469,7 @@ pineFunctionForRecordUpdate =
         )
         (Pine.ParseAndEvalExpression
             (Pine.LiteralExpression
-                (Pine.valueFromString "invalid record update - not a record")
+                (Pine.computeValueFromString_2025 "invalid record update - not a record")
             )
             recordExpression
         )
@@ -3586,7 +3587,7 @@ recursiveFunctionToUpdateFieldsInRecord =
             )
             (Pine.ParseAndEvalExpression
                 (Pine.LiteralExpression
-                    (Pine.valueFromString "invalid record update - field name not found")
+                    (Pine.computeValueFromString_2025 "invalid record update - field name not found")
                 )
                 firstFieldNameLocalExpression
             )
@@ -3626,7 +3627,7 @@ pineFunctionForRecordAccess =
         )
         (Pine.ParseAndEvalExpression
             (Pine.LiteralExpression
-                (Pine.valueFromString "invalid record access - not a record")
+                (Pine.computeValueFromString_2025 "invalid record access - not a record")
             )
             fieldNameLocalExpression
         )
@@ -3690,7 +3691,7 @@ recursiveFunctionToLookupFieldInRecord =
         )
         (Pine.ParseAndEvalExpression
             (Pine.LiteralExpression
-                (Pine.valueFromString "invalid record access - field name not found")
+                (Pine.computeValueFromString_2025 "invalid record access - field name not found")
             )
             fieldNameLocalExpression
         )
@@ -4784,7 +4785,7 @@ valueFromString : String -> Pine.Value
 valueFromString string =
     Pine.ListValue
         [ elmStringTypeTagNameAsValue
-        , Pine.ListValue [ Pine.valueFromString string ]
+        , Pine.ListValue [ Pine.computeValueFromString_2024 string ]
         ]
 
 
@@ -5266,6 +5267,6 @@ responseExpressionFromString str =
     Pine.LiteralExpression
         (Pine.ListValue
             [ Pine.valueFromString "String"
-            , Pine.ListValue [ Pine.valueFromString str ]
+            , Pine.ListValue [ Pine.computeValueFromString_2024 str ]
             ]
         )

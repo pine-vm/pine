@@ -12,23 +12,59 @@ public static class PineValueAsString
             keySelector: s => s,
             elementSelector: ValueFromString);
 
-    private static readonly FrozenDictionary<PineValue.ListValue, string> CommonStringsDecoded =
-        ReusedInstances
+    private static readonly FrozenDictionary<string, PineValue> ReusedInstances_2024 =
+        PopularValues.PopularStrings
+        .ToFrozenDictionary(
+            keySelector: s => s,
+            elementSelector: ValueFromString_2024);
+
+    private static readonly FrozenDictionary<PineValue.ListValue, string> CommonStringsDecodedAsList =
+        ReusedInstances_2024
         .ToFrozenDictionary(
             keySelector: kvp => kvp.Value as PineValue.ListValue,
             elementSelector: kvp => kvp.Key);
 
     /// <summary>
+    /// Converts a .NET string to a Pine blob value containing UTF-32 encoded characters.
+    /// </summary>
+    public static PineValue ValueFromString(string str)
+    {
+        if (ReusedInstances?.TryGetValue(str, out var reusedStringValue) ?? false && reusedStringValue is not null)
+            return reusedStringValue;
+
+        return BlobValueFromString(str);
+    }
+
+    /// <summary>
+    /// Converts a .NET string to a Pine blob value containing UTF-32 encoded characters.
+    /// </summary>
+    public static PineValue.BlobValue BlobValueFromString(string str)
+    {
+        if (str.Length is 0)
+            return PineValue.EmptyBlob;
+
+        var codePoints = ToCodePoints(str);
+
+        var bytes = new byte[codePoints.Count * 4];
+
+        for (var index = 0; index < codePoints.Count; index++)
+        {
+            System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(
+                bytes.AsSpan(index * 4),
+                (uint)codePoints[index]);
+        }
+
+        return (PineValue.BlobValue)PineValue.Blob(bytes);
+    }
+
+    /// <summary>
     /// Converts a .NET string to a Pine list value containing one element for each character in the input string.
     /// </summary>
     /// <returns>Pine list value containing one element for each character in the input string.</returns>
-    public static PineValue ValueFromString(string str)
+    public static PineValue ValueFromString_2024(string str)
     {
         if (str.Length is 0)
             return PineValue.EmptyList;
-
-        if (ReusedInstances?.TryGetValue(str, out var reusedStringValue) ?? false && reusedStringValue is not null)
-            return reusedStringValue;
 
         return PineValue.List(ListValueFromString(str));
     }
@@ -74,20 +110,54 @@ public static class PineValueAsString
 
     public static Result<string, string> StringFromValue(PineValue pineValue)
     {
-        if (pineValue is not PineValue.ListValue list)
-            return Result<string, string>.err("Only a ListValue can represent a string.");
+        if (pineValue is PineValue.ListValue list)
+            return StringFromListValue(list);
 
-        return StringFromListValue(list);
+        if (pineValue is PineValue.BlobValue blob)
+            return StringFromBlobValue(blob.Bytes);
+
+        return
+            Result<string, string>.err("PineValue is not a blob: " + pineValue.GetType().FullName);
     }
 
     private static readonly Result<string, string> emptyStringOk = Result<string, string>.ok("");
+
+    private static Result<string, string> StringFromBlobValue(ReadOnlyMemory<byte> blobBytes)
+    {
+        if (blobBytes.Length is 0)
+            return emptyStringOk;
+
+        if (blobBytes.Length % 4 is not 0)
+        {
+            return Result<string, string>.err("Blob length is not a multiple of 4: " + blobBytes.Length);
+        }
+
+        var codePointsCount = blobBytes.Length / 4;
+
+        var stringBuilder = new System.Text.StringBuilder(capacity: codePointsCount);
+
+        for (var index = 0; index < codePointsCount; index++)
+        {
+            var codePoint =
+                System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(blobBytes.Span[(index * 4)..]);
+
+            if (!UnicodeUtility.IsValidUnicodeScalar(codePoint))
+            {
+                return Result<string, string>.err("Blob value at [" + index + "] out of range: " + codePoint);
+            }
+
+            stringBuilder.Append(char.ConvertFromUtf32(codePoint));
+        }
+
+        return Result<string, string>.ok(stringBuilder.ToString());
+    }
 
     public static Result<string, string> StringFromListValue(PineValue.ListValue list)
     {
         if (list.Elements.Length is 0)
             return emptyStringOk;
 
-        if (CommonStringsDecoded.TryGetValue(list, out var commonString))
+        if (CommonStringsDecodedAsList.TryGetValue(list, out var commonString))
             return Result<string, string>.ok(commonString);
 
         var stringBuilder = new System.Text.StringBuilder(capacity: list.Elements.Length * 2);

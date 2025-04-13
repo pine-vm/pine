@@ -18,6 +18,18 @@ public class ElmValueInterop
     public static readonly PineValue String_Ok_Value =
         PineValueAsString.ValueFromString("Ok");
 
+    public static readonly PineValue String_Nothing_Value_2024 =
+        PineValueAsString.ValueFromString_2024("Nothing");
+
+    public static readonly PineValue String_Just_Value_2024 =
+        PineValueAsString.ValueFromString_2024("Just");
+
+    public static readonly PineValue String_Err_Value_2024 =
+        PineValueAsString.ValueFromString_2024("Err");
+
+    public static readonly PineValue String_Ok_Value_2024 =
+        PineValueAsString.ValueFromString_2024("Ok");
+
     public static ElmValue PineValueEncodedAsInElmCompiler(
         PineValue pineValue) =>
         PineValueEncodedAsInElmCompiler(
@@ -119,8 +131,8 @@ public class ElmValueInterop
                     "BlobValue" =>
                     tag.Arguments switch
                     {
-                    [ElmValue.ElmList firstArgument] =>
-                        ElmValueBlobValueDecodedAsInElmCompiler(firstArgument.Elements),
+                        [ElmValue.ElmList firstArgument] =>
+                            ElmValueBlobValueDecodedAsInElmCompiler(firstArgument.Elements),
 
                         _ =>
                             "Invalid arguments for BlobValue tag"
@@ -129,11 +141,11 @@ public class ElmValueInterop
                     "ListValue" =>
                     tag.Arguments switch
                     {
-                    [ElmValue.ElmList firstArgument] =>
-                        ElmValueListValueDecodedAsInElmCompiler(
-                            firstArgument.Elements,
-                            additionalReusableDecodings,
-                            reportNewDecoding),
+                        [ElmValue.ElmList firstArgument] =>
+                            ElmValueListValueDecodedAsInElmCompiler(
+                                firstArgument.Elements,
+                                additionalReusableDecodings,
+                                reportNewDecoding),
 
                         _ =>
                             "Invalid arguments for ListValue tag"
@@ -540,12 +552,14 @@ public class ElmValueInterop
 
         var tagValue = listValue.Elements.Span[0];
 
-        if (tagValue == String_Nothing_Value)
+        if (tagValue == String_Nothing_Value ||
+            tagValue == String_Nothing_Value_2024)
         {
             return nothing();
         }
 
-        if (tagValue == String_Just_Value)
+        if (tagValue == String_Just_Value ||
+            tagValue == String_Just_Value_2024)
         {
             var tagArgumentsValue = listValue.Elements.Span[1];
 
@@ -583,7 +597,8 @@ public class ElmValueInterop
 
         var tagValue = listValue.Elements.Span[0];
 
-        if (tagValue == String_Err_Value)
+        if (tagValue == String_Err_Value ||
+            tagValue == String_Err_Value_2024)
         {
             var tagArgumentsValue = listValue.Elements.Span[1];
 
@@ -602,7 +617,8 @@ public class ElmValueInterop
             return err(tagArgumentsListValue.Elements.Span[0]);
         }
 
-        if (tagValue == String_Ok_Value)
+        if (tagValue == String_Ok_Value ||
+            tagValue == String_Ok_Value_2024)
         {
             var tagArgumentsValue = listValue.Elements.Span[1];
 

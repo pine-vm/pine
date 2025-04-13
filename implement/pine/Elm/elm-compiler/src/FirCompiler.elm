@@ -2153,7 +2153,10 @@ parseFunctionRecordFromValueTagged value =
         Pine.ListValue listItems ->
             case listItems of
                 [ functionTag, functionRecord ] ->
-                    if functionTag == Pine.stringAsValue_Function then
+                    if
+                        (functionTag == Pine.stringAsValue_Function_2025)
+                            || (functionTag == Pine.stringAsValue_Function_2024)
+                    then
                         parseFunctionRecordFromValue functionRecord
 
                     else

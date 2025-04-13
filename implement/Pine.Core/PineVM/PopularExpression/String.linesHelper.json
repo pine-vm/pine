@@ -101,7 +101,7 @@
                           ],
                           [
                             { "ListAsString": "Literal" },
-                            [ { "ListAsString": "\r\n" } ]
+                            [ { "ListAsString_2024": "\r\n" } ]
                           ]
                         ]
                       ]
@@ -154,7 +154,7 @@
                               ],
                               [
                                 { "ListAsString": "Literal" },
-                                [ { "ListAsString": "\n\r" } ]
+                                [ { "ListAsString_2024": "\n\r" } ]
                               ]
                             ]
                           ]
@@ -207,7 +207,7 @@
                                   ],
                                   [
                                     { "ListAsString": "Literal" },
-                                    { "ListAsString": "\n" }
+                                    { "ListAsString_2024": "\n" }
                                   ]
                                 ]
                               ]
@@ -260,7 +260,7 @@
                                       ],
                                       [
                                         { "ListAsString": "Literal" },
-                                        { "ListAsString": "\r" }
+                                        { "ListAsString_2024": "\r" }
                                       ]
                                     ]
                                   ]

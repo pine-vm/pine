@@ -721,7 +721,7 @@ public class Precompiled
                 ExpressionEncoding.EncodeExpressionAsValue(valueFromCharExpression);
 
             var computeValueFromStringRecursiveExpr =
-                popularExpressionDictionary["Pine.computeValueFromStringRecursive"];
+                popularExpressionDictionary["Pine.computeValueFromString_2024"];
 
             var computeValueFromStringRecursiveExprValue =
                 ExpressionEncoding.EncodeExpressionAsValue(computeValueFromStringRecursiveExpr);
@@ -731,12 +731,7 @@ public class Precompiled
                     [
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
                         [0],
-                        PineValue.List(
-                            [
-                            valueFromCharExpressionValue,
-                            unsafeUnsignedBlobValueFromIntExpressionValue,
-                            computeValueFromStringRecursiveExprValue
-                            ])),
+                        popularValueDictionary["Pine.computeValueFromString_2024.aggregate-env"]),
                     ]);
 
             yield return
@@ -744,7 +739,7 @@ public class Precompiled
                     computeValueFromStringRecursiveExpr,
                     [new PrecompiledEntry(
                         envClass,
-                        PineComputeValueFromStringRecursive)]);
+                        PineComputeValueFromString_2024_Recursive)]);
         }
 
 
@@ -2640,7 +2635,7 @@ public class Precompiled
         throw new ParseExpressionException("Error in case-of block: No matching branch.");
     }
 
-    static PrecompiledResult.FinalValue? PineComputeValueFromStringRecursive(
+    static PrecompiledResult.FinalValue? PineComputeValueFromString_2024_Recursive(
         PineValue environment,
         PineVMParseCache parseCache)
     {

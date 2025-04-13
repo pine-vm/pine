@@ -426,6 +426,11 @@ public class WebServiceTests
 
             Assert.AreEqual(HttpStatusCode.OK, HttpPostStringContentAtRoot(publicAppClient, "part-a").StatusCode);
 
+            Assert.AreEqual(
+                "part-a",
+                await (await publicAppClient.GetAsync("")).Content.ReadAsStringAsync(),
+                "State after first post");
+
             Assert.AreEqual(HttpStatusCode.OK, HttpPostStringContentAtRoot(publicAppClient, "-⚙️-part-b").StatusCode);
 
             Assert.AreEqual(

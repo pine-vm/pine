@@ -66,10 +66,23 @@ public class JsonConverterForPineValue : JsonConverter<PineValue>
                 return pineValue;
             }
 
-
             if (propertyName is "ListAsString")
             {
-                var pineValue = PineValueAsString.ValueFromString(reader.GetString());
+                var pineValue = PineValueAsString.BlobValueFromString(reader.GetString());
+
+                reader.Read();
+
+                if (reader.TokenType is not JsonTokenType.EndObject)
+                    throw new NotSupportedException("Unexpected token type in object: " + reader.TokenType);
+
+                reader.Read();
+
+                return pineValue;
+            }
+
+            if (propertyName is "ListAsString_2024")
+            {
+                var pineValue = PineValueAsString.ValueFromString_2024(reader.GetString());
 
                 reader.Read();
 
@@ -99,6 +112,26 @@ public class JsonConverterForPineValue : JsonConverter<PineValue>
             }
         }
 
+        if (value is PineValue.BlobValue blobValue)
+        {
+            if (blobValue.Bytes.Length is not 0)
+            {
+                if (PineValueAsString.StringFromValue(value) is Result<string, string>.Ok asString && 0 < asString.Value.Length)
+                {
+                    if (!asString.Value.All(asChar => (asChar & 0xff00) == 0x400 || (asChar & 0xff00) == 0x200))
+                    {
+                        writer.WriteStartObject();
+
+                        writer.WriteString("ListAsString", asString.Value);
+
+                        writer.WriteEndObject();
+
+                        return;
+                    }
+                }
+            }
+        }
+
         if (value is PineValue.ListValue listValue)
         {
             if (0 < listValue.Elements.Length)
@@ -109,7 +142,7 @@ public class JsonConverterForPineValue : JsonConverter<PineValue>
                     {
                         writer.WriteStartObject();
 
-                        writer.WriteString("ListAsString", asString.Value);
+                        writer.WriteString("ListAsString_2024", asString.Value);
 
                         writer.WriteEndObject();
 

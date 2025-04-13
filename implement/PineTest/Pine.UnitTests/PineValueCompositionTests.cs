@@ -30,20 +30,8 @@ public class PineValueCompositionTests
                 expectedOutput = (PineValue)PineValue.List(
                     [
                         PineValue.List(
-                            [
-                                PineValue.List(
-                                    [
-                                        PineValue.Blob([65]),
-                                        PineValue.Blob([66]),
-                                        PineValue.Blob([67]),
-                                        PineValue.Blob([32]),
-                                        PineValue.Blob([228]),
-                                        PineValue.Blob([32]),
-                                        PineValue.Blob([1,246,0]),
-                                    ]
-                                ),
-                                PineValue.Blob([0,1,2,3] )
-                            ]
+                            PineValue.Blob([0,0,0,65,0,0,0,66,0,0,0,67,0,0,0,32,0,0,0,228,0,0,0,32,0,1,246,0]),
+                            PineValue.Blob([0,1,2,3])
                         )
                     ])
                 },
@@ -74,23 +62,9 @@ public class PineValueCompositionTests
             {
                 input =
                 (PineValue)PineValue.List(
-                    elements:
-                    [
-                        PineValue.List(
-                            elements:
-                            [
-                                PineValue.List(
-                                    elements:
-                                    [
-                                        PineValue.Blob([68]),
-                                        PineValue.Blob([69]),
-                                        PineValue.Blob([70]),
-                                        PineValue.Blob([32]),
-                                        PineValue.Blob([1,243,50]),
-                                    ]),
-                                PineValue.Blob([0,1,2,3]),
-                            ])
-                    ]),
+                    PineValue.List(
+                        PineValue.Blob([0,0,0,68,0,0,0,69,0,0,0,70,0,0,0,32,0,1,243,50]),
+                        PineValue.Blob([0,1,2,3]))),
                 expectedOutput = Result<IReadOnlyList<(int index, string name)>, TreeNodeWithStringPath>.ok(
                     TreeNodeWithStringPath.SortedTree(
                         treeContent:
@@ -129,52 +103,20 @@ public class PineValueCompositionTests
                         PineValue.List(
                             elements:
                             [
-                                PineValue.List(
-                                    elements:
-                                    [
-                                        PineValue.Blob([97]),
-                                    ]),
+                                PineValue.Blob([0,0,0,97]),
                                 PineValue.Blob([0,1,2]),
                             ]),
                         PineValue.List(
-                            elements:
-                            [
+                            PineValue.Blob([0,0,0,98]),
+                            PineValue.List(
                                 PineValue.List(
-                                    elements:
-                                    [
-                                        PineValue.Blob([98]),
-                                    ]
-                                ),
+                                    PineValue.Blob([0,0,0,99]),
+                                    PineValue.Blob([3,4,5,6])),
+
                                 PineValue.List(
-                                    elements:
-                                    [
-                                        PineValue.List(
-                                            elements:
-                                            [
-                                                PineValue.List(
-                                                    elements:
-                                                    [
-                                                        PineValue.Blob([99]),
-                                                    ]
-                                                ),
-                                                PineValue.Blob([3,4,5,6]),
-                                            ]
-                                        ),
-                                        PineValue.List(
-                                            elements:
-                                            [
-                                                PineValue.List(
-                                                    elements:
-                                                    [
-                                                        PineValue.Blob([100]),
-                                                    ]
-                                                ),
-                                                PineValue.Blob([7,8]),
-                                            ]
-                                        ),
-                                    ]
+                                    PineValue.Blob([0,0,0,100]),
+                                    PineValue.Blob([7,8]))
                                 )
-                            ]
                         ),
                     ])
             },
