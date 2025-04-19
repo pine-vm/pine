@@ -81,7 +81,7 @@ public class SelfTest
                 publicAppUrls: ["http://localhost:" + serverHttpPort],
                 deletePreviousProcess: false,
                 copyProcess: null,
-                deployApp: "https://github.com/pine-vm/pine/tree/1b8d4ff50a3ae94921f9e0f3357abf2bc1a696f3/implement/example-apps/minimal-backend-hello-world");
+                deployApp: "https://github.com/pine-vm/pine/tree/fd7f2100bff563538d1447064decde8b2a3bd07b/implement/example-apps/minimal-backend-hello-world");
 
         webHost.StartAsync().Wait();
 
