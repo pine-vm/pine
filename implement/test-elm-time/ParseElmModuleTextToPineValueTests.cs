@@ -545,6 +545,1217 @@ public class ParseElmModuleTextToPineValueTests
             alsoTestDotnetParser: true);
     }
 
+
+    [TestMethod]
+    public void Dotnet_parser_results_in_same_expression_as_Elm_parser()
+    {
+        IReadOnlyList<string> testCases =
+            [
+                """""
+                module Operations exposing (..)
+
+
+                operations_0 a b =
+                    a * (b + 1)
+
+                operations_1 a b =
+                    a * (b - 1)
+                
+                operations_2 a b =
+                    a + (b // 1)
+
+
+                operations_3 a b c f =
+                    (a + b) * (c + d)
+
+
+                operations_4 a b c f =
+                    a + b * c + d
+                                 
+                """"",
+
+                """"
+                module Pizza exposing (..)
+
+
+                test_0 a =
+                    a
+                    |> f1
+                    |> f2
+                    |> f3
+
+
+                test_1 func =
+                    func
+                    |. a
+                    |. b
+                    |= c
+                    |. d
+                    |. e
+
+                """",
+
+                """"
+                module TypeDecls exposing (..)
+
+
+                type alias ResultInstance =
+                    Result String Int
+
+                
+                {-| Comment
+                -}
+                type alias MaybeInstance =
+                    Maybe Int
+                
+                
+                """",
+
+                """"
+                module Basics exposing
+                    ( (&&)
+                    , (*)
+                    , (+)
+                    , (++)
+                    , (-)
+                    , (/)
+                    , (//)
+                    , (/=)
+                    , (<)
+                    , (<<)
+                    , (<=)
+                    , (<|)
+                    , (==)
+                    , (>)
+                    , (>=)
+                    , (>>)
+                    , (^)
+                    , (|>)
+                    , (||)
+                    , Bool(..)
+                    , Float
+                    , Int
+                    , Never
+                    , Order(..)
+                    , abs
+                    , acos
+                    , always
+                    , asin
+                    , atan
+                    , atan2
+                    , ceiling
+                    , clamp
+                    , compare
+                    , cos
+                    , degrees
+                    , e
+                    , floor
+                    , fromPolar
+                    , identity
+                    , isInfinite
+                    , isNaN
+                    , logBase
+                    , max
+                    , min
+                    , modBy
+                    , negate
+                    , never
+                    , not
+                    , pi
+                    , radians
+                    , remainderBy
+                    , round
+                    , sin
+                    , sqrt
+                    , tan
+                    , toFloat
+                    , toPolar
+                    , truncate
+                    , turns
+                    , xor
+                    )
+
+
+                """",
+
+                """"
+                module Basics exposing ( .. )
+
+
+                infix right 0 (<|) = apL
+                infix left  0 (|>) = apR
+                infix right 2 (||) = or
+                infix right 3 (&&) = and
+                infix non   4 (==) = eq
+                infix non   4 (/=) = neq
+                infix non   4 (<) = lt
+                infix non   4 (>) = gt
+                infix non   4 (<=) = le
+                infix non   4 (>=) = ge
+                infix right 5 (++) = append
+                infix left  6 (+) = add
+                infix left  6 (-) = sub
+                infix left  7 (*) = mul
+                infix left  7 (//) = idiv
+                infix right 8 (^) = pow
+                infix left  9 (<<) = composeL
+                infix right 9 (>>) = composeR
+
+
+                """",
+
+                """"
+                module Basics exposing ( .. )
+
+                {-| Testing comment
+
+                -}
+
+                type Bool
+                    = True
+                    | False
+
+
+                type String
+                    = String (List Char.Char)
+                    -- We need another tag to prevent the compiler from assuming that the condition for tag 'String' is always true.
+                    | AnyOtherKind_String
+
+
+                type Elm_Float
+                    = Elm_Float Int Int
+                    -- We need another tag to prevent the compiler from assuming that the condition for tag 'String' is always true.
+                    | AnyOtherKind_Float
+
+
+                {-| Represents the relative ordering of two things.
+                The relations are less than, equal to, and greater than.
+                -}
+                type Order
+                    = LT
+                    | EQ
+                    | GT
+
+
+                """",
+
+                """"
+                module Basics exposing (..)
+
+
+                eq : a -> a -> Bool
+                eq a b =
+                    if Pine_kernel.equal [ a, b ] then
+                        True
+
+                    else
+                        case ( a, b ) of
+                            ( Elm_Float numA denomA, intB ) ->
+                                if Pine_kernel.equal [ numA, intB ] then
+                                    Pine_kernel.equal [ denomA, 1 ]
+
+                                else
+                                    False
+
+                            ( intA, Elm_Float numB denomB ) ->
+                                if Pine_kernel.equal [ intA, numB ] then
+                                    Pine_kernel.equal [ denomB, 1 ]
+
+                                else
+                                    False
+
+                            _ ->
+                                if isPineBlob a then
+                                    False
+
+                                else if Pine_kernel.equal [ Pine_kernel.length a, Pine_kernel.length b ] then
+                                    case a of
+                                        String _ ->
+                                            False
+
+                                        RBNode_elm_builtin _ _ _ _ _ ->
+                                            Pine_kernel.equal [ dictToList a, dictToList b ]
+
+                                        Set_elm_builtin dictA ->
+                                            let
+                                                (Set_elm_builtin dictB) =
+                                                    b
+                                            in
+                                            Pine_kernel.equal [ dictKeys dictA, dictKeys dictB ]
+
+                                        _ ->
+                                            listsEqualRecursive a b
+
+                                else
+                                    False
+
+
+                listsEqualRecursive : List comparable -> List comparable -> Bool
+                listsEqualRecursive listA listB =
+                    if Pine_kernel.equal [ listA, [] ] then
+                        True
+
+                    else if eq (Pine_kernel.head listA) (Pine_kernel.head listB) then
+                        listsEqualRecursive
+                            (Pine_kernel.skip [ 1, listA ])
+                            (Pine_kernel.skip [ 1, listB ])
+
+                    else
+                        False
+
+
+                dictToList : Dict k v -> List ( k, v )
+                dictToList dict =
+                    case dict of
+                        RBEmpty_elm_builtin ->
+                            []
+
+                        RBNode_elm_builtin _ key value left right ->
+                            Pine_kernel.concat [ dictToList left, [ ( key, value ) ], dictToList right ]
+
+
+                dictKeys : Dict k v -> List k
+                dictKeys dict =
+                    case dict of
+                        RBEmpty_elm_builtin ->
+                            []
+
+                        RBNode_elm_builtin _ key value left right ->
+                            Pine_kernel.concat [ dictKeys left, [ key ], dictKeys right ]
+
+
+                neq : a -> a -> Bool
+                neq a b =
+                    not (eq a b)
+
+
+                add : number -> number -> number
+                add a b =
+                    Pine_kernel.int_add [ a, b ]
+
+
+                """",
+
+                """"
+                module Basics exposing (..)
+
+
+                mul : number -> number -> number
+                mul a b =
+                    case ( a, b ) of
+                        ( Elm_Float numA denomA, Elm_Float numB denomB ) ->
+                            let
+                                newNumerator =
+                                    Pine_kernel.int_mul [ numA, numB ]
+
+                                newDenominator =
+                                    Pine_kernel.int_mul [ denomA, denomB ]
+                            in
+                            simplifyFraction (Elm_Float newNumerator newDenominator)
+
+                        ( Elm_Float numA denomA, intB ) ->
+                            let
+                                newNumerator =
+                                    Pine_kernel.int_mul [ numA, intB ]
+                            in
+                            simplifyFraction (Elm_Float newNumerator denomA)
+
+                        ( intA, Elm_Float numB denomB ) ->
+                            let
+                                newNumerator =
+                                    Pine_kernel.int_mul [ intA, numB ]
+                            in
+                            simplifyFraction (Elm_Float newNumerator denomB)
+
+                        _ ->
+                            Pine_kernel.int_mul [ a, b ]
+
+                """",
+
+                """"
+                module Basics exposing (..)
+
+
+                type alias Buffer = Int
+
+
+                {-| Find the smaller of two comparables.
+
+                    min 42 12345678 == 42
+
+                    min "abc" "xyz" == "abc"
+
+                -}
+                min : comparable -> comparable -> comparable
+                min x y =
+                    if lt x y then
+                        x
+
+                    else
+                        y
+                
+
+                """",
+
+                """"
+                module Basics exposing (..)
+
+
+                type alias WithGenerics a beta =
+                    Int
+
+
+                param_0 () = 17
+
+                """",
+
+                """"
+                module Test exposing (..)
+
+
+                decl_alfa : Int -> (Int, Int)
+                decl_alfa a =
+                    ( a, a + 1 )
+
+                decl_beta : Int -> Int -> ( Int, Int, Int )
+                decl_beta a b =
+                    ( a, a + b, a * b )
+
+                """",
+
+                """"
+                module Basics exposing (..)
+
+
+                type alias MinType = {}
+
+                {- Beginning comment, {- nested comment -}
+                -- test
+                Continuing comment -}
+
+                """",
+
+                """"
+                module Basics exposing (..)
+
+
+                decl = """ test """
+
+                decl2 = """
+                
+                test2 """
+
+                """",
+
+                """""
+                module Encodings exposing (..)
+
+                
+                escapeChar : Char -> String
+                escapeChar char =
+                    case char of
+                        '\u{0008}' ->
+                            "\\b"
+
+                        '\t' ->
+                            "\\t"
+
+                        '\n' ->
+                            "\\n"
+
+                        '\u{000C}' ->
+                            "\\f"
+
+                        '\u{000D}' ->
+                            "\\r"
+
+                        '"' ->
+                            "\\\""
+
+                        '\\' ->
+                            "\\\\"
+
+                        _ ->
+                            String.fromChar char
+
+
+                string_alfa =
+                    "\u{0008}\t\n\u{000C}\u{000D}\"\\"
+                
+                string_beta =
+                    """\u{0008}\t\n\u{000C}\u{000D}\"\\"""
+
+
+                decl_10 = '\u{0000}'
+                
+                decl_11 = '\u{0001}'
+                
+                                                
+                """"",
+
+                """""
+                module Encodings exposing (..)
+
+
+                intAlfa =
+                    0x4
+
+                intBeta =
+                    0x03E8
+
+                intGamma =
+                    -0x13
+
+                intDelta =
+                    0x0000000100000000
+                
+                intDelta =
+                    0x0000000100000000
+
+                intEpsilon =
+                    0x1713000100000041
+
+                """"",
+
+                """""
+                module OperatorSpecialCase exposing (..)
+
+
+                negate a =
+                    -a
+
+                combine alfa beta =
+                    beta * -alfa
+
+                negate_tag alfa = Just -alfa
+
+                """"",
+
+                """""
+                module Records exposing (..)
+
+
+                simple: { alfa : String }
+                simple =
+                    { alfa = "alfa" }
+
+
+                twoFields : { alfa : String, beta : Int }
+                twoFields =
+                    { alfa = "alfa", beta = 17 }
+
+
+                varyingSpacing : { alfa :   String  ,  beta   : Int     }
+                varyingSpacing =
+                    {  alfa = "alfa" ,   beta  =   17  }
+                
+                """"",
+
+                """""
+                module Records exposing (..)
+
+
+                simpleGeneric : { a | name : String} -> String
+                simpleGeneric =
+                    .name
+
+
+                recordAccessApplied =
+                    Tuple.mapSecond .description
+
+                
+                """"",
+
+                """""
+                module Records exposing (..)
+
+
+                simpleNested : { alfa : { beta : String }, gamma : Int   } -> String
+                simpleNested record =
+                    record.alfa.beta
+
+                nested_3 : { alfa : { beta_1 : { delta_3 : String } }, gamma : Int   } -> String
+                nested_3 record =
+                    record.alfa.beta_1.delta_3
+                
+                """"",
+
+                """"
+                module Records exposing (..)
+
+
+                updateRecord_0 record =
+                    { record
+                        | field1 = 13
+                    }
+                
+
+                updateRecord_1 record =
+                    { record
+                        | field1 = 17
+                        , field2 = 21
+                    }
+                
+                """",
+
+                """"
+                module Frontend.ContainerHtml exposing (..)
+                
+
+                type Message
+                    = ClickedLinkInPreview { href : String }
+
+                """",
+
+                """"
+                module Basics exposing (..)
+
+
+                idiv : Int -> Int -> Int
+                idiv dividend divisor =
+                    if Pine_kernel.equal [ divisor, 0 ] then
+                        0
+
+                    else
+                        let
+                            ( dividendNegative, absDividend ) =
+                                if Pine_kernel.int_is_sorted_asc [ 0, dividend ] then
+                                    ( False, dividend )
+
+                                else
+                                    ( True, -dividend )
+
+                            ( divisorNegative, absDivisor ) =
+                                if Pine_kernel.int_is_sorted_asc [ 0, divisor ] then
+                                    ( False, divisor )
+
+                                else
+                                    ( True, -divisor )
+
+                            absQuotient =
+                                idivHelper absDividend absDivisor 0
+                        in
+                        if Pine_kernel.equal [ dividendNegative, divisorNegative ] then
+                            absQuotient
+
+                        else
+                            -absQuotient
+
+
+                """",
+
+                """""
+                module List exposing (..)
+
+
+                any : (a -> Bool) -> List a -> Bool
+                any isOkay list =
+                    case list of
+                        [] ->
+                            False
+
+                        x :: xs ->
+                            if isOkay x then
+                                True
+
+                            else
+                                any isOkay xs
+                
+
+                repeatHelp : List a -> Int -> a -> List a
+                repeatHelp result n value =
+                    if Pine_kernel.int_is_sorted_asc [ n, 0 ] then
+                        result
+
+                    else
+                        repeatHelp (cons value result) (n - 1) value
+                
+
+                """"",
+
+                """""
+                module String exposing (..)
+
+
+                fromIntAsList : Int -> List Char
+                fromIntAsList int =
+                    if Pine_kernel.int_is_sorted_asc [ 0, int ] then
+                        fromUnsignedIntAsList int
+
+                    else
+                        Pine_kernel.concat [ [ '-' ], fromUnsignedIntAsList -int ]
+                
+
+                right : Int -> String -> String
+                right n string =
+                    if Pine_kernel.int_is_sorted_asc [ n, 0 ] then
+                        ""
+
+                    else
+                        slice -n (length string) string
+
+                """"",
+
+                """"
+                module Dict exposing (..)
+
+                import Basics
+                import List exposing (..)
+                import Maybe exposing (..)
+
+
+                type NColor
+                    = Red
+                    | Black
+
+
+                {-| A dictionary of keys and values. So a `Dict String User` is a dictionary
+                that lets you look up a `String` (such as user names) and find the associated
+                `User`.
+
+                    import Dict exposing (Dict)
+
+                    users : Dict String User
+                    users =
+                        Dict.fromList
+                            [ ( "Alice", User "Alice" 28 1.65 )
+                            , ( "Bob", User "Bob" 19 1.82 )
+                            , ( "Chuck", User "Chuck" 33 1.75 )
+                            ]
+
+                    type alias User =
+                        { name : String
+                        , age : Int
+                        , height : Float
+                        }
+
+                -}
+                type Dict k v
+                    = RBNode_elm_builtin NColor k v (Dict k v) (Dict k v)
+                    | RBEmpty_elm_builtin
+
+
+                {-| Insert a key-value pair into a dictionary. Replaces value when there is
+                a collision.
+                -}
+                insert : comparable -> v -> Dict comparable v -> Dict comparable v
+                insert key value dict =
+                    -- Root node is always Black
+                    case insertHelp key value dict of
+                        RBNode_elm_builtin Red k v l r ->
+                            RBNode_elm_builtin Black k v l r
+
+                        x ->
+                            x
+                
+                
+                """",
+
+
+                """"
+                module Set exposing                
+                    ( Set
+                    , empty, singleton, insert, remove
+                    , isEmpty, member, size
+                    , union, intersect, diff
+                    , toList, fromList
+                    , map, foldl, foldr, filter, partition
+                    )
+
+                {-| A set of unique values. The values can be any comparable type. This
+                includes `Int`, `Float`, `Time`, `Char`, `String`, and tuples or lists
+                of comparable types.
+
+                Insert, remove, and query operations all take _O(log n)_ time.
+
+
+                # Sets
+
+                @docs Set
+
+
+                # Build
+
+                @docs empty, singleton, insert, remove
+
+
+                # Query
+
+                @docs isEmpty, member, size
+
+
+                # Combine
+
+                @docs union, intersect, diff
+
+
+                # Lists
+
+                @docs toList, fromList
+
+
+                # Transform
+
+                @docs map, foldl, foldr, filter, partition
+
+                -}
+
+                import Basics exposing (Bool, Int)
+                import Dict
+                import List exposing ((::))
+                import Maybe exposing (Maybe(..))
+
+
+                {-| Represents a set of unique values. So `(Set Int)` is a set of integers and
+                `(Set String)` is a set of strings.
+                -}
+                type Set t
+                    = Set_elm_builtin (Dict.Dict t ())
+
+                                
+                {-| Create a set with one value.
+                -}
+                singleton : comparable -> Set comparable
+                singleton key =
+                    Set_elm_builtin (Dict.singleton key ())
+
+                
+                """",
+
+                """""
+                module Parser.Advanced exposing
+                    ( Parser, run, DeadEnd, inContext, Token(..)
+                    , int, float, number, symbol, keyword, variable, end
+                    , succeed, (|=), (|.), lazy, andThen, problem
+                    , oneOf, map, backtrackable, commit, token
+                    , sequence, Trailing(..), loop, Step(..)
+                    , spaces, lineComment, multiComment, Nestable(..)
+                    , getChompedString, chompIf, chompWhile, chompUntil, chompUntilEndOr, mapChompedString
+                    , withIndent, getIndent
+                    , getPosition, getRow, getCol, getOffset, getSource
+                    , changeIndent, ignorer, keeper
+                    )
+
+
+                oneOfHelp : State c -> Bag c x -> List (Parser c x a) -> PStep c x a
+                oneOfHelp s0 bag parsers =
+                    case parsers of
+                        [] ->
+                            Bad False bag
+
+                        (Parser parse) :: remainingParsers ->
+                            case parse s0 of
+                                (Good _ _ _) as step ->
+                                    step
+
+                                (Bad p x) as step ->
+                                    if p then
+                                        step
+
+                                    else
+                                        oneOfHelp s0 (Append bag x) remainingParsers
+                
+                
+                """"",
+
+                """""
+                module Json.Decode exposing
+                    ( Decoder
+                    , Error(..)
+                    , Value
+                    , andThen
+                    , array
+                    , at
+                    , bool
+                    , decodeString
+                    , decodeValue
+                    , dict
+                    , errorToString
+                    , fail
+                    , field
+                    , float
+                    , index
+                    , int
+                    , keyValuePairs
+                    , lazy
+                    , list
+                    , map
+                    , map2
+                    , maybe
+                    , null
+                    , nullable
+                    , oneOf
+                    , oneOrMore
+                    , string
+                    , succeed
+                    , value
+                    )
+
+                import Array
+                import Json.Encode exposing (Value(..))
+                
+
+                parseInt : List Char -> Int -> ( Result String Int, Int )
+                parseInt src offset0 =
+                    let
+                        nextChar =
+                            List.take 1 (List.drop offset0 src)
+                    in
+                    case nextChar of
+                        [ '-' ] ->
+                            -- If we see a minus sign, parse the rest as an unsigned integer
+                            let
+                                ( unsignedResult, offset1 ) =
+                                    parseUnsignedInt src (offset0 + 1)
+                            in
+                            case unsignedResult of
+                                Ok unsignedVal ->
+                                    ( Ok -unsignedVal, offset1 )
+
+                                Err err ->
+                                    ( Err err, offset1 )
+
+                        _ ->
+                            -- If no minus sign, parse the rest as an unsigned integer
+                            parseUnsignedInt src offset0
+                
+                
+                
+                """"",
+
+                """"
+                module Bytes.Decode exposing (..)
+
+                unsignedInt8 : Decoder Int
+                unsignedInt8 =
+                    Decoder
+                        (\(Bytes.Elm_Bytes blob) offset ->
+                            let
+                                byte =
+                                    Pine_kernel.take [ 1, Pine_kernel.skip [ offset, blob ] ]
+                            in
+                            ( Pine_kernel.int_add [ offset, 1 ]
+                            , Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], byte ]
+                            )
+                        )
+                
+                """",
+
+                """"
+                module Url.Parser exposing
+                    ( (</>)
+                    , (<?>)
+                    , Parser
+                    , custom
+                    , fragment
+                    , int
+                    , map
+                    , oneOf
+                    , parse
+                    , query
+                    , s
+                    , string
+                    , top
+                    )
+
+                import Dict exposing (Dict)
+                import Url exposing (Url)
+                import Url.Parser.Internal as Q
+                import Url.Parser.Query as Query
+
+
+                infix right 7 (</>) = slash
+                infix left  8 (<?>) = questionMark
+
+
+                type Parser a b
+                    = Parser (State a -> List (State b))
+
+
+                s : String -> Parser a a
+                s str =
+                    Parser <|
+                        \{ visited, unvisited, params, frag, value } ->
+                            case unvisited of
+                                [] ->
+                                    []
+
+                                next :: rest ->
+                                    if next == str then
+                                        [ State (next :: visited) rest params frag value ]
+
+                                    else
+                                        []
+                
+                
+                """",
+
+                """"
+                module Encode exposing (encoder, toBytes)
+                
+
+                import Bitwise
+                import Bytes exposing (Bytes, Endianness(..))
+                import Bytes.Encode as Encode exposing (Encoder)
+
+
+                encodeChunks : String -> List Encoder -> Maybe (List Encoder)
+                encodeChunks input accum =
+                    case String.toList (String.left 4 input) of
+                        [] ->
+                            Just accum
+
+                        [ a, b, c, d ] ->
+                            case encodeCharacters a b c d of
+                                Just enc ->
+                                    encodeChunks (String.dropLeft 4 input) (enc :: accum)
+
+                                Nothing ->
+                                    Nothing
+
+                        [ a, b, c ] ->
+                            case encodeCharacters a b c '=' of
+                                Nothing ->
+                                    Nothing
+
+                                Just enc ->
+                                    Just (enc :: accum)
+
+                        [ a, b ] ->
+                            case encodeCharacters a b '=' '=' of
+                                Nothing ->
+                                    Nothing
+
+                                Just enc ->
+                                    Just (enc :: accum)
+
+                        _ ->
+                            Nothing
+
+                
+                """",
+
+                """""
+                module ElmCompiler exposing (..)
+                
+
+                typeCannotContainSetOrDict :
+                    List ( String, Elm.Syntax.TypeAnnotation.TypeAnnotation )
+                    -> Elm.Syntax.TypeAnnotation.TypeAnnotation
+                    -> Bool
+                typeCannotContainSetOrDict knownTypes typeAnnotation =
+                    case typeAnnotation of
+                        Elm.Syntax.TypeAnnotation.Typed (Elm.Syntax.Node.Node _ ( [], typeName )) typeArgs ->
+                            case ( typeName, typeArgs ) of
+                                ( "Int", [] ) ->
+                                    True
+
+                                ( "String", [] ) ->
+                                    True
+
+                                ( "Char", [] ) ->
+                                    True
+
+                                ( "List", [ Elm.Syntax.Node.Node _ itemType ] ) ->
+                                    typeCannotContainSetOrDict knownTypes itemType
+
+                                _ ->
+                                    True
+
+                        _ ->
+                            False
+                
+                
+                """"",
+
+                """""
+                module Backend.Generated.StateShimTypes exposing (..)
+
+                import Json.Encode
+
+
+                type alias ResponseOverSerialInterface =
+                    Result String StateShimResponse
+
+
+                type StateShimRequest
+                    = ListExposedFunctionsShimRequest
+
+
+                type StateShimResponse
+                    = ListExposedFunctionsShimResponse (List { functionName : String, functionDescription : ExposedFunctionDescription })
+
+
+                type alias ApplyFunctionArguments state =
+                    { stateArgument : state
+                    , serializedArgumentsJson : List Json.Encode.Value
+                    }
+
+
+                type alias ExposedFunctionDescription =
+                    { returnType : ExposedFunctionReturnTypeDescription
+                    , parameters : List ExposedFunctionParameterDescription
+                    }
+
+
+                type alias ExposedFunctionReturnTypeDescription =
+                    { sourceCodeText : String
+                    , containsAppStateType : Bool
+                    }
+
+
+                type alias ExposedFunctionParameterDescription =
+                    { patternSourceCodeText : String
+                    , typeSourceCodeText : String
+                    , typeIsAppStateType : Bool
+                    }
+
+
+                type alias FunctionApplicationResult =
+                    { resultLessStateJson : Maybe Json.Encode.Value
+                    , producedStateDifferentFromStateArgument : Bool
+                    }
+                
+                
+                """"",
+
+                """"
+                module CompilationInterface.SourceFiles.Generated_SourceFiles exposing (..)
+
+
+                type FileTreeNode blobStructure
+                    = BlobNode blobStructure
+                    | TreeNode (List ( String, FileTreeNode blobStructure ))
+
+
+                file__src_Backend_VolatileProcess_csx =
+                    { utf8 = "#r \"netstandard\"\n#r \"System\"\n#r \"System.Collections.Immutable\"\n#r \"System.Net\"----truncated" }
+
+                file_tree_node_elm_core_modules_explicit_import =
+                    TreeNode
+                        [( "Array.elm"
+                        , BlobNode ({ utf8 = "module Array\n    exposing\n        ----truncated" })
+                        )
+                        ,( "Bitwise.elm"
+                        , BlobNode ({ utf8 = "module Bitwise exposing\n  ----truncated" })
+                        )]
+
+                
+                """",
+
+                """""
+                {- For documentation of the compilation interface, see <https://github.com/pine-vm/pine/blob/main/guide/how-to-use-elm-compilation-interfaces.md#compilationinterfacesourcefiles-elm-module> -}
+
+
+                module CompilationInterface.SourceFiles exposing (..)
+                import CompilerGenerated.EncodeBytes as EncodeBytes
+                import CompilationInterface.SourceFiles.Generated_SourceFiles
+
+
+                type FileTreeNode blobStructure
+                    = BlobNode blobStructure
+                    | TreeNode (List ( String, FileTreeNode blobStructure ))
+
+
+                file_tree____static : FileTreeNode { base64 : String }
+                file_tree____static =
+                    CompilationInterface.SourceFiles.Generated_SourceFiles.file_tree_node_static
+                    |>mapFileTreeNodeFromGenerated
+                    |>mapBlobs(\blobValue -> { base64 = blobValue.base64
+                    })
+
+
+                file____src_Backend_VolatileProcess_csx : { utf8 : String }
+                file____src_Backend_VolatileProcess_csx =
+                    { utf8 = CompilationInterface.SourceFiles.Generated_SourceFiles.file__src_Backend_VolatileProcess_csx.utf8
+                    }
+
+
+                file_tree____elm_core_modules_implicit_import : FileTreeNode { utf8 : String }
+                file_tree____elm_core_modules_implicit_import =
+                    CompilationInterface.SourceFiles.Generated_SourceFiles.file_tree_node_elm_core_modules_implicit_import
+                    |>mapFileTreeNodeFromGenerated
+                    |>mapBlobs(\blobValue -> { utf8 = blobValue.utf8
+                    })
+
+
+                file_tree____elm_core_modules_explicit_import : FileTreeNode { utf8 : String }
+                file_tree____elm_core_modules_explicit_import =
+                    CompilationInterface.SourceFiles.Generated_SourceFiles.file_tree_node_elm_core_modules_explicit_import
+                    |>mapFileTreeNodeFromGenerated
+                    |>mapBlobs(\blobValue -> { utf8 = blobValue.utf8
+                    })
+                
+                """"",
+
+
+                """""
+                module CompilationInterface.SourceFiles exposing (..)
+
+                import CompilerGenerated.EncodeBytes as EncodeBytes
+                import CompilationInterface.SourceFiles.Generated_SourceFiles
+
+                {-| For documentation
+                -}
+
+
+                type FileTreeNode blobStructure
+                    = BlobNode blobStructure
+                    | TreeNode (List ( String, FileTreeNode blobStructure ))
+
+
+                """"",
+            ];
+
+        for (int i = 0; i < testCases.Count; ++i)
+        {
+            var testCase = testCases[i].TrimStart();
+
+            try
+            {
+                var parsedModulePineValue =
+                    ParseElmModuleTextToPineValue(testCase)
+                    .Extract(err => throw new Exception(err));
+
+                var responseAsElmValue =
+                    elmCompilerCache.PineValueDecodedAsElmValue(parsedModulePineValue)
+                    .Extract(err => throw new Exception(err));
+
+                var responseAsExpression =
+                    ElmValue.RenderAsElmExpression(responseAsElmValue).expressionString;
+
+                var fromDotnetResult =
+                    Pine.ElmSyntax.ElmSyntaxParser.ParseModuleTextAsElmSyntaxElmValue(testCase);
+
+                if (fromDotnetResult.IsErrOrNull() is { } err)
+                {
+                    Assert.Fail("Failed to parse Elm module text as Elm syntax: " + err);
+                }
+
+                if (fromDotnetResult.IsOkOrNull() is not { } fromDotnetOk)
+                {
+                    throw new Exception("Unexpected result type: " + fromDotnetResult);
+                }
+
+                var fromDotnetExpression =
+                    ElmValue.RenderAsElmExpression(fromDotnetOk).expressionString;
+
+                if (Testing.CompareStringsChunkwiseAndReportFirstDifference(
+                    expectedChunks: [responseAsExpression],
+                    actual: fromDotnetExpression) is { } firstDifference)
+                {
+                    Console.WriteLine(firstDifference);
+
+                    Assert.Fail(firstDifference);
+                }
+            }
+            catch (Exception e)
+            {
+                throw new Exception("Failed in test case " + i + ":\n" + testCase, e);
+            }
+        }
+    }
+
     static readonly ElmCompilerCache elmCompilerCache = new();
 
     public static ElmValue TestParsingModuleText(

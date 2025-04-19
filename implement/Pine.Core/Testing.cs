@@ -42,7 +42,7 @@ public static class Testing
 
             if (firstDifferentCharIndex.HasValue)
             {
-                var sliceLengthMax = 80;
+                var sliceLengthMax = 160;
 
                 var sliceStartIndex =
                     Math.Max(0, firstDifferentCharIndex.Value - sliceLengthMax / 2);

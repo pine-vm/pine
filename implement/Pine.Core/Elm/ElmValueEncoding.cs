@@ -104,7 +104,9 @@ public static class ElmValueEncoding
         {
             if (PineValueAsInteger.UnsignedIntegerFromValue(blobValue).IsOkOrNullable() is { } asBigInt)
             {
-                if (UnicodeUtility.IsValidUnicodeScalar(asBigInt))
+                int asInt = (int)asBigInt;
+
+                if (asInt is 0 || UnicodeUtility.IsValidUnicodeScalar(asInt))
                 {
                     return ElmValue.CharInstance((int)asBigInt);
                 }

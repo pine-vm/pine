@@ -733,24 +733,20 @@ public class InteractiveSessionPine : IInteractiveSession
         }
 
         {
-            if (moduleName.Contains("CompilationInterface") &&
-                moduleName.Any(i => i.Contains("Generated")))
+            var fromDotnetResult =
+                Pine.ElmSyntax.ElmSyntaxParser.ParseModuleTextAsElmSyntaxElmValue(moduleText);
+
+            // .NET based implementation of ElmSyntaxParser does not yet cover all syntax.
+
+            if (fromDotnetResult.IsOkOrNull() is { } parsedOk)
             {
-                var fromDotnetResult =
-                    Pine.ElmSyntax.ElmSyntaxParser.ParseModuleTextAsElmSyntaxElmValue(moduleText);
+                var asPineValue =
+                    ElmValueEncoding.ElmValueAsPineValue(parsedOk);
 
-                // .NET based implementation of ElmSyntaxParser does not yet cover all syntax.
-
-                if (fromDotnetResult.IsOkOrNull() is { } parsedOk)
-                {
-                    var asPineValue =
-                        ElmValueEncoding.ElmValueAsPineValue(parsedOk);
-
-                    return
-                        new KeyValuePair<IReadOnlyList<string>, PineValue>(
-                            moduleName,
-                            asPineValue);
-                }
+                return
+                    new KeyValuePair<IReadOnlyList<string>, PineValue>(
+                        moduleName,
+                        asPineValue);
             }
         }
 
