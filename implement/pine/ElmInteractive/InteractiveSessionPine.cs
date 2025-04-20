@@ -1135,14 +1135,7 @@ public class InteractiveSessionPine : IInteractiveSession
             {
                 if (fileStore.GetFileContent([fileName]) is { } fileContent)
                 {
-                    var dictionaryEntries =
-                        System.Text.Json.JsonSerializer.Deserialize<IReadOnlyList<PineValueCompactBuild.ListEntry>>(fileContent.Span);
-
-                    var dictionary = PineValueCompactBuild.BuildDictionaryFromEntries(dictionaryEntries);
-
-                    // Since we write only with a single root, the one we are looking for must be the largest composition.
-
-                    var loadedValue = dictionary[dictionaryEntries.Last().Key];
+                    var loadedValue = PineValueBinaryEncoding.DecodeRoot(fileContent);
 
                     evalCache[(expression, environment)] = loadedValue;
 
@@ -1166,11 +1159,13 @@ public class InteractiveSessionPine : IInteractiveSession
                 {
                     try
                     {
-                        var compactBuild =
-                            PineValueCompactBuild.PrebuildListEntriesAllFromRoot(evalOk);
+                        using var stream = new System.IO.MemoryStream();
 
-                        var fileContent =
-                            System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(compactBuild.listEntries);
+                        PineValueBinaryEncoding.Encode(stream, evalOk);
+
+                        stream.Seek(0, System.IO.SeekOrigin.Begin);
+
+                        var fileContent = stream.ToArray();
 
                         fileStore.SetFileContent([fileName], fileContent);
                     }
