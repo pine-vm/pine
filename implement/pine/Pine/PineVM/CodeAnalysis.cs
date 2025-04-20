@@ -15,6 +15,33 @@ public record EnvConstraintId
 
     readonly public string HashBase16;
 
+    readonly private FastRepresentation fastRepresentation;
+
+    /// <summary>
+    /// Representation optimized for fast check at runtime.
+    /// Independent of the identity of the constraint, this internal representation could
+    /// use different ordering to check the most distinctive items first.
+    /// </summary>
+    private record FastRepresentation(
+        ReadOnlyMemory<(ReadOnlyMemory<int>, PineValue)> Constraints)
+    {
+        public bool SatisfiedByValue(PineValue envValue)
+        {
+            for (int i = 0; i < Constraints.Length; ++i)
+            {
+                var (path, expectedValue) = Constraints.Span[i];
+
+                if (CodeAnalysis.ValueFromPathInValue(envValue, path.Span) is not { } pathValue)
+                    return false;
+
+                if (!pathValue.Equals(expectedValue))
+                    return false;
+            }
+
+            return true;
+        }
+    }
+
     private EnvConstraintId(
         IReadOnlyDictionary<IReadOnlyList<int>, PineValue> parsedEnvItems,
         string hashBase16)
@@ -22,6 +49,19 @@ public record EnvConstraintId
         ParsedEnvItems = parsedEnvItems;
 
         HashBase16 = hashBase16;
+
+        var constraintsList = new (ReadOnlyMemory<int>, PineValue)[parsedEnvItems.Count];
+
+        for (var i = 0; i < parsedEnvItems.Count; ++i)
+        {
+            var kv = parsedEnvItems.ElementAt(i);
+
+            constraintsList[i] = (new ReadOnlyMemory<int>([.. kv.Key]), kv.Value);
+        }
+
+        var constraintsMemory = new ReadOnlyMemory<(ReadOnlyMemory<int>, PineValue)>(constraintsList);
+
+        fastRepresentation = new FastRepresentation(constraintsMemory);
     }
 
     public PineValue? TryGetValue(IReadOnlyList<int> path)
@@ -109,19 +149,7 @@ public record EnvConstraintId
 
     public bool SatisfiedByValue(PineValue envValue)
     {
-        foreach (var envItem in ParsedEnvItems)
-        {
-            if (envItem.Value is not { } expectedValue)
-                return false;
-
-            if (CodeAnalysis.ValueFromPathInValue(envValue, [.. envItem.Key]) is not { } pathValue)
-                return false;
-
-            if (!pathValue.Equals(expectedValue))
-                return false;
-        }
-
-        return true;
+        return fastRepresentation.SatisfiedByValue(envValue);
     }
 
     public bool SatisfiedByConstraint(EnvConstraintId otherEnvConstraintId)
