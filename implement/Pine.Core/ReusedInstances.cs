@@ -748,7 +748,10 @@ public record ReusedInstances(
         }
     }
 
-    private PineValue? ReusedInstance(PineValue pineValue)
+    /// <summary>
+    /// Returns a reused instance of the given <see cref="PineValue"/> if it exists.
+    /// </summary>
+    public PineValue? ReusedInstance(PineValue pineValue)
     {
         if (pineValue is PineValue.BlobValue blobValue)
         {

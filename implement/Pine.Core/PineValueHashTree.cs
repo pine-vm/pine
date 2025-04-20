@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
@@ -7,10 +8,27 @@ namespace Pine.Core;
 
 public static class PineValueHashTree
 {
+    private static readonly ConcurrentDictionary<PineValue, ReadOnlyMemory<byte>> cachedHashes = new();
+
     public static ReadOnlyMemory<byte> ComputeHash(
         PineValue pineValue,
-        Func<PineValue, ReadOnlyMemory<byte>?>? delegateGetHashOfComponent = null) =>
-        ComputeHashAndDependencies(pineValue, delegateGetHashOfComponent).hash;
+        Func<PineValue, ReadOnlyMemory<byte>?>? delegateGetHashOfComponent = null)
+    {
+        if (cachedHashes.TryGetValue(pineValue, out var fromCache))
+        {
+            return fromCache;
+        }
+
+        var hash =
+            ComputeHashAndDependencies(pineValue, delegateGetHashOfComponent).hash;
+
+        if (ReusedInstances.Instance.ReusedInstance(pineValue) is { } reusedInstance)
+        {
+            cachedHashes.TryAdd(reusedInstance, hash);
+        }
+
+        return hash;
+    }
 
 
     public static (ReadOnlyMemory<byte> hash, IReadOnlyCollection<PineValue> dependencies)
