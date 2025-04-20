@@ -1181,9 +1181,11 @@ public class InteractiveSessionPine : IInteractiveSession
 
         public string FileNameFromKey(Expression expression, PineValue environment)
         {
-            var exprValue = EncodeExpression(expression);
-
-            var exprHash = ComputeHash(exprValue);
+            var exprHash =
+                encodedExprCache.GetOrAdd(
+                    expression,
+                    valueFactory:
+                    expr => ComputeHash(ExpressionEncoding.EncodeExpressionAsValue(expr)));
 
             var envHash = ComputeHash(environment);
 
@@ -1192,15 +1194,7 @@ public class InteractiveSessionPine : IInteractiveSession
                 Convert.ToHexStringLower(envHash[..8].Span);
         }
 
-        readonly ConcurrentDictionary<Expression, PineValue> encodedExprCache = new();
-
-        public PineValue EncodeExpression(Expression expression)
-        {
-            return encodedExprCache.GetOrAdd(
-                expression,
-                valueFactory:
-                ExpressionEncoding.EncodeExpressionAsValue);
-        }
+        readonly ConcurrentDictionary<Expression, ReadOnlyMemory<byte>> encodedExprCache = new();
 
         readonly ConcurrentDictionary<PineValue, ReadOnlyMemory<byte>> valueHashCache = new();
 
