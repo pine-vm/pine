@@ -391,6 +391,51 @@ public record StackInstruction(
     public static readonly StackInstruction Parse_And_Eval_Binary =
         new(StackInstructionKind.Parse_And_Eval_Binary);
 
+    public static StackInstruction Bit_And_Const(BigInteger integerLiteral) =>
+        new(StackInstructionKind.Bit_And_Const, IntegerLiteral: integerLiteral);
+
+    public static readonly StackInstruction Bit_And_Binary =
+        new(StackInstructionKind.Bit_And_Binary);
+
+    public static readonly StackInstruction Bit_Or_Generic =
+        new(StackInstructionKind.Bit_Or_Generic);
+
+    public static StackInstruction Bit_Or_Const(BigInteger integerLiteral) =>
+        new(StackInstructionKind.Bit_Or_Const, IntegerLiteral: integerLiteral);
+
+    public static readonly StackInstruction Bit_Or_Binary =
+        new(StackInstructionKind.Bit_Or_Binary);
+
+    public static readonly StackInstruction Bit_Xor_Generic =
+        new(StackInstructionKind.Bit_Xor_Generic);
+
+    public static readonly StackInstruction Bit_Xor_Binary =
+        new(StackInstructionKind.Bit_Xor_Binary);
+
+    public static StackInstruction Bit_Shift_Left_Const(int shiftCount) =>
+        new(StackInstructionKind.Bit_Shift_Left_Const, ShiftCount: shiftCount);
+
+    public static readonly StackInstruction Bit_Shift_Left_Binary =
+        new(StackInstructionKind.Bit_Shift_Left_Binary);
+
+    public static readonly StackInstruction Bit_Shift_Left_Generic =
+        new(StackInstructionKind.Bit_Shift_Left_Generic);
+
+    public static StackInstruction Bit_Shift_Right_Const(int shiftCount) =>
+        new(StackInstructionKind.Bit_Shift_Right_Const, ShiftCount: shiftCount);
+
+    public static readonly StackInstruction Bit_Shift_Right_Binary =
+        new(StackInstructionKind.Bit_Shift_Right_Binary);
+
+    public static readonly StackInstruction Bit_Shift_Right_Generic =
+        new(StackInstructionKind.Bit_Shift_Right_Generic);
+
+    public static StackInstruction Int_Less_Than_Or_Equal_Const(BigInteger integerLiteral) =>
+        new(StackInstructionKind.Int_Less_Than_Or_Equal_Const, IntegerLiteral: integerLiteral);
+
+    public static readonly StackInstruction Slice_Skip_Var_Take_Var =
+        new(StackInstructionKind.Slice_Skip_Var_Take_Var);
+
 
     public override string ToString()
     {
