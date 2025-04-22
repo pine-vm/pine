@@ -419,6 +419,31 @@ public class IntPathComparer : IComparer<IReadOnlyList<int>>
     }
 }
 
+
+public class IntPathMemoryComparer : IComparer<ReadOnlyMemory<int>>
+{
+    public static readonly IntPathMemoryComparer Instance = new();
+
+    public int Compare(ReadOnlyMemory<int> x, ReadOnlyMemory<int> y)
+    {
+        if (x.Equals(y))
+            return 0;
+
+        if (x.Length != y.Length)
+            return x.Length.CompareTo(y.Length);
+
+        for (var i = 0; i < x.Length; i++)
+        {
+            var comparison = x.Span[i].CompareTo(y.Span[i]);
+
+            if (comparison != 0)
+                return comparison;
+        }
+
+        return 0;
+    }
+}
+
 public record RecursiveAnalysisResult(
     ExpressionEnvClass RootEnvClass,
     ImmutableHashSet<ExprOnRecursionPathEntry> ExprOnRecursionPath,

@@ -384,24 +384,29 @@ public class CompilePineToDotNetTests
                 {
                     public static PineValue simpleFunction(PineValue env)
                     {
-                        var stack_0 =
-                            env;
-
-                        var stack_1 =
-                            KernelFunction.skip(
-                                1,
-                                stack_0);
-
-                        var stack_2 =
+                        var env_1 =
                             KernelFunction.head(
-                                stack_1);
+                                KernelFunction.skip(
+                                    1,
+                                    env));
 
-                        var stack_2_as_int =
+                        var env_1_0 =
+                            KernelFunction.head(
+                                env_1);
+
+                        return simpleFunction_uparam(
+                                env_1_0);
+                    }
+
+
+                    public static PineValue simpleFunction_uparam(PineValue env_1_0)
+                    {
+                        var env_1_0_as_int =
                             KernelFunction.SignedIntegerFromValueRelaxed(
-                                stack_2);
+                                env_1_0);
 
                         var stack_3_as_int =
-                            stack_2_as_int + 1L;
+                            env_1_0_as_int + 1L;
 
                         PineValue stack_3 =
                             PineValue.EmptyList;
@@ -444,24 +449,29 @@ public class CompilePineToDotNetTests
                 {
                     public static PineValue simpleFunction(PineValue env)
                     {
-                        var stack_0 =
-                            env;
-
-                        var stack_1 =
-                            KernelFunction.skip(
-                                1,
-                                stack_0);
-
-                        var stack_2 =
+                        var env_1 =
                             KernelFunction.head(
-                                stack_1);
+                                KernelFunction.skip(
+                                    1,
+                                    env));
 
-                        var stack_2_as_int =
+                        var env_1_0 =
+                            KernelFunction.head(
+                                env_1);
+
+                        return simpleFunction_uparam(
+                                env_1_0);
+                    }
+
+
+                    public static PineValue simpleFunction_uparam(PineValue env_1_0)
+                    {
+                        var env_1_0_as_int =
                             KernelFunction.SignedIntegerFromValueRelaxed(
-                                stack_2);
+                                env_1_0);
 
                         var stack_3_as_int =
-                            stack_2_as_int * 3L;
+                            env_1_0_as_int * 3L;
 
                         var stack_4_as_int =
                             stack_3_as_int + 1L;
