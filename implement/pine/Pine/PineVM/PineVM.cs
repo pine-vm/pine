@@ -591,7 +591,7 @@ public class PineVM : IPineVM
                         if (descendant is Expression.Environment)
                         {
                             return parseAndEvalExpr.Environment;
-            }
+                        }
 
                         return null;
                     },
@@ -622,61 +622,61 @@ public class PineVM : IPineVM
         Expression InlineParseAndEvalRecursive(
             Expression expression,
             bool underConditional)
-                    {
-                        return
-                CompilePineToDotNet.ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
-                findReplacement: expr =>
-                {
-                    /*
-                     * Do not inline invocations that are still conditional after substituting for the environment constraint.
-                     * Inlining these cases can lead to suboptimal overall performance for various reasons.
-                     * One reason is that inlining in a generic wrapper causes us to miss an opportunity to select
-                     * a more specialized implementation because this selection only happens on invocation.
-                     * */
+        {
+            return
+    CompilePineToDotNet.ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
+    findReplacement: expr =>
+    {
+        /*
+         * Do not inline invocations that are still conditional after substituting for the environment constraint.
+         * Inlining these cases can lead to suboptimal overall performance for various reasons.
+         * One reason is that inlining in a generic wrapper causes us to miss an opportunity to select
+         * a more specialized implementation because this selection only happens on invocation.
+         * */
 
-                    /*
-                     * 2024-07-20 Adaptation, for cases like specializations of `List.map`:
-                     * When optimizing `List.map` (or its recursive helper function) (or `List.foldx` for example),
-                     * better also inline the application of the generic partial application used with the function parameter.
-                     * That application is conditional (list empty?), but we want to inline that to eliminate the generic wrapper for
-                     * the function application and inline the parameter function directly.
-                     * Thus, the new rule also enables inlining under conditional expressions unless it is recursive.
-                     * */
+        /*
+         * 2024-07-20 Adaptation, for cases like specializations of `List.map`:
+         * When optimizing `List.map` (or its recursive helper function) (or `List.foldx` for example),
+         * better also inline the application of the generic partial application used with the function parameter.
+         * That application is conditional (list empty?), but we want to inline that to eliminate the generic wrapper for
+         * the function application and inline the parameter function directly.
+         * Thus, the new rule also enables inlining under conditional expressions unless it is recursive.
+         * */
 
-                    if (expr is Expression.Conditional conditional)
-                    {
-                        var conditionInlined =
-                        InlineParseAndEvalRecursive(
-                            conditional.Condition,
-                            underConditional: underConditional);
+        if (expr is Expression.Conditional conditional)
+        {
+            var conditionInlined =
+            InlineParseAndEvalRecursive(
+                conditional.Condition,
+                underConditional: underConditional);
 
-                        var falseBranchInlined =
-                        InlineParseAndEvalRecursive(
-                            conditional.FalseBranch,
-                            underConditional: true);
+            var falseBranchInlined =
+            InlineParseAndEvalRecursive(
+                conditional.FalseBranch,
+                underConditional: true);
 
-                        var trueBranchInlined =
-                        InlineParseAndEvalRecursive(
-                            conditional.TrueBranch,
-                            underConditional: true);
+            var trueBranchInlined =
+            InlineParseAndEvalRecursive(
+                conditional.TrueBranch,
+                underConditional: true);
 
-                        return Expression.ConditionalInstance(
-                            condition: conditionInlined,
-                            falseBranch: falseBranchInlined,
-                            trueBranch: trueBranchInlined);
-                    }
+            return Expression.ConditionalInstance(
+                condition: conditionInlined,
+                falseBranch: falseBranchInlined,
+                trueBranch: trueBranchInlined);
+        }
 
-                    if (expr is Expression.ParseAndEval parseAndEval)
-                    {
-                        if (TryInlineParseAndEval(parseAndEval) is { } inlined)
-                        {
-                            return inlined;
-                        }
-                    }
+        if (expr is Expression.ParseAndEval parseAndEval)
+        {
+            if (TryInlineParseAndEval(parseAndEval) is { } inlined)
+            {
+                return inlined;
+            }
+        }
 
-                    return null;
-                },
-                expression).expr;
+        return null;
+    },
+    expression).expr;
         }
 
         var expressionInlined =
@@ -1115,6 +1115,8 @@ public class PineVM : IPineVM
         long loopIterationCount = 0;
         long parseAndEvalCount = 0;
         long stackFrameCount = 0;
+        long lastCacheEntryInstructionCount = 0;
+        long lastCacheEntryParseAndEvalCount = 0;
 
         var stack = new Stack<StackFrame>();
 
@@ -1261,9 +1263,22 @@ public class PineVM : IPineVM
 
                 if (frameTotalInstructionCount + frameStackFrameCount * 100 > 700 && EvalCache is { } evalCache)
                 {
-                    evalCache.TryAdd(
-                        new EvalCacheEntryKey(currentFrameExprValue, currentFrame.EnvironmentValue),
-                        frameReturnValue);
+                    var parseAndEvalCountSinceLastCacheEntry =
+                        parseAndEvalCount - lastCacheEntryParseAndEvalCount;
+
+                    var instructionCountSinceLastCacheEntry =
+                        instructionCount - lastCacheEntryInstructionCount;
+
+                    if (instructionCountSinceLastCacheEntry + parseAndEvalCountSinceLastCacheEntry * 100 > 700)
+                    {
+                        if (evalCache.TryAdd(
+                            new EvalCacheEntryKey(currentFrameExprValue, currentFrame.EnvironmentValue),
+                            frameReturnValue))
+                        {
+                            lastCacheEntryInstructionCount = instructionCount;
+                            lastCacheEntryParseAndEvalCount = parseAndEvalCount;
+                        }
+                    }
                 }
 
                 reportFunctionApplication?.Invoke(
