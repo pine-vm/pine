@@ -1705,6 +1705,23 @@ public class ParseElmModuleTextToPineValueTests
 
 
                 """"",
+
+                """"
+                effect module Time where { subscription = MySub } exposing
+                  ( Posix
+                  , now
+                  )
+
+                import Elm.Kernel.Time
+
+                {-| Get the POSIX time at the moment when this task is run.
+                -}
+                now : Task x Posix
+                now =
+                  Elm.Kernel.Time.now millisToPosix
+                
+                """",
+
             ];
 
         for (int i = 0; i < testCases.Count; ++i)

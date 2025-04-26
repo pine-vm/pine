@@ -38,16 +38,52 @@ public class ElmSyntaxParser
         Node<ModuleName>? ModuleAlias,
         Node<Exposing>? ExposingList);
 
+    /*
+    type Module
+        = NormalModule DefaultModuleData
+        | PortModule DefaultModuleData
+        | EffectModule EffectModuleData
+
+
+    type alias DefaultModuleData =
+        { moduleName : Node ModuleName
+        , exposingList : Node Exposing
+        }
+
+
+    type alias EffectModuleData =
+        { moduleName : Node ModuleName
+        , exposingList : Node Exposing
+        , command : Maybe (Node String)
+        , subscription : Maybe (Node String)
+        }
+
+     * */
+
     private abstract record Module
     {
         public sealed record NormalModule(
             DefaultModuleData ModuleData)
+            : Module;
+
+        public sealed record PortModule(
+            DefaultModuleData ModuleData)
+            : Module;
+
+        public sealed record EffectModule(
+            EffectModuleData ModuleData)
             : Module;
     }
 
     private record DefaultModuleData(
         Node<ModuleName> ModuleName,
         Node<Exposing> ExposingList);
+
+    private record EffectModuleData(
+        Node<ModuleName> ModuleName,
+        Node<Exposing> ExposingList,
+        Node<string>? Command,
+        Node<string>? Subscription);
 
     /*
     type Exposing
@@ -740,6 +776,45 @@ public class ElmSyntaxParser
                     EncodeNode(EncodeModuleName, moduleData.ModuleData.ModuleName)),
                     ])
                 ]),
+
+            Module.PortModule moduleData =>
+                ElmValue.TagInstance(
+                    "PortModule",
+                    [new ElmValue.ElmRecord(
+                        [
+                        ("exposingList",
+                        EncodeNode(EncodeExposing, moduleData.ModuleData.ExposingList)),
+                        ("moduleName",
+                        EncodeNode(EncodeModuleName, moduleData.ModuleData.ModuleName)),
+                        ])
+                    ]),
+
+            Module.EffectModule moduleData =>
+                ElmValue.TagInstance(
+                    "EffectModule",
+                    [new ElmValue.ElmRecord(
+                        [
+                        ("command",
+                        moduleData.ModuleData.Command is not { } moduleCommand
+                            ? maybeNothingInstance
+                            : ElmValue.TagInstance(
+                                "Just",
+                                [EncodeNode(EncodeString, moduleCommand)])),
+
+                        ("exposingList",
+                        EncodeNode(EncodeExposing, moduleData.ModuleData.ExposingList)),
+
+                        ("moduleName",
+                        EncodeNode(EncodeModuleName, moduleData.ModuleData.ModuleName)),
+
+                        ("subscription",
+                        moduleData.ModuleData.Subscription is not { } moduleSubscription
+                            ? maybeNothingInstance
+                            : ElmValue.TagInstance(
+                                "Just",
+                                [EncodeNode(EncodeString, moduleSubscription)])),
+                        ])
+                    ]),
 
             _ =>
             throw new NotImplementedException(
@@ -2258,44 +2333,162 @@ public class ElmSyntaxParser
         // Parses the module header and returns a Node<Module>
         private Node<Module> ParseModule()
         {
-            // Expect the "module" keyword (this could be a token with Type Identifier "module")
-
-            var keywordToken = ConsumeKeyword("module");
-
-            ConsumeAllTrivia();
-
-            // Parse module name (e.g. CompilationInterface.ElmMake.Generated_ElmMake)
-            var moduleNameParts = new List<string>();
-
-            var firstModuleNamePart =
-                ConsumeAnyIdentifier("module name");
-
-            moduleNameParts.Add(firstModuleNamePart.Lexeme);
-
-            while (Peek.Type is TokenType.Dot)
+            if (NextTokenMatches(p => p.Lexeme is "effect"))
             {
-                Consume(TokenType.Dot);
+                /*
+                 * Example syntax:
+                 * ----
+                 * effect module Time where { subscription = MySub } exposing
+                 * */
 
-                var moduleNamePart = ConsumeAnyIdentifier("module name part");
+                var effectKeyword = ConsumeKeyword("effect");
 
-                moduleNameParts.Add(moduleNamePart.Lexeme);
+                ConsumeAllTrivia();
+
+                var moduleKeyword = ConsumeKeyword("module");
+
+                ConsumeAllTrivia();
+
+                var moduleNameParts = new List<Token>();
+
+                var firstModuleNamePart =
+                    ConsumeAnyIdentifier("module name");
+
+                moduleNameParts.Add(firstModuleNamePart);
+
+                while (Peek.Type is TokenType.Dot)
+                {
+                    Consume(TokenType.Dot);
+
+                    var moduleNamePart = ConsumeAnyIdentifier("module name part");
+
+                    moduleNameParts.Add(moduleNamePart);
+                }
+
+                var moduleNameNode =
+                    new Node<ModuleName>(
+                        new Range(firstModuleNamePart.Start, moduleNameParts.Last().End),
+                        [.. moduleNameParts.Select(t => t.Lexeme)]);
+
+                ConsumeAllTrivia();
+
+                Node<string>? command = null;
+                Node<string>? subscription = null;
+
+                if (NextTokenMatches(peek => peek.Lexeme is "where"))
+                {
+                    ConsumeKeyword("where");
+
+                    ConsumeAllTrivia();
+
+                    var recordExprNode = ParseRecordExpr(indentMin: 1);
+
+                    if (recordExprNode.Value is not Expression.RecordExpr recordExpr)
+                    {
+                        throw ExceptionForCurrentLocation(
+                            "Expected record expression after 'where', found: " +
+                            recordExprNode.Value.GetType().Name);
+                    }
+
+                    foreach (var recordField in recordExpr.Fields)
+                    {
+                        if (recordField.Value.fieldName.Value is "command")
+                        {
+                            if (recordField.Value.valueExpr.Value is not Expression.FunctionOrValue functionOrValue)
+                            {
+                                throw ExceptionForCurrentLocation(
+                                    "Expected function or value for 'command', found: " +
+                                    recordField.Value.valueExpr.GetType().Name);
+                            }
+
+                            command = new Node<string>(
+                                recordField.Value.valueExpr.Range,
+                                functionOrValue.Name);
+                        }
+
+                        if (recordField.Value.fieldName.Value is "subscription")
+                        {
+                            if (recordField.Value.valueExpr.Value is not Expression.FunctionOrValue functionOrValue)
+                            {
+                                throw ExceptionForCurrentLocation(
+                                    "Expected function or value for 'subscription', found: " +
+                                    recordField.Value.valueExpr.GetType().Name);
+                            }
+
+                            subscription = new Node<string>(
+                                recordField.Value.valueExpr.Range,
+                                functionOrValue.Name);
+                        }
+                    }
+
+                    ConsumeAllTrivia();
+                }
+
+                Node<Exposing> exposingNode = ParseExposing();
+
+                var moduleData =
+                    new EffectModuleData(
+                        ModuleName: moduleNameNode,
+                        ExposingList: exposingNode,
+                        Command: command,
+                        Subscription: subscription);
+
+                var moduleNodeValue = new Module.EffectModule(moduleData);
+                var moduleNode = new Node<Module>(new Range(effectKeyword.Start, exposingNode.Range.End), moduleNodeValue);
+
+                return moduleNode;
             }
 
-            // Create a Node<IReadOnlyList<string>> for the module name.
-            var moduleNameNode =
-                new Node<ModuleName>(
-                    new Range(firstModuleNamePart.Start, Peek.Start),
-                    moduleNameParts.AsReadOnly());
+            {
+                /*
+                 * Example syntax:
+                 * ----
+                 * module CompilationInterface.ElmMake exposing (..)
+                 * */
 
-            ConsumeAllTrivia();
+                // Expect the "module" keyword (this could be a token with Type Identifier "module")
 
-            Node<Exposing> exposingNode = ParseExposing();
+                var keywordToken = ConsumeKeyword("module");
 
-            // Build the module data and wrap it in a Module.NormalModule.
-            var moduleData = new DefaultModuleData(moduleNameNode, exposingNode);
-            var moduleNodeValue = new Module.NormalModule(moduleData);
-            var moduleNode = new Node<Module>(new Range(keywordToken.Start, Peek.Start), moduleNodeValue);
-            return moduleNode;
+                ConsumeAllTrivia();
+
+                // Parse module name (e.g. CompilationInterface.ElmMake.Generated_ElmMake)
+                var moduleNameParts = new List<Token>();
+
+                var firstModuleNamePart =
+                    ConsumeAnyIdentifier("module name");
+
+                moduleNameParts.Add(firstModuleNamePart);
+
+                while (Peek.Type is TokenType.Dot)
+                {
+                    Consume(TokenType.Dot);
+
+                    var moduleNamePart = ConsumeAnyIdentifier("module name part");
+
+                    moduleNameParts.Add(moduleNamePart);
+                }
+
+                // Create a Node<IReadOnlyList<string>> for the module name.
+                var moduleNameNode =
+                    new Node<ModuleName>(
+                        new Range(firstModuleNamePart.Start, moduleNameParts.Last().End),
+                        [.. moduleNameParts.Select(t => t.Lexeme)]);
+
+                ConsumeAllTrivia();
+
+                Node<Exposing> exposingNode = ParseExposing();
+
+                // Build the module data and wrap it in a Module.NormalModule.
+                var moduleData = new DefaultModuleData(moduleNameNode, exposingNode);
+                var moduleNodeValue = new Module.NormalModule(moduleData);
+
+                var moduleNode = new Node<Module>(
+                    new Range(keywordToken.Start, exposingNode.Range.End),
+                    moduleNodeValue);
+
+                return moduleNode;
+            }
         }
 
         // Parses an import statement and returns a Node<Import>
