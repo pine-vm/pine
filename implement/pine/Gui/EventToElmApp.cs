@@ -1,9 +1,10 @@
-﻿using System.Collections.Generic;
+using Pine.Core.Json;
+using System.Collections.Generic;
 
 namespace ElmTime.Gui;
 
 
-[System.Text.Json.Serialization.JsonConverter(typeof(Pine.Json.JsonConverterForChoiceType))]
+[System.Text.Json.Serialization.JsonConverter(typeof(JsonConverterForChoiceType))]
 public abstract record EventToElmApp
 {
     public record ReadAdminInterfaceConfigEvent(AdminInterfaceConfig Config)

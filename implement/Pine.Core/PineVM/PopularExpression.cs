@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Text.Json;
 using Pine.Core;
+using Pine.Core.Json;
 
 namespace Pine.PineVM;
 
