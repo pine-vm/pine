@@ -39,15 +39,33 @@ hashDigestFromValue value =
 
 
 valueFromString : String -> Value
-valueFromString =
-    String.toList
-        >> List.map valueFromChar
-        >> ListValue
+valueFromString string =
+    let
+        charsBytes : List (List Int)
+        charsBytes =
+            List.map blobBytesFromChar (String.toList string)
+    in
+    BlobValue
+        (List.concat charsBytes)
 
 
 valueFromChar : Char -> Value
-valueFromChar =
-    Char.toCode >> BigInt.fromInt >> unsignedBlobValueFromBigInt >> Maybe.withDefault [] >> BlobValue
+valueFromChar char =
+    BlobValue (blobBytesFromChar char)
+
+
+blobBytesFromChar : Char -> List Int
+blobBytesFromChar char =
+    let
+        charCode : Int
+        charCode =
+            Char.toCode char
+    in
+    [ modBy 0x0100 (charCode // 0x01000000)
+    , modBy 0x0100 (charCode // 0x00010000)
+    , modBy 0x0100 (charCode // 0x0100)
+    , modBy 0x0100 charCode
+    ]
 
 
 stringFromValue : Value -> Result String String
