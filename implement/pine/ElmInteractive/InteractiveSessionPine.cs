@@ -322,7 +322,8 @@ public class InteractiveSessionPine : IInteractiveSession
                 packageName is "elm/json" ||
                 packageName is "elm/bytes" ||
                 packageName is "elm/parser" ||
-                packageName is "elm/url")
+                packageName is "elm/url" ||
+                packageName is "elm/time")
             {
                 continue;
             }
