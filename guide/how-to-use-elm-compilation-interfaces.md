@@ -3,8 +3,8 @@
 The compilation interfaces enable simple customization and extension of the Elm compilation process.
 There are dedicated Elm compilation interfaces for the following use cases:
 
-+ Integrate and read source files of any type.
 + Generate functions to encode Elm values to JSON or decode JSON to Elm values.
++ Integrate and read source files of any type.
 + Invoke an `elm make` command to generate JavaScript or HTML documents.
 + Integrate files from other sources into the compilation and build process.
 
@@ -140,7 +140,7 @@ In the example above, the tree structure of the declaration type has two leaves:
 
 Since the compilation flags differ between the two paths, the compilation process will invoke the `elm  make` command once for each of the flags to build the complete record value for that declaration.
 
-Backend apps often use the output from `elm  make` send the frontend to web browsers with HTTP responses. We can also see this in the [example app](https://github.com/pine-vm/pine/blob/c764a804d90f1fa1002e1690b04487f7c06f765e/implement/example-apps/docker-image-default-app/src/Backend/Main.elm#L46-L61) mentioned earlier:
+Backend apps often use the output from `elm  make` send the frontend to web browsers with HTTP responses. We can also see this in the [example app](https://github.com/pine-vm/pine/blob/3a5c9d0052ab344984bafa5094d2debc3ad1ecb7/implement/example-apps/docker-image-default-app/src/Backend/Main.elm#L46-L62) mentioned earlier:
 
 ```Elm
     httpResponse =
@@ -151,8 +151,9 @@ Backend apps often use the output from `elm  make` send the frontend to web brow
                 |> Maybe.withDefault False
         then
             { statusCode = 200
-            , bodyAsBase64 =
-                Just CompilationInterface.ElmMake.elm_make____src_Frontend_Main_elm.debug.base64
+            , body =
+                CompilationInterface.ElmMake.elm_make____src_Frontend_Main_elm.debug.base64
+                    |> Base64.toBytes
             , headersToAdd =
                 [ { name = "Content-Type", values = [ "text/html" ] }
                 ]

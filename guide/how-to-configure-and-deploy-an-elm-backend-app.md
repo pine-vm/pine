@@ -30,12 +30,12 @@ I copied the executable file to '/bin/pine'. You will be able to use the 'pine' 
 As part of a deployment, Pine compiles the Elm app program code.
 The compiler requires the program code to contain the entry point for a web server app. In addition, it offers various functions we can use independent of each other as needed. It supports projects without a front-end or with multiple front-ends apps.
 
-Here is an example app containing backend and frontend: <https://github.com/pine-vm/pine/tree/67658db8f7e2ed50a9dd2a3ffcfaba2e20c7615d/implement/example-apps/docker-image-default-app>
+Here is an example app containing backend and frontend: <https://github.com/pine-vm/pine/tree/3a5c9d0052ab344984bafa5094d2debc3ad1ecb7/implement/example-apps/docker-image-default-app>
 
 We can use this command to run a server and deploy this app:
 
 ```cmd
-pine  run-server  --public-urls="http://*:5000"  --deploy=https://github.com/pine-vm/pine/tree/67658db8f7e2ed50a9dd2a3ffcfaba2e20c7615d/implement/example-apps/docker-image-default-app
+pine  run-server  --public-urls="http://*:5000"  --deploy=https://github.com/pine-vm/pine/tree/3a5c9d0052ab344984bafa5094d2debc3ad1ecb7/implement/example-apps/docker-image-default-app
 ```
 
 When running this command, we get an output like this:
@@ -44,10 +44,10 @@ When running this command, we get an output like this:
 I got no path to a persistent store for the process. This process will not be persisted!
 Loading app config to deploy...
 This path looks like a URL into a remote git repository. Trying to load from there...
-This path points to commit 67658db8f7e2ed50a9dd2a3ffcfaba2e20c7615d
-The first parent commit with same tree is https://github.com/pine-vm/pine/tree/5007bb0929fbd14e6bf701c97d048573e07fb672/implement/example-apps/docker-image-default-app
-Loaded source composition 52e5acafc9ec2087e1b6700a2b4f0d9f8d199e15944f7bb51da8cc5545b6f58e from 'https://github.com/pine-vm/pine/tree/67658db8f7e2ed50a9dd2a3ffcfaba2e20c7615d/implement/example-apps/docker-image-default-app'.
-Starting web server with admin interface (using engine JavaScript_V8 { })...
+This path points to commit 3a5c9d0052ab344984bafa5094d2debc3ad1ecb7
+The first parent commit with same tree is https://github.com/pine-vm/pine/tree/ebf9ac6ffcf32ed315d0293ebf9f62f4175ef3ce/implement/example-apps/docker-image-default-app
+Loaded source composition 4077cdef4fcb34d3de192ed115fa35b88f3f852bc77ffa1c6b43d55fbd5156a8 from 'https://github.com/pine-vm/pine/tree/3a5c9d0052ab344984bafa5094d2debc3ad1ecb7/implement/example-apps/docker-image-default-app'.
+Starting web server with admin interface...
 info: ElmTime.Platform.WebService.StartupAdminInterface[0]
       letsEncryptRenewalServiceCertificateCompleted: False
 info: ElmTime.Platform.WebService.StartupAdminInterface[0]

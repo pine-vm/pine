@@ -20,7 +20,7 @@ The `pine` executable file integrates all functionality to build apps and operat
 The command below runs a server and deploys a full-stack web app:
 
 ```txt
-pine  run-server  --public-urls="http://*:5000"  --deploy=https://github.com/pine-vm/pine/tree/8dbd5c91853fbcef3b645d95bccc01a886ccd7e2/implement/example-apps/docker-image-default-app
+pine  run-server  --public-urls="http://*:5000"  --deploy=https://github.com/pine-vm/pine/tree/3a5c9d0052ab344984bafa5094d2debc3ad1ecb7/implement/example-apps/docker-image-default-app
 ```
 
 
