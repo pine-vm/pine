@@ -6,8 +6,8 @@ import CompilationInterface.SourceFiles
 import FileTree
 
 
-fileTree : FileTree.FileTreeNode { base64 : String }
-fileTree =
+fileTree : () -> FileTree.FileTreeNode { base64 : String }
+fileTree () =
     CompilationInterface.SourceFiles.file_tree____static_content
         |> mapFileTreeNodeFromSource
         |> FileTree.setNodeAtPathInSortedFileTree

@@ -6,7 +6,6 @@
     "elm-version": "0.19.1",
     "dependencies": {
         "direct": {
-            "agu-z/elm-zip": "3.0.1",
             "avh4/elm-color": "1.0.0",
             "danfishgold/base64-bytes": "1.1.0",
             "elm/browser": "1.0.2",
@@ -30,14 +29,11 @@
         "indirect": {
             "elm/random": "1.0.0",
             "elm/virtual-dom": "1.0.3",
-            "folkertdev/elm-flate": "2.0.5",
             "ianmackenzie/elm-1d-parameter": "1.0.1",
             "ianmackenzie/elm-float-extra": "1.1.0",
             "ianmackenzie/elm-interval": "3.1.0",
             "ianmackenzie/elm-triangular-mesh": "1.1.0",
-            "ianmackenzie/elm-units-interval": "3.2.0",
-            "justinmimbs/date": "4.1.0",
-            "justinmimbs/time-extra": "1.2.0"
+            "ianmackenzie/elm-units-interval": "3.2.0"
         }
     },
     "test-dependencies": {
