@@ -160,9 +160,23 @@ public class ProgramCommandMakeTests
                 outputFileName: "should-not-matter",
                 elmMakeCommandAppendix: null);
 
-        return
-            makeResult
-            .Extract(fromErr: err => throw new Exception("Failed make command:\n" + err))
-            .producedFile;
+        if (makeResult.IsErrOrNull() is { } err)
+        {
+            throw new Exception("Failed make command:\n" + err);
+        }
+
+        if (makeResult.IsOkOrNull() is not { } makeOk)
+        {
+            throw new NotImplementedException(
+                "MakeGuiHtml: Unexpected result type: " + makeResult.GetType());
+        }
+
+        if (makeOk.ProducedFiles is not TreeNodeWithStringPath.BlobNode blobNode)
+        {
+            throw new NotImplementedException(
+                "MakeGuiHtml: Unexpected content in files produced by make: " + makeResult.GetType());
+        }
+
+        return blobNode.Bytes;
     }
 }

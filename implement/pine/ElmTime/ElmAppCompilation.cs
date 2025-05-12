@@ -259,14 +259,31 @@ namespace ElmTime
                                 seed: (string?)null,
                                 (current, next) => current + " " + next);
 
-                            return
-                            Elm019Binaries.ElmMake(
-                                elmCodeFiles,
-                                workingDirectoryRelative: workingDirectoryRelative,
-                                pathToFileWithElmEntryPoint: pathToFileWithElmEntryPoint,
-                                outputFileName: "output." + (makeJavascript ? "js" : "html"),
-                                elmMakeCommandAppendix: elmMakeCommandAppendix)
-                            .Map(makeOk => makeOk.producedFile);
+                            var elmMakeResult =
+                                Elm019Binaries.ElmMake(
+                                    elmCodeFiles,
+                                    workingDirectoryRelative: workingDirectoryRelative,
+                                    pathToFileWithElmEntryPoint: pathToFileWithElmEntryPoint,
+                                    outputFileName: "output." + (makeJavascript ? "js" : "html"),
+                                    elmMakeCommandAppendix: elmMakeCommandAppendix);
+
+                            if (elmMakeResult.IsErrOrNull() is { } err)
+                            {
+                                return "Failed running ElmMake: " + err;
+                            }
+
+                            if (elmMakeResult.IsOkOrNull() is not { } makeOk)
+                            {
+                                throw new NotImplementedException(
+                                    "Unexpected result type: " + elmMakeResult.GetType());
+                            }
+
+                            if (makeOk.ProducedFiles is not TreeNodeWithStringPath.BlobNode blobNode)
+                            {
+                                throw new Exception("Unexpected result type: " + makeOk.ProducedFiles.GetType());
+                            }
+
+                            return blobNode.Bytes;
                         }
 
                         var newDependencies =

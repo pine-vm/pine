@@ -2245,34 +2245,68 @@ public class Program
                             "Loaded " + inputHash[..10] + " as input: " +
                             string.Join("\n", DescribeCompositionForHumans(loadSourceFilesOk.sourceFiles, listBlobs: false, extractBlobName: null)));
 
-                        return
-                            Make(
-                                sourceFiles: PineValueComposition.TreeToFlatDictionaryWithPathComparer(loadSourceFilesOk.sourceFiles),
-                                workingDirectoryRelative: loadSourceFilesOk.workingDirectoryRelative,
-                                pathToFileWithElmEntryPoint: loadSourceFilesOk.pathToFileWithElmEntryPoint,
-                                outputFileName: Path.GetFileName(outputPathArgument),
-                                elmMakeCommandAppendix: elmMakeCommandAppendix)
-                            .Unpack(
-                                fromErr: error =>
-                                {
-                                    DotNetConsoleWriteProblemCausingAbort(
-                                        "Failed to make " + pathToElmFileArgument.Value + ":\n" + error);
-                                    return 20;
-                                },
-                                fromOk: makeOk =>
-                                {
-                                    var outputPath = Path.GetFullPath(outputPathArgument);
+                        var makeResult =
+                        Make(
+                            sourceFiles: PineValueComposition.TreeToFlatDictionaryWithPathComparer(loadSourceFilesOk.sourceFiles),
+                            workingDirectoryRelative: loadSourceFilesOk.workingDirectoryRelative,
+                            pathToFileWithElmEntryPoint: loadSourceFilesOk.pathToFileWithElmEntryPoint,
+                            outputFileName: Path.GetFileName(outputPathArgument),
+                            elmMakeCommandAppendix: elmMakeCommandAppendix);
 
-                                    var outputDirectory = Path.GetDirectoryName(outputPath);
+                        if (makeResult.IsErrOrNull() is { } makeErr)
+                        {
+                            DotNetConsoleWriteProblemCausingAbort(
+                                "Failed to make " + pathToElmFileArgument.Value + ":\n" + makeErr);
 
-                                    if (outputDirectory is not null)
-                                        Directory.CreateDirectory(outputDirectory);
+                            return 20;
+                        }
 
-                                    File.WriteAllBytes(outputPath, makeOk.producedFile.ToArray());
-                                    Console.WriteLine("Saved the output to " + outputPath);
+                        if (makeResult.IsOkOrNull() is not { } makeOk)
+                        {
+                            throw new NotImplementedException(
+                                "Unexpected make result type: " + makeResult);
+                        }
 
-                                    return 0;
-                                });
+                        ReadOnlyMemory<byte> computeOutputFileContent()
+                        {
+                            if (makeOk.ProducedFiles is TreeNodeWithStringPath.BlobNode blobNode)
+                            {
+                                return blobNode.Bytes;
+                            }
+
+                            if (makeOk.ProducedFiles is TreeNodeWithStringPath.TreeNode treeNode)
+                            {
+                                var blobs =
+                                treeNode.EnumerateBlobsTransitive()
+                                .Select(entry => (string.Join("/", entry.path), entry.blobContent))
+                                .ToImmutableList();
+
+                                Console.WriteLine(
+                                    "Make command produced tree node with " +
+                                    blobs.Count + " blobs. Packaging these into zip archive...");
+
+                                var zipArchive = ZipArchive.ZipArchiveFromEntries(blobs);
+
+                                return zipArchive;
+                            }
+
+                            throw new NotImplementedException(
+                                "Unexpected produced files type: " + makeOk.ProducedFiles);
+                        }
+
+                        var outputFileContent = computeOutputFileContent();
+
+                        var outputPath = Path.GetFullPath(outputPathArgument);
+
+                        var outputDirectory = Path.GetDirectoryName(outputPath);
+
+                        if (outputDirectory is not null)
+                            Directory.CreateDirectory(outputDirectory);
+
+                        File.WriteAllBytes(outputPath, outputFileContent.Span);
+                        Console.WriteLine("Saved the output to " + outputPath);
+
+                        return 0;
                     });
             });
         });
@@ -2454,13 +2488,7 @@ public class Program
                 throw new Exception("Unexpected parse result type: " + parseDeclResult);
             }
 
-            if (parseDeclOk is not ElmValue.ElmBytes bytesValue)
-            {
-                return "Expected Elm bytes value, but got: " + parseDeclOk;
-            }
-
-            return
-                new Elm019Binaries.ElmMakeOk(producedFile: bytesValue.Value);
+            return TryParseMakeOutput(parseDeclOk);
         }
 
         return
@@ -2479,6 +2507,130 @@ public class Program
                     throw new NotImplementedException(
                         "Unexpected root module entry point kind: " + rootModuleEntryPointKind),
                 });
+    }
+
+    private static Result<string, Elm019Binaries.ElmMakeOk> TryParseMakeOutput(ElmValue elmValue)
+    {
+        if (elmValue is ElmValue.ElmBytes bytesValue)
+        {
+            return new Elm019Binaries.ElmMakeOk(ProducedFiles: TreeNodeWithStringPath.Blob(bytesValue.Value));
+        }
+
+        if (elmValue is ElmValue.ElmTag)
+        {
+            var asTreeResult = ParseAsFileTree(elmValue);
+
+            if (asTreeResult.IsErrOrNull() is { } asTreeErr)
+            {
+                return "Failed to parse Elm tag value as file tree: " + asTreeErr;
+            }
+
+            if (asTreeResult.IsOkOrNull() is not { } asTreeOk)
+            {
+                throw new NotImplementedException("Unexpected result type: " + asTreeResult);
+            }
+
+            return new Elm019Binaries.ElmMakeOk(ProducedFiles: asTreeOk);
+        }
+
+        return "Unexpected Elm value type: " + elmValue;
+    }
+
+    private static Result<string, TreeNodeWithStringPath> ParseAsFileTree(ElmValue elmValue)
+    {
+        /*
+         * Type declaration on Elm side looks like this:
+         * 
+        type FileTreeNode blobStructure
+            = BlobNode blobStructure
+            | TreeNode (TreeNodeStructure blobStructure)
+
+
+        type alias TreeNodeStructure blobStructure =
+            List (TreeNodeEntryStructure blobStructure)
+
+
+        type alias TreeNodeEntryStructure blobStructure =
+            ( String, FileTreeNode blobStructure )
+
+         * */
+
+        if (elmValue is not ElmValue.ElmTag elmTag)
+        {
+            return "Expected Elm tag value, but got: " + elmValue;
+        }
+
+        if (elmTag.TagName.StartsWith("Blob", StringComparison.OrdinalIgnoreCase))
+        {
+            if (elmTag.Arguments.Count is not 1)
+            {
+                return "Expected Elm tag with one argument, but got: " + elmTag.Arguments.Count;
+            }
+
+            var blob = elmTag.Arguments[0];
+
+            if (elmTag.Arguments[0] is not ElmValue.ElmBytes bytes)
+            {
+                return "Expected Elm bytes value, but got: " + blob;
+            }
+
+            return TreeNodeWithStringPath.Blob(bytes.Value);
+        }
+
+        if (elmTag.TagName.StartsWith("Tree", StringComparison.OrdinalIgnoreCase))
+        {
+            if (elmTag.Arguments.Count is not 1)
+            {
+                return "Expected Elm tag with one argument, but got: " + elmTag.Arguments.Count;
+            }
+
+            if (elmTag.Arguments[0] is not ElmValue.ElmList elmList)
+            {
+                return "Expected Elm list value, but got: " + elmTag.Arguments[0];
+            }
+
+            var children = new (string name, TreeNodeWithStringPath item)[elmList.Elements.Count];
+
+            for (var i = 0; i < elmList.Elements.Count; ++i)
+            {
+                var child = elmList.Elements[i];
+
+                if (child is not ElmValue.ElmList tuple)
+                {
+                    return "Child [" + i + "] is not a tuple: " + child;
+                }
+
+                if (tuple.Elements.Count is not 2)
+                {
+                    return "Child [" + i + "]: Expected Elm tuple with two elements, but got: " + tuple.Elements.Count;
+                }
+
+                if (tuple.Elements[0] is not ElmValue.ElmString name)
+                {
+                    return "Child [" + i + "]: Expected Elm string value, but got: " + tuple.Elements[0];
+                }
+
+                var childTreeResult = ParseAsFileTree(tuple.Elements[1]);
+
+                if (childTreeResult.IsErrOrNull() is { } childTreeErr)
+                {
+                    return "Child [" + i + "] (" + name.Value + "): Failed to parse Elm tag value as file tree: " + childTreeErr;
+                }
+
+                if (childTreeResult.IsOkOrNull() is not { } childTreeOk)
+                {
+                    throw new NotImplementedException("Unexpected result type: " + childTreeResult);
+                }
+
+                children[i] = (name.Value, childTreeOk);
+            }
+
+            var treeNode = TreeNodeWithStringPath.NonSortedTree(children);
+
+            return treeNode;
+        }
+
+        return "Unexpected Elm tag value type: " + elmTag;
     }
 
     public static IEnumerable<string> DescribeCompositionForHumans(
