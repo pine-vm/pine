@@ -138,13 +138,18 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
                         }
 
                     Just url ->
+                        let
+                            filePath : List String
+                            filePath =
+                                url.path
+                                    |> String.split "/"
+                                    |> List.filter (String.isEmpty >> not)
+                        in
                         case
-                            Build.fileTree
-                                |> FileTree.flatListOfBlobsFromFileTreeNode
-                                |> List.filter (Tuple.first >> (==) (String.split "/" url.path |> List.filter (String.isEmpty >> not)))
-                                |> List.head
+                            Build.fileTree ()
+                                |> FileTree.getBlobAtPathFromFileTree filePath
                         of
-                            Just ( filePath, matchingFile ) ->
+                            Just matchingFile ->
                                 matchingFile.base64
                                     |> Base64.toBytes
                                     |> cachedResponse { filePath = filePath }
