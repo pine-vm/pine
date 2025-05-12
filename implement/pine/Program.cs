@@ -2023,7 +2023,7 @@ public class Program
             makeCommand.Description = "Compile Elm code into JavaScript, HTML, or other files.";
             makeCommand.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
 
-            var pathToElmFileArgument =
+            var entryPointElmFileArgument =
             makeCommand.Argument("path-to-elm-file", "path to the Elm module file to compile")
             .IsRequired(allowEmptyStrings: false);
 
@@ -2057,264 +2057,328 @@ public class Program
 
                 var outputPathArgument = outputOption.Value() ?? "make-default-output.html";
 
-                var loadInputDirectoryFailedFiles =
-                new Dictionary<IReadOnlyList<string>, IOException>(
-                    comparer: EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
-
-                var loadInputDirectoryResult =
-                    LoadComposition.LoadFromPathResolvingNetworkDependencies(
-                        inputDirectory,
-                        ignoreFileOnIOException: (filePath, ioException) =>
-                        {
-                            loadInputDirectoryFailedFiles[filePath] = ioException;
-                            return true;
-                        })
-                    .LogToActions(Console.WriteLine);
-
-                var elmMakeCommandOptions =
-                    new[] { debugOption, optimizeOption }
-                    .SelectMany(optionToForward =>
-                    optionToForward.HasValue() ?
-                    ["--" + optionToForward.LongName] :
-                    Array.Empty<string>())
-                    .ToImmutableList();
-
-                var elmMakeCommandAppendix = string.Join(" ", elmMakeCommandOptions);
-
-                return
-                loadInputDirectoryResult
-                    .AndThen(loadInputDirectoryOk =>
-                    {
-                        if (0 < loadInputDirectoryFailedFiles.Count)
-                        {
-                            var shownPaths =
-                                loadInputDirectoryFailedFiles
-                                .Take(3)
-                                .Select(pathAndException =>
-                                string.Join("/", pathAndException.Key) + " (" + pathAndException.Value.Message + ")")
-                                .ToImmutableList();
-
-                            Console.WriteLine(
-                                string.Join(
-                                    "\n",
-                                    "Ignored " + loadInputDirectoryFailedFiles.Count + " files due to IO exceptions:",
-                                    string.Join(
-                                        "\n",
-                                        [.. shownPaths,
-                                            shownPaths.Count < loadInputDirectoryFailedFiles.Count ? "..." : null]
-                                        )));
-                        }
-
-                        var filteredSourceTree =
-                            loadInputDirectoryOk.origin is LoadCompositionOrigin.FromLocalFileSystem
-                            ?
-                            LoadFromLocalFilesystem.RemoveNoiseFromTree(
-                                loadInputDirectoryOk.tree,
-                                discardGitDirectory: true)
-                            :
-                            loadInputDirectoryOk.tree;
-
-                        var discardedFiles =
-                        loadInputDirectoryOk.tree
-                        .EnumerateBlobsTransitive()
-                        .Where(originalBlob => filteredSourceTree.GetNodeAtPath(originalBlob.path) is not TreeNodeWithStringPath.BlobNode)
-                        .ToImmutableArray();
-
-                        if (0 < discardedFiles.Length)
-                        {
-                            Console.WriteLine("Discarded " + discardedFiles.Length + " files from the input directory.");
-                        }
-
-                        if (filteredSourceTree.GetNodeAtPath(["elm.json"]) is not
-                            TreeNodeWithStringPath.BlobNode elmJsonFile)
-                            return Result<string, LoadForMakeResult>.err(
-                                "Did not find elm.json file in that directory.");
-
-                        var elmJsonFileParsed = System.Text.Json.JsonSerializer.Deserialize<ElmJsonStructure>(elmJsonFile.Bytes.Span);
-
-                        var elmJsonSourceDirectories =
-                            elmJsonFileParsed.ParsedSourceDirectories.ToImmutableList();
-
-                        var sourceDirectoriesNotInInputDirectory =
-                            elmJsonSourceDirectories
-                                .Where(relativeSourceDir => 0 < relativeSourceDir.ParentLevel)
-                                .ToImmutableList();
-
-                        var pathToElmFile = pathToElmFileArgument.Value;
-
-                        if (pathToElmFile.StartsWith("./"))
-                            pathToElmFile = pathToElmFile[2..];
-
-                        if (sourceDirectoriesNotInInputDirectory.IsEmpty)
-                        {
-                            return new LoadForMakeResult(filteredSourceTree, [], pathToElmFile.Replace('\\', '/').Split('/'));
-                        }
-
-                        if (loadInputDirectoryOk.origin is not LoadCompositionOrigin.FromLocalFileSystem)
-                        {
-                            return
-                                "Failed to work with elm.json file containing directory which is not contained in input directory: This configuration is only supported when loading from a local file system";
-                        }
-
-                        string absoluteSourceDirectoryFromRelative(ElmJsonStructure.RelativeDirectory relDir)
-                        {
-                            var path = inputDirectory;
-
-                            if (!Path.IsPathFullyQualified(path))
-                            {
-                                path = Path.GetFullPath(path);
-                            }
-
-                            for (var i = 0; i < relDir.ParentLevel; ++i)
-                                path = Path.GetDirectoryName(path.TrimEnd('/', '\\'));
-
-                            return
-                                Path.Combine(path, string.Join('/', relDir.Subdirectories));
-                        }
-
-                        var outerSourceDirectoriesAbsolute =
-                            sourceDirectoriesNotInInputDirectory
-                                .Select(absoluteSourceDirectoryFromRelative)
-                                .ToImmutableList();
-
-                        var maxParentLevel =
-                            sourceDirectoriesNotInInputDirectory.Max(sd => sd.ParentLevel);
-
-                        var commonParentDirectory =
-                            absoluteSourceDirectoryFromRelative(
-                                new ElmJsonStructure.RelativeDirectory(
-                                    ParentLevel: maxParentLevel,
-                                    Subdirectories: []));
-
-                        IReadOnlyList<string> pathRelativeToCommonParentFromAbsolute(string absolutePath) =>
-                            absolutePath[commonParentDirectory.Length..].Replace('\\', '/').Trim('/').Split('/');
-
-                        var inputDirectoryAbsolute = Path.GetFullPath(inputDirectory);
-
-                        var workingDirectoryRelative =
-                            pathRelativeToCommonParentFromAbsolute(inputDirectoryAbsolute);
-
-                        var pathToElmFileAbsolute = Path.GetFullPath(pathToElmFile);
-
-                        var pathToFileWithElmEntryPoint =
-                            pathRelativeToCommonParentFromAbsolute(pathToElmFileAbsolute);
-
-                        return
-                            outerSourceDirectoriesAbsolute
-                                .Select(outerSourceDirectory =>
-                                {
-                                    return
-                                        LoadComposition.LoadFromPathResolvingNetworkDependencies(outerSourceDirectory)
-                                            .LogToActions(Console.WriteLine)
-                                            .Map(outerSourceDirLoadOk =>
-                                                (outerSourceDirLoadOk.tree,
-                                                    relativePath: pathRelativeToCommonParentFromAbsolute(outerSourceDirectory)));
-                                })
-                                .ListCombine()
-                                .Map(outerSourceDirectories =>
-                                {
-                                    var combinedTree =
-                                        outerSourceDirectories
-                                            .Aggregate(
-                                                seed:
-                                                TreeNodeWithStringPath.EmptyTree
-                                                    .SetNodeAtPathSorted(workingDirectoryRelative, filteredSourceTree),
-                                                func:
-                                                (aggregate, nextSourceDir) =>
-                                                    aggregate.SetNodeAtPathSorted(nextSourceDir.relativePath,
-                                                        nextSourceDir.tree));
-                                    return
-                                        new LoadForMakeResult(
-                                            sourceFiles: combinedTree,
-                                            workingDirectoryRelative,
-                                            pathToFileWithElmEntryPoint);
-                                });
-                    })
-                .Unpack(
-                    fromErr: error =>
-                    {
-                        DotNetConsoleWriteProblemCausingAbort("Failed to load from path '" + inputDirectory + "': " + error);
-
-                        return 10;
-                    },
-                    fromOk: loadSourceFilesOk =>
-                    {
-                        var inputHash = Convert.ToHexStringLower(PineValueHashTree.ComputeHashSorted(loadSourceFilesOk.sourceFiles).Span);
-
-                        Console.WriteLine(
-                            "Loaded " + inputHash[..10] + " as input: " +
-                            string.Join("\n", DescribeCompositionForHumans(loadSourceFilesOk.sourceFiles, listBlobs: false, extractBlobName: null)));
-
-                        var makeResult =
-                        Make(
-                            sourceFiles: PineValueComposition.TreeToFlatDictionaryWithPathComparer(loadSourceFilesOk.sourceFiles),
-                            workingDirectoryRelative: loadSourceFilesOk.workingDirectoryRelative,
-                            pathToFileWithElmEntryPoint: loadSourceFilesOk.pathToFileWithElmEntryPoint,
-                            outputFileName: Path.GetFileName(outputPathArgument),
-                            elmMakeCommandAppendix: elmMakeCommandAppendix);
-
-                        if (makeResult.IsErrOrNull() is { } makeErr)
-                        {
-                            DotNetConsoleWriteProblemCausingAbort(
-                                "Failed to make " + pathToElmFileArgument.Value + ":\n" + makeErr);
-
-                            return 20;
-                        }
-
-                        if (makeResult.IsOkOrNull() is not { } makeOk)
-                        {
-                            throw new NotImplementedException(
-                                "Unexpected make result type: " + makeResult);
-                        }
-
-                        ReadOnlyMemory<byte> computeOutputFileContent()
-                        {
-                            if (makeOk.ProducedFiles is TreeNodeWithStringPath.BlobNode blobNode)
-                            {
-                                return blobNode.Bytes;
-                            }
-
-                            if (makeOk.ProducedFiles is TreeNodeWithStringPath.TreeNode treeNode)
-                            {
-                                var blobs =
-                                treeNode.EnumerateBlobsTransitive()
-                                .Select(entry => (string.Join("/", entry.path), entry.blobContent))
-                                .ToImmutableList();
-
-                                Console.WriteLine(
-                                    "Make command produced tree node with " +
-                                    blobs.Count + " blobs. Packaging these into zip archive...");
-
-                                var zipArchive = ZipArchive.ZipArchiveFromEntries(blobs);
-
-                                return zipArchive;
-                            }
-
-                            throw new NotImplementedException(
-                                "Unexpected produced files type: " + makeOk.ProducedFiles);
-                        }
-
-                        var outputFileContent = computeOutputFileContent();
-
-                        var outputPath = Path.GetFullPath(outputPathArgument);
-
-                        var outputDirectory = Path.GetDirectoryName(outputPath);
-
-                        if (outputDirectory is not null)
-                            Directory.CreateDirectory(outputDirectory);
-
-                        File.WriteAllBytes(outputPath, outputFileContent.Span);
-                        Console.WriteLine("Saved the output to " + outputPath);
-
-                        return 0;
-                    });
+                return ElmMakeCommandExecute(
+                    inputDirectory: inputDirectory,
+                    entryPointElmFileArgument: entryPointElmFileArgument,
+                    outputPathArgument: outputPathArgument,
+                    debugOption: debugOption,
+                    optimizeOption: optimizeOption);
             });
         });
 
+    private static int ElmMakeCommandExecute(
+        string inputDirectory,
+        CommandArgument entryPointElmFileArgument,
+        string outputPathArgument,
+        CommandOption debugOption,
+        CommandOption optimizeOption)
+    {
+        var loadInputDirectoryFailedFiles =
+            new Dictionary<IReadOnlyList<string>, IOException>(
+                comparer: EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
+
+        var loadInputDirectoryResult =
+            LoadComposition.LoadFromPathResolvingNetworkDependencies(
+                inputDirectory,
+                ignoreFileOnIOException: (filePath, ioException) =>
+                {
+                    loadInputDirectoryFailedFiles[filePath] = ioException;
+                    return true;
+                })
+            .LogToActions(Console.WriteLine);
+
+        var elmMakeCommandOptions =
+            new[] { debugOption, optimizeOption }
+            .SelectMany(optionToForward =>
+            optionToForward.HasValue() ?
+            ["--" + optionToForward.LongName] :
+            Array.Empty<string>())
+            .ToImmutableList();
+
+        var elmMakeCommandAppendix = string.Join(" ", elmMakeCommandOptions);
+
+        int returnLoadingFromSourceError(string errorDetail)
+        {
+            DotNetConsoleWriteProblemCausingAbort("Failed to load from path '" + inputDirectory + "': " + errorDetail);
+            return 10;
+        }
+
+        if (loadInputDirectoryResult.IsErrOrNull() is { } loadInputDirErr)
+        {
+            return returnLoadingFromSourceError(loadInputDirErr);
+        }
+
+        if (loadInputDirectoryResult.IsOkOrNullable() is not { } loadInputDirectoryOk)
+        {
+            throw new NotImplementedException(
+                "Unexpected result type from loading input directory: " + loadInputDirectoryResult);
+        }
+
+        Result<string, LoadForMakeResult> loadForElmMake()
+        {
+            if (0 < loadInputDirectoryFailedFiles.Count)
+            {
+                var shownPaths =
+                    loadInputDirectoryFailedFiles
+                    .Take(3)
+                    .Select(pathAndException =>
+                    string.Join("/", pathAndException.Key) + " (" + pathAndException.Value.Message + ")")
+                    .ToImmutableList();
+
+                Console.WriteLine(
+                    string.Join(
+                        "\n",
+                        "Ignored " + loadInputDirectoryFailedFiles.Count + " files due to IO exceptions:",
+                        string.Join(
+                            "\n",
+                            [.. shownPaths,
+                                            shownPaths.Count < loadInputDirectoryFailedFiles.Count ? "..." : null]
+                            )));
+            }
+
+            var filteredSourceTree =
+                loadInputDirectoryOk.origin is LoadCompositionOrigin.FromLocalFileSystem
+                ?
+                LoadFromLocalFilesystem.RemoveNoiseFromTree(
+                    loadInputDirectoryOk.tree,
+                    discardGitDirectory: true)
+                :
+                loadInputDirectoryOk.tree;
+
+            var discardedFiles =
+                loadInputDirectoryOk.tree
+                .EnumerateBlobsTransitive()
+                .Where(originalBlob => filteredSourceTree.GetNodeAtPath(originalBlob.path) is not TreeNodeWithStringPath.BlobNode)
+                .ToImmutableArray();
+
+            if (0 < discardedFiles.Length)
+            {
+                Console.WriteLine("Discarded " + discardedFiles.Length + " files from the input directory.");
+            }
+
+            if (filteredSourceTree.GetNodeAtPath(["elm.json"]) is not
+                TreeNodeWithStringPath.BlobNode elmJsonFile)
+            {
+                return Result<string, LoadForMakeResult>.err(
+                    "Did not find elm.json file in that directory.");
+            }
+
+            var elmJsonFileParsed =
+                System.Text.Json.JsonSerializer.Deserialize<ElmJsonStructure>(elmJsonFile.Bytes.Span);
+
+            if (elmJsonFileParsed is null)
+            {
+                return Result<string, LoadForMakeResult>.err(
+                    "Failed to parse elm.json file.");
+            }
+
+            var elmJsonSourceDirectories =
+                elmJsonFileParsed.ParsedSourceDirectories.ToImmutableList();
+
+            var sourceDirectoriesNotInInputDirectory =
+                elmJsonSourceDirectories
+                .Where(relativeSourceDir => 0 < relativeSourceDir.ParentLevel)
+                .ToImmutableList();
+
+            var pathToElmFile = entryPointElmFileArgument.Value;
+
+            if (string.IsNullOrEmpty(pathToElmFile))
+            {
+                return Result<string, LoadForMakeResult>.err(
+                    "The path to the entry point Elm file is empty.");
+            }
+
+            if (pathToElmFile.StartsWith("./"))
+                pathToElmFile = pathToElmFile[2..];
+
+            if (sourceDirectoriesNotInInputDirectory.IsEmpty)
+            {
+                return
+                    new LoadForMakeResult(
+                        filteredSourceTree,
+                        [],
+                        pathToElmFile.Replace('\\', '/').Split('/'));
+            }
+
+            if (loadInputDirectoryOk.origin is not LoadCompositionOrigin.FromLocalFileSystem)
+            {
+                return
+                    "Failed to work with elm.json file containing directory which is not contained in input directory: This configuration is only supported when loading from a local file system";
+            }
+
+            string absoluteSourceDirectoryFromRelative(ElmJsonStructure.RelativeDirectory relDir)
+            {
+                var path = inputDirectory;
+
+                if (!Path.IsPathFullyQualified(path))
+                {
+                    path = Path.GetFullPath(path);
+                }
+
+                for (var i = 0; i < relDir.ParentLevel; ++i)
+                {
+                    path =
+                        Path.GetDirectoryName(path.TrimEnd('/', '\\'))
+                        ??
+                        throw new Exception("Failed to compute parent directory for " + path);
+                }
+
+                return
+                    Path.Combine(path, string.Join('/', relDir.Subdirectories));
+            }
+
+            var outerSourceDirectoriesAbsolute =
+                sourceDirectoriesNotInInputDirectory
+                .Select(absoluteSourceDirectoryFromRelative)
+                .ToImmutableList();
+
+            var maxParentLevel =
+                sourceDirectoriesNotInInputDirectory.Max(sd => sd.ParentLevel);
+
+            var commonParentDirectory =
+                absoluteSourceDirectoryFromRelative(
+                    new ElmJsonStructure.RelativeDirectory(
+                        ParentLevel: maxParentLevel,
+                        Subdirectories: []));
+
+            IReadOnlyList<string> pathRelativeToCommonParentFromAbsolute(string absolutePath) =>
+                absolutePath[commonParentDirectory.Length..].Replace('\\', '/').Trim('/').Split('/');
+
+            var inputDirectoryAbsolute = Path.GetFullPath(inputDirectory);
+
+            var workingDirectoryRelative =
+                pathRelativeToCommonParentFromAbsolute(inputDirectoryAbsolute);
+
+            var pathToElmFileAbsolute = Path.GetFullPath(pathToElmFile);
+
+            var pathToFileWithElmEntryPoint =
+                pathRelativeToCommonParentFromAbsolute(pathToElmFileAbsolute);
+
+            return
+                outerSourceDirectoriesAbsolute
+                    .Select(outerSourceDirectory =>
+                    {
+                        return
+                            LoadComposition.LoadFromPathResolvingNetworkDependencies(outerSourceDirectory)
+                                .LogToActions(Console.WriteLine)
+                                .Map(outerSourceDirLoadOk =>
+                                    (outerSourceDirLoadOk.tree,
+                                        relativePath: pathRelativeToCommonParentFromAbsolute(outerSourceDirectory)));
+                    })
+                    .ListCombine()
+                    .Map(outerSourceDirectories =>
+                    {
+                        var combinedTree =
+                            outerSourceDirectories
+                                .Aggregate(
+                                    seed:
+                                    TreeNodeWithStringPath.EmptyTree
+                                        .SetNodeAtPathSorted(workingDirectoryRelative, filteredSourceTree),
+                                    func:
+                                    (aggregate, nextSourceDir) =>
+                                        aggregate.SetNodeAtPathSorted(nextSourceDir.relativePath,
+                                            nextSourceDir.tree));
+                        return
+                            new LoadForMakeResult(
+                                SourceFiles: combinedTree,
+                                workingDirectoryRelative,
+                                pathToFileWithElmEntryPoint);
+                    });
+        }
+
+        var loadSourceFilesResult = loadForElmMake();
+
+        if (loadSourceFilesResult.IsErrOrNull() is { } loadSourceFilesErr)
+        {
+            return returnLoadingFromSourceError(loadSourceFilesErr);
+        }
+
+        if (loadSourceFilesResult.IsOkOrNull() is not { } loadSourceFilesOk)
+        {
+            throw new NotImplementedException(
+                "Unexpected result type from loading source files: " + loadSourceFilesResult);
+        }
+
+        var inputHash = Convert.ToHexStringLower(PineValueHashTree.ComputeHashSorted(loadSourceFilesOk.SourceFiles).Span);
+
+        Console.WriteLine(
+            "Loaded " + inputHash[..10] + " as input: " +
+            string.Join("\n", DescribeCompositionForHumans(loadSourceFilesOk.SourceFiles, listBlobs: false, extractBlobName: null)));
+
+        var makeResult =
+            Make(
+                sourceFiles: PineValueComposition.TreeToFlatDictionaryWithPathComparer(loadSourceFilesOk.SourceFiles),
+                workingDirectoryRelative: loadSourceFilesOk.WorkingDirectoryRelative,
+                pathToFileWithElmEntryPoint: loadSourceFilesOk.PathToFileWithElmEntryPoint,
+                outputFileName: Path.GetFileName(outputPathArgument),
+                elmMakeCommandAppendix: elmMakeCommandAppendix);
+
+        if (makeResult.IsErrOrNull() is { } makeErr)
+        {
+            DotNetConsoleWriteProblemCausingAbort(
+                "Failed to make " + entryPointElmFileArgument.Value + ":\n" + makeErr);
+
+            return 20;
+        }
+
+        if (makeResult.IsOkOrNull() is not { } makeOk)
+        {
+            throw new NotImplementedException(
+                "Unexpected make result type: " + makeResult);
+        }
+
+        ReadOnlyMemory<byte> computeOutputFileContent()
+        {
+            if (makeOk.ProducedFiles is TreeNodeWithStringPath.BlobNode blobNode)
+            {
+                Console.WriteLine(
+                    "Make command produced a single blob with " +
+                    CommandLineInterface.FormatIntegerForDisplay(blobNode.Bytes.Length) + " bytes.");
+
+                return blobNode.Bytes;
+            }
+
+            if (makeOk.ProducedFiles is TreeNodeWithStringPath.TreeNode treeNode)
+            {
+                var blobs =
+                    treeNode.EnumerateBlobsTransitive()
+                    .Select(entry => (string.Join("/", entry.path), entry.blobContent))
+                    .ToImmutableList();
+
+                Console.WriteLine(
+                    "Make command produced tree node with " +
+                    blobs.Count + " blobs (" +
+                    CommandLineInterface.FormatIntegerForDisplay(blobs.Sum(entry => entry.blobContent.Length)) +
+                    " aggregate bytes). Packaging these into zip archive...");
+
+                var zipArchive = ZipArchive.ZipArchiveFromEntries(blobs);
+
+                return zipArchive;
+            }
+
+            throw new NotImplementedException(
+                "Unexpected produced files type: " + makeOk.ProducedFiles);
+        }
+
+        var outputFileContent = computeOutputFileContent();
+
+        var outputPath = Path.GetFullPath(outputPathArgument);
+
+        var outputDirectory = Path.GetDirectoryName(outputPath);
+
+        if (outputDirectory is not null)
+            Directory.CreateDirectory(outputDirectory);
+
+        File.WriteAllBytes(outputPath, outputFileContent.Span);
+        Console.WriteLine("Saved the output to " + outputPath);
+
+        return 0;
+    }
+
     private record LoadForMakeResult(
-        TreeNodeWithStringPath sourceFiles,
-        IReadOnlyList<string> workingDirectoryRelative,
-        IReadOnlyList<string> pathToFileWithElmEntryPoint);
+        TreeNodeWithStringPath SourceFiles,
+        IReadOnlyList<string> WorkingDirectoryRelative,
+        IReadOnlyList<string> PathToFileWithElmEntryPoint);
 
     /// <summary>
     /// Compiles Elm code as offered with the 'make' command on the CLI.
@@ -2491,22 +2555,30 @@ public class Program
             return TryParseMakeOutput(parseDeclOk);
         }
 
+        if (loweringOk.Result.RootModuleEntryPointKind.IsErrOrNull() is { } rootModuleEntryPointKindErr)
+        {
+            return "Failed to get entry point main declaration: " + rootModuleEntryPointKindErr;
+        }
+
+        if (loweringOk.Result.RootModuleEntryPointKind.IsOkOrNull() is not { } rootModuleEntryPointKind)
+        {
+            throw new NotImplementedException(
+                "Unexpected root module entry point result type: " + loweringOk.Result.RootModuleEntryPointKind);
+        }
+
         return
-            loweringOk.Result.RootModuleEntryPointKind
-            .MapError(err => "Failed to get entry point main declaration: " + err)
-            .AndThen(rootModuleEntryPointKind =>
-                rootModuleEntryPointKind switch
-                {
-                    CompilerSerialInterface.ElmMakeEntryPointKind.ClassicMakeEntryPoint =>
-                        continueWithClassicEntryPoint(),
+            rootModuleEntryPointKind switch
+            {
+                CompilerSerialInterface.ElmMakeEntryPointKind.ClassicMakeEntryPoint =>
+                    continueWithClassicEntryPoint(),
 
-                    CompilerSerialInterface.ElmMakeEntryPointKind.BlobMakeEntryPoint blob =>
-                        continueWithBlobEntryPoint(),
+                CompilerSerialInterface.ElmMakeEntryPointKind.BlobMakeEntryPoint blob =>
+                    continueWithBlobEntryPoint(),
 
-                    _ =>
-                    throw new NotImplementedException(
-                        "Unexpected root module entry point kind: " + rootModuleEntryPointKind),
-                });
+                _ =>
+                throw new NotImplementedException(
+                    "Unexpected root module entry point kind: " + rootModuleEntryPointKind),
+            };
     }
 
     private static Result<string, Elm019Binaries.ElmMakeOk> TryParseMakeOutput(ElmValue elmValue)
