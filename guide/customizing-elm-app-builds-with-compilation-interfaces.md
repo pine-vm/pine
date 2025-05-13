@@ -1,20 +1,25 @@
-# How to Use Elm Compilation Interfaces
+# Customizing Elm App Builds with Compilation Interfaces
 
-The compilation interfaces enable simple customization and extension of the Elm compilation process.
+The compilation interfaces enable customization and extension of how an Elm app is built and composed.
+
 There are dedicated Elm compilation interfaces for the following use cases:
 
-+ Generate functions to encode Elm values to JSON or decode JSON to Elm values.
++ Generate JSON encoders/decoders to/from Elm values.
 + Integrate and read source files of any type.
 + Invoke an `elm make` command to generate JavaScript or HTML documents.
 + Integrate files from other sources into the compilation and build process.
 
 ### `CompilationInterface.GenerateJsonConverters` Module
 
-This module provides automatically generated JSON encoders and decoders for Elm types.
+The `GenerateJsonConverters` module provides automatically generated JSON encoders and decoders for Elm types.
 
-By adding a declaration in this module, we instruct the compiler to generate a JSON encoder or decoder. A common use case for this automation is types used at the interface between the front-end and the back-end.
+Adding a declaration in this module instructs the compiler to generate a JSON encoder or decoder.
 
-In this module, we can freely choose the names for functions, as we only need type annotations to tell the compiler what we want to have generated. To encode to JSON, add a function which takes this type and returns a `Json.Encode.Value`:
+This automation is often used when building full-stack applications in Elm: JSON offers a way to serialize Elm values to enable exchanging them between the backend and the frontend. Using this compilation interface means we can delegate the writing of the JSON encoders and decoders for these messages to the machine.
+
+In this module, we can freely choose the names for declarations, as we only need type annotations to tell the compiler what we want to have generated.
+
+To encode to JSON, add a function which takes the Elm type to serialize as parameter and returns a `Json.Encode.Value`:
 
 ```Elm
 jsonEncodeMessageToClient : FrontendBackendInterface.MessageToClient -> Json.Encode.Value
@@ -22,7 +27,7 @@ jsonEncodeMessageToClient =
     always (Json.Encode.string "The compiler replaces this declaration.")
 ```
 
-To get a JSON decoder, declare a name for an instance of `Json.Decode.Decoder`:
+To get a JSON decoder, add a declaration for an instance of `Json.Decode.Decoder`:
 
 ```Elm
 jsonDecodeMessageToClient : Json.Decode.Decoder FrontendBackendInterface.MessageToClient
@@ -30,14 +35,18 @@ jsonDecodeMessageToClient =
     Json.Decode.fail "The compiler replaces this declaration."
 ```
 
+As the examples above show, we keep a placeholder value in each declaration with a matching type. Using this form in the source code means the interface Elm module syntax remains compatible with type-checking tools. The insertion of the actual implementation happens automatically under the hood every time we build the app.
+
+In the example above, we use a type declared in another module.
+We are free to distribute the type declarations over any number of modules. The parser follows imports to recursively collect the graph of type declarations until it reaches atomic Elm types at the leaves.
 
 ### `CompilationInterface.SourceFiles` Module
 
-The `SourceFiles` module provides access to the source files, regardless of their type or other usage.
+The `SourceFiles` module provides access to the source files, regardless of file type or other usage.
 
-In addition to individual files, this module also supports accessing the contents of whole directories.
+In addition to individual files, this module also supports reading whole directories.
 
-By adding a declaration to this module, we can pick a source file and read its contents. The compilation step for this module happens before the one for the front-end. Therefore the source files are available to both front-end and back-end apps.
+Adding a declaration to this module lets us pick a source file and read its contents. The compilation step for this module happens before the one for the `ElmMake` module. Therefore, the values of embedded source files are available for both frontend and backend apps.
 
 ```Elm
 module CompilationInterface.SourceFiles exposing (..)
@@ -138,7 +147,7 @@ In the example above, the tree structure of the declaration type has two leaves:
 + `debug.javascript.base64 : String`
 + `javascript.base64 : String`
 
-Since the compilation flags differ between the two paths, the compilation process will invoke the `elm  make` command once for each of the flags to build the complete record value for that declaration.
+Since the compilation flags differ between the two paths, the build process will invoke the `elm  make` command once for each of the flags to build the complete record value for that declaration.
 
 Backend apps often use the output from `elm  make` send the frontend to web browsers with HTTP responses. We can also see this in the [example app](https://github.com/pine-vm/pine/blob/3a5c9d0052ab344984bafa5094d2debc3ad1ecb7/implement/example-apps/docker-image-default-app/src/Backend/Main.elm#L46-L62) mentioned earlier:
 

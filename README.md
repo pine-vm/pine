@@ -41,7 +41,7 @@ A selection of guides on popular topics:
 
 + Building a backend or web service: [./guide/how-to-build-a-backend-app-in-elm.md](./guide/how-to-build-a-backend-app-in-elm.md)
 
-+ Using Elm compilation interfaces: [./guide/how-to-use-elm-compilation-interfaces.md](./guide/how-to-use-elm-compilation-interfaces.md)
++ Customizing builds with compilation interfaces: [./guide/customizing-elm-app-builds-with-compilation-interfaces.md](./guide/customizing-elm-app-builds-with-compilation-interfaces.md)
 
 For an overview of all guides and documentation, see the [`guide` directory](./guide/).
 

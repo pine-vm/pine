@@ -34,9 +34,13 @@ But how do we let them exchange Elm values? Any software that wants to communica
 
 The Elm module `CompilationInterface.GenerateJsonConverters` provides automatically generated JSON encoders and decoders for Elm types of your choice.
 
-By adding a declaration in this module, we instruct the compiler to generate a JSON encoder or decoder. The compiler replaces the declaration with the generated code. The compiler also checks that the type is serializable and deserializable.
+Adding a declaration in this module instructs the compiler to generate a JSON encoder or decoder.
 
-In this module, we can freely choose the names for functions, as we only need type annotations to tell the compiler what we want to have generated. To encode to JSON, add a function which takes this type and returns a `Json.Encode.Value`:
+Using this compilation interface means we can delegate the writing of the JSON encoders and decoders for these messages to the machine.
+
+In this module, we can freely choose the names for declarations, as we only need type annotations to tell the compiler what we want to have generated.
+
+To encode to JSON, add a function which takes the Elm type to serialize as parameter and returns a `Json.Encode.Value`:
 
 ```Elm
 jsonEncodeMessageToClient : FrontendBackendInterface.MessageToClient -> Json.Encode.Value
@@ -44,13 +48,15 @@ jsonEncodeMessageToClient =
     always (Json.Encode.string "The compiler replaces this declaration.")
 ```
 
-To get a JSON decoder, declare a name for an instance of `Json.Decode.Decoder`:
+To get a JSON decoder, add a declaration for an instance of `Json.Decode.Decoder`:
 
 ```Elm
 jsonDecodeMessageToClient : Json.Decode.Decoder FrontendBackendInterface.MessageToClient
 jsonDecodeMessageToClient =
     Json.Decode.fail "The compiler replaces this declaration."
 ```
+
+As the examples above show, we keep a placeholder value in each declaration with a matching type. Using this form in the source code means the interface Elm module syntax remains compatible with type-checking tools. The insertion of the actual implementation happens automatically under the hood every time we build the app.
 
 In the example above, we use a type declared in another module.
 We are free to distribute the type declarations over any number of modules. The parser follows imports to recursively collect the graph of type declarations until it reaches atomic Elm types at the leaves.

@@ -1644,7 +1644,7 @@ public class ParseElmModuleTextToPineValueTests
                 """",
 
                 """""
-                {- For documentation of the compilation interface, see <https://github.com/pine-vm/pine/blob/main/guide/how-to-use-elm-compilation-interfaces.md#compilationinterfacesourcefiles-elm-module> -}
+                {- For documentation of the compilation interface, see <https://github.com/pine-vm/pine/blob/main/guide/customizing-elm-app-builds-with-compilation-interfaces.md#compilationinterfacesourcefiles-elm-module> -}
 
 
                 module CompilationInterface.SourceFiles exposing (..)
