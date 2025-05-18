@@ -3,7 +3,7 @@ using Pine.Core;
 using Pine.Json;
 using System.Text.Json;
 
-namespace TestElmTime;
+namespace Pine.UnitTests;
 
 [TestClass]
 public class JsonConverterForPineValueTests
@@ -35,7 +35,16 @@ public class JsonConverterForPineValueTests
             PineValueAsString.ValueFromString("Hello world!"),
 
             PineValue.List(
+                [PineValueAsString.ValueFromString(" ")]),
+
+            PineValue.List(
                 [PineValueAsString.ValueFromString("Hello world!")]),
+
+            PineValue.List(
+                [PineValueAsString.ValueFromString("+")]),
+
+            PineValue.List(
+                [PineValueAsString.ValueFromString("\"")]),
 
             PineValue.List(
                 [
@@ -47,15 +56,26 @@ public class JsonConverterForPineValueTests
 
         foreach (var testCase in testCases)
         {
-            var asJson = JsonSerializer.Serialize(
-                testCase,
-                options: jsonSerializerOptions);
+            var asJson =
+                JsonSerializer.Serialize(
+                    testCase,
+                    options: jsonSerializerOptions);
 
-            var fromJson = JsonSerializer.Deserialize<PineValue>(
-                asJson,
-                options: jsonSerializerOptions);
+            try
+            {
+                var fromJson =
+                    JsonSerializer.Deserialize<PineValue>(
+                        asJson,
+                        options: jsonSerializerOptions);
 
-            Assert.AreEqual(testCase, fromJson);
+                Assert.AreEqual(testCase, fromJson);
+            }
+            catch (System.Exception ex)
+            {
+                throw new System.Exception(
+                    $"Failed to deserialize: {asJson}",
+                    ex);
+            }
         }
     }
 

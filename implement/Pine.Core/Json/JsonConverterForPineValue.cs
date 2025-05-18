@@ -9,6 +9,7 @@ namespace Pine.Json;
 
 public class JsonConverterForPineValue : JsonConverter<PineValue>
 {
+    /// <inheritdoc/>
     public override PineValue? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         if (reader.TokenType == JsonTokenType.Number)
@@ -100,6 +101,7 @@ public class JsonConverterForPineValue : JsonConverter<PineValue>
         throw new NotImplementedException("Unexpected token type: " + reader.TokenType);
     }
 
+    /// <inheritdoc/>
     public override void Write(Utf8JsonWriter writer, PineValue value, JsonSerializerOptions options)
     {
         if (PineValueAsInteger.SignedIntegerFromValueStrict(value) is Result<string, System.Numerics.BigInteger>.Ok asInt)
@@ -116,13 +118,13 @@ public class JsonConverterForPineValue : JsonConverter<PineValue>
         {
             if (blobValue.Bytes.Length is not 0)
             {
-                if (PineValueAsString.StringFromValue(value) is Result<string, string>.Ok asString && 0 < asString.Value.Length)
+                if (PineValueAsString.StringFromValue(value).IsOkOrNull() is { } asString && 0 < asString.Length)
                 {
-                    if (!asString.Value.All(asChar => (asChar & 0xff00) == 0x400 || (asChar & 0xff00) == 0x200))
+                    if (!asString.All(asChar => (asChar & 0xff00) is 0x400 || (asChar & 0xff00) is 0x200))
                     {
                         writer.WriteStartObject();
 
-                        writer.WriteString("ListAsString", asString.Value);
+                        writer.WriteString("ListAsString", asString);
 
                         writer.WriteEndObject();
 
@@ -136,17 +138,37 @@ public class JsonConverterForPineValue : JsonConverter<PineValue>
         {
             if (0 < listValue.Elements.Length)
             {
-                if (PineValueAsString.StringFromValue(value) is Result<string, string>.Ok asString && 0 < asString.Value.Length)
+                bool containsIncompatibleItem = false;
+
+                for (int i = 0; i < listValue.Elements.Length; i++)
                 {
-                    if (!asString.Value.All(asChar => (asChar & 0xff00) == 0x400 || (asChar & 0xff00) == 0x200))
+                    if (listValue.Elements.Span[i] is not PineValue.BlobValue blobItem)
                     {
-                        writer.WriteStartObject();
+                        containsIncompatibleItem = true;
+                        break;
+                    }
 
-                        writer.WriteString("ListAsString_2024", asString.Value);
+                    if (blobItem.Bytes.Length is 0 or > 3)
+                    {
+                        containsIncompatibleItem = true;
+                        break;
+                    }
+                }
 
-                        writer.WriteEndObject();
+                if (!containsIncompatibleItem)
+                {
+                    if (PineValueAsString.StringFromValue(value).IsOkOrNull() is { } asString && 0 < asString.Length)
+                    {
+                        if (!asString.All(asChar => (asChar & 0xff00) is 0x400 || (asChar & 0xff00) is 0x200))
+                        {
+                            writer.WriteStartObject();
 
-                        return;
+                            writer.WriteString("ListAsString_2024", asString);
+
+                            writer.WriteEndObject();
+
+                            return;
+                        }
                     }
                 }
             }
