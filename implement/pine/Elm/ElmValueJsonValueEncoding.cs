@@ -1,5 +1,6 @@
 using Pine.Core;
 using Pine.Core.Elm;
+using Pine.Core.PopularEncodings;
 using Pine.PineVM;
 using System;
 using System.Linq;
@@ -39,7 +40,7 @@ public class ElmValueJsonValueEncoding
 
         if (elmValue is ElmValue.ElmInteger elmInt)
         {
-            return ("IntValue", PineValueAsInteger.ValueFromSignedInteger(elmInt.Value));
+            return ("IntValue", IntegerEncoding.EncodeSignedInteger(elmInt.Value));
         }
 
         if (elmValue is ElmValue.ElmList elmList)

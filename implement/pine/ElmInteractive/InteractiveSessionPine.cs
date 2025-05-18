@@ -2,6 +2,7 @@ using Pine;
 using Pine.Core;
 using Pine.Core.Elm;
 using Pine.Core.PineVM;
+using Pine.Core.PopularEncodings;
 using Pine.Elm;
 using Pine.Elm019;
 using Pine.PineVM;

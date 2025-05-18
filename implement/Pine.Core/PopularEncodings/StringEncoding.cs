@@ -2,9 +2,19 @@ using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
 
-namespace Pine.Core;
+namespace Pine.Core.PopularEncodings;
 
-public static class PineValueAsString
+/// <summary>
+/// Encoding of strings as Pine values and parsing Pine values as strings.
+/// 
+/// <para>
+/// This is the same encoding used for the tags distinguishing Pine expression variants and kernel function names.
+/// </para>
+/// <para>
+/// Frontend languages like Elm might use different representations of strings.
+/// </para>
+/// </summary>
+public static class StringEncoding
 {
     private static readonly FrozenDictionary<string, PineValue> ReusedInstances =
         PopularValues.PopularStrings
@@ -82,7 +92,7 @@ public static class PineValueAsString
         {
             var codePoint = codePoints[index];
 
-            if (PineValueAsInteger.ReusedInstanceForUnsignedInteger(codePoint) is { } reused)
+            if (IntegerEncoding.ReusedInstanceForUnsignedInteger(codePoint) is { } reused)
             {
                 pineValues[index] = reused;
                 continue;
@@ -90,7 +100,7 @@ public static class PineValueAsString
 
             var charAsInteger = new System.Numerics.BigInteger(codePoint);
 
-            var charAsIntegerResult = PineValueAsInteger.ValueFromUnsignedInteger(charAsInteger);
+            var charAsIntegerResult = IntegerEncoding.EncodeUnsignedInteger(charAsInteger);
 
             if (charAsIntegerResult is Result<string, PineValue>.Err error)
                 throw new Exception(error.Value);
@@ -108,6 +118,9 @@ public static class PineValueAsString
         return pineValues;
     }
 
+    /// <summary>
+    /// Try parse the given PineValue as a string.
+    /// </summary>
     public static Result<string, string> StringFromValue(PineValue pineValue)
     {
         if (pineValue is PineValue.ListValue list)
@@ -170,7 +183,7 @@ public static class PineValueAsString
                     "failed decoding char as integer at [" + index + "]: Not a blob");
             }
 
-            var charInteger = PineValueAsInteger.UnsignedIntegerFromBlobValue(blobValue.Bytes.Span);
+            var charInteger = IntegerEncoding.ParseUnsignedInteger(blobValue.Bytes.Span);
 
 
             if (UnicodeUtility.IsValidUnicodeScalar(charInteger))

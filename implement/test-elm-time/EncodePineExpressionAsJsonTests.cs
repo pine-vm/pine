@@ -1,5 +1,6 @@
-﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
+using Pine.Core.PopularEncodings;
 using Pine.Core.Json;
 using System.Collections.Generic;
 using System.Linq;
@@ -18,16 +19,16 @@ public class EncodePineExpressionAsJsonTests
             Expression.ListInstance([]),
 
             new Expression.Literal(
-                PineValueAsInteger.ValueFromSignedInteger(1)),
+                IntegerEncoding.EncodeSignedInteger(1)),
 
             new Expression.Literal(
-                PineValueAsString.ValueFromString("Hello world!")),
+                StringEncoding.ValueFromString("Hello world!")),
 
             new Expression.Literal(
                 PineValue.List(
                     [
-                    PineValueAsString.ValueFromString("String"),
-                    PineValue.List([PineValueAsString.ValueFromString("Hello world!")])
+                    StringEncoding.ValueFromString("String"),
+                    PineValue.List([StringEncoding.ValueFromString("Hello world!")])
                     ]
                     )),
 
@@ -37,13 +38,13 @@ public class EncodePineExpressionAsJsonTests
                 [new Expression.KernelApplication(
                     input: Expression.ListInstance(
                         [new Expression.Literal(
-                            PineValueAsInteger.ValueFromSignedInteger(
+                            IntegerEncoding.EncodeSignedInteger(
                                 0)), new Expression.KernelApplication(
                             input: new Expression.KernelApplication(
                                 input: new Expression.KernelApplication(
                                     input: Expression.ListInstance(
                                         [new Expression.Literal(
-                                            PineValueAsInteger.ValueFromSignedInteger(
+                                            IntegerEncoding.EncodeSignedInteger(
                                                 1)), new Expression.Environment()]),
                                     function: "skip"),
                                 function: "head"),
@@ -75,10 +76,10 @@ public class EncodePineExpressionAsJsonTests
             [Expression.ListInstance([])],
 
             [new Expression.Literal(
-                PineValueAsInteger.ValueFromSignedInteger(1))],
+                IntegerEncoding.EncodeSignedInteger(1))],
 
             [new Expression.Literal(
-                PineValueAsString.ValueFromString("Hello world!"))],
+                StringEncoding.ValueFromString("Hello world!"))],
 
             ];
 

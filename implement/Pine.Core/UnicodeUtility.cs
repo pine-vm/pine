@@ -29,6 +29,10 @@ public class UnicodeUtility
         return (value - 0x110000u ^ 0xD800u) >= 0xFFEF0800u;
     }
 
+    /// <summary>
+    /// Returns <see langword="true"/> iff <paramref name="value"/> is a valid Unicode scalar
+    /// value, i.e., is in [ U+0000..U+D7FF ], inclusive; or [ U+E000..U+10FFFF ], inclusive.
+    /// </summary>
     public static bool IsValidUnicodeScalar(BigInteger value) =>
-        value > 0 && value < int.MaxValue && IsValidUnicodeScalar((uint)value);
+        value <= int.MaxValue && value >= 0 && IsValidUnicodeScalar((uint)value);
 }

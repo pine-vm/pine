@@ -1,5 +1,6 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
+using Pine.Core.PopularEncodings;
 using Pine.PineVM;
 
 namespace TestElmTime;
@@ -51,7 +52,7 @@ public class PineVMTests
                             Expression.ListInstance(
                                 [
                                     Expression.LiteralInstance(
-                                        PineValueAsInteger.ValueFromSignedInteger(1)),
+                                        IntegerEncoding.EncodeSignedInteger(1)),
                                 ]),
 
                             new Expression.KernelApplication
@@ -76,7 +77,7 @@ public class PineVMTests
                                     input: Expression.ListInstance(
                                         [
                                         Expression.LiteralInstance(
-                                            PineValueAsInteger.ValueFromSignedInteger(1)),
+                                            IntegerEncoding.EncodeSignedInteger(1)),
 
                                         Expression.EnvironmentInstance,
                                         ])
@@ -87,15 +88,15 @@ public class PineVMTests
                 environment =
                 PineValue.List(
                     [
-                    PineValue.List([PineValueAsInteger.ValueFromSignedInteger(3)]),
-                    PineValue.List([PineValueAsInteger.ValueFromSignedInteger(11)]),
+                    PineValue.List([IntegerEncoding.EncodeSignedInteger(3)]),
+                    PineValue.List([IntegerEncoding.EncodeSignedInteger(11)]),
                     ]),
 
                 expected = Result<string, PineValue>.ok(PineValue.List(
                     [
-                        PineValueAsInteger.ValueFromSignedInteger(1),
-                        PineValueAsInteger.ValueFromSignedInteger(3),
-                        PineValueAsInteger.ValueFromSignedInteger(11),
+                        IntegerEncoding.EncodeSignedInteger(1),
+                        IntegerEncoding.EncodeSignedInteger(3),
+                        IntegerEncoding.EncodeSignedInteger(11),
                     ]))
             },
 
@@ -107,13 +108,13 @@ public class PineVMTests
                     condition:
                     Expression.LiteralInstance(PineValue.Blob([4])),
                     falseBranch:
-                    Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(17)),
+                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(17)),
                     trueBranch:
-                    Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(13))),
+                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(13))),
                 environment = PineValue.EmptyList,
 
                 expected = Result<string, PineValue>.ok(
-                    PineValueAsInteger.ValueFromSignedInteger(13))
+                    IntegerEncoding.EncodeSignedInteger(13))
             },
 
             new
@@ -136,7 +137,7 @@ public class PineVMTests
                                     input: Expression.ListInstance(
                                         [
                                         Expression.LiteralInstance(
-                                            PineValueAsInteger.ValueFromSignedInteger(1)),
+                                            IntegerEncoding.EncodeSignedInteger(1)),
 
                                         Expression.EnvironmentInstance,
                                         ])
@@ -145,12 +146,12 @@ public class PineVMTests
                         Expression.EnvironmentInstance),
                     trueBranch:
                     Expression.LiteralInstance(
-                        PineValueAsInteger.ValueFromSignedInteger(17))),
+                        IntegerEncoding.EncodeSignedInteger(17))),
 
                 environment =
                 PineValue.List(
                     [
-                        PineValueAsInteger.ValueFromSignedInteger(43),
+                        IntegerEncoding.EncodeSignedInteger(43),
                         ExpressionEncoding.EncodeExpressionAsValue(
                             new Expression.KernelApplication
                             (
@@ -160,7 +161,7 @@ public class PineVMTests
                     ]),
 
                 expected = Result<string, PineValue>.ok(
-                    PineValueAsInteger.ValueFromSignedInteger(43))
+                    IntegerEncoding.EncodeSignedInteger(43))
             },
 
             new
@@ -180,12 +181,12 @@ public class PineVMTests
                             ),
                         Expression.EnvironmentInstance),
                     trueBranch:
-                    Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(17))),
+                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(17))),
 
                 environment = PineValue.EmptyList,
 
                 expected = Result<string, PineValue>.ok(
-                    PineValueAsInteger.ValueFromSignedInteger(17))
+                    IntegerEncoding.EncodeSignedInteger(17))
             },
 
             new
@@ -196,7 +197,7 @@ public class PineVMTests
                     condition:
                     Expression.LiteralInstance(PineValue.Blob([4])),
                     falseBranch:
-                    Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(17)),
+                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(17)),
                     trueBranch:
                     new Expression.ParseAndEval(
                         encoded:
@@ -210,7 +211,7 @@ public class PineVMTests
                                     input: Expression.ListInstance(
                                         [
                                         Expression.LiteralInstance(
-                                            PineValueAsInteger.ValueFromSignedInteger(1)),
+                                            IntegerEncoding.EncodeSignedInteger(1)),
 
                                         Expression.EnvironmentInstance,
                                         ])
@@ -220,7 +221,7 @@ public class PineVMTests
                 environment =
                 PineValue.List(
                     [
-                        PineValueAsInteger.ValueFromSignedInteger(41),
+                        IntegerEncoding.EncodeSignedInteger(41),
 
                         ExpressionEncoding.EncodeExpressionAsValue(
                             new Expression.KernelApplication
@@ -231,7 +232,7 @@ public class PineVMTests
                     ]),
 
                 expected =
-                Result<string, PineValue>.ok(PineValueAsInteger.ValueFromSignedInteger(41))
+                Result<string, PineValue>.ok(IntegerEncoding.EncodeSignedInteger(41))
             },
         };
 
@@ -304,7 +305,7 @@ public class PineVMTests
                             input: Expression.ListInstance(
                                 [
                                 Expression.LiteralInstance(
-                                    PineValueAsInteger.ValueFromSignedInteger(1)),
+                                    IntegerEncoding.EncodeSignedInteger(1)),
 
                                 Expression.EnvironmentInstance,
                                 ])
@@ -318,7 +319,7 @@ public class PineVMTests
                             input: Expression.ListInstance(
                                 [
                                 Expression.LiteralInstance(
-                                    PineValueAsInteger.ValueFromSignedInteger(1)),
+                                    IntegerEncoding.EncodeSignedInteger(1)),
 
                                 Expression.EnvironmentInstance,
                                 ])
@@ -336,7 +337,7 @@ public class PineVMTests
                     StackInstruction.Push_Environment,
 
                     StackInstruction.Push_Literal(
-                        PineValueAsInteger.ValueFromSignedInteger(1)),
+                        IntegerEncoding.EncodeSignedInteger(1)),
 
                     StackInstruction.Skip_Binary,
 
@@ -370,7 +371,7 @@ public class PineVMTests
                                 Expression.ListInstance(
                                     [
                                     Expression.LiteralInstance(
-                                        PineValueAsInteger.ValueFromSignedInteger(13)),
+                                        IntegerEncoding.EncodeSignedInteger(13)),
 
                                     Expression.EnvironmentInstance,
                                     ])
@@ -390,7 +391,7 @@ public class PineVMTests
                                 Expression.ListInstance(
                                     [
                                     Expression.LiteralInstance(
-                                        PineValueAsInteger.ValueFromSignedInteger(13)),
+                                        IntegerEncoding.EncodeSignedInteger(13)),
 
                                     Expression.EnvironmentInstance,
                                     ])
@@ -409,7 +410,7 @@ public class PineVMTests
                     StackInstruction.Push_Environment,
 
                     StackInstruction.Push_Literal(
-                        PineValueAsInteger.ValueFromSignedInteger(13)),
+                        IntegerEncoding.EncodeSignedInteger(13)),
 
                     StackInstruction.Skip_Binary,
 
@@ -490,10 +491,10 @@ public class PineVMTests
                             [
                                 new Expression.ParseAndEval(
                                     encoded:
-                                    Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(11)),
+                                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(11)),
                                     environment:
-                                    Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(13))),
-                                Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(17)),
+                                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(13))),
+                                Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(17)),
                             ])),
                         Expression.LiteralInstance(PineValue.EmptyBlob),
                     ]),
@@ -502,15 +503,15 @@ public class PineVMTests
                 new PineVM.StackFrameInstructions(
                     [
                     StackInstruction.Push_Literal(
-                        PineValueAsInteger.ValueFromSignedInteger(13)),
+                        IntegerEncoding.EncodeSignedInteger(13)),
 
                     StackInstruction.Push_Literal(
-                        PineValueAsInteger.ValueFromSignedInteger(11)),
+                        IntegerEncoding.EncodeSignedInteger(11)),
 
                     StackInstruction.Parse_And_Eval_Binary,
 
                     StackInstruction.Push_Literal(
-                        PineValueAsInteger.ValueFromSignedInteger(17)),
+                        IntegerEncoding.EncodeSignedInteger(17)),
 
                     StackInstruction.Build_List(2),
 
@@ -532,43 +533,43 @@ public class PineVMTests
                 (Expression)Expression.ListInstance(
                     [
                         Expression.LiteralInstance(
-                            PineValueAsInteger.ValueFromSignedInteger(17)),
+                            IntegerEncoding.EncodeSignedInteger(17)),
 
                         Expression.ConditionalInstance(
                             condition:
                             Expression.EnvironmentInstance,
                             trueBranch:
                             Expression.LiteralInstance(
-                                PineValueAsInteger.ValueFromSignedInteger(21)),
+                                IntegerEncoding.EncodeSignedInteger(21)),
                             falseBranch:
                             Expression.LiteralInstance(
-                                PineValueAsInteger.ValueFromSignedInteger(23))
+                                IntegerEncoding.EncodeSignedInteger(23))
                         ),
 
                         Expression.LiteralInstance(
-                            PineValueAsInteger.ValueFromSignedInteger(27)),
+                            IntegerEncoding.EncodeSignedInteger(27)),
                     ]),
 
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
                     StackInstruction.Push_Literal(
-                        PineValueAsInteger.ValueFromSignedInteger(17)),
+                        IntegerEncoding.EncodeSignedInteger(17)),
 
                     StackInstruction.Push_Environment,
 
                     StackInstruction.Jump_If_True(2),
 
                     StackInstruction.Push_Literal(
-                        PineValueAsInteger.ValueFromSignedInteger(23)),
+                        IntegerEncoding.EncodeSignedInteger(23)),
 
                     StackInstruction.Jump_Unconditional(2),
 
                     StackInstruction.Push_Literal(
-                        PineValueAsInteger.ValueFromSignedInteger(21)),
+                        IntegerEncoding.EncodeSignedInteger(21)),
 
                     StackInstruction.Push_Literal(
-                        PineValueAsInteger.ValueFromSignedInteger(27)),
+                        IntegerEncoding.EncodeSignedInteger(27)),
 
                     StackInstruction.Build_List(3),
 
@@ -582,27 +583,27 @@ public class PineVMTests
                 (Expression)
                 Expression.ConditionalInstance(
                     condition:
-                    Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(11)),
+                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(11)),
                     trueBranch:
-                    Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(13)),
+                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(13)),
                     falseBranch:
-                    Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(17))),
+                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(17))),
 
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
                     StackInstruction.Push_Literal(
-                        PineValueAsInteger.ValueFromSignedInteger(11)),
+                        IntegerEncoding.EncodeSignedInteger(11)),
 
                     StackInstruction.Jump_If_True(2),
 
                     StackInstruction.Push_Literal(
-                        PineValueAsInteger.ValueFromSignedInteger(17)),
+                        IntegerEncoding.EncodeSignedInteger(17)),
 
                     StackInstruction.Jump_Unconditional(2),
 
                     StackInstruction.Push_Literal(
-                        PineValueAsInteger.ValueFromSignedInteger(13)),
+                        IntegerEncoding.EncodeSignedInteger(13)),
 
                     StackInstruction.Return
                     ])
@@ -615,7 +616,7 @@ public class PineVMTests
                 Expression.ConditionalInstance(
                     condition:
                     Expression.LiteralInstance(
-                        PineValueAsInteger.ValueFromSignedInteger(11)),
+                        IntegerEncoding.EncodeSignedInteger(11)),
                     trueBranch:
                     new Expression.ParseAndEval(
                         encoded:
@@ -625,7 +626,7 @@ public class PineVMTests
                                 input: Expression.ListInstance(
                                     [
                                     Expression.LiteralInstance(
-                                        PineValueAsInteger.ValueFromSignedInteger(13)),
+                                        IntegerEncoding.EncodeSignedInteger(13)),
 
                                     Expression.EnvironmentInstance,
                                     ])
@@ -633,18 +634,18 @@ public class PineVMTests
                         environment:
                         Expression.EnvironmentInstance),
                     falseBranch:
-                    Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(17))),
+                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(17))),
 
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
                     StackInstruction.Push_Literal(
-                        PineValueAsInteger.ValueFromSignedInteger(11)),
+                        IntegerEncoding.EncodeSignedInteger(11)),
 
                     StackInstruction.Jump_If_True(2),
 
                     StackInstruction.Push_Literal(
-                        PineValueAsInteger.ValueFromSignedInteger(17)),
+                        IntegerEncoding.EncodeSignedInteger(17)),
 
                     StackInstruction.Jump_Unconditional(6),
 
@@ -653,7 +654,7 @@ public class PineVMTests
                     StackInstruction.Push_Environment,
 
                     StackInstruction.Push_Literal(
-                        PineValueAsInteger.ValueFromSignedInteger(13)),
+                        IntegerEncoding.EncodeSignedInteger(13)),
 
                     StackInstruction.Skip_Binary,
 
@@ -670,11 +671,11 @@ public class PineVMTests
                 Expression.ListInstance(
                     [
                         Expression.LiteralInstance(
-                            PineValueAsInteger.ValueFromSignedInteger(47)),
+                            IntegerEncoding.EncodeSignedInteger(47)),
 
                         Expression.ConditionalInstance(
                             condition:
-                            Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(11)),
+                            Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(11)),
 
                             trueBranch:
                             new Expression.ParseAndEval(
@@ -685,7 +686,7 @@ public class PineVMTests
                                         input: Expression.ListInstance(
                                             [
                                             Expression.LiteralInstance(
-                                                PineValueAsInteger.ValueFromSignedInteger(13)),
+                                                IntegerEncoding.EncodeSignedInteger(13)),
 
                                             Expression.EnvironmentInstance,
                                             ])
@@ -695,22 +696,22 @@ public class PineVMTests
                                 Expression.EnvironmentInstance),
 
                             falseBranch:
-                            Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(17)))
+                            Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(17)))
                 ]),
 
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
                     StackInstruction.Push_Literal(
-                        PineValueAsInteger.ValueFromSignedInteger(47)),
+                        IntegerEncoding.EncodeSignedInteger(47)),
 
                     StackInstruction.Push_Literal(
-                        PineValueAsInteger.ValueFromSignedInteger(11)),
+                        IntegerEncoding.EncodeSignedInteger(11)),
 
                     StackInstruction.Jump_If_True(2),
 
                     StackInstruction.Push_Literal(
-                        PineValueAsInteger.ValueFromSignedInteger(17)),
+                        IntegerEncoding.EncodeSignedInteger(17)),
 
                     StackInstruction.Jump_Unconditional(6),
 
@@ -719,7 +720,7 @@ public class PineVMTests
                     StackInstruction.Push_Environment,
 
                     StackInstruction.Push_Literal(
-                        PineValueAsInteger.ValueFromSignedInteger(13)),
+                        IntegerEncoding.EncodeSignedInteger(13)),
 
                     StackInstruction.Skip_Binary,
 
@@ -737,30 +738,30 @@ public class PineVMTests
                 (Expression)
                 Expression.ConditionalInstance(
                     condition:
-                    Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(11)),
+                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(11)),
                     falseBranch:
                     Expression.ConditionalInstance(
                         condition:
-                        Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(13)),
+                        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(13)),
                         falseBranch:
                         new Expression.ParseAndEval(
                             encoded: Expression.EnvironmentInstance,
                             environment:Expression.EnvironmentInstance),
                         trueBranch:
-                        Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(21))),
+                        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(21))),
                     trueBranch:
-                    Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(23))),
+                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(23))),
 
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
                     StackInstruction.Push_Literal(
-                        PineValueAsInteger.ValueFromSignedInteger(11)),
+                        IntegerEncoding.EncodeSignedInteger(11)),
 
                     StackInstruction.Jump_If_True(8),
 
                     StackInstruction.Push_Literal(
-                        PineValueAsInteger.ValueFromSignedInteger(13)),
+                        IntegerEncoding.EncodeSignedInteger(13)),
 
                     StackInstruction.Jump_If_True(4),
 
@@ -773,12 +774,12 @@ public class PineVMTests
                     StackInstruction.Jump_Unconditional(2),
 
                     StackInstruction.Push_Literal(
-                        PineValueAsInteger.ValueFromSignedInteger(21)),
+                        IntegerEncoding.EncodeSignedInteger(21)),
 
                     StackInstruction.Jump_Unconditional(2),
 
                     StackInstruction.Push_Literal(
-                        PineValueAsInteger.ValueFromSignedInteger(23)),
+                        IntegerEncoding.EncodeSignedInteger(23)),
 
                     StackInstruction.Return
                     ])
@@ -792,63 +793,63 @@ public class PineVMTests
                     [
                         Expression.ConditionalInstance(
                             condition:
-                            Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(11)),
+                            Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(11)),
                             trueBranch:
                             new Expression.ParseAndEval(
                                 encoded:
-                                Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(41)),
+                                Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(41)),
                                 environment:
                                 Expression.EnvironmentInstance),
                             falseBranch:
-                            Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(17))),
+                            Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(17))),
 
                         Expression.ConditionalInstance(
                             condition:
-                            Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(13)),
+                            Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(13)),
                             trueBranch:
                             new Expression.ParseAndEval(
                                 encoded:
-                                Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(43)),
+                                Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(43)),
                                 environment:
                                 Expression.EnvironmentInstance),
                             falseBranch:
-                            Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(19))),
+                            Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(19))),
                 ]),
 
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
                     StackInstruction.Push_Literal(
-                        PineValueAsInteger.ValueFromSignedInteger(11)),
+                        IntegerEncoding.EncodeSignedInteger(11)),
 
                     StackInstruction.Jump_If_True(2),
 
                     StackInstruction.Push_Literal(
-                        PineValueAsInteger.ValueFromSignedInteger(17)),
+                        IntegerEncoding.EncodeSignedInteger(17)),
 
                     StackInstruction.Jump_Unconditional(4),
 
                     StackInstruction.Push_Environment,
 
                     StackInstruction.Push_Literal(
-                        PineValueAsInteger.ValueFromSignedInteger(41)),
+                        IntegerEncoding.EncodeSignedInteger(41)),
 
                     StackInstruction.Parse_And_Eval_Binary,
 
                     StackInstruction.Push_Literal(
-                        PineValueAsInteger.ValueFromSignedInteger(13)),
+                        IntegerEncoding.EncodeSignedInteger(13)),
 
                     StackInstruction.Jump_If_True(2),
 
                     StackInstruction.Push_Literal(
-                        PineValueAsInteger.ValueFromSignedInteger(19)),
+                        IntegerEncoding.EncodeSignedInteger(19)),
 
                     StackInstruction.Jump_Unconditional(4),
 
                     StackInstruction.Push_Environment,
 
                     StackInstruction.Push_Literal(
-                        PineValueAsInteger.ValueFromSignedInteger(43)),
+                        IntegerEncoding.EncodeSignedInteger(43)),
 
                     StackInstruction.Parse_And_Eval_Binary,
 
@@ -864,43 +865,43 @@ public class PineVMTests
                 (Expression)
                 Expression.ConditionalInstance(
                     condition:
-                    Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(11)),
+                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(11)),
                     trueBranch:
-                    Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(13)),
+                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(13)),
                     falseBranch:
                     Expression.ConditionalInstance(
                         condition:
-                        Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(21)),
+                        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(21)),
                         trueBranch:
-                        Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(23)),
+                        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(23)),
                         falseBranch:
-                        Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(27)))),
+                        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(27)))),
 
                 expected =
                 new PineVM.StackFrameInstructions(
                     [
                     StackInstruction.Push_Literal(
-                        PineValueAsInteger.ValueFromSignedInteger(11)),
+                        IntegerEncoding.EncodeSignedInteger(11)),
 
                     StackInstruction.Jump_If_True(6),
 
                     StackInstruction.Push_Literal(
-                        PineValueAsInteger.ValueFromSignedInteger(21)),
+                        IntegerEncoding.EncodeSignedInteger(21)),
 
                     StackInstruction.Jump_If_True(2),
 
                     StackInstruction.Push_Literal(
-                        PineValueAsInteger.ValueFromSignedInteger(27)),
+                        IntegerEncoding.EncodeSignedInteger(27)),
 
                     StackInstruction.Jump_Unconditional(2),
 
                     StackInstruction.Push_Literal(
-                        PineValueAsInteger.ValueFromSignedInteger(23)),
+                        IntegerEncoding.EncodeSignedInteger(23)),
 
                     StackInstruction.Jump_Unconditional(2),
 
                     StackInstruction.Push_Literal(
-                        PineValueAsInteger.ValueFromSignedInteger(13)),
+                        IntegerEncoding.EncodeSignedInteger(13)),
 
                     StackInstruction.Return
                     ])
@@ -922,7 +923,7 @@ public class PineVMTests
                         function: "skip",
                         input: Expression.ListInstance(
                             [
-                            Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(17)),
+                            Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(17)),
 
                             Expression.EnvironmentInstance,
                             ])
@@ -958,12 +959,12 @@ public class PineVMTests
                         input: Expression.ListInstance(
                             [
                             Expression.LiteralInstance(
-                                PineValueAsInteger.ValueFromSignedInteger(17)),
+                                IntegerEncoding.EncodeSignedInteger(17)),
 
                             Expression.ListInstance(
                                 [
                                 Expression.LiteralInstance(
-                                    PineValueAsInteger.ValueFromSignedInteger(21)),
+                                    IntegerEncoding.EncodeSignedInteger(21)),
 
                                 new Expression.KernelApplication
                                 (
@@ -975,7 +976,7 @@ public class PineVMTests
                                         input: Expression.ListInstance(
                                             [
                                             Expression.LiteralInstance(
-                                                PineValueAsInteger.ValueFromSignedInteger(23)),
+                                                IntegerEncoding.EncodeSignedInteger(23)),
 
                                             Expression.EnvironmentInstance,
                                             ])
@@ -990,7 +991,7 @@ public class PineVMTests
                 new PineVM.StackFrameInstructions(
                     [
                     StackInstruction.Push_Literal(
-                        PineValueAsInteger.ValueFromSignedInteger(21)),
+                        IntegerEncoding.EncodeSignedInteger(21)),
 
                     StackInstruction.Push_Environment,
 
@@ -1036,7 +1037,7 @@ public class PineVMTests
                             ),
                         ]),
                     trueBranch:
-                    Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(13)),
+                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(13)),
                     falseBranch:
                     Expression.ConditionalInstance(
                         condition:
@@ -1052,9 +1053,9 @@ public class PineVMTests
                                 ])
                         ),
                         trueBranch:
-                        Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(23)),
+                        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(23)),
                         falseBranch:
-                        Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(27)))),
+                        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(27)))),
 
                 expected =
                 new PineVM.StackFrameInstructions(
@@ -1082,17 +1083,17 @@ public class PineVMTests
                     StackInstruction.Jump_If_True(2),
 
                     StackInstruction.Push_Literal(
-                        PineValueAsInteger.ValueFromSignedInteger(27)),
+                        IntegerEncoding.EncodeSignedInteger(27)),
 
                     StackInstruction.Jump_Unconditional(2),
 
                     StackInstruction.Push_Literal(
-                        PineValueAsInteger.ValueFromSignedInteger(23)),
+                        IntegerEncoding.EncodeSignedInteger(23)),
 
                     StackInstruction.Jump_Unconditional(2),
 
                     StackInstruction.Push_Literal(
-                        PineValueAsInteger.ValueFromSignedInteger(13)),
+                        IntegerEncoding.EncodeSignedInteger(13)),
 
                     StackInstruction.Return
                     ])
@@ -1115,7 +1116,7 @@ public class PineVMTests
                                     input:
                                     Expression.ListInstance(
                                         [
-                                            Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(1)),
+                                            Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(1)),
                                             Expression.EnvironmentInstance,
                                         ]))),
 
@@ -1130,7 +1131,7 @@ public class PineVMTests
                                         input:
                                         Expression.ListInstance(
                                             [
-                                                Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(2)),
+                                                Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(2)),
                                                 Expression.EnvironmentInstance,
                                             ])))),
                         ])),
@@ -1170,7 +1171,7 @@ public class PineVMTests
                                     Expression.ListInstance(
                                         [
                                             Expression.LiteralInstance(
-                                                PineValueAsInteger.ValueFromSignedInteger(1)),
+                                                IntegerEncoding.EncodeSignedInteger(1)),
 
                                             Expression.EnvironmentInstance,
                                         ]))),
@@ -1181,7 +1182,7 @@ public class PineVMTests
                                 Expression.ListInstance(
                                     [
                                     Expression.LiteralInstance(
-                                        PineValueAsInteger.ValueFromSignedInteger(-1)),
+                                        IntegerEncoding.EncodeSignedInteger(-1)),
 
                                     new Expression.KernelApplication(
                                         function: "head",
@@ -1192,7 +1193,7 @@ public class PineVMTests
                                             Expression.ListInstance(
                                                 [
                                                     Expression.LiteralInstance(
-                                                        PineValueAsInteger.ValueFromSignedInteger(2)),
+                                                        IntegerEncoding.EncodeSignedInteger(2)),
 
                                                     Expression.EnvironmentInstance,
                                                 ])))
@@ -1229,7 +1230,7 @@ public class PineVMTests
                             function: "head",
                             input: Expression.EnvironmentInstance),
 
-                        Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(13)),
+                        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(13)),
                         ])),
 
                 expected =
@@ -1240,7 +1241,7 @@ public class PineVMTests
                     StackInstruction.Head_Generic,
 
                     StackInstruction.Equal_Binary_Const(
-                        PineValueAsInteger.ValueFromSignedInteger(13)),
+                        IntegerEncoding.EncodeSignedInteger(13)),
 
                     StackInstruction.Return,
                     ])
@@ -1255,7 +1256,7 @@ public class PineVMTests
                     input:
                     Expression.ListInstance(
                         [
-                        Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(17)),
+                        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(17)),
 
                         new Expression.KernelApplication(
                             function: "head",
@@ -1270,7 +1271,7 @@ public class PineVMTests
                     StackInstruction.Head_Generic,
 
                     StackInstruction.Equal_Binary_Const(
-                        PineValueAsInteger.ValueFromSignedInteger(17)),
+                        IntegerEncoding.EncodeSignedInteger(17)),
 
                     StackInstruction.Return,
                     ])
@@ -1296,7 +1297,7 @@ public class PineVMTests
                                     input:
                                     Expression.ListInstance(
                                         [
-                                        Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(11)),
+                                        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(11)),
                                         Expression.EnvironmentInstance,
                                         ])
                                 )),
@@ -1309,7 +1310,7 @@ public class PineVMTests
                                     input:
                                     Expression.ListInstance(
                                         [
-                                        Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(13)),
+                                        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(13)),
                                         Expression.EnvironmentInstance,
                                         ])
                                 )),
@@ -1349,7 +1350,7 @@ public class PineVMTests
                                 input:
                                 Expression.ListInstance(
                                     [
-                                    Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(17)),
+                                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(17)),
                                     Expression.EnvironmentInstance,
                                     ])
                             )),
@@ -1362,7 +1363,7 @@ public class PineVMTests
                                 input:
                                 Expression.ListInstance(
                                     [
-                                    Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(19)),
+                                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(19)),
                                     Expression.EnvironmentInstance,
                                     ])
                             )),
@@ -1410,7 +1411,7 @@ public class PineVMTests
                                     input:
                                     Expression.ListInstance(
                                         [
-                                        Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(11)),
+                                        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(11)),
                                         Expression.EnvironmentInstance,
                                         ])
                                 )),
@@ -1423,7 +1424,7 @@ public class PineVMTests
                                     input:
                                     Expression.ListInstance(
                                         [
-                                        Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(13)),
+                                        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(13)),
                                         Expression.EnvironmentInstance,
                                         ])
                                 )),
@@ -1459,7 +1460,7 @@ public class PineVMTests
                             function: "head",
                             input: Expression.EnvironmentInstance),
 
-                        Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(13)),
+                        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(13)),
                         ])),
 
                 expected =
@@ -1488,7 +1489,7 @@ public class PineVMTests
                             function: "head",
                             input: Expression.EnvironmentInstance),
 
-                        Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(17)),
+                        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(17)),
                         ])),
 
                 expected =

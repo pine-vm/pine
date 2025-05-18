@@ -1,6 +1,7 @@
-﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using Pine.Core.Elm;
+using Pine.Core.PopularEncodings;
 using System.Collections.Generic;
 
 namespace TestElmTime;
@@ -162,13 +163,13 @@ public class ElmValueTests
         Assert.AreEqual(3, parsedFields.Count);
 
         Assert.AreEqual("alfa", parsedFields[0].fieldName);
-        Assert.AreEqual(PineValueAsInteger.ValueFromSignedInteger(11), parsedFields[0].fieldValue);
+        Assert.AreEqual(IntegerEncoding.EncodeSignedInteger(11), parsedFields[0].fieldValue);
 
         Assert.AreEqual("beta", parsedFields[1].fieldName);
-        Assert.AreEqual(PineValueAsInteger.ValueFromSignedInteger(13), parsedFields[1].fieldValue);
+        Assert.AreEqual(IntegerEncoding.EncodeSignedInteger(13), parsedFields[1].fieldValue);
 
         Assert.AreEqual("gamma", parsedFields[2].fieldName);
-        Assert.AreEqual(PineValueAsInteger.ValueFromSignedInteger(17), parsedFields[2].fieldValue);
+        Assert.AreEqual(IntegerEncoding.EncodeSignedInteger(17), parsedFields[2].fieldValue);
     }
 
     [TestMethod]

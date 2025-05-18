@@ -2,6 +2,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Pine.Core;
+using Pine.Core.PopularEncodings;
 using System;
 using System.Collections.Generic;
 
@@ -112,7 +113,7 @@ public class PineKernelFunctionsInline
         if (takeArgumentList.items.Count is not 2)
             return null;
 
-        if (takeArgumentList.items[0] != Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(0)))
+        if (takeArgumentList.items[0] != Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(0)))
             return null;
 
         return takeArgumentList.items[1];
@@ -134,8 +135,8 @@ public class PineKernelFunctionsInline
                 SyntaxFactory.InvocationExpression(
                     SyntaxFactory.MemberAccessExpression(
                         SyntaxKind.SimpleMemberAccessExpression,
-                        SyntaxFactory.IdentifierName(nameof(PineValueAsInteger)),
-                        SyntaxFactory.IdentifierName(nameof(PineValueAsInteger.ValueFromSignedInteger))))
+                        SyntaxFactory.IdentifierName(nameof(IntegerEncoding)),
+                        SyntaxFactory.IdentifierName(nameof(IntegerEncoding.EncodeSignedInteger))))
                 .WithArgumentList(
                     SyntaxFactory.ArgumentList(
                         SyntaxFactory.SingletonSeparatedList(

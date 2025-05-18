@@ -2,6 +2,7 @@ using ElmTime.ElmInteractive;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using Pine.Core.Elm;
+using Pine.Core.PopularEncodings;
 using Pine.Elm;
 using Pine.PineVM;
 using System;
@@ -384,7 +385,7 @@ public class ElmValueJsonValueEncodingTests
                         pineVM,
                         parseEncodeFunctionOk,
                         [
-                            PineValueAsInteger.ValueFromSignedInteger(0),
+                            IntegerEncoding.EncodeSignedInteger(0),
                             actualPineValue
                         ]);
 

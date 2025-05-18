@@ -1,8 +1,8 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System;
 using System.Linq;
 
-namespace Pine.Core;
+namespace Pine.Core.PopularEncodings;
 
 /// <summary>
 /// The standard encoding of Pine expression as Pine value.
@@ -45,7 +45,7 @@ public static class ExpressionEncoding
             EncodeChoiceTypeVariantAsPineValue(
                 "StringTag",
                 PineValue.List(
-                    [PineValueAsString.BlobValueFromString(stringTag.Tag),
+                    [StringEncoding.BlobValueFromString(stringTag.Tag),
                     EncodeExpressionAsValue(stringTag.Tagged)
                     ])),
 
@@ -102,7 +102,7 @@ public static class ExpressionEncoding
         if (rootList.Elements.Length is not 2)
             return "Unexpected number of items in list: Not 2 but " + rootList.Elements.Length;
 
-        var parseTagResult = PineValueAsString.StringFromValue(rootList.Elements.Span[0]);
+        var parseTagResult = StringEncoding.StringFromValue(rootList.Elements.Span[0]);
 
         {
             if (parseTagResult.IsErrOrNull() is { } err)
@@ -242,7 +242,7 @@ public static class ExpressionEncoding
             "KernelApplication",
             PineValue.List(
                 [
-                PineValueAsString.BlobValueFromString(kernelApplicationExpression.Function),
+                StringEncoding.BlobValueFromString(kernelApplicationExpression.Function),
                 EncodeExpressionAsValue(kernelApplicationExpression.Input)
                 ]));
 
@@ -256,7 +256,7 @@ public static class ExpressionEncoding
         }
 
         var parseFunctionResult =
-            PineValueAsString.StringFromValue(arguments.Span[0]);
+            StringEncoding.StringFromValue(arguments.Span[0]);
 
         {
             if (parseFunctionResult.IsErrOrNull() is { } err)
@@ -357,7 +357,7 @@ public static class ExpressionEncoding
         ?
         "Unexpected number of arguments under string tag, not two but " + arguments.Length
         :
-        PineValueAsString.StringFromValue(arguments.Span[0]) switch
+        StringEncoding.StringFromValue(arguments.Span[0]) switch
         {
             Result<string, string>.Err err =>
             err.Value,
@@ -509,7 +509,7 @@ public static class ExpressionEncoding
         PineValue.List(
             [..fields.Select(field => PineValue.List(
                 [
-                    PineValueAsString.ValueFromString(field.fieldName),
+                    StringEncoding.ValueFromString(field.fieldName),
                     field.fieldValue
                 ]))]);
 
@@ -531,7 +531,7 @@ public static class ExpressionEncoding
             if (ParseListWithExactlyTwoElements(listElementResult).IsOkOrNullable() is not { } fieldNameValueAndValue)
                 return "Failed to parse list element as list with exactly two elements";
 
-            if (PineValueAsString.StringFromValue(fieldNameValueAndValue.Item1).IsOkOrNull() is not { } fieldName)
+            if (StringEncoding.StringFromValue(fieldNameValueAndValue.Item1).IsOkOrNull() is not { } fieldName)
                 return "Failed to parse field name as string";
 
             recordFields[fieldName] = fieldNameValueAndValue.Item2;
@@ -543,7 +543,7 @@ public static class ExpressionEncoding
     private static PineValue.ListValue EncodeChoiceTypeVariantAsPineValue(string tagName, PineValue tagArguments) =>
         PineValue.List(
             [
-                PineValueAsString.BlobValueFromString(tagName),
+                StringEncoding.BlobValueFromString(tagName),
                 tagArguments,
             ]);
 
@@ -563,7 +563,7 @@ public static class ExpressionEncoding
                 err.Value,
 
                 Result<string, (PineValue, PineValue)>.Ok tagNameValueAndValue =>
-                PineValueAsString.StringFromValue(tagNameValueAndValue.Value.Item1) switch
+                StringEncoding.StringFromValue(tagNameValueAndValue.Value.Item1) switch
                 {
                     Result<string, string>.Err err =>
                     err.Value,

@@ -2,6 +2,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Pine.Core;
+using Pine.Core.PopularEncodings;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -75,8 +76,8 @@ public partial class CompileToCSharp
 
         if (argumentExpression is Expression.Literal literal)
         {
-            if (PineValueAsInteger.SignedIntegerFromValueStrict(literal.Value) is Result<string, BigInteger>.Ok okInteger &&
-                PineValueAsInteger.ValueFromSignedInteger(okInteger.Value) == literal.Value)
+            if (IntegerEncoding.ParseSignedIntegerStrict(literal.Value) is Result<string, BigInteger>.Ok okInteger &&
+                IntegerEncoding.EncodeSignedInteger(okInteger.Value) == literal.Value)
             {
                 if (okInteger.Value >= long.MinValue && okInteger.Value <= long.MaxValue)
                     asLiteralInt64 = (long)okInteger.Value;

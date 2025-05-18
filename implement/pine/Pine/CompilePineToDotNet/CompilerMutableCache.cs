@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using Pine.Core;
+using Pine.Core.PopularEncodings;
 
 namespace Pine.CompilePineToDotNet;
 

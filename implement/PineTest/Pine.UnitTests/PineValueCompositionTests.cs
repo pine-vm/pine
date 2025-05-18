@@ -1,5 +1,6 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
+using Pine.Core.PopularEncodings;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -166,10 +167,10 @@ public class PineValueCompositionTests
         foreach (var testCase in testCases)
         {
             var asPineValue =
-                PineValueAsString.ValueFromString(testCase);
+                StringEncoding.ValueFromString(testCase);
 
             var toStringResult =
-                PineValueAsString.StringFromValue(asPineValue)
+                StringEncoding.StringFromValue(asPineValue)
                 .Extract(error => throw new Exception(error));
 
             Assert.AreEqual(testCase, toStringResult);
@@ -187,10 +188,10 @@ public class PineValueCompositionTests
         foreach (var testCase in testCases)
         {
             var asPineValue =
-                PineValueAsInteger.ValueFromSignedInteger(testCase);
+                IntegerEncoding.EncodeSignedInteger(testCase);
 
             var toIntegerResult =
-                PineValueAsInteger.SignedIntegerFromValueStrict(asPineValue)
+                IntegerEncoding.ParseSignedIntegerStrict(asPineValue)
                 .Extract(error => throw new Exception(error));
 
             Assert.AreEqual(testCase, toIntegerResult);
@@ -208,17 +209,17 @@ public class PineValueCompositionTests
         foreach (var testCase in testCases)
         {
             var asPineValue =
-                PineValueAsInteger.ValueFromUnsignedInteger(testCase)
+                IntegerEncoding.EncodeUnsignedInteger(testCase)
                 .Extract(error => throw new Exception(error));
 
             var toIntegerResult =
-                PineValueAsInteger.UnsignedIntegerFromValue(asPineValue)
+                IntegerEncoding.ParseUnsignedInteger(asPineValue)
                 .Extract(error => throw new Exception(error));
 
             Assert.AreEqual(testCase, toIntegerResult);
         }
 
-        Assert.IsTrue(PineValueAsInteger.ValueFromUnsignedInteger(-1) is Result<string, PineValue>.Err);
+        Assert.IsTrue(IntegerEncoding.EncodeUnsignedInteger(-1) is Result<string, PineValue>.Err);
     }
 
     [TestMethod]

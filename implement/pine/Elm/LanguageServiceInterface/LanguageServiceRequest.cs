@@ -1,5 +1,6 @@
 using Pine.Core;
 using Pine.Core.Elm;
+using Pine.Core.PopularEncodings;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -227,9 +228,9 @@ public static class RequestEncoding
                     ElmValueEncoding.ElmValueAsPineValue(
                         FileLocationEncoding.EncodeAsElmValue(provideHoverRequest.FileLocation))),
                     ("positionLineNumber",
-                    PineValueAsInteger.ValueFromSignedInteger(provideHoverRequest.PositionLineNumber)),
+                    IntegerEncoding.EncodeSignedInteger(provideHoverRequest.PositionLineNumber)),
                     ("positionColumn",
-                    PineValueAsInteger.ValueFromSignedInteger(provideHoverRequest.PositionColumn)),
+                    IntegerEncoding.EncodeSignedInteger(provideHoverRequest.PositionColumn)),
                 ]);
     }
 
@@ -241,9 +242,9 @@ public static class RequestEncoding
                     ("filePathOpenedInEditor",
                     ElmValueEncoding.StringAsPineValue(provideCompletionItemsRequest.FilePathOpenedInEditor)),
                     ("cursorLineNumber",
-                    PineValueAsInteger.ValueFromSignedInteger(provideCompletionItemsRequest.CursorLineNumber)),
+                    IntegerEncoding.EncodeSignedInteger(provideCompletionItemsRequest.CursorLineNumber)),
                     ("cursorColumn",
-                    PineValueAsInteger.ValueFromSignedInteger(provideCompletionItemsRequest.CursorColumn))
+                    IntegerEncoding.EncodeSignedInteger(provideCompletionItemsRequest.CursorColumn))
                 ]);
     }
 
@@ -255,9 +256,9 @@ public static class RequestEncoding
                     ("filePath",
                     ElmValueEncoding.StringAsPineValue(renameParams.FilePath)),
                     ("positionLineNumber",
-                    PineValueAsInteger.ValueFromSignedInteger(renameParams.PositionLineNumber)),
+                    IntegerEncoding.EncodeSignedInteger(renameParams.PositionLineNumber)),
                     ("positionColumn",
-                    PineValueAsInteger.ValueFromSignedInteger(renameParams.PositionColumn)),
+                    IntegerEncoding.EncodeSignedInteger(renameParams.PositionColumn)),
                     ("newName",
                     ElmValueEncoding.StringAsPineValue(renameParams.NewName))
                 ]);

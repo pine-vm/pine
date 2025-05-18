@@ -1,4 +1,5 @@
 using Pine.Core;
+using Pine.Core.PopularEncodings;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -734,7 +735,7 @@ public class PineIRCompiler
 
                 if (skipList.items[0] is Expression.Literal literalExpr)
                 {
-                    if (PineValueAsInteger.SignedIntegerFromValueRelaxed(literalExpr.Value).IsOkOrNullable() is { } skipCount)
+                    if (IntegerEncoding.ParseSignedIntegerRelaxed(literalExpr.Value).IsOkOrNullable() is { } skipCount)
                     {
                         return
                             afterSource
@@ -1062,7 +1063,7 @@ public class PineIRCompiler
                     prior
                     .AppendInstruction(
                         StackInstruction.Push_Literal(
-                            PineValueAsInteger.ValueFromSignedInteger(0)));
+                            IntegerEncoding.EncodeSignedInteger(0)));
             }
 
             if (listExpr.items.Count is 2)
@@ -1165,7 +1166,7 @@ public class PineIRCompiler
                     prior
                     .AppendInstruction(
                         StackInstruction.Push_Literal(
-                            PineValueAsInteger.ValueFromSignedInteger(1)));
+                            IntegerEncoding.EncodeSignedInteger(1)));
             }
 
             if (listExpr.items.Count is 2)

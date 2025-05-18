@@ -2,6 +2,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Pine.Core;
+using Pine.Core.PopularEncodings;
 using Pine.PineVM;
 using System;
 using System.Collections.Generic;
@@ -1544,8 +1545,8 @@ public partial class CompileToCSharp
 
         static long? attemptMapToSignedInteger(PineValue pineValue)
         {
-            if (PineValueAsInteger.SignedIntegerFromValueStrict(pineValue) is Result<string, BigInteger>.Ok okInteger &&
-                PineValueAsInteger.ValueFromSignedInteger(okInteger.Value) == pineValue &&
+            if (IntegerEncoding.ParseSignedIntegerStrict(pineValue) is Result<string, BigInteger>.Ok okInteger &&
+                IntegerEncoding.EncodeSignedInteger(okInteger.Value) == pineValue &&
                 okInteger.Value < long.MaxValue && long.MinValue < okInteger.Value)
                 return (long)okInteger.Value;
 
@@ -1558,8 +1559,8 @@ public partial class CompileToCSharp
                 SyntaxFactory.InvocationExpression(
                     SyntaxFactory.MemberAccessExpression(
                         SyntaxKind.SimpleMemberAccessExpression,
-                        SyntaxFactory.IdentifierName(nameof(PineValueAsInteger)),
-                        SyntaxFactory.IdentifierName(nameof(PineValueAsInteger.ValueFromSignedInteger))))
+                        SyntaxFactory.IdentifierName(nameof(IntegerEncoding)),
+                        SyntaxFactory.IdentifierName(nameof(IntegerEncoding.EncodeSignedInteger))))
                 .WithArgumentList(
                 SyntaxFactory.ArgumentList(
                     SyntaxFactory.SingletonSeparatedList(
@@ -1601,14 +1602,14 @@ public partial class CompileToCSharp
             }
         }
 
-        if (PineValueAsString.StringFromValue(pineValue) is Result<string, string>.Ok okString)
+        if (StringEncoding.StringFromValue(pineValue) is Result<string, string>.Ok okString)
         {
             return
                 (SyntaxFactory.InvocationExpression(
                     SyntaxFactory.MemberAccessExpression(
                         SyntaxKind.SimpleMemberAccessExpression,
-                        SyntaxFactory.IdentifierName(nameof(PineValueAsString)),
-                        SyntaxFactory.IdentifierName(nameof(PineValueAsString.ValueFromString))))
+                        SyntaxFactory.IdentifierName(nameof(StringEncoding)),
+                        SyntaxFactory.IdentifierName(nameof(StringEncoding.ValueFromString))))
                 .WithArgumentList(
                     SyntaxFactory.ArgumentList(
                         SyntaxFactory.SingletonSeparatedList(

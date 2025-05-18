@@ -1,4 +1,5 @@
 using Pine.Core;
+using Pine.Core.PopularEncodings;
 using Pine.Core.Elm;
 using Pine.Elm;
 using Pine.Elm019;
@@ -168,7 +169,7 @@ public class ElmInteractive
             {
                 if (0 < listComponent.Elements.Length)
                 {
-                    if (PineValueAsString.StringFromValue(pineValue) is Result<string, string>.Ok asString)
+                    if (StringEncoding.StringFromValue(pineValue) is Result<string, string>.Ok asString)
                         return new PineValueMappedForTransport(
                             ListAsString: asString.Value,
                             BlobAsInt: null,
@@ -187,7 +188,7 @@ public class ElmInteractive
             {
                 if (1 < blobValue.Bytes.Length && blobValue.Bytes.Length < 3)
                 {
-                    if (PineValueAsInteger.SignedIntegerFromBlobValueStrict(blobValue.Bytes.Span) is Result<string, System.Numerics.BigInteger>.Ok asInt)
+                    if (IntegerEncoding.ParseSignedIntegerStrict(blobValue.Bytes.Span) is Result<string, System.Numerics.BigInteger>.Ok asInt)
                     {
                         return new PineValueMappedForTransport(
                             ListAsString: null,
@@ -371,10 +372,10 @@ public class ElmInteractive
             return PineValue.Blob([.. blob.Select(b => (byte)b)]);
 
         if (fromJson.ListAsString is { } listAsString)
-            return PineValueAsString.ValueFromString(listAsString);
+            return StringEncoding.ValueFromString(listAsString);
 
         if (fromJson.BlobAsInt is { } asInt)
-            return PineValueAsInteger.ValueFromSignedInteger(asInt);
+            return IntegerEncoding.EncodeSignedInteger(asInt);
 
         if (fromJson.Reference is { } reference)
         {

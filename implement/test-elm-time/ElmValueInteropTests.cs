@@ -1,5 +1,6 @@
-﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
+using Pine.Core.PopularEncodings;
 using Pine.Core.Elm;
 using System.Collections.Generic;
 
@@ -15,7 +16,7 @@ public class ElmValueInteropTests
             PineValue.EmptyList,
             PineValue.EmptyBlob,
 
-            PineValueAsString.ValueFromString("Hello, world!"),
+            StringEncoding.ValueFromString("Hello, world!"),
         ];
 
         foreach (var testCase in testCases)

@@ -1,4 +1,5 @@
 using Pine.Core;
+using Pine.Core.PopularEncodings;
 using Pine.PineVM;
 using System;
 using System.Collections.Generic;
@@ -195,7 +196,7 @@ public static class ElmInteractiveEnvironment
         return
             PineValue.List(
                 [
-                PineValueAsString.ValueFromString("Function"),
+                StringEncoding.ValueFromString("Function"),
                 EncodeFunctionRecordInValue(functionRecord)
                 ]);
     }
@@ -234,7 +235,7 @@ public static class ElmInteractiveEnvironment
         }
 
         var parseFunctionParameterCountResult =
-            PineValueAsInteger.SignedIntegerFromValueStrict(functionRecordListItems.Elements.Span[1]);
+            IntegerEncoding.ParseSignedIntegerStrict(functionRecordListItems.Elements.Span[1]);
 
         {
             if (parseFunctionParameterCountResult.IsErrOrNull() is { } err)
@@ -286,7 +287,7 @@ public static class ElmInteractiveEnvironment
             PineValue.List(
                 [
                 innerFunctionValue,
-                PineValueAsInteger.ValueFromSignedInteger(functionRecord.ParameterCount),
+                IntegerEncoding.EncodeSignedInteger(functionRecord.ParameterCount),
                 PineValue.List(functionRecord.EnvFunctions.ToArray()),
                 PineValue.List(functionRecord.ArgumentsAlreadyCollected.ToArray())
                 ]);
@@ -334,7 +335,7 @@ public static class ElmInteractiveEnvironment
         if (listValue.Elements.Length is not 2)
             return false;
 
-        if (PineValueAsString.StringFromValue(listValue.Elements.Span[0]).IsOkOrNull() is not { } name)
+        if (StringEncoding.StringFromValue(listValue.Elements.Span[0]).IsOkOrNull() is not { } name)
             return false;
 
         if (name.Length < 1)
@@ -407,7 +408,7 @@ public static class ElmInteractiveEnvironment
             PineValue.ListValue listValue =>
             listValue.Elements.Length is 2
             ?
-            PineValueAsString.StringFromValue(listValue.Elements.Span[0])
+            StringEncoding.StringFromValue(listValue.Elements.Span[0])
             .Map(tag => (tag, listValue.Elements.Span[1]))
             :
             "Unexpected list length: " + listValue.Elements.Length,

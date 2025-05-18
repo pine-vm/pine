@@ -1,5 +1,6 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
+using Pine.Core.PopularEncodings;
 
 namespace TestElmTime;
 
@@ -11,33 +12,33 @@ public class PineVMEncodeExpressionTests
     {
         var testCases = new Expression[]
         {
-            new Expression.Literal(PineValueAsString.ValueFromString("literal content")),
+            new Expression.Literal(StringEncoding.ValueFromString("literal content")),
 
             new Expression.Environment(),
 
             Expression.ListInstance(
                 [
-                    new Expression.Literal(PineValueAsString.ValueFromString("list element alfa")),
-                    new Expression.Literal(PineValueAsString.ValueFromString("list element beta")),
-                    new Expression.Literal(PineValueAsString.ValueFromString("list element gamma")),
+                    new Expression.Literal(StringEncoding.ValueFromString("list element alfa")),
+                    new Expression.Literal(StringEncoding.ValueFromString("list element beta")),
+                    new Expression.Literal(StringEncoding.ValueFromString("list element gamma")),
                 ]),
 
             Expression.ConditionalInstance(
-                condition: new Expression.Literal(PineValueAsString.ValueFromString("condition")),
-                falseBranch: new Expression.Literal(PineValueAsString.ValueFromString("if false")),
-                trueBranch: new Expression.Literal(PineValueAsString.ValueFromString("if true"))),
+                condition: new Expression.Literal(StringEncoding.ValueFromString("condition")),
+                falseBranch: new Expression.Literal(StringEncoding.ValueFromString("if false")),
+                trueBranch: new Expression.Literal(StringEncoding.ValueFromString("if true"))),
 
             new Expression.ParseAndEval(
-                encoded: new Expression.Literal(PineValueAsString.ValueFromString("encoded")),
-                environment: new Expression.Literal(PineValueAsString.ValueFromString("environment"))),
+                encoded: new Expression.Literal(StringEncoding.ValueFromString("encoded")),
+                environment: new Expression.Literal(StringEncoding.ValueFromString("environment"))),
 
             new Expression.KernelApplication(
                 function: nameof(KernelFunction.length),
-                input: new Expression.Literal(PineValueAsString.ValueFromString("kernel app arg"))),
+                input: new Expression.Literal(StringEncoding.ValueFromString("kernel app arg"))),
 
             new Expression.StringTag(
                 tag: "tag text",
-                tagged: new Expression.Literal(PineValueAsString.ValueFromString("tagged expr")))
+                tagged: new Expression.Literal(StringEncoding.ValueFromString("tagged expr")))
         };
 
         foreach (var testCase in testCases)

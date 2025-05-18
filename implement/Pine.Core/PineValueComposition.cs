@@ -1,3 +1,4 @@
+using Pine.Core.PopularEncodings;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -8,91 +9,13 @@ namespace Pine.Core;
 public static class PineValueComposition
 {
     public static Result<IReadOnlyList<(int index, string name)>, TreeNodeWithStringPath> ParseAsTreeWithStringPath(
-        PineValue composition)
-    {
-        static Result<IReadOnlyList<(int index, string name)>, TreeNodeWithStringPath> continueForListComposition(
-            PineValue.ListValue compositionAsList)
-        {
-            var compositionResults =
-                compositionAsList.Elements
-                .ToArray()
-                    .Select((element, elementIndex) =>
-                    {
-                        if (element is not PineValue.ListValue elementAsList || elementAsList.Elements.Length != 2)
-                        {
-                            return Result<IReadOnlyList<(int index, string name)>, (string name, TreeNodeWithStringPath
-                                element)>.err([]);
-                        }
+        PineValue composition) =>
+        FileTreeEncoding.Parse(composition);
 
-                        if (PineValueAsString.StringFromValue(elementAsList.Elements.Span[0]) is not
-                            Result<string, string>.Ok nameOk)
-                        {
-                            return Result<IReadOnlyList<(int index, string name)>, (string name, TreeNodeWithStringPath
-                                element)>.err([]);
-                        }
 
-                        var currentIndexAndName =
-                            (index: elementIndex, name: nameOk.Value);
+    public static PineValue FromTreeWithStringPath(TreeNodeWithStringPath node)=>
+        FileTreeEncoding.Encode(node);
 
-                        return
-                            ParseAsTreeWithStringPath(elementAsList.Elements.Span[1]) switch
-                            {
-                                Result<IReadOnlyList<(int index, string name)>, TreeNodeWithStringPath>.Err err =>
-                                    Result<IReadOnlyList<(int index, string name)>, (string name,
-                                        TreeNodeWithStringPath element)>.err(
-                                        [currentIndexAndName, .. err.Value]),
-
-                                Result<IReadOnlyList<(int index, string name)>, TreeNodeWithStringPath>.Ok ok =>
-                                    Result<IReadOnlyList<(int index, string name)>, (string name,
-                                        TreeNodeWithStringPath element)>.ok(
-                                        (currentIndexAndName.name, ok.Value)),
-
-                                _ => throw new NotImplementedException()
-                            };
-                    })
-                    .ToImmutableList();
-
-            return
-                compositionResults
-                    .ListCombine()
-                    .Map(compositionOk => TreeNodeWithStringPath.SortedTree(compositionOk.ToImmutableList()));
-        }
-
-        return
-            composition switch
-            {
-                PineValue.BlobValue compositionAsBlob =>
-                    Result<IReadOnlyList<(int index, string name)>, TreeNodeWithStringPath>.ok(
-                        TreeNodeWithStringPath.Blob(compositionAsBlob.Bytes)),
-
-                PineValue.ListValue compositionAsList =>
-                    continueForListComposition(compositionAsList),
-
-                _ => throw new NotImplementedException("Incomplete match on sum type.")
-            };
-    }
-
-    public static PineValue FromTreeWithStringPath(TreeNodeWithStringPath node) =>
-        node switch
-        {
-            TreeNodeWithStringPath.BlobNode blob =>
-            PineValue.Blob(blob.Bytes),
-
-            TreeNodeWithStringPath.TreeNode tree =>
-                PineValue.List(
-                    [..tree.Elements
-                        .Select(treeElement =>
-                            PineValue.List(
-                                [
-                                    PineValueAsString.ValueFromString(treeElement.name),
-                                    FromTreeWithStringPath(treeElement.component)
-                                ]
-                            ))
-                    ]),
-
-            _ =>
-            throw new NotImplementedException("Unexpected node type: " + node.GetType())
-        };
 
     public static TreeNodeWithStringPath SortedTreeFromSetOfBlobsWithCommonFilePath(
         IEnumerable<(string path, ReadOnlyMemory<byte> blobContent)> blobsWithPath) =>

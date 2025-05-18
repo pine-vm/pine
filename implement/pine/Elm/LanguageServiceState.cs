@@ -4,6 +4,7 @@ using Pine.Core.PineVM;
 using System.Collections.Generic;
 using System.Linq;
 using Pine.Core.Elm;
+using Pine.Core.PopularEncodings;
 
 namespace Pine.Elm;
 
@@ -381,7 +382,7 @@ public class LanguageServiceState(
         {
             return PineValue.List(
                 [
-                    PineValueAsString.ValueFromString("BlobNode"),
+                    StringEncoding.ValueFromString("BlobNode"),
                     PineValue.List(
                         [
                             encodeBlob(blobNode.Blob)
@@ -393,7 +394,7 @@ public class LanguageServiceState(
         {
             return PineValue.List(
                 [
-                    PineValueAsString.ValueFromString("TreeNode"),
+                    StringEncoding.ValueFromString("TreeNode"),
                     PineValue.List(
                         [
                             PineValue.List(

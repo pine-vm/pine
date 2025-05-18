@@ -3,6 +3,7 @@ using Pine;
 using Pine.Core;
 using Pine.Core.Elm;
 using Pine.Core.PineVM;
+using Pine.Core.PopularEncodings;
 using Pine.Elm.Platform;
 using Pine.PineVM;
 using System;
@@ -321,7 +322,7 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
                     function: nameof(KernelFunction.skip),
                     Expression.ListInstance(
                         [
-                        Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(nextSkipCount)),
+                        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(nextSkipCount)),
                         currentNode
                         ]));
 

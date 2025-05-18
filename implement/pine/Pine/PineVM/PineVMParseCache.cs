@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Pine.Core;
+using Pine.Core.PopularEncodings;
 
 namespace Pine.PineVM;
 

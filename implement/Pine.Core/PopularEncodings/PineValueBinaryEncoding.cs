@@ -3,10 +3,10 @@ using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace Pine.Core;
+namespace Pine.Core.PopularEncodings;
 
 /// <summary>
-/// Provides methods to encode and decode <see cref="PineValue"/> instances 
+/// Functions to encode and decode <see cref="PineValue"/> instances 
 /// to and from a compact binary representation.
 /// </summary>
 public static class PineValueBinaryEncoding

@@ -1,5 +1,6 @@
 using ElmTime.ElmInteractive;
 using Pine.Core;
+using Pine.Core.PopularEncodings;
 using Pine.Core.Elm;
 using Pine.Core.Json;
 using System;
@@ -679,7 +680,7 @@ public class Precompiled
 
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
                     [1,0],
-                    PineValueAsString.ValueFromString("Function")),
+                    StringEncoding.ValueFromString("Function")),
                     ]);
 
             yield return
@@ -1657,7 +1658,7 @@ public class Precompiled
         }
 
         var newCharsValues =
-            PineValueAsString.ListValueFromString(new string(newCharsBuffer.AsMemory().Span[..charsWritten]));
+            StringEncoding.ListValueFromString(new string(newCharsBuffer.AsMemory().Span[..charsWritten]));
 
         var concatenatedCharsValues =
             new PineValue[charsList.Elements.Length + newCharsValues.Length];
@@ -1727,7 +1728,7 @@ public class Precompiled
             return null;
         }
 
-        var asStringResult = PineValueAsString.StringFromListValue(stringCharsList);
+        var asStringResult = StringEncoding.StringFromListValue(stringCharsList);
 
         if (asStringResult.IsOkOrNull() is not { } dotnetString)
         {
@@ -2021,8 +2022,8 @@ public class Precompiled
                     return PineValue.EmptyList;
                 }
 
-                var charA = PineValueAsInteger.UnsignedIntegerFromBlobValue(blobA.Bytes.Span);
-                var charB = PineValueAsInteger.UnsignedIntegerFromBlobValue(blobB.Bytes.Span);
+                var charA = IntegerEncoding.ParseUnsignedInteger(blobA.Bytes.Span);
+                var charB = IntegerEncoding.ParseUnsignedInteger(blobB.Bytes.Span);
 
                 if (charA < charB)
                 {
@@ -2373,7 +2374,7 @@ public class Precompiled
                             Tag_Just_Value(
                                 PineValue.List(
                                 [
-                                    KernelFunction.int_add(index, PineValueAsInteger.ValueFromSignedInteger(i)),
+                                    KernelFunction.int_add(index, IntegerEncoding.EncodeSignedInteger(i)),
                                     itemListValue
                                 ])),
                         StackFrameCount: itemEqStackFrameCount);
@@ -2510,12 +2511,12 @@ public class Precompiled
 
         var countValue = PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
         var count =
-            PineValueAsInteger.SignedIntegerFromValueStrict(countValue)
+            IntegerEncoding.ParseSignedIntegerStrict(countValue)
             .Extract(err => throw new Exception(err));
 
         var dict = PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
 
-        return PineValueAsInteger.ValueFromSignedInteger(sizeHelp((long)count, dict));
+        return IntegerEncoding.EncodeSignedInteger(sizeHelp((long)count, dict));
     }
 
 
@@ -2563,8 +2564,8 @@ public class Precompiled
         var returnValue =
             PineValue.List(
                 [
-                PineValueAsInteger.ValueFromSignedInteger(nodeCount),
-                PineValueAsInteger.ValueFromSignedInteger(byteCount)
+                IntegerEncoding.EncodeSignedInteger(nodeCount),
+                IntegerEncoding.EncodeSignedInteger(byteCount)
                 ]);
 
         return
@@ -2719,19 +2720,19 @@ public class Precompiled
         PineValue environment,
         PineVMParseCache parseCache)
     {
-        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(
+        if (IntegerEncoding.ParseSignedIntegerRelaxed(
             PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0, 0])).IsOkOrNullable() is not { } offset)
         {
             return null;
         }
 
-        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(
+        if (IntegerEncoding.ParseSignedIntegerRelaxed(
             PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0, 1])).IsOkOrNullable() is not { } newlines)
         {
             return null;
         }
 
-        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(
+        if (IntegerEncoding.ParseSignedIntegerRelaxed(
             PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0, 2])).IsOkOrNullable() is not { } col)
         {
             return null;
@@ -2742,7 +2743,7 @@ public class Precompiled
             return null;
         }
 
-        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(
+        if (IntegerEncoding.ParseSignedIntegerRelaxed(
             PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1, 1])).IsOkOrNullable() is not { } end)
         {
             return null;
@@ -2768,8 +2769,8 @@ public class Precompiled
         var finalValue =
             PineValue.List(
                 [
-                PineValueAsInteger.ValueFromSignedInteger(newlines),
-                PineValueAsInteger.ValueFromSignedInteger(col)
+                IntegerEncoding.EncodeSignedInteger(newlines),
+                IntegerEncoding.EncodeSignedInteger(col)
                 ]);
 
         return
@@ -2847,19 +2848,19 @@ public class Precompiled
             return null;
         }
 
-        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(
+        if (IntegerEncoding.ParseSignedIntegerRelaxed(
             PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1])).IsOkOrNullable() is not { } offset)
         {
             return null;
         }
 
-        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(
+        if (IntegerEncoding.ParseSignedIntegerRelaxed(
             PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 2])).IsOkOrNullable() is not { } row)
         {
             return null;
         }
 
-        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(
+        if (IntegerEncoding.ParseSignedIntegerRelaxed(
             PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 3])).IsOkOrNullable() is not { } col)
         {
             return null;
@@ -2917,9 +2918,9 @@ public class Precompiled
         var finalValue =
             PineValue.List(
                 [
-                PineValueAsInteger.ValueFromSignedInteger(newOffset),
-                PineValueAsInteger.ValueFromSignedInteger(newRow),
-                PineValueAsInteger.ValueFromSignedInteger(newCol)
+                IntegerEncoding.EncodeSignedInteger(newOffset),
+                IntegerEncoding.EncodeSignedInteger(newRow),
+                IntegerEncoding.EncodeSignedInteger(newCol)
                 ]);
 
         return
@@ -3067,17 +3068,17 @@ public class Precompiled
         var srcCharsValue =
             PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 2]);
 
-        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(offsetValue).IsOkOrNullable() is not { } startOffset)
+        if (IntegerEncoding.ParseSignedIntegerRelaxed(offsetValue).IsOkOrNullable() is not { } startOffset)
         {
             return null;
         }
 
-        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(rowValue).IsOkOrNullable() is not { } row)
+        if (IntegerEncoding.ParseSignedIntegerRelaxed(rowValue).IsOkOrNullable() is not { } row)
         {
             return null;
         }
 
-        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(colValue).IsOkOrNullable() is not { } col)
+        if (IntegerEncoding.ParseSignedIntegerRelaxed(colValue).IsOkOrNullable() is not { } col)
         {
             return null;
         }
@@ -3128,9 +3129,9 @@ public class Precompiled
         var finalValue =
             PineValue.List(
                 [
-                PineValueAsInteger.ValueFromSignedInteger(offset),
-                PineValueAsInteger.ValueFromSignedInteger(row),
-                PineValueAsInteger.ValueFromSignedInteger(col)
+                IntegerEncoding.EncodeSignedInteger(offset),
+                IntegerEncoding.EncodeSignedInteger(row),
+                IntegerEncoding.EncodeSignedInteger(col)
                 ]);
 
         return
@@ -3962,12 +3963,12 @@ public class Precompiled
         var charsValue =
             PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 2, 1, 0]);
 
-        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(startValue).IsOkOrNullable() is not { } start)
+        if (IntegerEncoding.ParseSignedIntegerRelaxed(startValue).IsOkOrNullable() is not { } start)
         {
             return null;
         }
 
-        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(endValue).IsOkOrNullable() is not { } end)
+        if (IntegerEncoding.ParseSignedIntegerRelaxed(endValue).IsOkOrNullable() is not { } end)
         {
             return null;
         }
@@ -4138,12 +4139,12 @@ public class Precompiled
         var charsValue =
             PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 3]);
 
-        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(currentLineStartValue).IsOkOrNullable() is not { } currentLineStart)
+        if (IntegerEncoding.ParseSignedIntegerRelaxed(currentLineStartValue).IsOkOrNullable() is not { } currentLineStart)
         {
             return null;
         }
 
-        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(offsetValue).IsOkOrNullable() is not { } offset)
+        if (IntegerEncoding.ParseSignedIntegerRelaxed(offsetValue).IsOkOrNullable() is not { } offset)
         {
             return null;
         }
@@ -4303,17 +4304,17 @@ public class Precompiled
         var indentValue =
             PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 4]);
 
-        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(offsetValue).IsOkOrNullable() is not { } startOffset)
+        if (IntegerEncoding.ParseSignedIntegerRelaxed(offsetValue).IsOkOrNullable() is not { } startOffset)
         {
             return null;
         }
 
-        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(rowValue).IsOkOrNullable() is not { } row)
+        if (IntegerEncoding.ParseSignedIntegerRelaxed(rowValue).IsOkOrNullable() is not { } row)
         {
             return null;
         }
 
-        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(colValue).IsOkOrNullable() is not { } col)
+        if (IntegerEncoding.ParseSignedIntegerRelaxed(colValue).IsOkOrNullable() is not { } col)
         {
             return null;
         }
@@ -4379,10 +4380,10 @@ public class Precompiled
                     PineValue.List(
                         [
                         srcCharsValue,
-                        PineValueAsInteger.ValueFromSignedInteger(offset),
+                        IntegerEncoding.EncodeSignedInteger(offset),
                         indentValue,
-                        PineValueAsInteger.ValueFromSignedInteger(row),
-                        PineValueAsInteger.ValueFromSignedInteger(col),
+                        IntegerEncoding.EncodeSignedInteger(row),
+                        IntegerEncoding.EncodeSignedInteger(col),
                         ])
                     ]),
                 StackFrameCount: 0);
@@ -4533,12 +4534,12 @@ public class Precompiled
         var indentValue =
             PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 5]);
 
-        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(offsetValue).IsOkOrNullable() is not { } startOffset)
+        if (IntegerEncoding.ParseSignedIntegerRelaxed(offsetValue).IsOkOrNullable() is not { } startOffset)
         {
             return null;
         }
 
-        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(colValue).IsOkOrNullable() is not { } col)
+        if (IntegerEncoding.ParseSignedIntegerRelaxed(colValue).IsOkOrNullable() is not { } col)
         {
             return null;
         }
@@ -4577,10 +4578,10 @@ public class Precompiled
                     PineValue.List(
                         [
                         srcCharsValue,
-                        PineValueAsInteger.ValueFromSignedInteger(offset),
+                        IntegerEncoding.EncodeSignedInteger(offset),
                         indentValue,
                         rowValue,
-                        PineValueAsInteger.ValueFromSignedInteger(col),
+                        IntegerEncoding.EncodeSignedInteger(col),
                         ])
                     ]),
                 StackFrameCount: 0);
@@ -4648,17 +4649,17 @@ public class Precompiled
         var indentValue =
             PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 5]);
 
-        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(offsetValue).IsOkOrNullable() is not { } startOffset)
+        if (IntegerEncoding.ParseSignedIntegerRelaxed(offsetValue).IsOkOrNullable() is not { } startOffset)
         {
             return null;
         }
 
-        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(rowValue).IsOkOrNullable() is not { } row)
+        if (IntegerEncoding.ParseSignedIntegerRelaxed(rowValue).IsOkOrNullable() is not { } row)
         {
             return null;
         }
 
-        if (PineValueAsInteger.SignedIntegerFromValueRelaxed(colValue).IsOkOrNullable() is not { } col)
+        if (IntegerEncoding.ParseSignedIntegerRelaxed(colValue).IsOkOrNullable() is not { } col)
         {
             return null;
         }
@@ -4709,10 +4710,10 @@ public class Precompiled
                 PineValue.List(
                     [
                     srcCharsValue,
-                    PineValueAsInteger.ValueFromSignedInteger(offset),
+                    IntegerEncoding.EncodeSignedInteger(offset),
                     indentValue,
-                    PineValueAsInteger.ValueFromSignedInteger(row),
-                    PineValueAsInteger.ValueFromSignedInteger(col),
+                    IntegerEncoding.EncodeSignedInteger(row),
+                    IntegerEncoding.EncodeSignedInteger(col),
                     ])
                 ]);
 
@@ -4858,28 +4859,28 @@ public class Precompiled
     }
 
     private static readonly PineValue IntegerOneValue =
-        PineValueAsInteger.ValueFromSignedInteger(1);
+        IntegerEncoding.EncodeSignedInteger(1);
 
     private static readonly PineValue Tag_BlobValue_Value =
-        PineValueAsString.ValueFromString("BlobValue");
+        StringEncoding.ValueFromString("BlobValue");
 
     private static readonly PineValue Tag_ListValue_Value =
-        PineValueAsString.ValueFromString("ListValue");
+        StringEncoding.ValueFromString("ListValue");
 
     private static readonly PineValue Tag_String_Value =
-        PineValueAsString.ValueFromString("String");
+        StringEncoding.ValueFromString("String");
 
     private static readonly PineValue Tag_Nothing_Name_Value =
-        PineValueAsString.ValueFromString("Nothing");
+        StringEncoding.ValueFromString("Nothing");
 
     private static readonly PineValue Tag_Just_Name_Value =
-        PineValueAsString.ValueFromString("Just");
+        StringEncoding.ValueFromString("Just");
 
     private static readonly PineValue Tag_Branch2_Name_Value =
-        PineValueAsString.ValueFromString("Branch2");
+        StringEncoding.ValueFromString("Branch2");
 
     private static readonly PineValue Tag_PState_Name_Value =
-        PineValueAsString.ValueFromString("PState");
+        StringEncoding.ValueFromString("PState");
 
     private static readonly PineValue Tag_EQ_Value =
         ElmValueEncoding.ElmValueAsPineValue(ElmValue.TagInstance("EQ", []));
@@ -4899,7 +4900,7 @@ public class Precompiled
     private static PineValue.ListValue Tag_Just_Value(PineValue justValue) =>
         PineValue.List(
             [
-            PineValueAsString.ValueFromString("Just"),
+            StringEncoding.ValueFromString("Just"),
             PineValue.List([justValue])
             ]
         );

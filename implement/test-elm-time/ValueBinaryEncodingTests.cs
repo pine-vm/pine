@@ -1,5 +1,6 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
+using Pine.Core.PopularEncodings;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -12,28 +13,28 @@ public class ValueBinaryEncodingTests
     public void Reuses_components()
     {
         var largeComponent =
-            PineValueAsString.ValueFromString(
+            StringEncoding.ValueFromString(
                 "building a value of size large enough so that non-duplicate encoding would become obvious");
 
         var compositionAlfa =
             PineValue.List(
                 PineValue.List(
-                    PineValueAsInteger.ValueFromSignedInteger(71),
+                    IntegerEncoding.EncodeSignedInteger(71),
                     largeComponent
                     ),
                 PineValue.List(
-                    PineValueAsInteger.ValueFromSignedInteger(91)
+                    IntegerEncoding.EncodeSignedInteger(91)
                     )
                 );
 
         var compositionBeta =
             PineValue.List(
                 PineValue.List(
-                    PineValueAsInteger.ValueFromSignedInteger(71),
+                    IntegerEncoding.EncodeSignedInteger(71),
                     largeComponent
                     ),
                 PineValue.List(
-                    PineValueAsInteger.ValueFromSignedInteger(91),
+                    IntegerEncoding.EncodeSignedInteger(91),
                     largeComponent
                     ),
                 largeComponent
@@ -92,47 +93,47 @@ public class ValueBinaryEncodingTests
                 PineValue.EmptyList,
                 PineValue.EmptyBlob),
 
-            PineValueAsInteger.ValueFromSignedInteger(71),
-            PineValueAsInteger.ValueFromSignedInteger(4171),
+            IntegerEncoding.EncodeSignedInteger(71),
+            IntegerEncoding.EncodeSignedInteger(4171),
 
             PineValue.List(
-                PineValueAsInteger.ValueFromSignedInteger(71),
-                PineValueAsInteger.ValueFromSignedInteger(4171),
-                PineValueAsInteger.ValueFromSignedInteger(134171),
-                PineValueAsInteger.ValueFromSignedInteger(43134171),
-                PineValueAsInteger.ValueFromSignedInteger(8143134171)),
+                IntegerEncoding.EncodeSignedInteger(71),
+                IntegerEncoding.EncodeSignedInteger(4171),
+                IntegerEncoding.EncodeSignedInteger(134171),
+                IntegerEncoding.EncodeSignedInteger(43134171),
+                IntegerEncoding.EncodeSignedInteger(8143134171)),
 
             PineValue.List(
-                PineValueAsInteger.ValueFromSignedInteger(71),
-                PineValueAsInteger.ValueFromSignedInteger(131),
-                PineValueAsInteger.ValueFromSignedInteger(71)),
+                IntegerEncoding.EncodeSignedInteger(71),
+                IntegerEncoding.EncodeSignedInteger(131),
+                IntegerEncoding.EncodeSignedInteger(71)),
 
             PineValue.List(
-                PineValueAsInteger.ValueFromSignedInteger(47),
-                PineValueAsInteger.ValueFromSignedInteger(71),
-                PineValueAsInteger.ValueFromSignedInteger(131),
-                PineValueAsInteger.ValueFromSignedInteger(71),
-                PineValueAsInteger.ValueFromSignedInteger(47)),
+                IntegerEncoding.EncodeSignedInteger(47),
+                IntegerEncoding.EncodeSignedInteger(71),
+                IntegerEncoding.EncodeSignedInteger(131),
+                IntegerEncoding.EncodeSignedInteger(71),
+                IntegerEncoding.EncodeSignedInteger(47)),
 
             PineValue.List(
-                PineValueAsInteger.ValueFromSignedInteger(47),
+                IntegerEncoding.EncodeSignedInteger(47),
                 PineValue.List(
-                    PineValueAsInteger.ValueFromSignedInteger(71)),
-                PineValueAsInteger.ValueFromSignedInteger(19),
+                    IntegerEncoding.EncodeSignedInteger(71)),
+                IntegerEncoding.EncodeSignedInteger(19),
                 PineValue.List(
-                    PineValueAsInteger.ValueFromSignedInteger(71))),
+                    IntegerEncoding.EncodeSignedInteger(71))),
 
             PineValue.List(
-                PineValueAsInteger.ValueFromSignedInteger(47),
+                IntegerEncoding.EncodeSignedInteger(47),
                 PineValue.List(
-                    PineValueAsInteger.ValueFromSignedInteger(43)),
+                    IntegerEncoding.EncodeSignedInteger(43)),
                 PineValue.List(
-                    PineValueAsInteger.ValueFromSignedInteger(91)),
-                PineValueAsInteger.ValueFromSignedInteger(21),
+                    IntegerEncoding.EncodeSignedInteger(91)),
+                IntegerEncoding.EncodeSignedInteger(21),
                 PineValue.List(
-                    PineValueAsInteger.ValueFromSignedInteger(91)),
+                    IntegerEncoding.EncodeSignedInteger(91)),
                 PineValue.List(
-                    PineValueAsInteger.ValueFromSignedInteger(43))),
+                    IntegerEncoding.EncodeSignedInteger(43))),
 
             Pine.PineVM.PopularExpression.BuildPopularValueDictionary().Values
             .OfType<PineValue.ListValue>()

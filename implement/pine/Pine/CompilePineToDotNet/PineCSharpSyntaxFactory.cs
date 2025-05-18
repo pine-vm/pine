@@ -7,6 +7,7 @@ using System.Linq;
 using System.Collections.Immutable;
 using System.Collections.Generic;
 using Pine.Core;
+using Pine.Core.PopularEncodings;
 
 namespace Pine.CompilePineToDotNet;
 
@@ -408,7 +409,7 @@ public static class PineCSharpSyntaxFactory
                 input:
                 Expression.ListInstance(
                     [
-                    Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(currentOffset)),
+                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(currentOffset)),
                         compositionExpr
                     ]));
 

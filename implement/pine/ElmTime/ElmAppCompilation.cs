@@ -22,6 +22,7 @@ using Pine.Elm;
 using Pine.PineVM;
 using Pine.Core.Elm;
 using Pine.Core.Json;
+using Pine.Core.PopularEncodings;
 
 
 namespace ElmTime
@@ -784,7 +785,7 @@ namespace ElmTime
 
             var tagNameValue = list.Elements.Span[0];
 
-            var tagNameResult = PineValueAsString.StringFromValue(tagNameValue);
+            var tagNameResult = StringEncoding.StringFromValue(tagNameValue);
 
             {
                 if (tagNameResult.IsErrOrNull() is { } err)
@@ -1203,17 +1204,17 @@ namespace ElmTime
         }
 
         private static readonly PineValue ValueFromString_CompilationIterationSuccess =
-            PineValueAsString.BlobValueFromString("CompilationIterationSuccess");
+            StringEncoding.BlobValueFromString("CompilationIterationSuccess");
 
         private static readonly PineValue ValueFromString_LocatedInSourceFiles =
-            PineValueAsString.BlobValueFromString("LocatedInSourceFiles");
+            StringEncoding.BlobValueFromString("LocatedInSourceFiles");
 
 
         private static readonly PineValue ValueFromString_CompilationIterationSuccess_2024 =
-            PineValueAsString.ValueFromString_2024("CompilationIterationSuccess");
+            StringEncoding.ValueFromString_2024("CompilationIterationSuccess");
 
         private static readonly PineValue ValueFromString_LocatedInSourceFiles_2024 =
-            PineValueAsString.ValueFromString_2024("LocatedInSourceFiles");
+            StringEncoding.ValueFromString_2024("LocatedInSourceFiles");
 
         private static Result<string, CompilerSerialInterface.ElmMakeEntryPointKind> ParseElmMakeEntryPointKindResult(
             PineValue pineValue,

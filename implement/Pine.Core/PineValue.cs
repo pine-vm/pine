@@ -1,3 +1,4 @@
+using Pine.Core.PopularEncodings;
 using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
@@ -10,7 +11,7 @@ namespace Pine.Core;
 /// It is a choice type with two cases, <see cref="ListValue"/> and <see cref="BlobValue"/>.
 /// <para/>
 /// Other kinds of data, like text, images, or a file system directory, are encoded based on these primitives.
-/// For conversion between the generic value type and common data types, see <see cref="PineValueAsInteger"/>, <see cref="PineValueAsString"/>, and <see cref="PineValueComposition"/>.
+/// For conversion between the generic value type and common data types, see <see cref="IntegerEncoding"/>, <see cref="StringEncoding"/>, and <see cref="PineValueComposition"/>.
 /// <para/>
 /// There is also a standard representation of program code and expressions as Pine values, 
 /// and you can see a reference implementation of this encoding at <see cref="ExpressionEncoding.ParseExpressionFromValue(PineValue)"/>.
@@ -137,7 +138,7 @@ public abstract record PineValue : IEquatable<PineValue>
             ..ReusedBlobInteger3ByteNegative,
             ..ReusedBlobInteger3BytePositive,
             ..ReusedBlobChar4Byte,
-            ..PopularValues.PopularStrings.Select(PineValueAsString.BlobValueFromString)])
+            ..PopularValues.PopularStrings.Select(StringEncoding.BlobValueFromString)])
         .ToFrozenSet();
 
     /// <summary>
@@ -149,8 +150,14 @@ public abstract record PineValue : IEquatable<PineValue>
 
         public ReadOnlyMemory<PineValue> Elements { get; }
 
+        /// <summary>
+        /// Aggregate number of nodes, including all nested lists.
+        /// </summary>
         public readonly long NodesCount;
 
+        /// <summary>
+        /// Aggregate number of bytes in all <see cref="BlobValue"/>s contained within this list and its nested lists.
+        /// </summary>
         public readonly long BlobsBytesCount;
 
         /// <summary>

@@ -1,3 +1,4 @@
+using Pine.Core.PopularEncodings;
 using Pine.Json;
 using System;
 using System.Collections.Generic;

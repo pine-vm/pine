@@ -1,3 +1,4 @@
+using Pine.Core.PopularEncodings;
 using Pine.PineVM;
 using System;
 using System.Collections.Generic;
@@ -74,7 +75,7 @@ public static class ElmValueEncoding
         if (firstByte is 2 || firstByte is 4)
         {
             var asBigIntResult =
-                PineValueAsInteger.SignedIntegerFromValueRelaxed(blobValue);
+                IntegerEncoding.ParseSignedIntegerRelaxed(blobValue);
 
             if (asBigIntResult.IsOkOrNullable() is { } bigInt)
             {
@@ -102,7 +103,7 @@ public static class ElmValueEncoding
 
         if (blobValue.Bytes.Length < 4)
         {
-            if (PineValueAsInteger.UnsignedIntegerFromValue(blobValue).IsOkOrNullable() is { } asBigInt)
+            if (IntegerEncoding.ParseUnsignedInteger(blobValue).IsOkOrNullable() is { } asBigInt)
             {
                 int asInt = (int)asBigInt;
 
@@ -146,7 +147,7 @@ public static class ElmValueEncoding
 
                             var charsList = tagArgumentsList.Elements.Span[0];
 
-                            var mapToStringResult = PineValueAsString.StringFromValue(charsList);
+                            var mapToStringResult = StringEncoding.StringFromValue(charsList);
 
                             if (mapToStringResult.IsOkOrNull() is { } ok)
                                 return ElmValue.StringInstance(ok);
@@ -215,10 +216,10 @@ public static class ElmValueEncoding
 
                             var denominatorValue = tagArgumentsList.Elements.Span[1];
 
-                            if (PineValueAsInteger.SignedIntegerFromValueStrict(numeratorValue).IsOkOrNullable() is not { } numeratorOk)
+                            if (IntegerEncoding.ParseSignedIntegerStrict(numeratorValue).IsOkOrNullable() is not { } numeratorOk)
                                 return "Failed to parse numerator under Float tag";
 
-                            if (PineValueAsInteger.SignedIntegerFromValueStrict(denominatorValue).IsOkOrNullable() is not { } denominatorOk)
+                            if (IntegerEncoding.ParseSignedIntegerStrict(denominatorValue).IsOkOrNullable() is not { } denominatorOk)
                                 return "Failed to parse denominator under Float tag";
 
                             return ElmValue.ElmFloat.Normalized(numeratorOk, denominatorOk);
@@ -234,7 +235,7 @@ public static class ElmValueEncoding
                         {
                             // Optimize, especially for the case of an Elm Tag.
 
-                            if (PineValueAsString.StringFromValue(tagCandidateValue).IsOkOrNull() is { } tagName)
+                            if (StringEncoding.StringFromValue(tagCandidateValue).IsOkOrNull() is { } tagName)
                             {
                                 if (tagName.Length is not 0 && char.IsAsciiLetterUpper(tagName[0]))
                                 {
@@ -339,7 +340,7 @@ public static class ElmValueEncoding
 
         var tagNameValue = list.Elements.Span[0];
 
-        var parseTagNameResult = PineValueAsString.StringFromValue(tagNameValue);
+        var parseTagNameResult = StringEncoding.StringFromValue(tagNameValue);
 
         if (parseTagNameResult.IsErrOrNull() is { } tagNameErr)
             return "First element is not a string: " + tagNameErr;
@@ -382,7 +383,7 @@ public static class ElmValueEncoding
             var fieldNameValue = fieldListElements[0];
             var fieldValue = fieldListElements[1];
 
-            var fieldNameResult = PineValueAsString.StringFromValue(fieldNameValue);
+            var fieldNameResult = StringEncoding.StringFromValue(fieldNameValue);
 
             if (fieldNameResult.IsOkOrNull() is { } fieldName)
             {
@@ -462,7 +463,7 @@ public static class ElmValueEncoding
             var fieldNameValue = fieldList.Elements.Span[0];
             var fieldValue = fieldList.Elements.Span[1];
 
-            var fieldNameResult = PineValueAsString.StringFromValue(fieldNameValue);
+            var fieldNameResult = StringEncoding.StringFromValue(fieldNameValue);
 
             if (fieldNameResult.IsOkOrNull() is { } fieldName)
             {
@@ -510,11 +511,11 @@ public static class ElmValueEncoding
                     .Select(item => ElmValueAsPineValue(item, additionalReusableEncodings, reportNewEncoding))]),
 
                 ElmValue.ElmChar elmChar =>
-                PineValueAsInteger.ValueFromUnsignedInteger(elmChar.Value)
+                IntegerEncoding.EncodeUnsignedInteger(elmChar.Value)
                 .Extract(err => throw new Exception(err)),
 
                 ElmValue.ElmInteger elmInteger =>
-                PineValueAsInteger.ValueFromSignedInteger(elmInteger.Value),
+                IntegerEncoding.EncodeSignedInteger(elmInteger.Value),
 
                 ElmValue.ElmString elmString =>
                 StringAsPineValue(elmString.Value),
@@ -542,8 +543,8 @@ public static class ElmValueEncoding
                     [ElmValue.ElmFloatTypeTagNameAsValue,
                     PineValue.List(
                         [
-                        PineValueAsInteger.ValueFromSignedInteger(elmFloat.Numerator),
-                        PineValueAsInteger.ValueFromSignedInteger(elmFloat.Denominator)
+                        IntegerEncoding.EncodeSignedInteger(elmFloat.Numerator),
+                        IntegerEncoding.EncodeSignedInteger(elmFloat.Denominator)
                         ])]),
 
                 _ =>
@@ -565,14 +566,14 @@ public static class ElmValueEncoding
                     [.. fields.Select(field =>
                     PineValue.List(
                         [
-                            PineValueAsString.ValueFromString(field.FieldName),
+                            StringEncoding.ValueFromString(field.FieldName),
                             field.FieldValue
                         ]))])])]);
 
     public static PineValue TagAsPineValue(string tagName, IReadOnlyList<PineValue> tagArguments) =>
         PineValue.List(
             [
-                PineValueAsString.ValueFromString(tagName),
+                StringEncoding.ValueFromString(tagName),
                 PineValue.List([..tagArguments])
             ]);
 
@@ -580,7 +581,7 @@ public static class ElmValueEncoding
         PineValue.List(
             [
             ElmValue.ElmStringTypeTagNameAsValue,
-            PineValue.List([PineValueAsString.ValueFromString_2024(elmString)])
+            PineValue.List([StringEncoding.ValueFromString_2024(elmString)])
             ]);
 
     /// <summary>

@@ -3,6 +3,7 @@ using ElmTime.ElmSyntax;
 using Pine.Core;
 using Pine.Core.Elm;
 using Pine.Core.PineVM;
+using Pine.Core.PopularEncodings;
 using Pine.Elm;
 using Pine.PineVM;
 using System.Collections.Generic;
@@ -940,7 +941,7 @@ public class ElmTimeJsonAdapter
             int indent,
             IPineVM pineVM)
         {
-            var indentArgument = PineValueAsInteger.ValueFromSignedInteger(indent);
+            var indentArgument = IntegerEncoding.EncodeSignedInteger(indent);
 
             var encodeResult =
                 ElmInteractiveEnvironment.ApplyFunction(
@@ -1094,8 +1095,8 @@ public class ElmTimeJsonAdapter
             var appStateIncludingShim =
                 ElmValueEncoding.ElmRecordAsPineValue(
                     [
-                    ("nextTaskIndex", PineValueAsInteger.ValueFromSignedInteger(0)),
-                    ("posixTimeMilli", PineValueAsInteger.ValueFromSignedInteger(posixTimeMilli)),
+                    ("nextTaskIndex", IntegerEncoding.EncodeSignedInteger(0)),
+                    ("posixTimeMilli", IntegerEncoding.EncodeSignedInteger(posixTimeMilli)),
                     ("createVolatileProcessTasks", EmptyDictAsPineValue),
                     ("requestToVolatileProcessTasks", EmptyDictAsPineValue),
                     ("terminateVolatileProcessTasks", EmptyDictAsPineValue),

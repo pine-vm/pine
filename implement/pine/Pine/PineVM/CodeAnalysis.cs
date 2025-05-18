@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using Pine.Core;
+using Pine.Core.PopularEncodings;
 
 namespace Pine.PineVM;
 
@@ -133,7 +134,7 @@ public record EnvConstraintId
             .Select(envItem =>
             (PineValue)
             PineValue.List(
-                [PineValue.List([.. envItem.Key.Select(pathItem => PineValueAsInteger.ValueFromSignedInteger(pathItem))]),
+                [PineValue.List([.. envItem.Key.Select(pathItem => IntegerEncoding.EncodeSignedInteger(pathItem))]),
                 envItem.Value]))];
 
         var hashBase16 =

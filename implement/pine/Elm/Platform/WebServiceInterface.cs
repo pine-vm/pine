@@ -1,6 +1,7 @@
 using ElmTime;
 using ElmTime.ElmInteractive;
 using Pine.Core;
+using Pine.Core.PopularEncodings;
 using Pine.Core.Elm;
 using Pine.Core.PineVM;
 using Pine.PineVM;
@@ -311,7 +312,7 @@ type alias LoadDependencyStruct =
             }
 
             var minimumPosixTimeMilli =
-                PineValueAsInteger.SignedIntegerFromValueRelaxed(minimumPosixTimeMilliField)
+                IntegerEncoding.ParseSignedIntegerRelaxed(minimumPosixTimeMilliField)
                 .Extract(err => throw new Exception("Failed parsing minimumPosixTimeMilli: " + err));
 
             var updateField =
@@ -677,7 +678,7 @@ type alias LoadDependencyStruct =
         return
             EncodeResult(
                 result,
-                encodeErr: PineValueAsString.ValueFromString,
+                encodeErr: StringEncoding.ValueFromString,
                 encodeOk: EncodeRuntimeInformationRecord);
     }
 
@@ -722,7 +723,7 @@ type alias LoadDependencyStruct =
         return
             PineValue.List(
                 [
-                PineValueAsString.ValueFromString(tagString),
+                StringEncoding.ValueFromString(tagString),
                 PineValue.List(
                     [
                     argValue

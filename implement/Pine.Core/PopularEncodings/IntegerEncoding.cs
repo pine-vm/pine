@@ -2,32 +2,46 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace Pine.Core;
+namespace Pine.Core.PopularEncodings;
 
 /// <summary>
 /// Standard encoding of integers in Pine.
+/// <para>
 /// This integer encoding corresponds to kernel functions like <see cref="KernelFunction.int_add(PineValue)"/> and <see cref="KernelFunction.skip(PineValue)"/>.
+/// </para>
+/// <para>
+/// When parsing, the 'strict' variant means we only accept the canonical encodings as produced by the encoding functions.
+/// In 'relaxed' parsing, we accept non-canonical encodings like negative zero or leading zeros.
+/// </para>
 /// </summary>
-public static class PineValueAsInteger
+public static class IntegerEncoding
 {
     /// <summary>
     /// Converts an integer into a blob value with an unsigned representation of that integer.
     /// Returns an error if the input integer is less than zero.
     /// </summary>
-    public static Result<string, PineValue> ValueFromUnsignedInteger(System.Numerics.BigInteger integer) =>
-        ReusedValueFromUnsignedInteger is { } reused && integer < reused.Count && 0 <= integer ?
-        reused[(int)integer]
-        :
-        BlobValueFromUnsignedInteger(integer)
-        .Map(PineValue.Blob);
+    public static Result<string, PineValue> EncodeUnsignedInteger(System.Numerics.BigInteger integer)
+    {
+        if (ReusedValueFromUnsignedInteger is { } reused && integer < reused.Count && 0 <= integer)
+        {
+            return reused[(int)integer];
+        }
+
+        if (integer < 0)
+            return "Argument is a negative integer.";
+
+        return PineValue.Blob(EncodeUnsignedIntegerBlobThrowing(integer));
+    }
 
     private static readonly IReadOnlyList<PineValue> ReusedValueFromUnsignedInteger =
         [..Enumerable.Range(0, 10_000)
-        .Select(Range => ValueFromUnsignedInteger(Range).Extract(err => throw new Exception(err)))];
+        .Select(Range => EncodeUnsignedInteger(Range).Extract(err => throw new Exception(err)))];
 
     /// <summary>
     /// Returns a reused instance of a <see cref="PineValue"/> encoding <paramref name="integer"/> in unsigned form.
-    /// Returns null the set of unsigned reused instances does not cover the given integer.
+    /// <para>
+    /// Returns null if the set of unsigned reused instances does not cover the given integer.
+    /// </para>
     /// </summary>
     public static PineValue? ReusedInstanceForUnsignedInteger(int integer)
     {
@@ -40,24 +54,35 @@ public static class PineValueAsInteger
         return null;
     }
 
-    public static Result<string, ReadOnlyMemory<byte>> BlobValueFromUnsignedInteger(System.Numerics.BigInteger integer)
+    /// <summary>
+    /// Blob bytes encoding the given integer in unsigned form.
+    /// <para>
+    /// Throws an exception if the given integer is negative.
+    /// </para>
+    /// </summary>
+    public static ReadOnlyMemory<byte> EncodeUnsignedIntegerBlobThrowing(System.Numerics.BigInteger integer)
     {
         if (integer < 0)
-            return "Argument is a negative integer.";
+        {
+            throw new ArgumentOutOfRangeException(nameof(integer), "Argument is a negative integer.");
+        }
 
         if (ReusedValueFromUnsignedInteger is { } reusedUnsigned &&
             integer < reusedUnsigned.Count)
         {
             if (reusedUnsigned[(int)integer] is PineValue.BlobValue blob)
-                return Result<string, ReadOnlyMemory<byte>>.ok(blob.Bytes);
+                return blob.Bytes;
         }
 
         var array = integer.ToByteArray(isUnsigned: true, isBigEndian: true);
 
-        return Result<string, ReadOnlyMemory<byte>>.ok(array);
+        return array;
     }
 
-    public static PineValue ValueFromSignedInteger(System.Numerics.BigInteger integer)
+    /// <summary>
+    /// Encode the given integer in signed form.
+    /// </summary>
+    public static PineValue EncodeSignedInteger(System.Numerics.BigInteger integer)
     {
         var absoluteValue = System.Numerics.BigInteger.Abs(integer);
 
@@ -90,10 +115,13 @@ public static class PineValueAsInteger
             return PineValue.Blob(absoluteBuffer[..(1 + bytesWritten)].ToArray());
         }
 
-        return PineValue.Blob(BlobValueFromSignedInteger(integer));
+        return PineValue.Blob(EncodeSignedIntegerBlob(integer));
     }
 
-    public static ReadOnlyMemory<byte> BlobValueFromSignedInteger(System.Numerics.BigInteger integer)
+    /// <summary>
+    /// Blob bytes encoding the given integer in signed form.
+    /// </summary>
+    public static ReadOnlyMemory<byte> EncodeSignedIntegerBlob(System.Numerics.BigInteger integer)
     {
         var absoluteValue = System.Numerics.BigInteger.Abs(integer);
 
@@ -110,13 +138,13 @@ public static class PineValueAsInteger
         return memory;
     }
 
-    public static Result<string, System.Numerics.BigInteger> SignedIntegerFromValueStrict(PineValue value) =>
-        SignedIntegerFromValue(value, rejectLeadingZero: true, rejectNegativeZero: true);
+    public static Result<string, System.Numerics.BigInteger> ParseSignedIntegerStrict(PineValue value) =>
+        ParseSignedInteger(value, rejectLeadingZero: true, rejectNegativeZero: true);
 
-    public static Result<string, System.Numerics.BigInteger> SignedIntegerFromValueRelaxed(PineValue value) =>
-        SignedIntegerFromValue(value, rejectLeadingZero: false, rejectNegativeZero: false);
+    public static Result<string, System.Numerics.BigInteger> ParseSignedIntegerRelaxed(PineValue value) =>
+        ParseSignedInteger(value, rejectLeadingZero: false, rejectNegativeZero: false);
 
-    public static Result<string, System.Numerics.BigInteger> SignedIntegerFromValue(
+    public static Result<string, System.Numerics.BigInteger> ParseSignedInteger(
         PineValue value,
         bool rejectLeadingZero,
         bool rejectNegativeZero)
@@ -124,25 +152,32 @@ public static class PineValueAsInteger
         if (value is not PineValue.BlobValue blob)
             return "Not a blob.";
 
-        return SignedIntegerFromBlobValue(
+        return ParseSignedInteger(
             blob.Bytes.Span,
             rejectLeadingZero: rejectLeadingZero,
             rejectNegativeZero: rejectNegativeZero);
     }
 
-    public static Result<string, System.Numerics.BigInteger> SignedIntegerFromBlobValueStrict(ReadOnlySpan<byte> blobValue) =>
-        SignedIntegerFromBlobValue(blobValue, rejectLeadingZero: true, rejectNegativeZero: true);
+    public static Result<string, System.Numerics.BigInteger> ParseSignedIntegerStrict(ReadOnlySpan<byte> blobValue) =>
+        ParseSignedInteger(blobValue, rejectLeadingZero: true, rejectNegativeZero: true);
 
-    public static Result<string, System.Numerics.BigInteger> SignedIntegerFromBlobValueRelaxed(ReadOnlySpan<byte> blobValue) =>
-        SignedIntegerFromBlobValue(blobValue, rejectLeadingZero: false, rejectNegativeZero: false);
+    public static Result<string, System.Numerics.BigInteger> ParseSignedIntegerRelaxed(ReadOnlySpan<byte> blobValue) =>
+        ParseSignedInteger(blobValue, rejectLeadingZero: false, rejectNegativeZero: false);
 
-    public static Result<string, System.Numerics.BigInteger> SignedIntegerFromBlobValue(
+    /// <summary>
+    /// Try parse the given byte sequence as a signed integer.
+    /// </summary>
+    /// <param name="blobValue">Sequence of bytes</param>
+    /// <param name="rejectLeadingZero">Return an error if the first byte is zero</param>
+    /// <param name="rejectNegativeZero">Return an error if the sign is negative and all following bytes are zero</param>
+    /// <returns></returns>
+    public static Result<string, System.Numerics.BigInteger> ParseSignedInteger(
         ReadOnlySpan<byte> blobValue,
         bool rejectLeadingZero,
         bool rejectNegativeZero)
     {
         if (blobValue.Length < 2)
-            return "Not a valid integer because it is shorter than 2 bytes. Did you mean to use an unsigned integer?";
+            return "Not a valid integer because it is shorter than 2 bytes. Did you mean to parse an unsigned integer?";
 
         var signByte = blobValue[0];
 
@@ -152,30 +187,36 @@ public static class PineValueAsInteger
         if (rejectLeadingZero && 2 < blobValue.Length && blobValue[1] is 0)
             return "Avoid ambiguous leading zero.";
 
-        var absValue = UnsignedIntegerFromBlobValue(blobValue[1..]);
+        var absValue = ParseUnsignedInteger(blobValue[1..]);
 
         return
             signByte is 4
             ?
             absValue
             :
-            rejectNegativeZero && absValue == 0
+            rejectNegativeZero && absValue.IsZero
             ?
             "Avoid ambiguous negative zero."
             :
             absValue * System.Numerics.BigInteger.MinusOne;
     }
 
-    public static Result<string, System.Numerics.BigInteger> UnsignedIntegerFromValue(PineValue value) =>
+    /// <summary>
+    /// Try parse the given value as an unsigned integer.
+    /// </summary>
+    public static Result<string, System.Numerics.BigInteger> ParseUnsignedInteger(PineValue value) =>
         value switch
         {
             PineValue.BlobValue blob =>
-            UnsignedIntegerFromBlobValue(blob.Bytes.Span),
+            ParseUnsignedInteger(blob.Bytes.Span),
 
             _ =>
             "Only a BlobValue can represent an integer."
         };
 
-    public static System.Numerics.BigInteger UnsignedIntegerFromBlobValue(ReadOnlySpan<byte> blobValue) =>
+    /// <summary>
+    /// Parse the given byte sequence as an unsigned integer.
+    /// </summary>
+    public static System.Numerics.BigInteger ParseUnsignedInteger(ReadOnlySpan<byte> blobValue) =>
         new(blobValue, isUnsigned: true, isBigEndian: true);
 }

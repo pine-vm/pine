@@ -1,3 +1,4 @@
+using Pine.Core.PopularEncodings;
 using Pine.PineVM;
 using System;
 using System.Collections.Generic;
@@ -78,7 +79,7 @@ public static class KernelFunction
         };
 
     public static PineValue length(PineValue value) =>
-        PineValueAsInteger.ValueFromSignedInteger(
+        IntegerEncoding.EncodeSignedInteger(
             value switch
             {
                 PineValue.BlobValue blobValue =>
@@ -391,7 +392,7 @@ public static class KernelFunction
     }
 
     public static PineValue int_add(BigInteger summandA, BigInteger summandB) =>
-        PineValueAsInteger.ValueFromSignedInteger(summandA + summandB);
+        IntegerEncoding.EncodeSignedInteger(summandA + summandB);
 
     public static PineValue int_mul(PineValue value) =>
         KernelFunctionExpectingListOfBigIntAndProducingBigInt(
@@ -411,7 +412,7 @@ public static class KernelFunction
     }
 
     public static PineValue int_mul(BigInteger factorA, BigInteger factorB) =>
-        PineValueAsInteger.ValueFromSignedInteger(factorA * factorB);
+        IntegerEncoding.EncodeSignedInteger(factorA * factorB);
 
     public static PineValue int_is_sorted_asc(PineValue value)
     {
@@ -793,7 +794,7 @@ public static class KernelFunction
         PineValue value) =>
         KernelFunctionExpectingListOfBigInt(
             aggregate:
-            listOfIntegers => PineValueAsInteger.ValueFromSignedInteger(aggregate(listOfIntegers)),
+            listOfIntegers => IntegerEncoding.EncodeSignedInteger(aggregate(listOfIntegers)),
             value);
 
     private static PineValue KernelFunctionExpectingListOfBigInt(

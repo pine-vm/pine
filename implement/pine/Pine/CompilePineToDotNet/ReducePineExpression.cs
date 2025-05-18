@@ -1,4 +1,5 @@
 using Pine.Core;
+using Pine.Core.PopularEncodings;
 using Pine.PineVM;
 using System;
 using System.Collections.Generic;
@@ -430,7 +431,7 @@ public class ReducePineExpression
                                                                 Expression.ListInstance(
                                                                     [
                                                                     Expression.LiteralInstance(
-                                                                        PineValueAsInteger.ValueFromSignedInteger(aggregateSkipCount)),
+                                                                        IntegerEncoding.EncodeSignedInteger(aggregateSkipCount)),
                                                                     innerSkipInputList.items[1]
                                                                     ]
                                                                 ));
@@ -538,7 +539,7 @@ public class ReducePineExpression
                             {
                                 return
                                     Expression.LiteralInstance(
-                                        PineValueAsInteger.ValueFromSignedInteger(inputList.items.Count));
+                                        IntegerEncoding.EncodeSignedInteger(inputList.items.Count));
                             }
 
                             if (rootKernelApp.Input is Expression.KernelApplication lengthInputKernelApp)
@@ -577,7 +578,7 @@ public class ReducePineExpression
                                     {
                                         return
                                             Expression.LiteralInstance(
-                                                PineValueAsInteger.ValueFromSignedInteger(aggregateLength.Value));
+                                                IntegerEncoding.EncodeSignedInteger(aggregateLength.Value));
                                     }
                                 }
                             }
@@ -671,7 +672,7 @@ public class ReducePineExpression
             {
                 if (TryEvaluateExpressionIndependent(skipInputList.items[0]).IsOkOrNull() is { } okSkipCountValue)
                 {
-                    if (PineValueAsInteger.SignedIntegerFromValueRelaxed(okSkipCountValue).IsOkOrNullable() is { } okSkipCount)
+                    if (IntegerEncoding.ParseSignedIntegerRelaxed(okSkipCountValue).IsOkOrNullable() is { } okSkipCount)
                     {
                         var skipCountClamped =
                             (int)(okSkipCount < 0 ? 0 : okSkipCount);

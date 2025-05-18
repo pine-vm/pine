@@ -1,5 +1,6 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
+using Pine.Core.PopularEncodings;
 using Pine.PineVM;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -22,7 +23,7 @@ public class PineIRCompilerTests
                     input: Expression.ListInstance(
                         [
                         Expression.LiteralInstance(
-                            PineValueAsInteger.ValueFromSignedInteger(13)),
+                            IntegerEncoding.EncodeSignedInteger(13)),
 
                         new Expression.KernelApplication
                         (
@@ -64,7 +65,7 @@ public class PineIRCompilerTests
                                     Expression.ListInstance(
                                         [
                                         Expression.LiteralInstance(
-                                            PineValueAsInteger.ValueFromSignedInteger(1)),
+                                            IntegerEncoding.EncodeSignedInteger(1)),
 
                                         SkipHeadPathInExpression(Expression.EnvironmentInstance, [1, 1])
                                         ])
@@ -136,7 +137,7 @@ public class PineIRCompilerTests
             StackInstruction.Length,
 
             StackInstruction.Equal_Binary_Const(
-                PineValueAsInteger.ValueFromSignedInteger(13)),
+                IntegerEncoding.EncodeSignedInteger(13)),
 
             StackInstruction.Jump_If_True(17),
 
@@ -159,7 +160,7 @@ public class PineIRCompilerTests
             StackInstruction.Local_Get(1),
 
             StackInstruction.Push_Literal(
-                PineValueAsInteger.ValueFromSignedInteger(1)),
+                IntegerEncoding.EncodeSignedInteger(1)),
 
             StackInstruction.Skip_Binary,
 
@@ -241,7 +242,7 @@ public class PineIRCompilerTests
                 StackInstruction.Length,
 
                 StackInstruction.Equal_Binary_Const(
-                    PineValueAsInteger.ValueFromSignedInteger(13)),
+                    IntegerEncoding.EncodeSignedInteger(13)),
 
                 StackInstruction.Jump_If_True(17),
 
@@ -264,7 +265,7 @@ public class PineIRCompilerTests
                 StackInstruction.Local_Get(2),
 
                 StackInstruction.Push_Literal(
-                    PineValueAsInteger.ValueFromSignedInteger(1)),
+                    IntegerEncoding.EncodeSignedInteger(1)),
 
                 StackInstruction.Skip_Binary,
 
@@ -335,12 +336,12 @@ public class PineIRCompilerTests
 
                     PineValue.List(
                         [
-                            PineValueAsInteger.ValueFromSignedInteger(1_071),
+                            IntegerEncoding.EncodeSignedInteger(1_071),
 
                             PineValue.List(
                                 [
                                 ..Enumerable.Range(0, 31)
-                                .Select(i => PineValueAsInteger.ValueFromSignedInteger(i))
+                                .Select(i => IntegerEncoding.EncodeSignedInteger(i))
                                 ]),
                         ]),
                 ]);
@@ -363,7 +364,7 @@ public class PineIRCompilerTests
         }
 
         var resultAsInteger =
-            PineValueAsInteger.SignedIntegerFromValueRelaxed(evalReport.ReturnValue);
+            IntegerEncoding.ParseSignedIntegerRelaxed(evalReport.ReturnValue);
 
         if (resultAsInteger.IsErrOrNull() is { } resultErr)
         {
@@ -421,7 +422,7 @@ public class PineIRCompilerTests
                 Expression.ListInstance(
                     [
                     Expression.LiteralInstance(
-                            PineValueAsInteger.ValueFromSignedInteger(pathItem)),
+                            IntegerEncoding.EncodeSignedInteger(pathItem)),
 
                         source,
                     ])

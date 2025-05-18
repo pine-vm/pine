@@ -1,3 +1,4 @@
+using Pine.Core.PopularEncodings;
 using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
@@ -60,46 +61,46 @@ public abstract record ElmValue
     public const string ElmFloatTypeTagName = "Elm_Float";
 
     public static readonly PineValue ElmRecordTypeTagNameAsValue =
-        PineValueAsString.ValueFromString(ElmRecordTypeTagName);
+        StringEncoding.ValueFromString(ElmRecordTypeTagName);
 
     public static readonly PineValue ElmRecordTypeTagNameAsValue_2024 =
-        PineValueAsString.ValueFromString_2024(ElmRecordTypeTagName);
+        StringEncoding.ValueFromString_2024(ElmRecordTypeTagName);
 
     public static readonly PineValue ElmBytesTypeTagNameAsValue =
-        PineValueAsString.ValueFromString(ElmBytesTypeTagName);
+        StringEncoding.ValueFromString(ElmBytesTypeTagName);
 
     public static readonly PineValue ElmBytesTypeTagNameAsValue_2024 =
-        PineValueAsString.ValueFromString_2024(ElmBytesTypeTagName);
+        StringEncoding.ValueFromString_2024(ElmBytesTypeTagName);
 
     public static readonly PineValue ElmStringTypeTagNameAsValue =
-        PineValueAsString.ValueFromString(ElmStringTypeTagName);
+        StringEncoding.ValueFromString(ElmStringTypeTagName);
 
     public static readonly PineValue ElmStringTypeTagNameAsValue_2024 =
-        PineValueAsString.ValueFromString_2024(ElmStringTypeTagName);
+        StringEncoding.ValueFromString_2024(ElmStringTypeTagName);
 
     public static readonly PineValue ElmSetTypeTagNameAsValue =
-        PineValueAsString.ValueFromString(ElmSetTypeTagName);
+        StringEncoding.ValueFromString(ElmSetTypeTagName);
 
     public static readonly PineValue ElmSetTypeTagNameAsValue_2024 =
-        PineValueAsString.ValueFromString_2024(ElmSetTypeTagName);
+        StringEncoding.ValueFromString_2024(ElmSetTypeTagName);
 
     public static readonly PineValue ElmDictEmptyTagNameAsValue =
-        PineValueAsString.ValueFromString(ElmDictEmptyTagName);
+        StringEncoding.ValueFromString(ElmDictEmptyTagName);
 
     public static readonly PineValue ElmDictEmptyTagNameAsValue_2024 =
-        PineValueAsString.ValueFromString_2024(ElmDictEmptyTagName);
+        StringEncoding.ValueFromString_2024(ElmDictEmptyTagName);
 
     public static readonly PineValue ElmDictNotEmptyTagNameAsValue =
-        PineValueAsString.ValueFromString(ElmDictNotEmptyTagName);
+        StringEncoding.ValueFromString(ElmDictNotEmptyTagName);
 
     public static readonly PineValue ElmDictNotEmptyTagNameAsValue_2024 =
-        PineValueAsString.ValueFromString_2024(ElmDictNotEmptyTagName);
+        StringEncoding.ValueFromString_2024(ElmDictNotEmptyTagName);
 
     public static readonly PineValue ElmFloatTypeTagNameAsValue =
-        PineValueAsString.ValueFromString(ElmFloatTypeTagName);
+        StringEncoding.ValueFromString(ElmFloatTypeTagName);
 
     public static readonly PineValue ElmFloatTypeTagNameAsValue_2024 =
-        PineValueAsString.ValueFromString_2024(ElmFloatTypeTagName);
+        StringEncoding.ValueFromString_2024(ElmFloatTypeTagName);
 
     public static readonly ElmValue EmptyDict =
         TagInstance(ElmDictEmptyTagName, []);

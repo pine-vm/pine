@@ -10,6 +10,7 @@ using System;
 using ElmTime.ElmInteractive;
 using Microsoft.CodeAnalysis;
 using System.Text;
+using Pine.Core.PopularEncodings;
 
 namespace Pine.Pine.CompilePineToDotNet;
 
@@ -1053,6 +1054,6 @@ public static class CompileModuleToCSharp
     private static readonly MemberAccessExpressionSyntax ValueFromSignedIntegerFunctionRef =
         SyntaxFactory.MemberAccessExpression(
             SyntaxKind.SimpleMemberAccessExpression,
-            SyntaxFactory.IdentifierName(nameof(PineValueAsInteger)),
-            SyntaxFactory.IdentifierName(nameof(PineValueAsInteger.ValueFromSignedInteger)));
+            SyntaxFactory.IdentifierName(nameof(IntegerEncoding)),
+            SyntaxFactory.IdentifierName(nameof(IntegerEncoding.EncodeSignedInteger)));
 }

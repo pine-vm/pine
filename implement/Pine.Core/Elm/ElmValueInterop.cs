@@ -1,3 +1,4 @@
+using Pine.Core.PopularEncodings;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -7,28 +8,28 @@ namespace Pine.Core.Elm;
 public class ElmValueInterop
 {
     public static readonly PineValue String_Nothing_Value =
-        PineValueAsString.ValueFromString("Nothing");
+        StringEncoding.ValueFromString("Nothing");
 
     public static readonly PineValue String_Just_Value =
-        PineValueAsString.ValueFromString("Just");
+        StringEncoding.ValueFromString("Just");
 
     public static readonly PineValue String_Err_Value =
-        PineValueAsString.ValueFromString("Err");
+        StringEncoding.ValueFromString("Err");
 
     public static readonly PineValue String_Ok_Value =
-        PineValueAsString.ValueFromString("Ok");
+        StringEncoding.ValueFromString("Ok");
 
     public static readonly PineValue String_Nothing_Value_2024 =
-        PineValueAsString.ValueFromString_2024("Nothing");
+        StringEncoding.ValueFromString_2024("Nothing");
 
     public static readonly PineValue String_Just_Value_2024 =
-        PineValueAsString.ValueFromString_2024("Just");
+        StringEncoding.ValueFromString_2024("Just");
 
     public static readonly PineValue String_Err_Value_2024 =
-        PineValueAsString.ValueFromString_2024("Err");
+        StringEncoding.ValueFromString_2024("Err");
 
     public static readonly PineValue String_Ok_Value_2024 =
-        PineValueAsString.ValueFromString_2024("Ok");
+        StringEncoding.ValueFromString_2024("Ok");
 
     public static ElmValue PineValueEncodedAsInElmCompiler(
         PineValue pineValue) =>

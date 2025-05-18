@@ -6,6 +6,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.CompilePineToDotNet;
 using Pine.Core;
+using Pine.Core.PopularEncodings;
 using Pine.Elm;
 using Pine.PineVM;
 using System.Collections.Generic;
@@ -18,7 +19,7 @@ namespace TestElmTime;
 [TestClass]
 public class CompilePineToDotNetTests
 {
-    public static readonly PineValue value_299b7decef = PineValueAsString.ValueFromString("List");
+    public static readonly PineValue value_299b7decef = StringEncoding.ValueFromString("List");
 
     public static readonly PineValue value_d597fb92e5 = PineValue.List([value_299b7decef, PineValue.EmptyList]);
 
@@ -30,9 +31,9 @@ public class CompilePineToDotNetTests
         var listBeforeOrdering =
             new[]
             {
-                PineValueAsString.ValueFromString("Err"),
+                StringEncoding.ValueFromString("Err"),
                 value_d597fb92e5,
-                PineValueAsString.ValueFromString("Ok"),
+                StringEncoding.ValueFromString("Ok"),
                 value_299b7decef
             };
 
@@ -48,8 +49,8 @@ public class CompilePineToDotNetTests
         CollectionAssert.AreEqual(
             new[]
             {
-                PineValueAsString.ValueFromString("Ok"),
-                PineValueAsString.ValueFromString("Err"),
+                StringEncoding.ValueFromString("Ok"),
+                StringEncoding.ValueFromString("Err"),
                 value_299b7decef,
                 value_d597fb92e5
             },
@@ -196,7 +197,7 @@ public class CompilePineToDotNetTests
                 input: new Expression.KernelApplication(
                     function: "skip",
                     input: Expression.ListInstance(
-                        [ Expression.LiteralInstance(PineValueAsInteger.ValueFromSignedInteger(13)),
+                        [ Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(13)),
                         Expression.EnvironmentInstance
                         ]))),
                 new ExprMappedToParentEnv.PathInParentEnv([13])),
@@ -206,13 +207,13 @@ public class CompilePineToDotNetTests
                 input: new Expression.KernelApplication(
                     function: "skip",
                     input: Expression.ListInstance(
-                        [ new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(21)),
+                        [ new Expression.Literal(IntegerEncoding.EncodeSignedInteger(21)),
                         new Expression.KernelApplication(
                             function: nameof(KernelFunction.head),
                             input: new Expression.KernelApplication(
                                 function: "skip",
                                 input: Expression.ListInstance(
-                                    [ new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(17)),
+                                    [ new Expression.Literal(IntegerEncoding.EncodeSignedInteger(17)),
                                     new Expression.Environment()
                                     ])))
                         ]))),
@@ -223,7 +224,7 @@ public class CompilePineToDotNetTests
                 input: new Expression.KernelApplication(
                     function: "skip",
                     input: Expression.ListInstance(
-                        [ new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(23)),
+                        [ new Expression.Literal(IntegerEncoding.EncodeSignedInteger(23)),
                         new Expression.KernelApplication(
                             function: nameof(KernelFunction.head),
                             input: new Expression.Environment())
@@ -297,7 +298,7 @@ public class CompilePineToDotNetTests
                         function:"skip",
                         input: Expression.ListInstance(
                             [
-                            new Expression.Literal(PineValueAsInteger.ValueFromSignedInteger(13)),
+                            new Expression.Literal(IntegerEncoding.EncodeSignedInteger(13)),
                             new Expression.Environment()
                             ]))),
 
@@ -413,7 +414,7 @@ public class CompilePineToDotNetTests
 
                         if (stack_3_as_int is { } stack_3_as_int_not_null)
                         {
-                            stack_3 = PineValueAsInteger.ValueFromSignedInteger(
+                            stack_3 = IntegerEncoding.EncodeSignedInteger(
                                 stack_3_as_int_not_null);
                         }
 
@@ -481,7 +482,7 @@ public class CompilePineToDotNetTests
 
                         if (stack_4_as_int is { } stack_4_as_int_not_null)
                         {
-                            stack_4 = PineValueAsInteger.ValueFromSignedInteger(
+                            stack_4 = IntegerEncoding.EncodeSignedInteger(
                                 stack_4_as_int_not_null);
                         }
 

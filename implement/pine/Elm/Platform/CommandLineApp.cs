@@ -1,5 +1,6 @@
 using Pine.Core;
 using Pine.Core.Elm;
+using Pine.Core.PopularEncodings;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -371,7 +372,7 @@ public record CommandLineAppConfig(
                 just:
                 exitCodeValue =>
                 (int)
-                PineValueAsInteger.SignedIntegerFromValueRelaxed(exitCodeValue)
+                IntegerEncoding.ParseSignedIntegerRelaxed(exitCodeValue)
                 .Extract(err => throw new Exception("Failed parsing exit code as integer")),
                 invalid:
                 err => throw new Exception("Failed parsing exit code as maybe: " + err));

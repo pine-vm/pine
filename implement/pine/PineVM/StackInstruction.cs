@@ -1,4 +1,5 @@
 using Pine.Core;
+using Pine.Core.PopularEncodings;
 using System;
 using System.Collections.Generic;
 using System.Numerics;
@@ -461,7 +462,7 @@ public record StackInstruction(
             CommandLineInterface.FormatIntegerForDisplay(blob.Bytes.Length) +
             "] ("
             +
-            (PineValueAsInteger.SignedIntegerFromBlobValueRelaxed(blob.Bytes.Span).IsOkOrNullable() is { } asInt ?
+            (IntegerEncoding.ParseSignedIntegerRelaxed(blob.Bytes.Span).IsOkOrNullable() is { } asInt ?
             "int " + asInt
             :
             "0x" + Convert.ToHexStringLower(blob.Bytes.Span))

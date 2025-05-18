@@ -3,6 +3,7 @@ using ElmTime.ElmSyntax;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using Pine.Core.Elm;
+using Pine.Core.PopularEncodings;
 using Pine.Elm;
 using Pine.PineVM;
 using System;
@@ -80,7 +81,7 @@ public class PGOTests
 
                 fieldId = 0,
 
-                expected = PineValueAsInteger.ValueFromSignedInteger(13)
+                expected = IntegerEncoding.EncodeSignedInteger(13)
             },
 
             new
@@ -94,7 +95,7 @@ public class PGOTests
 
                 fieldId = 1,
 
-                expected = PineValueAsInteger.ValueFromSignedInteger(47)
+                expected = IntegerEncoding.EncodeSignedInteger(47)
             },
 
             new
@@ -152,7 +153,7 @@ public class PGOTests
 
                 fieldId = 1,
 
-                expected = PineValueAsInteger.ValueFromSignedInteger(49)
+                expected = IntegerEncoding.EncodeSignedInteger(49)
             },
 
             new
@@ -168,7 +169,7 @@ public class PGOTests
 
                 fieldId = 0,
 
-                expected = PineValueAsInteger.ValueFromSignedInteger(71)
+                expected = IntegerEncoding.EncodeSignedInteger(71)
             },
 
             new
@@ -266,7 +267,7 @@ public class PGOTests
                         appendArguments:
                         [
                             ElmValueEncoding.ElmValueAsPineValue(scenario.record),
-                            PineValueAsInteger.ValueFromSignedInteger(scenario.fieldId)
+                            IntegerEncoding.EncodeSignedInteger(scenario.fieldId)
                         ])
                 .AndThen(composedArgs =>
                 pineVM.EvaluateExpressionOnCustomStack(
@@ -868,7 +869,7 @@ public class PGOTests
                     appendArguments:
                     [
                         ElmValueEncoding.ElmValueAsPineValue(scenario.record),
-                        PineValueAsInteger.ValueFromSignedInteger(scenario.fieldId),
+                        IntegerEncoding.EncodeSignedInteger(scenario.fieldId),
                         ElmValueEncoding.ElmValueAsPineValue(scenario.fieldValue),
                     ])
                 .AndThen(composedArgs =>
@@ -1275,7 +1276,7 @@ public class PGOTests
                     appendArguments:
                     [
                         ElmValueEncoding.ElmValueAsPineValue(scenarioList),
-                        PineValueAsInteger.ValueFromSignedInteger(scenarioFunctionId),
+                        IntegerEncoding.EncodeSignedInteger(scenarioFunctionId),
                     ])
                 .AndThen(composedArgs =>
                 pineVM.EvaluateExpressionOnCustomStack(
@@ -1642,7 +1643,7 @@ public class PGOTests
                     appendArguments:
                     [
                         scenarioDict,
-                        PineValueAsInteger.ValueFromSignedInteger(scenarioFunctionId),
+                        IntegerEncoding.EncodeSignedInteger(scenarioFunctionId),
                     ])
                 .AndThen(composedArgs =>
                 pineVM.EvaluateExpressionOnCustomStack(

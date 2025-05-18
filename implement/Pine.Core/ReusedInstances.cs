@@ -1,3 +1,4 @@
+using Pine.Core.PopularEncodings;
 using Pine.Core.Elm;
 using Pine.PineVM;
 using System.Collections.Frozen;
@@ -242,16 +243,16 @@ public record ReusedInstances(
         IEnumerable<PineValue> additionalRoots)
     {
         var rowStringValue =
-            PineValueAsString.ValueFromString("row");
+            StringEncoding.ValueFromString("row");
 
         var columnStringValue =
-            PineValueAsString.ValueFromString("column");
+            StringEncoding.ValueFromString("column");
 
         IReadOnlyList<PineValue.ListValue> listsFromElmSyntaxLocations =
             [..Enumerable.Range(0, 1600)
             .SelectMany(index =>
             {
-                var intValue = PineValueAsInteger.ValueFromSignedInteger(index);
+                var intValue = IntegerEncoding.EncodeSignedInteger(index);
 
                 /*
                  * These fields appear as parts of records returned from the Elm syntax parser.
@@ -627,7 +628,7 @@ public record ReusedInstances(
          * */
         var pineListValuesFromStrings =
             PopularValues.PopularStrings
-            .Select(PineValueAsString.ValueFromString_2024)
+            .Select(StringEncoding.ValueFromString_2024)
             .Cast<PineValue.ListValue>()
             .ToFrozenDictionary(
                 keySelector: sv => new PineValue.ListValue.ListValueStruct(sv),

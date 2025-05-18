@@ -2,6 +2,7 @@ using ElmTime.ElmInteractive;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine;
 using Pine.Core;
+using Pine.Core.PopularEncodings;
 using Pine.Core.Elm;
 using Pine.Core.PineVM;
 using Pine.Elm;
@@ -64,11 +65,11 @@ public class CompileElmCompilerTests
                 pineVM,
                 modByFunction,
                 arguments:
-                [PineValueAsInteger.ValueFromSignedInteger(13),
-                    PineValueAsInteger.ValueFromSignedInteger(17)]);
+                [IntegerEncoding.EncodeSignedInteger(13),
+                    IntegerEncoding.EncodeSignedInteger(17)]);
 
         Assert.AreEqual(
-            PineValueAsInteger.ValueFromSignedInteger(4),
+            IntegerEncoding.EncodeSignedInteger(4),
             modByApplicationResult.Extract(err => throw new Exception(err)));
 
         modByApplicationResult =
@@ -76,11 +77,11 @@ public class CompileElmCompilerTests
                 pineVM,
                 modByFunction,
                 arguments:
-                [PineValueAsInteger.ValueFromSignedInteger(41),
-                    PineValueAsInteger.ValueFromSignedInteger(47)]);
+                [IntegerEncoding.EncodeSignedInteger(41),
+                    IntegerEncoding.EncodeSignedInteger(47)]);
 
         Assert.AreEqual(
-            PineValueAsInteger.ValueFromSignedInteger(6),
+            IntegerEncoding.EncodeSignedInteger(6),
             modByApplicationResult.Extract(err => throw new Exception(err)));
     }
 
@@ -451,7 +452,7 @@ public class CompileElmCompilerTests
 
             var expectedDeclValue =
                 ElmValueInterop.PineValueEncodedAsInElmCompiler(
-                    PineValueAsString.ValueFromString("Function"));
+                    StringEncoding.ValueFromString("Function"));
 
             var (expectedDeclValueAsExpr, _) =
                 ElmValue.RenderAsElmExpression(expectedDeclValue);
@@ -578,7 +579,7 @@ public class CompileElmCompilerTests
                     ?
                     null
                     :
-                    PineValueAsString.StringFromValue(listValue.Elements.Span[0]),
+                    StringEncoding.StringFromValue(listValue.Elements.Span[0]),
 
                     _ =>
                     null

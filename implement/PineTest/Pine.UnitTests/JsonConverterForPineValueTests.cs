@@ -1,5 +1,6 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
+using Pine.Core.PopularEncodings;
 using Pine.Json;
 using System.Text.Json;
 
@@ -17,14 +18,14 @@ public class JsonConverterForPineValueTests
 
         var testCases = new[]
         {
-            PineValueAsInteger.ValueFromSignedInteger(0),
-            PineValueAsInteger.ValueFromSignedInteger(1234),
-            PineValueAsInteger.ValueFromSignedInteger(-45678),
+            IntegerEncoding.EncodeSignedInteger(0),
+            IntegerEncoding.EncodeSignedInteger(1234),
+            IntegerEncoding.EncodeSignedInteger(-45678),
 
             PineValue.EmptyList,
 
             PineValue.List(
-                [PineValueAsInteger.ValueFromSignedInteger(56), PineValueAsInteger.ValueFromSignedInteger(57)]),
+                [IntegerEncoding.EncodeSignedInteger(56), IntegerEncoding.EncodeSignedInteger(57)]),
 
             PineValue.Blob([]),
             PineValue.Blob([32]),
@@ -36,24 +37,24 @@ public class JsonConverterForPineValueTests
             PineValue.List(
                 [PineValue.Blob([32])]),
 
-            PineValueAsString.ValueFromString("Hello world!"),
+            StringEncoding.ValueFromString("Hello world!"),
 
             PineValue.List(
-                [PineValueAsString.ValueFromString(" ")]),
+                [StringEncoding.ValueFromString(" ")]),
 
             PineValue.List(
-                [PineValueAsString.ValueFromString("Hello world!")]),
+                [StringEncoding.ValueFromString("Hello world!")]),
 
             PineValue.List(
-                [PineValueAsString.ValueFromString("+")]),
+                [StringEncoding.ValueFromString("+")]),
 
             PineValue.List(
-                [PineValueAsString.ValueFromString("\"")]),
+                [StringEncoding.ValueFromString("\"")]),
 
             PineValue.List(
                 [
-                PineValueAsString.ValueFromString("String"),
-                PineValue.List([PineValueAsString.ValueFromString("Hello world!")]),
+                StringEncoding.ValueFromString("String"),
+                PineValue.List([StringEncoding.ValueFromString("Hello world!")]),
                 ]),
 
         };
@@ -98,12 +99,12 @@ public class JsonConverterForPineValueTests
         Assert.AreEqual(
             "1234",
             serializePineValue(
-                PineValueAsInteger.ValueFromSignedInteger(1234)));
+                IntegerEncoding.EncodeSignedInteger(1234)));
 
         Assert.AreEqual(
             "-34567",
             serializePineValue(
-                PineValueAsInteger.ValueFromSignedInteger(-34567)));
+                IntegerEncoding.EncodeSignedInteger(-34567)));
     }
 
     [TestMethod]
@@ -121,7 +122,7 @@ public class JsonConverterForPineValueTests
         Assert.AreEqual(
             $$"""{"BlobAsString":"stringValue 789"}""",
             serializePineValue(
-                PineValueAsString.BlobValueFromString("stringValue 789")));
+                StringEncoding.BlobValueFromString("stringValue 789")));
 
         Assert.AreEqual(
             "[]",
@@ -143,7 +144,7 @@ public class JsonConverterForPineValueTests
         Assert.AreEqual(
             $$"""{"ListAsString_2024":"stringValue 789"}""",
             serializePineValue(
-                PineValueAsString.ValueFromString_2024("stringValue 789")));
+                StringEncoding.ValueFromString_2024("stringValue 789")));
 
         Assert.AreEqual(
             "[]",

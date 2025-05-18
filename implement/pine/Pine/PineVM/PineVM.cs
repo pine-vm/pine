@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using Pine.Core;
+using Pine.Core.PopularEncodings;
 using Pine.Core.PineVM;
 using Pine.Pine.PineVM;
 
@@ -1784,7 +1785,7 @@ public class PineVM : IPineVM
 
                             if (KernelFunction.SignedIntegerFromValueRelaxed(leftValue) is { } leftInt)
                             {
-                                resultValue = PineValueAsInteger.ValueFromSignedInteger(leftInt + rightInt);
+                                resultValue = IntegerEncoding.EncodeSignedInteger(leftInt + rightInt);
                             }
 
                             currentFrame.PushInstructionResult(resultValue);
@@ -1802,7 +1803,7 @@ public class PineVM : IPineVM
                             if (KernelFunction.SignedIntegerFromValueRelaxed(left) is { } leftInt &&
                                 KernelFunction.SignedIntegerFromValueRelaxed(right) is { } rightInt)
                             {
-                                resultValue = PineValueAsInteger.ValueFromSignedInteger(leftInt - rightInt);
+                                resultValue = IntegerEncoding.EncodeSignedInteger(leftInt - rightInt);
                             }
 
                             currentFrame.PushInstructionResult(resultValue);
@@ -1820,7 +1821,7 @@ public class PineVM : IPineVM
                             if (KernelFunction.SignedIntegerFromValueRelaxed(left) is { } leftInt &&
                                 KernelFunction.SignedIntegerFromValueRelaxed(right) is { } rightInt)
                             {
-                                resultValue = PineValueAsInteger.ValueFromSignedInteger(leftInt * rightInt);
+                                resultValue = IntegerEncoding.EncodeSignedInteger(leftInt * rightInt);
                             }
 
                             currentFrame.PushInstructionResult(resultValue);
@@ -1840,7 +1841,7 @@ public class PineVM : IPineVM
 
                             if (KernelFunction.SignedIntegerFromValueRelaxed(left) is { } leftInt)
                             {
-                                resultValue = PineValueAsInteger.ValueFromSignedInteger(leftInt * right);
+                                resultValue = IntegerEncoding.EncodeSignedInteger(leftInt * right);
                             }
 
                             currentFrame.PushInstructionResult(resultValue);
@@ -2391,7 +2392,7 @@ public class PineVM : IPineVM
     }
 
     public static string DescribeValueForErrorMessage(PineValue pineValue) =>
-        PineValueAsString.StringFromValue(pineValue)
+        StringEncoding.StringFromValue(pineValue)
         .Unpack(fromErr: _ => "not a string", fromOk: asString => "string \'" + asString + "\'");
 
     public PineValue EvaluateKernelApplicationExpression(

@@ -1,4 +1,5 @@
 using Pine.Core;
+using Pine.Core.PopularEncodings;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -20,7 +21,7 @@ public class JsonConverterForPineValue : JsonConverter<PineValue>
             {
                 reader.Read();
 
-                return PineValueAsInteger.ValueFromSignedInteger(integer);
+                return IntegerEncoding.EncodeSignedInteger(integer);
             }
         }
 
@@ -72,7 +73,7 @@ public class JsonConverterForPineValue : JsonConverter<PineValue>
              * */
             if (propertyName is "BlobAsString" or "ListAsString")
             {
-                var pineValue = PineValueAsString.BlobValueFromString(reader.GetString());
+                var pineValue = StringEncoding.BlobValueFromString(reader.GetString());
 
                 reader.Read();
 
@@ -86,7 +87,7 @@ public class JsonConverterForPineValue : JsonConverter<PineValue>
 
             if (propertyName is "ListAsString_2024")
             {
-                var pineValue = PineValueAsString.ValueFromString_2024(reader.GetString());
+                var pineValue = StringEncoding.ValueFromString_2024(reader.GetString());
 
                 reader.Read();
 
@@ -107,7 +108,7 @@ public class JsonConverterForPineValue : JsonConverter<PineValue>
     /// <inheritdoc/>
     public override void Write(Utf8JsonWriter writer, PineValue value, JsonSerializerOptions options)
     {
-        if (PineValueAsInteger.SignedIntegerFromValueStrict(value) is Result<string, System.Numerics.BigInteger>.Ok asInt)
+        if (IntegerEncoding.ParseSignedIntegerStrict(value) is Result<string, System.Numerics.BigInteger>.Ok asInt)
         {
             if (asInt.Value < long.MaxValue && long.MinValue < asInt.Value)
             {
@@ -121,7 +122,7 @@ public class JsonConverterForPineValue : JsonConverter<PineValue>
         {
             if (blobValue.Bytes.Length is not 0)
             {
-                if (PineValueAsString.StringFromValue(value).IsOkOrNull() is { } asString && 0 < asString.Length)
+                if (StringEncoding.StringFromValue(value).IsOkOrNull() is { } asString && 0 < asString.Length)
                 {
                     if (!asString.All(asChar => (asChar & 0xff00) is 0x400 || (asChar & 0xff00) is 0x200))
                     {
@@ -160,7 +161,7 @@ public class JsonConverterForPineValue : JsonConverter<PineValue>
 
                 if (!containsIncompatibleItem)
                 {
-                    if (PineValueAsString.StringFromValue(value).IsOkOrNull() is { } asString && 0 < asString.Length)
+                    if (StringEncoding.StringFromValue(value).IsOkOrNull() is { } asString && 0 < asString.Length)
                     {
                         if (!asString.All(asChar => (asChar & 0xff00) is 0x400 || (asChar & 0xff00) is 0x200))
                         {
