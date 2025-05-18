@@ -67,7 +67,10 @@ public class JsonConverterForPineValue : JsonConverter<PineValue>
                 return pineValue;
             }
 
-            if (propertyName is "ListAsString")
+            /*
+             * Maintain backward compatibility: Previous versions used the label "ListAsString".
+             * */
+            if (propertyName is "BlobAsString" or "ListAsString")
             {
                 var pineValue = PineValueAsString.BlobValueFromString(reader.GetString());
 
@@ -124,7 +127,7 @@ public class JsonConverterForPineValue : JsonConverter<PineValue>
                     {
                         writer.WriteStartObject();
 
-                        writer.WriteString("ListAsString", asString);
+                        writer.WriteString("BlobAsString", asString);
 
                         writer.WriteEndObject();
 

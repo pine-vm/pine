@@ -27,10 +27,14 @@ public class JsonConverterForPineValueTests
                 [PineValueAsInteger.ValueFromSignedInteger(56), PineValueAsInteger.ValueFromSignedInteger(57)]),
 
             PineValue.Blob([]),
+            PineValue.Blob([32]),
             PineValue.Blob([10,11,13]),
 
             PineValue.List(
                 [PineValue.List([]), PineValue.List([])]),
+
+            PineValue.List(
+                [PineValue.Blob([32])]),
 
             PineValueAsString.ValueFromString("Hello world!"),
 
@@ -115,7 +119,7 @@ public class JsonConverterForPineValueTests
                 options: jsonSerializerOptions);
 
         Assert.AreEqual(
-            $$"""{"ListAsString":"stringValue 789"}""",
+            $$"""{"BlobAsString":"stringValue 789"}""",
             serializePineValue(
                 PineValueAsString.BlobValueFromString("stringValue 789")));
 
