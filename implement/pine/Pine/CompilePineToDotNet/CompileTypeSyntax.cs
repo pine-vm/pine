@@ -82,17 +82,17 @@ public static class CompileTypeSyntax
         SimpleNameSyntax nameInNamespace) =>
         namespaceSegments switch
         {
-        [] =>
-        nameInNamespace,
+            [] =>
+            nameInNamespace,
 
-        [var firstSegment, ..] =>
-            SyntaxFactory.QualifiedName(
-                namespaceSegments
-                .Skip(1)
-                .Select(SyntaxFactory.IdentifierName)
-                .Aggregate(
-                    seed: (NameSyntax)SyntaxFactory.IdentifierName(firstSegment),
-                    func: SyntaxFactory.QualifiedName),
-            nameInNamespace)
+            [var firstSegment, ..] =>
+                SyntaxFactory.QualifiedName(
+                    namespaceSegments
+                    .Skip(1)
+                    .Select(SyntaxFactory.IdentifierName)
+                    .Aggregate(
+                        seed: (NameSyntax)SyntaxFactory.IdentifierName(firstSegment),
+                        func: SyntaxFactory.QualifiedName),
+                nameInNamespace)
         };
 }

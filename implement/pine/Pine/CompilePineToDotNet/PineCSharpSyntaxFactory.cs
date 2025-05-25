@@ -84,13 +84,13 @@ public static class PineCSharpSyntaxFactory
             IReadOnlyList<ExpressionSyntax> remaining) =>
             remaining switch
             {
-            [var next, ..] =>
-            aggregateRecursive(
-                SyntaxFactory.BinaryExpression(
-                    SyntaxKind.LogicalAndExpression,
-                    combined,
-                    next),
-                [.. remaining.Skip(1)]),
+                [var next, ..] =>
+                aggregateRecursive(
+                    SyntaxFactory.BinaryExpression(
+                        SyntaxKind.LogicalAndExpression,
+                        combined,
+                        next),
+                    [.. remaining.Skip(1)]),
 
                 _ => combined
             };

@@ -123,9 +123,9 @@ public class ProfilingPineVM
                                 {
                                     computeExpressionUsageTimes.Enqueue(
                                         System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: analysisOuterStartTime));
-                                    }
                                 }
                             }
+                        }
 
                         var exprUsageAlreadyInDict =
                         expressionUsages.TryGetValue(

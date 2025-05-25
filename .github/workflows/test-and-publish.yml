@@ -1,6 +1,10 @@
 name: test-and-publish
 
-on: [push,workflow_dispatch]
+on:
+  push:
+  workflow_dispatch:
+  pull_request_review:
+    types: [submitted]
 
 jobs:
   build:
@@ -38,6 +42,14 @@ jobs:
       run: |
         dotnet clean ./implement/PineTest/Pine.UnitTests/Pine.UnitTests.csproj && dotnet nuget locals all --clear
         dotnet clean ./implement/test-elm-time/test-elm-time.csproj && dotnet nuget locals all --clear
+
+    - name: Check formatting in .NET source code
+      run: |
+        dotnet  format  ./implement/Pine.Core  --verify-no-changes
+        dotnet  format  ./implement/PineTest/Pine.UnitTests  --verify-no-changes
+        dotnet  format  ./implement/pine  --verify-no-changes
+        dotnet  format  ./implement/test-elm-time  --verify-no-changes
+        dotnet  format  ./implement/prebuild  --verify-no-changes
 
     - name: Prebuild
       working-directory: ./implement/

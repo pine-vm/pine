@@ -51,7 +51,7 @@ public class BytesConversions
             deflatedStream, System.IO.Compression.CompressionMode.Compress);
 
         compressor.Write(input.Span);
-        
+
         compressor.Close();
 
         return deflatedStream.ToArray();
@@ -84,7 +84,7 @@ public class BytesConversions
 
         s1.CopyTo(array);
         s2.CopyTo(array.AsSpan(s1.Length));
-        
+
         return array;
     }
 

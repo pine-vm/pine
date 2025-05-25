@@ -404,159 +404,182 @@ public class StartupAdminInterface
     {
         return
         async context =>
+        await AdminInterfaceRunAsync(
+            logger: logger,
+            processStoreFileStore: processStoreFileStore,
+            processStoreWriter: processStoreWriter,
+            adminPassword: adminPassword,
+            getPublicAppHost: getPublicAppHost,
+            avoidConcurrencyLock: avoidConcurrencyLock,
+            startPublicApp: startPublicApp,
+            stopPublicApp: stopPublicApp,
+            context: context);
+    }
+
+    private static async System.Threading.Tasks.Task AdminInterfaceRunAsync(
+        ILogger logger,
+        IFileStore processStoreFileStore,
+        IProcessStoreWriter processStoreWriter,
+        string? adminPassword,
+        Func<PublicHostProcess?> getPublicAppHost,
+        object avoidConcurrencyLock,
+        Action startPublicApp,
+        Action stopPublicApp,
+        HttpContext context)
+    {
+        var bodyControlFeature = context.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpBodyControlFeature>();
+
+        if (bodyControlFeature is not null)
         {
-            var bodyControlFeature = context.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpBodyControlFeature>();
-            if (bodyControlFeature != null)
+            bodyControlFeature.AllowSynchronousIO = true;
+        }
+
+        {
+            context.Request.Headers.TryGetValue("Authorization", out var requestAuthorizationHeaderValue);
+
+            context.Response.Headers.XPoweredBy = "Pine";
+
+            _ = AuthenticationHeaderValue.TryParse(
+                requestAuthorizationHeaderValue.FirstOrDefault(), out var requestAuthorization);
+
+            if (!(0 < adminPassword?.Length))
             {
-                bodyControlFeature.AllowSynchronousIO = true;
+                context.Response.StatusCode = 403;
+                await context.Response.WriteAsync("The admin interface is not available because the admin password is not yet configured.");
+                return;
             }
 
+            var buffer = new byte[400];
+
+            var decodedRequestAuthorizationParameter =
+                Convert.TryFromBase64String(requestAuthorization?.Parameter ?? "", buffer, out var bytesWritten) ?
+                Encoding.UTF8.GetString(buffer, 0, bytesWritten) : null;
+
+            var requestAuthorizationPassword =
+                decodedRequestAuthorizationParameter?.Split(':')?.ElementAtOrDefault(1);
+
+            if (!(string.Equals(adminPassword, requestAuthorizationPassword) &&
+                string.Equals("basic", requestAuthorization?.Scheme, StringComparison.OrdinalIgnoreCase)))
             {
-                context.Request.Headers.TryGetValue("Authorization", out var requestAuthorizationHeaderValue);
+                context.Response.StatusCode = 401;
+                context.Response.Headers.WWWAuthenticate = @"Basic realm=""" + context.Request.Host + @""", charset=""UTF-8""";
+                await context.Response.WriteAsync("Unauthorized");
+                return;
+            }
+        }
 
-                context.Response.Headers.XPoweredBy = "Pine";
+        {
+            /*
+             * Increase the request body size limit, which defaults to 30 megabytes in ASP.NET Core 8.
+             * https://learn.microsoft.com/en-us/dotnet/api/microsoft.aspnetcore.server.kestrel.core.kestrelserverlimits.maxrequestbodysize?view=aspnetcore-8.0#microsoft-aspnetcore-server-kestrel-core-kestrelserverlimits-maxrequestbodysize
+             * */
 
-                AuthenticationHeaderValue.TryParse(
-                    requestAuthorizationHeaderValue.FirstOrDefault(), out var requestAuthorization);
+            var bodySizeFeature =
+                context.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>();
 
-                if (!(0 < adminPassword?.Length))
+            if (bodySizeFeature is not null)
+            {
+                bodySizeFeature.MaxRequestBodySize = 400_000_000;
+            }
+        }
+
+        async System.Threading.Tasks.Task deployElmApp(bool initElmAppState)
+        {
+            var deploymentZipArchive = await Asp.CopyRequestBodyAsync(context.Request);
+
+            {
+                try
                 {
-                    context.Response.StatusCode = 403;
-                    await context.Response.WriteAsync("The admin interface is not available because the admin password is not yet configured.");
+                    var filesFromZipArchive = ZipArchive.EntriesFromZipArchive(deploymentZipArchive).ToImmutableList();
+
+                    if (filesFromZipArchive.Count < 1)
+                        throw new Exception("Contains no files.");
+                }
+                catch (Exception e)
+                {
+                    context.Response.StatusCode = 400;
+                    await context.Response.WriteAsync("Malformed web app config zip-archive:\n" + e);
                     return;
                 }
-
-                var buffer = new byte[400];
-
-                var decodedRequestAuthorizationParameter =
-                    Convert.TryFromBase64String(requestAuthorization?.Parameter ?? "", buffer, out var bytesWritten) ?
-                    Encoding.UTF8.GetString(buffer, 0, bytesWritten) : null;
-
-                var requestAuthorizationPassword =
-                    decodedRequestAuthorizationParameter?.Split(':')?.ElementAtOrDefault(1);
-
-                if (!(string.Equals(adminPassword, requestAuthorizationPassword) &&
-                    string.Equals("basic", requestAuthorization?.Scheme, StringComparison.OrdinalIgnoreCase)))
-                {
-                    context.Response.StatusCode = 401;
-                    context.Response.Headers.WWWAuthenticate = @"Basic realm=""" + context.Request.Host + @""", charset=""UTF-8""";
-                    await context.Response.WriteAsync("Unauthorized");
-                    return;
-                }
             }
 
-            {
-                /*
-                 * Increase the request body size limit, which defaults to 30 megabytes in ASP.NET Core 8.
-                 * https://learn.microsoft.com/en-us/dotnet/api/microsoft.aspnetcore.server.kestrel.core.kestrelserverlimits.maxrequestbodysize?view=aspnetcore-8.0#microsoft-aspnetcore-server-kestrel-core-kestrelserverlimits-maxrequestbodysize
-                 * */
+            var deploymentTree =
+                PineValueComposition.SortedTreeFromSetOfBlobsWithCommonFilePath(
+                    ZipArchive.EntriesFromZipArchive(deploymentZipArchive));
 
-                var bodySizeFeature =
-                    context.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>();
+            var deploymentPineValue = PineValueComposition.FromTreeWithStringPath(deploymentTree);
 
-                if (bodySizeFeature is not null)
+            var deploymentHashBase16 = Convert.ToHexStringLower(PineValueHashTree.ComputeHash(deploymentPineValue).Span);
+
+            logger.LogInformation("Got request to deploy app " + deploymentHashBase16);
+
+            processStoreWriter.StoreComponent(deploymentPineValue);
+
+            var deploymentEventValueInFile =
+                new ValueInFileStructure
                 {
-                    bodySizeFeature.MaxRequestBodySize = 400_000_000;
-                }
-            }
+                    HashBase16 = deploymentHashBase16
+                };
 
-            async System.Threading.Tasks.Task deployElmApp(bool initElmAppState)
-            {
-                var deploymentZipArchive = await Asp.CopyRequestBodyAsync(context.Request);
+            var compositionLogEvent =
+                CompositionLogRecordInFile.CompositionEvent.EventForDeployAppConfig(
+                    appConfigValueInFile: deploymentEventValueInFile,
+                    initElmAppState: initElmAppState);
 
-                {
-                    try
-                    {
-                        var filesFromZipArchive = ZipArchive.EntriesFromZipArchive(deploymentZipArchive).ToImmutableList();
+            await attemptContinueWithCompositionEventAndSendHttpResponse(compositionLogEvent);
+        }
 
-                        if (filesFromZipArchive.Count < 1)
-                            throw new Exception("Contains no files.");
-                    }
-                    catch (Exception e)
-                    {
-                        context.Response.StatusCode = 400;
-                        await context.Response.WriteAsync("Malformed web app config zip-archive:\n" + e);
-                        return;
-                    }
-                }
+        Result<string, IReadOnlyList<StateShim.InterfaceToHost.NamedExposedFunction>> listDatabaseFunctions()
+        {
+            if (getPublicAppHost() is not { } publicAppHost)
+                return "No application deployed.";
 
-                var deploymentTree =
-                    PineValueComposition.SortedTreeFromSetOfBlobsWithCommonFilePath(
-                        ZipArchive.EntriesFromZipArchive(deploymentZipArchive));
+            return publicAppHost.ProcessLiveRepresentation.ListDatabaseFunctions();
+        }
 
-                var deploymentPineValue = PineValueComposition.FromTreeWithStringPath(deploymentTree);
-
-                var deploymentHashBase16 = Convert.ToHexStringLower(PineValueHashTree.ComputeHash(deploymentPineValue).Span);
-
-                logger.LogInformation("Got request to deploy app " + deploymentHashBase16);
-
-                processStoreWriter.StoreComponent(deploymentPineValue);
-
-                var deploymentEventValueInFile =
-                    new ValueInFileStructure
-                    {
-                        HashBase16 = deploymentHashBase16
-                    };
-
-                var compositionLogEvent =
-                    CompositionLogRecordInFile.CompositionEvent.EventForDeployAppConfig(
-                        appConfigValueInFile: deploymentEventValueInFile,
-                        initElmAppState: initElmAppState);
-
-                await attemptContinueWithCompositionEventAndSendHttpResponse(compositionLogEvent);
-            }
-
-            Result<string, IReadOnlyList<StateShim.InterfaceToHost.NamedExposedFunction>> listDatabaseFunctions()
+        Result<string, AdminInterface.ApplyDatabaseFunctionSuccess> applyDatabaseFunction(
+            AdminInterface.ApplyDatabaseFunctionRequest request)
+        {
+            lock (avoidConcurrencyLock)
             {
                 if (getPublicAppHost() is not { } publicAppHost)
                     return "No application deployed.";
 
-                return publicAppHost.ProcessLiveRepresentation.ListDatabaseFunctions();
+                return publicAppHost.ProcessLiveRepresentation.ApplyFunctionOnMainBranch(request);
             }
+        }
 
-            Result<string, AdminInterface.ApplyDatabaseFunctionSuccess> applyDatabaseFunction(
-                AdminInterface.ApplyDatabaseFunctionRequest request)
+        IReadOnlyList<ApiRoute> apiRoutes = null;
+
+        IEnumerable<Gui.EventToElmApp> handleMessageFromGui(
+            Gui.MessageToHost messageFromGui) =>
+            messageFromGui switch
             {
-                lock (avoidConcurrencyLock)
-                {
-                    if (getPublicAppHost() is not { } publicAppHost)
-                        return "No application deployed.";
-
-                    return publicAppHost.ProcessLiveRepresentation.ApplyFunctionOnMainBranch(request);
-                }
-            }
-
-            IReadOnlyList<ApiRoute> apiRoutes = null;
-
-            IEnumerable<Gui.EventToElmApp> handleMessageFromGui(
-                Gui.MessageToHost messageFromGui) =>
-                messageFromGui switch
-                {
-                    Gui.MessageToHost.ReadAdminInterfaceConfigRequest =>
-                    ImmutableList.Create(
-                        new Gui.EventToElmApp.ReadAdminInterfaceConfigEvent(
-                            new Gui.AdminInterfaceConfig(
-                                elmTimeVersionId: Program.AppVersionId,
-                                httpRoutes:
-                                [.. apiRoutes.Select(apiRoute => new Gui.HttpRoute(
+                Gui.MessageToHost.ReadAdminInterfaceConfigRequest =>
+                ImmutableList.Create(
+                    new Gui.EventToElmApp.ReadAdminInterfaceConfigEvent(
+                        new Gui.AdminInterfaceConfig(
+                            elmTimeVersionId: Program.AppVersionId,
+                            httpRoutes:
+                            [.. apiRoutes.Select(apiRoute => new Gui.HttpRoute(
                                     path: apiRoute.path,
                                     methods: [.. apiRoute.methods.Keys]))],
-                                databaseFunctions:
-                                /*
-                                listDatabaseFunctions()
-                                .Extract(_ => [])
-                                */
-                                [])
-                            )
-                        ),
+                            databaseFunctions:
+                            /*
+                            listDatabaseFunctions()
+                            .Extract(_ => [])
+                            */
+                            [])
+                        )
+                    ),
 
-                    _ =>
-                    throw new Exception("Unknown message from GUI: " + System.Text.Json.JsonSerializer.Serialize(messageFromGui))
-                };
+                _ =>
+                throw new Exception("Unknown message from GUI: " + System.Text.Json.JsonSerializer.Serialize(messageFromGui))
+            };
 
-            apiRoutes =
-            [
-                    new ApiRoute
+        apiRoutes =
+        [
+                new ApiRoute
                     (
                         path : PathApiGetDeployedAppConfig,
                         methods : ImmutableDictionary<string, ApiRouteMethodConfig>.Empty
@@ -761,309 +784,308 @@ public class StartupAdminInterface
                     ),
                 ];
 
-            foreach (var apiRoute in apiRoutes)
+        foreach (var apiRoute in apiRoutes)
+        {
+            if (!context.Request.Path.Equals(new PathString(apiRoute.path)))
+                continue;
+
+            var matchingMethod =
+                apiRoute.methods
+                .FirstOrDefault(m => string.Equals(m.Key, context.Request.Method, StringComparison.InvariantCultureIgnoreCase));
+
+            if (matchingMethod.Value is not { } matchingMethodDelegate)
             {
-                if (!context.Request.Path.Equals(new PathString(apiRoute.path)))
-                    continue;
+                var supportedMethodsNames =
+                    apiRoute.methods.Keys.Select(m => m.ToUpperInvariant()).ToList();
 
-                var matchingMethod =
-                    apiRoute.methods
-                    .FirstOrDefault(m => string.Equals(m.Key, context.Request.Method, StringComparison.InvariantCultureIgnoreCase));
+                var guide =
+                    HtmlFromLines(
+                        "<h2>Method Not Allowed</h2>",
+                        "",
+                        context.Request.Path.ToString() +
+                        " is a valid path, but the method " + context.Request.Method.ToUpperInvariant() +
+                        " is not supported here.",
+                        "Only following " +
+                        (supportedMethodsNames.Count == 1 ? "method is" : "methods are") +
+                        " supported here: " + string.Join(", ", supportedMethodsNames));
 
-                if (matchingMethod.Value is not { } matchingMethodDelegate)
-                {
-                    var supportedMethodsNames =
-                        apiRoute.methods.Keys.Select(m => m.ToUpperInvariant()).ToList();
-
-                    var guide =
-                        HtmlFromLines(
-                            "<h2>Method Not Allowed</h2>",
-                            "",
-                            context.Request.Path.ToString() +
-                            " is a valid path, but the method " + context.Request.Method.ToUpperInvariant() +
-                            " is not supported here.",
-                            "Only following " +
-                            (supportedMethodsNames.Count == 1 ? "method is" : "methods are") +
-                            " supported here: " + string.Join(", ", supportedMethodsNames));
-
-                    context.Response.StatusCode = 405;
-                    await context.Response.WriteAsync(HtmlDocument(guide));
-                    return;
-                }
-
-                await matchingMethodDelegate.Invoke(context, getPublicAppHost());
+                context.Response.StatusCode = 405;
+                await context.Response.WriteAsync(HtmlDocument(guide));
                 return;
             }
 
-            if (context.Request.Path.StartsWithSegments(new PathString(PathApiRevertProcessTo),
-                out var revertToRemainingPath))
+            await matchingMethodDelegate.Invoke(context, getPublicAppHost());
+            return;
+        }
+
+        if (context.Request.Path.StartsWithSegments(new PathString(PathApiRevertProcessTo),
+            out var revertToRemainingPath))
+        {
+            if (!string.Equals(context.Request.Method, "post", StringComparison.InvariantCultureIgnoreCase))
             {
-                if (!string.Equals(context.Request.Method, "post", StringComparison.InvariantCultureIgnoreCase))
+                context.Response.StatusCode = 405;
+                await context.Response.WriteAsync("Method not supported.");
+                return;
+            }
+
+            var processVersionId = revertToRemainingPath.ToString().Trim('/');
+
+            var processVersionCompositionRecord =
+                new ProcessStoreReaderInFileStore(processStoreFileStore)
+                .EnumerateSerializedCompositionLogRecordsReverse()
+                .FirstOrDefault(compositionEntry => CompositionLogRecordInFile.HashBase16FromCompositionRecord(compositionEntry) == processVersionId);
+
+            if (processVersionCompositionRecord == null)
+            {
+                context.Response.StatusCode = 404;
+                await context.Response.WriteAsync("Did not find process version '" + processVersionId + "'.");
+                return;
+            }
+
+            await attemptContinueWithCompositionEventAndSendHttpResponse(new CompositionLogRecordInFile.CompositionEvent
+            {
+                RevertProcessTo = new ValueInFileStructure { HashBase16 = processVersionId },
+            });
+            return;
+        }
+
+        TruncateProcessHistoryReport truncateProcessHistory(TimeSpan productionBlockDurationLimit)
+        {
+            var beginTime = BytesConversions.TimeStringViewForReport(DateTimeOffset.UtcNow);
+
+            var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+            const int numbersOfThreadsToDeleteFiles = 4;
+
+            var filePathsInProcessStorePartitions =
+                processStoreFileStore.ListFiles()
+                .Select((s, i) => (s, i))
+                .GroupBy(x => x.i % numbersOfThreadsToDeleteFiles)
+                .Select(g => g.Select(x => x.s).ToImmutableList())
+                .ToImmutableList();
+
+            logger.LogInformation(
+                message: nameof(truncateProcessHistory) + ": Found {filePathCount} file paths to delete",
+                filePathsInProcessStorePartitions.Sum(partition => partition.Count));
+
+            lock (avoidConcurrencyLock)
+            {
+                var lockStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+                /*
+                var storeReductionStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+                var storeReductionReport =
+                    getPublicAppHost()
+                    ?.ProcessLiveRepresentation?.StoreReductionRecordForCurrentState(processStoreWriter).report;
+
+                storeReductionStopwatch.Stop();
+
+                logger.LogInformation(
+                    message: nameof(truncateProcessHistory) + ": Stored reduction in {storeReductionDurationMs} ms",
+                    storeReductionStopwatch.ElapsedMilliseconds);
+                */
+
+                var getFilesForRestoreStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+                var filesForRestore =
+                    PersistentProcessLiveRepresentation.GetFilesForRestoreProcess(
+                        processStoreFileStore).files
+                    .Select(filePathAndContent => filePathAndContent.Key)
+                    .ToImmutableHashSet(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
+
+                getFilesForRestoreStopwatch.Stop();
+
+                var deleteFilesStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+                var partitionsTasks =
+                    filePathsInProcessStorePartitions
+                    .Select(partitionFilePaths => System.Threading.Tasks.Task.Run(() =>
+                    {
+                        int partitionDeletedFilesCount = 0;
+
+                        foreach (var filePath in partitionFilePaths)
+                        {
+                            if (filesForRestore.Contains(filePath))
+                                continue;
+
+                            if (productionBlockDurationLimit < lockStopwatch.Elapsed)
+                                break;
+
+                            processStoreFileStore.DeleteFile(filePath);
+                            ++partitionDeletedFilesCount;
+                        }
+
+                        return partitionDeletedFilesCount;
+                    }))
+                    .ToImmutableList();
+
+                var totalDeletedFilesCount = partitionsTasks.Sum(task => task.Result);
+
+                deleteFilesStopwatch.Stop();
+
+                logger.LogInformation(
+                    message: nameof(truncateProcessHistory) + ": Deleted {totalDeletedFilesCount} files in {storeReductionDurationMs} ms",
+                    totalDeletedFilesCount,
+                    deleteFilesStopwatch.ElapsedMilliseconds);
+
+                return new TruncateProcessHistoryReport
+                (
+                    beginTime: beginTime,
+                    filesForRestoreCount: filesForRestore.Count,
+                    discoveredFilesCount: filePathsInProcessStorePartitions.Sum(partition => partition.Count),
+                    deletedFilesCount: totalDeletedFilesCount,
+                    storeReductionTimeSpentMilli: 0,
+                    storeReductionReport: null,
+                    getFilesForRestoreTimeSpentMilli: (int)getFilesForRestoreStopwatch.ElapsedMilliseconds,
+                    deleteFilesTimeSpentMilli: (int)deleteFilesStopwatch.ElapsedMilliseconds,
+                    lockedTimeSpentMilli: (int)lockStopwatch.ElapsedMilliseconds,
+                    totalTimeSpentMilli: (int)totalStopwatch.ElapsedMilliseconds
+                );
+            }
+        }
+
+        if (context.Request.Path.Equals(new PathString(PathApiTruncateProcessHistory)))
+        {
+            var truncateResult = truncateProcessHistory(productionBlockDurationLimit: TimeSpan.FromMinutes(1));
+
+            context.Response.StatusCode = 200;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync(System.Text.Json.JsonSerializer.Serialize(truncateResult));
+            return;
+        }
+
+        {
+            if (context.Request.Path.StartsWithSegments(
+                new PathString(PathApiProcessHistoryFileStoreGetFileContent), out var remainingPathString))
+            {
+                if (!string.Equals(context.Request.Method, "get", StringComparison.InvariantCultureIgnoreCase))
                 {
                     context.Response.StatusCode = 405;
                     await context.Response.WriteAsync("Method not supported.");
                     return;
                 }
 
-                var processVersionId = revertToRemainingPath.ToString().Trim('/');
+                var filePathInStore =
+                    remainingPathString.ToString().Trim('/').Split('/').ToImmutableList();
 
-                var processVersionCompositionRecord =
-                    new ProcessStoreReaderInFileStore(processStoreFileStore)
-                    .EnumerateSerializedCompositionLogRecordsReverse()
-                    .FirstOrDefault(compositionEntry => CompositionLogRecordInFile.HashBase16FromCompositionRecord(compositionEntry) == processVersionId);
+                var fileContent = processStoreFileStore.GetFileContent(filePathInStore);
 
-                if (processVersionCompositionRecord == null)
+                if (fileContent == null)
                 {
                     context.Response.StatusCode = 404;
-                    await context.Response.WriteAsync("Did not find process version '" + processVersionId + "'.");
+                    await context.Response.WriteAsync("No file at '" + string.Join("/", filePathInStore) + "'.");
                     return;
                 }
 
-                await attemptContinueWithCompositionEventAndSendHttpResponse(new CompositionLogRecordInFile.CompositionEvent
+                context.Response.StatusCode = 200;
+                context.Response.ContentType = "application/octet-stream";
+                await context.Response.Body.WriteAsync(fileContent.Value);
+                return;
+            }
+        }
+
+        {
+            if (context.Request.Path.StartsWithSegments(
+                new PathString(PathApiProcessHistoryFileStoreListFilesInDirectory), out var remainingPathString))
+            {
+                if (!string.Equals(context.Request.Method, "get", StringComparison.InvariantCultureIgnoreCase))
                 {
-                    RevertProcessTo = new ValueInFileStructure { HashBase16 = processVersionId },
+                    context.Response.StatusCode = 405;
+                    await context.Response.WriteAsync("Method not supported.");
+                    return;
+                }
+
+                var filePathInStore =
+                    remainingPathString.ToString().Trim('/').Split('/').ToImmutableList();
+
+                var filesPaths = processStoreFileStore.ListFilesInDirectory(filePathInStore);
+
+                var filesPathsList =
+                    string.Join('\n', filesPaths.Select(path => string.Join('/', path)));
+
+                context.Response.StatusCode = 200;
+                context.Response.ContentType = "application/octet-stream";
+                await context.Response.Body.WriteAsync(Encoding.UTF8.GetBytes(filesPathsList));
+                return;
+            }
+        }
+
+        (int statusCode, AttemptContinueWithCompositionEventReport responseReport) attemptContinueWithCompositionEvent(
+            CompositionLogRecordInFile.CompositionEvent compositionLogEvent)
+        {
+            lock (avoidConcurrencyLock)
+            {
+                var (statusCode, report) =
+                    AttemptContinueWithCompositionEventAndCommit(
+                        compositionLogEvent,
+                        processStoreFileStore,
+                        testContinueLogger: logEntry => logger.LogInformation(logEntry));
+
+                report = report with
+                {
+                    storeReductionTimeSpentMilli = (int)0,
+                };
+
+                startPublicApp();
+
+                return (statusCode, report);
+            }
+        }
+
+        async System.Threading.Tasks.Task writeAsHttpResponse<ErrT, OkT>(Result<ErrT, OkT> result)
+        {
+            static string reportAsString(object report)
+            {
+                return report switch
+                {
+                    null => "",
+
+                    string alreadyString => alreadyString,
+
+                    _ => System.Text.Json.JsonSerializer.Serialize(report)
+                };
+            }
+
+            var (statusCode, responseBodyString) = result.Unpack(err => (400, reportAsString(err)), ok => (200, reportAsString(ok)));
+
+            context.Response.StatusCode = statusCode;
+            await context.Response.WriteAsync(responseBodyString);
+        }
+
+        async System.Threading.Tasks.Task attemptContinueWithCompositionEventAndSendHttpResponse(
+            CompositionLogRecordInFile.CompositionEvent compositionLogEvent,
+            ILogger? logger = null)
+        {
+            logger?.LogInformation(
+                "Begin attempt to continue with composition event: " +
+                System.Text.Json.JsonSerializer.Serialize(compositionLogEvent));
+
+            var (statusCode, attemptReport) = attemptContinueWithCompositionEvent(compositionLogEvent);
+
+            var responseBodyString =
+            System.Text.Json.JsonSerializer.Serialize(
+                attemptReport,
+                options: new System.Text.Json.JsonSerializerOptions
+                {
+                    WriteIndented = true
                 });
-                return;
-            }
 
-            TruncateProcessHistoryReport truncateProcessHistory(TimeSpan productionBlockDurationLimit)
-            {
-                var beginTime = BytesConversions.TimeStringViewForReport(DateTimeOffset.UtcNow);
+            context.Response.StatusCode = statusCode;
+            await context.Response.WriteAsync(responseBodyString);
+        }
 
-                var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
+        if (context.Request.Path.Equals(PathString.Empty) || context.Request.Path.Equals(new PathString("/")))
+        {
+            var html = ComposeAdminGuiHtml();
 
-                const int numbersOfThreadsToDeleteFiles = 4;
+            context.Response.StatusCode = 200;
+            await context.Response.WriteAsync(html);
+            return;
+        }
 
-                var filePathsInProcessStorePartitions =
-                    processStoreFileStore.ListFiles()
-                    .Select((s, i) => (s, i))
-                    .GroupBy(x => x.i % numbersOfThreadsToDeleteFiles)
-                    .Select(g => g.Select(x => x.s).ToImmutableList())
-                    .ToImmutableList();
-
-                logger.LogInformation(
-                    message: nameof(truncateProcessHistory) + ": Found {filePathCount} file paths to delete",
-                    filePathsInProcessStorePartitions.Sum(partition => partition.Count));
-
-                lock (avoidConcurrencyLock)
-                {
-                    var lockStopwatch = System.Diagnostics.Stopwatch.StartNew();
-
-                    /*
-                    var storeReductionStopwatch = System.Diagnostics.Stopwatch.StartNew();
-
-                    var storeReductionReport =
-                        getPublicAppHost()
-                        ?.ProcessLiveRepresentation?.StoreReductionRecordForCurrentState(processStoreWriter).report;
-
-                    storeReductionStopwatch.Stop();
-
-                    logger.LogInformation(
-                        message: nameof(truncateProcessHistory) + ": Stored reduction in {storeReductionDurationMs} ms",
-                        storeReductionStopwatch.ElapsedMilliseconds);
-                    */
-
-                    var getFilesForRestoreStopwatch = System.Diagnostics.Stopwatch.StartNew();
-
-                    var filesForRestore =
-                        PersistentProcessLiveRepresentation.GetFilesForRestoreProcess(
-                            processStoreFileStore).files
-                        .Select(filePathAndContent => filePathAndContent.Key)
-                        .ToImmutableHashSet(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
-
-                    getFilesForRestoreStopwatch.Stop();
-
-                    var deleteFilesStopwatch = System.Diagnostics.Stopwatch.StartNew();
-
-                    var partitionsTasks =
-                        filePathsInProcessStorePartitions
-                        .Select(partitionFilePaths => System.Threading.Tasks.Task.Run(() =>
-                        {
-                            int partitionDeletedFilesCount = 0;
-
-                            foreach (var filePath in partitionFilePaths)
-                            {
-                                if (filesForRestore.Contains(filePath))
-                                    continue;
-
-                                if (productionBlockDurationLimit < lockStopwatch.Elapsed)
-                                    break;
-
-                                processStoreFileStore.DeleteFile(filePath);
-                                ++partitionDeletedFilesCount;
-                            }
-
-                            return partitionDeletedFilesCount;
-                        }))
-                        .ToImmutableList();
-
-                    var totalDeletedFilesCount = partitionsTasks.Sum(task => task.Result);
-
-                    deleteFilesStopwatch.Stop();
-
-                    logger.LogInformation(
-                        message: nameof(truncateProcessHistory) + ": Deleted {totalDeletedFilesCount} files in {storeReductionDurationMs} ms",
-                        totalDeletedFilesCount,
-                        deleteFilesStopwatch.ElapsedMilliseconds);
-
-                    return new TruncateProcessHistoryReport
-                    (
-                        beginTime: beginTime,
-                        filesForRestoreCount: filesForRestore.Count,
-                        discoveredFilesCount: filePathsInProcessStorePartitions.Sum(partition => partition.Count),
-                        deletedFilesCount: totalDeletedFilesCount,
-                        storeReductionTimeSpentMilli: 0,
-                        storeReductionReport: null,
-                        getFilesForRestoreTimeSpentMilli: (int)getFilesForRestoreStopwatch.ElapsedMilliseconds,
-                        deleteFilesTimeSpentMilli: (int)deleteFilesStopwatch.ElapsedMilliseconds,
-                        lockedTimeSpentMilli: (int)lockStopwatch.ElapsedMilliseconds,
-                        totalTimeSpentMilli: (int)totalStopwatch.ElapsedMilliseconds
-                    );
-                }
-            }
-
-            if (context.Request.Path.Equals(new PathString(PathApiTruncateProcessHistory)))
-            {
-                var truncateResult = truncateProcessHistory(productionBlockDurationLimit: TimeSpan.FromMinutes(1));
-
-                context.Response.StatusCode = 200;
-                context.Response.ContentType = "application/json";
-                await context.Response.WriteAsync(System.Text.Json.JsonSerializer.Serialize(truncateResult));
-                return;
-            }
-
-            {
-                if (context.Request.Path.StartsWithSegments(
-                    new PathString(PathApiProcessHistoryFileStoreGetFileContent), out var remainingPathString))
-                {
-                    if (!string.Equals(context.Request.Method, "get", StringComparison.InvariantCultureIgnoreCase))
-                    {
-                        context.Response.StatusCode = 405;
-                        await context.Response.WriteAsync("Method not supported.");
-                        return;
-                    }
-
-                    var filePathInStore =
-                        remainingPathString.ToString().Trim('/').Split('/').ToImmutableList();
-
-                    var fileContent = processStoreFileStore.GetFileContent(filePathInStore);
-
-                    if (fileContent == null)
-                    {
-                        context.Response.StatusCode = 404;
-                        await context.Response.WriteAsync("No file at '" + string.Join("/", filePathInStore) + "'.");
-                        return;
-                    }
-
-                    context.Response.StatusCode = 200;
-                    context.Response.ContentType = "application/octet-stream";
-                    await context.Response.Body.WriteAsync(fileContent.Value);
-                    return;
-                }
-            }
-
-            {
-                if (context.Request.Path.StartsWithSegments(
-                    new PathString(PathApiProcessHistoryFileStoreListFilesInDirectory), out var remainingPathString))
-                {
-                    if (!string.Equals(context.Request.Method, "get", StringComparison.InvariantCultureIgnoreCase))
-                    {
-                        context.Response.StatusCode = 405;
-                        await context.Response.WriteAsync("Method not supported.");
-                        return;
-                    }
-
-                    var filePathInStore =
-                        remainingPathString.ToString().Trim('/').Split('/').ToImmutableList();
-
-                    var filesPaths = processStoreFileStore.ListFilesInDirectory(filePathInStore);
-
-                    var filesPathsList =
-                        string.Join('\n', filesPaths.Select(path => string.Join('/', path)));
-
-                    context.Response.StatusCode = 200;
-                    context.Response.ContentType = "application/octet-stream";
-                    await context.Response.Body.WriteAsync(Encoding.UTF8.GetBytes(filesPathsList));
-                    return;
-                }
-            }
-
-            (int statusCode, AttemptContinueWithCompositionEventReport responseReport) attemptContinueWithCompositionEvent(
-                CompositionLogRecordInFile.CompositionEvent compositionLogEvent)
-            {
-                lock (avoidConcurrencyLock)
-                {
-                    var (statusCode, report) =
-                        AttemptContinueWithCompositionEventAndCommit(
-                            compositionLogEvent,
-                            processStoreFileStore,
-                            testContinueLogger: logEntry => logger.LogInformation(logEntry));
-
-                    report = report with
-                    {
-                        storeReductionTimeSpentMilli = (int)0,
-                    };
-
-                    startPublicApp();
-
-                    return (statusCode, report);
-                }
-            }
-
-            async System.Threading.Tasks.Task writeAsHttpResponse<ErrT, OkT>(Result<ErrT, OkT> result)
-            {
-                static string reportAsString(object report)
-                {
-                    return report switch
-                    {
-                        null => "",
-
-                        string alreadyString => alreadyString,
-
-                        _ => System.Text.Json.JsonSerializer.Serialize(report)
-                    };
-                }
-
-                var (statusCode, responseBodyString) = result.Unpack(err => (400, reportAsString(err)), ok => (200, reportAsString(ok)));
-
-                context.Response.StatusCode = statusCode;
-                await context.Response.WriteAsync(responseBodyString);
-            }
-
-            async System.Threading.Tasks.Task attemptContinueWithCompositionEventAndSendHttpResponse(
-                CompositionLogRecordInFile.CompositionEvent compositionLogEvent,
-                ILogger? logger = null)
-            {
-                logger?.LogInformation(
-                    "Begin attempt to continue with composition event: " +
-                    System.Text.Json.JsonSerializer.Serialize(compositionLogEvent));
-
-                var (statusCode, attemptReport) = attemptContinueWithCompositionEvent(compositionLogEvent);
-
-                var responseBodyString =
-                System.Text.Json.JsonSerializer.Serialize(
-                    attemptReport,
-                    options: new System.Text.Json.JsonSerializerOptions
-                    {
-                        WriteIndented = true
-                    });
-
-                context.Response.StatusCode = statusCode;
-                await context.Response.WriteAsync(responseBodyString);
-            }
-
-            if (context.Request.Path.Equals(PathString.Empty) || context.Request.Path.Equals(new PathString("/")))
-            {
-                var html = ComposeAdminGuiHtml();
-
-                context.Response.StatusCode = 200;
-                await context.Response.WriteAsync(html);
-                return;
-            }
-
-            context.Response.StatusCode = 404;
-            await context.Response.WriteAsync("Not Found");
-        };
+        context.Response.StatusCode = 404;
+        await context.Response.WriteAsync("Not Found");
     }
 
     private static void BeginMakeAdminGuiHtml() =>

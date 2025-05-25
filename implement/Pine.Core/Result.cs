@@ -96,10 +96,10 @@ public abstract record Result<ErrT, OkT>
         {
             Ok ok =>
             okMap(ok.Value),
-            
+
             Err err =>
             new Result<ErrT, MappedOkT>.Err(err.Value),
-            
+
             _ =>
             throw new NotImplementedException()
         };
@@ -113,10 +113,10 @@ public abstract record Result<ErrT, OkT>
         {
             Ok ok =>
             ok.Value,
-            
+
             Err =>
             defaultIfErr,
-            
+
             _ =>
             throw new NotImplementedException()
         };
@@ -150,7 +150,7 @@ public abstract record Result<ErrT, OkT>
 
             Err err =>
             fromErr(err.Value),
-            
+
             _ =>
             throw new NotImplementedException()
         };
@@ -166,10 +166,10 @@ public abstract record Result<ErrT, OkT>
         {
             Ok ok =>
             fromOk(ok.Value),
-            
+
             Err err =>
             fromErr(err.Value),
-            
+
             _ =>
             throw new NotImplementedException()
         };

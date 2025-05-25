@@ -135,13 +135,13 @@ public class JsonConverterForChoiceType : JsonConverterFactory
             {
                 return "Failed for nested type " + nestedType.Name + " :" + error;
             }
-            
+
             if (variantResult.IsOkOrNull() is not { } variant)
             {
                 throw new NotImplementedException(
                     "Unexpected result from ParseChoiceTypeVariant: " + variantResult);
             }
-            
+
             variants.Add(variant);
         }
 

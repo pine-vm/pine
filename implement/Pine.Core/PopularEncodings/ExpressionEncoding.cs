@@ -306,12 +306,12 @@ public static class ExpressionEncoding
         }
 
         var parseConditionResult = generalParser(arguments.Span[0]);
-        
+
         {
             if (parseConditionResult.IsErrOrNull() is { } err)
                 return err;
         }
-        
+
         if (parseConditionResult.IsOkOrNull() is not { } condition)
         {
             throw new NotImplementedException(
@@ -319,12 +319,12 @@ public static class ExpressionEncoding
         }
 
         var parseFalseBranchResult = generalParser(arguments.Span[1]);
-        
+
         {
             if (parseFalseBranchResult.IsErrOrNull() is { } err)
                 return err;
         }
-        
+
         if (parseFalseBranchResult.IsOkOrNull() is not { } falseBranch)
         {
             throw new NotImplementedException(

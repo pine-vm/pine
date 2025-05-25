@@ -20,8 +20,8 @@ public class PineKernelFunctionsInline
                 Expression.List argumentList =>
                 argumentList.items switch
                 {
-                [var firstArgument, var secondArgument] =>
-                TryInlineKernelFunction_Equal_two_args(firstArgument, secondArgument, compilationEnv),
+                    [var firstArgument, var secondArgument] =>
+                    TryInlineKernelFunction_Equal_two_args(firstArgument, secondArgument, compilationEnv),
 
                     _ =>
                     null

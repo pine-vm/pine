@@ -13,7 +13,7 @@ public static class PineValueComposition
         FileTreeEncoding.Parse(composition);
 
 
-    public static PineValue FromTreeWithStringPath(TreeNodeWithStringPath node)=>
+    public static PineValue FromTreeWithStringPath(TreeNodeWithStringPath node) =>
         FileTreeEncoding.Encode(node);
 
 
