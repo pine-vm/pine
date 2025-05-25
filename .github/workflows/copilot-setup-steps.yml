@@ -1,0 +1,53 @@
+name: "Copilot Setup Steps"
+
+# https://docs.github.com/en/enterprise-cloud@latest/copilot/customizing-copilot/customizing-the-development-environment-for-copilot-coding-agent
+
+# Allow testing of the setup steps from your repository's "Actions" tab.
+on: workflow_dispatch
+
+jobs:
+  # The job MUST be called `copilot-setup-steps` or it will not be picked up by Copilot.
+  copilot-setup-steps:
+    runs-on: ubuntu-latest
+
+    # Set the permissions to the lowest permissions possible needed for your steps.
+    # Copilot will be given its own token for its operations.
+    permissions:
+      # If you want to clone the repository as part of your setup steps, for example to install dependencies, you'll need the `contents: read` permission. If you don't clone the repository in your setup steps, Copilot will do this for you automatically after the steps complete.
+      contents: read
+
+    # You can define any steps you want, and they will run before the agent starts.
+    # If you do not check out your code, Copilot will do this for you.
+    steps:
+
+      - name: Avoid git mutating files on checkout
+        run: |
+          git config --global core.autocrlf false
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Check installed dotnet
+        run: dotnet --info
+
+      - name: Download & extract Pine
+        shell: pwsh
+        run: |
+          Invoke-WebRequest `
+            https://github.com/pine-vm/pine/releases/download/v0.4.6/pine-bin-v0.4.6-linux-x64.zip `
+            -OutFile pine.zip
+
+          Add-Type -A 'System.IO.Compression.FileSystem'
+          [IO.Compression.ZipFile]::ExtractToDirectory('pine.zip', './pine')
+
+      - name: install Pine 
+        shell: pwsh
+        run: | 
+          ls . 
+          ls ./pine 
+          ./pine/pine  install 
+          (Get-Location).path + "/pine" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append 
