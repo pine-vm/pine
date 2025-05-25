@@ -47,3 +47,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Prebuild
+        working-directory: ./implement/
+        run: |
+          dotnet  run  --project ./prebuild/prebuild.csproj
