@@ -1,3 +1,4 @@
+using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Elm019;
 using System.Text.Json;
@@ -55,57 +56,57 @@ public class Elm019JsonFileParsingTests
         var elmJsonParsed =
             JsonSerializer.Deserialize<ElmJsonStructure>(elmJsonFile);
 
-        Assert.IsNotNull(elmJsonParsed);
+        elmJsonParsed.Should().NotBeNull();
 
-        Assert.AreEqual("application", elmJsonParsed.Type);
+        elmJsonParsed.Type.Should().Be("application");
 
-        Assert.AreEqual(3, elmJsonParsed.SourceDirectories.Count);
+        elmJsonParsed.SourceDirectories.Count.Should().Be(3);
 
-        Assert.AreEqual("src", elmJsonParsed.SourceDirectories[0]);
+        elmJsonParsed.SourceDirectories[0].Should().Be("src");
 
-        Assert.AreEqual("elm-syntax/src", elmJsonParsed.SourceDirectories[1]);
+        elmJsonParsed.SourceDirectories[1].Should().Be("elm-syntax/src");
 
-        Assert.AreEqual("elm-syntax-encode-json/src", elmJsonParsed.SourceDirectories[2]);
+        elmJsonParsed.SourceDirectories[2].Should().Be("elm-syntax-encode-json/src");
 
-        Assert.AreEqual("0.19.1", elmJsonParsed.ElmVersion);
+        elmJsonParsed.ElmVersion.Should().Be("0.19.1");
 
         var directDependencies =
             elmJsonParsed.Dependencies.Direct
             ??
             throw new System.Exception("directDependencies is null");
 
-        Assert.AreEqual(8, directDependencies.Count);
+        directDependencies.Count.Should().Be(8);
 
-        Assert.AreEqual("2.0.1", directDependencies["cmditch/elm-bigint"]);
+        directDependencies["cmditch/elm-bigint"].Should().Be("2.0.1");
 
-        Assert.AreEqual("1.1.0", directDependencies["danfishgold/base64-bytes"]);
+        directDependencies["danfishgold/base64-bytes"].Should().Be("1.1.0");
 
-        Assert.AreEqual("1.0.8", directDependencies["elm/bytes"]);
+        directDependencies["elm/bytes"].Should().Be("1.0.8");
 
-        Assert.AreEqual("1.0.5", directDependencies["elm/core"]);
+        directDependencies["elm/core"].Should().Be("1.0.5");
 
-        Assert.AreEqual("1.1.3", directDependencies["elm/json"]);
+        directDependencies["elm/json"].Should().Be("1.1.3");
 
-        Assert.AreEqual("1.1.0", directDependencies["elm/parser"]);
+        directDependencies["elm/parser"].Should().Be("1.1.0");
 
-        Assert.AreEqual("2.4.0", directDependencies["elm-community/result-extra"]);
+        directDependencies["elm-community/result-extra"].Should().Be("2.4.0");
 
-        Assert.AreEqual("1.0.0", directDependencies["folkertdev/elm-sha2"]);
+        directDependencies["folkertdev/elm-sha2"].Should().Be("1.0.0");
 
         var indirectDependencies =
             elmJsonParsed.Dependencies.Indirect
             ??
             throw new System.Exception("indirectDependencies is null");
 
-        Assert.AreEqual(4, indirectDependencies.Count);
+        indirectDependencies.Count.Should().Be(4);
 
-        Assert.AreEqual("1.0.0", indirectDependencies["elm/regex"]);
+        indirectDependencies["elm/regex"].Should().Be("1.0.0");
 
-        Assert.AreEqual("8.7.0", indirectDependencies["elm-community/list-extra"]);
+        indirectDependencies["elm-community/list-extra"].Should().Be("8.7.0");
 
-        Assert.AreEqual("5.3.0", indirectDependencies["elm-community/maybe-extra"]);
+        indirectDependencies["elm-community/maybe-extra"].Should().Be("5.3.0");
 
-        Assert.AreEqual("1.0.0", indirectDependencies["rtfeldman/elm-hex"]);
+        indirectDependencies["rtfeldman/elm-hex"].Should().Be("1.0.0");
     }
 
     [TestMethod]
@@ -161,62 +162,62 @@ public class Elm019JsonFileParsingTests
         var elmJsonParsed =
             JsonSerializer.Deserialize<ElmJsonStructure>(elmJsonFile);
 
-        Assert.IsNotNull(elmJsonParsed);
+        elmJsonParsed.Should().NotBeNull();
 
-        Assert.AreEqual("package", elmJsonParsed.Type);
+        elmJsonParsed.Type.Should().Be("package");
 
-        Assert.AreEqual("stil4m/elm-syntax", elmJsonParsed.Name);
+        elmJsonParsed.Name.Should().Be("stil4m/elm-syntax");
 
-        Assert.AreEqual("Elm Syntax in Elm: for parsing and writing Elm in Elm", elmJsonParsed.Summary);
+        elmJsonParsed.Summary.Should().Be("Elm Syntax in Elm: for parsing and writing Elm in Elm");
 
-        Assert.AreEqual("MIT", elmJsonParsed.License);
+        elmJsonParsed.License.Should().Be("MIT");
 
-        Assert.AreEqual("7.3.8", elmJsonParsed.Version);
+        elmJsonParsed.Version.Should().Be("7.3.8");
 
-        Assert.AreEqual(23, elmJsonParsed.ExposedModules.Count);
+        elmJsonParsed.ExposedModules.Count.Should().Be(23);
 
-        Assert.AreEqual("Elm.Dependency", elmJsonParsed.ExposedModules[0]);
-        Assert.AreEqual("Elm.Interface", elmJsonParsed.ExposedModules[1]);
-        Assert.AreEqual("Elm.Parser", elmJsonParsed.ExposedModules[2]);
-        Assert.AreEqual("Elm.Processing", elmJsonParsed.ExposedModules[3]);
-        Assert.AreEqual("Elm.RawFile", elmJsonParsed.ExposedModules[4]);
-        Assert.AreEqual("Elm.Writer", elmJsonParsed.ExposedModules[5]);
-        Assert.AreEqual("Elm.Syntax.Comments", elmJsonParsed.ExposedModules[6]);
-        Assert.AreEqual("Elm.Syntax.Declaration", elmJsonParsed.ExposedModules[7]);
-        Assert.AreEqual("Elm.Syntax.Documentation", elmJsonParsed.ExposedModules[8]);
-        Assert.AreEqual("Elm.Syntax.Exposing", elmJsonParsed.ExposedModules[9]);
-        Assert.AreEqual("Elm.Syntax.Expression", elmJsonParsed.ExposedModules[10]);
-        Assert.AreEqual("Elm.Syntax.File", elmJsonParsed.ExposedModules[11]);
-        Assert.AreEqual("Elm.Syntax.Import", elmJsonParsed.ExposedModules[12]);
-        Assert.AreEqual("Elm.Syntax.Infix", elmJsonParsed.ExposedModules[13]);
-        Assert.AreEqual("Elm.Syntax.Module", elmJsonParsed.ExposedModules[14]);
-        Assert.AreEqual("Elm.Syntax.ModuleName", elmJsonParsed.ExposedModules[15]);
-        Assert.AreEqual("Elm.Syntax.Node", elmJsonParsed.ExposedModules[16]);
-        Assert.AreEqual("Elm.Syntax.Pattern", elmJsonParsed.ExposedModules[17]);
-        Assert.AreEqual("Elm.Syntax.Range", elmJsonParsed.ExposedModules[18]);
-        Assert.AreEqual("Elm.Syntax.Signature", elmJsonParsed.ExposedModules[19]);
-        Assert.AreEqual("Elm.Syntax.TypeAlias", elmJsonParsed.ExposedModules[20]);
-        Assert.AreEqual("Elm.Syntax.TypeAnnotation", elmJsonParsed.ExposedModules[21]);
-        Assert.AreEqual("Elm.Syntax.Type", elmJsonParsed.ExposedModules[22]);
+        elmJsonParsed.ExposedModules[0].Should().Be("Elm.Dependency");
+        elmJsonParsed.ExposedModules[1].Should().Be("Elm.Interface");
+        elmJsonParsed.ExposedModules[2].Should().Be("Elm.Parser");
+        elmJsonParsed.ExposedModules[3].Should().Be("Elm.Processing");
+        elmJsonParsed.ExposedModules[4].Should().Be("Elm.RawFile");
+        elmJsonParsed.ExposedModules[5].Should().Be("Elm.Writer");
+        elmJsonParsed.ExposedModules[6].Should().Be("Elm.Syntax.Comments");
+        elmJsonParsed.ExposedModules[7].Should().Be("Elm.Syntax.Declaration");
+        elmJsonParsed.ExposedModules[8].Should().Be("Elm.Syntax.Documentation");
+        elmJsonParsed.ExposedModules[9].Should().Be("Elm.Syntax.Exposing");
+        elmJsonParsed.ExposedModules[10].Should().Be("Elm.Syntax.Expression");
+        elmJsonParsed.ExposedModules[11].Should().Be("Elm.Syntax.File");
+        elmJsonParsed.ExposedModules[12].Should().Be("Elm.Syntax.Import");
+        elmJsonParsed.ExposedModules[13].Should().Be("Elm.Syntax.Infix");
+        elmJsonParsed.ExposedModules[14].Should().Be("Elm.Syntax.Module");
+        elmJsonParsed.ExposedModules[15].Should().Be("Elm.Syntax.ModuleName");
+        elmJsonParsed.ExposedModules[16].Should().Be("Elm.Syntax.Node");
+        elmJsonParsed.ExposedModules[17].Should().Be("Elm.Syntax.Pattern");
+        elmJsonParsed.ExposedModules[18].Should().Be("Elm.Syntax.Range");
+        elmJsonParsed.ExposedModules[19].Should().Be("Elm.Syntax.Signature");
+        elmJsonParsed.ExposedModules[20].Should().Be("Elm.Syntax.TypeAlias");
+        elmJsonParsed.ExposedModules[21].Should().Be("Elm.Syntax.TypeAnnotation");
+        elmJsonParsed.ExposedModules[22].Should().Be("Elm.Syntax.Type");
 
-        Assert.AreEqual("0.19.0 <= v < 0.20.0", elmJsonParsed.ElmVersion);
+        elmJsonParsed.ElmVersion.Should().Be("0.19.0 <= v < 0.20.0");
 
         var dependencies =
             elmJsonParsed.Dependencies.Flat
             ??
             throw new System.Exception("dependencies is null");
 
-        Assert.AreEqual(5, dependencies.Count);
+        dependencies.Count.Should().Be(5);
 
-        Assert.AreEqual("1.0.0 <= v < 2.0.0", dependencies["elm/core"]);
+        dependencies["elm/core"].Should().Be("1.0.0 <= v < 2.0.0");
 
-        Assert.AreEqual("1.0.0 <= v < 2.0.0", dependencies["elm/json"]);
+        dependencies["elm/json"].Should().Be("1.0.0 <= v < 2.0.0");
 
-        Assert.AreEqual("1.0.0 <= v < 2.0.0", dependencies["elm/parser"]);
+        dependencies["elm/parser"].Should().Be("1.0.0 <= v < 2.0.0");
 
-        Assert.AreEqual("1.0.0 <= v < 2.0.0", dependencies["rtfeldman/elm-hex"]);
+        dependencies["rtfeldman/elm-hex"].Should().Be("1.0.0 <= v < 2.0.0");
 
-        Assert.AreEqual("1.0.1 <= v < 2.0.0", dependencies["stil4m/structured-writer"]);
+        dependencies["stil4m/structured-writer"].Should().Be("1.0.1 <= v < 2.0.0");
 
     }
 
@@ -269,35 +270,35 @@ public class Elm019JsonFileParsingTests
         var elmJsonParsed =
             JsonSerializer.Deserialize<ElmJsonStructure>(elmJsonFile);
 
-        Assert.IsNotNull(elmJsonParsed);
+        elmJsonParsed.Should().NotBeNull();
 
-        Assert.AreEqual("package", elmJsonParsed.Type);
+        elmJsonParsed.Type.Should().Be("package");
 
-        Assert.AreEqual("elm/core", elmJsonParsed.Name);
+        elmJsonParsed.Name.Should().Be("elm/core");
 
-        Assert.AreEqual(17, elmJsonParsed.ExposedModules.Count);
+        elmJsonParsed.ExposedModules.Count.Should().Be(17);
 
-        Assert.AreEqual("Basics", elmJsonParsed.ExposedModules[0]);
-        Assert.AreEqual("String", elmJsonParsed.ExposedModules[1]);
-        Assert.AreEqual("Char", elmJsonParsed.ExposedModules[2]);
-        Assert.AreEqual("Bitwise", elmJsonParsed.ExposedModules[3]);
-        Assert.AreEqual("Tuple", elmJsonParsed.ExposedModules[4]);
+        elmJsonParsed.ExposedModules[0].Should().Be("Basics");
+        elmJsonParsed.ExposedModules[1].Should().Be("String");
+        elmJsonParsed.ExposedModules[2].Should().Be("Char");
+        elmJsonParsed.ExposedModules[3].Should().Be("Bitwise");
+        elmJsonParsed.ExposedModules[4].Should().Be("Tuple");
 
-        Assert.AreEqual("List", elmJsonParsed.ExposedModules[5]);
-        Assert.AreEqual("Dict", elmJsonParsed.ExposedModules[6]);
-        Assert.AreEqual("Set", elmJsonParsed.ExposedModules[7]);
-        Assert.AreEqual("Array", elmJsonParsed.ExposedModules[8]);
+        elmJsonParsed.ExposedModules[5].Should().Be("List");
+        elmJsonParsed.ExposedModules[6].Should().Be("Dict");
+        elmJsonParsed.ExposedModules[7].Should().Be("Set");
+        elmJsonParsed.ExposedModules[8].Should().Be("Array");
 
-        Assert.AreEqual("Maybe", elmJsonParsed.ExposedModules[9]);
-        Assert.AreEqual("Result", elmJsonParsed.ExposedModules[10]);
+        elmJsonParsed.ExposedModules[9].Should().Be("Maybe");
+        elmJsonParsed.ExposedModules[10].Should().Be("Result");
 
-        Assert.AreEqual("Debug", elmJsonParsed.ExposedModules[11]);
+        elmJsonParsed.ExposedModules[11].Should().Be("Debug");
 
-        Assert.AreEqual("Platform.Cmd", elmJsonParsed.ExposedModules[12]);
-        Assert.AreEqual("Platform.Sub", elmJsonParsed.ExposedModules[13]);
-        Assert.AreEqual("Platform", elmJsonParsed.ExposedModules[14]);
-        Assert.AreEqual("Process", elmJsonParsed.ExposedModules[15]);
-        Assert.AreEqual("Task", elmJsonParsed.ExposedModules[16]);
+        elmJsonParsed.ExposedModules[12].Should().Be("Platform.Cmd");
+        elmJsonParsed.ExposedModules[13].Should().Be("Platform.Sub");
+        elmJsonParsed.ExposedModules[14].Should().Be("Platform");
+        elmJsonParsed.ExposedModules[15].Should().Be("Process");
+        elmJsonParsed.ExposedModules[16].Should().Be("Task");
 
     }
 }

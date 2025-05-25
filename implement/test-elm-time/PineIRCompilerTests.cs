@@ -1,3 +1,4 @@
+using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using Pine.Core.PopularEncodings;
@@ -303,16 +304,12 @@ public class PineIRCompilerTests
         System.Console.WriteLine(
             $"Compiled instructions:\n{actualInstructionsText}");
 
-        Assert.AreEqual(
-            expectedInstructions.Instructions.Count,
-            compiled.Instructions.Count,
-            "Instructions count");
+        compiled.Instructions.Count.Should().Be(expectedInstructions.Instructions.Count, "Instructions count");
 
         for (var instructionIndex = 0; instructionIndex < expectedInstructions.Instructions.Count; instructionIndex++)
         {
-            Assert.AreEqual(
+            compiled.Instructions[instructionIndex].Should().Be(
                 expectedInstructions.Instructions[instructionIndex],
-                compiled.Instructions[instructionIndex],
                 $"Instruction at index {instructionIndex} of " + compiled.Instructions.Count);
         }
 
@@ -389,16 +386,15 @@ public class PineIRCompilerTests
         System.Console.WriteLine(
             "Eval loop iteration count: " + evalReport.LoopIterationCount);
 
-        Assert.AreEqual(
+        resultInteger.Should().Be(
             1_071 + 1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9 + 10 + 11 + 12 + 13 + 14 + 15 + 16 + 17,
-            resultInteger,
             "Evaluated result");
 
-        Assert.IsTrue(evalReport.InvocationCount < 4);
+        evalReport.InvocationCount.Should().BeLessThan(4);
 
-        Assert.IsTrue(300 < evalReport.InstructionCount);
+        evalReport.InstructionCount.Should().BeGreaterThan(300);
 
-        Assert.IsTrue(7 < evalReport.LoopIterationCount);
+        evalReport.LoopIterationCount.Should().BeGreaterThan(7);
     }
 
     static Expression SkipHeadPathInExpression(Expression source, System.ReadOnlySpan<int> path)

@@ -1,4 +1,5 @@
 using ElmTime;
+using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using System;
@@ -71,7 +72,7 @@ public class ProgramCommandMakeTests
                 .Select(file => ((IReadOnlyList<string>)file.path, (ReadOnlyMemory<byte>)Encoding.UTF8.GetBytes(file.content)))],
                 entryPointFilePath: ["src", "Build.elm"]);
 
-        CollectionAssert.AreEqual(new byte[] { 0, 1, 3, 4, 71 }, outputBlob.Span.ToArray());
+        outputBlob.Span.ToArray().Should().Equal(new byte[] { 0, 1, 3, 4, 71 });
     }
 
     [TestMethod]
@@ -133,9 +134,7 @@ public class ProgramCommandMakeTests
                 .Select(file => ((IReadOnlyList<string>)file.path, (ReadOnlyMemory<byte>)Encoding.UTF8.GetBytes(file.content)))],
                 entryPointFilePath: ["src", "Build.elm"]);
 
-        CollectionAssert.AreEqual(
-            new byte[] { 0, 13, 17, 31, 71 },
-            outputBlob.Span.ToArray());
+        outputBlob.Span.ToArray().Should().Equal(new byte[] { 0, 13, 17, 31, 71 });
     }
 
     private static ReadOnlyMemory<byte> GetOutputFileContentForCommandMake(

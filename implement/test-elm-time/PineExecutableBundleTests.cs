@@ -1,3 +1,4 @@
+using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using Pine.Core.Elm;
@@ -20,7 +21,7 @@ public class PineExecutableBundleTests
         var elmCompilerFromBundleValue =
             BundledElmEnvironments.BundledElmEnvironmentFromFileTree(combinedSourceFiles);
 
-        Assert.IsNotNull(elmCompilerFromBundleValue);
+        elmCompilerFromBundleValue.Should().NotBeNull();
 
         var elmCompilerFromBundle =
             Pine.Elm.ElmCompiler.ElmCompilerFromEnvValue(elmCompilerFromBundleValue)
@@ -48,13 +49,9 @@ public class PineExecutableBundleTests
                         actualEnv: elmCompilerFromBundleValue)
                 ]));
 
-        Assert.AreEqual(
-            freshEnvironment,
-            elmCompilerFromBundleValue);
+        freshEnvironment.Should().Be(elmCompilerFromBundleValue);
 
-        Assert.AreEqual(
-            elmCompiler.CompilerEnvironment,
-            elmCompilerFromBundleValue);
+        elmCompiler.CompilerEnvironment.Should().Be(elmCompilerFromBundleValue);
     }
 
     [TestMethod]
@@ -63,9 +60,8 @@ public class PineExecutableBundleTests
         var elmCompilerFromBundle =
             BundledElmEnvironments.BundledElmCompilerCompiledEnvValue();
 
-        Assert.IsNotNull(
-            elmCompilerFromBundle,
-            message: "Elm compiler environment not found in bundled environments");
+        elmCompilerFromBundle.Should().NotBeNull(
+            "Elm compiler environment not found in bundled environments");
 
         var elmCompiler =
             Pine.Elm.ElmCompiler.ElmCompilerFromEnvValue(elmCompilerFromBundle)
@@ -98,9 +94,8 @@ public class PineExecutableBundleTests
         var parsedElmModuleSyntaxAsString =
             ElmValue.RenderAsElmExpression(parsedElmValue).expressionString;
 
-        Assert.AreEqual(
-            "{ comments = [], declarations = [Node { end = { column = 14, row = 4 }, start = { column = 1, row = 3 } } (AliasDeclaration { documentation = Nothing, generics = [], name = Node { end = { column = 20, row = 3 }, start = { column = 12, row = 3 } } \"MaybeInt\", typeAnnotation = Node { end = { column = 14, row = 4 }, start = { column = 5, row = 4 } } (Typed (Node { end = { column = 10, row = 4 }, start = { column = 5, row = 4 } } ([],\"Maybe\")) [Node { end = { column = 14, row = 4 }, start = { column = 11, row = 4 } } (Typed (Node { end = { column = 14, row = 4 }, start = { column = 11, row = 4 } } ([],\"Int\")) [])]) })], imports = [], moduleDefinition = Node { end = { column = 36, row = 1 }, start = { column = 1, row = 1 } } (NormalModule { exposingList = Node { end = { column = 36, row = 1 }, start = { column = 23, row = 1 } } (All { end = { column = 35, row = 1 }, start = { column = 33, row = 1 } }), moduleName = Node { end = { column = 22, row = 1 }, start = { column = 8, row = 1 } } [\"Namespace\",\"Beta\"] }) }",
-            parsedElmModuleSyntaxAsString);
+        parsedElmModuleSyntaxAsString.Should().Be(
+            "{ comments = [], declarations = [Node { end = { column = 14, row = 4 }, start = { column = 1, row = 3 } } (AliasDeclaration { documentation = Nothing, generics = [], name = Node { end = { column = 20, row = 3 }, start = { column = 12, row = 3 } } \"MaybeInt\", typeAnnotation = Node { end = { column = 14, row = 4 }, start = { column = 5, row = 4 } } (Typed (Node { end = { column = 10, row = 4 }, start = { column = 5, row = 4 } } ([],\"Maybe\")) [Node { end = { column = 14, row = 4 }, start = { column = 11, row = 4 } } (Typed (Node { end = { column = 14, row = 4 }, start = { column = 11, row = 4 } } ([],\"Int\")) [])]) })], imports = [], moduleDefinition = Node { end = { column = 36, row = 1 }, start = { column = 1, row = 1 } } (NormalModule { exposingList = Node { end = { column = 36, row = 1 }, start = { column = 23, row = 1 } } (All { end = { column = 35, row = 1 }, start = { column = 33, row = 1 } }), moduleName = Node { end = { column = 22, row = 1 }, start = { column = 8, row = 1 } } [\"Namespace\",\"Beta\"] }) }");
     }
 
     [TestMethod]

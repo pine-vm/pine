@@ -1,3 +1,4 @@
+using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine;
 using Pine.Core;
@@ -74,7 +75,7 @@ public class LoadCompositionTests
                 var composition = PineValueComposition.FromTreeWithStringPath(loaded.tree);
                 var compositionId = Convert.ToHexStringLower(PineValueHashTree.ComputeHash(composition).Span);
 
-                Assert.AreEqual(testCase.expectedCompositionId, compositionId);
+                compositionId.Should().Be(testCase.expectedCompositionId);
             }
             catch (Exception e)
             {

@@ -1,3 +1,4 @@
+using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using System;
@@ -47,9 +48,8 @@ public class LoadFromGitHubTests
                         SHA256.HashData(fileNameAndContent.fileContent.Span))))
             .ToImmutableList();
 
-        CollectionAssert.AreEquivalent(
+        loadedFilesNamesAndHashes.Should().BeEquivalentTo(
             expectedFilesNamesAndHashes,
-            loadedFilesNamesAndHashes,
             "Loaded files equal expected files.");
     }
 
@@ -84,8 +84,7 @@ public class LoadFromGitHubTests
 
         foreach (var expectedFileNameAndHash in expectedFilesNamesAndHashes)
         {
-            Assert.IsTrue(
-                loadedFilesNamesAndHashes.Contains(expectedFileNameAndHash),
+            loadedFilesNamesAndHashes.Should().Contain(expectedFileNameAndHash,
                 "Collection of loaded files contains a file named '" + expectedFileNameAndHash.fileName +
                 "' with hash " + expectedFileNameAndHash.fileHash + ".");
         }
@@ -105,12 +104,11 @@ public class LoadFromGitHubTests
             loadFromGithubResult.tree
             .Map(fromBlob: blob => blob, fromTree: _ => throw new Exception("Unexpected tree"));
 
-        Assert.IsNotNull(blobContent, "Found blobContent.");
+        blobContent.Should().NotBeNull("Found blobContent.");
 
-        Assert.AreEqual(expectedFileHash,
-            Convert.ToHexStringLower(SHA256.HashData(blobContent.Span))
-            .ToLowerInvariant(),
-            "Loaded blob content hash equals expected hash.");
+        Convert.ToHexStringLower(SHA256.HashData(blobContent.Span))
+            .ToLowerInvariant()
+            .Should().Be(expectedFileHash, "Loaded blob content hash equals expected hash.");
     }
 
     [TestMethod]
@@ -121,23 +119,21 @@ public class LoadFromGitHubTests
                 "https://github.com/Viir/bots/tree/6c5442434768625a4df9d0dfd2f54d61d9d1f61e/implement/applications")
             .Extract(error => throw new Exception("Failed to load from GitHub: " + error));
 
-        Assert.AreEqual(
-            "https://github.com/Viir/bots/tree/6c5442434768625a4df9d0dfd2f54d61d9d1f61e/implement/applications",
-            loadFromGithubResult.urlInCommit);
+        loadFromGithubResult.urlInCommit.Should().Be(
+            "https://github.com/Viir/bots/tree/6c5442434768625a4df9d0dfd2f54d61d9d1f61e/implement/applications");
 
-        Assert.AreEqual(
-            "https://github.com/Viir/bots/tree/1f915f4583cde98e0491e66bc73d7df0e92d1aac/implement/applications",
-            loadFromGithubResult.urlInFirstParentCommitWithSameValueAtThisPath);
+        loadFromGithubResult.urlInFirstParentCommitWithSameValueAtThisPath.Should().Be(
+            "https://github.com/Viir/bots/tree/1f915f4583cde98e0491e66bc73d7df0e92d1aac/implement/applications");
 
-        Assert.AreEqual("6c5442434768625a4df9d0dfd2f54d61d9d1f61e", loadFromGithubResult.rootCommit.hash);
-        Assert.AreEqual("Support finding development guides\n", loadFromGithubResult.rootCommit.content.message);
-        Assert.AreEqual("Michael Rätzel", loadFromGithubResult.rootCommit.content.author.name);
-        Assert.AreEqual("viir@viir.de", loadFromGithubResult.rootCommit.content.author.email);
+        loadFromGithubResult.rootCommit.hash.Should().Be("6c5442434768625a4df9d0dfd2f54d61d9d1f61e");
+        loadFromGithubResult.rootCommit.content.message.Should().Be("Support finding development guides\n");
+        loadFromGithubResult.rootCommit.content.author.name.Should().Be("Michael Rätzel");
+        loadFromGithubResult.rootCommit.content.author.email.Should().Be("viir@viir.de");
 
-        Assert.AreEqual("1f915f4583cde98e0491e66bc73d7df0e92d1aac", loadFromGithubResult.firstParentCommitWithSameTree.hash);
-        Assert.AreEqual("Guide users\n\nClarify the bot uses drones if available.\n", loadFromGithubResult.firstParentCommitWithSameTree.content.message);
-        Assert.AreEqual("John", loadFromGithubResult.firstParentCommitWithSameTree.content.author.name);
-        Assert.AreEqual("john-dev@botengine.email", loadFromGithubResult.firstParentCommitWithSameTree.content.author.email);
+        loadFromGithubResult.firstParentCommitWithSameTree.hash.Should().Be("1f915f4583cde98e0491e66bc73d7df0e92d1aac");
+        loadFromGithubResult.firstParentCommitWithSameTree.content.message.Should().Be("Guide users\n\nClarify the bot uses drones if available.\n");
+        loadFromGithubResult.firstParentCommitWithSameTree.content.author.name.Should().Be("John");
+        loadFromGithubResult.firstParentCommitWithSameTree.content.author.email.Should().Be("john-dev@botengine.email");
     }
 
 
@@ -160,7 +156,7 @@ public class LoadFromGitHubTests
             loadedFilesPathsAndContents
             .FirstOrDefault(c => c.filePath.Equals("README.md", StringComparison.InvariantCultureIgnoreCase));
 
-        Assert.IsNotNull(readmeFile.fileContent, "Loaded files contain README.md");
+        readmeFile.fileContent.Should().NotBeNull("Loaded files contain README.md");
     }
 
     [TestMethod]
@@ -212,11 +208,11 @@ public class LoadFromGitHubTests
                     loadFromGitHubResult.tree
                     .Map(fromBlob: blob => blob, fromTree: _ => throw new Exception("Unexpected tree"));
 
-                Assert.IsNotNull(blobContent, "Found blobContent.");
+                blobContent.Should().NotBeNull("Found blobContent.");
 
-                Assert.AreEqual("e80817b2aa00350dff8f00207083b3b21b0726166dd695475be512ce86507238",
-                    Convert.ToHexStringLower(SHA256.HashData(blobContent.Span))
-                    .ToLowerInvariant(),
+                Convert.ToHexStringLower(SHA256.HashData(blobContent.Span))
+                    .ToLowerInvariant()
+                    .Should().Be("e80817b2aa00350dff8f00207083b3b21b0726166dd695475be512ce86507238",
                     "Loaded blob content hash equals expected hash.");
             }
 
@@ -234,14 +230,14 @@ public class LoadFromGitHubTests
                     loadFromGitHubResult.tree
                     .Map(fromBlob: blob => blob, fromTree: _ => throw new Exception("Unexpected tree"));
 
-                Assert.IsNotNull(blobContent, "Found blobContent.");
+                blobContent.Should().NotBeNull("Found blobContent.");
 
-                Assert.AreEqual("a328195ad75edf2bcc8df48b3d59db93ecc19b95b6115597c282900e1cf18cbc",
-                    Convert.ToHexStringLower(SHA256.HashData(blobContent.Span))
-                    .ToLowerInvariant(),
+                Convert.ToHexStringLower(SHA256.HashData(blobContent.Span))
+                    .ToLowerInvariant()
+                    .Should().Be("a328195ad75edf2bcc8df48b3d59db93ecc19b95b6115597c282900e1cf18cbc",
                     "Loaded blob content hash equals expected hash.");
 
-                Assert.IsTrue(stopwatch.Elapsed.TotalSeconds < 3, "Reading another blob from an already cached commit should complete fast.");
+                stopwatch.Elapsed.TotalSeconds.Should().BeLessThan(3, "Reading another blob from an already cached commit should complete fast.");
             }
         }
         finally

@@ -1,5 +1,6 @@
 using ElmTime.ElmInteractive;
 using ElmTime.ElmSyntax;
+using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using Pine.Core.Elm;
@@ -56,7 +57,7 @@ public class PGOTests
         var testSubmissionResponse =
             testSubmissionResult.Extract(err => throw new Exception(err));
 
-        Assert.AreEqual("4", testSubmissionResponse.InteractiveResponse.DisplayText);
+        testSubmissionResponse.InteractiveResponse.DisplayText.Should().Be("4");
 
         var interactiveEnvironmentValue = interactiveSession.CurrentEnvironmentValue();
 
@@ -276,7 +277,7 @@ public class PGOTests
                     new PineVM.EvaluationConfig(ParseAndEvalCountLimit: 1234))
                 .Map(evalReport =>
                 {
-                    Assert.AreEqual(scenario.expected, evalReport.ReturnValue);
+                    evalReport.ReturnValue.Should().Be(scenario.expected);
 
                     Console.WriteLine(
                         "Completed scenario using " + evalReport.InstructionCount +
@@ -299,7 +300,7 @@ public class PGOTests
 
         Console.WriteLine("\nAverage instruction count not optimized: " + nonOptimizedAverageInstructionCount + "\n");
 
-        Assert.IsTrue(40 < nonOptimizedAverageInstructionCount);
+        nonOptimizedAverageInstructionCount.Should().BeGreaterThan(40);
 
         var invocationReports = new List<PineVM.EvaluationReport>();
 
@@ -400,9 +401,9 @@ public class PGOTests
 
         var speedupFactor = nonOptimizedAverageInstructionCount / optimizedAverageInstructionCount;
 
-        Assert.IsTrue(2 <= speedupFactor);
+        speedupFactor.Should().BeGreaterThanOrEqualTo(2);
 
-        Assert.IsTrue(optimizedAverageInstructionCount <= 40);
+        optimizedAverageInstructionCount.Should().BeLessThanOrEqualTo(40);
     }
 
     [TestMethod]
@@ -442,7 +443,7 @@ public class PGOTests
         var testSubmissionResponse =
             testSubmissionResult.Extract(err => throw new Exception(err));
 
-        Assert.AreEqual("{ alfa = 41, delta = 71 }", testSubmissionResponse.InteractiveResponse.DisplayText);
+        testSubmissionResponse.InteractiveResponse.DisplayText.Should().Be("{ alfa = 41, delta = 71 }");
 
         var interactiveEnvironmentValue = interactiveSession.CurrentEnvironmentValue();
 
@@ -879,9 +880,8 @@ public class PGOTests
                     new PineVM.EvaluationConfig(ParseAndEvalCountLimit: 1234))
                 .Map(evalReport =>
                 {
-                    Assert.AreEqual(
+                    evalReport.ReturnValue.Should().Be(
                         ElmValueEncoding.ElmValueAsPineValue(scenario.expected),
-                        evalReport.ReturnValue,
                         "New record value matches expected");
 
                     Console.WriteLine(
@@ -903,7 +903,7 @@ public class PGOTests
 
         Console.WriteLine("\nAverage instruction count not optimized: " + nonOptimizedAverageInstructionCount + "\n");
 
-        Assert.IsTrue(60 < nonOptimizedAverageInstructionCount);
+        nonOptimizedAverageInstructionCount.Should().BeGreaterThan(60);
 
         var invocationReports = new List<PineVM.EvaluationReport>();
 
@@ -1006,9 +1006,9 @@ public class PGOTests
 
         Console.WriteLine("Remaining instructions percentage: " + remainingInstructionsPercent + "%");
 
-        Assert.IsTrue(remainingInstructionsPercent < 75);
+        remainingInstructionsPercent.Should().BeLessThan(75);
 
-        Assert.IsTrue(optimizedAverageInstructionCount <= 130);
+        optimizedAverageInstructionCount.Should().BeLessThanOrEqualTo(130);
     }
 
     [TestMethod]
@@ -1068,7 +1068,7 @@ public class PGOTests
         var testSubmissionResponse =
             testSubmissionResult.Extract(err => throw new Exception(err));
 
-        Assert.AreEqual("""["alfa","beta"]""", testSubmissionResponse.InteractiveResponse.DisplayText);
+        testSubmissionResponse.InteractiveResponse.DisplayText.Should().Be("""["alfa","beta"]""");
 
         var interactiveEnvironmentValue = interactiveSession.CurrentEnvironmentValue();
 

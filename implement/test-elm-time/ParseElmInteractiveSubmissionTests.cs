@@ -1,3 +1,4 @@
+using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using Pine.Core.Elm;
@@ -73,9 +74,8 @@ public class ParseElmInteractiveSubmissionTests
         var responseAsExpression =
             ElmValue.RenderAsElmExpression(responseAsElmValue).expressionString;
 
-        Assert.AreEqual(
+        responseAsExpression.Should().Be(
             expectedExpressionString,
-            responseAsExpression,
             "Submission parsed as expression syntax");
 
         return responseAsElmValue;
@@ -86,9 +86,7 @@ public class ParseElmInteractiveSubmissionTests
         var elmCompilerFromBundle =
             BundledElmEnvironments.BundledElmCompilerCompiledEnvValue();
 
-        Assert.IsNotNull(
-            elmCompilerFromBundle,
-            message: "Elm compiler environment not found in bundled environments");
+        elmCompilerFromBundle.Should().NotBeNull("Elm compiler environment not found in bundled environments");
 
         var elmCompiler =
             ElmCompiler.ElmCompilerFromEnvValue(elmCompilerFromBundle)

@@ -1,3 +1,4 @@
+using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using Pine.Core.PopularEncodings;
@@ -62,15 +63,11 @@ public class ValueBinaryEncodingTests
         var reproducedBeta =
             PineValueBinaryEncoding.DecodeRoot(compositionBetaEncodedBytes.ToArray());
 
-        Assert.AreEqual(
-            expected: compositionAlfa,
-            actual: reproducedAlfa);
+        reproducedAlfa.Should().Be(compositionAlfa);
 
-        Assert.AreEqual(
-            expected: compositionBeta,
-            actual: reproducedBeta);
+        reproducedBeta.Should().Be(compositionBeta);
 
-        Assert.IsTrue(compositionBetaEncodedBytes.Length < compositionAlfaEncodedBytes.Length * 2);
+        compositionBetaEncodedBytes.Length.Should().BeLessThan(compositionAlfaEncodedBytes.Length * 2);
     }
 
     [TestMethod]
@@ -156,9 +153,7 @@ public class ValueBinaryEncodingTests
                 var decoded =
                     PineValueBinaryEncoding.DecodeRoot(encodedFlat);
 
-                Assert.AreEqual(
-                    expected: testCase,
-                    actual: decoded);
+                decoded.Should().Be(testCase);
             }
             catch (System.Exception ex)
             {

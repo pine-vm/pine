@@ -1,3 +1,4 @@
+using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Elm019;
 
@@ -70,51 +71,44 @@ public class Elm019MakeReportParsingTests
 
         var parsedReport = ElmMakeReportConverter.Deserialize(reportJson);
 
-        Assert.IsNotNull(parsedReport);
+        parsedReport.Should().NotBeNull();
 
         if (parsedReport is not ElmMakeReport.ElmMakeReportCompileErrors compileErrors)
         {
-            Assert.Fail("Unexpected type: " + parsedReport?.GetType());
+            "Failed test".Should().BeNull("Unexpected type: " + parsedReport?.GetType());
             return;
         }
 
-        Assert.AreEqual(1, compileErrors.Errors.Count);
+        compileErrors.Errors.Count.Should().Be(1);
 
         var error = compileErrors.Errors[0];
 
-        Assert.AreEqual(
-            "C:\\Users\\Raetzel_M\\AppData\\Local\\Temp\\havjzbzg.vhc\\src\\Main.elm",
-            error.Path);
-
-        Assert.AreEqual("Main", error.Name);
-
-        Assert.AreEqual(1, error.Problems.Count);
+        error.Path.Should().Be("C:\\Users\\Raetzel_M\\AppData\\Local\\Temp\\havjzbzg.vhc\\src\\Main.elm");
+        error.Name.Should().Be("Main");
+        error.Problems.Count.Should().Be(1);
 
         var problem = error.Problems[0];
 
-        Assert.AreEqual("TYPE MISMATCH", problem.Title);
+        problem.Title.Should().Be("TYPE MISMATCH");
+        problem.Region.Start.Line.Should().Be(8);
+        problem.Region.Start.Column.Should().Be(33);
+        problem.Region.End.Line.Should().Be(8);
+        problem.Region.End.Column.Should().Be(37);
 
-        Assert.AreEqual(8, problem.Region.Start.Line);
-        Assert.AreEqual(33, problem.Region.Start.Column);
-        Assert.AreEqual(8, problem.Region.End.Line);
-        Assert.AreEqual(37, problem.Region.End.Column);
-
-        Assert.AreEqual(
+        problem.Message[0].Should().Be(
             new MessageItem.StringMessage(
-            "The 2nd element of this list does not match all the previous elements:\n\n8|     [ Html.text \"Hello World!\", 1234 ]\n                                   "),
-            problem.Message[0]);
+            "The 2nd element of this list does not match all the previous elements:\n\n8|     [ Html.text \"Hello World!\", 1234 ]\n                                   "));
 
-        Assert.AreEqual(9, problem.Message.Count);
+        problem.Message.Count.Should().Be(9);
 
-        Assert.AreEqual(
+        problem.Message[1].Should().Be(
             new MessageItem.StyledMessage
             (
                 Bold: false,
                 Underline: false,
                 Color: "RED",
                 String: "^^^^"
-            ),
-            problem.Message[1]);
+            ));
     }
 
     [TestMethod]
@@ -141,37 +135,33 @@ public class Elm019MakeReportParsingTests
 
         var parsedReport = ElmMakeReportConverter.Deserialize(reportJson);
 
-        Assert.IsNotNull(parsedReport);
+        parsedReport.Should().NotBeNull();
 
         if (parsedReport is not ElmMakeReport.ElmMakeReportError errorReport)
         {
-            Assert.Fail("Unexpected type: " + parsedReport?.GetType());
+            "Failed test".Should().BeNull("Unexpected type: " + parsedReport?.GetType());
             return;
         }
 
-        Assert.IsNull(errorReport.Path);
-        Assert.AreEqual("NO elm.json FILE", errorReport.Title);
+        errorReport.Path.Should().BeNull();
+        errorReport.Title.Should().Be("NO elm.json FILE");
+        errorReport.Message.Count.Should().Be(3);
 
-        Assert.AreEqual(3, errorReport.Message.Count);
-
-        Assert.AreEqual(
+        errorReport.Message[0].Should().Be(
             new MessageItem.StringMessage(
-            "It looks like you are starting a new Elm project. Very exciting! Try running:\n\n    "),
-            errorReport.Message[0]);
+            "It looks like you are starting a new Elm project. Very exciting! Try running:\n\n    "));
 
-        Assert.AreEqual(
+        errorReport.Message[1].Should().Be(
             new MessageItem.StyledMessage
             (
                 Bold: false,
                 Underline: false,
                 Color: "GREEN",
                 String: "elm init"
-            ),
-            errorReport.Message[1]);
+            ));
 
-        Assert.AreEqual(
+        errorReport.Message[2].Should().Be(
             new MessageItem.StringMessage(
-            "\n\nIt will help you get set up. It is really simple!"),
-            errorReport.Message[2]);
+            "\n\nIt will help you get set up. It is really simple!"));
     }
 }

@@ -1,4 +1,5 @@
 using ElmTime.ElmSyntax;
+using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using System.Collections.Generic;
@@ -101,19 +102,18 @@ public class ElmSyntaxTests
 
             if (parseModuleNameResult.IsErrOrNull() is { } err)
             {
-                Assert.Fail(
-                    "Failed to parse module name: " + err + "\nmodule text:\n" + testCase.moduleText);
+                // Using FluentAssertion's approach to fail a test
+                "Failed test".Should().BeNull("Failed to parse module name: " + err + "\nmodule text:\n" + testCase.moduleText);
             }
 
             if (parseModuleNameResult.IsOkOrNull() is not { } parsedName)
             {
-                Assert.Fail("Unknown result type: " + parseModuleNameResult);
+                // Using FluentAssertion's approach to fail a test
+                "Failed test".Should().BeNull("Unknown result type: " + parseModuleNameResult);
                 return;
             }
 
-            Assert.IsTrue(
-                parsedName.SequenceEqual(testCase.expectedModuleName),
-                message: "Module name");
+            parsedName.Should().BeEquivalentTo(testCase.expectedModuleName, "Module name");
         }
     }
 
@@ -137,9 +137,7 @@ public class ElmSyntaxTests
         var parseModuleNameResult =
             ElmModule.ParseModuleName(moduleText);
 
-        Assert.IsTrue(
-            parseModuleNameResult.IsErr(),
-            message: "Expected error");
+        parseModuleNameResult.IsErr().Should().BeTrue("Expected error");
     }
 
     [TestMethod]
@@ -220,10 +218,9 @@ public class ElmSyntaxTests
                 ElmModule.ParseModuleImportedModulesNames(testCase.moduleText)
                 .ToImmutableHashSet(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
 
-            Assert.IsTrue(
-                parsedImports.SequenceEqual(
-                    testCase.expectedImports,
-                    EnumerableExtension.EqualityComparer<IReadOnlyList<string>>()));
+            parsedImports.Should().BeEquivalentTo(
+                testCase.expectedImports,
+                config => config.Using(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>()));
         }
     }
 
@@ -321,14 +318,9 @@ public class ElmSyntaxTests
 
             try
             {
-                Assert.AreEqual(
-                    testCase.expectedLines.Count,
-                    lines.Count,
-                    "Number of lines");
+                lines.Count.Should().Be(testCase.expectedLines.Count, "Number of lines");
 
-                Assert.IsTrue(
-                    lines.SequenceEqual(testCase.expectedLines),
-                    message: "Lines contents");
+                lines.Should().BeEquivalentTo(testCase.expectedLines, "Lines contents");
             }
             catch (System.Exception ex)
             {

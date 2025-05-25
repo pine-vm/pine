@@ -1,3 +1,4 @@
+using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine;
 using Pine.Core;
@@ -46,9 +47,7 @@ public class ElmCommandLineAppTests
                     System.Text.Encoding.UTF8.GetString(outputBatch.Span))
                 .ToImmutableArray();
 
-            Assert.AreEqual(
-                expected: "Started with the following command line: fake command line\n",
-                actual: string.Concat(outputTexts));
+            string.Concat(outputTexts).Should().Be("Started with the following command line: fake command line\n");
         }
 
         {
@@ -64,11 +63,7 @@ public class ElmCommandLineAppTests
                     System.Text.Encoding.UTF8.GetString(outputBatch.Span))
                 .ToImmutableArray();
 
-            Assert.AreEqual(
-                expected:
-                "Hello",
-                actual:
-                string.Concat(outputTexts));
+            string.Concat(outputTexts).Should().Be("Hello");
         }
 
         {
@@ -84,11 +79,7 @@ public class ElmCommandLineAppTests
                     System.Text.Encoding.UTF8.GetString(outputBatch.Span))
                 .ToImmutableArray();
 
-            Assert.AreEqual(
-                expected:
-                " app!",
-                actual:
-                string.Concat(outputTexts));
+            string.Concat(outputTexts).Should().Be(" app!");
         }
 
 
@@ -105,11 +96,7 @@ public class ElmCommandLineAppTests
                     System.Text.Encoding.UTF8.GetString(outputBatch.Span))
                 .ToImmutableArray();
 
-            Assert.AreEqual(
-                expected:
-                "\nReceived line:\nHello app!\n",
-                actual:
-                string.Concat(outputTexts));
+            string.Concat(outputTexts).Should().Be("\nReceived line:\nHello app!\n");
         }
     }
 }

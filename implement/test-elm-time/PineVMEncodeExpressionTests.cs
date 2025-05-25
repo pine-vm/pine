@@ -1,3 +1,4 @@
+using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using Pine.Core.PopularEncodings;
@@ -50,7 +51,7 @@ public class PineVMEncodeExpressionTests
                 ExpressionEncoding.ParseExpressionFromValue(encoded)
                 .Extract(err => throw new System.Exception("Failed to decode expression: " + err));
 
-            Assert.AreEqual(testCase, decoded);
+            decoded.Should().Be(testCase);
         }
     }
 }

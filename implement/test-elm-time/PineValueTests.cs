@@ -1,3 +1,4 @@
+using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 
@@ -69,14 +70,12 @@ public class PineValueTests
 
         foreach (var testCase in testCases)
         {
-            Assert.AreEqual(
+            testCase.listValue.NodesCount.Should().Be(
                 testCase.expectedNodeCount,
-                testCase.listValue.NodesCount,
                 testCase.testName + " - node count");
 
-            Assert.AreEqual(
+            testCase.listValue.BlobsBytesCount.Should().Be(
                 testCase.expectedByteCount,
-                testCase.listValue.BlobsBytesCount,
                 testCase.testName + " - byte count");
         }
     }

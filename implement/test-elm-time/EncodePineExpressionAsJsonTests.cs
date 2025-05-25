@@ -1,3 +1,4 @@
+using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using Pine.Core.PopularEncodings;
@@ -63,7 +64,7 @@ public class EncodePineExpressionAsJsonTests
 
             var deserialized = EncodePineExpressionAsJson.SingleFromJsonString(json);
 
-            Assert.AreEqual(testCase, deserialized, "test case " + i);
+            deserialized.Should().Be(testCase, $"test case {i} should roundtrip properly");
         }
     }
 
@@ -91,7 +92,7 @@ public class EncodePineExpressionAsJsonTests
 
             var deserialized = EncodePineExpressionAsJson.ListFromJsonString(json);
 
-            Assert.IsTrue(testCase.SequenceEqual(deserialized), "test case " + i);
+            deserialized.Should().Equal(testCase, $"test case {i} should roundtrip properly");
         }
     }
 }

@@ -1,3 +1,4 @@
+using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using Pine.Core.PopularEncodings;
@@ -28,7 +29,7 @@ public class ElmValueInteropTests
                 ElmValueInterop.ElmValueDecodedAsInElmCompiler(encodedInCompiler, null, null)
                 .Extract(err => throw new System.Exception(err));
 
-            Assert.AreEqual(testCase, roundtrip);
+            roundtrip.Should().Be(testCase);
         }
     }
 }

@@ -1,4 +1,5 @@
-﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+﻿using FluentAssertions;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine;
 using System.Collections.Immutable;
 using System.Linq;
@@ -44,8 +45,8 @@ public class ProcessWithLogTests
         {
             var result = testCase.process.LogToList();
 
-            Assert.AreEqual(testCase.expectedResult, result.result);
-            CollectionAssert.AreEqual(testCase.expectedLog, result.log.ToList());
+            result.result.Should().Be(testCase.expectedResult);
+            result.log.ToList().Should().Equal(testCase.expectedLog);
         }
     }
 

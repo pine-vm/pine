@@ -1,4 +1,5 @@
-﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+using FluentAssertions;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Elm;
 
 namespace TestElmTime;
@@ -40,9 +41,7 @@ a =
         var formatted =
             AVH4ElmFormatBinaries.RunElmFormat(elmModuleTextBeforeFormatting);
 
-        Assert.AreEqual(
-            expectedElmModuleTextAfterFormatting.Trim(),
-            formatted.Trim());
+        formatted.Trim().Should().Be(expectedElmModuleTextAfterFormatting.Trim());
     }
 
     [TestMethod]
@@ -73,8 +72,6 @@ a =
         var formattedTrimmed =
             formatted.Trim();
 
-        Assert.AreEqual(
-            expectedElmModuleTextAfterFormatting.Trim(),
-            formattedTrimmed);
+        formattedTrimmed.Should().Be(expectedElmModuleTextAfterFormatting.Trim());
     }
 }

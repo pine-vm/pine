@@ -1,4 +1,5 @@
 using ElmTime.ElmInteractive;
+using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using Pine.Core.Elm;
@@ -376,9 +377,7 @@ public class ElmValueJsonValueEncodingTests
                     ElmValueEncoding.PineValueAsElmValue(actualPineValue, null, null)
                     .Extract(err => throw new Exception("Failed decoding back as Elm value: " + err));
 
-                Assert.AreEqual(
-                    testCase.expectedLibJsonValue,
-                    asElmValue);
+                asElmValue.Should().Be(testCase.expectedLibJsonValue);
 
                 var applyResult =
                     ElmInteractiveEnvironment.ApplyFunction(
@@ -408,9 +407,7 @@ public class ElmValueJsonValueEncodingTests
                     throw new Exception("Expected ElmString, got: " + encodeJsonValue);
                 }
 
-                Assert.AreEqual(
-                    testCase.expectedJsonString,
-                    encodeJsonString.Value);
+                encodeJsonString.Value.Should().Be(testCase.expectedJsonString);
             }
             catch (Exception e)
             {

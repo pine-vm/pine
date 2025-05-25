@@ -1,4 +1,5 @@
-﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+using FluentAssertions;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Net;
@@ -55,44 +56,44 @@ public class ElmAppCompilationInterfaceTests
         {
             var httpResponse = publicAppClient.GetAsync(string.Join("/", demoFile.path)).Result;
 
-            Assert.AreEqual(HttpStatusCode.OK, httpResponse.StatusCode);
+            httpResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
             var responseContent =
                 httpResponse.Content.ReadAsByteArrayAsync().Result;
 
             var inspectResponseContent = System.Text.Encoding.UTF8.GetString(responseContent);
 
-            CollectionAssert.AreEqual(demoFile.content.ToArray(), responseContent);
+            responseContent.Should().Equal(demoFile.content.ToArray());
         }
 
         {
             var httpResponse = publicAppClient.GetAsync("readme-md").Result;
 
-            Assert.AreEqual(HttpStatusCode.OK, httpResponse.StatusCode);
+            httpResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
             var responseContent = httpResponse.Content.ReadAsStringAsync().Result;
 
-            Assert.AreEqual("A text file we will integrate using UTF8 encoding ⚓\nNewline and special chars:\"'", responseContent);
+            responseContent.Should().Be("A text file we will integrate using UTF8 encoding ⚓\nNewline and special chars:\"'");
         }
 
         {
             var httpResponse = publicAppClient.GetAsync("alpha-file-via-other-interface-module").Result;
 
-            Assert.AreEqual(HttpStatusCode.OK, httpResponse.StatusCode);
+            httpResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
             var responseContent = httpResponse.Content.ReadAsStringAsync().Result;
 
-            Assert.AreEqual("Text file content", responseContent);
+            responseContent.Should().Be("Text file content");
         }
 
         {
             var httpResponse = publicAppClient.GetAsync("file-via-other-source-dir-beta").Result;
 
-            Assert.AreEqual(HttpStatusCode.OK, httpResponse.StatusCode);
+            httpResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
             var responseContent = httpResponse.Content.ReadAsStringAsync().Result;
 
-            Assert.AreEqual("Another text file content", responseContent);
+            responseContent.Should().Be("Another text file content");
         }
     }
 }

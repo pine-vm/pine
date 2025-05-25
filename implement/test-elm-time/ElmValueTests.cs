@@ -1,3 +1,4 @@
+using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using Pine.Core.Elm;
@@ -60,7 +61,7 @@ public class ElmValueTests
                 ElmValueEncoding.PineValueAsElmValue(pineValue, null, null)
                 .Extract(err => throw new System.Exception(err));
 
-            Assert.AreEqual(testCase, roundtrip);
+            roundtrip.Should().Be(testCase);
         }
     }
 
@@ -130,7 +131,7 @@ public class ElmValueTests
             var (expressionString, _) =
                 ElmValue.RenderAsElmExpression(elmValue);
 
-            Assert.AreEqual(expectedExpression, expressionString);
+            expressionString.Should().Be(expectedExpression);
         }
     }
 
@@ -149,7 +150,7 @@ public class ElmValueTests
 
         if (parseResult is Result<string, IReadOnlyList<(string fieldName, PineValue fieldValue)>>.Err parseAsRecordErr)
         {
-            Assert.Fail("Failed parsing as record: " + parseAsRecordErr.Value);
+            "Failed parsing as record".Should().BeNull(parseAsRecordErr.Value);
         }
 
         if (parseResult is not Result<string, IReadOnlyList<(string fieldName, PineValue fieldValue)>>.Ok parseAsRecordOk)
@@ -160,16 +161,16 @@ public class ElmValueTests
 
         var parsedFields = parseAsRecordOk.Value;
 
-        Assert.AreEqual(3, parsedFields.Count);
+        parsedFields.Should().HaveCount(3);
 
-        Assert.AreEqual("alfa", parsedFields[0].fieldName);
-        Assert.AreEqual(IntegerEncoding.EncodeSignedInteger(11), parsedFields[0].fieldValue);
+        parsedFields[0].fieldName.Should().Be("alfa");
+        parsedFields[0].fieldValue.Should().Be(IntegerEncoding.EncodeSignedInteger(11));
 
-        Assert.AreEqual("beta", parsedFields[1].fieldName);
-        Assert.AreEqual(IntegerEncoding.EncodeSignedInteger(13), parsedFields[1].fieldValue);
+        parsedFields[1].fieldName.Should().Be("beta");
+        parsedFields[1].fieldValue.Should().Be(IntegerEncoding.EncodeSignedInteger(13));
 
-        Assert.AreEqual("gamma", parsedFields[2].fieldName);
-        Assert.AreEqual(IntegerEncoding.EncodeSignedInteger(17), parsedFields[2].fieldValue);
+        parsedFields[2].fieldName.Should().Be("gamma");
+        parsedFields[2].fieldValue.Should().Be(IntegerEncoding.EncodeSignedInteger(17));
     }
 
     [TestMethod]
@@ -199,6 +200,6 @@ public class ElmValueTests
 
         var asPineValueFormBeta = ElmValueEncoding.ElmValueAsPineValue(elmRecordFormBeta);
 
-        Assert.AreEqual(asPineValueFormAlfa, asPineValueFormBeta);
+        asPineValueFormAlfa.Should().Be(asPineValueFormBeta);
     }
 }

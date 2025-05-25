@@ -26,7 +26,7 @@ public class CompilePineToDotNetTests
     [TestMethod]
     public void Test_sort_pine_value_for_declaration()
     {
-        Assert.IsTrue(value_d597fb92e5.ContainsInListTransitive(value_299b7decef));
+        value_d597fb92e5.ContainsInListTransitive(value_299b7decef).Should().BeTrue();
 
         var listBeforeOrdering =
             new[]
@@ -46,15 +46,14 @@ public class CompilePineToDotNetTests
             CSharpDeclarationOrder.OrderValuesForDeclaration(listBeforeOrdering)
             .ToImmutableList();
 
-        CollectionAssert.AreEqual(
+        orderedValues.Should().Equal(
             new[]
             {
                 StringEncoding.ValueFromString("Ok"),
                 StringEncoding.ValueFromString("Err"),
                 value_299b7decef,
                 value_d597fb92e5
-            },
-            orderedValues);
+            });
     }
 
     [TestMethod]
@@ -65,9 +64,7 @@ public class CompilePineToDotNetTests
                 typeof(EvalExprDelegate),
                 usings: []);
 
-        Assert.AreEqual(
-            "Pine.Core.EvalExprDelegate",
-            syntax.ToFullString());
+        syntax.ToFullString().Should().Be("Pine.Core.EvalExprDelegate");
     }
 
     [TestMethod]
@@ -78,9 +75,7 @@ public class CompilePineToDotNetTests
                 typeof(Result<string, int>),
                 usings: []);
 
-        Assert.AreEqual(
-            "Pine.Core.Result<System.String,System.Int32>",
-            syntax.ToFullString());
+        syntax.ToFullString().Should().Be("Pine.Core.Result<System.String,System.Int32>");
     }
 
     [TestMethod]
@@ -91,9 +86,7 @@ public class CompilePineToDotNetTests
                 typeof(IReadOnlyDictionary<PineValue, string>),
                 usings: []);
 
-        Assert.AreEqual(
-            "System.Collections.Generic.IReadOnlyDictionary<Pine.Core.PineValue,System.String>",
-            syntax.ToFullString());
+        syntax.ToFullString().Should().Be("System.Collections.Generic.IReadOnlyDictionary<Pine.Core.PineValue,System.String>");
     }
 
     [TestMethod]
@@ -139,9 +132,7 @@ public class CompilePineToDotNetTests
             .GetRoot()
             .NormalizeWhitespace();
 
-        Assert.AreEqual(
-            expectedSyntaxNormalized.ToFullString(),
-            compiledFormattedExpression.Syntax.ToFullString());
+        compiledFormattedExpression.Syntax.ToFullString().Should().Be(expectedSyntaxNormalized.ToFullString());
     }
 
     static CompiledExpression CompiledFormattedCSharp(
@@ -236,20 +227,18 @@ public class CompilePineToDotNetTests
         {
             var result = CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(expression);
 
-            Assert.AreEqual(expected, result);
+            result.Should().Be(expected);
         }
     }
 
     [TestMethod]
     public void Test_ExprMappedToParentEnv_PathInParentEnv_equality()
     {
-        Assert.AreEqual(
-            new ExprMappedToParentEnv.PathInParentEnv([]),
-            new ExprMappedToParentEnv.PathInParentEnv([]));
+        new ExprMappedToParentEnv.PathInParentEnv([])
+            .Should().Be(new ExprMappedToParentEnv.PathInParentEnv([]));
 
-        Assert.AreEqual(
-            new ExprMappedToParentEnv.PathInParentEnv([1, 3]),
-            new ExprMappedToParentEnv.PathInParentEnv([1, 3]));
+        new ExprMappedToParentEnv.PathInParentEnv([1, 3])
+            .Should().Be(new ExprMappedToParentEnv.PathInParentEnv([1, 3]));
     }
 
     [TestMethod]
@@ -319,11 +308,11 @@ public class CompilePineToDotNetTests
                     testCase.expr,
                     testCase.envConstraint);
 
-            Assert.AreEqual(testCase.expectedPaths.Count, paths.Count, "Paths count");
+            paths.Count.Should().Be(testCase.expectedPaths.Count, "Paths count");
 
             for (var i = 0; i < testCase.expectedPaths.Count; i++)
             {
-                Assert.IsTrue(paths[i].SequenceEqual(testCase.expectedPaths[i]), "Path " + i);
+                paths[i].Should().Equal(testCase.expectedPaths[i], "Path " + i);
             }
         }
     }
