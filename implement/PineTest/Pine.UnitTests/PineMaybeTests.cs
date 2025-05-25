@@ -1,3 +1,4 @@
+using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using System.Text.Json;
@@ -22,7 +23,7 @@ public class PineMaybeTests
 
             var deserialized = JsonSerializer.Deserialize<Maybe<string>>(serialized);
 
-            Assert.AreEqual(testCase, deserialized);
+            deserialized.Should().Be(testCase);
         }
     }
 
@@ -34,40 +35,32 @@ public class PineMaybeTests
          * Each tag of a choice type can have a list of parameters, and we encode this list as a JSON array.
          * */
 
-        Assert.AreEqual(
-            Maybe<string>.nothing(),
-            JsonSerializer.Deserialize<Maybe<string>>($$"""{"Nothing":[]}"""));
+        JsonSerializer.Deserialize<Maybe<string>>($$"""{"Nothing":[]}""")
+            .Should().Be(Maybe<string>.nothing());
 
-        Assert.AreEqual(
-            Maybe<int>.just(34),
-            JsonSerializer.Deserialize<Maybe<int>>($$"""{"Just":[34]}"""));
+        JsonSerializer.Deserialize<Maybe<int>>($$"""{"Just":[34]}""")
+            .Should().Be(Maybe<int>.just(34));
 
-        Assert.AreEqual(
-            Maybe<int?>.just(67),
-            JsonSerializer.Deserialize<Maybe<int?>>($$"""{"Just":[67]}"""));
+        JsonSerializer.Deserialize<Maybe<int?>>($$"""{"Just":[67]}""")
+            .Should().Be(Maybe<int?>.just(67));
 
-        Assert.AreEqual(
-            Maybe<int?>.just(null),
-            JsonSerializer.Deserialize<Maybe<int?>>($$"""{"Just":[null]}"""));
+        JsonSerializer.Deserialize<Maybe<int?>>($$"""{"Just":[null]}""")
+            .Should().Be(Maybe<int?>.just(null));
     }
 
     [TestMethod]
     public void Maybe_Nothing_from_null()
     {
-        Assert.AreEqual(
-            Maybe<int>.just(123),
-            Maybe.NothingFromNull<int>(123));
+        Maybe.NothingFromNull<int>(123)
+            .Should().Be(Maybe<int>.just(123));
 
-        Assert.AreEqual(
-            Maybe<int>.nothing(),
-            Maybe.NothingFromNull<int>(null));
+        Maybe.NothingFromNull<int>(null)
+            .Should().Be(Maybe<int>.nothing());
 
-        Assert.AreEqual(
-            Maybe<string>.just("hello"),
-            Maybe.NothingFromNull("hello"));
+        Maybe.NothingFromNull("hello")
+            .Should().Be(Maybe<string>.just("hello"));
 
-        Assert.AreEqual(
-            Maybe<string>.nothing(),
-            Maybe.NothingFromNull<string>(null));
+        Maybe.NothingFromNull<string>(null)
+            .Should().Be(Maybe<string>.nothing());
     }
 }

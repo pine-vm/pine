@@ -1,3 +1,4 @@
+using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using System.Text.Json;
@@ -22,7 +23,7 @@ public class PineResultTests
 
             var deserialized = JsonSerializer.Deserialize<Result<string, int>>(serialized);
 
-            Assert.AreEqual(testCase, deserialized);
+            deserialized.Should().Be(testCase);
         }
     }
 
@@ -34,40 +35,31 @@ public class PineResultTests
          * Each tag of a choice type can have a list of parameters, and we encode this list as a JSON array.
          * */
 
-        Assert.AreEqual(
-            Result<string, int>.err("some text"),
-            JsonSerializer.Deserialize<Result<string, int>>($$"""{"Err":["some text"]}"""));
+        JsonSerializer.Deserialize<Result<string, int>>($$"""{"Err":["some text"]}""")
+            .Should().Be(Result<string, int>.err("some text"));
 
-        Assert.AreEqual(
-            Result<string, int>.ok(34),
-            JsonSerializer.Deserialize<Result<string, int>>($$"""{"Ok":[34]}"""));
+        JsonSerializer.Deserialize<Result<string, int>>($$"""{"Ok":[34]}""")
+            .Should().Be(Result<string, int>.ok(34));
 
-        Assert.AreEqual(
-            Result<string, int?>.ok(67),
-            JsonSerializer.Deserialize<Result<string, int?>>($$"""{"Ok":[67]}"""));
+        JsonSerializer.Deserialize<Result<string, int?>>($$"""{"Ok":[67]}""")
+            .Should().Be(Result<string, int?>.ok(67));
 
-        Assert.AreEqual(
-            Result<string?, int>.err(null),
-            JsonSerializer.Deserialize<Result<string?, int>>($$"""{"Err":[null]}"""));
+        JsonSerializer.Deserialize<Result<string?, int>>($$"""{"Err":[null]}""")
+            .Should().Be(Result<string?, int>.err(null));
 
-        Assert.AreEqual(
-            Result<string, int?>.ok(null),
-            JsonSerializer.Deserialize<Result<string, int?>>($$"""{"Ok":[null]}"""));
+        JsonSerializer.Deserialize<Result<string, int?>>($$"""{"Ok":[null]}""")
+            .Should().Be(Result<string, int?>.ok(null));
 
-        Assert.AreEqual(
-            $$"""{"Err":["error message"]}""",
-            JsonSerializer.Serialize(Result<string, int>.err("error message")));
+        JsonSerializer.Serialize(Result<string, int>.err("error message"))
+            .Should().Be($$"""{"Err":["error message"]}""");
 
-        Assert.AreEqual(
-            $$"""{"Ok":[87]}""",
-            JsonSerializer.Serialize(Result<string, int>.ok(87)));
+        JsonSerializer.Serialize(Result<string, int>.ok(87))
+            .Should().Be($$"""{"Ok":[87]}""");
 
-        Assert.AreEqual(
-            $$"""{"Err":[null]}""",
-            JsonSerializer.Serialize(Result<string?, int>.err(null)));
+        JsonSerializer.Serialize(Result<string?, int>.err(null))
+            .Should().Be($$"""{"Err":[null]}""");
 
-        Assert.AreEqual(
-            $$"""{"Ok":[null]}""",
-            JsonSerializer.Serialize(Result<string, int?>.ok(null)));
+        JsonSerializer.Serialize(Result<string, int?>.ok(null))
+            .Should().Be($$"""{"Ok":[null]}""");
     }
 }

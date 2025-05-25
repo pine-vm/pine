@@ -1,3 +1,4 @@
+using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using Pine.Core.Json;
@@ -20,21 +21,17 @@ public class JsonConverterForChoiceTypeTests
     [TestMethod]
     public void JSON_coding_union_type_simple_class()
     {
-        Assert.AreEqual(
-            new SimpleClass.Alfa(),
-            JsonSerializer.Deserialize<SimpleClass>($$"""{ "Alfa" : [] }"""));
+        JsonSerializer.Deserialize<SimpleClass>($$"""{ "Alfa" : [] }""")
+            .Should().Be(new SimpleClass.Alfa());
 
-        Assert.AreEqual(
-            new SimpleClass.Beta(),
-            JsonSerializer.Deserialize<SimpleClass>($$"""{ "Beta" : [] }"""));
+        JsonSerializer.Deserialize<SimpleClass>($$"""{ "Beta" : [] }""")
+            .Should().Be(new SimpleClass.Beta());
 
-        Assert.AreEqual(
-            $$"""{"Alfa":[]}""",
-            JsonSerializer.Serialize<SimpleClass>(new SimpleClass.Alfa()));
+        JsonSerializer.Serialize<SimpleClass>(new SimpleClass.Alfa())
+            .Should().Be($$"""{"Alfa":[]}""");
 
-        Assert.AreEqual(
-            $$"""{"Beta":[]}""",
-            JsonSerializer.Serialize<SimpleClass>(new SimpleClass.Beta()));
+        JsonSerializer.Serialize<SimpleClass>(new SimpleClass.Beta())
+            .Should().Be($$"""{"Beta":[]}""");
     }
 
     [JsonConverter(typeof(JsonConverterForChoiceType))]
@@ -58,46 +55,40 @@ public class JsonConverterForChoiceTypeTests
     [TestMethod]
     public void JSON_coding_union_type_mixed_class()
     {
-        Assert.AreEqual(
-            new MixedClass<object>.VariantWithoutArgs(),
-            JsonSerializer.Deserialize<MixedClass<object>>($$"""{ "VariantWithoutArgs" : [] }"""));
+        JsonSerializer.Deserialize<MixedClass<object>>($$"""{ "VariantWithoutArgs" : [] }""")
+            .Should().Be(new MixedClass<object>.VariantWithoutArgs());
 
-        Assert.AreEqual(
-            new MixedClass<object>.VariantWithTwoArgs(67, "hello world"),
-            JsonSerializer.Deserialize<MixedClass<object>>($$"""{ "VariantWithTwoArgs" : [ 67, "hello world" ] }"""));
+        JsonSerializer.Deserialize<MixedClass<object>>($$"""{ "VariantWithTwoArgs" : [ 67, "hello world" ] }""")
+            .Should().Be(new MixedClass<object>.VariantWithTwoArgs(67, "hello world"));
 
-        Assert.AreEqual(
-            new MixedClass<long>.VariantWithRecursion(
-                123,
-                new MixedClass<long>.VariantWithThreeArgs(-1, 876036854775808, "another text"),
-                new MixedClass<int>.VariantWithTwoArgs(78, "a text")),
-            JsonSerializer.Deserialize<MixedClass<long>>(
-                $$"""
-                { "VariantWithRecursion" :
-                [ 123, { "VariantWithThreeArgs" : [ -1, 876036854775808, "another text" ] }, { "VariantWithTwoArgs" : [ 78, "a text" ] } ]
-                }
-                """));
-
-        Assert.AreEqual(
-            $$"""{"VariantWithoutArgs":[]}""",
-            JsonSerializer.Serialize<MixedClass<object>>(new MixedClass<object>.VariantWithoutArgs()));
-
-        Assert.AreEqual(
-            $$"""{"VariantWithTwoArgs":[4,"a string"]}""",
-            JsonSerializer.Serialize<MixedClass<object>>(new MixedClass<object>.VariantWithTwoArgs(4, "a string")));
-
-        Assert.AreEqual(
-            $$"""{"VariantWithRecursion":[345,{"VariantWithThreeArgs":[-987,376036858765801,"another text"]},{"VariantWithTwoArgs":[56,"a text"]}]}""",
-            JsonSerializer.Serialize<MixedClass<long>>(
+        JsonSerializer.Deserialize<MixedClass<long>>(
+            $$"""
+            { "VariantWithRecursion" :
+            [ 123, { "VariantWithThreeArgs" : [ -1, 876036854775808, "another text" ] }, { "VariantWithTwoArgs" : [ 78, "a text" ] } ]
+            }
+            """)
+            .Should().Be(
                 new MixedClass<long>.VariantWithRecursion(
+                    123,
+                    new MixedClass<long>.VariantWithThreeArgs(-1, 876036854775808, "another text"),
+                    new MixedClass<int>.VariantWithTwoArgs(78, "a text")));
+
+        JsonSerializer.Serialize<MixedClass<object>>(new MixedClass<object>.VariantWithoutArgs())
+            .Should().Be($$"""{"VariantWithoutArgs":[]}""");
+
+        JsonSerializer.Serialize<MixedClass<object>>(new MixedClass<object>.VariantWithTwoArgs(4, "a string"))
+            .Should().Be($$"""{"VariantWithTwoArgs":[4,"a string"]}""");
+
+        JsonSerializer.Serialize<MixedClass<long>>(
+            new MixedClass<long>.VariantWithRecursion(
                 345,
                 new MixedClass<long>.VariantWithThreeArgs(-987, 376036858765801, "another text"),
-                new MixedClass<int>.VariantWithTwoArgs(56, "a text"))));
+                new MixedClass<int>.VariantWithTwoArgs(56, "a text")))
+            .Should().Be($$"""{"VariantWithRecursion":[345,{"VariantWithThreeArgs":[-987,376036858765801,"another text"]},{"VariantWithTwoArgs":[56,"a text"]}]}""");
 
-        Assert.AreEqual(
-            $$"""{"SimplestRecursion":[{"VariantWithoutArgs":[]}]}""",
-            JsonSerializer.Serialize<MixedClass<long>>(
-                new MixedClass<long>.SimplestRecursion(new MixedClass<long>.VariantWithoutArgs())));
+        JsonSerializer.Serialize<MixedClass<long>>(
+            new MixedClass<long>.SimplestRecursion(new MixedClass<long>.VariantWithoutArgs()))
+            .Should().Be($$"""{"SimplestRecursion":[{"VariantWithoutArgs":[]}]}""");
     }
 
 
@@ -113,39 +104,36 @@ public class JsonConverterForChoiceTypeTests
     [TestMethod]
     public void JSON_coding_union_type_with_results()
     {
-        Assert.AreEqual(
-            new WithResults<long>.DiverseResults(
-                Result<string, int>.err("error"),
-                Result<string, long>.ok(123456789123456789),
-                Result<string, Result<string, long>>.ok(Result<string, long>.err("nested error"))),
-            JsonSerializer.Deserialize<WithResults<long>>(
-                $$"""{ "DiverseResults" : [ { "Err" : [ "error" ] }, { "Ok" : [ 123456789123456789 ] }, { "Ok" : [ { "Err" : [ "nested error" ] } ] } ] }"""));
-
-        Assert.AreEqual(
-            $$"""{"DiverseResults":[{"Err":["error"]},{"Ok":[345678912345678912]},{"Ok":[{"Err":["nested error"]}]}]}""",
-            JsonSerializer.Serialize<WithResults<long>>(
+        JsonSerializer.Deserialize<WithResults<long>>(
+            $$"""{ "DiverseResults" : [ { "Err" : [ "error" ] }, { "Ok" : [ 123456789123456789 ] }, { "Ok" : [ { "Err" : [ "nested error" ] } ] } ] }""")
+            .Should().Be(
                 new WithResults<long>.DiverseResults(
                     Result<string, int>.err("error"),
-                    Result<string, long>.ok(345678912345678912),
-                    Result<string, Result<string, long>>.ok(Result<string, long>.err("nested error")))));
+                    Result<string, long>.ok(123456789123456789),
+                    Result<string, Result<string, long>>.ok(Result<string, long>.err("nested error"))));
+
+        JsonSerializer.Serialize<WithResults<long>>(
+            new WithResults<long>.DiverseResults(
+                Result<string, int>.err("error"),
+                Result<string, long>.ok(345678912345678912),
+                Result<string, Result<string, long>>.ok(Result<string, long>.err("nested error"))))
+            .Should().Be($$"""{"DiverseResults":[{"Err":["error"]},{"Ok":[345678912345678912]},{"Ok":[{"Err":["nested error"]}]}]}""");
     }
 
     [TestMethod]
     public void JSON_serialize_record_choice_type_variant_with_ignored_property()
     {
-        Assert.AreEqual(
-            $$"""{"StringProperty":"stringValue"}""",
-            JsonSerializer.Serialize(
-                new DemoChoice.DemoVariant(
-                    StringProperty: "stringValue",
-                    IntProperty: 123)));
+        JsonSerializer.Serialize(
+            new DemoChoice.DemoVariant(
+                StringProperty: "stringValue",
+                IntProperty: 123))
+            .Should().Be($$"""{"StringProperty":"stringValue"}""");
 
-        Assert.AreEqual(
-            $$"""{"DemoVariant":["stringValue"]}""",
-            JsonSerializer.Serialize<DemoChoice>(
-                new DemoChoice.DemoVariant(
-                    StringProperty: "stringValue",
-                    IntProperty: 123)));
+        JsonSerializer.Serialize<DemoChoice>(
+            new DemoChoice.DemoVariant(
+                StringProperty: "stringValue",
+                IntProperty: 123))
+            .Should().Be($$"""{"DemoVariant":["stringValue"]}""");
     }
 
     [JsonConverter(typeof(JsonConverterForChoiceType))]

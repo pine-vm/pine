@@ -1,3 +1,4 @@
+using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using System.Collections.Generic;
@@ -17,14 +18,11 @@ public class ReusedInstancesTests
         IReadOnlyDictionary<PineValue.ListValue.ListValueStruct, PineValue.ListValue> a,
         IReadOnlyDictionary<PineValue.ListValue.ListValueStruct, PineValue.ListValue> b)
     {
-        if (a.Count != b.Count)
-        {
-            Assert.Fail("Counts are not equal: " + a.Count + " vs " + b.Count);
-        }
+        a.Count.Should().Be(b.Count, "Counts should be equal");
 
         foreach (var kv in a)
         {
-            Assert.IsTrue(b.ContainsKey(kv.Key), "contains key");
+            b.Should().Contain(kv, "dictionary should contain the key-value pair");
         }
     }
 }

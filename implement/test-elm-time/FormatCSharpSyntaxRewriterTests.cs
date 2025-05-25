@@ -1,3 +1,4 @@
+using FluentAssertions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -27,7 +28,7 @@ public class FormatCSharpSyntaxRewriterTests
 
         var formattedSyntaxText = FormatCSharpScript(inputSyntaxText);
 
-        StringAssert.Contains(formattedSyntaxText, expectedFormattedText);
+        formattedSyntaxText.Should().Contain(expectedFormattedText);
     }
 
     [TestMethod]
@@ -47,7 +48,7 @@ public class FormatCSharpSyntaxRewriterTests
 
         var formattedSyntaxText = FormatCSharpScript(inputSyntaxText);
 
-        StringAssert.Contains(formattedSyntaxText, expectedFormattedText);
+        formattedSyntaxText.Should().Contain(expectedFormattedText);
     }
 
     [TestMethod]
@@ -60,7 +61,7 @@ public class FormatCSharpSyntaxRewriterTests
 
         var formattedSyntaxText = FormatCSharpScript(inputSyntaxText);
 
-        StringAssert.Contains(formattedSyntaxText, inputSyntaxText);
+        formattedSyntaxText.Should().Contain(inputSyntaxText);
     }
 
     [TestMethod]
@@ -82,7 +83,7 @@ public class FormatCSharpSyntaxRewriterTests
 
         var formattedSyntaxText = FormatCSharpScript(inputSyntaxText);
 
-        StringAssert.Contains(formattedSyntaxText, expectedFormattedText);
+        formattedSyntaxText.Should().Contain(expectedFormattedText);
     }
 
     [TestMethod]
@@ -106,7 +107,7 @@ public class FormatCSharpSyntaxRewriterTests
 
         var formattedSyntaxText = FormatCSharpScript(inputSyntaxText);
 
-        StringAssert.Contains(formattedSyntaxText, expectedFormattedText);
+        formattedSyntaxText.Should().Contain(expectedFormattedText);
     }
 
     [TestMethod]
@@ -135,7 +136,7 @@ public class FormatCSharpSyntaxRewriterTests
 
         var formattedSyntaxText = FormatCSharpScript(inputSyntaxText);
 
-        StringAssert.Contains(formattedSyntaxText, expectedFormattedText);
+        formattedSyntaxText.Should().Contain(expectedFormattedText);
     }
 
 
@@ -156,7 +157,7 @@ public class FormatCSharpSyntaxRewriterTests
 
         var formattedSyntaxText = FormatCSharpScript(inputSyntaxText);
 
-        StringAssert.Contains(formattedSyntaxText, expectedFormattedText);
+        formattedSyntaxText.Should().Contain(expectedFormattedText);
     }
 
     [TestMethod]
@@ -190,7 +191,7 @@ public class FormatCSharpSyntaxRewriterTests
 
         var formattedSyntaxText = FormatCSharpScript(inputSyntaxText);
 
-        StringAssert.Contains(formattedSyntaxText, expectedFormattedText);
+        formattedSyntaxText.Should().Contain(expectedFormattedText);
     }
 
     [TestMethod]
@@ -213,7 +214,7 @@ public class FormatCSharpSyntaxRewriterTests
 
         var formattedSyntaxText = FormatCSharpScript(inputSyntaxText);
 
-        StringAssert.Contains(formattedSyntaxText, expectedFormattedText);
+        formattedSyntaxText.Should().Contain(expectedFormattedText);
     }
 
     [TestMethod]
@@ -246,7 +247,7 @@ public class FormatCSharpSyntaxRewriterTests
 
         var formattedSyntaxText = FormatCSharpScript(inputSyntaxText);
 
-        StringAssert.Contains(formattedSyntaxText, expectedFormattedText);
+        formattedSyntaxText.Should().Contain(expectedFormattedText);
     }
 
     [TestMethod]
@@ -274,7 +275,7 @@ public class FormatCSharpSyntaxRewriterTests
 
         var formattedSyntaxText = FormatCSharpScript(inputSyntaxText);
 
-        StringAssert.Contains(formattedSyntaxText, expectedFormattedText);
+        formattedSyntaxText.Should().Contain(expectedFormattedText);
     }
 
     [TestMethod]
@@ -315,7 +316,7 @@ public class FormatCSharpSyntaxRewriterTests
 
         var formattedSyntaxText = FormatCSharpScript(inputSyntaxText);
 
-        StringAssert.Contains(formattedSyntaxText, expectedFormattedText);
+        formattedSyntaxText.Should().Contain(expectedFormattedText);
     }
 
     [TestMethod]
@@ -344,7 +345,7 @@ public class FormatCSharpSyntaxRewriterTests
 
         var formattedSyntaxText = FormatCSharpScript(inputSyntaxText);
 
-        StringAssert.Contains(formattedSyntaxText, expectedFormattedText);
+        formattedSyntaxText.Should().Contain(expectedFormattedText);
     }
 
     [TestMethod]
@@ -389,7 +390,7 @@ public class FormatCSharpSyntaxRewriterTests
 
         var formattedSyntaxText = FormatCSharpScript(inputSyntaxText);
 
-        StringAssert.Contains(formattedSyntaxText, expectedFormattedText);
+        formattedSyntaxText.Should().Contain(expectedFormattedText);
     }
 
     [TestMethod]
@@ -413,7 +414,7 @@ public class FormatCSharpSyntaxRewriterTests
 
         var formattedSyntaxText = FormatCSharpScript(inputSyntaxText);
 
-        StringAssert.Contains(formattedSyntaxText, expectedFormattedText);
+        formattedSyntaxText.Should().Contain(expectedFormattedText);
     }
 
 

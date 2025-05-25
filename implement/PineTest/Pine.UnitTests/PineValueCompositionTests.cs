@@ -1,3 +1,4 @@
+using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using Pine.Core.PopularEncodings;
@@ -42,7 +43,7 @@ public class PineValueCompositionTests
         {
             var asComposition = PineValueComposition.FromTreeWithStringPath(testCase.input);
 
-            Assert.AreEqual(testCase.expectedOutput, asComposition);
+            asComposition.Should().Be(testCase.expectedOutput);
         }
     }
 
@@ -81,7 +82,7 @@ public class PineValueCompositionTests
         {
             var parseResult = PineValueComposition.ParseAsTreeWithStringPath(testCase.input);
 
-            Assert.AreEqual(testCase.expectedOutput, parseResult);
+            parseResult.Should().Be(testCase.expectedOutput);
         }
     }
 
@@ -128,7 +129,7 @@ public class PineValueCompositionTests
             var asComposition = PineValueComposition.FromTreeWithStringPath(
                 PineValueComposition.SortedTreeFromSetOfBlobsWithCommonFilePath(testCase.input));
 
-            Assert.AreEqual(testCase.expectedOutput, asComposition);
+            asComposition.Should().Be(testCase.expectedOutput);
         }
     }
 
@@ -150,7 +151,7 @@ public class PineValueCompositionTests
         {
             var hash = PineValueHashTree.ComputeHash(testCase.input);
 
-            Assert.AreEqual(testCase.expectedHashBase16, Convert.ToHexStringLower(hash.Span), ignoreCase: true);
+            Convert.ToHexStringLower(hash.Span).Should().BeEquivalentTo(testCase.expectedHashBase16, options => options.IgnoringCase());
         }
     }
 
@@ -173,7 +174,7 @@ public class PineValueCompositionTests
                 StringEncoding.StringFromValue(asPineValue)
                 .Extract(error => throw new Exception(error));
 
-            Assert.AreEqual(testCase, toStringResult);
+            toStringResult.Should().Be(testCase);
         }
     }
 
@@ -194,7 +195,7 @@ public class PineValueCompositionTests
                 IntegerEncoding.ParseSignedIntegerStrict(asPineValue)
                 .Extract(error => throw new Exception(error));
 
-            Assert.AreEqual(testCase, toIntegerResult);
+            toIntegerResult.Should().Be(testCase);
         }
     }
 
@@ -216,10 +217,10 @@ public class PineValueCompositionTests
                 IntegerEncoding.ParseUnsignedInteger(asPineValue)
                 .Extract(error => throw new Exception(error));
 
-            Assert.AreEqual(testCase, toIntegerResult);
+            toIntegerResult.Should().Be(testCase);
         }
 
-        Assert.IsTrue(IntegerEncoding.EncodeUnsignedInteger(-1) is Result<string, PineValue>.Err);
+        IntegerEncoding.EncodeUnsignedInteger(-1).Should().BeOfType<Result<string, PineValue>.Err>();
     }
 
     [TestMethod]
@@ -282,7 +283,7 @@ public class PineValueCompositionTests
         {
             var sortedTree = PineValueComposition.SortedTreeFromTree(testCase.input);
 
-            Assert.AreEqual(expected: testCase.expected, sortedTree);
+            sortedTree.Should().Be(testCase.expected);
         }
     }
 }
