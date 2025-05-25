@@ -24,12 +24,14 @@ jobs:
     - name: Avoid git mutating files on checkout
       run: |
         git config --global core.autocrlf false
+
     - uses: actions/checkout@v4
+
     - uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: '9.0.203'
+        dotnet-version: '9.0.x'
 
-    - name: Try use dotnet
+    - name: Check installed dotnet
       run: dotnet --info
 
     - name: Clean package cache as a temporary workaround for https://github.com/actions/setup-dotnet/issues/155
