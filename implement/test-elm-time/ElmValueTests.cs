@@ -124,6 +124,13 @@ public class ElmValueTests
 
                 (ElmValue.ElmFloat.Convert(-0.5),
                 "-0.5"),
+
+                (ElmValue.ListInstance(
+                    [
+                    ElmValue.Integer(1),
+                    ElmValue.StringInstance("Hello"),
+                    ]),
+                "(1,\"Hello\")"),
             ];
 
         foreach (var (elmValue, expectedExpression) in testCases)

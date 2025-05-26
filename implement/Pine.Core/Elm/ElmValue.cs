@@ -939,15 +939,13 @@ public abstract record ElmValue
         {
             return false;
         }
-        else
-        {
-            var areAllItemsEqual = AreElmValueListItemTypesEqual(list);
 
-            if (areAllItemsEqual is Maybe<bool>.Just areAllItemsEqualJust)
-                return !areAllItemsEqualJust.Value;
-            else
-                return null;
-        }
+        var areAllItemsEqual = AreElmValueListItemTypesEqual(list);
+
+        if (areAllItemsEqual.HasValue)
+            return !areAllItemsEqual.Value;
+
+        return null;
     }
 
     /// <summary>
@@ -955,28 +953,29 @@ public abstract record ElmValue
     /// </summary>
     /// <param name="list">The list of <see cref="ElmValue"/> items.</param>
     /// <returns>
-    /// A <see cref="Maybe{JustT}"/> of <see cref="bool"/>.
-    /// <see cref="Maybe{JustT}.Just"/> if all items are determined to be of the same type.
-    /// <see cref="Maybe{JustT}.Just"/> if at least one pair of items is determined to be of different types.
-    /// <see cref="Maybe{JustT}.nothing()"/> if the type equality is ambiguous for any pair (e.g., comparing two lists or two records with the same field names but potentially different field types).
+    /// <c>true</c> if all items are determined to be of the same type.
+    /// <c>false</c> if at least one pair of items is determined to be of different types.
+    /// <c>null</c> if the type equality is ambiguous for any pair (e.g., comparing two lists or two records with the same field names but potentially different field types).
     /// </returns>
-    public static Maybe<bool> AreElmValueListItemTypesEqual(IReadOnlyList<ElmValue> list)
+    public static bool? AreElmValueListItemTypesEqual(IReadOnlyList<ElmValue> list)
     {
-        var pairsTypesEqual =
-            list
-            .SelectMany((left, leftIndex) =>
-            list
-            .Skip(leftIndex + 1)
-            .Select(right => AreElmValueTypesEqual(left, right)))
-            .ToList();
-
-        if (pairsTypesEqual.All(item => item is Maybe<bool>.Just itemJust && itemJust.Value))
+        if (list.Count <= 1)
             return true;
 
-        if (pairsTypesEqual.Any(item => item is Maybe<bool>.Just itemJust && !itemJust.Value))
-            return false;
+        var firstElementType = list[0];
 
-        return Maybe<bool>.nothing();
+        for (int i = 1; i < list.Count; i++)
+        {
+            var comparisonResult = AreElmValueTypesEqual(firstElementType, list[i]);
+
+            if (comparisonResult is false)
+                return false;
+
+            if (comparisonResult is null)
+                return null;
+        }
+
+        return true;
     }
 
     /// <summary>
@@ -985,16 +984,15 @@ public abstract record ElmValue
     /// <param name="valueA">The first Elm value.</param>
     /// <param name="valueB">The second Elm value.</param>
     /// <returns>
-    /// A <see cref="Maybe{JustT}"/> of <see cref="bool"/>.
-    /// Returns <see cref="Maybe{JustT}.Just"/> if both values are of the same concrete Elm type (e.g., both are ElmInteger, both ElmChar, both ElmString).
-    /// Returns <see cref="Maybe{JustT}.Just"/> if the types are definitively different (e.g., ElmInteger and ElmString), or if they are records with different field names.
-    /// Returns <see cref="Maybe{JustT}.nothing()"/> if the type equality is ambiguous. This occurs for:
+    /// Returns <c>true</c> if both values are of the same concrete Elm type (e.g., both are ElmInteger, both ElmChar, both ElmString).
+    /// Returns <c>false</c> if the types are definitively different (e.g., ElmInteger and ElmString), or if they are records with different field names.
+    /// Returns <c>null</c> if the type equality is ambiguous. This occurs for:
     /// - Two <see cref="ElmList"/> instances (as their element types would need further inspection).
     /// - Two <see cref="ElmRecord"/> instances with the same field names (as their field value types would need further inspection).
     /// - Two <see cref="ElmTag"/> instances (as their constructor names and argument types would need further inspection).
     /// - Two <see cref="ElmInternal"/> instances.
     /// </returns>
-    public static Maybe<bool> AreElmValueTypesEqual(
+    public static bool? AreElmValueTypesEqual(
         ElmValue valueA,
         ElmValue valueB)
     {
@@ -1008,7 +1006,7 @@ public abstract record ElmValue
             return true;
 
         if (valueA is ElmList && valueB is ElmList)
-            return Maybe<bool>.nothing();
+            return null;
 
         if (valueA is ElmRecord recordA && valueB is ElmRecord recordB)
         {
@@ -1021,14 +1019,14 @@ public abstract record ElmValue
             if (!recordAFieldNames.OrderBy(name => name).SequenceEqual(recordBFieldNames))
                 return false;
 
-            return Maybe<bool>.nothing();
+            return null;
         }
 
         if (valueA is ElmTag && valueB is ElmTag)
-            return Maybe<bool>.nothing();
+            return null;
 
         if (valueA is ElmInternal && valueB is ElmInternal)
-            return Maybe<bool>.nothing();
+            return null;
 
         return false;
     }
