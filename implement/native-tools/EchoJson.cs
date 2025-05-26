@@ -1,7 +1,13 @@
-﻿using System;
+using System;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace native_tools;
+
+[JsonSerializable(typeof(JsonElement))]
+public partial class EchoJsonSerializerContext : JsonSerializerContext
+{
+}
 
 public class EchoJson
 {
@@ -18,8 +24,9 @@ public class EchoJson
 
             try
             {
-                var json = JsonSerializer.Deserialize<JsonElement>(lineText);
-                Console.WriteLine(JsonSerializer.Serialize(json) + "\n");
+                var json = JsonSerializer.Deserialize(lineText, EchoJsonSerializerContext.Default.JsonElement);
+
+                Console.WriteLine(JsonSerializer.Serialize(json, EchoJsonSerializerContext.Default.JsonElement) + "\n");
             }
             catch (Exception ex)
             {
