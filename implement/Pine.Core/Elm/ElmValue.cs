@@ -46,83 +46,188 @@ public abstract record ElmValue
     override public string ToString() =>
         GetType().Name + " : " + RenderAsElmExpression(this).expressionString;
 
+    /// <summary>
+    /// Tag name used to represent Elm records when encoding as <see cref="PineValue"/>.
+    /// </summary>
     public const string ElmRecordTypeTagName = "Elm_Record";
 
+    /// <summary>
+    /// Tag name used to represent instances of `Bytes.Bytes` from Elm when encoding as <see cref="PineValue"/>.
+    /// </summary>
     public const string ElmBytesTypeTagName = "Elm_Bytes";
 
+    /// <summary>
+    /// Tag name used to represent Elm strings when encoding as <see cref="PineValue"/>.
+    /// This corresponds to the `String` type in Elm.
+    /// </summary>
     public const string ElmStringTypeTagName = "String";
 
+    /// <summary>
+    /// Tag name used to represent Elm sets when encoding as <see cref="PineValue"/>.
+    /// This corresponds to the `Set.Set` type from the `elm/core` library.
+    /// </summary>
     public const string ElmSetTypeTagName = "Set_elm_builtin";
 
+    /// <summary>
+    /// Tag name used to represent an empty Elm dictionary when encoding as <see cref="PineValue"/>.
+    /// This corresponds to an empty `Dict.Dict` from the `elm/core` library, which is represented by `RBEmpty_elm_builtin` internally.
+    /// </summary>
     public const string ElmDictEmptyTagName = "RBEmpty_elm_builtin";
 
+    /// <summary>
+    /// Tag name used to represent a non-empty Elm dictionary (a node in a red-black tree) when encoding as <see cref="PineValue"/>.
+    /// This corresponds to a non-empty `Dict.Dict` from the `elm/core` library, which is represented by `RBNode_elm_builtin` internally.
+    /// </summary>
     public const string ElmDictNotEmptyTagName = "RBNode_elm_builtin";
 
+    /// <summary>
+    /// Tag name used to represent Elm floating-point numbers when encoding as <see cref="PineValue"/>.
+    /// This corresponds to the `Float` type in Elm.
+    /// </summary>
     public const string ElmFloatTypeTagName = "Elm_Float";
 
+    /// <summary>
+    /// Represents the 'Elm_Record' tag name as a <see cref="PineValue"/> using the default string encoding.
+    /// </summary>
     public static readonly PineValue ElmRecordTypeTagNameAsValue =
         StringEncoding.ValueFromString(ElmRecordTypeTagName);
 
+    /// <summary>
+    /// Represents the 'Elm_Record' tag name as a <see cref="PineValue"/> using the 2024 string encoding.
+    /// </summary>
     public static readonly PineValue ElmRecordTypeTagNameAsValue_2024 =
         StringEncoding.ValueFromString_2024(ElmRecordTypeTagName);
 
+    /// <summary>
+    /// Represents the 'Elm_Bytes' tag name as a <see cref="PineValue"/> using the default string encoding.
+    /// </summary>
     public static readonly PineValue ElmBytesTypeTagNameAsValue =
         StringEncoding.ValueFromString(ElmBytesTypeTagName);
 
+    /// <summary>
+    /// Represents the 'Elm_Bytes' tag name as a <see cref="PineValue"/> using the 2024 string encoding.
+    /// </summary>
     public static readonly PineValue ElmBytesTypeTagNameAsValue_2024 =
         StringEncoding.ValueFromString_2024(ElmBytesTypeTagName);
 
+    /// <summary>
+    /// Represents the 'String' tag name as a <see cref="PineValue"/> using the default string encoding.
+    /// </summary>
     public static readonly PineValue ElmStringTypeTagNameAsValue =
         StringEncoding.ValueFromString(ElmStringTypeTagName);
 
+    /// <summary>
+    /// Represents the 'String' tag name as a <see cref="PineValue"/> using the 2024 string encoding.
+    /// </summary>
     public static readonly PineValue ElmStringTypeTagNameAsValue_2024 =
         StringEncoding.ValueFromString_2024(ElmStringTypeTagName);
 
+    /// <summary>
+    /// Represents the 'Set_elm_builtin' tag name as a <see cref="PineValue"/> using the default string encoding.
+    /// </summary>
     public static readonly PineValue ElmSetTypeTagNameAsValue =
         StringEncoding.ValueFromString(ElmSetTypeTagName);
 
+    /// <summary>
+    /// Represents the 'Set_elm_builtin' tag name as a <see cref="PineValue"/> using the 2024 string encoding.
+    /// </summary>
     public static readonly PineValue ElmSetTypeTagNameAsValue_2024 =
         StringEncoding.ValueFromString_2024(ElmSetTypeTagName);
 
+    /// <summary>
+    /// Represents the 'RBEmpty_elm_builtin' tag name as a <see cref="PineValue"/> using the default string encoding.
+    /// This corresponds to an empty dictionary of the `Dict.Dict` type from the Elm core library.
+    /// </summary>
     public static readonly PineValue ElmDictEmptyTagNameAsValue =
         StringEncoding.ValueFromString(ElmDictEmptyTagName);
 
+    /// <summary>
+    /// Represents the 'RBEmpty_elm_builtin' tag name as a <see cref="PineValue"/> using the 2024 string encoding.
+    /// This corresponds to an empty dictionary of the `Dict.Dict` type from the Elm core library.
+    /// </summary>
     public static readonly PineValue ElmDictEmptyTagNameAsValue_2024 =
         StringEncoding.ValueFromString_2024(ElmDictEmptyTagName);
 
+    /// <summary>
+    /// Represents the 'RBNode_elm_builtin' tag name as a <see cref="PineValue"/> using the default string encoding.
+    /// This corresponds to a non-empty dictionary of the `Dict.Dict` type from the Elm core library.
+    /// </summary>
     public static readonly PineValue ElmDictNotEmptyTagNameAsValue =
         StringEncoding.ValueFromString(ElmDictNotEmptyTagName);
 
+    /// <summary>
+    /// Represents the 'RBNode_elm_builtin' tag name as a <see cref="PineValue"/> using the 2024 string encoding.
+    /// This corresponds to a non-empty dictionary of the `Dict.Dict` type from the Elm core library.
+    /// </summary>
     public static readonly PineValue ElmDictNotEmptyTagNameAsValue_2024 =
         StringEncoding.ValueFromString_2024(ElmDictNotEmptyTagName);
 
+    /// <summary>
+    /// Represents the 'Elm_Float' tag name as a <see cref="PineValue"/> using the default string encoding.
+    /// </summary>
     public static readonly PineValue ElmFloatTypeTagNameAsValue =
         StringEncoding.ValueFromString(ElmFloatTypeTagName);
 
+    /// <summary>
+    /// Represents the 'Elm_Float' tag name as a <see cref="PineValue"/> using the 2024 string encoding.
+    /// </summary>
     public static readonly PineValue ElmFloatTypeTagNameAsValue_2024 =
         StringEncoding.ValueFromString_2024(ElmFloatTypeTagName);
 
+    /// <summary>
+    /// Represents an empty Elm dictionary.
+    /// </summary>
     public static readonly ElmValue EmptyDict =
         TagInstance(ElmDictEmptyTagName, []);
 
+    /// <summary>
+    /// Creates an <see cref="ElmList"/> instance from a read-only list of <see cref="ElmValue"/> elements.
+    /// </summary>
+    /// <param name="Elements">The elements of the list.</param>
+    /// <returns>A new <see cref="ElmList"/> instance.</returns>
     public static ElmValue ListInstance(IReadOnlyList<ElmValue> Elements) =>
         new ElmList(Elements);
 
+    /// <summary>
+    /// Creates an Elm tuple (represented as an <see cref="ElmList"/>) from two <see cref="ElmValue"/> items.
+    /// </summary>
+    /// <param name="Item1">The first item of the tuple.</param>
+    /// <param name="Item2">The second item of the tuple.</param>
+    /// <returns>An <see cref="ElmList"/> representing the tuple.</returns>
     public static ElmValue TupleInstance(ElmValue Item1, ElmValue Item2) =>
         ListInstance([Item1, Item2]);
 
+    /// <summary>
+    /// Creates an <see cref="ElmInteger"/> instance from a <see cref="System.Numerics.BigInteger"/>.
+    /// This method may return a cached instance for frequently used integer values.
+    /// </summary>
+    /// <param name="Value">The integer value.</param>
+    /// <returns>An <see cref="ElmInteger"/> instance.</returns>
     public static ElmValue Integer(System.Numerics.BigInteger Value) =>
         ReusedIntegerInstances?.TryGetValue(Value, out var reusedInstance) ?? false && reusedInstance is not null ?
         reusedInstance
         :
         new ElmInteger(Value);
 
+    /// <summary>
+    /// Creates an <see cref="ElmString"/> instance from a <see cref="string"/>.
+    /// This method may return a cached instance for frequently used string values.
+    /// </summary>
+    /// <param name="Value">The string value.</param>
+    /// <returns>An <see cref="ElmString"/> instance.</returns>
     public static ElmValue StringInstance(string Value) =>
         ReusedStringInstances?.TryGetValue(Value, out var reusedInstance) ?? false && reusedInstance is not null ?
         reusedInstance
         :
         new ElmString(Value);
 
+    /// <summary>
+    /// Creates an <see cref="ElmTag"/> instance.
+    /// This method may return a cached instance for frequently used tags.
+    /// </summary>
+    /// <param name="TagName">The name of the tag.</param>
+    /// <param name="Arguments">The arguments associated with the tag.</param>
+    /// <returns>An <see cref="ElmTag"/> instance.</returns>
     public static ElmTag TagInstance(string TagName, IReadOnlyList<ElmValue> Arguments)
     {
         var tagStruct =
@@ -136,6 +241,12 @@ public abstract record ElmValue
         return new ElmTag(TagName, Arguments);
     }
 
+    /// <summary>
+    /// Creates an <see cref="ElmChar"/> instance from an integer representing a Unicode code point.
+    /// This method may return a cached instance for frequently used character values.
+    /// </summary>
+    /// <param name="Value">The Unicode code point of the character.</param>
+    /// <returns>An <see cref="ElmChar"/> instance.</returns>
     public static ElmValue CharInstance(int Value) =>
         Value < ReusedCharInstances?.Count && 0 <= Value ?
         ReusedCharInstances[Value]
@@ -158,6 +269,10 @@ public abstract record ElmValue
         [..Enumerable.Range(0, 4000)
         .Select(CharInstance)];
 
+    /// <summary>
+    /// An integer with unlimited precision, represented as a <see cref="System.Numerics.BigInteger"/>.
+    /// </summary>
+    /// <param name="Value"></param>
     public record ElmInteger(System.Numerics.BigInteger Value)
         : ElmValue
     {
@@ -171,11 +286,20 @@ public abstract record ElmValue
         }
     }
 
+    /// <summary>
+    /// Represents an Elm tagged union value, that is, a variant of a choice type.
+    /// </summary>
     public record ElmTag
         : ElmValue
     {
+        /// <summary>
+        /// Gets the name of the tag.
+        /// </summary>
         public string TagName { get; }
 
+        /// <summary>
+        /// Gets the list of arguments associated with the tag.
+        /// </summary>
         public IReadOnlyList<ElmValue> Arguments { get; }
 
         readonly int slimHashCode;
@@ -237,14 +361,31 @@ public abstract record ElmValue
         override public int GetHashCode() =>
             slimHashCode;
 
+        /// <summary>
+        /// A struct representing the essential data of an <see cref="ElmTag"/>, used for efficient hashing and equality comparison.
+        /// </summary>
         internal readonly record struct ElmTagStruct
         {
+            /// <summary>
+            /// Gets the name of the tag.
+            /// </summary>
             public string TagName { get; }
 
+            /// <summary>
+            /// Gets the list of arguments associated with the tag.
+            /// </summary>
             public IReadOnlyList<ElmValue> Arguments { get; }
 
+            /// <summary>
+            /// Gets the precomputed hash code.
+            /// </summary>
             public readonly int slimHashCode;
 
+            /// <summary>
+            /// Initializes a new instance of the <see cref="ElmTagStruct"/> struct.
+            /// </summary>
+            /// <param name="TagName">The name of the tag.</param>
+            /// <param name="Arguments">The arguments associated with the tag.</param>
             public ElmTagStruct(string TagName, IReadOnlyList<ElmValue> Arguments)
             {
                 this.TagName = TagName;
@@ -253,9 +394,15 @@ public abstract record ElmValue
                 slimHashCode = ComputeHashCode(TagName, Arguments);
             }
 
+            /// <inheritdoc/>
             public override int GetHashCode() =>
                 slimHashCode;
 
+            /// <summary>
+            /// Determines whether the current <see cref="ElmTagStruct"/> is equal to another <see cref="ElmTagStruct"/>.
+            /// </summary>
+            /// <param name="otherTag">The other tag struct to compare with.</param>
+            /// <returns><c>true</c> if the two tag structs are equal; otherwise, <c>false</c>.</returns>
             public bool Equals(ElmTagStruct otherTag)
             {
                 if (otherTag.slimHashCode != slimHashCode)
@@ -276,6 +423,12 @@ public abstract record ElmValue
                 return true;
             }
 
+            /// <summary>
+            /// Computes the hash code for an Elm tag given its name and arguments.
+            /// </summary>
+            /// <param name="TagName">The name of the tag.</param>
+            /// <param name="Arguments">The arguments of the tag.</param>
+            /// <returns>The computed hash code.</returns>
             public static int ComputeHashCode(
                 string TagName,
                 IReadOnlyList<ElmValue> Arguments)
@@ -301,9 +454,15 @@ public abstract record ElmValue
             GetType().Name + " : " + RenderAsElmExpression(this).expressionString;
     }
 
+    /// <summary>
+    /// Represents an Elm list value.
+    /// </summary>
     public record ElmList
         : ElmValue
     {
+        /// <summary>
+        /// Gets the elements of the list.
+        /// </summary>
         public IReadOnlyList<ElmValue> Elements { init; get; }
 
 
@@ -312,6 +471,10 @@ public abstract record ElmValue
         /// <inheritdoc/>
         public override int ContainedNodesCount { get; }
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ElmList"/> class.
+        /// </summary>
+        /// <param name="Elements">The elements of the list.</param>
         public ElmList(IReadOnlyList<ElmValue> Elements)
         {
             this.Elements = Elements;
@@ -367,6 +530,10 @@ public abstract record ElmValue
             GetType().Name + " : " + RenderAsElmExpression(this).expressionString;
     }
 
+    /// <summary>
+    /// Represents an Elm string value.
+    /// </summary>
+    /// <param name="Value">The string value.</param>
     public record ElmString(string Value)
         : ElmValue
     {
@@ -374,6 +541,10 @@ public abstract record ElmValue
         public override int ContainedNodesCount { get; } = 0;
     }
 
+    /// <summary>
+    /// Represents an Elm character value.
+    /// </summary>
+    /// <param name="Value">The Unicode code point of the character.</param>
     public record ElmChar(int Value)
         : ElmValue
     {
@@ -381,6 +552,10 @@ public abstract record ElmValue
         public override int ContainedNodesCount { get; } = 0;
     }
 
+    /// <summary>
+    /// Represents an Elm record value.
+    /// </summary>
+    /// <param name="Fields">The fields of the record, as a list of name-value pairs.</param>
     public record ElmRecord(IReadOnlyList<(string FieldName, ElmValue Value)> Fields)
         : ElmValue
     {
@@ -552,6 +727,11 @@ public abstract record ElmValue
         override public int ContainedNodesCount { get; } = 0;
     }
 
+    /// <summary>
+    /// Represents an Elm internal value, which is not directly representable in Elm source code
+    /// but used for internal purposes or to represent values from external systems.
+    /// </summary>
+    /// <param name="Value">The string representation of the internal value.</param>
     public record ElmInternal(string Value)
         : ElmValue
     {
@@ -621,6 +801,12 @@ public abstract record ElmValue
             };
     }
 
+    /// <summary>
+    /// Renders a character's Unicode code point as a string suitable for an Elm character literal.
+    /// Handles special characters like newline, carriage return, and tab.
+    /// </summary>
+    /// <param name="charValue">The Unicode code point of the character.</param>
+    /// <returns>A string representation of the character for use in an Elm expression.</returns>
     public static string RenderCharAsElmExpression(int charValue)
     {
         if (charValue is 10)
@@ -635,6 +821,13 @@ public abstract record ElmValue
         return char.ConvertFromUtf32(charValue);
     }
 
+    /// <summary>
+    /// Renders an Elm tag as an Elm expression string.
+    /// Handles special cases for Elm's built-in Set and Dict types to render them in a more readable format (e.g., Set.fromList [...], Dict.fromList [...]).
+    /// </summary>
+    /// <param name="tagName">The name of the tag.</param>
+    /// <param name="arguments">The arguments of the tag.</param>
+    /// <returns>A tuple containing the Elm expression string and a boolean indicating if parentheses are needed for function application.</returns>
     public static (string expressionString, bool needsParens) ElmTagAsExpression(
         string tagName,
         IReadOnlyList<ElmValue> arguments)
@@ -690,12 +883,29 @@ public abstract record ElmValue
             needsParens: true);
     }
 
+    /// <summary>
+    /// Converts an Elm dictionary (represented as an <see cref="ElmValue"/>, typically an <see cref="ElmTag"/> with name "RBNode_elm_builtin" or "RBEmpty_elm_builtin")
+    /// into a list of key-value pairs.
+    /// </summary>
+    /// <param name="dict">The Elm dictionary value.</param>
+    /// <returns>A read-only list of key-value pairs from the dictionary.</returns>
     public static IReadOnlyList<(ElmValue key, ElmValue value)> ElmValueDictToList(ElmValue dict) =>
         ElmValueDictFoldr(
             (key, value, acc) => acc.Insert(0, (key, value)),
             ImmutableList<(ElmValue key, ElmValue value)>.Empty,
             dict);
 
+    /// <summary>
+    /// Performs a right fold (foldr) operation on a dictionary instance of the `Dict.Dict` type from the Elm core library.
+    /// <para />
+    /// Elm dictionaries are represented as red-black trees (<c>RBNode_elm_builtin</c> for non-empty, <c>RBEmpty_elm_builtin</c> for empty).
+    /// This function recursively traverses the tree, applying the provided function to each key-value pair and an accumulator.
+    /// </summary>
+    /// <typeparam name="T">The type of the accumulator and the result.</typeparam>
+    /// <param name="func">The function to apply to each key-value pair and the accumulator. It takes the key, value, and current accumulator value, and returns the new accumulator value.</param>
+    /// <param name="aggregate">The initial value of the accumulator.</param>
+    /// <param name="elmValue">The Elm dictionary value to fold over.</param>
+    /// <returns>The final accumulated value after traversing the entire dictionary.</returns>
     public static T ElmValueDictFoldr<T>(Func<ElmValue, ElmValue, T, T> func, T aggregate, ElmValue elmValue)
     {
         if (elmValue is ElmTag elmTag && elmTag.TagName is "RBNode_elm_builtin" && elmTag.Arguments.Count is 5)
@@ -711,6 +921,18 @@ public abstract record ElmValue
         return aggregate;
     }
 
+    /// <summary>
+    /// Determines if the items in an Elm list look like they could form a tuple.
+    /// <para />
+    /// Since tuples from Elm are lowered to plain lists by the Elm compiler, we use heuristics to guess if a Pine list
+    /// represents an Elm tuple.
+    /// </summary>
+    /// <param name="list">The list of <see cref="ElmValue"/> items.</param>
+    /// <returns>
+    /// <c>true</c> if the list items suggest a tuple (short list with differing item types).
+    /// <c>false</c> if the list is too long or all items are definitely of the same type.
+    /// <c>null</c> if it's ambiguous (e.g., types are not definitively same or different, like two lists).
+    /// </returns>
     public static bool? ElmListItemsLookLikeTupleItems(IReadOnlyList<ElmValue> list)
     {
         if (3 < list.Count)
@@ -728,6 +950,16 @@ public abstract record ElmValue
         }
     }
 
+    /// <summary>
+    /// Checks if all items in a list of <see cref="ElmValue"/> are of the same Elm type.
+    /// </summary>
+    /// <param name="list">The list of <see cref="ElmValue"/> items.</param>
+    /// <returns>
+    /// A <see cref="Maybe{JustT}"/> of <see cref="bool"/>.
+    /// <see cref="Maybe{JustT}.Just"/> if all items are determined to be of the same type.
+    /// <see cref="Maybe{JustT}.Just"/> if at least one pair of items is determined to be of different types.
+    /// <see cref="Maybe{JustT}.nothing()"/> if the type equality is ambiguous for any pair (e.g., comparing two lists or two records with the same field names but potentially different field types).
+    /// </returns>
     public static Maybe<bool> AreElmValueListItemTypesEqual(IReadOnlyList<ElmValue> list)
     {
         var pairsTypesEqual =
@@ -747,6 +979,21 @@ public abstract record ElmValue
         return Maybe<bool>.nothing();
     }
 
+    /// <summary>
+    /// Compares two <see cref="ElmValue"/> instances to determine if they are of the same Elm type.
+    /// </summary>
+    /// <param name="valueA">The first Elm value.</param>
+    /// <param name="valueB">The second Elm value.</param>
+    /// <returns>
+    /// A <see cref="Maybe{JustT}"/> of <see cref="bool"/>.
+    /// Returns <see cref="Maybe{JustT}.Just"/> if both values are of the same concrete Elm type (e.g., both are ElmInteger, both ElmChar, both ElmString).
+    /// Returns <see cref="Maybe{JustT}.Just"/> if the types are definitively different (e.g., ElmInteger and ElmString), or if they are records with different field names.
+    /// Returns <see cref="Maybe{JustT}.nothing()"/> if the type equality is ambiguous. This occurs for:
+    /// - Two <see cref="ElmList"/> instances (as their element types would need further inspection).
+    /// - Two <see cref="ElmRecord"/> instances with the same field names (as their field value types would need further inspection).
+    /// - Two <see cref="ElmTag"/> instances (as their constructor names and argument types would need further inspection).
+    /// - Two <see cref="ElmInternal"/> instances.
+    /// </returns>
     public static Maybe<bool> AreElmValueTypesEqual(
         ElmValue valueA,
         ElmValue valueB)

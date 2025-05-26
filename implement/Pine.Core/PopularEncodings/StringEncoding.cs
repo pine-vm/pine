@@ -69,6 +69,9 @@ public static class StringEncoding
 
     /// <summary>
     /// Converts a .NET string to a Pine list value containing one element for each character in the input string.
+    /// <para>
+    /// This was the original encoding of strings in Pine, used before 2025.
+    /// </para>
     /// </summary>
     /// <returns>Pine list value containing one element for each character in the input string.</returns>
     public static PineValue ValueFromString_2024(string str)
