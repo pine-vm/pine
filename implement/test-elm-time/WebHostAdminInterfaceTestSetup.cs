@@ -6,14 +6,20 @@ using System;
 using System.IO;
 using System.Net.Http.Headers;
 using System.Text;
+using System.Threading;
 
 namespace TestElmTime;
 
 public class WebHostAdminInterfaceTestSetup : IDisposable
 {
-    private static string PublicWebHostUrlDefault => "http://localhost:35491";
+    private static int instanceCounter = 0;
 
-    private static string AdminWebHostUrlDefault => "http://localhost:19372";
+    private readonly int instanceId = Interlocked.Increment(ref instanceCounter);
+
+    private string PublicWebHostUrlDefault => "http://localhost:" + (35491 + instanceId);
+
+    private string AdminWebHostUrlDefault => "http://localhost:" + (19372 + instanceId);
+
 
     private readonly string? publicWebHostUrlOverride;
 
@@ -136,6 +142,8 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
     public void Dispose()
     {
         Directory.Delete(testDirectory, true);
+
+        GC.SuppressFinalize(this);
     }
 
     private WebHostAdminInterfaceTestSetup(
