@@ -1,14 +1,13 @@
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine;
 using Pine.Core;
 using Pine.Elm.Platform;
 using System.Collections.Immutable;
 using System.Linq;
+using Xunit;
 
 namespace TestElmTime;
 
-[TestClass]
 public class ElmCommandLineAppTests
 {
     private static string PathToSimpleAppDirectory => @"./../../../../example-apps/cli-demo";
@@ -17,8 +16,7 @@ public class ElmCommandLineAppTests
         PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(
             Filesystem.GetAllFilesFromDirectory(path));
 
-    [TestMethod]
-    [Timeout(1000 * 60 * 10)]
+    [Fact(Timeout = 1000 * 60 * 10)]
     public void Run_simple_command_line_interface_app()
     {
         var console = (IConsole)StaticConsole.Instance;

@@ -1,16 +1,15 @@
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using Pine.Core.PopularEncodings;
 using System.Collections.Generic;
 using System.Linq;
+using Xunit;
 
 namespace TestElmTime;
 
-[TestClass]
 public class ValueBinaryEncodingTests
 {
-    [TestMethod]
+    [Fact]
     public void Reuses_components()
     {
         var largeComponent =
@@ -70,7 +69,7 @@ public class ValueBinaryEncodingTests
         compositionBetaEncodedBytes.Length.Should().BeLessThan(compositionAlfaEncodedBytes.Length * 2);
     }
 
-    [TestMethod]
+    [Fact]
     public void Roundtrips()
     {
         IReadOnlyList<PineValue> testCases =

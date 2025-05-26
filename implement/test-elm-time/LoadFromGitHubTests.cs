@@ -1,5 +1,4 @@
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using System;
 using System.Collections.Generic;
@@ -7,13 +6,13 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Net.Http;
 using System.Security.Cryptography;
+using Xunit;
 
 namespace TestElmTime;
 
-[TestClass]
 public class LoadFromGitHubTests
 {
-    [TestMethod]
+    [Fact]
     public void Test_LoadFromGitHub_Tree()
     {
         var expectedFilesNamesAndHashes = new[]
@@ -53,7 +52,7 @@ public class LoadFromGitHubTests
             "Loaded files equal expected files.");
     }
 
-    [TestMethod]
+    [Fact]
     public void Test_LoadFromGitHub_Tree_at_root()
     {
         var expectedFilesNamesAndHashes = new[]
@@ -90,7 +89,7 @@ public class LoadFromGitHubTests
         }
     }
 
-    [TestMethod]
+    [Fact]
     public void Test_LoadFromGitHub_Object()
     {
         var expectedFileHash = "e80817b2aa00350dff8f00207083b3b21b0726166dd695475be512ce86507238";
@@ -111,7 +110,7 @@ public class LoadFromGitHubTests
             .Should().Be(expectedFileHash, "Loaded blob content hash equals expected hash.");
     }
 
-    [TestMethod]
+    [Fact]
     public void LoadFromGitHub_Commits_Contents_And_Lineage()
     {
         var loadFromGithubResult =
@@ -137,7 +136,7 @@ public class LoadFromGitHubTests
     }
 
 
-    [TestMethod]
+    [Fact]
     public void LoadFromGitHub_URL_points_only_to_repository()
     {
         var loadFromGithubResult =
@@ -159,7 +158,7 @@ public class LoadFromGitHubTests
         readmeFile.fileContent.Should().NotBeNull("Loaded files contain README.md");
     }
 
-    [TestMethod]
+    [Fact]
     public void LoadFromGitHub_Partial_Cache()
     {
         var tempWorkingDirectory = Pine.Filesystem.CreateRandomDirectoryInTempDirectory();

@@ -1,13 +1,12 @@
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
+using Xunit;
 
 namespace TestElmTime;
 
-[TestClass]
 public class PineValueTests
 {
-    [TestMethod]
+    [Fact]
     public void Pine_list_value_content_counts()
     {
         var testCases = new[]

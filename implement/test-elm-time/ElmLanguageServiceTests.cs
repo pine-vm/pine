@@ -1,5 +1,4 @@
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using Pine.Elm;
 using System;
@@ -7,13 +6,13 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
+using Xunit;
 
 namespace TestElmTime;
 
-[TestClass]
 public class ElmLanguageServiceTests
 {
-    [TestMethod]
+    [Fact]
     public void Language_service_provides_hover()
     {
         var elmModuleText =
@@ -53,7 +52,7 @@ public class ElmLanguageServiceTests
             expectedHoverText: "    init : State");
     }
 
-    [TestMethod]
+    [Fact]
     public void Language_service_provides_completion_items()
     {
         var elmModuleTextAlfa =

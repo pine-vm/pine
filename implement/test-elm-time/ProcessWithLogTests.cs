@@ -1,15 +1,14 @@
-﻿using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+using FluentAssertions;
 using Pine;
 using System.Collections.Immutable;
 using System.Linq;
+using Xunit;
 
 namespace TestElmTime;
 
-[TestClass]
 public class ProcessWithLogTests
 {
-    [TestMethod]
+    [Fact]
     public void Process_with_log_build_and_unpack()
     {
         var testCases = new[]

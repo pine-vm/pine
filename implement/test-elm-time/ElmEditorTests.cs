@@ -1,5 +1,4 @@
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine;
 using Pine.Core;
 using System;
@@ -8,16 +7,16 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Text.Json;
+using Xunit;
 
 namespace TestElmTime
 {
-    [TestClass]
     public class ElmEditorTests
     {
         private static string NormalizeStringTestingElmFormat(string originalString) =>
             originalString.Trim().Replace("\n\r", "\n").Replace("\r\n", "\n");
 
-        [TestMethod]
+        [Fact]
         public void Elm_editor_backend_support_format_elm_module_text()
         {
             var webAppSource =

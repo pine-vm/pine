@@ -1,6 +1,5 @@
 using ElmTime.ElmInteractive;
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using Pine.Core.Elm;
 using Pine.Core.PopularEncodings;
@@ -8,13 +7,13 @@ using Pine.Elm;
 using Pine.PineVM;
 using System;
 using System.Linq;
+using Xunit;
 
 namespace TestElmTime;
 
-[TestClass]
 public class ElmValueJsonValueEncodingTests
 {
-    [TestMethod]
+    [Fact]
     public void EncodeElmValueAsJson_tests()
     {
         var testCases =

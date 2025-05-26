@@ -1,16 +1,15 @@
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using Pine.Core.PopularEncodings;
 using Pine.Json;
 using System.Text.Json;
+using Xunit;
 
 namespace Pine.UnitTests;
 
-[TestClass]
 public class JsonConverterForPineValueTests
 {
-    [TestMethod]
+    [Fact]
     public void JSON_serialize_pine_value_roundtrips()
     {
         var jsonSerializerOptions = new JsonSerializerOptions { };
@@ -85,7 +84,7 @@ public class JsonConverterForPineValueTests
         }
     }
 
-    [TestMethod]
+    [Fact]
     public void JSON_serialize_pine_value_to_native_integer()
     {
         var jsonSerializerOptions = new JsonSerializerOptions { };
@@ -106,7 +105,7 @@ public class JsonConverterForPineValueTests
             .Should().Be("-34567");
     }
 
-    [TestMethod]
+    [Fact]
     public void JSON_serialize_pine_value_to_native_string()
     {
         var jsonSerializerOptions = new JsonSerializerOptions { };
@@ -126,7 +125,7 @@ public class JsonConverterForPineValueTests
             .Should().Be("[]");
     }
 
-    [TestMethod]
+    [Fact]
     public void JSON_serialize_pine_value_to_native_string_2024()
     {
         var jsonSerializerOptions = new JsonSerializerOptions { };

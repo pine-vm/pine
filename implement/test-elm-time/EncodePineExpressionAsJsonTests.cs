@@ -1,17 +1,15 @@
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
-using Pine.Core.PopularEncodings;
 using Pine.Core.Json;
+using Pine.Core.PopularEncodings;
 using System.Collections.Generic;
-using System.Linq;
+using Xunit;
 
 namespace TestElmTime;
 
-[TestClass]
 public class EncodePineExpressionAsJsonTests
 {
-    [TestMethod]
+    [Fact]
     public void EncodePineExpressionAsJsonRoundtrips()
     {
         IReadOnlyList<Expression> testCases =
@@ -68,7 +66,7 @@ public class EncodePineExpressionAsJsonTests
         }
     }
 
-    [TestMethod]
+    [Fact]
     public void EncodePineExpressionListAsJsonRoundtrips()
     {
         IReadOnlyList<IReadOnlyList<Expression>> testCases =

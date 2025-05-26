@@ -1,5 +1,4 @@
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using Pine.Core.Elm;
 using Pine.Elm.Platform;
@@ -7,16 +6,16 @@ using System;
 using System.Linq;
 using System.Net.Http;
 using System.Threading.Tasks;
+using Xunit;
 
 namespace TestElmTime;
 
-[TestClass]
 public class ElmWebServiceUsingVolatileProcessNativeTest
 {
     public static PineValue ElmWebServiceVolatileProcessNative =>
         TestSetup.AppConfigComponentFromFiles(TestSetup.VolatileProcessNativeWebApp);
 
-    [TestMethod]
+    [Fact]
     public async Task Volatile_process_native_echo_json()
     {
         using var testSetup =
@@ -37,7 +36,7 @@ public class ElmWebServiceUsingVolatileProcessNativeTest
         httpResponseContent.Trim().Should().Be("[1,3,4]", "Response content should match the expected JSON format.");
     }
 
-    [TestMethod]
+    [Fact]
     public async Task Volatile_process_native_echo_json_sandbox()
     {
         var webAppSource =

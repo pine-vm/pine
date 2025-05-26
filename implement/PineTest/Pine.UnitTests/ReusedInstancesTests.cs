@@ -1,14 +1,13 @@
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using System.Collections.Generic;
+using Xunit;
 
 namespace Pine.UnitTests;
 
-[TestClass]
 public class ReusedInstancesTests
 {
-    [TestMethod]
+    [Fact]
     public void Ensure_reference_equality_between_mappings_between_reused_instances()
     {
         ReusedInstances.Instance.AssertReferenceEquality();

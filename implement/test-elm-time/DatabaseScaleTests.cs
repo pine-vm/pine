@@ -1,5 +1,4 @@
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -8,13 +7,13 @@ using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading.Tasks;
+using Xunit;
 
 namespace TestElmTime;
 
-[TestClass]
 public class DatabaseScaleTests
 {
-    [TestMethod]
+    [Fact]
     public async Task Test_database_scale()
     {
         var webAppSource =

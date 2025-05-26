@@ -1,18 +1,17 @@
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using Pine.Core.PopularEncodings;
 using Pine.PineVM;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using Xunit;
 
 namespace TestElmTime;
 
-[TestClass]
 public class PineIRCompilerTests
 {
-    [TestMethod]
+    [Fact]
     public void Compile_tail_recursion_to_loop()
     {
         var recursiveFunctionSum =

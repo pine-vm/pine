@@ -1,15 +1,14 @@
 using FluentAssertions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.CompilePineToDotNet;
+using Xunit;
 
 namespace TestElmTime;
 
-[TestClass]
 public class FormatCSharpSyntaxRewriterTests
 {
-    [TestMethod]
+    [Fact]
     public void Formats_argument_list_in_invocation_expression()
     {
         var inputSyntaxText =
@@ -31,7 +30,7 @@ public class FormatCSharpSyntaxRewriterTests
         formattedSyntaxText.Should().Contain(expectedFormattedText);
     }
 
-    [TestMethod]
+    [Fact]
     public void Formats_argument_list_in_obj_creation_expression()
     {
         var inputSyntaxText =
@@ -51,7 +50,7 @@ public class FormatCSharpSyntaxRewriterTests
         formattedSyntaxText.Should().Contain(expectedFormattedText);
     }
 
-    [TestMethod]
+    [Fact]
     public void Does_not_line_break_empty_argument_list_in_obj_creation_expression()
     {
         var inputSyntaxText =
@@ -64,7 +63,7 @@ public class FormatCSharpSyntaxRewriterTests
         formattedSyntaxText.Should().Contain(inputSyntaxText);
     }
 
-    [TestMethod]
+    [Fact]
     public void Formats_nested_argument_list_in_obj_creation_expression()
     {
         var inputSyntaxText =
@@ -86,7 +85,7 @@ public class FormatCSharpSyntaxRewriterTests
         formattedSyntaxText.Should().Contain(expectedFormattedText);
     }
 
-    [TestMethod]
+    [Fact]
     public void Formats_nested_argument_list_in_obj_creation_expression_containing_invocation()
     {
         var inputSyntaxText =
@@ -110,7 +109,7 @@ public class FormatCSharpSyntaxRewriterTests
         formattedSyntaxText.Should().Contain(expectedFormattedText);
     }
 
-    [TestMethod]
+    [Fact]
     public void Adds_newlines_between_statements_in_method_declaration()
     {
         var inputSyntaxText =
@@ -140,7 +139,7 @@ public class FormatCSharpSyntaxRewriterTests
     }
 
 
-    [TestMethod]
+    [Fact]
     public void Indents_in_arrow_expression_clause()
     {
         var inputSyntaxText =
@@ -160,7 +159,7 @@ public class FormatCSharpSyntaxRewriterTests
         formattedSyntaxText.Should().Contain(expectedFormattedText);
     }
 
-    [TestMethod]
+    [Fact]
     public void Indents_statements_in_if_statement_block()
     {
         var inputSyntaxText =
@@ -194,7 +193,7 @@ public class FormatCSharpSyntaxRewriterTests
         formattedSyntaxText.Should().Contain(expectedFormattedText);
     }
 
-    [TestMethod]
+    [Fact]
     public void Adds_newlines_in_conditional_expression()
     {
         var inputSyntaxText =
@@ -217,7 +216,7 @@ public class FormatCSharpSyntaxRewriterTests
         formattedSyntaxText.Should().Contain(expectedFormattedText);
     }
 
-    [TestMethod]
+    [Fact]
     public void Adds_newlines_between_member_declarations()
     {
         var inputSyntaxText =
@@ -250,7 +249,7 @@ public class FormatCSharpSyntaxRewriterTests
         formattedSyntaxText.Should().Contain(expectedFormattedText);
     }
 
-    [TestMethod]
+    [Fact]
     public void Adds_newlines_before_method_calls()
     {
         var inputSyntaxText =
@@ -278,7 +277,7 @@ public class FormatCSharpSyntaxRewriterTests
         formattedSyntaxText.Should().Contain(expectedFormattedText);
     }
 
-    [TestMethod]
+    [Fact]
     public void Adds_newlines_after_assignment()
     {
         var inputSyntaxText =
@@ -319,7 +318,7 @@ public class FormatCSharpSyntaxRewriterTests
         formattedSyntaxText.Should().Contain(expectedFormattedText);
     }
 
-    [TestMethod]
+    [Fact]
     public void Formats_switch_expression()
     {
         var inputSyntaxText =
@@ -348,7 +347,7 @@ public class FormatCSharpSyntaxRewriterTests
         formattedSyntaxText.Should().Contain(expectedFormattedText);
     }
 
-    [TestMethod]
+    [Fact]
     public void Formats_nested_switch_expression()
     {
         var inputSyntaxText =
@@ -393,7 +392,7 @@ public class FormatCSharpSyntaxRewriterTests
         formattedSyntaxText.Should().Contain(expectedFormattedText);
     }
 
-    [TestMethod]
+    [Fact]
     public void Formats_parameter_list_in_method_declaration()
     {
         var inputSyntaxText =

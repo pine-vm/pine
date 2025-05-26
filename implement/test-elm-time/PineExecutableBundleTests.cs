@@ -1,15 +1,14 @@
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using Pine.Core.Elm;
 using Pine.UnitTests;
+using Xunit;
 
 namespace TestElmTime;
 
-[TestClass]
 public class PineExecutableBundleTests
 {
-    [TestMethod]
+    [Fact]
     public void Bundles_default_elm_compiler()
     {
         var compilerSourceFiles =
@@ -54,7 +53,7 @@ public class PineExecutableBundleTests
         elmCompiler.CompilerEnvironment.Should().Be(elmCompilerFromBundleValue);
     }
 
-    [TestMethod]
+    [Fact]
     public void Bundled_environment_contains_Elm_syntax_parser()
     {
         var elmCompilerFromBundle =
@@ -98,7 +97,7 @@ public class PineExecutableBundleTests
             "{ comments = [], declarations = [Node { end = { column = 14, row = 4 }, start = { column = 1, row = 3 } } (AliasDeclaration { documentation = Nothing, generics = [], name = Node { end = { column = 20, row = 3 }, start = { column = 12, row = 3 } } \"MaybeInt\", typeAnnotation = Node { end = { column = 14, row = 4 }, start = { column = 5, row = 4 } } (Typed (Node { end = { column = 10, row = 4 }, start = { column = 5, row = 4 } } ([],\"Maybe\")) [Node { end = { column = 14, row = 4 }, start = { column = 11, row = 4 } } (Typed (Node { end = { column = 14, row = 4 }, start = { column = 11, row = 4 } } ([],\"Int\")) [])]) })], imports = [], moduleDefinition = Node { end = { column = 36, row = 1 }, start = { column = 1, row = 1 } } (NormalModule { exposingList = Node { end = { column = 36, row = 1 }, start = { column = 23, row = 1 } } (All { end = { column = 35, row = 1 }, start = { column = 33, row = 1 } }), moduleName = Node { end = { column = 22, row = 1 }, start = { column = 8, row = 1 } } [\"Namespace\",\"Beta\"] }) }");
     }
 
-    [TestMethod]
+    [Fact]
     public void Embedded_precompiled_pine_value_lists()
     {
         var elmCompilerValue =
@@ -129,7 +128,7 @@ public class PineExecutableBundleTests
             fromFreshBuildListValues);
     }
 
-    [TestMethod]
+    [Fact]
     public void Bundled_Elm_kernel_module_sources_equal()
     {
         /*

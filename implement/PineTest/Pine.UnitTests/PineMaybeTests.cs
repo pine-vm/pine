@@ -1,14 +1,13 @@
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using System.Text.Json;
+using Xunit;
 
 namespace TestElmTime;
 
-[TestClass]
 public class PineMaybeTests
 {
-    [TestMethod]
+    [Fact]
     public void Maybe_JSON_coding_roundtrip_string()
     {
         var testCases = new[]
@@ -27,7 +26,7 @@ public class PineMaybeTests
         }
     }
 
-    [TestMethod]
+    [Fact]
     public void Maybe_JSON_coding_diverse()
     {
         /*
@@ -48,7 +47,7 @@ public class PineMaybeTests
             .Should().Be(Maybe<int?>.just(null));
     }
 
-    [TestMethod]
+    [Fact]
     public void Maybe_Nothing_from_null()
     {
         Maybe.NothingFromNull<int>(123)

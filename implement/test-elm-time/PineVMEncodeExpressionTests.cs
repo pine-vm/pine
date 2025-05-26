@@ -1,14 +1,13 @@
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using Pine.Core.PopularEncodings;
+using Xunit;
 
 namespace TestElmTime;
 
-[TestClass]
 public class PineVMEncodeExpressionTests
 {
-    [TestMethod]
+    [Fact]
     public void TestExpressionEncodeDecodeSymmetry()
     {
         var testCases = new Expression[]

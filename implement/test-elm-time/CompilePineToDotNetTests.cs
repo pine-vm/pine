@@ -3,7 +3,6 @@ using FluentAssertions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.CompilePineToDotNet;
 using Pine.Core;
 using Pine.Core.PopularEncodings;
@@ -13,17 +12,17 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
+using Xunit;
 
 namespace TestElmTime;
 
-[TestClass]
 public class CompilePineToDotNetTests
 {
     public static readonly PineValue value_299b7decef = StringEncoding.ValueFromString("List");
 
     public static readonly PineValue value_d597fb92e5 = PineValue.List([value_299b7decef, PineValue.EmptyList]);
 
-    [TestMethod]
+    [Fact]
     public void Test_sort_pine_value_for_declaration()
     {
         value_d597fb92e5.ContainsInListTransitive(value_299b7decef).Should().BeTrue("value should contain value_299b7decef in list transitive");
@@ -47,16 +46,15 @@ public class CompilePineToDotNetTests
             .ToImmutableList();
 
         orderedValues.Should().BeEquivalentTo(
-            new[]
-            {
+            [
                 StringEncoding.ValueFromString("Ok"),
                 StringEncoding.ValueFromString("Err"),
                 value_299b7decef,
                 value_d597fb92e5
-            }, options => options.WithStrictOrdering());
+            ], options => options.WithStrictOrdering());
     }
 
-    [TestMethod]
+    [Fact]
     public void Test_compile_syntax_for_type_declared_in_type()
     {
         var syntax =
@@ -67,7 +65,7 @@ public class CompilePineToDotNetTests
         syntax.ToFullString().Should().Be("Pine.Core.EvalExprDelegate");
     }
 
-    [TestMethod]
+    [Fact]
     public void Test_compile_syntax_for_generic_type()
     {
         var syntax =
@@ -78,7 +76,7 @@ public class CompilePineToDotNetTests
         syntax.ToFullString().Should().Be("Pine.Core.Result<System.String,System.Int32>");
     }
 
-    [TestMethod]
+    [Fact]
     public void Test_compile_syntax_for_generic_IReadOnlyDictionary()
     {
         var syntax =
@@ -89,8 +87,7 @@ public class CompilePineToDotNetTests
         syntax.ToFullString().Should().Be("System.Collections.Generic.IReadOnlyDictionary<Pine.Core.PineValue,System.String>");
     }
 
-    [TestMethod]
-    [Ignore("Inlining disabled for head")]
+    [Fact(Skip = "Inlining disabled for head")]
     public void Test_compile_specialized_for_kernel_head()
     {
         var pineExpression =
@@ -160,7 +157,7 @@ public class CompilePineToDotNetTests
             };
     }
 
-    [TestMethod]
+    [Fact]
     public void Test_TryParseExpressionAsIndexPathFromEnv()
     {
         var testCases = new[]
@@ -231,7 +228,7 @@ public class CompilePineToDotNetTests
         }
     }
 
-    [TestMethod]
+    [Fact]
     public void Test_ExprMappedToParentEnv_PathInParentEnv_equality()
     {
         new ExprMappedToParentEnv.PathInParentEnv([])
@@ -241,7 +238,7 @@ public class CompilePineToDotNetTests
             .Should().Be(new ExprMappedToParentEnv.PathInParentEnv([1, 3]));
     }
 
-    [TestMethod]
+    [Fact]
     public void Test_CompileEnvItemsPathsForExprFunction()
     {
         var testCases = new[]
@@ -317,7 +314,7 @@ public class CompilePineToDotNetTests
         }
     }
 
-    [TestMethod]
+    [Fact]
     public void Compile_from_Elm_to_CSharp()
     {
         var elmJsonFile =

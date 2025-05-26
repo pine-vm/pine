@@ -1,17 +1,16 @@
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine;
 using Pine.Core;
 using System;
 using System.Collections.Immutable;
 using System.Linq;
+using Xunit;
 
 namespace TestElmTime;
 
-[TestClass]
 public class LoadCompositionTests
 {
-    [TestMethod]
+    [Fact]
     public void Composition_from_link_in_elm_editor()
     {
         var testCases = new[]

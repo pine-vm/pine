@@ -1,13 +1,12 @@
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Elm;
+using Xunit;
 
 namespace TestElmTime;
 
-[TestClass]
 public class AVH4ElmFormatBinariesTests
 {
-    [TestMethod]
+    [Fact]
     public void Format_elm_module_text()
     {
         var elmModuleTextBeforeFormatting = @"
@@ -44,7 +43,7 @@ a =
         formatted.Trim().Should().Be(expectedElmModuleTextAfterFormatting.Trim());
     }
 
-    [TestMethod]
+    [Fact]
     public void Format_elm_module_text_containing_unicode()
     {
         var elmModuleTextBeforeFormatting =

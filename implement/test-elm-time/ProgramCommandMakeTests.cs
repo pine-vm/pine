@@ -1,19 +1,18 @@
 using ElmTime;
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
+using Xunit;
 
 namespace TestElmTime;
 
-[TestClass]
 public class ProgramCommandMakeTests
 {
-    [TestMethod]
+    [Fact]
     public void TestCommandMake_with_blobMain()
     {
         var projectFiles = new[]
@@ -75,7 +74,7 @@ public class ProgramCommandMakeTests
         outputBlob.Span.ToArray().Should().Equal(new byte[] { 0, 1, 3, 4, 71 });
     }
 
-    [TestMethod]
+    [Fact]
     public void TestCommandMake_with_blobMain_as_thunk()
     {
         var projectFiles = new[]

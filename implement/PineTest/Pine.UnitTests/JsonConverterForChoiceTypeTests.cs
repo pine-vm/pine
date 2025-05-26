@@ -1,13 +1,12 @@
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using Pine.Core.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Xunit;
 
 namespace TestElmTime;
 
-[TestClass]
 public class JsonConverterForChoiceTypeTests
 {
     [JsonConverter(typeof(JsonConverterForChoiceType))]
@@ -18,7 +17,7 @@ public class JsonConverterForChoiceTypeTests
         public record Beta : SimpleClass;
     }
 
-    [TestMethod]
+    [Fact]
     public void JSON_coding_union_type_simple_class()
     {
         JsonSerializer.Deserialize<SimpleClass>($$"""{ "Alfa" : [] }""")
@@ -52,7 +51,7 @@ public class JsonConverterForChoiceTypeTests
             : MixedClass<T0>;
     }
 
-    [TestMethod]
+    [Fact]
     public void JSON_coding_union_type_mixed_class()
     {
         JsonSerializer.Deserialize<MixedClass<object>>($$"""{ "VariantWithoutArgs" : [] }""")
@@ -101,7 +100,7 @@ public class JsonConverterForChoiceTypeTests
             Result<string, Result<string, long>> Nested) : WithResults<T0>;
     }
 
-    [TestMethod]
+    [Fact]
     public void JSON_coding_union_type_with_results()
     {
         JsonSerializer.Deserialize<WithResults<long>>(
@@ -120,7 +119,7 @@ public class JsonConverterForChoiceTypeTests
             .Should().Be($$"""{"DiverseResults":[{"Err":["error"]},{"Ok":[345678912345678912]},{"Ok":[{"Err":["nested error"]}]}]}""");
     }
 
-    [TestMethod]
+    [Fact]
     public void JSON_serialize_record_choice_type_variant_with_ignored_property()
     {
         JsonSerializer.Serialize(

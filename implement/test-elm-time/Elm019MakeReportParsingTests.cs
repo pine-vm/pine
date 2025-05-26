@@ -1,13 +1,12 @@
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Elm019;
+using Xunit;
 
 namespace TestElmTime;
 
-[TestClass]
 public class Elm019MakeReportParsingTests
 {
-    [TestMethod]
+    [Fact]
     public void Elm_make_report_compile_errors()
     {
         var reportJson =
@@ -111,7 +110,7 @@ public class Elm019MakeReportParsingTests
             ));
     }
 
-    [TestMethod]
+    [Fact]
     public void Elm_make_report_error_no_elm_json()
     {
         var reportJson =

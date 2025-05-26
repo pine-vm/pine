@@ -1,5 +1,4 @@
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine;
 using Pine.Core;
 using Pine.Elm;
@@ -8,10 +7,10 @@ using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using Xunit;
 
 namespace TestElmTime;
 
-[TestClass]
 public class ElmInteractiveTests
 {
     private static string PathToCoreScenariosDirectory => @"./../../../../test-and-train/elm-interactive-scenarios-core";
@@ -22,8 +21,7 @@ public class ElmInteractiveTests
         ElmCompiler.CompilerSourceContainerFilesDefault.Value;
 
 
-    [TestMethod]
-    [Timeout(1000 * 60 * 50)]
+    [Fact(Timeout = 1000 * 60 * 50)]
     public void TestElmInteractiveScenarios()
     {
         var console = (IConsole)StaticConsole.Instance;
@@ -138,8 +136,7 @@ public class ElmInteractiveTests
         }
     }
 
-    [TestMethod]
-    [Timeout(1000 * 60 * 8)]
+    [Fact(Timeout = 1000 * 60 * 8)]
     public void First_submission_in_interactive_benefits_from_dynamic_PGO()
     {
         using var dynamicPGOShare = new Pine.PineVM.DynamicPGOShare();

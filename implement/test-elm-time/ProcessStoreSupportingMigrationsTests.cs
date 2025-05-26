@@ -1,15 +1,14 @@
-﻿using ElmTime.Platform.WebService.ProcessStoreSupportingMigrations;
+using ElmTime.Platform.WebService.ProcessStoreSupportingMigrations;
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine;
 using System.Collections.Immutable;
+using Xunit;
 
 namespace TestElmTime;
 
-[TestClass]
 public class ProcessStoreSupportingMigrationsTests
 {
-    [TestMethod]
+    [Fact]
     public void Test_ProjectFileStoreReaderForAppendedCompositionLogEvent()
     {
         var compositionLogEvent = new CompositionLogRecordInFile.CompositionEvent

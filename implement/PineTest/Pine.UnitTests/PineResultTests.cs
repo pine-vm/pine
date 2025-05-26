@@ -1,14 +1,13 @@
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using System.Text.Json;
+using Xunit;
 
 namespace TestElmTime;
 
-[TestClass]
 public class PineResultTests
 {
-    [TestMethod]
+    [Fact]
     public void Result_JSON_coding_roundtrip_string_int()
     {
         var testCases = new[]
@@ -27,7 +26,7 @@ public class PineResultTests
         }
     }
 
-    [TestMethod]
+    [Fact]
     public void Result_JSON_coding_diverse()
     {
         /*

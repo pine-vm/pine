@@ -1,16 +1,15 @@
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using Pine.Core.Elm;
 using Pine.Elm;
 using System;
+using Xunit;
 
 namespace TestElmTime;
 
-[TestClass]
 public class ParseElmInteractiveSubmissionTests
 {
-    [TestMethod]
+    [Fact]
     public void Parse_Elm_Interactive_submission()
     {
         var testCases = new[]

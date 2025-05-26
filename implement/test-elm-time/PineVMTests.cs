@@ -1,15 +1,14 @@
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using Pine.Core.PopularEncodings;
 using Pine.PineVM;
+using Xunit;
 
 namespace TestElmTime;
 
-[TestClass]
 public class PineVMTests
 {
-    [TestMethod]
+    [Fact]
     public void Evaluate_expression()
     {
         var testCases = new[]
@@ -251,7 +250,7 @@ public class PineVMTests
         }
     }
 
-    [TestMethod]
+    [Fact]
     public void Compile_stack_frame_instructions()
     {
         var testCases = new[]

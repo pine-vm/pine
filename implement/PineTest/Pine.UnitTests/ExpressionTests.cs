@@ -1,15 +1,14 @@
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using System.Collections.Generic;
 using System.Linq;
+using Xunit;
 
 namespace Pine.UnitTests;
 
-[TestClass]
 public class ExpressionTests
 {
-    [TestMethod]
+    [Fact]
     public void Expression_aggregate_properties_equal_derived_from_generic_enumeration()
     {
         IReadOnlyList<Expression> testCases =

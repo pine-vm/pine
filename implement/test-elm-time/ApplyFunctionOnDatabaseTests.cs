@@ -1,6 +1,5 @@
 using ElmTime;
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using Pine.Core.Elm;
 using Pine.Core.Json;
@@ -11,13 +10,13 @@ using System.Linq;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Threading.Tasks;
+using Xunit;
 
 namespace TestElmTime;
 
-[TestClass]
 public class ApplyFunctionOnDatabaseTests
 {
-    [TestMethod]
+    [Fact]
     public async Task Apply_exposed_function_via_admin_interface_adding_to_counter_web_app()
     {
         var adminPassword = "test";
@@ -108,7 +107,7 @@ public class ApplyFunctionOnDatabaseTests
         }
     }
 
-    [TestMethod]
+    [Fact]
     public async Task Apply_function_via_admin_interface_report_from_calculator()
     {
         var adminPassword = "test";
@@ -185,7 +184,7 @@ public class ApplyFunctionOnDatabaseTests
         }
     }
 
-    [TestMethod]
+    [Fact]
     public async Task List_exposed_functions_via_admin_interface()
     {
         var adminPassword = "test";
@@ -269,7 +268,7 @@ public class ApplyFunctionOnDatabaseTests
     }
 
 
-    [TestMethod]
+    [Fact]
     public void List_exposed_functions_sandbox()
     {
         var appConfigTree =

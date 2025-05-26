@@ -1,18 +1,17 @@
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using Pine.Core.PopularEncodings;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using Xunit;
 
 namespace TestElmTime;
 
-[TestClass]
 public class PineValueCompositionTests
 {
-    [TestMethod]
+    [Fact]
     public void Composition_from_tree_with_string_path()
     {
         var testCases = new[]
@@ -47,7 +46,7 @@ public class PineValueCompositionTests
         }
     }
 
-    [TestMethod]
+    [Fact]
     public void Parse_as_tree_with_string_path()
     {
         var testCases = new[]
@@ -86,7 +85,7 @@ public class PineValueCompositionTests
         }
     }
 
-    [TestMethod]
+    [Fact]
     public void Composition_from_file_tree()
     {
         var testCases = new[]
@@ -133,7 +132,7 @@ public class PineValueCompositionTests
         }
     }
 
-    [TestMethod]
+    [Fact]
     public void Hash_composition()
     {
         var testCases = new[]
@@ -155,7 +154,7 @@ public class PineValueCompositionTests
         }
     }
 
-    [TestMethod]
+    [Fact]
     public void String_value_roundtrips()
     {
         var testCases = new[]
@@ -178,7 +177,7 @@ public class PineValueCompositionTests
         }
     }
 
-    [TestMethod]
+    [Fact]
     public void Signed_Integer_value_roundtrips()
     {
         var testCases = new[]
@@ -199,7 +198,7 @@ public class PineValueCompositionTests
         }
     }
 
-    [TestMethod]
+    [Fact]
     public void Unsigned_Integer_value_roundtrips()
     {
         var testCases = new[]
@@ -223,7 +222,7 @@ public class PineValueCompositionTests
         IntegerEncoding.EncodeUnsignedInteger(-1).Should().BeOfType<Result<string, PineValue>.Err>();
     }
 
-    [TestMethod]
+    [Fact]
     public void Tree_with_string_path_sorting()
     {
         var testCases = new[]

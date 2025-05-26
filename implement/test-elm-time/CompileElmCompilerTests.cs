@@ -1,11 +1,10 @@
 using ElmTime.ElmInteractive;
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine;
 using Pine.Core;
-using Pine.Core.PopularEncodings;
 using Pine.Core.Elm;
 using Pine.Core.PineVM;
+using Pine.Core.PopularEncodings;
 using Pine.Elm;
 using Pine.PineVM;
 using System;
@@ -13,10 +12,10 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
+using Xunit;
 
 namespace TestElmTime;
 
-[TestClass]
 public class CompileElmCompilerTests
 {
     static IReadOnlyList<string> CompilerPackageSources =>
@@ -25,7 +24,7 @@ public class CompileElmCompilerTests
     private static readonly ElmCompilerCache elmCompilerCache = new();
 
 
-    [TestMethod]
+    [Fact]
     public void Test_call_Basics_modBy()
     {
         using var pgoShare = new DynamicPGOShare();
@@ -82,7 +81,7 @@ public class CompileElmCompilerTests
         modByApplicationResult.Extract(err => throw new Exception(err)).Should().Be(IntegerEncoding.EncodeSignedInteger(6));
     }
 
-    [TestMethod]
+    [Fact]
     public async System.Threading.Tasks.Task Test_parse_simple_Elm_module_and_encode_as_Pine_value()
     {
         var elmModuleText =
@@ -258,7 +257,7 @@ public class CompileElmCompilerTests
         }
     }
 
-    [TestMethod]
+    [Fact]
     public void Test_call_String_split()
     {
         using var pgoShare = new DynamicPGOShare();
@@ -316,8 +315,7 @@ public class CompileElmCompilerTests
                     ElmValue.StringInstance("focaccia")]));
     }
 
-    [Ignore("Productive side not ready yet")]
-    [TestMethod]
+    [Fact(Skip = "Productive side not ready yet")]
     public void Elm_compiler_compiles_Elm_compiler()
     {
         /*

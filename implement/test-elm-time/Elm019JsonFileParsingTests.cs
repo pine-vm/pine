@@ -1,14 +1,13 @@
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Elm019;
 using System.Text.Json;
+using Xunit;
 
 namespace TestElmTime;
 
-[TestClass]
 public class Elm019JsonFileParsingTests
 {
-    [TestMethod]
+    [Fact]
     public void Parse_elm_json_of_application_type()
     {
         var elmJsonFile =
@@ -109,7 +108,7 @@ public class Elm019JsonFileParsingTests
         indirectDependencies["rtfeldman/elm-hex"].Should().Be("1.0.0");
     }
 
-    [TestMethod]
+    [Fact]
     public void Parse_elm_json_of_package_type()
     {
         var elmJsonFile =
@@ -221,7 +220,7 @@ public class Elm019JsonFileParsingTests
 
     }
 
-    [TestMethod]
+    [Fact]
     public void Parse_elm_json_of_package_type_with_exposed_modules_as_object()
     {
         var elmJsonFile =

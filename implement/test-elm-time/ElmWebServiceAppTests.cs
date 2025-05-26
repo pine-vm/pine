@@ -1,12 +1,11 @@
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using MoreLinq;
 using Pine.Core;
 using System.Linq;
+using Xunit;
 
 namespace TestElmTime;
 
-[TestClass]
 public class ElmWebServiceAppTests
 {
     public static PineValue CounterWebApp =>
@@ -24,7 +23,7 @@ public class ElmWebServiceAppTests
     public static PineValue HttpProxyWebApp =>
         TestSetup.AppConfigComponentFromFiles(TestSetup.HttpProxyWebApp);
 
-    [TestMethod]
+    [Fact]
     public async System.Threading.Tasks.Task Restore_counter_http_web_app_on_server_restart()
     {
         var eventsAndExpectedResponses =

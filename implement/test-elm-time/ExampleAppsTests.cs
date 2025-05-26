@@ -1,5 +1,4 @@
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using Pine.Core.Elm;
 using Pine.Elm.Platform;
@@ -7,10 +6,10 @@ using System;
 using System.Linq;
 using System.Net;
 using System.Threading.Tasks;
+using Xunit;
 
 namespace TestElmTime;
 
-[TestClass]
 public class ExampleAppsTests
 {
     public static PineValue ExampleAppValueFromExampleName(string exampleName) =>
@@ -18,7 +17,7 @@ public class ExampleAppsTests
             TestSetup.GetElmAppFromDirectoryPath(
                 [".", "..", "..", "..", "..", "example-apps", exampleName]));
 
-    [TestMethod]
+    [Fact]
     public async Task Example_app_minimal_backend_hello_world()
     {
         var webAppSource =
@@ -43,7 +42,7 @@ public class ExampleAppsTests
             "response content as string");
     }
 
-    [TestMethod]
+    [Fact]
     public void Example_app_minimal_webservice_hello_world_sandbox()
     {
         var webAppSource =
@@ -107,7 +106,7 @@ public class ExampleAppsTests
             "response content as string");
     }
 
-    [TestMethod]
+    [Fact]
     public async Task Example_app_Elm_editor_webservice_sandbox()
     {
         var elmModuleTextBeforeFormatting =
@@ -273,7 +272,7 @@ public class ExampleAppsTests
         originalString.Trim().Replace("\n\r", "\n").Replace("\r\n", "\n");
 
 
-    [TestMethod]
+    [Fact]
     public void Counter_webapp_Json_adapter()
     {
         var webAppSourceTree =
@@ -384,7 +383,7 @@ public class ExampleAppsTests
     }
 
 
-    [TestMethod]
+    [Fact]
     public void Example_app_demo_backend_state()
     {
         var webAppSource =

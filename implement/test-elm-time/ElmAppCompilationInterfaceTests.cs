@@ -1,17 +1,16 @@
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Net;
 using System;
 using Pine.Core;
+using Xunit;
 
 namespace TestElmTime;
 
-[TestClass]
 public class ElmAppCompilationInterfaceTests
 {
-    [TestMethod]
+    [Fact]
     public void Compilation_interface_with_file_paths_from_multiple_source_directories()
     {
         var defaultAppSourceFiles = TestSetup.GetElmAppFromSubdirectoryName("compilation-interface-multiple-source-dir");

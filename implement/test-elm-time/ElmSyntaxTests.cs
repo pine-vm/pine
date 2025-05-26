@@ -1,17 +1,15 @@
 using ElmTime.ElmSyntax;
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.Linq;
+using Xunit;
 
 namespace TestElmTime;
 
-[TestClass]
 public class ElmSyntaxTests
 {
-    [TestMethod]
+    [Fact]
     public void Parse_Elm_module_name()
     {
         var testCases = new[]
@@ -117,7 +115,7 @@ public class ElmSyntaxTests
         }
     }
 
-    [TestMethod]
+    [Fact]
     public void Parse_Elm_module_name_ignores_string_literal_content()
     {
         var moduleText =
@@ -140,7 +138,7 @@ public class ElmSyntaxTests
         parseModuleNameResult.IsErr().Should().BeTrue("Expected error");
     }
 
-    [TestMethod]
+    [Fact]
     public void Parse_Elm_module_text_imports()
     {
         var testCases = new[]
@@ -224,7 +222,7 @@ public class ElmSyntaxTests
         }
     }
 
-    [TestMethod]
+    [Fact]
     public void Enumerate_module_lines()
     {
         var testCases = new[]

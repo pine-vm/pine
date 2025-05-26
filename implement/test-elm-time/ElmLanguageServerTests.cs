@@ -1,5 +1,4 @@
-﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
-using Pine;
+﻿using Pine;
 using Pine.Core.LanguageServerProtocol;
 using Pine.Elm;
 using StreamJsonRpc;
@@ -9,13 +8,13 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using Xunit;
 
 namespace TestElmTime;
 
-[TestClass]
 public class ElmLanguageServerTests
 {
-    [TestMethod]
+    [Fact]
     public async Task Language_server_reports_capabilities_Async()
     {
         var executablePath = FindPineExecutableFilePath();

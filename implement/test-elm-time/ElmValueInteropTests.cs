@@ -1,16 +1,15 @@
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using Pine.Core.PopularEncodings;
 using Pine.Core.Elm;
 using System.Collections.Generic;
+using Xunit;
 
 namespace TestElmTime;
 
-[TestClass]
 public class ElmValueInteropTests
 {
-    [TestMethod]
+    [Fact]
     public void Pine_value_encoded_as_in_elm_compiler_roundtrips()
     {
         var testCases = (IReadOnlyList<PineValue>)[

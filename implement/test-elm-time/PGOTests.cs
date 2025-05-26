@@ -1,7 +1,6 @@
 using ElmTime.ElmInteractive;
 using ElmTime.ElmSyntax;
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using Pine.Core.Elm;
 using Pine.Core.PopularEncodings;
@@ -12,15 +11,15 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
+using Xunit;
 
 namespace TestElmTime;
 
-[TestClass]
 public class PGOTests
 {
     static readonly PineVMParseCache ParseCache = new();
 
-    [TestMethod]
+    [Fact]
     public void PGO_reduces_Elm_record_access()
     {
         var elmModule =
@@ -406,7 +405,7 @@ public class PGOTests
         optimizedAverageInstructionCount.Should().BeLessThanOrEqualTo(40);
     }
 
-    [TestMethod]
+    [Fact]
     public void PGO_reduces_Elm_record_update()
     {
         var elmModule =
@@ -1011,7 +1010,7 @@ public class PGOTests
         optimizedAverageInstructionCount.Should().BeLessThanOrEqualTo(130);
     }
 
-    [TestMethod]
+    [Fact]
     public void PGO_reduces_Elm_list_map_tuple_first()
     {
         var elmModule =
@@ -1447,7 +1446,7 @@ public class PGOTests
     }
 
 
-    [TestMethod]
+    [Fact]
     public void PGO_reduces_Elm_Dict_fold()
     {
         var elmModule =

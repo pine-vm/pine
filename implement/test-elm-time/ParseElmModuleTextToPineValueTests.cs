@@ -1,6 +1,5 @@
 using FluentAssertions;
 using FluentAssertions.Execution;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using Pine.Core.Elm;
 using Pine.Elm;
@@ -8,13 +7,13 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using Xunit;
 
 namespace TestElmTime;
 
-[TestClass]
 public class ParseElmModuleTextToPineValueTests
 {
-    [TestMethod]
+    [Fact]
     public void Parse_Elm_module_with_varied_syntax()
     {
         var elmModuleText =
@@ -361,7 +360,7 @@ public class ParseElmModuleTextToPineValueTests
         }
     }
 
-    [TestMethod]
+    [Fact]
     public void Parse_Elm_module_Bytes_Decode_decodeBlobAsCharsRec()
     {
         var elmModuleText =
@@ -403,7 +402,7 @@ public class ParseElmModuleTextToPineValueTests
             alsoTestDotnetParser: false);
     }
 
-    [TestMethod]
+    [Fact]
     public void Dotnet_parser_results_in_same_expression_as_Elm_parser_source_files()
     {
         /*
@@ -446,7 +445,7 @@ public class ParseElmModuleTextToPineValueTests
             alsoTestDotnetParser: true);
     }
 
-    [TestMethod]
+    [Fact]
     public void Dotnet_parser_results_in_same_expression_as_Elm_parser_json_converters()
     {
         /*
@@ -540,7 +539,7 @@ public class ParseElmModuleTextToPineValueTests
     }
 
 
-    [TestMethod]
+    [Fact]
     public void Dotnet_parser_results_in_same_expression_as_Elm_parser()
     {
         IReadOnlyList<string> testCases =

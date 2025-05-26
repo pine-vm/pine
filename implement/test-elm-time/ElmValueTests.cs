@@ -1,16 +1,15 @@
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using Pine.Core.Elm;
 using Pine.Core.PopularEncodings;
 using System.Collections.Generic;
+using Xunit;
 
 namespace TestElmTime;
 
-[TestClass]
 public class ElmValueTests
 {
-    [TestMethod]
+    [Fact]
     public void Elm_value_encoding_roundtrips()
     {
         var testCases = (IReadOnlyList<ElmValue>)[
@@ -65,7 +64,7 @@ public class ElmValueTests
         }
     }
 
-    [TestMethod]
+    [Fact]
     public void Elm_value_display_as_expression()
     {
         var testCases =
@@ -142,7 +141,7 @@ public class ElmValueTests
         }
     }
 
-    [TestMethod]
+    [Fact]
     public void Shallow_parsing_as_record()
     {
         var elmRecord = new ElmValue.ElmRecord(
@@ -180,7 +179,7 @@ public class ElmValueTests
         parsedFields[2].fieldValue.Should().Be(IntegerEncoding.EncodeSignedInteger(17));
     }
 
-    [TestMethod]
+    [Fact]
     public void Elm_value_encoding_orders_record_fields()
     {
         /*
