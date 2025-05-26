@@ -43,14 +43,17 @@ public class Program
         var file =
             ReusedInstances.BuildPrecompiledDictFile(fromFreshBuild);
 
-        var absolutePath = System.IO.Path.GetFullPath(DestinationFilePath);
+        var absolutePath =
+            System.IO.Path.GetFullPath(DestinationFilePath) ??
+            throw new Exception("Failed to resolve absolute path for " + DestinationFilePath);
 
         Console.WriteLine(
             "Resolved the destination path of " + DestinationFilePath +
             " to " + absolutePath);
 
         System.IO.Directory.CreateDirectory(
-            System.IO.Path.GetDirectoryName(absolutePath));
+            System.IO.Path.GetDirectoryName(absolutePath) ??
+            throw new Exception("Failed to get directory name for " + absolutePath));
 
         System.IO.File.WriteAllBytes(
             absolutePath,
