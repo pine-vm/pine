@@ -17,7 +17,6 @@ jobs:
       contents: read
 
     env:
-      # Let the agent reach NuGet & Digicert
       COPILOT_AGENT_FIREWALL_ALLOW_LIST_ADDITIONS: >
         api.nuget.org,
         globalcdn.nuget.org,
@@ -25,7 +24,9 @@ jobs:
         symbols.nuget.org,
         crl3.digicert.com,
         ocsp.digicert.com,
-        www.microsoft.com
+        pine-vm.org,
+        www.microsoft.com,
+        learn.microsoft.com
 
     # You can define any steps you want, and they will run before the agent starts.
     # If you do not check out your code, Copilot will do this for you.
