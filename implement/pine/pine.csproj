@@ -5,8 +5,8 @@
     <TargetFramework>net9.0</TargetFramework>
     <AssemblyName>pine</AssemblyName>
     <RootNamespace>Pine</RootNamespace>
-    <AssemblyVersion>0.4.6</AssemblyVersion>
-    <FileVersion>0.4.6</FileVersion>
+    <AssemblyVersion>0.4.7</AssemblyVersion>
+    <FileVersion>0.4.7</FileVersion>
     <Nullable>enable</Nullable>
     <GenerateEmbeddedFilesManifest>true</GenerateEmbeddedFilesManifest>
   </PropertyGroup>
@@ -42,11 +42,11 @@
     <PackageReference Include="certes" Version="3.0.4" />
     <PackageReference Include="LibGit2Sharp" Version="0.28.0" />
     <PackageReference Include="McMaster.Extensions.CommandLineUtils" Version="4.1.1" />
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="4.13.0" />
-    <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="9.0.4" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="4.14.0" />
+    <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="9.0.5" />
     <PackageReference Include="ReadLine" Version="2.0.1" />
     <PackageReference Include="SharpCompress" Version="0.39.0" />
-    <PackageReference Include="StreamJsonRpc" Version="2.21.69" />
+    <PackageReference Include="StreamJsonRpc" Version="2.22.11" />
     <PackageReference Include="TupleAsJsonArray" Version="1.0.2" />
   </ItemGroup>
 

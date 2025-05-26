@@ -21,7 +21,7 @@
 
   <ItemGroup>
     <PackageReference Include="AwesomeAssertions" Version="8.2.0" />
-    <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="9.0.4" />
+    <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="9.0.5" />
     <PackageReference Include="Microsoft.Testing.Extensions.TrxReport" Version="1.7.0" />
     <PackageReference Include="morelinq" Version="4.4.0" />
     <PackageReference Include="coverlet.collector" Version="6.0.4">
@@ -29,7 +29,7 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="SharpCompress" Version="0.39.0" />
-    <PackageReference Include="StreamJsonRpc" Version="2.21.69" />
+    <PackageReference Include="StreamJsonRpc" Version="2.22.11" />
     <PackageReference Include="xunit.v3.core" Version="2.0.2" />
   </ItemGroup>
 
