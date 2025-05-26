@@ -1,3 +1,4 @@
+using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using Pine.Core.Elm;
@@ -33,7 +34,7 @@ public class ElmWebServiceUsingVolatileProcessNativeTest
 
         var httpResponseContent = await httpResponse.Content.ReadAsStringAsync();
 
-        Assert.AreEqual("[1,3,4]", httpResponseContent.Trim());
+        httpResponseContent.Trim().Should().Be("[1,3,4]", "Response content should match the expected JSON format.");
     }
 
     [TestMethod]
@@ -120,14 +121,11 @@ public class ElmWebServiceUsingVolatileProcessNativeTest
         var formatResponseContentAsString =
             System.Text.Encoding.UTF8.GetString(formatHttpResponseBody.Value.Span);
 
-        Assert.AreEqual(
+        formatResponseCommand.Respond.Response.StatusCode.Should().Be(
             200,
-            formatResponseCommand.Respond.Response.StatusCode,
             "Response status code should be OK.\nresponseContentAsString:\n" + formatResponseContentAsString);
 
-        Assert.AreEqual(
-            "[1,3,4]",
-            ElmTime.ElmSyntax.ElmModule.ModuleLines(formatResponseContentAsString)
-            .First());
+        ElmTime.ElmSyntax.ElmModule.ModuleLines(formatResponseContentAsString)
+            .First().Should().Be("[1,3,4]", "Response content should match the expected JSON format.");
     }
 }

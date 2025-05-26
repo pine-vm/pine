@@ -58,7 +58,7 @@ public class Elm019JsonFileParsingTests
 
         elmJsonParsed.Should().NotBeNull();
 
-        elmJsonParsed.Type.Should().Be("application");
+        elmJsonParsed!.Type.Should().Be("application");
 
         elmJsonParsed.SourceDirectories.Count.Should().Be(3);
 
@@ -164,7 +164,7 @@ public class Elm019JsonFileParsingTests
 
         elmJsonParsed.Should().NotBeNull();
 
-        elmJsonParsed.Type.Should().Be("package");
+        elmJsonParsed!.Type.Should().Be("package");
 
         elmJsonParsed.Name.Should().Be("stil4m/elm-syntax");
 
@@ -272,7 +272,7 @@ public class Elm019JsonFileParsingTests
 
         elmJsonParsed.Should().NotBeNull();
 
-        elmJsonParsed.Type.Should().Be("package");
+        elmJsonParsed!.Type.Should().Be("package");
 
         elmJsonParsed.Name.Should().Be("elm/core");
 

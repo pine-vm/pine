@@ -46,7 +46,7 @@ public class ApplyFunctionOnDatabaseTests
 
                 expectedCounter += additionViaPublicInterface;
 
-                httpResponseContent.Should().Be(expectedCounter.ToString(), "response content");
+                httpResponseContent.Should().Be(expectedCounter.ToString(), "response content should match expected counter");
             }
 
             {
@@ -58,7 +58,7 @@ public class ApplyFunctionOnDatabaseTests
                             serializedArgumentsJson: [17.ToString()],
                             commitResultingState: false));
 
-                ((int)applyFunctionResponse.StatusCode).Should().Be(200, "applyFunctionResponse.StatusCode");
+                ((int)applyFunctionResponse.StatusCode).Should().Be(200, "applyFunctionResponse.StatusCode should be OK");
             }
 
             {
@@ -66,7 +66,7 @@ public class ApplyFunctionOnDatabaseTests
 
                 var httpResponseContent = await httpResponse.Content.ReadAsStringAsync();
 
-                httpResponseContent.Should().Be(expectedCounter.ToString(), "response content");
+                httpResponseContent.Should().Be(expectedCounter.ToString(), "response content should match expected counter");
             }
 
             {
@@ -82,7 +82,7 @@ public class ApplyFunctionOnDatabaseTests
 
                 expectedCounter += additionViaAdminInterface;
 
-                ((int)applyFunctionResponse.StatusCode).Should().Be(200, "applyFunctionResponse.StatusCode");
+                ((int)applyFunctionResponse.StatusCode).Should().Be(200, "applyFunctionResponse.StatusCode should be OK");
             }
 
             {
@@ -90,7 +90,7 @@ public class ApplyFunctionOnDatabaseTests
 
                 var httpResponseContent = await httpResponse.Content.ReadAsStringAsync();
 
-                httpResponseContent.Should().Be(expectedCounter.ToString(), "response content");
+                httpResponseContent.Should().Be(expectedCounter.ToString(), "response content should match expected counter");
             }
         }
 
@@ -103,7 +103,7 @@ public class ApplyFunctionOnDatabaseTests
 
                 var httpResponseContent = await httpResponse.Content.ReadAsStringAsync();
 
-                httpResponseContent.Should().Be(expectedCounter.ToString(), "response content");
+                httpResponseContent.Should().Be(expectedCounter.ToString(), "response content should match expected counter");
             }
         }
     }
@@ -139,12 +139,12 @@ public class ApplyFunctionOnDatabaseTests
 
             expectedResultingNumber += additionViaPublicInterface;
 
-            JsonSerializer.Deserialize<CalculatorBackendStateRecord>(httpResponseContent).Should().Be(
+            JsonSerializer.Deserialize<CalculatorBackendStateRecord>(httpResponseContent).Should().BeEquivalentTo(
                 new CalculatorBackendStateRecord(
                     httpRequestCount: 1,
                     operationsViaHttpRequestCount: 1,
                     resultingNumber: expectedResultingNumber),
-                "response content");
+                "response content should match expected state");
         }
 
         {
@@ -158,11 +158,13 @@ public class ApplyFunctionOnDatabaseTests
 
             var applyFunctionResponseContent = await applyFunctionResponse.Content.ReadAsStringAsync();
 
-            ((int)applyFunctionResponse.StatusCode).Should().Be(200, "applyFunctionResponse.StatusCode");
+            ((int)applyFunctionResponse.StatusCode).Should().Be(200, "applyFunctionResponse.StatusCode should be OK");
 
             var applyFunctionResponseStruct =
                 JsonSerializer.Deserialize<Result<string, ElmTime.AdminInterface.ApplyDatabaseFunctionSuccess>>(
-                    applyFunctionResponseContent);
+                    applyFunctionResponseContent)
+                ??
+                throw new Exception("applyFunctionResponseContent is null");
 
             var applyFunctionSuccess =
                 applyFunctionResponseStruct
@@ -175,7 +177,7 @@ public class ApplyFunctionOnDatabaseTests
 
             var customReport = JsonSerializer.Deserialize<CustomUsageReportStruct>(resultLessStateJson);
 
-            customReport.Should().Be(
+            customReport.Should().BeEquivalentTo(
                 new CustomUsageReportStruct(
                     httpRequestCount: 1,
                     operationsViaHttpRequestCount: 1,
@@ -207,7 +209,9 @@ public class ApplyFunctionOnDatabaseTests
 
         var listFunctionsResponseStruct =
             JsonSerializer.Deserialize<Result<string, IReadOnlyList<ElmTime.StateShim.InterfaceToHost.NamedExposedFunction>>>(
-                listFunctionsResponseContent);
+                listFunctionsResponseContent)
+            ??
+            throw new Exception("listFunctionsResponseContent is null");
 
         var functionsDescriptions =
             listFunctionsResponseStruct
@@ -227,12 +231,12 @@ public class ApplyFunctionOnDatabaseTests
         applyCalculatorOperationFunctionDescription.Should().NotBeNull();
         customUsageReportFunctionDescription.Should().NotBeNull();
 
-        applyCalculatorOperationFunctionDescription!.returnType.Should().Be(
+        applyCalculatorOperationFunctionDescription!.returnType.Should().BeEquivalentTo(
             new ElmTime.StateShim.InterfaceToHost.ExposedFunctionReturnTypeDescription(
                 sourceCodeText: "Backend.State.State",
                 containsAppStateType: true));
 
-        applyCalculatorOperationFunctionDescription!.parameters.ToList().Should().Equal(
+        applyCalculatorOperationFunctionDescription!.parameters.Should().BeEquivalentTo(
             new[]
             {
                 new ElmTime.StateShim.InterfaceToHost.ExposedFunctionParameterDescription(
@@ -245,12 +249,12 @@ public class ApplyFunctionOnDatabaseTests
                     typeIsAppStateType: true)
             });
 
-        customUsageReportFunctionDescription!.returnType.Should().Be(
+        customUsageReportFunctionDescription!.returnType.Should().BeEquivalentTo(
             new ElmTime.StateShim.InterfaceToHost.ExposedFunctionReturnTypeDescription(
                 sourceCodeText: "CustomUsageReport",
                 containsAppStateType: false));
 
-        customUsageReportFunctionDescription!.parameters.ToList().Should().Equal(
+        customUsageReportFunctionDescription!.parameters.Should().BeEquivalentTo(
             new[]
             {
                 new ElmTime.StateShim.InterfaceToHost.ExposedFunctionParameterDescription(
@@ -293,7 +297,7 @@ public class ApplyFunctionOnDatabaseTests
         exposedFunctionApplyCalculatorOp.Should().NotBeNull(
             "Exposed function 'applyCalculatorOperation' not found in the app.");
 
-        exposedFunctionApplyCalculatorOp.Description.Should().Be(
+        exposedFunctionApplyCalculatorOp.Description.Should().BeEquivalentTo(
             new ElmTimeJsonAdapter.ExposedFunctionDescription(
                 ReturnType:
                 new ElmTimeJsonAdapter.ExposedFunctionDescriptionReturnType(
@@ -373,7 +377,7 @@ public class ApplyFunctionOnDatabaseTests
 
             ElmValue.RenderAsElmExpression(parseStateAsElmValue).expressionString.Should().Be(
                 "{ httpRequestCount = 0, operationsViaHttpRequestCount = 0, resultingNumber = 1234 }",
-                "Resulting app state");
+                "Resulting app state should match expected format");
         }
     }
 

@@ -1,3 +1,4 @@
+using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine;
 using Pine.Core;
@@ -184,7 +185,7 @@ public class ElmInteractiveTests
                     fromErr: err => throw new Exception(err),
                     fromOk: ok => ok.InteractiveResponse.DisplayText);
 
-            Assert.AreEqual(expected: """["123","34567834567"]""", responseDisplayText);
+            responseDisplayText.Should().Be("""["123","34567834567"]""");
         }
     }
 }

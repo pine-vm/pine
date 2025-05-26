@@ -47,9 +47,8 @@ public class WebServiceTests
         var eventsAndExpectedResponsesBatches =
             allEventsAndExpectedResponses.Batch(3).ToList();
 
-        Assert.IsTrue(
-            2 < eventsAndExpectedResponsesBatches.Count,
-            "More than two batches of events to test with.");
+        eventsAndExpectedResponsesBatches.Should()
+            .HaveCountGreaterThan(2, "More than two batches of events to test with.");
 
         using var testSetup =
             WebHostAdminInterfaceTestSetup.Setup(
@@ -96,17 +95,13 @@ public class WebServiceTests
                 var httpResponseContent =
                     await httpResponse.Content.ReadAsStringAsync();
 
-                Assert.AreEqual(
-                    expectedResponse,
-                    httpResponseContent,
-                    false,
-                    "server response");
+                httpResponseContent.Should()
+                    .Be(expectedResponse, "server response");
             }
 
-            Assert.AreEqual(
-                beforeBatchStoredReductionsCount + 1,
-                ReadStoredReductionFileRelativePaths().Count(),
-                "Number of stored reductions has increased by one since previous batch.");
+            ReadStoredReductionFileRelativePaths().Count().Should()
+                .Be(beforeBatchStoredReductionsCount + 1,
+                    "Number of stored reductions has increased by one since previous batch.");
         }
     }
 
@@ -160,7 +155,7 @@ public class WebServiceTests
             var httpResponse =
                 await publicAppClient.GetAsync(string.Join("/", demoFile.path));
 
-            Assert.AreEqual(HttpStatusCode.OK, httpResponse.StatusCode);
+            httpResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
             var responseContent =
                 await httpResponse.Content.ReadAsByteArrayAsync();
@@ -168,33 +163,33 @@ public class WebServiceTests
             var inspectResponseContent =
                 System.Text.Encoding.UTF8.GetString(responseContent);
 
-            CollectionAssert.AreEqual(demoFile.content.ToArray(), responseContent);
+            responseContent.Should().BeEquivalentTo(demoFile.content.ToArray());
         }
 
         {
             var httpResponse =
                 await publicAppClient.GetAsync("readme-md");
 
-            Assert.AreEqual(HttpStatusCode.OK, httpResponse.StatusCode);
+            httpResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
             var responseContent =
                 await httpResponse.Content.ReadAsStringAsync();
 
-            Assert.AreEqual(
+            responseContent.Should().Be(
                 "A text file we will integrate using UTF8 encoding ⚓\nNewline and special chars:\"'",
-                responseContent);
+                "Content of the readme-md file should match the expected value.");
         }
 
         {
             var httpResponse =
                 await publicAppClient.GetAsync("alpha-file-via-other-interface-module");
 
-            Assert.AreEqual(HttpStatusCode.OK, httpResponse.StatusCode);
+            httpResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
             var responseContent =
                 await httpResponse.Content.ReadAsStringAsync();
 
-            Assert.AreEqual("Text file content", responseContent);
+            responseContent.Should().Be("Text file content", "Content of the alpha-file-via-other-interface-module should match the expected value.");
         }
     }
 
@@ -387,16 +382,12 @@ public class WebServiceTests
             // Consider overhead from base64 encoding plus additional properties of an HTTP request.
             requestSizeLimit / 4 * 3 - 2000;
 
-        Assert.AreEqual(
-            HttpStatusCode.OK,
-            (await PostStringContentToPublicAppAsync(
-                "small enough content" + new string('_', sufficientlySmallRequestContentSize))).StatusCode,
-            "Receive OK status code for sufficiently small request.");
+        (await PostStringContentToPublicAppAsync(
+            "small enough content" + new string('_', sufficientlySmallRequestContentSize))).StatusCode.Should()
+            .Be(HttpStatusCode.OK, "Receive OK status code for sufficiently small request.");
 
-        Assert.AreEqual(
-            HttpStatusCode.RequestEntityTooLarge,
-            (await PostStringContentToPublicAppAsync("too large content" + new string('_', requestSizeLimit))).StatusCode,
-            "Receive non-OK status code for too large request.");
+        (await PostStringContentToPublicAppAsync("too large content" + new string('_', requestSizeLimit))).StatusCode.Should()
+            .Be(HttpStatusCode.RequestEntityTooLarge, "Receive non-OK status code for too large request.");
     }
 
     [TestMethod]
@@ -419,35 +410,29 @@ public class WebServiceTests
         {
             using var publicAppClient = testSetup.BuildPublicAppHttpClient();
 
-            Assert.AreEqual(
-                "",
-                await (await publicAppClient.GetAsync("")).Content.ReadAsStringAsync(),
-                "Initial State");
+            (await (await publicAppClient.GetAsync("")).Content.ReadAsStringAsync())
+                .Should().BeEmpty("Initial state should be empty.");
 
-            Assert.AreEqual(HttpStatusCode.OK, HttpPostStringContentAtRoot(publicAppClient, "part-a").StatusCode);
+            HttpPostStringContentAtRoot(publicAppClient, "part-a").StatusCode
+                .Should().Be(HttpStatusCode.OK, "HTTP status code for posting to root.");
 
-            Assert.AreEqual(
-                "part-a",
-                await (await publicAppClient.GetAsync("")).Content.ReadAsStringAsync(),
-                "State after first post");
+            (await (await publicAppClient.GetAsync("")).Content.ReadAsStringAsync())
+                .Should().Be("part-a", "State after first post should be 'part-a'.");
 
-            Assert.AreEqual(HttpStatusCode.OK, HttpPostStringContentAtRoot(publicAppClient, "-⚙️-part-b").StatusCode);
+            HttpPostStringContentAtRoot(publicAppClient, "-⚙️-part-b").StatusCode
+                .Should().Be(HttpStatusCode.OK, "HTTP status code for posting to root with part-b.");
 
-            Assert.AreEqual(
-                "part-a-⚙️-part-b",
-                await (await publicAppClient.GetAsync("")).Content.ReadAsStringAsync(),
-                "State After Multiple Posts");
+            (await (await publicAppClient.GetAsync("")).Content.ReadAsStringAsync())
+                .Should().Be("part-a-⚙️-part-b", "State after posting to root.");
 
             using (var client = testSetup.BuildAdminInterfaceHttpClient())
             {
-                Assert.AreEqual(
-                    HttpStatusCode.Unauthorized,
-                    (await HttpSetElmAppStateAsync(client, "new-state")).StatusCode,
+                (await HttpSetElmAppStateAsync(client, "new-state")).StatusCode
+                    .Should().Be(HttpStatusCode.Unauthorized,
                         "HTTP status code for unauthorized request to set elm app state.");
 
-                Assert.AreEqual(
-                    "part-a-⚙️-part-b",
-                    await (await publicAppClient.GetAsync("")).Content.ReadAsStringAsync(),
+                (await (await publicAppClient.GetAsync("")).Content.ReadAsStringAsync())
+                    .Should().Be("part-a-⚙️-part-b",
                     "State after failing to set elm app state.");
 
                 client.DefaultRequestHeaders.Authorization =
@@ -456,27 +441,25 @@ public class WebServiceTests
                         Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
                             Configuration.BasicAuthenticationForAdmin(adminPassword))));
 
-                Assert.AreEqual(
-                    HttpStatusCode.OK,
-                    (await HttpSetElmAppStateAsync(client, @"""new-state""")).StatusCode,
+                (await HttpSetElmAppStateAsync(client, @"""new-state""")).StatusCode
+                    .Should().Be(HttpStatusCode.OK,
                         "HTTP status code for authorized request to set elm app state.");
             }
 
-            Assert.AreEqual(
-                "new-state",
-                await (await publicAppClient.GetAsync("")).Content.ReadAsStringAsync(),
+            (await (await publicAppClient.GetAsync("")).Content.ReadAsStringAsync())
+                .Should().Be("new-state",
                 "State after setting elm app state.");
 
-            Assert.AreEqual(HttpStatusCode.OK, HttpPostStringContentAtRoot(publicAppClient, "_appendix").StatusCode);
+            HttpPostStringContentAtRoot(publicAppClient, "_appendix").StatusCode
+                .Should().Be(HttpStatusCode.OK);
         }
 
         using (var server = testSetup.StartWebHost())
         {
             using var publicAppClient = testSetup.BuildPublicAppHttpClient();
 
-            Assert.AreEqual(
-                "new-state_appendix",
-                publicAppClient.GetAsync("").Result.Content.ReadAsStringAsync().Result,
+            publicAppClient.GetAsync("").Result.Content.ReadAsStringAsync().Result
+                .Should().Be("new-state_appendix",
                 "State after setting elm app state, appending, and restarting server.");
         }
     }
@@ -508,7 +491,7 @@ public class WebServiceTests
                 "",
                 new StringContent(requestContentString));
 
-        Assert.AreEqual("application/json", response.Content.Headers.ContentType?.ToString());
+        response.Content.Headers.ContentType?.ToString().Should().Be("application/json");
 
         var responseContentString =
             await response.Content.ReadAsStringAsync();
@@ -521,16 +504,14 @@ public class WebServiceTests
             collectionFromResponseContent
             .First(entry => entry.name == appSpecificHttpRequestHeaderName);
 
-        Assert.AreEqual(
-            requestHeaderValue,
-            WebUtility.UrlDecode(matchingEntryFromResponseContent.values.FirstOrDefault()),
+        WebUtility.UrlDecode(matchingEntryFromResponseContent.values.FirstOrDefault())
+            .Should().Be(requestHeaderValue,
             "Expect the HTTP request header was propagated to an entry in the response content.");
 
         response.Headers.TryGetValues(appSpecificHttpResponseHeaderName, out var appSpecificHttpHeaderValues);
 
-        Assert.AreEqual(
-            requestContentString,
-            WebUtility.UrlDecode(appSpecificHttpHeaderValues?.FirstOrDefault()),
+        WebUtility.UrlDecode(appSpecificHttpHeaderValues?.FirstOrDefault())
+            .Should().Be(requestContentString,
             "Expect the HTTP request content was propagated to the response header with name '" + appSpecificHttpResponseHeaderName + "'");
     }
 
@@ -607,18 +588,14 @@ public class WebServiceTests
             var responseContentString =
                 await response.Content.ReadAsStringAsync();
 
-            Assert.AreEqual(
-                200,
-                (int)response.StatusCode,
-                "Response.status code, " + responseContentString);
+            ((int)response.StatusCode).Should().Be(200, "Response.status code, " + responseContentString);
 
             var echoRequestStructure =
                 System.Text.Json.JsonSerializer.Deserialize<ElmTime.Platform.WebService.InterfaceToHost.HttpRequest>(
                     responseContentString)!;
 
-            Assert.AreEqual(
-                Convert.ToBase64String(requestContentBytes).ToLowerInvariant(),
-                echoRequestStructure.bodyAsBase64.WithDefault("").ToLowerInvariant(),
+            echoRequestStructure.bodyAsBase64.WithDefault("").ToLowerInvariant()
+                .Should().Be(Convert.ToBase64String(requestContentBytes).ToLowerInvariant(),
                 "Request body is propagated.");
 
             var echoCustomHeaderValues =
@@ -626,15 +603,9 @@ public class WebServiceTests
                 .FirstOrDefault(header => header.name == customHeaderName)
                 ?.values;
 
-            Assert.AreEqual(
-                1,
-                echoCustomHeaderValues?.Length,
-                "Custom header name is propagated.");
+            echoCustomHeaderValues?.Length.Should().Be(1, "Custom header name is propagated.");
 
-            Assert.AreEqual(
-                customHeaderValue,
-                echoCustomHeaderValues?[0],
-                "Custom header value is propagated.");
+            echoCustomHeaderValues?[0].Should().Be(customHeaderValue, "Custom header value is propagated.");
         }
 
         using (var publicAppClient = testSetup.BuildPublicAppHttpClient())
@@ -669,9 +640,7 @@ public class WebServiceTests
                     header.name, contentTypeHeaderName, StringComparison.InvariantCultureIgnoreCase))
                 ?.values.SingleOrDefault();
 
-            Assert.AreEqual(
-                customContentType,
-                observedContentType,
+            observedContentType.Should().Be(customContentType,
                 "Sent HTTP request with content type '" + customContentType + "'.");
         }
     }
@@ -739,13 +708,13 @@ public class WebServiceTests
 
         await System.Threading.Tasks.Task.Delay(TimeSpan.FromSeconds(5));
 
-        Assert.IsFalse(httpPostTask.IsCompleted, "HTTP task is not completed.");
+        httpPostTask.IsCompleted.Should().BeFalse("HTTP task is not completed.");
 
         delayMutateInFileStore = false;
 
         await System.Threading.Tasks.Task.Delay(TimeSpan.FromSeconds(5));
 
-        Assert.IsTrue(httpPostTask.IsCompleted, "HTTP task is completed.");
+        httpPostTask.IsCompleted.Should().BeTrue("HTTP task is completed.");
     }
 
     [TestMethod]
@@ -766,9 +735,8 @@ public class WebServiceTests
         var eventsAndExpectedResponsesBatches =
             allEventsAndExpectedResponses.Batch(3).ToList();
 
-        Assert.IsTrue(
-            2 < eventsAndExpectedResponsesBatches.Count,
-            "More than two batches of events to test with.");
+        (2 < eventsAndExpectedResponsesBatches.Count)
+            .Should().BeTrue("More than two batches of events to test with.");
 
         var deploymentZipArchive =
             ZipArchive.ZipArchiveFromEntries(TestSetup.CounterElmWebApp);
@@ -789,16 +757,14 @@ public class WebServiceTests
                         StartupAdminInterface.PathApiDeployAndInitAppState,
                         new ByteArrayContent(deploymentZipArchive));
 
-                Assert.IsTrue(
-                    deployAppConfigResponse.IsSuccessStatusCode,
-                    "deploy response IsSuccessStatusCode");
+                deployAppConfigResponse.IsSuccessStatusCode
+                    .Should().BeTrue("deploy response IsSuccessStatusCode");
 
                 var getAppConfigResponse =
                     await adminClient.GetAsync(StartupAdminInterface.PathApiGetDeployedAppConfig);
 
-                Assert.IsTrue(
-                    getAppConfigResponse.IsSuccessStatusCode,
-                    "get-app-config response IsSuccessStatusCode");
+                getAppConfigResponse.IsSuccessStatusCode
+                    .Should().BeTrue("get-app-config response IsSuccessStatusCode");
 
                 var getAppResponseContent =
                     await getAppConfigResponse.Content.ReadAsByteArrayAsync();
@@ -807,9 +773,8 @@ public class WebServiceTests
                     PineValueComposition.SortedTreeFromSetOfBlobsWithCommonFilePath(
                         ZipArchive.EntriesFromZipArchive(getAppResponseContent).ToImmutableList());
 
-                CollectionAssert.AreEqual(
-                    PineValueHashTree.ComputeHashSorted(deploymentTree).ToArray(),
-                    PineValueHashTree.ComputeHashSorted(responseAppConfigTree).ToArray(),
+                PineValueHashTree.ComputeHashSorted(responseAppConfigTree).ToArray()
+                    .Should().Equal(PineValueHashTree.ComputeHashSorted(deploymentTree).ToArray(),
                     "Get the same configuration back.");
             }
 
@@ -825,10 +790,7 @@ public class WebServiceTests
                 var httpResponseContent =
                     await httpResponse.Content.ReadAsStringAsync();
 
-                Assert.AreEqual(
-                    expectedResponse,
-                    httpResponseContent,
-                    false,
+                httpResponseContent.Should().Be(expectedResponse,
                     "server response matches " + expectedResponse);
             }
 
@@ -858,9 +820,8 @@ public class WebServiceTests
                 var deployHttpResponseBody =
                     await deployHttpResponse.Content.ReadAsStringAsync();
 
-                Assert.IsTrue(
-                    deployHttpResponse.IsSuccessStatusCode,
-                    "deploy response IsSuccessStatusCode (response body: " + deployHttpResponseBody + ")");
+                deployHttpResponse.IsSuccessStatusCode
+                    .Should().BeTrue("deploy response IsSuccessStatusCode (response body: " + deployHttpResponseBody + ")");
             }
 
             foreach (var (serializedEvent, expectedResponse) in eventsAndExpectedResponsesBatch)
@@ -875,10 +836,7 @@ public class WebServiceTests
                 var httpResponseContent =
                     await httpResponse.Content.ReadAsStringAsync();
 
-                Assert.AreEqual(
-                    expectedResponse,
-                    httpResponseContent,
-                    false,
+                httpResponseContent.Should().Be(expectedResponse,
                     "server response matches " + expectedResponse);
             }
         }
@@ -909,18 +867,16 @@ public class WebServiceTests
                     "",
                     new StringContent(stateToTriggerInvalidMigration, System.Text.Encoding.UTF8));
 
-            Assert.IsTrue(
-                httpResponse.IsSuccessStatusCode,
-                "Set state httpResponse.IsSuccessStatusCode (" + await httpResponse.Content?.ReadAsStringAsync() + ")");
+            httpResponse.IsSuccessStatusCode
+                .Should().BeTrue("Set state httpResponse.IsSuccessStatusCode (" + await httpResponse.Content?.ReadAsStringAsync() + ")");
         }
 
         using (var client = testSetup.BuildPublicAppHttpClient())
         {
             var httpResponse = await client.GetAsync("");
 
-            Assert.AreEqual(
-                await httpResponse.Content?.ReadAsStringAsync(),
-                stateToTriggerInvalidMigration,
+            (await httpResponse.Content?.ReadAsStringAsync())
+                .Should().Be(stateToTriggerInvalidMigration,
                 "Get same state back.");
         }
 
@@ -933,9 +889,7 @@ public class WebServiceTests
                     StartupAdminInterface.PathApiDeployAndMigrateAppState,
                     new ByteArrayContent(deploymentZipArchive));
 
-            Assert.AreEqual(
-                HttpStatusCode.BadRequest,
-                migrateHttpResponse.StatusCode,
+            migrateHttpResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest,
                 "migrate-elm-state response status code is BadRequest");
 
             if (migrateHttpResponse.Content is not { } migrateHttpResponseContent)
@@ -946,9 +900,8 @@ public class WebServiceTests
             var migrateHttpResponseContentString =
                 await migrateHttpResponseContent.ReadAsStringAsync();
 
-            Assert.IsTrue(
-                migrateHttpResponseContentString.Contains("maybeString"),
-                "HTTP response content contains matching message (" + migrateHttpResponseContentString + ")");
+            migrateHttpResponseContentString.Contains("maybeString")
+                .Should().BeTrue("HTTP response content contains matching message (" + migrateHttpResponseContentString + ")");
         }
 
         using (var client = testSetup.BuildPublicAppHttpClient())
@@ -960,9 +913,8 @@ public class WebServiceTests
                 throw new InvalidOperationException("No response content.");
             }
 
-            Assert.AreEqual(
-                stateToTriggerInvalidMigration,
-                await responseContent.ReadAsStringAsync(),
+            (await responseContent.ReadAsStringAsync())
+                .Should().Be(stateToTriggerInvalidMigration,
                 "Get same state back after attempted migration.");
         }
 
@@ -976,9 +928,13 @@ public class WebServiceTests
                     "",
                     new StringContent(stateNotTriggeringInvalidMigration, System.Text.Encoding.UTF8));
 
-            Assert.IsTrue(
-                httpResponse.IsSuccessStatusCode,
-                "Set state httpResponse.IsSuccessStatusCode (" + await httpResponse.Content?.ReadAsStringAsync() + ")");
+            var responseContentString =
+                httpResponse.Content is { } responseContent ?
+                await responseContent.ReadAsStringAsync() :
+                null;
+
+            httpResponse.IsSuccessStatusCode.Should()
+                .BeTrue(because: "Set state httpResponse.IsSuccessStatusCode (" + responseContentString + ")");
         }
 
         using (var adminClient = testSetup.SetDefaultRequestHeaderAuthorizeForAdmin(
@@ -989,18 +945,16 @@ public class WebServiceTests
                     StartupAdminInterface.PathApiDeployAndMigrateAppState,
                     new ByteArrayContent(deploymentZipArchive));
 
-            Assert.IsTrue(
-                migrateHttpResponse.IsSuccessStatusCode,
-                "migrateHttpResponse.IsSuccessStatusCode (" + await migrateHttpResponse.Content?.ReadAsStringAsync() + ")");
+            migrateHttpResponse.IsSuccessStatusCode
+                .Should().BeTrue("migrateHttpResponse.IsSuccessStatusCode (" + await migrateHttpResponse.Content?.ReadAsStringAsync() + ")");
         }
 
         using (var client = testSetup.BuildPublicAppHttpClient())
         {
             var httpResponse = await client.GetAsync("");
 
-            Assert.AreEqual(
-                stateNotTriggeringInvalidMigration.Replace("sometext", "sometext8"),
-                await httpResponse.Content?.ReadAsStringAsync(),
+            (await httpResponse.Content?.ReadAsStringAsync())
+                .Should().Be(stateNotTriggeringInvalidMigration.Replace("sometext", "sometext8"),
                 "Get expected state from public app, reflecting the mapping coded in the Elm migration code.");
         }
     }
@@ -1039,10 +993,7 @@ public class WebServiceTests
             var httpResponseContent =
                 await httpResponse.Content.ReadAsStringAsync();
 
-            Assert.AreEqual(
-                expectedResponse,
-                httpResponseContent,
-                false,
+            httpResponseContent.Should().Be(expectedResponse,
                 "server response matches " + expectedResponse);
         }
 
@@ -1058,9 +1009,8 @@ public class WebServiceTests
             var contentString =
                 await deployAppConfigAndMigrateElmStateResponse.Content.ReadAsStringAsync();
 
-            Assert.IsTrue(
-                deployAppConfigAndMigrateElmStateResponse.IsSuccessStatusCode,
-                "deployAppConfigAndMigrateElmStateResponse IsSuccessStatusCode (" + contentString + ")");
+            deployAppConfigAndMigrateElmStateResponse.IsSuccessStatusCode
+                .Should().BeTrue("deployAppConfigAndMigrateElmStateResponse IsSuccessStatusCode (" + contentString + ")");
         }
 
         await System.Threading.Tasks.Task.Delay(TimeSpan.FromSeconds(1));
@@ -1069,30 +1019,24 @@ public class WebServiceTests
         {
             var initialGetResponse = await client.GetAsync("");
 
-            Assert.AreEqual(
-                "14",
-                await initialGetResponse.Content.ReadAsStringAsync(),
+            (await initialGetResponse.Content.ReadAsStringAsync())
+                .Should().Be("14",
                 "State migrated from counter app");
 
             var firstPostResponse =
                 await client.PostAsync("", new StringContent("-part-a", System.Text.Encoding.UTF8));
 
-            Assert.AreEqual(
-                HttpStatusCode.OK,
-                firstPostResponse.StatusCode);
+            firstPostResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
             var secondPostResponse =
                 await client.PostAsync("", new StringContent("-part-b", System.Text.Encoding.UTF8));
 
-            Assert.AreEqual(
-                HttpStatusCode.OK,
-                secondPostResponse.StatusCode);
+            secondPostResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
             var finalGetResponse = await client.GetAsync("");
 
-            Assert.AreEqual(
-                "14-part-a-part-b",
-                await finalGetResponse.Content.ReadAsStringAsync(),
+            (await finalGetResponse.Content.ReadAsStringAsync())
+                .Should().Be("14-part-a-part-b",
                 "State after multiple posts");
         }
     }
@@ -1139,11 +1083,7 @@ public class WebServiceTests
             var httpResponseContent =
                 await httpResponse.Content.ReadAsStringAsync();
 
-            Assert.AreEqual(
-                expectedResponse,
-                httpResponseContent,
-                false,
-                "server response");
+            httpResponseContent.Should().Be(expectedResponse, "server response");
         }
 
         var processVersionAfterFirstBatch =
@@ -1162,11 +1102,7 @@ public class WebServiceTests
             var httpResponseContent =
                 await httpResponse.Content.ReadAsStringAsync();
 
-            Assert.AreEqual(
-                expectedResponse,
-                httpResponseContent,
-                false,
-                "server response");
+            httpResponseContent.Should().Be(expectedResponse, "server response");
         }
 
         using (var adminClient =
@@ -1178,9 +1114,8 @@ public class WebServiceTests
                     StartupAdminInterface.PathApiRevertProcessTo + "/" + processVersionAfterFirstBatch,
                     null);
 
-            Assert.IsTrue(
-                revertResponse.IsSuccessStatusCode,
-                "revertResponse IsSuccessStatusCode (" +
+            revertResponse.IsSuccessStatusCode
+                .Should().BeTrue("revertResponse IsSuccessStatusCode (" +
                 await revertResponse.Content.ReadAsStringAsync() + ")");
         }
 
@@ -1194,7 +1129,7 @@ public class WebServiceTests
             var httpResponseContent =
                 await httpResponse.Content.ReadAsStringAsync();
 
-            Assert.AreEqual(expectedResponse, httpResponseContent, false, "server response");
+            httpResponseContent.Should().Be(expectedResponse, "server response");
         }
     }
 
@@ -1251,11 +1186,7 @@ public class WebServiceTests
                 var httpResponseContent =
                     await httpResponse.Content.ReadAsStringAsync();
 
-                Assert.AreEqual(
-                    expectedResponse,
-                    httpResponseContent,
-                    false,
-                    "server response");
+                httpResponseContent.Should().Be(expectedResponse, "server response");
             }
 
             replicaSetup =
@@ -1312,11 +1243,7 @@ public class WebServiceTests
                 var httpResponseContent =
                     await httpResponse.Content.ReadAsStringAsync();
 
-                Assert.AreEqual(
-                    expectedResponse,
-                    httpResponseContent,
-                    false,
-                    "server response");
+                httpResponseContent.Should().Be(expectedResponse, "server response");
             }
         }
     }
@@ -1374,11 +1301,7 @@ public class WebServiceTests
             var httpResponseContent =
                 await httpResponse.Content.ReadAsStringAsync();
 
-            Assert.AreEqual(
-                expectedResponse,
-                httpResponseContent,
-                false,
-                "server response");
+            httpResponseContent.Should().Be(expectedResponse, "server response");
         }
 
         persistentProcessHostDateTime += TimeSpan.FromHours(3);
@@ -1393,11 +1316,7 @@ public class WebServiceTests
             var httpResponseContent =
                 await httpResponse.Content.ReadAsStringAsync();
 
-            Assert.AreEqual(
-                expectedResponse,
-                httpResponseContent,
-                false,
-                "server response");
+            httpResponseContent.Should().Be(expectedResponse, "server response");
         }
 
         var numberOfFilesBefore = countFilesInProcessFileStore();
@@ -1409,17 +1328,15 @@ public class WebServiceTests
                 await adminClient.PostAsync(
                     StartupAdminInterface.PathApiTruncateProcessHistory, null);
 
-            Assert.IsTrue(
-                truncateResponse.IsSuccessStatusCode,
-                "truncateResponse IsSuccessStatusCode (" +
+            truncateResponse.IsSuccessStatusCode
+                .Should().BeTrue("truncateResponse IsSuccessStatusCode (" +
                 await truncateResponse.Content.ReadAsStringAsync() + ")");
         }
 
         var numberOfFilesAfter = countFilesInProcessFileStore();
 
-        Assert.IsTrue(
-            numberOfFilesAfter < numberOfFilesBefore,
-            "Number of files in store is lower after truncate request.");
+        (numberOfFilesAfter < numberOfFilesBefore)
+            .Should().BeTrue("Number of files in store is lower after truncate request.");
 
         foreach (var (serializedEvent, expectedResponse) in thirdBatchOfCounterAppEvents)
         {
@@ -1431,11 +1348,7 @@ public class WebServiceTests
             var httpResponseContent =
                 await httpResponse.Content.ReadAsStringAsync();
 
-            Assert.AreEqual(
-                expectedResponse,
-                httpResponseContent,
-                false,
-                "server response");
+            httpResponseContent.Should().Be(expectedResponse, "server response");
         }
     }
 
@@ -1487,11 +1400,7 @@ public class WebServiceTests
                 var httpResponseContent =
                     await httpResponse.Content.ReadAsStringAsync();
 
-                Assert.AreEqual(
-                    expectedResponse,
-                    httpResponseContent,
-                    false,
-                    "server response");
+                httpResponseContent.Should().Be(expectedResponse, "server response");
             }
 
             persistentProcessHostDateTime -= TimeSpan.FromDays(1);
@@ -1506,11 +1415,7 @@ public class WebServiceTests
                 var httpResponseContent =
                     await httpResponse.Content.ReadAsStringAsync();
 
-                Assert.AreEqual(
-                    expectedResponse,
-                    httpResponseContent,
-                    false,
-                    "server response");
+                httpResponseContent.Should().Be(expectedResponse, "server response");
             }
         }
 
@@ -1530,11 +1435,7 @@ public class WebServiceTests
                 var httpResponseContent =
                     await httpResponse.Content.ReadAsStringAsync();
 
-                Assert.AreEqual(
-                    expectedResponse,
-                    httpResponseContent,
-                    false,
-                    "server response");
+                httpResponseContent.Should().Be(expectedResponse, "server response");
             }
         }
     }
@@ -1602,11 +1503,7 @@ public class WebServiceTests
                 var httpResponseContent =
                     await httpResponse.Content.ReadAsStringAsync();
 
-                Assert.AreEqual(
-                    expectedResponse,
-                    httpResponseContent,
-                    false,
-                    "server response");
+                httpResponseContent.Should().Be(expectedResponse, "server response");
 
                 persistentProcessHostDateTime += TimeSpan.FromSeconds(1);
             }
@@ -1623,7 +1520,7 @@ public class WebServiceTests
 
         var lastWriteOperation = storeHistoryLessTrailingReduction.Last();
 
-        Assert.IsNotNull(lastWriteOperation.AppendFileContent?.path, "Last write operation was append");
+        lastWriteOperation.AppendFileContent?.path.Should().NotBeNull("Last write operation was append");
 
         var storeHistoryWithCrash =
             storeHistoryLessTrailingReduction
@@ -1644,9 +1541,8 @@ public class WebServiceTests
 
             using var publicAppClient = testSetupAfterCrash.BuildPublicAppHttpClient();
 
-            Assert.AreEqual(
-                allEventsAndExpectedResponses.SkipLast(1).Last().expectedResponse,
-                await getCurrentCounterValueFromHttpClientAsync(publicAppClient));
+            (await getCurrentCounterValueFromHttpClientAsync(publicAppClient))
+                .Should().Be(allEventsAndExpectedResponses.SkipLast(1).Last().expectedResponse);
         }
     }
 
@@ -1674,13 +1570,10 @@ public class WebServiceTests
         {
             var restoredProcessLastDeployedAppComponent = restoredProcess.lastAppConfig.appConfigComponent;
 
-            Assert.IsNotNull(
-                restoredProcessLastDeployedAppComponent,
-                "Restored process has app deployed.");
+            restoredProcessLastDeployedAppComponent.Should().NotBeNull("Restored process has app deployed.");
 
-            Assert.AreEqual(
-                deployReport.filteredSourceCompositionId,
-                Convert.ToHexStringLower(PineValueHashTree.ComputeHash(restoredProcessLastDeployedAppComponent).Span),
+            Convert.ToHexStringLower(PineValueHashTree.ComputeHash(restoredProcessLastDeployedAppComponent).Span)
+                .Should().Be(deployReport.filteredSourceCompositionId,
                 "App ID in restored process equals app ID from deployment report.");
         }
 
@@ -1719,16 +1612,14 @@ public class WebServiceTests
 
             httpStopwatch.Stop();
 
-            Assert.IsTrue(
-                expectedDelayMilliseconds <= httpStopwatch.ElapsedMilliseconds,
-                "expectedDelayMilliseconds <= httpStopwatch.ElapsedMilliseconds");
+            (expectedDelayMilliseconds <= httpStopwatch.ElapsedMilliseconds)
+                .Should().BeTrue("expectedDelayMilliseconds <= httpStopwatch.ElapsedMilliseconds");
 
             var additionalDelayMilliseconds =
                 httpStopwatch.ElapsedMilliseconds - expectedDelayMilliseconds;
 
-            Assert.IsTrue(
-                additionalDelayMilliseconds < 1500,
-                "additionalDelayMilliseconds < 1500");
+            (additionalDelayMilliseconds < 1500)
+                .Should().BeTrue("additionalDelayMilliseconds < 1500");
         }
     }
 
@@ -1794,16 +1685,14 @@ public class WebServiceTests
 
             httpStopwatch.Stop();
 
-            Assert.IsTrue(
-                expectedDelayMilliseconds <= httpStopwatch.ElapsedMilliseconds,
-                "expectedDelayMilliseconds <= httpStopwatch.ElapsedMilliseconds");
+            (expectedDelayMilliseconds <= httpStopwatch.ElapsedMilliseconds)
+                .Should().BeTrue("expectedDelayMilliseconds <= httpStopwatch.ElapsedMilliseconds");
 
             var additionalDelayMilliseconds =
                 httpStopwatch.ElapsedMilliseconds - expectedDelayMilliseconds;
 
-            Assert.IsTrue(
-                additionalDelayMilliseconds < 1500,
-                "additionalDelayMilliseconds < 1500");
+            (additionalDelayMilliseconds < 1500)
+                .Should().BeTrue("additionalDelayMilliseconds < 1500");
         }
 
         await timeUpdateTaskCancellation.CancelAsync();
@@ -1861,18 +1750,13 @@ public class WebServiceTests
             var httpResponseContent =
                 await httpResponse.Content.ReadAsStringAsync();
 
-            Assert.AreEqual(
-                "13",
-                httpResponseContent,
-                false,
-                "server response");
+            httpResponseContent.Should().Be("13", "server response");
 
             var storeOperationCountIncrease =
                 fileStoreHistoryCountAllOperations() - storeOperationCountBefore;
 
-            Assert.IsTrue(
-                0 < storeOperationCountIncrease,
-                "Store operations increase");
+            (0 < storeOperationCountIncrease)
+                .Should().BeTrue("Store operations increase");
         }
 
 
@@ -1888,19 +1772,12 @@ public class WebServiceTests
             var httpResponseContent =
                 await httpResponse.Content.ReadAsStringAsync();
 
-            Assert.AreEqual(
-                "13",
-                httpResponseContent,
-                false,
-                "server response");
+            httpResponseContent.Should().Be("13", "server response");
 
             var storeOperationCountIncrease =
                 fileStoreHistoryCountAllOperations() - storeOperationCountBefore;
 
-            Assert.AreEqual(
-                0,
-                storeOperationCountIncrease,
-                "Store operations increase");
+            storeOperationCountIncrease.Should().Be(0, "Store operations increase");
         }
     }
 
@@ -1923,7 +1800,7 @@ public class WebServiceTests
         var responseContent =
             await httpResponse.Content.ReadAsStringAsync();
 
-        Assert.AreEqual("value from local assembly", responseContent);
+        responseContent.Should().Be("value from local assembly");
     }
 
     [TestMethod]
@@ -1949,7 +1826,7 @@ public class WebServiceTests
 
             var httpResponseContent = await httpResponse.Content.ReadAsStringAsync();
 
-            Assert.AreEqual("3", httpResponseContent, false, "response content");
+            httpResponseContent.Should().Be("3", "response content");
         }
 
         {
@@ -1958,9 +1835,9 @@ public class WebServiceTests
 
             var httpResponseContent = await httpResponse.Content.ReadAsStringAsync();
 
-            Assert.IsTrue(httpResponse.IsSuccessStatusCode);
+            httpResponse.IsSuccessStatusCode.Should().BeTrue();
 
-            Assert.AreEqual("4", httpResponseContent, false, "response content");
+            httpResponseContent.Should().Be("4", "response content");
         }
 
         {
@@ -1969,9 +1846,9 @@ public class WebServiceTests
 
             var httpResponseContent = await httpResponse.Content.ReadAsStringAsync();
 
-            Assert.IsFalse(httpResponse.IsSuccessStatusCode);
+            httpResponse.IsSuccessStatusCode.Should().BeFalse();
 
-            Assert.AreNotEqual("5", httpResponseContent, false, "response content");
+            httpResponseContent.Should().NotBe("5", "response content");
         }
     }
 

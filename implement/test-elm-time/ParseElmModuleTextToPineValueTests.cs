@@ -1,3 +1,5 @@
+using FluentAssertions;
+using FluentAssertions.Execution;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using Pine.Core.Elm;
@@ -233,9 +235,9 @@ public class ParseElmModuleTextToPineValueTests
         var moduleDefinitionNodeAsExpression =
             ElmValue.RenderAsElmExpression(moduleDefinitionNode).expressionString;
 
-        Assert.AreEqual(
-            """Node { end = { column = 36, row = 1 }, start = { column = 1, row = 1 } } (NormalModule { exposingList = Node { end = { column = 36, row = 1 }, start = { column = 23, row = 1 } } (All { end = { column = 35, row = 1 }, start = { column = 33, row = 1 } }), moduleName = Node { end = { column = 22, row = 1 }, start = { column = 8, row = 1 } } ["Namespace","Beta"] })""",
-            moduleDefinitionNodeAsExpression);
+        moduleDefinitionNodeAsExpression
+            .Should().Be(
+            """Node { end = { column = 36, row = 1 }, start = { column = 1, row = 1 } } (NormalModule { exposingList = Node { end = { column = 36, row = 1 }, start = { column = 23, row = 1 } } (All { end = { column = 35, row = 1 }, start = { column = 33, row = 1 } }), moduleName = Node { end = { column = 22, row = 1 }, start = { column = 8, row = 1 } } ["Namespace","Beta"] })""");
 
         var importsNode =
             ((ElmValue.ElmRecord)responseAsElmValue).Fields.First(f => f.FieldName is "imports").Value;
@@ -243,9 +245,8 @@ public class ParseElmModuleTextToPineValueTests
         var importsNodeAsExpression =
             ElmValue.RenderAsElmExpression(importsNode).expressionString;
 
-        Assert.AreEqual(
-            """[Node { end = { column = 27, row = 3 }, start = { column = 1, row = 3 } } { exposingList = Just (Node { end = { column = 27, row = 3 }, start = { column = 14, row = 3 } } (All { end = { column = 26, row = 3 }, start = { column = 24, row = 3 } })), moduleAlias = Nothing, moduleName = Node { end = { column = 13, row = 3 }, start = { column = 8, row = 3 } } ["Delta"] },Node { end = { column = 12, row = 4 }, start = { column = 1, row = 4 } } { exposingList = Nothing, moduleAlias = Nothing, moduleName = Node { end = { column = 12, row = 4 }, start = { column = 8, row = 4 } } ["Dict"] },Node { end = { column = 66, row = 5 }, start = { column = 1, row = 5 } } { exposingList = Just (Node { end = { column = 66, row = 5 }, start = { column = 23, row = 5 } } (Explicit [Node { end = { column = 47, row = 5 }, start = { column = 33, row = 5 } } (TypeExpose { name = "Dependency", open = Just { end = { column = 47, row = 5 }, start = { column = 43, row = 5 } } }),Node { end = { column = 56, row = 5 }, start = { column = 49, row = 5 } } (TypeOrAliasExpose "Version"),Node { end = { column = 65, row = 5 }, start = { column = 58, row = 5 } } (FunctionExpose "epsilon")])), moduleAlias = Nothing, moduleName = Node { end = { column = 22, row = 5 }, start = { column = 8, row = 5 } } ["Elm","Dependency"] },Node { end = { column = 36, row = 6 }, start = { column = 1, row = 6 } } { exposingList = Nothing, moduleAlias = Just (Node { end = { column = 36, row = 6 }, start = { column = 27, row = 6 } } ["Interface"]), moduleName = Node { end = { column = 23, row = 6 }, start = { column = 8, row = 6 } } ["Gamma","Interface"] }]""",
-            importsNodeAsExpression);
+        importsNodeAsExpression.Should().Be(
+            """[Node { end = { column = 27, row = 3 }, start = { column = 1, row = 3 } } { exposingList = Just (Node { end = { column = 27, row = 3 }, start = { column = 14, row = 3 } } (All { end = { column = 26, row = 3 }, start = { column = 24, row = 3 } })), moduleAlias = Nothing, moduleName = Node { end = { column = 13, row = 3 }, start = { column = 8, row = 3 } } ["Delta"] },Node { end = { column = 12, row = 4 }, start = { column = 1, row = 4 } } { exposingList = Nothing, moduleAlias = Nothing, moduleName = Node { end = { column = 12, row = 4 }, start = { column = 8, row = 4 } } ["Dict"] },Node { end = { column = 66, row = 5 }, start = { column = 1, row = 5 } } { exposingList = Just (Node { end = { column = 66, row = 5 }, start = { column = 23, row = 5 } } (Explicit [Node { end = { column = 47, row = 5 }, start = { column = 33, row = 5 } } (TypeExpose { name = "Dependency", open = Just { end = { column = 47, row = 5 }, start = { column = 43, row = 5 } } }),Node { end = { column = 56, row = 5 }, start = { column = 49, row = 5 } } (TypeOrAliasExpose "Version"),Node { end = { column = 65, row = 5 }, start = { column = 58, row = 5 } } (FunctionExpose "epsilon")])), moduleAlias = Nothing, moduleName = Node { end = { column = 22, row = 5 }, start = { column = 8, row = 5 } } ["Elm","Dependency"] },Node { end = { column = 36, row = 6 }, start = { column = 1, row = 6 } } { exposingList = Nothing, moduleAlias = Just (Node { end = { column = 36, row = 6 }, start = { column = 27, row = 6 } } ["Interface"]), moduleName = Node { end = { column = 23, row = 6 }, start = { column = 8, row = 6 } } ["Gamma","Interface"] }]""");
 
         var declarationsList =
             (ElmValue.ElmList)((ElmValue.ElmRecord)responseAsElmValue)["declarations"]!;
@@ -257,7 +258,7 @@ public class ParseElmModuleTextToPineValueTests
             ((ElmValue.ElmRecord)((ElmValue.ElmRecord)declarationNode.Arguments[0])["start"]!)["row"]!).Value)
             .ToImmutableArray();
 
-        Assert.AreEqual(16, declarations.Length);
+        declarations.Should().HaveCount(16, "There should be 4 declarations in the module.");
 
         var typeAliasDeclarationNode = declarations.ElementAt(0);
         var recordAliasDeclarationNode = declarations.ElementAt(1);
@@ -266,23 +267,20 @@ public class ParseElmModuleTextToPineValueTests
         var typeAliasDeclarationNodeAsExpression =
             ElmValue.RenderAsElmExpression(typeAliasDeclarationNode).expressionString;
 
-        Assert.AreEqual(
-            """Node { end = { column = 14, row = 10 }, start = { column = 1, row = 9 } } (AliasDeclaration { documentation = Nothing, generics = [], name = Node { end = { column = 20, row = 9 }, start = { column = 12, row = 9 } } "MaybeInt", typeAnnotation = Node { end = { column = 14, row = 10 }, start = { column = 5, row = 10 } } (Typed (Node { end = { column = 10, row = 10 }, start = { column = 5, row = 10 } } ([],"Maybe")) [Node { end = { column = 14, row = 10 }, start = { column = 11, row = 10 } } (Typed (Node { end = { column = 14, row = 10 }, start = { column = 11, row = 10 } } ([],"Int")) [])]) })""",
-            typeAliasDeclarationNodeAsExpression);
+        typeAliasDeclarationNodeAsExpression.Should().Be(
+            """Node { end = { column = 14, row = 10 }, start = { column = 1, row = 9 } } (AliasDeclaration { documentation = Nothing, generics = [], name = Node { end = { column = 20, row = 9 }, start = { column = 12, row = 9 } } "MaybeInt", typeAnnotation = Node { end = { column = 14, row = 10 }, start = { column = 5, row = 10 } } (Typed (Node { end = { column = 10, row = 10 }, start = { column = 5, row = 10 } } ([],"Maybe")) [Node { end = { column = 14, row = 10 }, start = { column = 11, row = 10 } } (Typed (Node { end = { column = 14, row = 10 }, start = { column = 11, row = 10 } } ([],"Int")) [])]) })""");
 
         var recordAliasDeclarationNodeAsExpression =
             ElmValue.RenderAsElmExpression(recordAliasDeclarationNode).expressionString;
 
-        Assert.AreEqual(
-            """Node { end = { column = 19, row = 14 }, start = { column = 1, row = 13 } } (AliasDeclaration { documentation = Nothing, generics = [], name = Node { end = { column = 22, row = 13 }, start = { column = 12, row = 13 } } "RecordType", typeAnnotation = Node { end = { column = 19, row = 14 }, start = { column = 5, row = 14 } } (Record [Node { end = { column = 17, row = 14 }, start = { column = 7, row = 14 } } [Node { end = { column = 11, row = 14 }, start = { column = 7, row = 14 } } "alfa",Node { end = { column = 17, row = 14 }, start = { column = 14, row = 14 } } (Typed (Node { end = { column = 17, row = 14 }, start = { column = 14, row = 14 } } ([],"Int")) [])]]) })""",
-            recordAliasDeclarationNodeAsExpression);
+        recordAliasDeclarationNodeAsExpression.Should().Be(
+            """Node { end = { column = 19, row = 14 }, start = { column = 1, row = 13 } } (AliasDeclaration { documentation = Nothing, generics = [], name = Node { end = { column = 22, row = 13 }, start = { column = 12, row = 13 } } "RecordType", typeAnnotation = Node { end = { column = 19, row = 14 }, start = { column = 5, row = 14 } } (Record [Node { end = { column = 17, row = 14 }, start = { column = 7, row = 14 } } [Node { end = { column = 11, row = 14 }, start = { column = 7, row = 14 } } "alfa",Node { end = { column = 17, row = 14 }, start = { column = 14, row = 14 } } (Typed (Node { end = { column = 17, row = 14 }, start = { column = 14, row = 14 } } ([],"Int")) [])]]) })""");
 
         var choiceTypeDeclarationNodeAsExpression =
             ElmValue.RenderAsElmExpression(choiceTypeDeclarationNode).expressionString;
 
-        Assert.AreEqual(
-            """Node { end = { column = 22, row = 19 }, start = { column = 1, row = 17 } } (CustomTypeDeclaration { constructors = [Node { end = { column = 18, row = 18 }, start = { column = 7, row = 18 } } { arguments = [], name = Node { end = { column = 18, row = 18 }, start = { column = 7, row = 18 } } "Choice_Alfa" },Node { end = { column = 22, row = 19 }, start = { column = 7, row = 19 } } { arguments = [Node { end = { column = 22, row = 19 }, start = { column = 19, row = 19 } } (Typed (Node { end = { column = 22, row = 19 }, start = { column = 19, row = 19 } } ([],"Int")) [])], name = Node { end = { column = 18, row = 19 }, start = { column = 7, row = 19 } } "Choice_Beta" }], documentation = Nothing, generics = [], name = Node { end = { column = 16, row = 17 }, start = { column = 6, row = 17 } } "ChoiceType" })""",
-            choiceTypeDeclarationNodeAsExpression);
+        choiceTypeDeclarationNodeAsExpression.Should().Be(
+            """Node { end = { column = 22, row = 19 }, start = { column = 1, row = 17 } } (CustomTypeDeclaration { constructors = [Node { end = { column = 18, row = 18 }, start = { column = 7, row = 18 } } { arguments = [], name = Node { end = { column = 18, row = 18 }, start = { column = 7, row = 18 } } "Choice_Alfa" },Node { end = { column = 22, row = 19 }, start = { column = 7, row = 19 } } { arguments = [Node { end = { column = 22, row = 19 }, start = { column = 19, row = 19 } } (Typed (Node { end = { column = 22, row = 19 }, start = { column = 19, row = 19 } } ([],"Int")) [])], name = Node { end = { column = 18, row = 19 }, start = { column = 7, row = 19 } } "Choice_Beta" }], documentation = Nothing, generics = [], name = Node { end = { column = 16, row = 17 }, start = { column = 6, row = 17 } } "ChoiceType" })""");
 
         {
             var functionDeclarationNode = declarations.ElementAt(3);
@@ -293,7 +291,7 @@ public class ParseElmModuleTextToPineValueTests
             var declaration =
                 (ElmValue.ElmTag)functionDeclarationNode.Arguments.ElementAt(1);
 
-            Assert.AreEqual("FunctionDeclaration", declaration.TagName);
+            declaration.TagName.Should().Be("FunctionDeclaration");
 
             var declarationRecord = (ElmValue.ElmRecord)declaration.Arguments.Single();
 
@@ -303,9 +301,8 @@ public class ParseElmModuleTextToPineValueTests
             var declarationSignatureNodeAsExpression =
                 ElmValue.RenderAsElmExpression(declarationSignatureNode).expressionString;
 
-            Assert.AreEqual(
-                """Just (Node { end = { column = 25, row = 22 }, start = { column = 1, row = 22 } } { name = Node { end = { column = 6, row = 22 }, start = { column = 1, row = 22 } } "greet", typeAnnotation = Node { end = { column = 25, row = 22 }, start = { column = 9, row = 22 } } (FunctionTypeAnnotation (Node { end = { column = 15, row = 22 }, start = { column = 9, row = 22 } } (Typed (Node { end = { column = 15, row = 22 }, start = { column = 9, row = 22 } } ([],"String")) [])) (Node { end = { column = 25, row = 22 }, start = { column = 19, row = 22 } } (Typed (Node { end = { column = 25, row = 22 }, start = { column = 19, row = 22 } } ([],"String")) []))) })""",
-                declarationSignatureNodeAsExpression);
+            declarationSignatureNodeAsExpression.Should().Be(
+                """Just (Node { end = { column = 25, row = 22 }, start = { column = 1, row = 22 } } { name = Node { end = { column = 6, row = 22 }, start = { column = 1, row = 22 } } "greet", typeAnnotation = Node { end = { column = 25, row = 22 }, start = { column = 9, row = 22 } } (FunctionTypeAnnotation (Node { end = { column = 15, row = 22 }, start = { column = 9, row = 22 } } (Typed (Node { end = { column = 15, row = 22 }, start = { column = 9, row = 22 } } ([],"String")) [])) (Node { end = { column = 25, row = 22 }, start = { column = 19, row = 22 } } (Typed (Node { end = { column = 25, row = 22 }, start = { column = 19, row = 22 } } ([],"String")) []))) })""");
 
             var declarationDeclarationNode =
                 declarationRecord.Fields.First(f => f.FieldName is "declaration").Value;
@@ -313,9 +310,8 @@ public class ParseElmModuleTextToPineValueTests
             var declarationDeclarationNodeAsExpression =
                 ElmValue.RenderAsElmExpression(declarationDeclarationNode).expressionString;
 
-            Assert.AreEqual(
-                """Node { end = { column = 36, row = 24 }, start = { column = 1, row = 23 } } { arguments = [Node { end = { column = 17, row = 23 }, start = { column = 7, row = 23 } } (VarPattern "param_name")], expression = Node { end = { column = 36, row = 24 }, start = { column = 5, row = 24 } } (OperatorApplication "++" Right (Node { end = { column = 14, row = 24 }, start = { column = 5, row = 24 } } (Literal "Hello, ")) (Node { end = { column = 36, row = 24 }, start = { column = 18, row = 24 } } (OperatorApplication "++" Right (Node { end = { column = 28, row = 24 }, start = { column = 18, row = 24 } } (FunctionOrValue [] "param_name")) (Node { end = { column = 36, row = 24 }, start = { column = 32, row = 24 } } (Literal " 👋"))))), name = Node { end = { column = 6, row = 23 }, start = { column = 1, row = 23 } } "greet" }""",
-                declarationDeclarationNodeAsExpression);
+            declarationDeclarationNodeAsExpression.Should().Be(
+                """Node { end = { column = 36, row = 24 }, start = { column = 1, row = 23 } } { arguments = [Node { end = { column = 17, row = 23 }, start = { column = 7, row = 23 } } (VarPattern "param_name")], expression = Node { end = { column = 36, row = 24 }, start = { column = 5, row = 24 } } (OperatorApplication "++" Right (Node { end = { column = 14, row = 24 }, start = { column = 5, row = 24 } } (Literal "Hello, ")) (Node { end = { column = 36, row = 24 }, start = { column = 18, row = 24 } } (OperatorApplication "++" Right (Node { end = { column = 28, row = 24 }, start = { column = 18, row = 24 } } (FunctionOrValue [] "param_name")) (Node { end = { column = 36, row = 24 }, start = { column = 32, row = 24 } } (Literal " 👋"))))), name = Node { end = { column = 6, row = 23 }, start = { column = 1, row = 23 } } "greet" }""");
         }
 
         {
@@ -327,7 +323,7 @@ public class ParseElmModuleTextToPineValueTests
             var declaration =
                 (ElmValue.ElmTag)functionDeclarationNode.Arguments.ElementAt(1);
 
-            Assert.AreEqual("FunctionDeclaration", declaration.TagName);
+            declaration.TagName.Should().Be("FunctionDeclaration");
 
             var declarationRecord = (ElmValue.ElmRecord)declaration.Arguments.Single();
 
@@ -337,9 +333,8 @@ public class ParseElmModuleTextToPineValueTests
             var declarationDeclarationNodeAsExpression =
                 ElmValue.RenderAsElmExpression(declarationDeclarationNode).expressionString;
 
-            Assert.AreEqual(
-                """Node { end = { column = 40, row = 42 }, start = { column = 1, row = 36 } } { arguments = [Node { end = { column = 12, row = 36 }, start = { column = 11, row = 36 } } (VarPattern "a")], expression = Node { end = { column = 40, row = 42 }, start = { column = 5, row = 37 } } (CaseExpression { cases = [[Node { end = { column = 23, row = 38 }, start = { column = 9, row = 38 } } (NamedPattern { moduleName = [], name = "String" } [Node { end = { column = 23, row = 38 }, start = { column = 16, row = 38 } } (VarPattern "stringA")]),Node { end = { column = 61, row = 39 }, start = { column = 13, row = 39 } } (Application [Node { end = { column = 19, row = 39 }, start = { column = 13, row = 39 } } (FunctionOrValue [] "String"),Node { end = { column = 61, row = 39 }, start = { column = 20, row = 39 } } (ParenthesizedExpression (Node { end = { column = 60, row = 39 }, start = { column = 21, row = 39 } } (Application [Node { end = { column = 39, row = 39 }, start = { column = 21, row = 39 } } (FunctionOrValue ["Pine_kernel"] "concat"),Node { end = { column = 60, row = 39 }, start = { column = 40, row = 39 } } (ListExpr [Node { end = { column = 49, row = 39 }, start = { column = 42, row = 39 } } (FunctionOrValue [] "stringA"),Node { end = { column = 58, row = 39 }, start = { column = 51, row = 39 } } (FunctionOrValue [] "stringA")])])))])],[Node { end = { column = 10, row = 41 }, start = { column = 9, row = 41 } } AllPattern,Node { end = { column = 40, row = 42 }, start = { column = 13, row = 42 } } (Application [Node { end = { column = 31, row = 42 }, start = { column = 13, row = 42 } } (FunctionOrValue ["Pine_kernel"] "concat"),Node { end = { column = 40, row = 42 }, start = { column = 32, row = 42 } } (ListExpr [Node { end = { column = 35, row = 42 }, start = { column = 34, row = 42 } } (FunctionOrValue [] "a"),Node { end = { column = 38, row = 42 }, start = { column = 37, row = 42 } } (FunctionOrValue [] "a")])])]], expression = Node { end = { column = 11, row = 37 }, start = { column = 10, row = 37 } } (FunctionOrValue [] "a") }), name = Node { end = { column = 10, row = 36 }, start = { column = 1, row = 36 } } "replicate" }""",
-                declarationDeclarationNodeAsExpression);
+            declarationDeclarationNodeAsExpression.Should().Be(
+                """Node { end = { column = 40, row = 42 }, start = { column = 1, row = 36 } } { arguments = [Node { end = { column = 12, row = 36 }, start = { column = 11, row = 36 } } (VarPattern "a")], expression = Node { end = { column = 40, row = 42 }, start = { column = 5, row = 37 } } (CaseExpression { cases = [[Node { end = { column = 23, row = 38 }, start = { column = 9, row = 38 } } (NamedPattern { moduleName = [], name = "String" } [Node { end = { column = 23, row = 38 }, start = { column = 16, row = 38 } } (VarPattern "stringA")]),Node { end = { column = 61, row = 39 }, start = { column = 13, row = 39 } } (Application [Node { end = { column = 19, row = 39 }, start = { column = 13, row = 39 } } (FunctionOrValue [] "String"),Node { end = { column = 61, row = 39 }, start = { column = 20, row = 39 } } (ParenthesizedExpression (Node { end = { column = 60, row = 39 }, start = { column = 21, row = 39 } } (Application [Node { end = { column = 39, row = 39 }, start = { column = 21, row = 39 } } (FunctionOrValue ["Pine_kernel"] "concat"),Node { end = { column = 60, row = 39 }, start = { column = 40, row = 39 } } (ListExpr [Node { end = { column = 49, row = 39 }, start = { column = 42, row = 39 } } (FunctionOrValue [] "stringA"),Node { end = { column = 58, row = 39 }, start = { column = 51, row = 39 } } (FunctionOrValue [] "stringA")])])))])],[Node { end = { column = 10, row = 41 }, start = { column = 9, row = 41 } } AllPattern,Node { end = { column = 40, row = 42 }, start = { column = 13, row = 42 } } (Application [Node { end = { column = 31, row = 42 }, start = { column = 13, row = 42 } } (FunctionOrValue ["Pine_kernel"] "concat"),Node { end = { column = 40, row = 42 }, start = { column = 32, row = 42 } } (ListExpr [Node { end = { column = 35, row = 42 }, start = { column = 34, row = 42 } } (FunctionOrValue [] "a"),Node { end = { column = 38, row = 42 }, start = { column = 37, row = 42 } } (FunctionOrValue [] "a")])])]], expression = Node { end = { column = 11, row = 37 }, start = { column = 10, row = 37 } } (FunctionOrValue [] "a") }), name = Node { end = { column = 10, row = 36 }, start = { column = 1, row = 36 } } "replicate" }""");
         }
 
         {
@@ -351,7 +346,7 @@ public class ParseElmModuleTextToPineValueTests
             var declaration =
                 (ElmValue.ElmTag)functionDeclarationNode.Arguments.ElementAt(1);
 
-            Assert.AreEqual("FunctionDeclaration", declaration.TagName);
+            declaration.TagName.Should().Be("FunctionDeclaration");
 
             var declarationRecord = (ElmValue.ElmRecord)declaration.Arguments.Single();
 
@@ -361,9 +356,8 @@ public class ParseElmModuleTextToPineValueTests
             var declarationDeclarationNodeAsExpression =
                 ElmValue.RenderAsElmExpression(declarationDeclarationNode).expressionString;
 
-            Assert.AreEqual(
-                """Node { end = { column = 10, row = 124 }, start = { column = 1, row = 110 } } { arguments = [Node { end = { column = 10, row = 110 }, start = { column = 6, row = 110 } } (VarPattern "func"),Node { end = { column = 28, row = 110 }, start = { column = 11, row = 110 } } (ParenthesizedPattern (Node { end = { column = 27, row = 110 }, start = { column = 12, row = 110 } } (NamedPattern { moduleName = [], name = "Decoder" } [Node { end = { column = 27, row = 110 }, start = { column = 20, row = 110 } } (VarPattern "decodeA")]))),Node { end = { column = 46, row = 110 }, start = { column = 29, row = 110 } } (ParenthesizedPattern (Node { end = { column = 45, row = 110 }, start = { column = 30, row = 110 } } (NamedPattern { moduleName = [], name = "Decoder" } [Node { end = { column = 45, row = 110 }, start = { column = 38, row = 110 } } (VarPattern "decodeB")]))),Node { end = { column = 64, row = 110 }, start = { column = 47, row = 110 } } (ParenthesizedPattern (Node { end = { column = 63, row = 110 }, start = { column = 48, row = 110 } } (NamedPattern { moduleName = [], name = "Decoder" } [Node { end = { column = 63, row = 110 }, start = { column = 56, row = 110 } } (VarPattern "decodeC")])))], expression = Node { end = { column = 10, row = 124 }, start = { column = 5, row = 111 } } (Application [Node { end = { column = 12, row = 111 }, start = { column = 5, row = 111 } } (FunctionOrValue [] "Decoder"),Node { end = { column = 10, row = 124 }, start = { column = 9, row = 112 } } (ParenthesizedExpression (Node { end = { column = 36, row = 123 }, start = { column = 10, row = 112 } } (LambdaExpression { args = [Node { end = { column = 16, row = 112 }, start = { column = 11, row = 112 } } (VarPattern "bites"),Node { end = { column = 23, row = 112 }, start = { column = 17, row = 112 } } (VarPattern "offset")], expression = Node { end = { column = 36, row = 123 }, start = { column = 13, row = 113 } } (LetExpression { declarations = [Node { end = { column = 41, row = 115 }, start = { column = 17, row = 114 } } (LetDestructuring (Node { end = { column = 31, row = 114 }, start = { column = 17, row = 114 } } (TuplePattern [Node { end = { column = 26, row = 114 }, start = { column = 19, row = 114 } } (VarPattern "offsetA"),Node { end = { column = 29, row = 114 }, start = { column = 28, row = 114 } } (VarPattern "a")])) (Node { end = { column = 41, row = 115 }, start = { column = 21, row = 115 } } (Application [Node { end = { column = 28, row = 115 }, start = { column = 21, row = 115 } } (FunctionOrValue [] "decodeA"),Node { end = { column = 34, row = 115 }, start = { column = 29, row = 115 } } (FunctionOrValue [] "bites"),Node { end = { column = 41, row = 115 }, start = { column = 35, row = 115 } } (FunctionOrValue [] "offset")]))),Node { end = { column = 42, row = 118 }, start = { column = 17, row = 117 } } (LetDestructuring (Node { end = { column = 31, row = 117 }, start = { column = 17, row = 117 } } (TuplePattern [Node { end = { column = 26, row = 117 }, start = { column = 19, row = 117 } } (VarPattern "offsetB"),Node { end = { column = 29, row = 117 }, start = { column = 28, row = 117 } } (VarPattern "b")])) (Node { end = { column = 42, row = 118 }, start = { column = 21, row = 118 } } (Application [Node { end = { column = 28, row = 118 }, start = { column = 21, row = 118 } } (FunctionOrValue [] "decodeB"),Node { end = { column = 34, row = 118 }, start = { column = 29, row = 118 } } (FunctionOrValue [] "bites"),Node { end = { column = 42, row = 118 }, start = { column = 35, row = 118 } } (FunctionOrValue [] "offsetA")]))),Node { end = { column = 42, row = 121 }, start = { column = 17, row = 120 } } (LetDestructuring (Node { end = { column = 31, row = 120 }, start = { column = 17, row = 120 } } (TuplePattern [Node { end = { column = 26, row = 120 }, start = { column = 19, row = 120 } } (VarPattern "offsetC"),Node { end = { column = 29, row = 120 }, start = { column = 28, row = 120 } } (VarPattern "c")])) (Node { end = { column = 42, row = 121 }, start = { column = 21, row = 121 } } (Application [Node { end = { column = 28, row = 121 }, start = { column = 21, row = 121 } } (FunctionOrValue [] "decodeC"),Node { end = { column = 34, row = 121 }, start = { column = 29, row = 121 } } (FunctionOrValue [] "bites"),Node { end = { column = 42, row = 121 }, start = { column = 35, row = 121 } } (FunctionOrValue [] "offsetB")])))], expression = Node { end = { column = 36, row = 123 }, start = { column = 13, row = 123 } } (TupledExpression [Node { end = { column = 22, row = 123 }, start = { column = 15, row = 123 } } (FunctionOrValue [] "offsetC"),Node { end = { column = 34, row = 123 }, start = { column = 24, row = 123 } } (Application [Node { end = { column = 28, row = 123 }, start = { column = 24, row = 123 } } (FunctionOrValue [] "func"),Node { end = { column = 30, row = 123 }, start = { column = 29, row = 123 } } (FunctionOrValue [] "a"),Node { end = { column = 32, row = 123 }, start = { column = 31, row = 123 } } (FunctionOrValue [] "b"),Node { end = { column = 34, row = 123 }, start = { column = 33, row = 123 } } (FunctionOrValue [] "c")])]) }) })))]), name = Node { end = { column = 5, row = 110 }, start = { column = 1, row = 110 } } "map3" }""",
-                declarationDeclarationNodeAsExpression);
+            declarationDeclarationNodeAsExpression.Should().Be(
+                """Node { end = { column = 10, row = 124 }, start = { column = 1, row = 110 } } { arguments = [Node { end = { column = 10, row = 110 }, start = { column = 6, row = 110 } } (VarPattern "func"),Node { end = { column = 28, row = 110 }, start = { column = 11, row = 110 } } (ParenthesizedPattern (Node { end = { column = 27, row = 110 }, start = { column = 12, row = 110 } } (NamedPattern { moduleName = [], name = "Decoder" } [Node { end = { column = 27, row = 110 }, start = { column = 20, row = 110 } } (VarPattern "decodeA")]))),Node { end = { column = 46, row = 110 }, start = { column = 29, row = 110 } } (ParenthesizedPattern (Node { end = { column = 45, row = 110 }, start = { column = 30, row = 110 } } (NamedPattern { moduleName = [], name = "Decoder" } [Node { end = { column = 45, row = 110 }, start = { column = 38, row = 110 } } (VarPattern "decodeB")]))),Node { end = { column = 64, row = 110 }, start = { column = 47, row = 110 } } (ParenthesizedPattern (Node { end = { column = 63, row = 110 }, start = { column = 48, row = 110 } } (NamedPattern { moduleName = [], name = "Decoder" } [Node { end = { column = 63, row = 110 }, start = { column = 56, row = 110 } } (VarPattern "decodeC")])))], expression = Node { end = { column = 10, row = 124 }, start = { column = 5, row = 111 } } (Application [Node { end = { column = 12, row = 111 }, start = { column = 5, row = 111 } } (FunctionOrValue [] "Decoder"),Node { end = { column = 10, row = 124 }, start = { column = 9, row = 112 } } (ParenthesizedExpression (Node { end = { column = 36, row = 123 }, start = { column = 10, row = 112 } } (LambdaExpression { args = [Node { end = { column = 16, row = 112 }, start = { column = 11, row = 112 } } (VarPattern "bites"),Node { end = { column = 23, row = 112 }, start = { column = 17, row = 112 } } (VarPattern "offset")], expression = Node { end = { column = 36, row = 123 }, start = { column = 13, row = 113 } } (LetExpression { declarations = [Node { end = { column = 41, row = 115 }, start = { column = 17, row = 114 } } (LetDestructuring (Node { end = { column = 31, row = 114 }, start = { column = 17, row = 114 } } (TuplePattern [Node { end = { column = 26, row = 114 }, start = { column = 19, row = 114 } } (VarPattern "offsetA"),Node { end = { column = 29, row = 114 }, start = { column = 28, row = 114 } } (VarPattern "a")])) (Node { end = { column = 41, row = 115 }, start = { column = 21, row = 115 } } (Application [Node { end = { column = 28, row = 115 }, start = { column = 21, row = 115 } } (FunctionOrValue [] "decodeA"),Node { end = { column = 34, row = 115 }, start = { column = 29, row = 115 } } (FunctionOrValue [] "bites"),Node { end = { column = 41, row = 115 }, start = { column = 35, row = 115 } } (FunctionOrValue [] "offset")]))),Node { end = { column = 42, row = 118 }, start = { column = 17, row = 117 } } (LetDestructuring (Node { end = { column = 31, row = 117 }, start = { column = 17, row = 117 } } (TuplePattern [Node { end = { column = 26, row = 117 }, start = { column = 19, row = 117 } } (VarPattern "offsetB"),Node { end = { column = 29, row = 117 }, start = { column = 28, row = 117 } } (VarPattern "b")])) (Node { end = { column = 42, row = 118 }, start = { column = 21, row = 118 } } (Application [Node { end = { column = 28, row = 118 }, start = { column = 21, row = 118 } } (FunctionOrValue [] "decodeB"),Node { end = { column = 34, row = 118 }, start = { column = 29, row = 118 } } (FunctionOrValue [] "bites"),Node { end = { column = 42, row = 118 }, start = { column = 35, row = 118 } } (FunctionOrValue [] "offsetA")]))),Node { end = { column = 42, row = 121 }, start = { column = 17, row = 120 } } (LetDestructuring (Node { end = { column = 31, row = 120 }, start = { column = 17, row = 120 } } (TuplePattern [Node { end = { column = 26, row = 120 }, start = { column = 19, row = 120 } } (VarPattern "offsetC"),Node { end = { column = 29, row = 120 }, start = { column = 28, row = 120 } } (VarPattern "c")])) (Node { end = { column = 42, row = 121 }, start = { column = 21, row = 121 } } (Application [Node { end = { column = 28, row = 121 }, start = { column = 21, row = 121 } } (FunctionOrValue [] "decodeC"),Node { end = { column = 34, row = 121 }, start = { column = 29, row = 121 } } (FunctionOrValue [] "bites"),Node { end = { column = 42, row = 121 }, start = { column = 35, row = 121 } } (FunctionOrValue [] "offsetB")])))], expression = Node { end = { column = 36, row = 123 }, start = { column = 13, row = 123 } } (TupledExpression [Node { end = { column = 22, row = 123 }, start = { column = 15, row = 123 } } (FunctionOrValue [] "offsetC"),Node { end = { column = 34, row = 123 }, start = { column = 24, row = 123 } } (Application [Node { end = { column = 28, row = 123 }, start = { column = 24, row = 123 } } (FunctionOrValue [] "func"),Node { end = { column = 30, row = 123 }, start = { column = 29, row = 123 } } (FunctionOrValue [] "a"),Node { end = { column = 32, row = 123 }, start = { column = 31, row = 123 } } (FunctionOrValue [] "b"),Node { end = { column = 34, row = 123 }, start = { column = 33, row = 123 } } (FunctionOrValue [] "c")])]) }) })))]), name = Node { end = { column = 5, row = 110 }, start = { column = 1, row = 110 } } "map3" }""");
         }
     }
 
@@ -1746,12 +1740,12 @@ public class ParseElmModuleTextToPineValueTests
 
                 if (fromDotnetResult.IsErrOrNull() is { } err)
                 {
-                    Assert.Fail("Failed to parse Elm module text as Elm syntax: " + err);
+                    throw new AssertionFailedException("Failed to parse Elm module text as Elm syntax: " + err);
                 }
 
                 if (fromDotnetResult.IsOkOrNull() is not { } fromDotnetOk)
                 {
-                    throw new Exception("Unexpected result type: " + fromDotnetResult);
+                    throw new NotImplementedException("Unexpected result type: " + fromDotnetResult);
                 }
 
                 var fromDotnetExpression =
@@ -1763,7 +1757,7 @@ public class ParseElmModuleTextToPineValueTests
                 {
                     Console.WriteLine(firstDifference);
 
-                    Assert.Fail(firstDifference);
+                    throw new AssertionFailedException(firstDifference);
                 }
             }
             catch (Exception e)
@@ -1812,14 +1806,13 @@ public class ParseElmModuleTextToPineValueTests
             {
                 Console.WriteLine(firstDifference);
 
-                Assert.Fail(firstDifference);
+                throw new AssertionFailedException(firstDifference);
             }
         }
 
-        Assert.AreEqual(
+        responseAsExpression.Should().Be(
             expectedExpressionString,
-            responseAsExpression,
-            "Module parsed as expression syntax");
+            because: "Module parsed as expression syntax");
 
         if (alsoTestDotnetParser)
         {
@@ -1828,12 +1821,12 @@ public class ParseElmModuleTextToPineValueTests
 
             if (fromDotnetResult.IsErrOrNull() is { } err)
             {
-                Assert.Fail("Failed to parse Elm module text as Elm syntax: " + err);
+                throw new AssertionFailedException("Failed to parse Elm module text as Elm syntax: " + err);
             }
 
             if (fromDotnetResult.IsOkOrNull() is not { } fromDotnetOk)
             {
-                throw new Exception("Unexpected result type: " + fromDotnetResult);
+                throw new NotImplementedException("Unexpected result type: " + fromDotnetResult);
             }
 
             var fromDotnetExpression =
@@ -1845,7 +1838,7 @@ public class ParseElmModuleTextToPineValueTests
             {
                 Console.WriteLine(firstDifference);
 
-                Assert.Fail(
+                throw new AssertionFailedException(
                     "Dotnet parser produced different expression syntax: " +
                     firstDifference);
             }
@@ -1871,9 +1864,8 @@ public class ParseElmModuleTextToPineValueTests
             var elmCompilerFromBundle =
                 BundledElmEnvironments.BundledElmCompilerCompiledEnvValue();
 
-            Assert.IsNotNull(
-                elmCompilerFromBundle,
-                message: "Elm compiler environment not found in bundled environments");
+            elmCompilerFromBundle.Should().NotBeNull(
+                    because: "Elm compiler environment not found in bundled environments");
 
             return
             ElmCompiler.ElmCompilerFromEnvValue(elmCompilerFromBundle)

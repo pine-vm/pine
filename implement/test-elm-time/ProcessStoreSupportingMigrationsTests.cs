@@ -1,4 +1,5 @@
 ﻿using ElmTime.Platform.WebService.ProcessStoreSupportingMigrations;
+using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine;
 using System.Collections.Immutable;
@@ -26,6 +27,6 @@ public class ProcessStoreSupportingMigrationsTests
         var compositionLogRecords =
             processStoreReader.EnumerateSerializedCompositionLogRecordsReverse().ToImmutableList();
 
-        Assert.IsTrue(!compositionLogRecords.IsEmpty);
+        compositionLogRecords.Should().NotBeEmpty();
     }
 }

@@ -1,3 +1,4 @@
+using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using MoreLinq;
 using Pine.Core;
@@ -40,7 +41,7 @@ public class ElmWebServiceAppTests
 
         var eventsAndExpectedResponsesBatches = eventsAndExpectedResponses.Batch(3).ToList();
 
-        Assert.IsTrue(2 < eventsAndExpectedResponsesBatches.Count, "More than two batches of events to test with.");
+        eventsAndExpectedResponsesBatches.Should().HaveCountGreaterThan(2, "More than two batches of events to test with.");
 
         using var testSetup =
             WebHostAdminInterfaceTestSetup.Setup(deployAppAndInitElmState: CounterWebApp);
@@ -62,7 +63,7 @@ public class ElmWebServiceAppTests
                 var httpResponseContent =
                     await httpResponse.Content.ReadAsStringAsync();
 
-                Assert.AreEqual(expectedResponse, httpResponseContent, false, "server response");
+                httpResponseContent.Should().Be(expectedResponse, "server response");
             }
         }
     }

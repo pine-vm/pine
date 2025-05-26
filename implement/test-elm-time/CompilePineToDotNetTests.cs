@@ -26,7 +26,7 @@ public class CompilePineToDotNetTests
     [TestMethod]
     public void Test_sort_pine_value_for_declaration()
     {
-        value_d597fb92e5.ContainsInListTransitive(value_299b7decef).Should().BeTrue();
+        value_d597fb92e5.ContainsInListTransitive(value_299b7decef).Should().BeTrue("value should contain value_299b7decef in list transitive");
 
         var listBeforeOrdering =
             new[]
@@ -46,14 +46,14 @@ public class CompilePineToDotNetTests
             CSharpDeclarationOrder.OrderValuesForDeclaration(listBeforeOrdering)
             .ToImmutableList();
 
-        orderedValues.Should().Equal(
+        orderedValues.Should().BeEquivalentTo(
             new[]
             {
                 StringEncoding.ValueFromString("Ok"),
                 StringEncoding.ValueFromString("Err"),
                 value_299b7decef,
                 value_d597fb92e5
-            });
+            }, options => options.WithStrictOrdering());
     }
 
     [TestMethod]
@@ -308,11 +308,11 @@ public class CompilePineToDotNetTests
                     testCase.expr,
                     testCase.envConstraint);
 
-            paths.Count.Should().Be(testCase.expectedPaths.Count, "Paths count");
+            paths.Count.Should().Be(testCase.expectedPaths.Count, "Paths count should match");
 
             for (var i = 0; i < testCase.expectedPaths.Count; i++)
             {
-                paths[i].Should().Equal(testCase.expectedPaths[i], "Path " + i);
+                paths[i].Should().BeEquivalentTo(testCase.expectedPaths[i], options => options.WithStrictOrdering(), $"Path {i} should match expected path");
             }
         }
     }

@@ -1,3 +1,4 @@
+using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Pine.Core;
 using Pine.Core.PopularEncodings;
@@ -244,7 +245,9 @@ public class PineVMTests
                 testCase.expression,
                 testCase.environment);
 
-            Assert.AreEqual(testCase.expected, evaluated);
+            evaluated.Should().Be(
+                testCase.expected,
+                "Evaluated expression should match the expected value.");
         }
     }
 
@@ -1524,20 +1527,18 @@ public class PineVMTests
 
             try
             {
-                Assert.AreEqual(
+                compiled.Generic.Instructions.Should().HaveCount(
                     testCase.expected.Instructions.Count,
-                    compiled.Generic.Instructions.Count,
-                    "Instructions count");
+                    "Instructions count for test case " + testCaseIndex);
 
                 for (var instructionIndex = 0; instructionIndex < testCase.expected.Instructions.Count; instructionIndex++)
                 {
-                    Assert.AreEqual(
+                    compiled.Generic.Instructions[instructionIndex].Should().Be(
                         testCase.expected.Instructions[instructionIndex],
-                        compiled.Generic.Instructions[instructionIndex],
-                        $"Instruction at index {instructionIndex} of " + compiled.Generic.Instructions.Count);
+                        "Instruction at index " + instructionIndex + " of " + compiled.Generic.Instructions.Count);
                 }
 
-                Assert.AreEqual(testCase.expected, compiled.Generic);
+                compiled.Generic.Should().BeEquivalentTo(testCase.expected);
             }
             catch (System.Exception e)
             {

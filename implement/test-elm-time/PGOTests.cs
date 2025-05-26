@@ -1285,7 +1285,9 @@ public class PGOTests
                     new PineVM.EvaluationConfig(ParseAndEvalCountLimit: 12345))
                 .Map(evalReport =>
                 {
-                    Assert.AreEqual(ElmValueEncoding.ElmValueAsPineValue(scenarioExpected), evalReport.ReturnValue);
+                    evalReport.ReturnValue.Should().Be(
+                        ElmValueEncoding.ElmValueAsPineValue(scenarioExpected),
+                        "Return value matches expected for scenario with functionId " + scenarioFunctionId);
 
                     Console.WriteLine(
                         "Completed scenario using " + evalReport.InstructionCount +
@@ -1438,7 +1440,9 @@ public class PGOTests
              * Therefore, the test expects only one invocation per item of the input list.
              * */
 
-            Assert.IsTrue(scenarioReport.InvocationCount < largerListInput.Length + 30, "Total invocation count");
+            scenarioReport.InvocationCount.Should().BeLessThan(
+                largerListInput.Length + 30,
+                "Total invocation count for larger list with " + largerListInput.Length + " items");
         }
     }
 
@@ -1489,7 +1493,7 @@ public class PGOTests
         var testSubmissionResponse =
             testSubmissionResult.Extract(err => throw new Exception(err));
 
-        Assert.AreEqual("""[(41,"beta"),(31,"alfa")]""", testSubmissionResponse.InteractiveResponse.DisplayText);
+        testSubmissionResponse.InteractiveResponse.DisplayText.Should().Be("""[(41,"beta"),(31,"alfa")]""");
 
         var interactiveEnvironmentValue = interactiveSession.CurrentEnvironmentValue();
 
@@ -1654,7 +1658,9 @@ public class PGOTests
                 {
                     if (scenarioExpected is not null)
                     {
-                        Assert.AreEqual(ElmValueEncoding.ElmValueAsPineValue(scenarioExpected), evalReport.ReturnValue);
+                        evalReport.ReturnValue.Should().Be(
+                            ElmValueEncoding.ElmValueAsPineValue(scenarioExpected),
+                            "Return value matches expected for scenario with functionId " + scenarioFunctionId);
                     }
 
                     Console.WriteLine(
@@ -1830,7 +1836,9 @@ public class PGOTests
              * Therefore, the test expects at most two invocations per dictionary item.
              * */
 
-            Assert.IsTrue(scenarioReport.InvocationCount < largerListInput.Length * 2 + 30, "Total invocation count");
+            scenarioReport.InvocationCount.Should().BeLessThan(
+                largerListInput.Length * 2 + 30,
+                "Total invocation count for larger list with " + largerListInput.Length + " items");
         }
     }
 
