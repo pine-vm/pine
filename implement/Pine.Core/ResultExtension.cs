@@ -92,7 +92,7 @@ public static class ResultExtension
     }
 
     /// <summary>
-    /// Combines a list of <see cref="Result{ErrT, OkT}"/> into a single <see cref="Result{ErrT, IReadOnlyList{OkT}}"/>.
+    /// Combines a list of <see cref="Result{ErrT, OkT}"/> into a single Result&lt;ErrT, IReadOnlyList&lt;OkT&gt;&gt;.
     /// If any result in the list is an error, it returns the first error encountered.
     /// Otherwise, it returns a list of all the success values.
     /// </summary>
