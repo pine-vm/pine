@@ -1773,4 +1773,87 @@ public class LanguageServer(
 
         return Result<string, string>.err("Not an absolute URI");
     }
+
+    /// <summary>
+    /// Apply a list of text edits following the specification from
+    /// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.18/specification/#textEditArray
+    /// </summary>
+    public static string ApplyTextEdits(string originalText, IReadOnlyList<TextEdit> edits)
+    {
+        if (edits.Count is 0)
+            return originalText;
+
+        // Convert text to lines for easier position calculation
+        var lines = originalText.ModuleLines().ToList();
+
+        // Sort edits by start position in reverse order (end to start)
+        // This ensures that applying edits doesn't invalidate positions of subsequent edits
+        var sortedEdits =
+            edits
+            .OrderByDescending(edit => edit.Range.Start.Line)
+            .ThenByDescending(edit => edit.Range.Start.Character)
+            .ToList();
+
+        // Apply each edit
+        foreach (var edit in sortedEdits)
+        {
+            var startLine = (int)edit.Range.Start.Line;
+            var startChar = (int)edit.Range.Start.Character;
+            var endLine = (int)edit.Range.End.Line;
+            var endChar = (int)edit.Range.End.Character;
+
+            // Validate range bounds
+            if (startLine < 0 || startLine >= lines.Count)
+                continue; // Skip invalid edits
+
+            if (endLine < 0 || endLine >= lines.Count)
+                continue; // Skip invalid edits
+
+            if (startLine == endLine)
+            {
+                // Single line edit
+                var line = lines[startLine];
+
+                if (startChar < 0 || startChar > line.Length || endChar < startChar || endChar > line.Length)
+                    continue; // Skip invalid edits
+
+                var before = line[..startChar];
+                var after = line[endChar..];
+
+                lines[startLine] = before + edit.NewText + after;
+            }
+            else
+            {
+                // Multi-line edit
+                var firstLine = lines[startLine];
+                var lastLine = lines[endLine];
+
+                if (startChar < 0 || startChar > firstLine.Length || endChar < 0 || endChar > lastLine.Length)
+                    continue; // Skip invalid edits
+
+                var before = firstLine[..startChar];
+                var after = lastLine[endChar..];
+
+                // Replace the range with new text
+                var newContent = before + edit.NewText + after;
+
+                // Remove the lines in the range
+                for (int i = endLine; i >= startLine; i--)
+                {
+                    lines.RemoveAt(i);
+                }
+
+                // Split new content into lines and insert
+                var newLines = newContent.ModuleLines().ToList();
+
+                for (int i = 0; i < newLines.Count; i++)
+                {
+                    lines.Insert(startLine + i, newLines[i]);
+                }
+            }
+        }
+
+        // Reconstruct the text
+        return string.Join("\n", lines);
+    }
 }
