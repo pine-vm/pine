@@ -115,6 +115,7 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
         return new System.Net.Http.HttpClient(handler)
         {
             BaseAddress = new Uri(PublicWebHostUrl),
+            Timeout = TimeSpan.FromMinutes(3),
         };
     }
 
@@ -123,6 +124,7 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
         return new System.Net.Http.HttpClient
         {
             BaseAddress = new Uri(AdminWebHostUrl),
+            Timeout = TimeSpan.FromMinutes(3),
         };
     }
 
