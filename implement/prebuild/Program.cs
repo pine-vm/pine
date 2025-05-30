@@ -110,11 +110,11 @@ public class Program
                 overrideElmCompiler: elmCompilerFirst)
             .Extract(err => throw new Exception(err));
 
-        clock.Stop();
-
         Console.WriteLine(
             "Built the second iteration in " +
             clock.Elapsed.TotalSeconds.ToString("0.00") + " seconds");
+
+        clock.Restart();
 
         Console.WriteLine(
             "Env compiled in second iteration is " + elmCompilerSecond.CompilerEnvironment);
@@ -122,6 +122,10 @@ public class Program
         BundledElmEnvironments.CompressAndWriteBundleFile(
             ImmutableDictionary<TreeNodeWithStringPath, PineValue>.Empty
             .SetItem(elmCompilerSource, elmCompilerSecond.CompilerEnvironment));
+
+        Console.WriteLine(
+            "Compressed and wrote bundle file in " +
+            clock.Elapsed.TotalSeconds.ToString("0.00") + " seconds");
 
         return elmCompilerSecond.CompilerEnvironment;
     }
