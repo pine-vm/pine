@@ -44,7 +44,7 @@ jobs:
     - name: Prebuild
       working-directory: ./implement/
       run: |
-        dotnet  run  --project ./prebuild/prebuild.csproj
+        dotnet  run  --project ./prebuild/prebuild.csproj  --configuration Release
 
     - name: dotnet publish
       run: dotnet publish -c Release -r ${{ matrix.publish-runtime-id }} --self-contained true -p:PublishSingleFile=true  --output ./dotnet-build  ./implement/pine

@@ -24,7 +24,7 @@ steps:
       **/pine.csproj
       **/test-elm-time.csproj
 
-- script: dotnet  run  --project ./prebuild/prebuild.csproj
+- script: dotnet  run  --project ./prebuild/prebuild.csproj  --configuration Release
   displayName: 'Prebuild'
   workingDirectory: ./implement/
 

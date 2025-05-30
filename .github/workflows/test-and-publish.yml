@@ -54,7 +54,7 @@ jobs:
     - name: Prebuild
       working-directory: ./implement/
       run: |
-        dotnet  run  --project ./prebuild/prebuild.csproj
+        dotnet  run  --project ./prebuild/prebuild.csproj  --configuration Release
 
     - name: Run Pine unit tests
       run: |
