@@ -1,12 +1,17 @@
 # Customizing Elm App Builds with Compilation Interfaces
 
-The compilation interfaces enable customization and extension of how an Elm app is built and composed.
+The compilation interfaces enable customization and extension of how an Elm app or test program is built and composed.
 
-There are dedicated Elm compilation interfaces for the following use cases:
+But why customize the build process in the first place? For example, these customizations enable us to:
 
-+ Generate JSON encoders/decoders to/from Elm values.
-+ Integrate and read source files of any type.
-+ Invoke an `elm make` command to generate JavaScript or HTML documents.
++ Pass a JSON file or other test fixture into a test suite.
++ Bundle an application with resources like images or audio files into a single HTML file, making it easier to distribute the app.
+
+There are dedicated Elm compilation interfaces for various kinds of data sources and transformations:
+
++ Generate JSON encoders/decoders to/from Elm values -> `GenerateJsonConverters` module
++ Integrate and read source files of any type -> `SourceFiles` module
++ Invoke an `elm make` command to generate JavaScript or HTML documents -> `ElmMake` module.
 + Integrate files from other sources into the compilation and build process.
 
 ### `CompilationInterface.GenerateJsonConverters` Module
