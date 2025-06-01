@@ -57,6 +57,12 @@ jobs:
           set -euo pipefail
           pine --version
 
+      - name: Install elm-test-rs
+        run: npm install -g elm-test-rs
+
+      - name: Check elm-test-rs installation
+        run: elm-test-rs --version
+
       - name: Checkout code
         uses: actions/checkout@v4
 
