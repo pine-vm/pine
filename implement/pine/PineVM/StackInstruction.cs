@@ -45,8 +45,16 @@ public enum StackInstructionKind
 
     /// <summary>
     /// Gets the length of the top value from the stack as integer.
+    /// <para />
+    /// This corresponds to the kernel function 'length' of the Pine language.
     /// </summary>
     Length,
+
+    /// <summary>
+    /// Gets the length of the top value from the stack as integer and
+    /// checks if it is equal to the constant from <see cref="StackInstruction.IntegerLiteral"/>.
+    /// </summary>
+    Length_Equal_Const,
 
     /// <summary>
     /// Concatenates the items in the list from the top value on the stack.
@@ -294,6 +302,9 @@ public record StackInstruction(
     public static readonly StackInstruction Length =
         new(StackInstructionKind.Length);
 
+    public static StackInstruction Length_Equal_Const(BigInteger integerLiteral) =>
+        new(StackInstructionKind.Length_Equal_Const, IntegerLiteral: integerLiteral);
+
     public static readonly StackInstruction Reverse =
         new(StackInstructionKind.Reverse);
 
@@ -538,6 +549,14 @@ public record StackInstruction(
                     PopCount: 1,
                     PushCount: 1,
                     []),
+
+            StackInstructionKind.Length_Equal_Const =>
+                new InstructionDetails(
+                    PopCount: 1,
+                    PushCount: 1,
+                    [instruction.IntegerLiteral?.ToString()
+                    ?? throw new Exception(
+                        "Missing IntegerLiteral for LengthEqualConst instruction")]),
 
             StackInstructionKind.Concat_Generic =>
                 new InstructionDetails(

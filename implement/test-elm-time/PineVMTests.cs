@@ -1507,6 +1507,68 @@ public class PineVMTests
                     ])
             },
 
+            new
+            {
+                expression =
+                (Expression)
+                new Expression.KernelApplication
+                (
+                    function: "equal",
+                    input: Expression.ListInstance(
+                        [
+                        new Expression.KernelApplication
+                        (
+                            function: "length",
+                            input: Expression.EnvironmentInstance
+                            ),
+
+                        Expression.LiteralInstance(
+                            IntegerEncoding.EncodeSignedInteger(11)),
+                    ])
+                    ),
+
+                expected =
+                new PineVM.StackFrameInstructions(
+                    [
+                        StackInstruction.Push_Environment,
+
+                        StackInstruction.Length_Equal_Const(11),
+
+                        StackInstruction.Return,
+                    ])
+            },
+
+            new
+            {
+                expression =
+                (Expression)
+                new Expression.KernelApplication
+                (
+                    function: "equal",
+                    input: Expression.ListInstance(
+                        [
+                        Expression.LiteralInstance(
+                            IntegerEncoding.EncodeSignedInteger(13)),
+
+                        new Expression.KernelApplication
+                        (
+                            function: "length",
+                            input: Expression.EnvironmentInstance
+                            ),
+                    ])
+                    ),
+
+                expected =
+                new PineVM.StackFrameInstructions(
+                    [
+                        StackInstruction.Push_Environment,
+
+                        StackInstruction.Length_Equal_Const(13),
+
+                        StackInstruction.Return,
+                    ])
+            },
+
         };
 
         var parseCache = new PineVMParseCache();

@@ -1494,6 +1494,38 @@ public class PineVM : IPineVM
                             continue;
                         }
 
+                    case StackInstructionKind.Length_Equal_Const:
+                        {
+                            var topmostValue = currentFrame.PopTopmostFromStack();
+
+                            var lengthValue =
+                                topmostValue switch
+                                {
+                                    PineValue.ListValue listValue =>
+                                    listValue.Elements.Length,
+
+                                    PineValue.BlobValue blobValue =>
+                                    blobValue.Bytes.Length,
+
+                                    _ =>
+                                    throw new Exception(
+                                        "Unexpected value type for length operation: " + topmostValue.GetType().FullName)
+                                };
+
+                            var testedLength =
+                                currentInstruction.IntegerLiteral
+                                ??
+                                throw new Exception(
+                                    "Invalid operation form: Missing integer literal value for length comparison");
+
+                            var areEqual = lengthValue == testedLength;
+
+                            currentFrame.PushInstructionResult(
+                                areEqual ? PineVMValues.TrueValue : PineVMValues.FalseValue);
+
+                            continue;
+                        }
+
                     case StackInstructionKind.Skip_Head_Const:
                         {
                             var index =

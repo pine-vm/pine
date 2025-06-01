@@ -664,30 +664,65 @@ public class PineIRCompiler
             {
                 if (listExpr.items[0] is Expression.Literal leftLiteralExpr)
                 {
-                    var afterRight =
-                        CompileExpressionTransitive(
-                            listExpr.items[1],
-                            context,
-                            prior);
+                    if (IntegerEncoding.ParseSignedIntegerRelaxed(leftLiteralExpr.Value).IsOkOrNullable() is { } leftInteger &&
+                        listExpr.items[1] is Expression.KernelApplication rightKernelApp &&
+                        rightKernelApp.Function is nameof(KernelFunction.length))
+                    {
+                        var afterRight =
+                            CompileExpressionTransitive(
+                                rightKernelApp.Input,
+                                context,
+                                prior);
 
-                    return
-                        afterRight
-                        .AppendInstruction(
-                            StackInstruction.Equal_Binary_Const(leftLiteralExpr.Value));
+                        return
+                            afterRight
+                            .AppendInstruction(
+                                StackInstruction.Length_Equal_Const(leftInteger));
+                    }
+
+                    {
+                        var afterRight =
+                            CompileExpressionTransitive(
+                                listExpr.items[1],
+                                context,
+                                prior);
+
+                        return
+                            afterRight
+                            .AppendInstruction(
+                                StackInstruction.Equal_Binary_Const(leftLiteralExpr.Value));
+                    }
                 }
 
                 if (listExpr.items[1] is Expression.Literal rightLiteralExpr)
                 {
-                    var afterLeft =
-                        CompileExpressionTransitive(
-                            listExpr.items[0],
-                            context,
-                            prior);
+                    if (IntegerEncoding.ParseSignedIntegerRelaxed(rightLiteralExpr.Value).IsOkOrNullable() is { } rightInteger &&
+                        listExpr.items[0] is Expression.KernelApplication leftKernelApp &&
+                        leftKernelApp.Function is nameof(KernelFunction.length))
+                    {
+                        var afterLeft =
+                            CompileExpressionTransitive(
+                                leftKernelApp.Input,
+                                context,
+                                prior);
+                        return
+                            afterLeft
+                            .AppendInstruction(
+                                StackInstruction.Length_Equal_Const(rightInteger));
+                    }
 
-                    return
-                        afterLeft
-                        .AppendInstruction(
-                            StackInstruction.Equal_Binary_Const(rightLiteralExpr.Value));
+                    {
+                        var afterLeft =
+                            CompileExpressionTransitive(
+                                listExpr.items[0],
+                                context,
+                                prior);
+
+                        return
+                            afterLeft
+                            .AppendInstruction(
+                                StackInstruction.Equal_Binary_Const(rightLiteralExpr.Value));
+                    }
                 }
 
                 {
