@@ -150,6 +150,8 @@ public enum StackInstructionKind
 
     Int_Less_Than_Or_Equal_Const,
 
+    Int_Greater_Than_Or_Equal_Const,
+
     /// <summary>
     /// Jump to the offset from <see cref="StackInstruction.JumpOffset"/> if the top value on the stack is true.
     /// </summary>
@@ -235,6 +237,8 @@ public enum StackInstructionKind
     Bit_Shift_Right_Const,
 
     Bit_Shift_Right_Generic,
+
+    Logical_And_Binary,
 }
 
 /// <summary>
@@ -445,8 +449,14 @@ public record StackInstruction(
     public static StackInstruction Int_Less_Than_Or_Equal_Const(BigInteger integerLiteral) =>
         new(StackInstructionKind.Int_Less_Than_Or_Equal_Const, IntegerLiteral: integerLiteral);
 
+    public static StackInstruction Int_Greater_Than_Or_Equal_Const(BigInteger integerLiteral) =>
+        new(StackInstructionKind.Int_Greater_Than_Or_Equal_Const, IntegerLiteral: integerLiteral);
+
     public static readonly StackInstruction Slice_Skip_Var_Take_Var =
         new(StackInstructionKind.Slice_Skip_Var_Take_Var);
+
+    public static readonly StackInstruction Logical_And_Binary =
+        new(StackInstructionKind.Logical_And_Binary);
 
 
     public override string ToString()
@@ -730,6 +740,14 @@ public record StackInstruction(
                     ?? throw new Exception(
                         "Missing IntegerLiteral for IntLessThanOrEqualConst instruction")]),
 
+            StackInstructionKind.Int_Greater_Than_Or_Equal_Const =>
+                new InstructionDetails(
+                    PopCount: 1,
+                    PushCount: 1,
+                    [instruction.IntegerLiteral?.ToString()
+                    ?? throw new Exception(
+                        "Missing IntegerLiteral for IntGreaterThanOrEqualConst instruction")]),
+
             StackInstructionKind.Jump_If_True_Const =>
                 new InstructionDetails(
                     PopCount: 1,
@@ -901,6 +919,12 @@ public record StackInstruction(
             StackInstructionKind.Bit_Shift_Right_Generic =>
                 new InstructionDetails(
                     PopCount: 1,
+                    PushCount: 1,
+                    []),
+
+            StackInstructionKind.Logical_And_Binary =>
+                new InstructionDetails(
+                    PopCount: 2,
                     PushCount: 1,
                     []),
 

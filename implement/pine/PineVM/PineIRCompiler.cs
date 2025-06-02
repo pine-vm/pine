@@ -1052,7 +1052,7 @@ public class PineIRCompiler
                 }
             }
 
-            if (innerKernelApp.Function is "int_is_sorted_asc" &&
+            if (innerKernelApp.Function is nameof(KernelFunction.int_is_sorted_asc) &&
                 innerKernelApp.Input is Expression.List isSortedAscList && isSortedAscList.items.Count is 2)
             {
                 /*
@@ -1289,21 +1289,91 @@ public class PineIRCompiler
 
             if (listExpr.items.Count is 2)
             {
-                var afterLeft =
-                    CompileExpressionTransitive(
-                        listExpr.items[0],
-                        context,
-                        prior);
+                if (listExpr.items[0] is Expression.Literal leftLiteralExpr &&
+                    KernelFunction.SignedIntegerFromValueRelaxed(leftLiteralExpr.Value) is { } leftInt)
+                {
+                    var afterRight =
+                        CompileExpressionTransitive(
+                            listExpr.items[1],
+                            context,
+                            prior);
 
-                var afterRight =
-                    CompileExpressionTransitive(
-                        listExpr.items[1],
-                        context,
-                        afterLeft);
+                    return
+                        afterRight
+                        .AppendInstruction(
+                            StackInstruction.Int_Greater_Than_Or_Equal_Const(leftInt));
+                }
 
-                return
-                    afterRight
-                    .AppendInstruction(StackInstruction.Int_Less_Than_Or_Equal_Binary);
+                if (listExpr.items[1] is Expression.Literal rightLiteralExpr &&
+                    KernelFunction.SignedIntegerFromValueRelaxed(rightLiteralExpr.Value) is { } rightInt)
+                {
+                    var afterLeft =
+                        CompileExpressionTransitive(
+                            listExpr.items[0],
+                            context,
+                            prior);
+
+                    return
+                        afterLeft
+                        .AppendInstruction(
+                            StackInstruction.Int_Less_Than_Or_Equal_Const(rightInt));
+                }
+
+                {
+                    var afterLeft =
+                        CompileExpressionTransitive(
+                            listExpr.items[0],
+                            context,
+                            prior);
+
+                    var afterRight =
+                        CompileExpressionTransitive(
+                            listExpr.items[1],
+                            context,
+                            afterLeft);
+
+                    return
+                        afterRight
+                        .AppendInstruction(StackInstruction.Int_Less_Than_Or_Equal_Binary);
+                }
+            }
+
+            if (listExpr.items.Count is 3)
+            {
+                if (listExpr.items[0] is Expression.Literal leftLiteralExpr &&
+                    KernelFunction.SignedIntegerFromValueRelaxed(leftLiteralExpr.Value) is { } leftInt)
+                {
+                    if (listExpr.items[2] is Expression.Literal rightLiteralExpr &&
+                        KernelFunction.SignedIntegerFromValueRelaxed(rightLiteralExpr.Value) is { } rightInt)
+                    {
+                        var middleExpr = listExpr.items[1];
+
+                        var contextSettingLocal =
+                            context
+                            with
+                            {
+                                CopyToLocal =
+                                    context.CopyToLocal.Add(middleExpr)
+                            };
+
+                        var afterMiddle =
+                            CompileExpressionTransitive(
+                                middleExpr,
+                                contextSettingLocal,
+                                prior);
+
+                        return
+                            afterMiddle
+                            .AppendInstruction(
+                                StackInstruction.Int_Greater_Than_Or_Equal_Const(leftInt))
+                            .AppendInstruction(
+                                StackInstruction.Local_Get(afterMiddle.LocalsSet[middleExpr]))
+                            .AppendInstruction(
+                                StackInstruction.Int_Less_Than_Or_Equal_Const(rightInt))
+                            .AppendInstruction(
+                                StackInstruction.Logical_And_Binary);
+                    }
+                }
             }
         }
 

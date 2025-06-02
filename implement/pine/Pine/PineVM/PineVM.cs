@@ -1923,6 +1923,76 @@ public class PineVM : IPineVM
                             continue;
                         }
 
+                    case StackInstructionKind.Int_Less_Than_Const:
+                        {
+                            var right = currentInstruction.IntegerLiteral
+                                ??
+                                throw new Exception("Invalid operation form: Missing literal value");
+
+                            var left = currentFrame.PopTopmostFromStack();
+
+                            PineValue resultValue = PineValue.EmptyList;
+
+                            if (KernelFunction.SignedIntegerFromValueRelaxed(left) is { } leftInt)
+                            {
+                                resultValue =
+                                    leftInt < right ?
+                                    PineVMValues.TrueValue :
+                                    PineVMValues.FalseValue;
+                            }
+
+                            currentFrame.PushInstructionResult(resultValue);
+
+                            continue;
+                        }
+
+                    case StackInstructionKind.Int_Less_Than_Or_Equal_Const:
+                        {
+                            var right = currentInstruction.IntegerLiteral
+                                ??
+                                throw new Exception("Invalid operation form: Missing literal value");
+
+                            var left = currentFrame.PopTopmostFromStack();
+
+                            PineValue resultValue = PineValue.EmptyList;
+
+                            if (KernelFunction.SignedIntegerFromValueRelaxed(left) is { } leftInt)
+                            {
+                                resultValue =
+                                    leftInt <= right ?
+                                    PineVMValues.TrueValue :
+                                    PineVMValues.FalseValue;
+                            }
+
+                            currentFrame.PushInstructionResult(resultValue);
+
+                            continue;
+                        }
+
+                    case StackInstructionKind.Int_Greater_Than_Or_Equal_Const:
+                        {
+                            var right =
+                                currentInstruction.IntegerLiteral
+                                ??
+                                throw new Exception("Invalid operation form: Missing literal value");
+
+                            var left = currentFrame.PopTopmostFromStack();
+
+                            PineValue resultValue = PineValue.EmptyList;
+
+                            if (KernelFunction.SignedIntegerFromValueRelaxed(left) is { } leftInt)
+                            {
+                                resultValue =
+                                    leftInt >= right ?
+                                    PineVMValues.TrueValue :
+                                    PineVMValues.FalseValue;
+                            }
+
+                            currentFrame.PushInstructionResult(resultValue);
+
+                            continue;
+                        }
+
                     case StackInstructionKind.Negate:
                         {
                             var value = currentFrame.PopTopmostFromStack();
@@ -2206,6 +2276,23 @@ public class PineVM : IPineVM
                             currentFrame.PopTopmostFromStack();
 
                             currentFrame.InstructionPointer++;
+
+                            continue;
+                        }
+
+                    case StackInstructionKind.Logical_And_Binary:
+                        {
+                            var right = currentFrame.PopTopmostFromStack();
+                            var left = currentFrame.PopTopmostFromStack();
+
+                            PineValue resultValue = PineVMValues.FalseValue;
+
+                            if (left == PineVMValues.TrueValue && right == PineVMValues.TrueValue)
+                            {
+                                resultValue = PineVMValues.TrueValue;
+                            }
+
+                            currentFrame.PushInstructionResult(resultValue);
 
                             continue;
                         }
