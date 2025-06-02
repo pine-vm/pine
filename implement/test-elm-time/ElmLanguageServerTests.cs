@@ -11,6 +11,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Xunit;
 using FluentAssertions;
+using System.Text.Json;
 
 namespace TestElmTime;
 
@@ -361,9 +362,14 @@ public class ElmLanguageServerTests
                         testCase.OriginalText,
                         testCase.NewText);
 
-                // Verify that applying the edits produces the expected result
-                var result = LanguageServer.ApplyTextEdits(testCase.OriginalText, actualEdits);
-                result.Should().Be(testCase.NewText);
+                Console.WriteLine(
+                    "Derived " + actualEdits.Count + " edits:\n" +
+                    string.Join('\n', actualEdits.Select(e => JsonSerializer.Serialize(e))));
+
+                var resultingText =
+                    LanguageServer.ApplyTextEdits(testCase.OriginalText, actualEdits);
+
+                resultingText.Should().Be(testCase.NewText);
 
                 // For most test cases, also verify the exact edit format
                 // (Skip exact format verification for cases that might have multiple valid representations)
