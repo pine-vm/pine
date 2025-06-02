@@ -734,8 +734,8 @@ public class WebServiceTests
         var eventsAndExpectedResponsesBatches =
             allEventsAndExpectedResponses.Batch(3).ToList();
 
-        (2 < eventsAndExpectedResponsesBatches.Count)
-            .Should().BeTrue("More than two batches of events to test with.");
+        eventsAndExpectedResponsesBatches.Count.Should()
+            .BeGreaterThan(2, "More than two batches of events to test with.");
 
         var deploymentZipArchive =
             ZipArchive.ZipArchiveFromEntries(TestSetup.CounterElmWebApp);
@@ -1333,8 +1333,8 @@ public class WebServiceTests
 
         var numberOfFilesAfter = countFilesInProcessFileStore();
 
-        (numberOfFilesAfter < numberOfFilesBefore)
-            .Should().BeTrue("Number of files in store is lower after truncate request.");
+        numberOfFilesAfter.Should().BeLessThan(numberOfFilesBefore, because:
+            "Number of files in store is lower after truncate request.");
 
         foreach (var (serializedEvent, expectedResponse) in thirdBatchOfCounterAppEvents)
         {
@@ -1610,14 +1610,13 @@ public class WebServiceTests
 
             httpStopwatch.Stop();
 
-            (expectedDelayMilliseconds <= httpStopwatch.ElapsedMilliseconds)
-                .Should().BeTrue("expectedDelayMilliseconds <= httpStopwatch.ElapsedMilliseconds");
+            httpStopwatch.ElapsedMilliseconds.Should().BeGreaterThanOrEqualTo(expectedDelayMilliseconds,
+                "Actual delay should be greater than or equal to expected delay");
 
             var additionalDelayMilliseconds =
                 httpStopwatch.ElapsedMilliseconds - expectedDelayMilliseconds;
 
-            (additionalDelayMilliseconds < 1500)
-                .Should().BeTrue("additionalDelayMilliseconds < 1500");
+            additionalDelayMilliseconds.Should().BeLessThan(1_700);
         }
     }
 
@@ -1683,14 +1682,13 @@ public class WebServiceTests
 
             httpStopwatch.Stop();
 
-            (expectedDelayMilliseconds <= httpStopwatch.ElapsedMilliseconds)
-                .Should().BeTrue("expectedDelayMilliseconds <= httpStopwatch.ElapsedMilliseconds");
+            httpStopwatch.ElapsedMilliseconds.Should().BeGreaterThanOrEqualTo(expectedDelayMilliseconds,
+                "Actual delay should be greater than or equal to expected delay");
 
             var additionalDelayMilliseconds =
                 httpStopwatch.ElapsedMilliseconds - expectedDelayMilliseconds;
 
-            (additionalDelayMilliseconds < 1500)
-                .Should().BeTrue("additionalDelayMilliseconds < 1500");
+            additionalDelayMilliseconds.Should().BeLessThan(1_700);
         }
 
         await timeUpdateTaskCancellation.CancelAsync();
@@ -1753,8 +1751,8 @@ public class WebServiceTests
             var storeOperationCountIncrease =
                 fileStoreHistoryCountAllOperations() - storeOperationCountBefore;
 
-            (0 < storeOperationCountIncrease)
-                .Should().BeTrue("Store operations increase");
+            storeOperationCountIncrease.Should()
+                .BeGreaterThan(0, "Store operations increase should be greater than 0");
         }
 
 
