@@ -1875,104 +1875,111 @@ public class LanguageServer(
         if (originalText == newText)
             return [];
 
-        var originalLines = originalText.ModuleLines().ToArray();
-        var newLines = newText.ModuleLines().ToArray();
+        var originalLines =
+            originalText.ModuleLines().ToList();
 
-        // Find common prefix length
+        var newLines =
+            newText.ModuleLines().ToList();
+
+        // Find common prefix (lines that are the same at the beginning)
         int commonPrefixLength = 0;
-        int minLength = System.Math.Min(originalLines.Length, newLines.Length);
 
-        while (commonPrefixLength < minLength &&
-               originalLines[commonPrefixLength] == newLines[commonPrefixLength])
+        int minLength =
+            originalLines.Count < newLines.Count
+            ? originalLines.Count
+            : newLines.Count;
+
+        while (
+            commonPrefixLength < minLength &&
+            originalLines[commonPrefixLength] == newLines[commonPrefixLength])
         {
             commonPrefixLength++;
         }
 
-        // Find common suffix length
+        // Find common suffix (lines that are the same at the end)
         int commonSuffixLength = 0;
-        int maxSuffixLength = minLength - commonPrefixLength;
+        int remainingOriginal = originalLines.Count - commonPrefixLength;
+        int remainingNew = newLines.Count - commonPrefixLength;
+
+        int maxSuffixLength =
+            remainingOriginal < remainingNew
+            ? remainingOriginal
+            : remainingNew;
 
         while (commonSuffixLength < maxSuffixLength &&
-               originalLines[originalLines.Length - 1 - commonSuffixLength] ==
-               newLines[newLines.Length - 1 - commonSuffixLength])
+               originalLines[originalLines.Count - 1 - commonSuffixLength] ==
+               newLines[newLines.Count - 1 - commonSuffixLength])
         {
             commonSuffixLength++;
         }
 
-        // Calculate start and end lines for the edit
-        int startLine = commonPrefixLength;
-        int endLine = originalLines.Length - commonSuffixLength - 1;
+        // Calculate what needs to be replaced
+        int firstChangedLine = commonPrefixLength;
+        int lastChangedLineInOriginal = originalLines.Count - commonSuffixLength - 1;
 
-        // Handle the middle section that needs to be replaced
-        var middleNewLines = newLines
-            .Skip(commonPrefixLength)
-            .Take(newLines.Length - commonPrefixLength - commonSuffixLength)
-            .ToArray();
+        // Get the replacement text (the lines from new text that differ)
+        var replacementLines =
+            newLines.Skip(commonPrefixLength).Take(newLines.Count - commonPrefixLength - commonSuffixLength);
 
-        // Determine positions and new text based on the scenario
-        uint startLinePos, endLinePos, startChar, endChar;
-        string newTextForEdit;
+        if (firstChangedLine >= originalLines.Count)
+        {
+            // Insertion at the end of the document
+            int lastExistingLine = originalLines.Count - 1;
+            int lastExistingLineLength = lastExistingLine >= 0 ? originalLines[lastExistingLine].Length : 0;
 
-        if (startLine > endLine)
-        {
-            // This is an insertion at the end or in the middle
-            if (startLine >= originalLines.Length)
-            {
-                // Insertion at the very end of document
-                startLinePos = (uint)(originalLines.Length - 1);
-                endLinePos = startLinePos;
-                startChar = (uint)originalLines[^1].Length;
-                endChar = startChar;
-                newTextForEdit = "\n" + string.Join("\n", middleNewLines);
-            }
-            else
-            {
-                // Insertion in the middle
-                startLinePos = (uint)startLine;
-                endLinePos = startLinePos;
-                startChar = 0;
-                endChar = 0;
-                newTextForEdit = string.Join("\n", middleNewLines) + "\n";
-            }
-        }
-        else if (middleNewLines.Length is 0)
-        {
-            // This is a deletion
-            if (commonSuffixLength is 0 && endLine == originalLines.Length - 1)
-            {
-                // Deleting lines from the end - start from end of last remaining line
-                startLinePos = (uint)(startLine - 1);
-                endLinePos = (uint)endLine;
-                startChar = (uint)originalLines[startLine - 1].Length;
-                endChar = (uint)originalLines[endLine].Length;
-                newTextForEdit = "";
-            }
-            else
-            {
-                // Deleting lines from middle or beginning
-                startLinePos = (uint)startLine;
-                endLinePos = (uint)endLine;
-                startChar = 0;
-                endChar = (uint)originalLines[endLine].Length;
-                newTextForEdit = "";
-            }
-        }
-        else
-        {
-            // This is a replacement
-            startLinePos = (uint)startLine;
-            endLinePos = (uint)endLine;
-            startChar = 0;
-            endChar = (uint)originalLines[endLine].Length;
-            newTextForEdit = string.Join("\n", middleNewLines);
+            var range = new Range(
+                Start: new Position(Line: (uint)lastExistingLine, Character: (uint)lastExistingLineLength),
+                End: new Position(Line: (uint)lastExistingLine, Character: (uint)lastExistingLineLength));
+
+            var replacementText = "\n" + string.Join("\n", replacementLines);
+
+            return [new TextEdit(Range: range, NewText: replacementText)];
         }
 
-        var textEdit = new TextEdit(
-            Range: new Range(
-                Start: new Position(Line: startLinePos, Character: startChar),
-                End: new Position(Line: endLinePos, Character: endChar)),
-            NewText: newTextForEdit);
+        if (newLines.Count < originalLines.Count && firstChangedLine >= newLines.Count)
+        {
+            // Deletion from the end - delete extra lines from original
+            int lastKeptLine = newLines.Count - 1;
+            int lastKeptLineLength = lastKeptLine >= 0 ? originalLines[lastKeptLine].Length : 0;
+            int lastDeletedLine = originalLines.Count - 1;
+            int lastDeletedLineLength = originalLines[lastDeletedLine].Length;
 
-        return [textEdit];
+            var range = new Range(
+                Start: new Position(Line: (uint)lastKeptLine, Character: (uint)lastKeptLineLength),
+                End: new Position(Line: (uint)lastDeletedLine, Character: (uint)lastDeletedLineLength));
+
+            return [new TextEdit(Range: range, NewText: "")];
+        }
+
+        if (firstChangedLine < originalLines.Count && newLines.Count < originalLines.Count)
+        {
+            // Deletion in the middle - we need to delete some lines
+            // The range should include the newline that creates the line to be deleted
+            int startLine = firstChangedLine > 0 ? firstChangedLine - 1 : 0;
+            int startChar = firstChangedLine > 0 ? originalLines[startLine].Length : 0;
+            int endLine = lastChangedLineInOriginal;
+            int endChar = originalLines[endLine].Length;
+
+            var range = new Range(
+                Start: new Position(Line: (uint)startLine, Character: (uint)startChar),
+                End: new Position(Line: (uint)endLine, Character: (uint)endChar));
+
+            // Use the replacement text as calculated earlier
+
+            var replacementText = string.Join("\n", replacementLines);
+
+            return [new TextEdit(Range: range, NewText: replacementText)];
+        }
+
+        {
+            // Normal replacement case
+            var range = new Range(
+                Start: new Position(Line: (uint)firstChangedLine, Character: 0),
+                End: new Position(Line: (uint)lastChangedLineInOriginal, Character: (uint)originalLines[lastChangedLineInOriginal].Length));
+
+            var replacementText = string.Join("\n", replacementLines);
+
+            return [new TextEdit(Range: range, NewText: replacementText)];
+        }
     }
 }
