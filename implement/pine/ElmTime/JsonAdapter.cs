@@ -1278,10 +1278,10 @@ public class ElmTimeJsonAdapter
         var rootFileText =
             System.Text.Encoding.UTF8.GetString(rootFileNode.Bytes.Span);
 
-        var inMainDeclaration = false;
-
         IEnumerable<string> linesFiltered()
         {
+            var inMainDeclaration = false;
+
             foreach (var line in rootFileText.ModuleLines())
             {
                 if (line.StartsWith("main "))
