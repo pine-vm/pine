@@ -3263,12 +3263,11 @@ public class Precompiled
             return null;
         }
 
-        if (functionRecordOk.Value.ParameterCount is not 1)
-        {
-            return null;
-        }
+        var functionRecordRemainingParamCount =
+            functionRecordOk.Value.ParameterCount -
+            functionRecordOk.Value.ArgumentsAlreadyCollected.Length;
 
-        if (functionRecordOk.Value.ArgumentsAlreadyCollected.Length is not 0)
+        if (functionRecordRemainingParamCount is not 1)
         {
             return null;
         }
@@ -3278,10 +3277,18 @@ public class Precompiled
 
         PineValue environmentForItem(PineValue itemValue)
         {
-            var argumentsList = PineValue.List([itemValue]);
+            var argumentsItems = new PineValue[functionRecordOk.Value.ArgumentsAlreadyCollected.Length + 1];
+
+            functionRecordOk.Value.ArgumentsAlreadyCollected.CopyTo(argumentsItems);
+
+            argumentsItems[^1] = itemValue;
 
             return
-                PineValue.List([environmentFunctionsEntry, argumentsList]);
+                PineValue.List(
+                    [
+                    environmentFunctionsEntry,
+                    PineValue.List(argumentsItems)
+                    ]);
         }
 
         var itemsResults = new PineValue[itemsListValue.Elements.Length];
