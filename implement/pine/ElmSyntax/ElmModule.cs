@@ -259,49 +259,30 @@ public static class ElmModule
         return textWithoutLeadingComments;
     }
 
+    /// <summary>
+    /// Enumerates strings of individual lines, the subsequences of characters between line breaks.
+    /// <para />
+    /// Any of the following four character sequences is considered a line break:
+    /// <list type="bullet">
+    /// <item>LF (line feed)</item>
+    /// <item>CR (carriage return)</item>
+    /// <item>CR LF (carriage return + line feed</item>
+    /// <item>LF CR (line feed + carriage return)</item>
+    /// </list>
+    /// </summary>
     public static IEnumerable<string> ModuleLines(this string moduleText)
     {
         int lastLineStartIndex = 0;
 
-        for (int i = 0; i < moduleText.Length; i++)
+        foreach (var (lineEnd, lineStart) in ModuleLinesBounds(moduleText))
         {
-            var currentChar = moduleText[i];
+            var lineLength = lineEnd - lastLineStartIndex;
 
-            if (currentChar is '\n')
-            {
-                var lineLength = i - lastLineStartIndex;
+            var lineText = moduleText.Substring(lastLineStartIndex, lineLength);
 
-                var lineText = moduleText.Substring(lastLineStartIndex, lineLength);
+            yield return lineText;
 
-                yield return lineText;
-
-                if (i + 1 < moduleText.Length && moduleText[i + 1] is '\r')
-                {
-                    ++i;
-                }
-
-                lastLineStartIndex = i + 1;
-
-                continue;
-            }
-
-            if (currentChar is '\r')
-            {
-                var lineLength = i - lastLineStartIndex;
-
-                var lineText = moduleText.Substring(lastLineStartIndex, lineLength);
-
-                yield return lineText;
-
-                if (i + 1 < moduleText.Length && moduleText[i + 1] is '\n')
-                {
-                    ++i;
-                }
-
-                lastLineStartIndex = i + 1;
-
-                continue;
-            }
+            lastLineStartIndex = lineStart;
         }
 
         var remainingText = moduleText[lastLineStartIndex..];
@@ -309,6 +290,52 @@ public static class ElmModule
         yield return remainingText;
     }
 
+    /// <summary>
+    /// Enumerates line breaks, returning the indices of characters at the ending of one line and the start of the following line.
+    /// <para />
+    /// Any of the following four character sequences is considered a line break:
+    /// <list type="bullet">
+    /// <item>LF (line feed)</item>
+    /// <item>CR (carriage return)</item>
+    /// <item>CR LF (carriage return + line feed</item>
+    /// <item>LF CR (line feed + carriage return)</item>
+    /// </list>
+    /// </summary>
+    public static IEnumerable<(int lineEnd, int lineStart)> ModuleLinesBounds(this string moduleText)
+    {
+        for (int charIndex = 0; charIndex < moduleText.Length; charIndex++)
+        {
+            var currentChar = moduleText[charIndex];
+
+            if (currentChar is '\n')
+            {
+                if (moduleText.Length > charIndex + 1 && moduleText[charIndex + 1] is '\r')
+                {
+                    yield return (charIndex, charIndex + 2);
+
+                    ++charIndex;
+                }
+                else
+                {
+                    yield return (charIndex, charIndex + 1);
+                }
+            }
+
+            if (currentChar is '\r')
+            {
+                if (moduleText.Length > charIndex + 1 && moduleText[charIndex + 1] is '\n')
+                {
+                    yield return (charIndex, charIndex + 2);
+
+                    ++charIndex;
+                }
+                else
+                {
+                    yield return (charIndex, charIndex + 1);
+                }
+            }
+        }
+    }
 
     public static TreeNodeWithStringPath FilterAppCodeTreeForRootModulesAndDependencies(
         TreeNodeWithStringPath appCodeTree,

@@ -1288,8 +1288,7 @@ public class ElmTimeJsonAdapter
                 {
                     inMainDeclaration = true;
                 }
-
-                if (line.Trim().Length is 0)
+                else if (string.IsNullOrWhiteSpace(line))
                 {
                     inMainDeclaration = false;
                 }
