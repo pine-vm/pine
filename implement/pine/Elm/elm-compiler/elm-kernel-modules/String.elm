@@ -527,20 +527,105 @@ unsafeDigitCharacterFromValue digitValue =
 
 trim : String -> String
 trim (String chars) =
+    let
+        leftTrimmedCount : Int
+        leftTrimmedCount =
+            countTrimmableCharsFromLeft 0 chars
+
+        rightRemainingLength : Int
+        rightRemainingLength =
+            countTrimmableCharsFromRight
+                (Pine_kernel.length chars)
+                chars
+    in
     String
-        (dropWhileList isCharRemovedOnTrim
-            (List.reverse (dropWhileList isCharRemovedOnTrim (List.reverse chars)))
+        (Pine_kernel.skip
+            [ leftTrimmedCount
+            , Pine_kernel.take
+                [ rightRemainingLength
+                , chars
+                ]
+            ]
         )
 
 
 trimLeft : String -> String
 trimLeft (String chars) =
-    String (dropWhileList isCharRemovedOnTrim chars)
+    let
+        trimmedCount : Int
+        trimmedCount =
+            countTrimmableCharsFromLeft 0 chars
+    in
+    String
+        (Pine_kernel.skip
+            [ trimmedCount
+            , chars
+            ]
+        )
 
 
 trimRight : String -> String
 trimRight (String chars) =
-    String (List.reverse (dropWhileList isCharRemovedOnTrim (List.reverse chars)))
+    let
+        remainingLength : Int
+        remainingLength =
+            countTrimmableCharsFromRight
+                (Pine_kernel.length chars)
+                chars
+    in
+    String
+        (Pine_kernel.take
+            [ remainingLength
+            , chars
+            ]
+        )
+
+
+countTrimmableCharsFromLeft : Int -> List Char -> Int
+countTrimmableCharsFromLeft offset chars =
+    let
+        nextCharList =
+            Pine_kernel.take
+                [ 1
+                , Pine_kernel.skip [ offset, chars ]
+                ]
+    in
+    case nextCharList of
+        [] ->
+            offset
+
+        [ char ] ->
+            if isCharRemovedOnTrim char then
+                countTrimmableCharsFromLeft
+                    (Pine_kernel.int_add [ offset, 1 ])
+                    chars
+
+            else
+                offset
+
+
+countTrimmableCharsFromRight : Int -> List Char -> Int
+countTrimmableCharsFromRight remainingLength chars =
+    if Pine_kernel.equal [ remainingLength, 0 ] then
+        0
+
+    else
+        let
+            char =
+                Pine_kernel.head
+                    (Pine_kernel.skip
+                        [ Pine_kernel.int_add [ remainingLength, -1 ]
+                        , chars
+                        ]
+                    )
+        in
+        if isCharRemovedOnTrim char then
+            countTrimmableCharsFromRight
+                (Pine_kernel.int_add [ remainingLength, -1 ])
+                chars
+
+        else
+            remainingLength
 
 
 isCharRemovedOnTrim : Char -> Bool
