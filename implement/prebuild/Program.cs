@@ -133,7 +133,7 @@ public class Program
     public static Result<string, PineValue> BuildElmCompilerFirstIteration(
         TreeNodeWithStringPath elmCompilerSource)
     {
-        if (true)
+        if (false)
         {
             var previousCompiler = LoadPreviousCompiler();
 
@@ -261,16 +261,16 @@ public class Program
         ImmutableDictionary<OSPlatform, (string hash, string remoteSource)>.Empty
         .Add(
             OSPlatform.Linux,
-            ("8693c6fa6e9ea58756e39af0f2bd4a36ae7ad0e651721211c410d9c38f897305",
-            @"https://github.com/pine-vm/pine/releases/download/v0.3.31/pine-bin-v0.3.31-linux-x64.zip"))
+            ("49a6624f4c989b793514f61a3c05b0c24e855447b65abb25b80be6291acdb7be",
+            @"https://github.com/pine-vm/pine/releases/download/v0.4.7/pine-bin-v0.4.7-linux-x64.zip"))
         .Add(
             OSPlatform.Windows,
-            ("5cc7305bab9fc983084c8a2498c80d07969a73bc53d059dc9302d90c9830b12e",
-            @"https://github.com/pine-vm/pine/releases/download/v0.3.31/pine-bin-v0.3.31-win-x64.zip"))
+            ("ed9b166ef27bd8bcef94cd920bd5e69600ef44f0abd7112edd08d70f89b124e6",
+            @"https://github.com/pine-vm/pine/releases/download/v0.4.7/pine-bin-v0.4.7-win-x64.zip"))
         .Add(
             OSPlatform.OSX,
-            ("4e5aed63302cbcc43b98207e7d0426d7b0b59acc8add0240cea5b1ce8d9df74d",
-            @"https://github.com/pine-vm/pine/releases/download/v0.3.31/pine-bin-v0.3.31-osx-x64.zip"));
+            ("d50af2e3db01e74d3b9848499ab5f857fe5b290b5371fce238b7e6aa2e8b5fed",
+            @"https://github.com/pine-vm/pine/releases/download/v0.4.7/pine-bin-v0.4.7-osx-x64.zip"));
 
     private readonly static Lazy<string> executableFilePathCached = new(() =>
     {
