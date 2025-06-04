@@ -891,138 +891,198 @@ public class InteractiveSessionPine : IInteractiveSession
                 addInspectionLogEntry?.Invoke(
                     label + " duration: " + CommandLineInterface.FormatIntegerForDisplay(clock.ElapsedMilliseconds) + " ms");
 
-            return
-                buildCompilerResult
-                .MapError(err => "Failed to build compiler: " + err)
-                .AndThen(elmCompiler =>
-                buildPineEvalContextTask.Result
-                .MapError(error => "Failed to build initial Pine eval context: " + error)
-                .AndThen(buildPineEvalContextOk =>
-                {
-                    clock.Restart();
+            if (buildCompilerResult.IsErrOrNull() is { } buildCompilerErr)
+            {
+                return "Failed to build Elm compiler: " + buildCompilerErr;
+            }
 
-                    var parseSubmissionResult =
-                        ParseInteractiveSubmission(
-                            elmCompiler,
-                            pineVM,
-                            submission: submission,
-                            addInspectionLogEntry: compileEntry => addInspectionLogEntry?.Invoke("Parse: " + compileEntry));
+            if (buildCompilerResult.IsOkOrNull() is not { } elmCompiler)
+            {
+                throw new NotImplementedException(
+                    "Unexpected build compiler result type: " + buildCompilerResult.GetType());
+            }
 
-                    return
-                    parseSubmissionResult
-                    .MapError(error => "Failed to parse submission: " + error)
-                    .AndThen(parsedSubmissionOk =>
-                    {
-                        return
-                        elmCompilerCache.PineValueDecodedAsElmValue(parsedSubmissionOk)
-                        .MapError(error => "Failed parsing result as Elm value: " + error)
-                        .AndThen(parsedSubmissionAsElmValue =>
-                        {
-                            logDuration("parse");
+            if (buildPineEvalContextTask.Result.IsErrOrNull() is { } buildPineEvalContextErr)
+            {
+                return "Failed to build initial Pine eval context: " + buildPineEvalContextErr;
+            }
 
-                            clock.Restart();
+            if (buildPineEvalContextTask.Result.IsOkOrNull() is not { } buildPineEvalContextOk)
+            {
+                throw new NotImplementedException(
+                    "Unexpected build Pine eval context result type: " + buildPineEvalContextTask.Result.GetType());
+            }
 
-                            var environmentEncodedForCompiler =
-                                elmCompilerCache.EncodeValueForCompiler(buildPineEvalContextOk);
+            clock.Restart();
 
-                            logDuration("compile - encode environment");
+            var parseSubmissionResult =
+                ParseInteractiveSubmission(
+                    elmCompiler,
+                    pineVM,
+                    submission: submission,
+                    addInspectionLogEntry: compileEntry => addInspectionLogEntry?.Invoke("Parse: " + compileEntry));
 
-                            clock.Restart();
+            if (parseSubmissionResult.IsErrOrNull() is { } parseSubmissionErr)
+            {
+                return "Failed to parse submission: " + parseSubmissionErr;
+            }
 
-                            var compileParsedResult =
-                                ElmInteractiveEnvironment.ApplyFunction(
-                                    pineVM,
-                                    elmCompiler.CompileParsedInteractiveSubmission,
-                                    arguments:
-                                    [
-                                        environmentEncodedForCompiler,
-                                        parsedSubmissionOk
-                                    ]);
+            if (parseSubmissionResult.IsOkOrNull() is not { } parsedSubmissionOk)
+            {
+                throw new NotImplementedException(
+                    "Unexpected parse submission result type: " + parseSubmissionResult.GetType());
+            }
 
-                            if (compileParsedResult.IsOkOrNull() is not { } compileParsedOk)
-                            {
-                                return
-                                "Failed compiling parsed submission (" +
-                                parsedSubmissionAsElmValue + "): " +
-                                compileParsedResult.Unpack(err => err, ok => "Not an err");
-                            }
+            var parseSubmissionAsElmValueResult =
+                elmCompilerCache.PineValueDecodedAsElmValue(parsedSubmissionOk);
 
-                            logDuration("compile - apply");
+            if (parseSubmissionAsElmValueResult.IsErrOrNull() is { } parseSubmissionAsElmValueErr)
+            {
+                return "Failed parsing submission response as Elm value: " + parseSubmissionAsElmValueErr;
+            }
 
-                            clock.Restart();
+            if (parseSubmissionAsElmValueResult.IsOkOrNull() is not { } parsedSubmissionAsElmValue)
+            {
+                throw new NotImplementedException(
+                    "Unexpected parse submission as Elm value result type: " + parseSubmissionAsElmValueResult.GetType());
+            }
 
-                            var compileParsedOkAsElmValue =
-                            elmCompilerCache.PineValueDecodedAsElmValue(compileParsedOk)
-                            .Extract(err => throw new Exception("Failed decoding as Elm value: " + err));
+            logDuration("parse");
 
-                            logDuration("compile - decode result");
+            clock.Restart();
 
-                            clock.Restart();
+            var environmentEncodedForCompiler =
+                elmCompilerCache.EncodeValueForCompiler(buildPineEvalContextOk);
 
-                            if (compileParsedOkAsElmValue is not ElmValue.ElmTag compiledResultTag)
-                            {
-                                return "Unexpected return value: No tag: " + compileParsedOkAsElmValue;
-                            }
+            logDuration("compile - encode environment");
 
-                            if (compiledResultTag.TagName is not "Ok" || compiledResultTag.Arguments.Count is not 1)
-                            {
-                                return "Failed compile: " + compiledResultTag;
-                            }
+            clock.Restart();
 
-                            var decodeExpressionResult =
-                            elmCompilerCache.DecodeExpressionFromElmValue(compiledResultTag.Arguments[0]);
+            var compileParsedResult =
+                ElmInteractiveEnvironment.ApplyFunction(
+                    pineVM,
+                    elmCompiler.CompileParsedInteractiveSubmission,
+                    arguments:
+                    [
+                        environmentEncodedForCompiler,
+                        parsedSubmissionOk
+                    ]);
 
-                            return
-                            decodeExpressionResult
-                            .MapError(error => "Failed decoding compiled expression: " + error)
-                            .AndThen(resultingExpr =>
-                            {
-                                logDuration("compile - decode expression");
+            if (compileParsedResult.IsErrOrNull() is { } compileParsedErr)
+            {
+                return "Failed compiling parsed submission (" +
+                    parsedSubmissionAsElmValue + "): " + compileParsedErr;
+            }
 
-                                clock.Restart();
+            if (compileParsedResult.IsOkOrNull() is not { } compileParsedOk)
+            {
+                return
+                    "Failed compiling parsed submission (" +
+                    parsedSubmissionAsElmValue + "): " +
+                    compileParsedResult.Unpack(err => err, ok => "Not an err");
+            }
 
-                                var evalResult = pineVM.EvaluateExpression(resultingExpr, buildPineEvalContextOk);
+            logDuration("compile - apply");
 
-                                logDuration("eval");
+            clock.Restart();
 
-                                return
-                                evalResult
-                                .MapError(error => "Failed to evaluate expression in PineVM: " + error)
-                                .AndThen(evalOk =>
-                                {
-                                    if (evalOk is not PineValue.ListValue evalResultListComponent)
-                                    {
-                                        return
-                                        "Type mismatch: Pine expression evaluated to a blob";
-                                    }
+            var compileParsedOkAsElmValueResult =
+                elmCompilerCache.PineValueDecodedAsElmValue(compileParsedOk);
 
-                                    if (evalResultListComponent.Elements.Length is not 2)
-                                    {
-                                        return
-                                        "Type mismatch: Pine expression evaluated to a list with unexpected number of elements: " +
-                                        evalResultListComponent.Elements.Length +
-                                        " instead of 2";
-                                    }
+            if (compileParsedOkAsElmValueResult.IsErrOrNull() is { } compileParsedOkAsElmValueErr)
+            {
+                return "Failed decoding compiled expression: " + compileParsedOkAsElmValueErr;
+            }
 
-                                    buildPineEvalContextTask = System.Threading.Tasks.Task.FromResult(
-                                        Result<string, PineValue>.ok(evalResultListComponent.Elements.Span[0]));
+            if (compileParsedOkAsElmValueResult.IsOkOrNull() is not { } compileParsedOkAsElmValue)
+            {
+                throw new NotImplementedException(
+                    "Unexpected compile parsed ok as Elm value result type: " + compileParsedOkAsElmValueResult.GetType());
+            }
 
-                                    clock.Restart();
+            logDuration("compile - decode result");
 
-                                    var parseSubmissionResponseResult =
-                                        ElmInteractive.SubmissionResponseFromResponsePineValue(
-                                            response: evalResultListComponent.Elements.Span[1]);
+            clock.Restart();
 
-                                    logDuration("parse-result");
+            if (compileParsedOkAsElmValue is not ElmValue.ElmTag compiledResultTag)
+            {
+                return "Unexpected return value: No tag: " + compileParsedOkAsElmValue;
+            }
 
-                                    return
-                                    parseSubmissionResponseResult
-                                    .MapError(error => "Failed to parse submission response: " + error);
-                                });
-                            });
-                        });
-                    });
-                }));
+            if (compiledResultTag.TagName is not "Ok" || compiledResultTag.Arguments.Count is not 1)
+            {
+                return "Failed compile: " + compiledResultTag;
+            }
+
+            var decodeExpressionResult =
+                elmCompilerCache.DecodeExpressionFromElmValue(compiledResultTag.Arguments[0]);
+
+            if (decodeExpressionResult.IsErrOrNull() is { } decodeExpressionErr)
+            {
+                return "Failed decoding compiled expression: " + decodeExpressionErr;
+            }
+
+            if (decodeExpressionResult.IsOkOrNull() is not { } resultingExpr)
+            {
+                throw new NotImplementedException(
+                    "Unexpected decode expression result type: " + decodeExpressionResult.GetType());
+            }
+
+            logDuration("compile - decode expression");
+
+            clock.Restart();
+
+            var evalResult = pineVM.EvaluateExpression(resultingExpr, buildPineEvalContextOk);
+
+            logDuration("eval");
+
+            if (evalResult.IsErrOrNull() is { } evalErr)
+            {
+                return "Failed to evaluate compiled expression in PineVM: " + evalErr;
+            }
+
+            if (evalResult.IsOkOrNull() is not { } evalOk)
+            {
+                throw new NotImplementedException(
+                    "Unexpected eval result type: " + evalResult.GetType());
+            }
+
+            if (evalOk is not PineValue.ListValue evalResultListComponent)
+            {
+                return "Type mismatch: Pine expression not evaluated to a list: " + evalOk;
+            }
+
+            if (evalResultListComponent.Elements.Length is not 2)
+            {
+                return
+                    "Type mismatch: Pine expression evaluated to a list with unexpected number of elements: " +
+                    evalResultListComponent.Elements.Length +
+                    " instead of 2";
+            }
+
+            buildPineEvalContextTask = System.Threading.Tasks.Task.FromResult(
+                Result<string, PineValue>.ok(evalResultListComponent.Elements.Span[0]));
+
+            clock.Restart();
+
+            var parseSubmissionResponseResult =
+                ElmInteractive.SubmissionResponseFromResponsePineValue(
+                    response: evalResultListComponent.Elements.Span[1]);
+
+            logDuration("parse-result");
+
+            if (parseSubmissionResponseResult.IsErrOrNull() is { } parseSubmissionResponseErr)
+            {
+                return "Failed to parse submission response: " + parseSubmissionResponseErr;
+            }
+
+            if (parseSubmissionResponseResult.IsOkOrNull() is not { } parseSubmissionResponseOk)
+            {
+                throw new NotImplementedException(
+                    "Unexpected parse submission response result type: " + parseSubmissionResponseResult.GetType());
+            }
+
+            return parseSubmissionResponseOk;
         }
     }
 
