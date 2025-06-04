@@ -16,7 +16,7 @@ To filter tests to run by C# method name, use a command like this:
 dotnet  run  --  --filter-method="*method_name*"
 ```
 
-> Warning: Running a command like `dotnet  test  --filter=method_name` does not work as expected, as it will silently ignore the filter and run all tests instead.
+> Warning: Running a command like `dotnet  test  --filter=method_name` does not work as expected, as it will silently ignore the filter and run all tests instead. (This issue been reported for example at <https://github.com/dotnet/sdk/issues/45927> and <https://github.com/dotnet/sdk/issues/49210>)
 
 The command-line interface of the test framework offers many more options, like filtering tests by various attributes, configuring a timeout and more. To see an overview of available options, run the following command from the directory containing the `.csproj` file:
 
