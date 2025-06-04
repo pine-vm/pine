@@ -864,6 +864,7 @@ compilationAndEmitStackFromModulesInCompilation availableModules { moduleAliases
             , importedFunctionsToInline = []
             , environmentFunctions = []
             , environmentDeconstructions = []
+            , skipApplyFunction = False
             }
     in
     ( compilationStack
@@ -4104,6 +4105,7 @@ emitRecursionDomain { exposedDeclarationsNames, allModuleDeclarations, importedF
                 ( [], prevEmittedDeclarationsToInline ) :: importedFunctionsToInline
             , environmentFunctions = emitStack.environmentFunctions
             , environmentDeconstructions = emitStack.environmentDeconstructions
+            , skipApplyFunction = emitStack.skipApplyFunction
             }
             recursionDomainDeclarationsInBlock
             (FirCompiler.DeclBlockClosureCaptures [])
@@ -5084,7 +5086,10 @@ compileAndEvalParsedInteractiveSubmission environment submission =
                     Ok val
 
 
-compileParsedInteractiveSubmission : Pine.Value -> InteractiveSubmission -> Result String Pine.Expression
+compileParsedInteractiveSubmission :
+    Pine.Value
+    -> InteractiveSubmission
+    -> Result String Pine.Expression
 compileParsedInteractiveSubmission environment submission =
     case getDeclarationsFromEnvironment environment of
         Err err ->
@@ -5097,7 +5102,7 @@ compileParsedInteractiveSubmission environment submission =
 
                 Ok environmentDeclarations ->
                     let
-                        ( defaultCompilationStack, emitStack ) =
+                        ( defaultCompilationStack, emitStackDefault ) =
                             compilationAndEmitStackFromInteractiveEnvironment
                                 { modules =
                                     Dict.map (\_ ( _, parsedModule ) -> parsedModule)
@@ -5130,7 +5135,7 @@ compileParsedInteractiveSubmission environment submission =
                                         Ok ( _, functionDeclarationCompilation ) ->
                                             case
                                                 FirCompiler.emitExpressionInDeclarationBlock
-                                                    emitStack
+                                                    emitStackDefault
                                                     [ ( declarationName, functionDeclarationCompilation ) ]
                                                     functionDeclarationCompilation
                                             of
@@ -5181,6 +5186,12 @@ compileParsedInteractiveSubmission environment submission =
                                     Err "Destructuring as submission is not implemented"
 
                         ExpressionSubmission elmExpression ->
+                            let
+                                emitStack =
+                                    { emitStackDefault
+                                        | skipApplyFunction = True
+                                    }
+                            in
                             case
                                 case compileElmSyntaxExpression defaultCompilationStack elmExpression of
                                     Err err ->

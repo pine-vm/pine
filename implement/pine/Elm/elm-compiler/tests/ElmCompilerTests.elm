@@ -1037,6 +1037,7 @@ emitClosureExpressionTests =
                                 , importedFunctionsToInline = []
                                 , environmentFunctions = []
                                 , environmentDeconstructions = []
+                                , skipApplyFunction = False
                                 }
 
                             rootFunctionExpression =

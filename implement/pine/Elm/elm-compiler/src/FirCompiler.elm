@@ -88,6 +88,7 @@ type alias EmitStack =
 
     -- Deconstructions we can derive from the second item in the environment list
     , environmentDeconstructions : List ( String, EnvironmentDeconstructionEntry )
+    , skipApplyFunction : Bool
     }
 
 
@@ -788,6 +789,7 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
             , importedFunctionsToInline = stackBefore.importedFunctionsToInline
             , environmentFunctions = environmentFunctions
             , environmentDeconstructions = environmentDeconstructions
+            , skipApplyFunction = stackBefore.skipApplyFunction
             }
 
         emitFunction : DeclBlockFunctionEntry -> Result String Pine.Expression
@@ -1641,7 +1643,11 @@ emitFunctionApplication functionExpression arguments compilation =
                             genericFunctionApplication ()
 
 
-emitFunctionApplicationPine : EmitStack -> List Pine.Expression -> Pine.Expression -> Result String Pine.Expression
+emitFunctionApplicationPine :
+    EmitStack
+    -> List Pine.Expression
+    -> Pine.Expression
+    -> Result String Pine.Expression
 emitFunctionApplicationPine emitStack arguments functionExpressionPine =
     let
         genericPartialApplication () =
@@ -1650,7 +1656,10 @@ emitFunctionApplicationPine emitStack arguments functionExpressionPine =
                 emitStack
                 functionExpressionPine
     in
-    if not (pineExpressionIsIndependent functionExpressionPine) then
+    if emitStack.skipApplyFunction then
+        Ok (genericPartialApplication ())
+
+    else if not (pineExpressionIsIndependent functionExpressionPine) then
         Ok (genericPartialApplication ())
 
     else

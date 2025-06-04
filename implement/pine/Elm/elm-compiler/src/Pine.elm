@@ -16,6 +16,7 @@ module Pine exposing
     , encodeExpressionAsValue
     , environmentExpr
     , environmentFromDeclarations
+    , computeValueFromString_2024_recursive
     , evalEnvironmentFromList
     , evaluateExpression
     , falseValue
