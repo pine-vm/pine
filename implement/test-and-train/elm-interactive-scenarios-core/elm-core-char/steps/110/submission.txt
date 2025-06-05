@@ -1,1 +1,1 @@
-Char.toCode '😃'
+Char.toCode ' '

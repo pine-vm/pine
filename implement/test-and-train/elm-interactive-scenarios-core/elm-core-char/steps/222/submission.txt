@@ -1,0 +1,6 @@
+[ Char.isLower ' '
+, Char.isLower 'a'
+, Char.isLower 'z'
+, Char.isLower 'A'
+, Char.isLower '_'
+]

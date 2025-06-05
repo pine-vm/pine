@@ -1,0 +1,7 @@
+[ Char.isUpper ' '
+, Char.isUpper 'a'
+, Char.isUpper 'z'
+, Char.isUpper 'A'
+, Char.isUpper 'Z'
+, Char.isUpper '_'
+]
