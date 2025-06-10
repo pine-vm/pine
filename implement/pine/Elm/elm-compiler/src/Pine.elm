@@ -937,7 +937,7 @@ describeValue : Int -> Value -> String
 describeValue maxDepth value =
     case value of
         BlobValue blob ->
-            "BlobValue 0x" ++ hexadecimalRepresentationFromBlobValue blob
+            "BlobValue [" ++ String.fromInt (List.length blob) ++ "] 0x" ++ hexadecimalRepresentationFromBlobValue blob
 
         ListValue list ->
             let
