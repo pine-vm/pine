@@ -518,9 +518,11 @@ kernelFunction_bit_and_recursive blob arguments =
             case next of
                 BlobValue nextBlob ->
                     kernelFunction_bit_and_recursive
+                        (List.reverse
                         (bit_and_tuple []
-                            (List.reverse blob)
-                            (List.reverse nextBlob)
+                                blob
+                                nextBlob
+                            )
                         )
                         rest
 
