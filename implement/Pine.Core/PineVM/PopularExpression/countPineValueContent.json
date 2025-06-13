@@ -6,7 +6,7 @@
         {
           "List": [
             [
-              { "Literal": [ { "ListAsString": "BlobValue" } ] },
+              { "Literal": [ { "BlobAsString": "BlobValue" } ] },
               {
                 "KernelApplication": [
                   "head",
@@ -48,7 +48,7 @@
             {
               "List": [
                 [
-                  { "Literal": [ { "ListAsString": "ListValue" } ] },
+                  { "Literal": [ { "BlobAsString": "ListValue" } ] },
                   {
                     "KernelApplication": [
                       "head",
@@ -84,7 +84,7 @@
         },
         {
           "ParseAndEval": [
-            { "Literal": [ { "ListAsString": "Error in case-of block: No matching branch." } ] },
+            { "Literal": [ { "BlobAsString": "Error in case-of block: No matching branch." } ] },
             {
               "KernelApplication": [
                 "head",

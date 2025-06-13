@@ -7,8 +7,10 @@ module Pine exposing
     , bigIntFromBlobValue
     , bigIntFromUnsignedBlobValue
     , bigIntFromValue
+    , blobBytesFromChar
     , blobValueFromBigInt
     , computeValueFromString_2024
+    , computeValueFromString_2024_recursive
     , computeValueFromString_2025
     , countValueContent
     , displayStringFromPineError
@@ -16,7 +18,6 @@ module Pine exposing
     , encodeExpressionAsValue
     , environmentExpr
     , environmentFromDeclarations
-    , computeValueFromString_2024_recursive
     , evalEnvironmentFromList
     , evaluateExpression
     , falseValue
@@ -37,6 +38,7 @@ module Pine exposing
     , valueFromBool
     , valueFromChar
     , valueFromChar_2024
+    , valueFromChar_2025
     , valueFromContextExpansionWithName
     , valueFromInt
     , valueFromString
@@ -1063,7 +1065,26 @@ valueFromChar char =
 
 valueFromChar_2024 : Char -> Value
 valueFromChar_2024 char =
-    BlobValue (unsafeUnsignedBlobValueFromInt (Char.toCode char))
+    let
+        charCode : Int
+        charCode =
+            Char.toCode char
+    in
+    if charCode < 0x0100 then
+        BlobValue [ charCode ]
+
+    else if charCode < 0x00010000 then
+        BlobValue
+            [ charCode // 0x0100
+            , modBy 0x0100 charCode
+            ]
+
+    else
+        BlobValue
+            [ modBy 0x0100 (charCode // 0x00010000)
+            , modBy 0x0100 (charCode // 0x0100)
+            , modBy 0x0100 charCode
+            ]
 
 
 valueFromChar_2025 : Char -> Value

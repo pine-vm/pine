@@ -10,13 +10,52 @@ type alias Char =
 toCode : Char -> Int
 toCode char =
     -- Add the sign prefix byte
-    Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], char ]
+    if Pine_kernel.equal [ Pine_kernel.length char, 4 ] then
+        if
+            Pine_kernel.equal
+                [ Pine_kernel.skip [ 2, 0x01000000 ]
+                , Pine_kernel.take [ 3, char ]
+                ]
+        then
+            Pine_kernel.concat
+                [ Pine_kernel.take [ 1, 0 ]
+                , Pine_kernel.skip [ 3, char ]
+                ]
+
+        else if
+            Pine_kernel.equal
+                [ Pine_kernel.skip [ 2, 0x00010000 ]
+                , Pine_kernel.take [ 2, char ]
+                ]
+        then
+            Pine_kernel.concat
+                [ Pine_kernel.take [ 1, 0 ]
+                , Pine_kernel.skip [ 2, char ]
+                ]
+
+        else
+            -- Assume at most three bytes used
+            Pine_kernel.concat
+                [ Pine_kernel.take [ 1, 0 ]
+                , Pine_kernel.skip [ 1, char ]
+                ]
+
+    else
+        Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], char ]
 
 
 fromCode : Int -> Char
 fromCode code =
     -- Remove the sign prefix byte
-    Pine_kernel.skip [ 1, code ]
+    Pine_kernel.reverse
+        (Pine_kernel.take
+            [ 4
+            , Pine_kernel.concat
+                [ Pine_kernel.reverse (Pine_kernel.skip [ 1, code ])
+                , Pine_kernel.skip [ 2, 0x0000000100000000 ]
+                ]
+            ]
+        )
 
 
 {-| Detect digits `0123456789`
@@ -136,7 +175,10 @@ toUpper char =
             Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], char ]
     in
     if Pine_kernel.int_is_sorted_asc [ 0x61, code, 0x7A ] then
-        Pine_kernel.skip [ 1, Pine_kernel.int_add [ code, -0x20 ] ]
+        Pine_kernel.concat
+            [ Pine_kernel.take [ 3, Pine_kernel.skip [ 2, 0x0000000100000000 ] ]
+            , Pine_kernel.skip [ 1, Pine_kernel.int_add [ code, -0x20 ] ]
+            ]
 
     else
         char
@@ -149,7 +191,10 @@ toLower char =
             Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], char ]
     in
     if Pine_kernel.int_is_sorted_asc [ 0x41, code, 0x5A ] then
-        Pine_kernel.skip [ 1, Pine_kernel.int_add [ code, 0x20 ] ]
+        Pine_kernel.concat
+            [ Pine_kernel.take [ 3, Pine_kernel.skip [ 2, 0x0000000100000000 ] ]
+            , Pine_kernel.skip [ 1, Pine_kernel.int_add [ code, 0x20 ] ]
+            ]
 
     else
         char

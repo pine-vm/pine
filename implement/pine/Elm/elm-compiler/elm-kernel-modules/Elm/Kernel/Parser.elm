@@ -110,8 +110,12 @@ chompBase10Helper offset chars =
 
 
 isSubString : String -> Int -> Int -> Int -> List Char -> ( Int, Int, Int )
-isSubString (String smallChars) offset row col bigChars =
+isSubString smallString offset row col bigChars =
     let
+        smallChars : List Char
+        smallChars =
+            String.toList smallString
+
         expectedLength : Int
         expectedLength =
             Pine_kernel.length smallChars
@@ -172,8 +176,12 @@ isSubChar predicate offset chars =
 
 
 findSubString : String -> Int -> Int -> Int -> List Char -> ( Int, Int, Int )
-findSubString (String smallChars) offset row col bigChars =
+findSubString smallString offset row col bigChars =
     let
+        smallChars : List Char
+        smallChars =
+            String.toList smallString
+
         newOffset : Int
         newOffset =
             indexOf smallChars bigChars offset
@@ -293,7 +301,7 @@ countOffsetsInString ( offset, newlines, col ) ( chars, end ) =
 newlineChar : Char
 newlineChar =
     -- ASCII code for '\\n'
-    Pine_kernel.skip [ 1, 10 ]
+    '\n'
 
 
 isAsciiCode : Int -> Int -> List Char -> Bool

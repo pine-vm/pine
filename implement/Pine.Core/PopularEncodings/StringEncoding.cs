@@ -79,6 +79,11 @@ public static class StringEncoding
         if (str.Length is 0)
             return PineValue.EmptyList;
 
+        if (ReusedInstances_2024?.TryGetValue(str, out var reusedInstance) ?? false && reusedInstance is not null)
+        {
+            return reusedInstance;
+        }
+
         return PineValue.List(ListValueFromString(str));
     }
 

@@ -254,13 +254,13 @@ decodeBlobAsCharsRec offset blob chars =
 
     else
         let
-            ( char, bytesConsumed ) =
+            ( charCode, bytesConsumed ) =
                 decodeUtf8Char blob offset
         in
         decodeBlobAsCharsRec
             (Pine_kernel.int_add [ offset, bytesConsumed ])
             blob
-            (char :: chars)
+            (Char.fromCode charCode :: chars)
 
 
 decodeUtf8Char : Int -> Int -> ( Int, Int )
@@ -271,10 +271,13 @@ decodeUtf8Char blob offset =
 
         firstByteInt =
             Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], firstByte ]
+
+        charCode =
+            Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], firstByte ]
     in
     if Pine_kernel.int_is_sorted_asc [ firstByteInt, 0x7F ] then
         -- 1-byte character (ASCII)
-        ( firstByte, 1 )
+        ( charCode, 1 )
 
     else if Pine_kernel.equal [ Pine_kernel.bit_and [ firstByteInt, 0xE0 ], 0xC0 ] then
         -- 2-byte character
@@ -297,7 +300,7 @@ decodeUtf8Char blob offset =
                     , secondSixBits
                     ]
         in
-        ( Pine_kernel.skip [ 1, charCode ], 2 )
+        ( charCode, 2 )
 
     else if Pine_kernel.equal [ Pine_kernel.bit_and [ firstByteInt, 0xF0 ], 0xE0 ] then
         -- 3-byte character
@@ -330,7 +333,7 @@ decodeUtf8Char blob offset =
                     , thirdSixBits
                     ]
         in
-        ( Pine_kernel.skip [ 1, charCode ], 3 )
+        ( charCode, 3 )
 
     else if Pine_kernel.equal [ Pine_kernel.bit_and [ firstByteInt, 0xF8 ], 0xF0 ] then
         -- 4-byte character
@@ -373,11 +376,11 @@ decodeUtf8Char blob offset =
                     , fourthSixBits
                     ]
         in
-        ( Pine_kernel.skip [ 1, charCode ], 4 )
+        ( charCode, 4 )
 
     else
         -- Invalid UTF-8 sequence; use replacement character
-        ( Pine_kernel.skip [ 1, 0xFFFD ], 1 )
+        ( 0xFFFD, 1 )
 
 
 succeed : a -> Decoder a

@@ -1,62 +1,188 @@
 [
-  { "ListAsString": "Function" },
+  { "BlobAsString": "Function" },
   [
     [
-      { "ListAsString": "ParseAndEval" },
+      { "BlobAsString": "Conditional" },
       [
         [
-          { "ListAsString": "Literal" },
+          { "BlobAsString": "KernelApplication" },
           [
+            { "BlobAsString": "int_is_sorted_asc" },
             [
-              { "ListAsString": "List" },
+              { "BlobAsString": "List" },
               [
                 [
                   [
-                    { "ListAsString": "Literal" },
-                    [ { "ListAsString": "String" } ]
+                    { "BlobAsString": "Literal" },
+                    [ 0 ]
                   ],
                   [
-                    { "ListAsString": "List" },
+                    { "BlobAsString": "KernelApplication" },
                     [
+                      { "BlobAsString": "head" },
                       [
+                        { "BlobAsString": "KernelApplication" },
                         [
-                          { "ListAsString": "KernelApplication" },
+                          { "BlobAsString": "head" },
                           [
-                            { "ListAsString": "take" },
+                            { "BlobAsString": "KernelApplication" },
                             [
-                              { "ListAsString": "List" },
+                              { "BlobAsString": "skip" },
                               [
+                                { "BlobAsString": "List" },
                                 [
                                   [
-                                    { "ListAsString": "ParseAndEval" },
+                                    [
+                                      { "BlobAsString": "Literal" },
+                                      [ 1 ]
+                                    ],
+                                    [
+                                      { "BlobAsString": "Environment" },
+                                      []
+                                    ]
+                                  ]
+                                ]
+                              ]
+                            ]
+                          ]
+                        ]
+                      ]
+                    ]
+                  ],
+                  [
+                    { "BlobAsString": "KernelApplication" },
+                    [
+                      { "BlobAsString": "head" },
+                      [
+                        { "BlobAsString": "KernelApplication" },
+                        [
+                          { "BlobAsString": "skip" },
+                          [
+                            { "BlobAsString": "List" },
+                            [
+                              [
+                                [
+                                  { "BlobAsString": "Literal" },
+                                  [ 1 ]
+                                ],
+                                [
+                                  { "BlobAsString": "KernelApplication" },
+                                  [
+                                    { "BlobAsString": "head" },
+                                    [
+                                      { "BlobAsString": "KernelApplication" },
+                                      [
+                                        { "BlobAsString": "skip" },
+                                        [
+                                          { "BlobAsString": "List" },
+                                          [
+                                            [
+                                              [
+                                                { "BlobAsString": "Literal" },
+                                                [ 1 ]
+                                              ],
+                                              [
+                                                { "BlobAsString": "Environment" },
+                                                []
+                                              ]
+                                            ]
+                                          ]
+                                        ]
+                                      ]
+                                    ]
+                                  ]
+                                ]
+                              ]
+                            ]
+                          ]
+                        ]
+                      ]
+                    ]
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ],
+        [
+          { "BlobAsString": "ParseAndEval" },
+          [
+            [
+              { "BlobAsString": "Literal" },
+              [
+                [
+                  { "BlobAsString": "List" },
+                  [
+                    [
+                      [
+                        { "BlobAsString": "Literal" },
+                        [ { "BlobAsString": "String" } ]
+                      ],
+                      [
+                        { "BlobAsString": "List" },
+                        [
+                          [
+                            [
+                              { "BlobAsString": "KernelApplication" },
+                              [
+                                { "BlobAsString": "take" },
+                                [
+                                  { "BlobAsString": "List" },
+                                  [
                                     [
                                       [
-                                        { "ListAsString": "KernelApplication" },
+                                        { "BlobAsString": "ParseAndEval" },
                                         [
-                                          { "ListAsString": "head" },
                                           [
-                                            { "ListAsString": "KernelApplication" },
+                                            { "BlobAsString": "KernelApplication" },
                                             [
-                                              { "ListAsString": "skip" },
+                                              { "BlobAsString": "head" },
                                               [
-                                                { "ListAsString": "List" },
+                                                { "BlobAsString": "KernelApplication" },
                                                 [
+                                                  { "BlobAsString": "skip" },
                                                   [
+                                                    { "BlobAsString": "List" },
                                                     [
-                                                      { "ListAsString": "Literal" },
-                                                      [ 2 ]
-                                                    ],
-                                                    [
-                                                      { "ListAsString": "KernelApplication" },
                                                       [
-                                                        { "ListAsString": "head" },
                                                         [
-                                                          { "ListAsString": "Environment" },
-                                                          []
+                                                          { "BlobAsString": "Literal" },
+                                                          [ 2 ]
+                                                        ],
+                                                        [
+                                                          { "BlobAsString": "KernelApplication" },
+                                                          [
+                                                            { "BlobAsString": "head" },
+                                                            [
+                                                              { "BlobAsString": "Environment" },
+                                                              []
+                                                            ]
+                                                          ]
                                                         ]
                                                       ]
                                                     ]
                                                   ]
+                                                ]
+                                              ]
+                                            ]
+                                          ],
+                                          [
+                                            { "BlobAsString": "List" },
+                                            [
+                                              [
+                                                [
+                                                  { "BlobAsString": "KernelApplication" },
+                                                  [
+                                                    { "BlobAsString": "head" },
+                                                    [
+                                                      { "BlobAsString": "Environment" },
+                                                      []
+                                                    ]
+                                                  ]
+                                                ],
+                                                [
+                                                  { "BlobAsString": "List" },
+                                                  [ [] ]
                                                 ]
                                               ]
                                             ]
@@ -64,62 +190,41 @@
                                         ]
                                       ],
                                       [
-                                        { "ListAsString": "List" },
+                                        { "BlobAsString": "KernelApplication" },
                                         [
+                                          { "BlobAsString": "skip" },
                                           [
+                                            { "BlobAsString": "List" },
                                             [
-                                              { "ListAsString": "KernelApplication" },
-                                              [
-                                                { "ListAsString": "head" },
-                                                [
-                                                  { "ListAsString": "Environment" },
-                                                  []
-                                                ]
-                                              ]
-                                            ],
-                                            [
-                                              { "ListAsString": "List" },
-                                              [ [] ]
-                                            ]
-                                          ]
-                                        ]
-                                      ]
-                                    ]
-                                  ],
-                                  [
-                                    { "ListAsString": "KernelApplication" },
-                                    [
-                                      { "ListAsString": "skip" },
-                                      [
-                                        { "ListAsString": "List" },
-                                        [
-                                          [
-                                            [
-                                              { "ListAsString": "ParseAndEval" },
                                               [
                                                 [
-                                                  { "ListAsString": "KernelApplication" },
+                                                  { "BlobAsString": "ParseAndEval" },
                                                   [
-                                                    { "ListAsString": "head" },
                                                     [
-                                                      { "ListAsString": "KernelApplication" },
+                                                      { "BlobAsString": "KernelApplication" },
                                                       [
-                                                        { "ListAsString": "skip" },
+                                                        { "BlobAsString": "head" },
                                                         [
-                                                          { "ListAsString": "List" },
+                                                          { "BlobAsString": "KernelApplication" },
                                                           [
+                                                            { "BlobAsString": "skip" },
                                                             [
+                                                              { "BlobAsString": "List" },
                                                               [
-                                                                { "ListAsString": "Literal" },
-                                                                [ 1 ]
-                                                              ],
-                                                              [
-                                                                { "ListAsString": "KernelApplication" },
                                                                 [
-                                                                  { "ListAsString": "head" },
                                                                   [
-                                                                    { "ListAsString": "Environment" },
-                                                                    []
+                                                                    { "BlobAsString": "Literal" },
+                                                                    [ 1 ]
+                                                                  ],
+                                                                  [
+                                                                    { "BlobAsString": "KernelApplication" },
+                                                                    [
+                                                                      { "BlobAsString": "head" },
+                                                                      [
+                                                                        { "BlobAsString": "Environment" },
+                                                                        []
+                                                                      ]
+                                                                    ]
                                                                   ]
                                                                 ]
                                                               ]
@@ -127,55 +232,55 @@
                                                           ]
                                                         ]
                                                       ]
+                                                    ],
+                                                    [
+                                                      { "BlobAsString": "List" },
+                                                      [
+                                                        [
+                                                          [
+                                                            { "BlobAsString": "KernelApplication" },
+                                                            [
+                                                              { "BlobAsString": "head" },
+                                                              [
+                                                                { "BlobAsString": "Environment" },
+                                                                []
+                                                              ]
+                                                            ]
+                                                          ],
+                                                          [
+                                                            { "BlobAsString": "List" },
+                                                            [ [] ]
+                                                          ]
+                                                        ]
+                                                      ]
                                                     ]
                                                   ]
                                                 ],
                                                 [
-                                                  { "ListAsString": "List" },
+                                                  { "BlobAsString": "KernelApplication" },
                                                   [
+                                                    { "BlobAsString": "head" },
                                                     [
+                                                      { "BlobAsString": "KernelApplication" },
                                                       [
-                                                        { "ListAsString": "KernelApplication" },
+                                                        { "BlobAsString": "skip" },
                                                         [
-                                                          { "ListAsString": "head" },
+                                                          { "BlobAsString": "List" },
                                                           [
-                                                            { "ListAsString": "Environment" },
-                                                            []
-                                                          ]
-                                                        ]
-                                                      ],
-                                                      [
-                                                        { "ListAsString": "List" },
-                                                        [ [] ]
-                                                      ]
-                                                    ]
-                                                  ]
-                                                ]
-                                              ]
-                                            ],
-                                            [
-                                              { "ListAsString": "KernelApplication" },
-                                              [
-                                                { "ListAsString": "head" },
-                                                [
-                                                  { "ListAsString": "KernelApplication" },
-                                                  [
-                                                    { "ListAsString": "skip" },
-                                                    [
-                                                      { "ListAsString": "List" },
-                                                      [
-                                                        [
-                                                          [
-                                                            { "ListAsString": "Literal" },
-                                                            [ 5 ]
-                                                          ],
-                                                          [
-                                                            { "ListAsString": "KernelApplication" },
                                                             [
-                                                              { "ListAsString": "head" },
                                                               [
-                                                                { "ListAsString": "Environment" },
-                                                                []
+                                                                { "BlobAsString": "Literal" },
+                                                                [ 5 ]
+                                                              ],
+                                                              [
+                                                                { "BlobAsString": "KernelApplication" },
+                                                                [
+                                                                  { "BlobAsString": "head" },
+                                                                  [
+                                                                    { "BlobAsString": "Environment" },
+                                                                    []
+                                                                  ]
+                                                                ]
                                                               ]
                                                             ]
                                                           ]
@@ -201,67 +306,408 @@
                   ]
                 ]
               ]
-            ]
-          ]
-        ],
-        [
-          { "ListAsString": "List" },
-          [
+            ],
             [
+              { "BlobAsString": "List" },
               [
-                { "ListAsString": "List" },
                 [
                   [
+                    { "BlobAsString": "List" },
                     [
-                      { "ListAsString": "Literal" },
                       [
                         [
-                          { "ListAsString": "Conditional" },
+                          { "BlobAsString": "Literal" },
                           [
                             [
-                              { "ListAsString": "KernelApplication" },
+                              { "BlobAsString": "Conditional" },
                               [
-                                { "ListAsString": "equal" },
                                 [
-                                  { "ListAsString": "List" },
+                                  { "BlobAsString": "KernelApplication" },
+                                  [
+                                    { "BlobAsString": "equal" },
+                                    [
+                                      { "BlobAsString": "List" },
+                                      [
+                                        [
+                                          [
+                                            { "BlobAsString": "KernelApplication" },
+                                            [
+                                              { "BlobAsString": "take" },
+                                              [
+                                                { "BlobAsString": "List" },
+                                                [
+                                                  [
+                                                    [
+                                                      { "BlobAsString": "Literal" },
+                                                      [ 1 ]
+                                                    ],
+                                                    [
+                                                      { "BlobAsString": "KernelApplication" },
+                                                      [
+                                                        { "BlobAsString": "head" },
+                                                        [
+                                                          { "BlobAsString": "KernelApplication" },
+                                                          [
+                                                            { "BlobAsString": "head" },
+                                                            [
+                                                              { "BlobAsString": "KernelApplication" },
+                                                              [
+                                                                { "BlobAsString": "skip" },
+                                                                [
+                                                                  { "BlobAsString": "List" },
+                                                                  [
+                                                                    [
+                                                                      [
+                                                                        { "BlobAsString": "Literal" },
+                                                                        [ 1 ]
+                                                                      ],
+                                                                      [
+                                                                        { "BlobAsString": "Environment" },
+                                                                        []
+                                                                      ]
+                                                                    ]
+                                                                  ]
+                                                                ]
+                                                              ]
+                                                            ]
+                                                          ]
+                                                        ]
+                                                      ]
+                                                    ]
+                                                  ]
+                                                ]
+                                              ]
+                                            ]
+                                          ],
+                                          [
+                                            { "BlobAsString": "KernelApplication" },
+                                            [
+                                              { "BlobAsString": "take" },
+                                              [
+                                                { "BlobAsString": "Literal" },
+                                                [ [ 1, -1 ] ]
+                                              ]
+                                            ]
+                                          ]
+                                        ]
+                                      ]
+                                    ]
+                                  ]
+                                ],
+                                [
+                                  { "BlobAsString": "KernelApplication" },
+                                  [
+                                    { "BlobAsString": "head" },
+                                    [
+                                      { "BlobAsString": "KernelApplication" },
+                                      [
+                                        { "BlobAsString": "head" },
+                                        [
+                                          { "BlobAsString": "KernelApplication" },
+                                          [
+                                            { "BlobAsString": "skip" },
+                                            [
+                                              { "BlobAsString": "List" },
+                                              [
+                                                [
+                                                  [
+                                                    { "BlobAsString": "Literal" },
+                                                    [ 1 ]
+                                                  ],
+                                                  [
+                                                    { "BlobAsString": "Environment" },
+                                                    []
+                                                  ]
+                                                ]
+                                              ]
+                                            ]
+                                          ]
+                                        ]
+                                      ]
+                                    ]
+                                  ]
+                                ],
+                                [
+                                  { "BlobAsString": "KernelApplication" },
+                                  [
+                                    { "BlobAsString": "int_add" },
+                                    [
+                                      { "BlobAsString": "List" },
+                                      [
+                                        [
+                                          [
+                                            { "BlobAsString": "KernelApplication" },
+                                            [
+                                              { "BlobAsString": "head" },
+                                              [
+                                                { "BlobAsString": "KernelApplication" },
+                                                [
+                                                  { "BlobAsString": "head" },
+                                                  [
+                                                    { "BlobAsString": "KernelApplication" },
+                                                    [
+                                                      { "BlobAsString": "skip" },
+                                                      [
+                                                        { "BlobAsString": "List" },
+                                                        [
+                                                          [
+                                                            [
+                                                              { "BlobAsString": "Literal" },
+                                                              [ 1 ]
+                                                            ],
+                                                            [
+                                                              { "BlobAsString": "Environment" },
+                                                              []
+                                                            ]
+                                                          ]
+                                                        ]
+                                                      ]
+                                                    ]
+                                                  ]
+                                                ]
+                                              ]
+                                            ]
+                                          ],
+                                          [
+                                            { "BlobAsString": "KernelApplication" },
+                                            [
+                                              { "BlobAsString": "length" },
+                                              [
+                                                { "BlobAsString": "KernelApplication" },
+                                                [
+                                                  { "BlobAsString": "head" },
+                                                  [
+                                                    { "BlobAsString": "KernelApplication" },
+                                                    [
+                                                      { "BlobAsString": "skip" },
+                                                      [
+                                                        { "BlobAsString": "List" },
+                                                        [
+                                                          [
+                                                            [
+                                                              { "BlobAsString": "Literal" },
+                                                              [ 5 ]
+                                                            ],
+                                                            [
+                                                              { "BlobAsString": "KernelApplication" },
+                                                              [
+                                                                { "BlobAsString": "head" },
+                                                                [
+                                                                  { "BlobAsString": "Environment" },
+                                                                  []
+                                                                ]
+                                                              ]
+                                                            ]
+                                                          ]
+                                                        ]
+                                                      ]
+                                                    ]
+                                                  ]
+                                                ]
+                                              ]
+                                            ]
+                                          ]
+                                        ]
+                                      ]
+                                    ]
+                                  ]
+                                ]
+                              ]
+                            ]
+                          ]
+                        ],
+                        [
+                          { "BlobAsString": "Literal" },
+                          [
+                            [
+                              { "BlobAsString": "ParseAndEval" },
+                              [
+                                [
+                                  { "BlobAsString": "KernelApplication" },
+                                  [
+                                    { "BlobAsString": "head" },
+                                    [
+                                      { "BlobAsString": "KernelApplication" },
+                                      [
+                                        { "BlobAsString": "head" },
+                                        [
+                                          { "BlobAsString": "Environment" },
+                                          []
+                                        ]
+                                      ]
+                                    ]
+                                  ]
+                                ],
+                                [
+                                  { "BlobAsString": "List" },
                                   [
                                     [
                                       [
-                                        { "ListAsString": "KernelApplication" },
+                                        { "BlobAsString": "KernelApplication" },
                                         [
-                                          { "ListAsString": "take" },
+                                          { "BlobAsString": "head" },
                                           [
-                                            { "ListAsString": "List" },
+                                            { "BlobAsString": "Environment" },
+                                            []
+                                          ]
+                                        ]
+                                      ],
+                                      [
+                                        { "BlobAsString": "List" },
+                                        [
+                                          [
+                                            [
+                                              { "BlobAsString": "KernelApplication" },
+                                              [
+                                                { "BlobAsString": "int_mul" },
+                                                [
+                                                  { "BlobAsString": "List" },
+                                                  [
+                                                    [
+                                                      [
+                                                        { "BlobAsString": "KernelApplication" },
+                                                        [
+                                                          { "BlobAsString": "head" },
+                                                          [
+                                                            { "BlobAsString": "KernelApplication" },
+                                                            [
+                                                              { "BlobAsString": "skip" },
+                                                              [
+                                                                { "BlobAsString": "List" },
+                                                                [
+                                                                  [
+                                                                    [
+                                                                      { "BlobAsString": "Literal" },
+                                                                      [ 3 ]
+                                                                    ],
+                                                                    [
+                                                                      { "BlobAsString": "KernelApplication" },
+                                                                      [
+                                                                        { "BlobAsString": "head" },
+                                                                        [
+                                                                          { "BlobAsString": "Environment" },
+                                                                          []
+                                                                        ]
+                                                                      ]
+                                                                    ]
+                                                                  ]
+                                                                ]
+                                                              ]
+                                                            ]
+                                                          ]
+                                                        ]
+                                                      ],
+                                                      [
+                                                        { "BlobAsString": "Literal" },
+                                                        [ 4 ]
+                                                      ]
+                                                    ]
+                                                  ]
+                                                ]
+                                              ]
+                                            ]
+                                          ]
+                                        ]
+                                      ]
+                                    ]
+                                  ]
+                                ]
+                              ]
+                            ]
+                          ]
+                        ],
+                        [
+                          { "BlobAsString": "Literal" },
+                          [
+                            [
+                              { "BlobAsString": "KernelApplication" },
+                              [
+                                { "BlobAsString": "int_add" },
+                                [
+                                  { "BlobAsString": "List" },
+                                  [
+                                    [
+                                      [
+                                        { "BlobAsString": "ParseAndEval" },
+                                        [
+                                          [
+                                            { "BlobAsString": "KernelApplication" },
+                                            [
+                                              { "BlobAsString": "head" },
+                                              [
+                                                { "BlobAsString": "KernelApplication" },
+                                                [
+                                                  { "BlobAsString": "head" },
+                                                  [
+                                                    { "BlobAsString": "Environment" },
+                                                    []
+                                                  ]
+                                                ]
+                                              ]
+                                            ]
+                                          ],
+                                          [
+                                            { "BlobAsString": "List" },
                                             [
                                               [
                                                 [
-                                                  { "ListAsString": "Literal" },
-                                                  [ 1 ]
+                                                  { "BlobAsString": "KernelApplication" },
+                                                  [
+                                                    { "BlobAsString": "head" },
+                                                    [
+                                                      { "BlobAsString": "Environment" },
+                                                      []
+                                                    ]
+                                                  ]
                                                 ],
                                                 [
-                                                  { "ListAsString": "KernelApplication" },
+                                                  { "BlobAsString": "List" },
                                                   [
-                                                    { "ListAsString": "head" },
                                                     [
-                                                      { "ListAsString": "KernelApplication" },
                                                       [
-                                                        { "ListAsString": "head" },
+                                                        { "BlobAsString": "KernelApplication" },
                                                         [
-                                                          { "ListAsString": "KernelApplication" },
+                                                          { "BlobAsString": "int_mul" },
                                                           [
-                                                            { "ListAsString": "skip" },
+                                                            { "BlobAsString": "List" },
                                                             [
-                                                              { "ListAsString": "List" },
                                                               [
                                                                 [
+                                                                  { "BlobAsString": "KernelApplication" },
                                                                   [
-                                                                    { "ListAsString": "Literal" },
-                                                                    [ 1 ]
-                                                                  ],
-                                                                  [
-                                                                    { "ListAsString": "Environment" },
-                                                                    []
+                                                                    { "BlobAsString": "head" },
+                                                                    [
+                                                                      { "BlobAsString": "KernelApplication" },
+                                                                      [
+                                                                        { "BlobAsString": "skip" },
+                                                                        [
+                                                                          { "BlobAsString": "List" },
+                                                                          [
+                                                                            [
+                                                                              [
+                                                                                { "BlobAsString": "Literal" },
+                                                                                [ 4 ]
+                                                                              ],
+                                                                              [
+                                                                                { "BlobAsString": "KernelApplication" },
+                                                                                [
+                                                                                  { "BlobAsString": "head" },
+                                                                                  [
+                                                                                    { "BlobAsString": "Environment" },
+                                                                                    []
+                                                                                  ]
+                                                                                ]
+                                                                              ]
+                                                                            ]
+                                                                          ]
+                                                                        ]
+                                                                      ]
+                                                                    ]
                                                                   ]
+                                                                ],
+                                                                [
+                                                                  { "BlobAsString": "Literal" },
+                                                                  [ 4 ]
                                                                 ]
                                                               ]
                                                             ]
@@ -277,205 +723,70 @@
                                         ]
                                       ],
                                       [
-                                        { "ListAsString": "KernelApplication" },
+                                        { "BlobAsString": "KernelApplication" },
                                         [
-                                          { "ListAsString": "take" },
+                                          { "BlobAsString": "int_mul" },
                                           [
-                                            { "ListAsString": "Literal" },
-                                            [ [ 1, -1 ] ]
-                                          ]
-                                        ]
-                                      ]
-                                    ]
-                                  ]
-                                ]
-                              ]
-                            ],
-                            [
-                              { "ListAsString": "KernelApplication" },
-                              [
-                                { "ListAsString": "head" },
-                                [
-                                  { "ListAsString": "KernelApplication" },
-                                  [
-                                    { "ListAsString": "head" },
-                                    [
-                                      { "ListAsString": "KernelApplication" },
-                                      [
-                                        { "ListAsString": "skip" },
-                                        [
-                                          { "ListAsString": "List" },
-                                          [
+                                            { "BlobAsString": "List" },
                                             [
                                               [
-                                                { "ListAsString": "Literal" },
-                                                [ 1 ]
-                                              ],
-                                              [
-                                                { "ListAsString": "Environment" },
-                                                []
-                                              ]
-                                            ]
-                                          ]
-                                        ]
-                                      ]
-                                    ]
-                                  ]
-                                ]
-                              ]
-                            ],
-                            [
-                              { "ListAsString": "KernelApplication" },
-                              [
-                                { "ListAsString": "int_add" },
-                                [
-                                  { "ListAsString": "List" },
-                                  [
-                                    [
-                                      [
-                                        { "ListAsString": "KernelApplication" },
-                                        [
-                                          { "ListAsString": "head" },
-                                          [
-                                            { "ListAsString": "KernelApplication" },
-                                            [
-                                              { "ListAsString": "head" },
-                                              [
-                                                { "ListAsString": "KernelApplication" },
                                                 [
-                                                  { "ListAsString": "skip" },
-                                                  [
-                                                    { "ListAsString": "List" },
-                                                    [
-                                                      [
-                                                        [
-                                                          { "ListAsString": "Literal" },
-                                                          [ 1 ]
-                                                        ],
-                                                        [
-                                                          { "ListAsString": "Environment" },
-                                                          []
-                                                        ]
-                                                      ]
-                                                    ]
-                                                  ]
-                                                ]
-                                              ]
-                                            ]
-                                          ]
-                                        ]
-                                      ],
-                                      [
-                                        { "ListAsString": "KernelApplication" },
-                                        [
-                                          { "ListAsString": "length" },
-                                          [
-                                            { "ListAsString": "KernelApplication" },
-                                            [
-                                              { "ListAsString": "head" },
-                                              [
-                                                { "ListAsString": "KernelApplication" },
+                                                  { "BlobAsString": "Literal" },
+                                                  [ -1 ]
+                                                ],
                                                 [
-                                                  { "ListAsString": "skip" },
+                                                  { "BlobAsString": "ParseAndEval" },
                                                   [
-                                                    { "ListAsString": "List" },
                                                     [
+                                                      { "BlobAsString": "KernelApplication" },
                                                       [
+                                                        { "BlobAsString": "head" },
                                                         [
-                                                          { "ListAsString": "Literal" },
-                                                          [ 5 ]
-                                                        ],
-                                                        [
-                                                          { "ListAsString": "KernelApplication" },
+                                                          { "BlobAsString": "KernelApplication" },
                                                           [
-                                                            { "ListAsString": "head" },
+                                                            { "BlobAsString": "skip" },
                                                             [
-                                                              { "ListAsString": "Environment" },
-                                                              []
+                                                              { "BlobAsString": "List" },
+                                                              [
+                                                                [
+                                                                  [
+                                                                    { "BlobAsString": "Literal" },
+                                                                    [ 1 ]
+                                                                  ],
+                                                                  [
+                                                                    { "BlobAsString": "KernelApplication" },
+                                                                    [
+                                                                      { "BlobAsString": "head" },
+                                                                      [
+                                                                        { "BlobAsString": "Environment" },
+                                                                        []
+                                                                      ]
+                                                                    ]
+                                                                  ]
+                                                                ]
+                                                              ]
                                                             ]
                                                           ]
                                                         ]
                                                       ]
-                                                    ]
-                                                  ]
-                                                ]
-                                              ]
-                                            ]
-                                          ]
-                                        ]
-                                      ]
-                                    ]
-                                  ]
-                                ]
-                              ]
-                            ]
-                          ]
-                        ]
-                      ]
-                    ],
-                    [
-                      { "ListAsString": "Literal" },
-                      [
-                        [
-                          { "ListAsString": "ParseAndEval" },
-                          [
-                            [
-                              { "ListAsString": "KernelApplication" },
-                              [
-                                { "ListAsString": "head" },
-                                [
-                                  { "ListAsString": "KernelApplication" },
-                                  [
-                                    { "ListAsString": "head" },
-                                    [
-                                      { "ListAsString": "Environment" },
-                                      []
-                                    ]
-                                  ]
-                                ]
-                              ]
-                            ],
-                            [
-                              { "ListAsString": "List" },
-                              [
-                                [
-                                  [
-                                    { "ListAsString": "KernelApplication" },
-                                    [
-                                      { "ListAsString": "head" },
-                                      [
-                                        { "ListAsString": "Environment" },
-                                        []
-                                      ]
-                                    ]
-                                  ],
-                                  [
-                                    { "ListAsString": "List" },
-                                    [
-                                      [
-                                        [
-                                          { "ListAsString": "KernelApplication" },
-                                          [
-                                            { "ListAsString": "head" },
-                                            [
-                                              { "ListAsString": "KernelApplication" },
-                                              [
-                                                { "ListAsString": "skip" },
-                                                [
-                                                  { "ListAsString": "List" },
-                                                  [
+                                                    ],
                                                     [
+                                                      { "BlobAsString": "List" },
                                                       [
-                                                        { "ListAsString": "Literal" },
-                                                        [ 3 ]
-                                                      ],
-                                                      [
-                                                        { "ListAsString": "KernelApplication" },
                                                         [
-                                                          { "ListAsString": "head" },
                                                           [
-                                                            { "ListAsString": "Environment" },
-                                                            []
+                                                            { "BlobAsString": "KernelApplication" },
+                                                            [
+                                                              { "BlobAsString": "head" },
+                                                              [
+                                                                { "BlobAsString": "Environment" },
+                                                                []
+                                                              ]
+                                                            ]
+                                                          ],
+                                                          [
+                                                            { "BlobAsString": "List" },
+                                                            [ [] ]
                                                           ]
                                                         ]
                                                       ]
@@ -493,80 +804,146 @@
                               ]
                             ]
                           ]
-                        ]
-                      ]
-                    ],
-                    [
-                      { "ListAsString": "Literal" },
-                      [
+                        ],
                         [
-                          { "ListAsString": "KernelApplication" },
+                          { "BlobAsString": "KernelApplication" },
                           [
-                            { "ListAsString": "int_add" },
+                            { "BlobAsString": "head" },
                             [
-                              { "ListAsString": "List" },
+                              { "BlobAsString": "KernelApplication" },
                               [
+                                { "BlobAsString": "head" },
                                 [
+                                  { "BlobAsString": "KernelApplication" },
                                   [
-                                    { "ListAsString": "ParseAndEval" },
+                                    { "BlobAsString": "skip" },
+                                    [
+                                      { "BlobAsString": "List" },
+                                      [
+                                        [
+                                          [
+                                            { "BlobAsString": "Literal" },
+                                            [ 1 ]
+                                          ],
+                                          [
+                                            { "BlobAsString": "Environment" },
+                                            []
+                                          ]
+                                        ]
+                                      ]
+                                    ]
+                                  ]
+                                ]
+                              ]
+                            ]
+                          ]
+                        ],
+                        [
+                          { "BlobAsString": "KernelApplication" },
+                          [
+                            { "BlobAsString": "head" },
+                            [
+                              { "BlobAsString": "KernelApplication" },
+                              [
+                                { "BlobAsString": "skip" },
+                                [
+                                  { "BlobAsString": "List" },
+                                  [
                                     [
                                       [
-                                        { "ListAsString": "KernelApplication" },
+                                        { "BlobAsString": "Literal" },
+                                        [ 1 ]
+                                      ],
+                                      [
+                                        { "BlobAsString": "KernelApplication" },
                                         [
-                                          { "ListAsString": "head" },
+                                          { "BlobAsString": "head" },
                                           [
-                                            { "ListAsString": "KernelApplication" },
+                                            { "BlobAsString": "KernelApplication" },
                                             [
-                                              { "ListAsString": "head" },
+                                              { "BlobAsString": "skip" },
                                               [
-                                                { "ListAsString": "Environment" },
-                                                []
+                                                { "BlobAsString": "List" },
+                                                [
+                                                  [
+                                                    [
+                                                      { "BlobAsString": "Literal" },
+                                                      [ 1 ]
+                                                    ],
+                                                    [
+                                                      { "BlobAsString": "Environment" },
+                                                      []
+                                                    ]
+                                                  ]
+                                                ]
                                               ]
                                             ]
                                           ]
                                         ]
-                                      ],
+                                      ]
+                                    ]
+                                  ]
+                                ]
+                              ]
+                            ]
+                          ]
+                        ],
+                        [
+                          { "BlobAsString": "KernelApplication" },
+                          [
+                            { "BlobAsString": "head" },
+                            [
+                              { "BlobAsString": "KernelApplication" },
+                              [
+                                { "BlobAsString": "head" },
+                                [
+                                  { "BlobAsString": "KernelApplication" },
+                                  [
+                                    { "BlobAsString": "skip" },
+                                    [
+                                      { "BlobAsString": "List" },
                                       [
-                                        { "ListAsString": "List" },
                                         [
                                           [
+                                            { "BlobAsString": "Literal" },
+                                            [ 1 ]
+                                          ],
+                                          [
+                                            { "BlobAsString": "KernelApplication" },
                                             [
-                                              { "ListAsString": "KernelApplication" },
+                                              { "BlobAsString": "head" },
                                               [
-                                                { "ListAsString": "head" },
+                                                { "BlobAsString": "KernelApplication" },
                                                 [
-                                                  { "ListAsString": "Environment" },
-                                                  []
-                                                ]
-                                              ]
-                                            ],
-                                            [
-                                              { "ListAsString": "List" },
-                                              [
-                                                [
+                                                  { "BlobAsString": "skip" },
                                                   [
-                                                    { "ListAsString": "KernelApplication" },
+                                                    { "BlobAsString": "List" },
                                                     [
-                                                      { "ListAsString": "head" },
                                                       [
-                                                        { "ListAsString": "KernelApplication" },
                                                         [
-                                                          { "ListAsString": "skip" },
+                                                          { "BlobAsString": "Literal" },
+                                                          [ 2 ]
+                                                        ],
+                                                        [
+                                                          { "BlobAsString": "KernelApplication" },
                                                           [
-                                                            { "ListAsString": "List" },
+                                                            { "BlobAsString": "head" },
                                                             [
+                                                              { "BlobAsString": "KernelApplication" },
                                                               [
+                                                                { "BlobAsString": "skip" },
                                                                 [
-                                                                  { "ListAsString": "Literal" },
-                                                                  [ 4 ]
-                                                                ],
-                                                                [
-                                                                  { "ListAsString": "KernelApplication" },
+                                                                  { "BlobAsString": "List" },
                                                                   [
-                                                                    { "ListAsString": "head" },
                                                                     [
-                                                                      { "ListAsString": "Environment" },
-                                                                      []
+                                                                      [
+                                                                        { "BlobAsString": "Literal" },
+                                                                        [ 1 ]
+                                                                      ],
+                                                                      [
+                                                                        { "BlobAsString": "Environment" },
+                                                                        []
+                                                                      ]
                                                                     ]
                                                                   ]
                                                                 ]
@@ -584,45 +961,151 @@
                                         ]
                                       ]
                                     ]
-                                  ],
+                                  ]
+                                ]
+                              ]
+                            ]
+                          ]
+                        ]
+                      ]
+                    ]
+                  ],
+                  [
+                    { "BlobAsString": "List" },
+                    [ [] ]
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ],
+        [
+          { "BlobAsString": "List" },
+          [
+            [
+              [
+                { "BlobAsString": "Literal" },
+                [ { "BlobAsString": "String" } ]
+              ],
+              [
+                { "BlobAsString": "List" },
+                [
+                  [
+                    [
+                      { "BlobAsString": "KernelApplication" },
+                      [
+                        { "BlobAsString": "take" },
+                        [
+                          { "BlobAsString": "List" },
+                          [
+                            [
+                              [
+                                { "BlobAsString": "KernelApplication" },
+                                [
+                                  { "BlobAsString": "int_mul" },
                                   [
-                                    { "ListAsString": "KernelApplication" },
+                                    { "BlobAsString": "List" },
                                     [
-                                      { "ListAsString": "int_mul" },
                                       [
-                                        { "ListAsString": "List" },
                                         [
+                                          { "BlobAsString": "KernelApplication" },
                                           [
+                                            { "BlobAsString": "int_add" },
                                             [
-                                              { "ListAsString": "Literal" },
-                                              [ -1 ]
-                                            ],
-                                            [
-                                              { "ListAsString": "ParseAndEval" },
+                                              { "BlobAsString": "List" },
                                               [
                                                 [
-                                                  { "ListAsString": "KernelApplication" },
                                                   [
-                                                    { "ListAsString": "head" },
+                                                    { "BlobAsString": "KernelApplication" },
                                                     [
-                                                      { "ListAsString": "KernelApplication" },
+                                                      { "BlobAsString": "head" },
                                                       [
-                                                        { "ListAsString": "skip" },
+                                                        { "BlobAsString": "KernelApplication" },
                                                         [
-                                                          { "ListAsString": "List" },
+                                                          { "BlobAsString": "skip" },
                                                           [
+                                                            { "BlobAsString": "List" },
                                                             [
                                                               [
-                                                                { "ListAsString": "Literal" },
-                                                                [ 1 ]
-                                                              ],
-                                                              [
-                                                                { "ListAsString": "KernelApplication" },
                                                                 [
-                                                                  { "ListAsString": "head" },
+                                                                  { "BlobAsString": "Literal" },
+                                                                  [ 1 ]
+                                                                ],
+                                                                [
+                                                                  { "BlobAsString": "KernelApplication" },
                                                                   [
-                                                                    { "ListAsString": "Environment" },
-                                                                    []
+                                                                    { "BlobAsString": "head" },
+                                                                    [
+                                                                      { "BlobAsString": "KernelApplication" },
+                                                                      [
+                                                                        { "BlobAsString": "skip" },
+                                                                        [
+                                                                          { "BlobAsString": "List" },
+                                                                          [
+                                                                            [
+                                                                              [
+                                                                                { "BlobAsString": "Literal" },
+                                                                                [ 1 ]
+                                                                              ],
+                                                                              [
+                                                                                { "BlobAsString": "Environment" },
+                                                                                []
+                                                                              ]
+                                                                            ]
+                                                                          ]
+                                                                        ]
+                                                                      ]
+                                                                    ]
+                                                                  ]
+                                                                ]
+                                                              ]
+                                                            ]
+                                                          ]
+                                                        ]
+                                                      ]
+                                                    ]
+                                                  ],
+                                                  [
+                                                    { "BlobAsString": "KernelApplication" },
+                                                    [
+                                                      { "BlobAsString": "int_mul" },
+                                                      [
+                                                        { "BlobAsString": "List" },
+                                                        [
+                                                          [
+                                                            [
+                                                              { "BlobAsString": "Literal" },
+                                                              [ -1 ]
+                                                            ],
+                                                            [
+                                                              { "BlobAsString": "KernelApplication" },
+                                                              [
+                                                                { "BlobAsString": "head" },
+                                                                [
+                                                                  { "BlobAsString": "KernelApplication" },
+                                                                  [
+                                                                    { "BlobAsString": "head" },
+                                                                    [
+                                                                      { "BlobAsString": "KernelApplication" },
+                                                                      [
+                                                                        { "BlobAsString": "skip" },
+                                                                        [
+                                                                          { "BlobAsString": "List" },
+                                                                          [
+                                                                            [
+                                                                              [
+                                                                                { "BlobAsString": "Literal" },
+                                                                                [ 1 ]
+                                                                              ],
+                                                                              [
+                                                                                { "BlobAsString": "Environment" },
+                                                                                []
+                                                                              ]
+                                                                            ]
+                                                                          ]
+                                                                        ]
+                                                                      ]
+                                                                    ]
                                                                   ]
                                                                 ]
                                                               ]
@@ -632,180 +1115,143 @@
                                                       ]
                                                     ]
                                                   ]
-                                                ],
+                                                ]
+                                              ]
+                                            ]
+                                          ]
+                                        ],
+                                        [
+                                          { "BlobAsString": "Literal" },
+                                          [ 4 ]
+                                        ]
+                                      ]
+                                    ]
+                                  ]
+                                ]
+                              ],
+                              [
+                                { "BlobAsString": "KernelApplication" },
+                                [
+                                  { "BlobAsString": "skip" },
+                                  [
+                                    { "BlobAsString": "List" },
+                                    [
+                                      [
+                                        [
+                                          { "BlobAsString": "KernelApplication" },
+                                          [
+                                            { "BlobAsString": "int_mul" },
+                                            [
+                                              { "BlobAsString": "List" },
+                                              [
                                                 [
-                                                  { "ListAsString": "List" },
                                                   [
+                                                    { "BlobAsString": "KernelApplication" },
                                                     [
+                                                      { "BlobAsString": "head" },
                                                       [
-                                                        { "ListAsString": "KernelApplication" },
+                                                        { "BlobAsString": "KernelApplication" },
                                                         [
-                                                          { "ListAsString": "head" },
+                                                          { "BlobAsString": "head" },
                                                           [
-                                                            { "ListAsString": "Environment" },
-                                                            []
+                                                            { "BlobAsString": "KernelApplication" },
+                                                            [
+                                                              { "BlobAsString": "skip" },
+                                                              [
+                                                                { "BlobAsString": "List" },
+                                                                [
+                                                                  [
+                                                                    [
+                                                                      { "BlobAsString": "Literal" },
+                                                                      [ 1 ]
+                                                                    ],
+                                                                    [
+                                                                      { "BlobAsString": "Environment" },
+                                                                      []
+                                                                    ]
+                                                                  ]
+                                                                ]
+                                                              ]
+                                                            ]
                                                           ]
                                                         ]
-                                                      ],
-                                                      [
-                                                        { "ListAsString": "List" },
-                                                        [ [] ]
                                                       ]
                                                     ]
+                                                  ],
+                                                  [
+                                                    { "BlobAsString": "Literal" },
+                                                    [ 4 ]
                                                   ]
                                                 ]
                                               ]
                                             ]
                                           ]
-                                        ]
-                                      ]
-                                    ]
-                                  ]
-                                ]
-                              ]
-                            ]
-                          ]
-                        ]
-                      ]
-                    ],
-                    [
-                      { "ListAsString": "KernelApplication" },
-                      [
-                        { "ListAsString": "head" },
-                        [
-                          { "ListAsString": "KernelApplication" },
-                          [
-                            { "ListAsString": "head" },
-                            [
-                              { "ListAsString": "KernelApplication" },
-                              [
-                                { "ListAsString": "skip" },
-                                [
-                                  { "ListAsString": "List" },
-                                  [
-                                    [
-                                      [
-                                        { "ListAsString": "Literal" },
-                                        [ 1 ]
-                                      ],
-                                      [
-                                        { "ListAsString": "Environment" },
-                                        []
-                                      ]
-                                    ]
-                                  ]
-                                ]
-                              ]
-                            ]
-                          ]
-                        ]
-                      ]
-                    ],
-                    [
-                      { "ListAsString": "KernelApplication" },
-                      [
-                        { "ListAsString": "head" },
-                        [
-                          { "ListAsString": "KernelApplication" },
-                          [
-                            { "ListAsString": "skip" },
-                            [
-                              { "ListAsString": "List" },
-                              [
-                                [
-                                  [
-                                    { "ListAsString": "Literal" },
-                                    [ 1 ]
-                                  ],
-                                  [
-                                    { "ListAsString": "KernelApplication" },
-                                    [
-                                      { "ListAsString": "head" },
-                                      [
-                                        { "ListAsString": "KernelApplication" },
+                                        ],
                                         [
-                                          { "ListAsString": "skip" },
+                                          { "BlobAsString": "KernelApplication" },
                                           [
-                                            { "ListAsString": "List" },
+                                            { "BlobAsString": "head" },
                                             [
+                                              { "BlobAsString": "KernelApplication" },
                                               [
+                                                { "BlobAsString": "head" },
                                                 [
-                                                  { "ListAsString": "Literal" },
-                                                  [ 1 ]
-                                                ],
-                                                [
-                                                  { "ListAsString": "Environment" },
-                                                  []
-                                                ]
-                                              ]
-                                            ]
-                                          ]
-                                        ]
-                                      ]
-                                    ]
-                                  ]
-                                ]
-                              ]
-                            ]
-                          ]
-                        ]
-                      ]
-                    ],
-                    [
-                      { "ListAsString": "KernelApplication" },
-                      [
-                        { "ListAsString": "head" },
-                        [
-                          { "ListAsString": "KernelApplication" },
-                          [
-                            { "ListAsString": "head" },
-                            [
-                              { "ListAsString": "KernelApplication" },
-                              [
-                                { "ListAsString": "skip" },
-                                [
-                                  { "ListAsString": "List" },
-                                  [
-                                    [
-                                      [
-                                        { "ListAsString": "Literal" },
-                                        [ 1 ]
-                                      ],
-                                      [
-                                        { "ListAsString": "KernelApplication" },
-                                        [
-                                          { "ListAsString": "head" },
-                                          [
-                                            { "ListAsString": "KernelApplication" },
-                                            [
-                                              { "ListAsString": "skip" },
-                                              [
-                                                { "ListAsString": "List" },
-                                                [
+                                                  { "BlobAsString": "KernelApplication" },
                                                   [
+                                                    { "BlobAsString": "skip" },
                                                     [
-                                                      { "ListAsString": "Literal" },
-                                                      [ 2 ]
-                                                    ],
-                                                    [
-                                                      { "ListAsString": "KernelApplication" },
+                                                      { "BlobAsString": "List" },
                                                       [
-                                                        { "ListAsString": "head" },
                                                         [
-                                                          { "ListAsString": "KernelApplication" },
                                                           [
-                                                            { "ListAsString": "skip" },
+                                                            { "BlobAsString": "Literal" },
+                                                            [ 1 ]
+                                                          ],
+                                                          [
+                                                            { "BlobAsString": "KernelApplication" },
                                                             [
-                                                              { "ListAsString": "List" },
+                                                              { "BlobAsString": "head" },
                                                               [
+                                                                { "BlobAsString": "KernelApplication" },
                                                                 [
+                                                                  { "BlobAsString": "skip" },
                                                                   [
-                                                                    { "ListAsString": "Literal" },
-                                                                    [ 1 ]
-                                                                  ],
-                                                                  [
-                                                                    { "ListAsString": "Environment" },
-                                                                    []
+                                                                    { "BlobAsString": "List" },
+                                                                    [
+                                                                      [
+                                                                        [
+                                                                          { "BlobAsString": "Literal" },
+                                                                          [ 2 ]
+                                                                        ],
+                                                                        [
+                                                                          { "BlobAsString": "KernelApplication" },
+                                                                          [
+                                                                            { "BlobAsString": "head" },
+                                                                            [
+                                                                              { "BlobAsString": "KernelApplication" },
+                                                                              [
+                                                                                { "BlobAsString": "skip" },
+                                                                                [
+                                                                                  { "BlobAsString": "List" },
+                                                                                  [
+                                                                                    [
+                                                                                      [
+                                                                                        { "BlobAsString": "Literal" },
+                                                                                        [ 1 ]
+                                                                                      ],
+                                                                                      [
+                                                                                        { "BlobAsString": "Environment" },
+                                                                                        []
+                                                                                      ]
+                                                                                    ]
+                                                                                  ]
+                                                                                ]
+                                                                              ]
+                                                                            ]
+                                                                          ]
+                                                                        ]
+                                                                      ]
+                                                                    ]
                                                                   ]
                                                                 ]
                                                               ]
@@ -832,10 +1278,6 @@
                     ]
                   ]
                 ]
-              ],
-              [
-                { "ListAsString": "List" },
-                [ [] ]
               ]
             ]
           ]

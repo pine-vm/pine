@@ -1060,7 +1060,7 @@ compileElmSyntaxExpression stackBefore elmExpression =
             Ok (LiteralExpression (valueFromString literal))
 
         Elm.Syntax.Expression.CharLiteral char ->
-            Ok (LiteralExpression (Pine.valueFromChar_2024 char))
+            Ok (LiteralExpression (Pine.valueFromChar_2025 char))
 
         Elm.Syntax.Expression.Integer integer ->
             Ok (LiteralExpression (Pine.valueFromInt integer))
@@ -2298,7 +2298,7 @@ compileElmSyntaxPattern compilation elmPattern =
                                 )
 
         Elm.Syntax.Pattern.CharPattern char ->
-            compilePatternOnlyEqualsCondition (LiteralExpression (Pine.valueFromChar_2024 char))
+            compilePatternOnlyEqualsCondition (LiteralExpression (Pine.valueFromChar_2025 char))
 
         Elm.Syntax.Pattern.IntPattern int ->
             compilePatternOnlyEqualsCondition (LiteralExpression (Pine.valueFromInt int))
@@ -2425,7 +2425,7 @@ elmSyntaxListPatternAsLiteral processedItems listItems =
 
                 Elm.Syntax.Pattern.CharPattern char ->
                     elmSyntaxListPatternAsLiteral
-                        (Pine.valueFromChar_2024 char :: processedItems)
+                        (Pine.valueFromChar_2025 char :: processedItems)
                         followingItems
 
                 Elm.Syntax.Pattern.ListPattern innerListItems ->
@@ -2877,14 +2877,13 @@ searchCompileElmSyntaxOperatorOptimized stack operator leftExpr rightExpr =
                                 List.concatMap
                                     (\stringExpr ->
                                         case stringExpr of
-                                            LiteralExpression (Pine.ListValue ({- 'String' tag -} _ :: (Pine.ListValue [ Pine.ListValue literalChars ]) :: _)) ->
+                                            LiteralExpression (Pine.ListValue ({- 'String' tag -} _ :: (Pine.ListValue [ literalChars ]) :: _)) ->
                                                 --  Some code uses syntax like ` var ++ "" ` to simplify (local) type inference.
-                                                if literalChars == [] then
+                                                if literalChars == Pine.BlobValue [] then
                                                     []
 
                                                 else
-                                                    [ LiteralExpression
-                                                        (Pine.ListValue literalChars)
+                                                    [ LiteralExpression literalChars
                                                     ]
 
                                             _ ->
@@ -4787,7 +4786,7 @@ valueFromString : String -> Pine.Value
 valueFromString string =
     Pine.ListValue
         [ elmStringTypeTagNameAsValue
-        , Pine.ListValue [ Pine.computeValueFromString_2024 string ]
+        , Pine.ListValue [ Pine.computeValueFromString_2025 string ]
         ]
 
 
@@ -5278,6 +5277,6 @@ responseExpressionFromString str =
     Pine.LiteralExpression
         (Pine.ListValue
             [ Pine.valueFromString "String"
-            , Pine.ListValue [ Pine.computeValueFromString_2024 str ]
+            , Pine.ListValue [ Pine.computeValueFromString_2025 str ]
             ]
         )

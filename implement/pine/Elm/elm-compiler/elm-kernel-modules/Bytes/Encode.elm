@@ -200,29 +200,30 @@ sequence builders =
 
 
 string : String -> Encoder
-string (String chars) =
+string (String charsBytes) =
+    BytesEncoder
+        (Bytes.Elm_Bytes (encodeCharsAsBlob charsBytes))
+
+
+encodeCharsAsBlob : Int -> Int
+encodeCharsAsBlob charsBytes =
+    encodeCharsAsBlobHelp emptyBlob 0 charsBytes
+
+
+encodeCharsAsBlobHelp : Int -> Int -> Int -> Int
+encodeCharsAsBlobHelp acc offset charsBytes =
     let
-        blob =
-            encodeCharsAsBlob chars
+        nextChar =
+            Pine_kernel.take [ 4, Pine_kernel.skip [ offset, charsBytes ] ]
     in
-    BytesEncoder (Bytes.Elm_Bytes blob)
+    if Pine_kernel.equal [ Pine_kernel.length nextChar, 0 ] then
+        acc
 
-
-encodeCharsAsBlob : List Char -> Int
-encodeCharsAsBlob chars =
-    encodeCharsAsBlobHelp emptyBlob chars
-
-
-encodeCharsAsBlobHelp : Int -> List Char -> Int
-encodeCharsAsBlobHelp acc chars =
-    case chars of
-        [] ->
-            acc
-
-        char :: rest ->
-            encodeCharsAsBlobHelp
-                (Pine_kernel.concat [ acc, encodeCharAsBlob char ])
-                rest
+    else
+        encodeCharsAsBlobHelp
+            (Pine_kernel.concat [ acc, encodeCharAsBlob nextChar ])
+            (Pine_kernel.int_add [ offset, 4 ])
+            charsBytes
 
 
 encodeCharAsBlob : Char -> Int
@@ -233,7 +234,10 @@ encodeCharAsBlob char =
     in
     if Pine_kernel.int_is_sorted_asc [ code, 0x7F ] then
         -- 1-byte encoding
-        char
+        Pine_kernel.skip
+            [ 1
+            , code
+            ]
 
     else if Pine_kernel.int_is_sorted_asc [ code, 0x07FF ] then
         -- 2-byte encoding
@@ -318,9 +322,9 @@ encodeCharAsBlob char =
 
 
 getStringWidth : String -> Int
-getStringWidth (String chars) =
+getStringWidth (String charsBytes) =
     Pine_kernel.length
-        (encodeCharsAsBlob chars)
+        (encodeCharsAsBlob charsBytes)
 
 
 maskSingleByte : Int

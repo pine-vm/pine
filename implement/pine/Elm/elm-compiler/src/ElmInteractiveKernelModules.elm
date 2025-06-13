@@ -226,29 +226,30 @@ sequence builders =
 
 
 string : String -> Encoder
-string (String chars) =
+string (String charsBytes) =
+    BytesEncoder
+        (Bytes.Elm_Bytes (encodeCharsAsBlob charsBytes))
+
+
+encodeCharsAsBlob : Int -> Int
+encodeCharsAsBlob charsBytes =
+    encodeCharsAsBlobHelp emptyBlob 0 charsBytes
+
+
+encodeCharsAsBlobHelp : Int -> Int -> Int -> Int
+encodeCharsAsBlobHelp acc offset charsBytes =
     let
-        blob =
-            encodeCharsAsBlob chars
+        nextChar =
+            Pine_kernel.take [ 4, Pine_kernel.skip [ offset, charsBytes ] ]
     in
-    BytesEncoder (Bytes.Elm_Bytes blob)
+    if Pine_kernel.equal [ Pine_kernel.length nextChar, 0 ] then
+        acc
 
-
-encodeCharsAsBlob : List Char -> Int
-encodeCharsAsBlob chars =
-    encodeCharsAsBlobHelp emptyBlob chars
-
-
-encodeCharsAsBlobHelp : Int -> List Char -> Int
-encodeCharsAsBlobHelp acc chars =
-    case chars of
-        [] ->
-            acc
-
-        char :: rest ->
-            encodeCharsAsBlobHelp
-                (Pine_kernel.concat [ acc, encodeCharAsBlob char ])
-                rest
+    else
+        encodeCharsAsBlobHelp
+            (Pine_kernel.concat [ acc, encodeCharAsBlob nextChar ])
+            (Pine_kernel.int_add [ offset, 4 ])
+            charsBytes
 
 
 encodeCharAsBlob : Char -> Int
@@ -257,11 +258,14 @@ encodeCharAsBlob char =
         code =
             Char.toCode char
     in
-    if Pine_kernel.int_is_sorted_asc [ code, 0x7f ] then
+    if Pine_kernel.int_is_sorted_asc [ code, 0x7F ] then
         -- 1-byte encoding
-        char
+        Pine_kernel.skip
+            [ 1
+            , code
+            ]
 
-    else if Pine_kernel.int_is_sorted_asc [ code, 0x7ff ] then
+    else if Pine_kernel.int_is_sorted_asc [ code, 0x07FF ] then
         -- 2-byte encoding
         let
             byte1 =
@@ -281,7 +285,7 @@ encodeCharAsBlob char =
             , Pine_kernel.bit_and [ byte2, maskSingleByte ]
             ]
 
-    else if Pine_kernel.int_is_sorted_asc [ code, 0xffff ] then
+    else if Pine_kernel.int_is_sorted_asc [ code, 0xFFFF ] then
         -- 3-byte encoding
         let
             byte1 =
@@ -344,9 +348,9 @@ encodeCharAsBlob char =
 
 
 getStringWidth : String -> Int
-getStringWidth (String chars) =
+getStringWidth (String charsBytes) =
     Pine_kernel.length
-        (encodeCharsAsBlob chars)
+        (encodeCharsAsBlob charsBytes)
 
 
 maskSingleByte : Int
@@ -622,13 +626,13 @@ decodeBlobAsCharsRec offset blob chars =
 
     else
         let
-            ( char, bytesConsumed ) =
+            ( charCode, bytesConsumed ) =
                 decodeUtf8Char blob offset
         in
         decodeBlobAsCharsRec
             (Pine_kernel.int_add [ offset, bytesConsumed ])
             blob
-            (char :: chars)
+            (Char.fromCode charCode :: chars)
 
 
 decodeUtf8Char : Int -> Int -> ( Int, Int )
@@ -639,10 +643,13 @@ decodeUtf8Char blob offset =
 
         firstByteInt =
             Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], firstByte ]
+
+        charCode =
+            Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], firstByte ]
     in
     if Pine_kernel.int_is_sorted_asc [ firstByteInt, 0x7F ] then
         -- 1-byte character (ASCII)
-        ( firstByte, 1 )
+        ( charCode, 1 )
 
     else if Pine_kernel.equal [ Pine_kernel.bit_and [ firstByteInt, 0xE0 ], 0xC0 ] then
         -- 2-byte character
@@ -665,7 +672,7 @@ decodeUtf8Char blob offset =
                     , secondSixBits
                     ]
         in
-        ( Pine_kernel.skip [ 1, charCode ], 2 )
+        ( charCode, 2 )
 
     else if Pine_kernel.equal [ Pine_kernel.bit_and [ firstByteInt, 0xF0 ], 0xE0 ] then
         -- 3-byte character
@@ -698,7 +705,7 @@ decodeUtf8Char blob offset =
                     , thirdSixBits
                     ]
         in
-        ( Pine_kernel.skip [ 1, charCode ], 3 )
+        ( charCode, 3 )
 
     else if Pine_kernel.equal [ Pine_kernel.bit_and [ firstByteInt, 0xF8 ], 0xF0 ] then
         -- 4-byte character
@@ -741,11 +748,11 @@ decodeUtf8Char blob offset =
                     , fourthSixBits
                     ]
         in
-        ( Pine_kernel.skip [ 1, charCode ], 4 )
+        ( charCode, 4 )
 
     else
         -- Invalid UTF-8 sequence; use replacement character
-        ( Pine_kernel.skip [ 1, 0xFFFD ], 1 )
+        ( 0xFFFD, 1 )
 
 
 succeed : a -> Decoder a
@@ -1610,7 +1617,12 @@ decodeString decoder jsonString =
 
 
 parseJsonStringToValue : String -> Result String Value
-parseJsonStringToValue (String jsonChars) =
+parseJsonStringToValue jsonString =
+    let
+        jsonChars : List Char
+        jsonChars =
+            String.toList jsonString
+    in
     case parseValue jsonChars 0 of
         ( Ok ok, consumed ) ->
             let
@@ -2561,8 +2573,12 @@ chompBase10Helper offset chars =
 
 
 isSubString : String -> Int -> Int -> Int -> List Char -> ( Int, Int, Int )
-isSubString (String smallChars) offset row col bigChars =
+isSubString smallString offset row col bigChars =
     let
+        smallChars : List Char
+        smallChars =
+            String.toList smallString
+
         expectedLength : Int
         expectedLength =
             Pine_kernel.length smallChars
@@ -2623,8 +2639,12 @@ isSubChar predicate offset chars =
 
 
 findSubString : String -> Int -> Int -> Int -> List Char -> ( Int, Int, Int )
-findSubString (String smallChars) offset row col bigChars =
+findSubString smallString offset row col bigChars =
     let
+        smallChars : List Char
+        smallChars =
+            String.toList smallString
+
         newOffset : Int
         newOffset =
             indexOf smallChars bigChars offset
@@ -2744,7 +2764,7 @@ countOffsetsInString ( offset, newlines, col ) ( chars, end ) =
 newlineChar : Char
 newlineChar =
     -- ASCII code for '\\n'
-    Pine_kernel.skip [ 1, 10 ]
+    '\\n'
 
 
 isAsciiCode : Int -> Int -> List Char -> Bool
@@ -2925,7 +2945,12 @@ The only difference is that when it fails, it has much more precise information
 for each dead end.
 -}
 run : Parser c x a -> String -> Result (List (DeadEnd c x)) a
-run (Parser parse) (String srcChars) =
+run (Parser parse) string =
+    let
+        srcChars : List Char
+        srcChars =
+            String.toList string
+    in
     case
         parse
             (PState
@@ -3589,7 +3614,7 @@ finalizeFloat invalid expecting intSettings floatSettings intPair s =
                                     ]
                                 ]
                     in
-                    case String.toFloat (String sliceChars) of
+                    case String.toFloat (String.fromList sliceChars) of
                         Nothing ->
                             Bad True (fromState s invalid)
 
@@ -3740,7 +3765,7 @@ mapChompedString func (Parser parse) =
                                     ]
                                 ]
                     in
-                    Good p (func (String sliceChars) a) s1
+                    Good p (func (String.fromList sliceChars) a) s1
         )
 
 
@@ -4073,7 +4098,7 @@ getSource =
                 (PState srcChars offset indent context row col) =
                     s
             in
-            Good False (String srcChars) s
+            Good False (String.fromList srcChars) s
         )
 
 
@@ -4172,7 +4197,7 @@ variable i =
 
                     name : String
                     name =
-                        String nameChars
+                        String.fromList nameChars
                 in
                 if Set.member name i.reserved then
                     Bad False (fromState s i.expecting)

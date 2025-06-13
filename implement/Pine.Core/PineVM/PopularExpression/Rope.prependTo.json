@@ -6,7 +6,7 @@
         {
           "List": [
             [
-              { "Literal": [ { "ListAsString": "Nothing" } ] },
+              { "Literal": [ { "BlobAsString": "Nothing" } ] },
               {
                 "KernelApplication": [
                   "head",
@@ -60,7 +60,7 @@
             {
               "List": [
                 [
-                  { "Literal": [ { "ListAsString": "Just" } ] },
+                  { "Literal": [ { "BlobAsString": "Just" } ] },
                   {
                     "KernelApplication": [
                       "head",
@@ -108,7 +108,7 @@
         },
         {
           "ParseAndEval": [
-            { "Literal": [ { "ListAsString": "Error in case-of block: No matching branch." } ] },
+            { "Literal": [ { "BlobAsString": "Error in case-of block: No matching branch." } ] },
             {
               "KernelApplication": [
                 "head",
@@ -154,7 +154,7 @@
                 {
                   "List": [
                     [
-                      { "Literal": [ { "ListAsString": "Nothing" } ] },
+                      { "Literal": [ { "BlobAsString": "Nothing" } ] },
                       {
                         "KernelApplication": [
                           "head",
@@ -196,7 +196,7 @@
                     {
                       "List": [
                         [
-                          { "Literal": [ { "ListAsString": "Just" } ] },
+                          { "Literal": [ { "BlobAsString": "Just" } ] },
                           {
                             "KernelApplication": [
                               "head",
@@ -232,7 +232,7 @@
                 },
                 {
                   "ParseAndEval": [
-                    { "Literal": [ { "ListAsString": "Error in case-of block: No matching branch." } ] },
+                    { "Literal": [ { "BlobAsString": "Error in case-of block: No matching branch." } ] },
                     {
                       "KernelApplication": [
                         "head",
@@ -261,14 +261,14 @@
                 {
                   "List": [
                     [
-                      { "Literal": [ { "ListAsString": "Just" } ] },
+                      { "Literal": [ { "BlobAsString": "Just" } ] },
                       {
                         "List": [
                           [
                             {
                               "List": [
                                 [
-                                  { "Literal": [ { "ListAsString": "Branch2" } ] },
+                                  { "Literal": [ { "BlobAsString": "Branch2" } ] },
                                   {
                                     "List": [
                                       [

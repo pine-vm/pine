@@ -78,7 +78,7 @@
                                 }
                               ]
                             },
-                            { "Literal": [ { "ListAsString": "Function" } ] }
+                            { "Literal": [ { "BlobAsString": "Function" } ] }
                           ]
                         ]
                       }
@@ -294,7 +294,7 @@
                       {
                         "List": [
                           [
-                            { "Literal": [ { "ListAsString": "Function" } ] },
+                            { "Literal": [ { "BlobAsString": "Function" } ] },
                             {
                               "List": [
                                 [

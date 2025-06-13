@@ -577,7 +577,12 @@ decodeString decoder jsonString =
 
 
 parseJsonStringToValue : String -> Result String Value
-parseJsonStringToValue (String jsonChars) =
+parseJsonStringToValue jsonString =
+    let
+        jsonChars : List Char
+        jsonChars =
+            String.toList jsonString
+    in
     case parseValue jsonChars 0 of
         ( Ok ok, consumed ) ->
             let

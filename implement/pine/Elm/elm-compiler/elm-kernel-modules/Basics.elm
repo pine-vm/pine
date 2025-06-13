@@ -489,7 +489,7 @@ compare a b =
     else
         case ( a, b ) of
             ( String stringA, String stringB ) ->
-                compareStrings stringA stringB
+                compareStrings 0 stringA stringB
 
             ( Elm_Float numA denomA, Elm_Float numB denomB ) ->
                 let
@@ -581,37 +581,48 @@ compareList listA listB =
                         headOrder
 
 
-compareStrings : List Char -> List Char -> Order
-compareStrings stringA stringB =
-    case stringA of
-        [] ->
-            case stringB of
-                [] ->
-                    EQ
+compareStrings : Int -> Int -> Int -> Order
+compareStrings offset stringA stringB =
+    let
+        charA =
+            Pine_kernel.take
+                [ 4
+                , Pine_kernel.skip [ offset, stringA ]
+                ]
 
-                _ ->
-                    LT
+        charB =
+            Pine_kernel.take
+                [ 4
+                , Pine_kernel.skip [ offset, stringB ]
+                ]
+    in
+    if Pine_kernel.equal [ Pine_kernel.length charA, 0 ] then
+        if Pine_kernel.equal [ Pine_kernel.length charB, 0 ] then
+            EQ
 
-        charA :: tailA ->
-            case stringB of
-                [] ->
-                    GT
+        else
+            LT
 
-                charB :: tailB ->
-                    if Pine_kernel.equal [ charA, charB ] then
-                        compareStrings tailA tailB
+    else if Pine_kernel.equal [ Pine_kernel.length charB, 0 ] then
+        GT
 
-                    else if
-                        -- Pine_kernel.int_is_sorted_asc only works with signed integers. Therefore prepend sign to each character.
-                        Pine_kernel.int_is_sorted_asc
-                            [ Pine_kernel.concat [ 0, charA ]
-                            , Pine_kernel.concat [ 0, charB ]
-                            ]
-                    then
-                        LT
+    else if Pine_kernel.equal [ charA, charB ] then
+        compareStrings
+            (Pine_kernel.int_add [ offset, 4 ])
+            stringA
+            stringB
 
-                    else
-                        GT
+    else if
+        -- Pine_kernel.int_is_sorted_asc only works with signed integers. Therefore prepend sign to each character.
+        Pine_kernel.int_is_sorted_asc
+            [ Pine_kernel.concat [ 0, charA ]
+            , Pine_kernel.concat [ 0, charB ]
+            ]
+    then
+        LT
+
+    else
+        GT
 
 
 modBy : Int -> Int -> Int

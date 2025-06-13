@@ -165,7 +165,12 @@ The only difference is that when it fails, it has much more precise information
 for each dead end.
 -}
 run : Parser c x a -> String -> Result (List (DeadEnd c x)) a
-run (Parser parse) (String srcChars) =
+run (Parser parse) string =
+    let
+        srcChars : List Char
+        srcChars =
+            String.toList string
+    in
     case
         parse
             (PState
@@ -829,7 +834,7 @@ finalizeFloat invalid expecting intSettings floatSettings intPair s =
                                     ]
                                 ]
                     in
-                    case String.toFloat (String sliceChars) of
+                    case String.toFloat (String.fromList sliceChars) of
                         Nothing ->
                             Bad True (fromState s invalid)
 
@@ -980,7 +985,7 @@ mapChompedString func (Parser parse) =
                                     ]
                                 ]
                     in
-                    Good p (func (String sliceChars) a) s1
+                    Good p (func (String.fromList sliceChars) a) s1
         )
 
 
@@ -1314,7 +1319,7 @@ getSource =
                 (PState srcChars offset indent context row col) =
                     s
             in
-            Good False (String srcChars) s
+            Good False (String.fromList srcChars) s
         )
 
 
@@ -1413,7 +1418,7 @@ variable i =
 
                     name : String
                     name =
-                        String nameChars
+                        String.fromList nameChars
                 in
                 if Set.member name i.reserved then
                     Bad False (fromState s i.expecting)

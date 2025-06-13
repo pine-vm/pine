@@ -9,7 +9,7 @@ using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
-using System.Text;
+using System.Buffers.Binary;
 
 namespace Pine.PineVM;
 
@@ -161,8 +161,6 @@ public class Precompiled
         var basicsEqExposedValue = popularValueDictionary["Basics.eq.exposed"];
 
         var listMemberExposedValue = popularValueDictionary["List.member.exposed"];
-
-        var stringAnyExposedValue = popularValueDictionary["String.any.exposed"];
 
         var stringSliceExpression = popularExpressionDictionary["String.slice"];
 
@@ -556,6 +554,28 @@ public class Precompiled
         }
 
         {
+            var stringToListRecursiveExpression = popularExpressionDictionary["String.toListRecursive"];
+
+            var stringToListRecursiveExpressionValue =
+                ExpressionEncoding.EncodeExpressionAsValue(stringToListRecursiveExpression);
+
+            var stringToListRecursiveEnvClass =
+                EnvConstraintId.Create(
+                    [
+                    new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                    [0, 0],
+                    stringToListRecursiveExpressionValue)
+                    ]);
+
+            yield return
+                new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
+                    stringToListRecursiveExpression,
+                    [new PrecompiledEntry(
+                        stringToListRecursiveEnvClass,
+                        StringToListRecursive)]);
+        }
+
+        {
             var assocListGetExpressionEnvClass =
                 EnvConstraintId.Create(
                     [
@@ -742,6 +762,26 @@ public class Precompiled
                     [new PrecompiledEntry(
                         envClass,
                         PineComputeValueFromString_2024_Recursive)]);
+        }
+
+        {
+            var computeValueFromString_2025Expr =
+                popularExpressionDictionary["Pine.computeValueFromString_2025.body"];
+
+            var envClass =
+                EnvConstraintId.Create(
+                    [
+                    new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                        [0],
+                        popularValueDictionary["Pine.computeValueFromString_2025.aggregate-env"]),
+                    ]);
+
+            yield return
+                new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
+                    computeValueFromString_2025Expr,
+                    [new PrecompiledEntry(
+                        envClass,
+                        PineComputeValueFromString_2025)]);
         }
 
 
@@ -976,6 +1016,14 @@ public class Precompiled
                         envClassFromPredicate(
                             popularValueDictionary["predicate_nestableComment_char_is_not_elm_multiline_comment_open_or_close"]),
                         ParserFast_skipWhileHelp_not_elm_multiline_comment_open_or_close)]);
+
+            yield return
+                new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
+                    skipWhileHelpExpression,
+                    [new PrecompiledEntry(
+                        envClassFromPredicate(
+                            popularValueDictionary["predicate_first_arg_is_not_ASCII_quote_or_backslash"]),
+                        ParserFast_skipWhileHelp_not_ASCII_quote_or_backslash)]);
 
             /*
             yield return
@@ -1243,16 +1291,24 @@ public class Precompiled
         var charValue =
             PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
 
-        if (charValue is not PineValue.BlobValue charBlob || charBlob.Bytes.Length is not 1)
+        if (charValue is not PineValue.BlobValue charBlob || charBlob.Bytes.Length < 1)
         {
             return PineVMValues.FalseValue;
         }
 
-        var charCode = charBlob.Bytes.Span[0];
+        for (int i = 0; i < charBlob.Bytes.Length - 1; ++i)
+        {
+            if (charBlob.Bytes.Span[i] is not 0)
+            {
+                return PineVMValues.FalseValue;
+            }
+        }
+
+        var charCodeLowByte = charBlob.Bytes.Span[^1];
 
         var isLower =
-            0x61 <= charCode &&
-            charCode <= 0x7A;
+            0x61 <= charCodeLowByte &&
+            charCodeLowByte <= 0x7A;
 
         return
             isLower
@@ -1269,16 +1325,24 @@ public class Precompiled
         var charValue =
             PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
 
-        if (charValue is not PineValue.BlobValue charBlob || charBlob.Bytes.Length is not 1)
+        if (charValue is not PineValue.BlobValue charBlob || charBlob.Bytes.Length < 1)
         {
             return PineVMValues.FalseValue;
         }
 
-        var charCode = charBlob.Bytes.Span[0];
+        for (int i = 0; i < charBlob.Bytes.Length - 1; ++i)
+        {
+            if (charBlob.Bytes.Span[i] is not 0)
+            {
+                return PineVMValues.FalseValue;
+            }
+        }
+
+        var charCodeLowByte = charBlob.Bytes.Span[^1];
 
         var isUpper =
-            0x41 <= charCode &&
-            charCode <= 0x5A;
+            0x41 <= charCodeLowByte &&
+            charCodeLowByte <= 0x5A;
 
         return
             isUpper
@@ -1293,16 +1357,20 @@ public class Precompiled
         PineVMParseCache parseCache)
     {
         /*
-        encodeCharsAsBlobHelp : Int -> List Char -> Int
-        encodeCharsAsBlobHelp acc chars =
-            case chars of
-                [] ->
-                    acc
+        encodeCharsAsBlobHelp : Int -> Int -> Int -> Int
+        encodeCharsAsBlobHelp acc offset charsBytes =
+            let
+                nextChar =
+                    Pine_kernel.take [ 4, Pine_kernel.skip [ offset, charsBytes ] ]
+            in
+            if Pine_kernel.equal [ Pine_kernel.length nextChar, 0 ] then
+                acc
 
-                char :: rest ->
-                    encodeCharsAsBlobHelp
-                        (Pine_kernel.concat [ acc, encodeCharAsBlob char ])
-                        rest
+            else
+                encodeCharsAsBlobHelp
+                    (Pine_kernel.concat [ acc, encodeCharAsBlob nextChar ])
+                    (Pine_kernel.int_add [ offset, 4 ])
+                    charsBytes
 
 
         encodeCharAsBlob : Char -> Int
@@ -1313,7 +1381,10 @@ public class Precompiled
             in
             if Pine_kernel.int_is_sorted_asc [ code, 0x7F ] then
                 -- 1-byte encoding
-                char
+                Pine_kernel.skip
+                    [ 1
+                    , code
+                    ]
 
             else if Pine_kernel.int_is_sorted_asc [ code, 0x07FF ] then
                 -- 2-byte encoding
@@ -1401,20 +1472,28 @@ public class Precompiled
         var acc =
             PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
 
-        var chars =
+        var offsetValue =
             PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
+
+        var chars =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 2]);
+
+        if (IntegerEncoding.ParseSignedIntegerRelaxed(offsetValue).IsOkOrNullable() is not { } offset)
+        {
+            return acc;
+        }
 
         if (chars == PineValue.EmptyList)
         {
             return acc;
         }
 
-        if (chars is not PineValue.ListValue charsList)
+        if (chars is not PineValue.BlobValue charsBlob)
         {
             return acc;
         }
 
-        if (charsList.Elements.Length is 0)
+        if (charsBlob.Bytes.Length is 0)
         {
             return acc;
         }
@@ -1422,41 +1501,23 @@ public class Precompiled
         var accBlob =
             acc as PineValue.BlobValue ?? PineValue.EmptyBlob;
 
-        var buffer = new byte[accBlob.Bytes.Length + charsList.Elements.Length * 4];
+        var buffer = new byte[accBlob.Bytes.Length + charsBlob.Bytes.Length];
 
         accBlob.Bytes.CopyTo(buffer);
 
         int bytesWritten = accBlob.Bytes.Length;
 
-        for (var i = 0; i < charsList.Elements.Length; ++i)
-        {
-            var charValue = charsList.Elements.Span[i];
+        int offsetInt = (int)offset;
 
-            if (charValue is not PineValue.BlobValue charBlob)
+        while (true)
+        {
+            if (offsetInt + 4 > charsBlob.Bytes.Length)
             {
                 break;
             }
 
             var charCode =
-                charBlob.Bytes.Length is 1
-                ?
-                charBlob.Bytes.Span[0]
-                :
-                charBlob.Bytes.Length is 2
-                ?
-                (charBlob.Bytes.Span[0] << 8) |
-                charBlob.Bytes.Span[1]
-                :
-                charBlob.Bytes.Length is 3
-                ?
-                (charBlob.Bytes.Span[0] << 16) |
-                (charBlob.Bytes.Span[1] << 8) |
-                charBlob.Bytes.Span[2]
-                :
-                (charBlob.Bytes.Span[0] << 24) |
-                (charBlob.Bytes.Span[1] << 16) |
-                (charBlob.Bytes.Span[2] << 8) |
-                charBlob.Bytes.Span[3];
+                BinaryPrimitives.ReadInt32BigEndian(charsBlob.Bytes.Span[offsetInt..]);
 
             if (charCode <= 0x7F)
             {
@@ -1480,6 +1541,8 @@ public class Precompiled
                 buffer[bytesWritten++] = (byte)(0x80 | ((charCode >> 6) & 0x3F));
                 buffer[bytesWritten++] = (byte)(0x80 | (charCode & 0x3F));
             }
+
+            offsetInt += 4;
         }
 
         return PineValue.Blob(buffer.AsMemory(0, bytesWritten));
@@ -1633,49 +1696,129 @@ public class Precompiled
         var charsValue =
             PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 2]);
 
-        if (KernelFunction.SignedIntegerFromValueRelaxed(argOffsetValue) is not { } argOffset)
-        {
-            return null;
-        }
-
-        if (blobValue is not PineValue.BlobValue blob)
-        {
-            return null;
-        }
-
         if (charsValue is not PineValue.ListValue charsList)
         {
             return null;
         }
 
-        var argOffsetInt = (int)argOffset;
-
-        var newCharsBuffer = new char[blob.Bytes.Length - argOffsetInt];
-
-        if (!Encoding.UTF8.TryGetChars(blob.Bytes[argOffsetInt..].Span, newCharsBuffer, out var charsWritten))
+        if (KernelFunction.SignedIntegerFromValueRelaxed(argOffsetValue) is not { } argOffset)
         {
             return null;
         }
 
-        var newCharsValues =
-            StringEncoding.ListValueFromString(new string(newCharsBuffer.AsMemory().Span[..charsWritten]));
-
-        var concatenatedCharsValues =
-            new PineValue[charsList.Elements.Length + newCharsValues.Length];
-
-        for (var i = 0; i < charsList.Elements.Length; ++i)
+        if (blobValue is not PineValue.BlobValue blobUtf8)
         {
-            concatenatedCharsValues[i] =
-                charsList.Elements.Span[charsList.Elements.Length - i - 1];
+            return null;
         }
 
-        newCharsValues.Span.CopyTo(concatenatedCharsValues.AsSpan(start: charsList.Elements.Length));
+        var concatBufferInt32 = new int[blobUtf8.Bytes.Length];
+
+        for (int i = 0; i < charsList.Elements.Length; ++i)
+        {
+            if (IntegerEncoding.ParseUnsignedInteger(charsList.Elements.Span[i]).IsOkOrNullable() is not { } charCode)
+            {
+                return null;
+            }
+
+            concatBufferInt32[charsList.Elements.Length - i - 1] = (int)charCode;
+        }
+
+        var sourceOffsetInt = (int)argOffset;
+
+        var writtenChars = charsList.Elements.Length;
+
+        while (sourceOffsetInt < blobUtf8.Bytes.Length)
+        {
+            var byteValue = blobUtf8.Bytes.Span[sourceOffsetInt];
+
+            if (byteValue <= 0x7f)
+            {
+                // 1-byte character (ASCII)
+
+                concatBufferInt32[writtenChars++] = byteValue;
+                sourceOffsetInt += 1;
+            }
+            else if ((byteValue & 0xE0) == 0xC0)
+            {
+                // 2-byte character
+
+                if (sourceOffsetInt + 1 >= blobUtf8.Bytes.Length)
+                {
+                    break; // Not enough bytes for a 2-byte character
+                }
+
+                var secondByte = blobUtf8.Bytes.Span[sourceOffsetInt + 1];
+
+                var charCode =
+                    ((byteValue & 0x1F) << 6) |
+                    (secondByte & 0x3F);
+
+                concatBufferInt32[writtenChars++] = charCode;
+                sourceOffsetInt += 2;
+            }
+            else if ((byteValue & 0xF0) == 0xE0)
+            {
+                // 3-byte character
+
+                if (sourceOffsetInt + 2 >= blobUtf8.Bytes.Length)
+                {
+                    break; // Not enough bytes for a 3-byte character
+                }
+
+                var secondByte = blobUtf8.Bytes.Span[sourceOffsetInt + 1];
+                var thirdByte = blobUtf8.Bytes.Span[sourceOffsetInt + 2];
+
+                var charCode =
+                    ((byteValue & 0x0F) << 12) |
+                    ((secondByte & 0x3F) << 6) |
+                    (thirdByte & 0x3F);
+
+                concatBufferInt32[writtenChars++] = charCode;
+                sourceOffsetInt += 3;
+            }
+            else if ((byteValue & 0xF8) == 0xF0)
+            {
+                // 4-byte character
+
+                if (sourceOffsetInt + 3 >= blobUtf8.Bytes.Length)
+                {
+                    break; // Not enough bytes for a 4-byte character
+                }
+
+                var secondByte = blobUtf8.Bytes.Span[sourceOffsetInt + 1];
+                var thirdByte = blobUtf8.Bytes.Span[sourceOffsetInt + 2];
+                var fourthByte = blobUtf8.Bytes.Span[sourceOffsetInt + 3];
+
+                var charCode =
+                    ((byteValue & 0x07) << 18) |
+                    ((secondByte & 0x3F) << 12) |
+                    ((thirdByte & 0x3F) << 6) |
+                    (fourthByte & 0x3F);
+
+                concatBufferInt32[writtenChars++] = charCode;
+                sourceOffsetInt += 4;
+            }
+            else
+            {
+                // Invalid UTF-8 sequence; use replacement character
+
+                concatBufferInt32[writtenChars++] = 0xFFFD;
+                sourceOffsetInt += 1; // Skip one byte
+            }
+        }
+
+        var concatBuffer = new byte[writtenChars * 4];
+
+        for (int i = 0; i < writtenChars; ++i)
+        {
+            BinaryPrimitives.WriteInt32BigEndian(concatBuffer.AsSpan(i * 4), concatBufferInt32[i]);
+        }
 
         var elmStringValue =
             PineValue.List(
                 [
                 ElmValue.ElmStringTypeTagNameAsValue,
-                PineValue.List([PineValue.List(concatenatedCharsValues)])
+                PineValue.List([PineValue.Blob(concatBuffer)])
                 ]);
 
         return new PrecompiledResult.FinalValue(elmStringValue, 0);
@@ -1723,12 +1866,12 @@ public class Precompiled
             return null;
         }
 
-        if (stringTagArguments.Elements.Span[0] is not PineValue.ListValue stringCharsList)
+        if (stringTagArguments.Elements.Span[0] is not PineValue.BlobValue stringCharsBlob)
         {
             return null;
         }
 
-        var asStringResult = StringEncoding.StringFromListValue(stringCharsList);
+        var asStringResult = StringEncoding.StringFromValue(stringCharsBlob);
 
         if (asStringResult.IsOkOrNull() is not { } dotnetString)
         {
@@ -2000,56 +2143,89 @@ public class Precompiled
 
     static PineValue CompareStrings(PineValue stringA, PineValue stringB)
     {
-        if (stringA is PineValue.ListValue listA && stringB is PineValue.ListValue listB)
+        /*
+        compareStrings : Int -> Int -> Int -> Order
+        compareStrings offset stringA stringB =
+            let
+                charA =
+                    Pine_kernel.take
+                        [ 4
+                        , Pine_kernel.skip [ offset, stringA ]
+                        ]
+
+                charB =
+                    Pine_kernel.take
+                        [ 4
+                        , Pine_kernel.skip [ offset, stringB ]
+                        ]
+            in
+            if Pine_kernel.equal [ Pine_kernel.length charA, 0 ] then
+                if Pine_kernel.equal [ Pine_kernel.length charB, 0 ] then
+                    EQ
+
+                else
+                    LT
+
+            else if Pine_kernel.equal [ Pine_kernel.length charB, 0 ] then
+                GT
+
+            else if Pine_kernel.equal [ charA, charB ] then
+                compareStrings
+                    (Pine_kernel.int_add [ offset, 4 ])
+                    stringA
+                    stringB
+
+            else if
+                -- Pine_kernel.int_is_sorted_asc only works with signed integers. Therefore prepend sign to each character.
+                Pine_kernel.int_is_sorted_asc
+                    [ Pine_kernel.concat [ 0, charA ]
+                    , Pine_kernel.concat [ 0, charB ]
+                    ]
+            then
+                LT
+
+            else
+                GT
+         * */
+
+        if (stringA is PineValue.BlobValue blobA && stringB is PineValue.BlobValue blobB)
         {
             var commonLength =
-                listA.Elements.Length < listB.Elements.Length ?
-                listA.Elements.Length :
-                listB.Elements.Length;
+                blobA.Bytes.Length < blobB.Bytes.Length ?
+                blobA.Bytes.Length :
+                blobB.Bytes.Length;
 
-            for (var i = 0; i < commonLength; ++i)
+            var commonLenghtChars = commonLength / 4;
+
+            for (var i = 0; i < commonLenghtChars; ++i)
             {
-                var itemA = listA.Elements.Span[i];
-                var itemB = listB.Elements.Span[i];
+                var offset = i * 4;
 
-                if (itemA is not PineValue.BlobValue blobA)
+                var charA = BinaryPrimitives.ReadInt32BigEndian(blobA.Bytes.Span[offset..]);
+                var charB = BinaryPrimitives.ReadInt32BigEndian(blobB.Bytes.Span[offset..]);
+
+                if (charA == charB)
                 {
-                    return PineValue.EmptyList;
+                    continue;
                 }
 
-                if (itemB is not PineValue.BlobValue blobB)
-                {
-                    return PineValue.EmptyList;
-                }
-
-                var charA = IntegerEncoding.ParseUnsignedInteger(blobA.Bytes.Span);
-                var charB = IntegerEncoding.ParseUnsignedInteger(blobB.Bytes.Span);
-
-                if (charA < charB)
-                {
-                    return Tag_LT_Value;
-                }
-
-                if (charA > charB)
-                {
-                    return Tag_GT_Value;
-                }
+                return charA < charB ? Tag_LT_Value : Tag_GT_Value;
             }
 
-            if (listA.Elements.Length < listB.Elements.Length)
-            {
-                return Tag_LT_Value;
-            }
-
-            if (listA.Elements.Length > listB.Elements.Length)
-            {
-                return Tag_GT_Value;
-            }
-
-            return Tag_EQ_Value;
+            return
+                blobA.Bytes.Length < blobB.Bytes.Length
+                ? Tag_LT_Value
+                : blobA.Bytes.Length > blobB.Bytes.Length
+                ? Tag_GT_Value
+                : Tag_EQ_Value;
         }
 
-        throw new ParseExpressionException("Error in case-of block: No matching branch.");
+        return
+            stringA == stringB
+            ? Tag_EQ_Value
+            : KernelFunction.int_is_sorted_asc(PineValue.List([stringA, stringB])) == PineVMValues.TrueValue
+            ? Tag_LT_Value
+            : Tag_GT_Value;
     }
 
     static PrecompiledResult.FinalValue BasicsEq(
@@ -2509,7 +2685,9 @@ public class Precompiled
             throw new ParseExpressionException("Error in case-of block: No matching branch.");
         }
 
-        var countValue = PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+        var countValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+
         var count =
             IntegerEncoding.ParseSignedIntegerStrict(countValue)
             .Extract(err => throw new Exception(err));
@@ -2714,6 +2892,64 @@ public class Precompiled
             new PrecompiledResult.FinalValue(
                 finalValue,
                 StackFrameCount: 3 + mappedValues.Length * 1);
+    }
+
+    static PrecompiledResult.FinalValue? PineComputeValueFromString_2025(
+        PineValue environment,
+        PineVMParseCache parseCache)
+    {
+        /*
+        computeValueFromString_2025 : String -> Value
+        computeValueFromString_2025 string =
+            let
+                charsBytes : List (List Int)
+                charsBytes =
+                    List.map blobBytesFromChar (String.toList string)
+            in
+            BlobValue
+                (List.concat charsBytes)
+
+
+        blobBytesFromChar : Char -> List Int
+        blobBytesFromChar char =
+            let
+                charCode : Int
+                charCode =
+                    Char.toCode char
+            in
+            [ modBy 0x0100 (charCode // 0x01000000)
+            , modBy 0x0100 (charCode // 0x00010000)
+            , modBy 0x0100 (charCode // 0x0100)
+            , modBy 0x0100 charCode
+            ]
+        */
+
+        var argStringCharsBlobValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0, 1, 0]);
+
+        if (argStringCharsBlobValue is not PineValue.BlobValue charsBlob)
+        {
+            return null;
+        }
+
+        var blobValueIntegers = new PineValue[charsBlob.Bytes.Length];
+
+        for (var j = 0; j < charsBlob.Bytes.Length; ++j)
+        {
+            blobValueIntegers[j] = PineValue.Blob([4, charsBlob.Bytes.Span[j]]);
+        }
+
+        var blobValue =
+            PineValue.List(
+                [
+                Tag_BlobValue_Value,
+                PineValue.List([PineValue.List(blobValueIntegers)])
+                ]);
+
+        return
+            new PrecompiledResult.FinalValue(
+                blobValue,
+                StackFrameCount: 3 + charsBlob.Bytes.Length);
     }
 
     static PrecompiledResult.FinalValue? ElmKernelParser_countOffsetsInString(
@@ -3924,41 +4160,60 @@ public class Precompiled
     {
         /*
         slice : Int -> Int -> String -> String
-        slice start end (String chars) =
-            let
-                absoluteIndex relativeIndex =
-                    {-
-                       Instead of using integer comparison together with the literal 0,
-                       check the first byte if the sign is negative.
-                    -}
-                    if
-                        Pine_kernel.equal
-                            [ Pine_kernel.take [ 1, relativeIndex ]
-                            , Pine_kernel.take [ 1, -1 ]
+        slice start end (String charsBlob) =
+            if Pine_kernel.int_is_sorted_asc [ 0, start, end ] then
+                let
+                    sliceLength : Int
+                    sliceLength =
+                        Pine_kernel.int_add [ end, Pine_kernel.int_mul [ -1, start ] ]
+                in
+                String
+                    (Pine_kernel.take
+                        [ Pine_kernel.int_mul [ sliceLength, 4 ]
+                        , Pine_kernel.skip
+                            [ Pine_kernel.int_mul [ start, 4 ]
+                            , charsBlob
                             ]
-                    then
-                        Pine_kernel.int_add [ relativeIndex, Pine_kernel.length chars ]
-
-                    else
-                        relativeIndex
-
-                absoluteStart : Int
-                absoluteStart =
-                    absoluteIndex start
-
-                sliceLength : Int
-                sliceLength =
-                    Pine_kernel.int_add
-                        [ absoluteIndex end
-                        , Pine_kernel.int_mul [ -1, absoluteStart ]
                         ]
-            in
-            String
-                (Pine_kernel.take
-                    [ sliceLength
-                    , Pine_kernel.skip [ absoluteStart, chars ]
-                    ]
-                )
+                    )
+
+            else
+                let
+                    absoluteIndex relativeIndex =
+                        {-
+                           Instead of using integer comparison together with the literal 0,
+                           check the first byte if the sign is negative.
+                        -}
+                        if
+                            Pine_kernel.equal
+                                [ Pine_kernel.take [ 1, relativeIndex ]
+                                , Pine_kernel.take [ 1, -1 ]
+                                ]
+                        then
+                            Pine_kernel.int_add [ relativeIndex, Pine_kernel.length charsBlob ]
+
+                        else
+                            relativeIndex
+
+                    absoluteStart : Int
+                    absoluteStart =
+                        absoluteIndex
+                            (Pine_kernel.int_mul [ start, 4 ])
+
+                    sliceLength : Int
+                    sliceLength =
+                        Pine_kernel.int_add
+                            [ absoluteIndex (Pine_kernel.int_mul [ end, 4 ])
+                            , Pine_kernel.int_mul [ -1, absoluteStart ]
+                            ]
+                in
+                String
+                    (Pine_kernel.take
+                        [ sliceLength
+                        , Pine_kernel.skip [ absoluteStart, charsBlob ]
+                        ]
+                    )
+
          * */
 
         var startValue =
@@ -3980,7 +4235,7 @@ public class Precompiled
             return null;
         }
 
-        if (charsValue is not PineValue.ListValue charsList)
+        if (charsValue is not PineValue.BlobValue charsBlob)
         {
             return null;
         }
@@ -3989,28 +4244,30 @@ public class Precompiled
         {
             if (relativeIndex < 0)
             {
-                return relativeIndex + charsList.Elements.Length;
+                return relativeIndex + charsBlob.Bytes.Length;
             }
 
             return relativeIndex;
         }
 
-        var absoluteStart = absoluteIndex((int)start);
+        var absoluteStart = absoluteIndex((int)start * 4);
 
-        var sliceLength = absoluteIndex((int)end) - absoluteStart;
+        var sliceLength = absoluteIndex((int)end * 4) - absoluteStart;
 
-        var sliceChars =
-            charsList.Elements.Length <= absoluteStart
+        var sliceCharsBytes =
+            charsBlob.Bytes.Length <= absoluteStart
             ?
-            PineValue.EmptyList
+            PineValue.EmptyBlob.Bytes
             :
-            PineVM.FusedSkipAndTake(charsList, skipCount: absoluteStart, takeCount: sliceLength);
+            charsBlob.Bytes.Slice(
+                start: absoluteStart,
+                length: Math.Max(0, sliceLength));
 
         var slicedStringValue =
             PineValue.List(
                 [
                 Tag_String_Value,
-                PineValue.List([sliceChars])
+                PineValue.List([PineValue.Blob(sliceCharsBytes)])
                 ]);
 
         var finalValue =
@@ -4021,74 +4278,71 @@ public class Precompiled
         return () => finalValue;
     }
 
-
     static Func<PrecompiledResult>? StringLinesHelper(
         PineValue environment,
         PineVMParseCache parseCache)
     {
         /*
-        
-        linesHelper : Int -> List String -> Int -> List Char -> List String
-        linesHelper currentLineStart currentLines offset chars =
+        linesHelper : Int -> List String -> Int -> Int -> List String
+        linesHelper currentLineStart currentLines offset charsBytes =
             let
                 nextChar =
-                    Pine_kernel.head (Pine_kernel.skip [ offset, chars ])
+                    Pine_kernel.take
+                        [ 4
+                        , Pine_kernel.skip [ offset, charsBytes ]
+                        ]
 
                 nextTwoChars =
-                    Pine_kernel.take [ 2, Pine_kernel.skip [ offset, chars ] ]
+                    Pine_kernel.take
+                        [ 8
+                        , Pine_kernel.skip [ offset, charsBytes ]
+                        ]
             in
-            if Pine_kernel.equal [ nextChar, [] ] then
+            if Pine_kernel.equal [ Pine_kernel.length nextChar, 0 ] then
                 let
                     currentLineLength =
                         Pine_kernel.int_add [ offset, -currentLineStart ]
-
-                    currentLineChars : List Char
-                    currentLineChars =
-                        Pine_kernel.take
-                            [ currentLineLength
-                            , Pine_kernel.skip [ currentLineStart, chars ]
-                            ]
                 in
                 Pine_kernel.concat
                     [ currentLines
-                    , [ String (Pine_kernel.skip [ currentLineStart, chars ]) ]
+                    , [ String (Pine_kernel.skip [ currentLineStart, charsBytes ]) ]
                     ]
 
-            else if Pine_kernel.equal [ nextTwoChars, [ '\u{000D}', '\n' ] ] then
+            else if Pine_kernel.equal [ nextTwoChars, Pine_kernel.concat [ '\u{000D}', '\n' ] ] then
                 let
                     currentLineLength =
                         Pine_kernel.int_add [ offset, -currentLineStart ]
 
-                    currentLineChars : List Char
+                    currentLineChars : Int
                     currentLineChars =
                         Pine_kernel.take
                             [ currentLineLength
-                            , Pine_kernel.skip [ currentLineStart, chars ]
+                            , Pine_kernel.skip [ currentLineStart, charsBytes ]
                             ]
                 in
                 linesHelper
-                    (Pine_kernel.int_add [ offset, 2 ])
+                    (Pine_kernel.int_add [ offset, 8 ])
                     (Pine_kernel.concat [ currentLines, [ String currentLineChars ] ])
-                    (Pine_kernel.int_add [ offset, 2 ])
-                    chars
+                    (Pine_kernel.int_add [ offset, 8 ])
+                    charsBytes
 
-            else if Pine_kernel.equal [ nextTwoChars, [ '\n', '\u{000D}' ] ] then
+            else if Pine_kernel.equal [ nextTwoChars, Pine_kernel.concat [ '\n', '\u{000D}' ] ] then
                 let
                     currentLineLength =
                         Pine_kernel.int_add [ offset, -currentLineStart ]
 
-                    currentLineChars : List Char
+                    currentLineChars : Int
                     currentLineChars =
                         Pine_kernel.take
                             [ currentLineLength
-                            , Pine_kernel.skip [ currentLineStart, chars ]
+                            , Pine_kernel.skip [ currentLineStart, charsBytes ]
                             ]
                 in
                 linesHelper
-                    (Pine_kernel.int_add [ offset, 2 ])
+                    (Pine_kernel.int_add [ offset, 8 ])
                     (Pine_kernel.concat [ currentLines, [ String currentLineChars ] ])
-                    (Pine_kernel.int_add [ offset, 2 ])
-                    chars
+                    (Pine_kernel.int_add [ offset, 8 ])
+                    charsBytes
 
             else if Pine_kernel.equal [ nextChar, '\n' ] then
                 let
@@ -4099,14 +4353,14 @@ public class Precompiled
                     currentLineChars =
                         Pine_kernel.take
                             [ currentLineLength
-                            , Pine_kernel.skip [ currentLineStart, chars ]
+                            , Pine_kernel.skip [ currentLineStart, charsBytes ]
                             ]
                 in
                 linesHelper
-                    (Pine_kernel.int_add [ offset, 1 ])
+                    (Pine_kernel.int_add [ offset, 4 ])
                     (Pine_kernel.concat [ currentLines, [ String currentLineChars ] ])
-                    (Pine_kernel.int_add [ offset, 1 ])
-                    chars
+                    (Pine_kernel.int_add [ offset, 4 ])
+                    charsBytes
 
             else if Pine_kernel.equal [ nextChar, '\u{000D}' ] then
                 let
@@ -4117,21 +4371,22 @@ public class Precompiled
                     currentLineChars =
                         Pine_kernel.take
                             [ currentLineLength
-                            , Pine_kernel.skip [ currentLineStart, chars ]
+                            , Pine_kernel.skip [ currentLineStart, charsBytes ]
                             ]
                 in
                 linesHelper
-                    (Pine_kernel.int_add [ offset, 1 ])
+                    (Pine_kernel.int_add [ offset, 4 ])
                     (Pine_kernel.concat [ currentLines, [ String currentLineChars ] ])
-                    (Pine_kernel.int_add [ offset, 1 ])
-                    chars
+                    (Pine_kernel.int_add [ offset, 4 ])
+                    charsBytes
 
             else
                 linesHelper
                     currentLineStart
                     currentLines
-                    (Pine_kernel.int_add [ offset, 1 ])
-                    chars
+                    (Pine_kernel.int_add [ offset, 4 ])
+                    charsBytes
+
          * */
 
         var currentLineStartValue =
@@ -4143,7 +4398,7 @@ public class Precompiled
         var offsetValue =
             PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 2]);
 
-        var charsValue =
+        var charsBytesValue =
             PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 3]);
 
         if (IntegerEncoding.ParseSignedIntegerRelaxed(currentLineStartValue).IsOkOrNullable() is not { } currentLineStart)
@@ -4156,118 +4411,174 @@ public class Precompiled
             return null;
         }
 
-        if (charsValue is not PineValue.ListValue charsList)
+        if (charsBytesValue is not PineValue.BlobValue charsBlob)
         {
             return null;
         }
 
         int offsetInt = (int)offset;
+
         int currentLineStartInt = (int)currentLineStart;
 
         var linesValues = new List<PineValue>();
 
         while (true)
         {
-            var remainingCharsCount =
-                charsList.Elements.Length - offsetInt;
+            var remainingBytesCount =
+                charsBlob.Bytes.Length - offsetInt;
 
-            if (remainingCharsCount < 1)
+            if (remainingBytesCount < 1)
             {
                 break;
             }
 
-            var nextChar = charsList.Elements.Span[offsetInt];
-
-            if (nextChar is not PineValue.BlobValue nextCharBlob)
+            if (remainingBytesCount < 4)
             {
-                break;
-            }
-
-            if (nextCharBlob.Bytes.Length is not 1)
-            {
-                ++offsetInt;
-
                 continue;
             }
 
-            var nextCharByte = nextCharBlob.Bytes.Span[0];
+            var nextChar = BinaryPrimitives.ReadInt32BigEndian(charsBlob.Bytes.Span[offsetInt..]);
 
-            if (1 < remainingCharsCount)
+            if (8 <= remainingBytesCount)
             {
-                var nextNextChar = charsList.Elements.Span[offsetInt + 1];
+                var nextNextChar =
+                    BinaryPrimitives.ReadInt32BigEndian(charsBlob.Bytes.Span[(offsetInt + 4)..]);
 
-                if (nextNextChar is PineValue.BlobValue nextNextCharBlob &&
-                    nextNextCharBlob.Bytes.Length is 1)
+                if (nextChar is 0x0a && nextNextChar is 0x0d ||
+                    nextChar is 0x0d && nextNextChar is 0x0a)
                 {
-                    var nextNextCharByte = nextNextCharBlob.Bytes.Span[0];
+                    var currentLineLength =
+                        offsetInt - currentLineStartInt;
 
-                    if (nextCharByte is 10 && nextNextCharByte is 13 ||
-                        nextCharByte is 13 && nextNextCharByte is 10)
-                    {
-                        var currentLineLength =
-                            offsetInt - currentLineStartInt;
+                    var currentLineCharsBytes =
+                        charsBlob.Bytes.Slice(
+                            currentLineStartInt,
+                            currentLineLength);
 
-                        var currentLineChars =
-                            PineVM.FusedSkipAndTake(
-                                charsList,
-                                skipCount: currentLineStartInt,
-                                takeCount: currentLineLength);
+                    linesValues.Add(
+                        PineValue.List(
+                            [Tag_String_Value,
+                            PineValue.List([PineValue.Blob(currentLineCharsBytes)])
+                            ]));
 
-                        linesValues.Add(
-                            PineValue.List(
-                                [Tag_String_Value,
-                                    PineValue.List([currentLineChars])
-                                ]));
+                    offsetInt += 8;
+                    currentLineStartInt = offsetInt;
 
-                        offsetInt += 2;
-                        currentLineStartInt = offsetInt;
-
-                        continue;
-                    }
+                    continue;
                 }
             }
 
-            if (nextCharByte is 10 || nextCharByte is 13)
+            if (nextChar is 0x0a || nextChar is 0x0d)
             {
                 var currentLineLength =
                     offsetInt - currentLineStartInt;
 
-                var currentLineChars =
-                    PineVM.FusedSkipAndTake(charsList, skipCount: currentLineStartInt, takeCount: currentLineLength);
+                var currentLineCharsBytes =
+                    charsBlob.Bytes.Slice(
+                        currentLineStartInt,
+                        currentLineLength);
 
                 linesValues.Add(
                     PineValue.List(
                         [Tag_String_Value,
-                        PineValue.List([currentLineChars])
+                        PineValue.List([PineValue.Blob(currentLineCharsBytes)])
                         ]));
 
-                ++offsetInt;
+                offsetInt += 4;
                 currentLineStartInt = offsetInt;
 
                 continue;
             }
 
-            ++offsetInt;
+            offsetInt += 4;
         }
 
-        {
-            var currentLineLength = offsetInt - currentLineStartInt;
+        var lastLineCharsBytes =
+            charsBlob.Bytes[currentLineStartInt..];
 
-            var currentLineChars =
-                PineVM.FusedSkipAndTake(
-                    charsList,
-                    skipCount: currentLineStartInt,
-                    takeCount: currentLineLength);
-
-            linesValues.Add(
-                PineValue.List(
-                    [Tag_String_Value,
-                    PineValue.List([currentLineChars])
-                    ]));
-        }
+        linesValues.Add(
+            PineValue.List(
+                [Tag_String_Value,
+                    PineValue.List([PineValue.Blob(lastLineCharsBytes)])
+                ]));
 
         var finalValue =
             KernelFunction.concat([currentLinesValue, PineValue.List([.. linesValues])]);
+
+        return
+            () => new PrecompiledResult.FinalValue(finalValue, StackFrameCount: 0);
+    }
+
+    static Func<PrecompiledResult>? StringToListRecursive(
+        PineValue environment,
+        PineVMParseCache parseCache)
+    {
+        /*
+
+        toListRecursive : Int -> List Char -> Int -> List Char
+        toListRecursive offset list blob =
+            let
+                nextChar =
+                    Pine_kernel.take
+                        [ 4
+                        , Pine_kernel.skip [ offset, blob ]
+                        ]
+            in
+            if Pine_kernel.equal [ Pine_kernel.length nextChar, 0 ] then
+                list
+
+            else
+                toListRecursive
+                    (Pine_kernel.int_add [ offset, 4 ])
+                    (Pine_kernel.concat [ list, [ nextChar ] ])
+                    blob
+         * */
+
+        var offsetValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+
+        var mappedCharsValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
+
+        var charsValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 2]);
+
+        if (IntegerEncoding.ParseSignedIntegerRelaxed(offsetValue).IsOkOrNullable() is not { } offset)
+        {
+            return null;
+        }
+
+        if (charsValue is not PineValue.BlobValue charsBlob)
+        {
+            return null;
+        }
+
+        var charsItems = new List<PineValue>(capacity: charsBlob.Bytes.Length / 3);
+
+        var offsetInt = (int)offset;
+
+        while (true)
+        {
+            var remainingBytesCount =
+                charsBlob.Bytes.Length - offsetInt;
+
+            if (remainingBytesCount < 1)
+            {
+                break;
+            }
+
+            var nextCharBytes =
+                remainingBytesCount < 4
+                ? charsBlob.Bytes.Slice(offsetInt, remainingBytesCount)
+                : charsBlob.Bytes.Slice(offsetInt, 4);
+
+            offsetInt += 4;
+
+            charsItems.Add(PineValue.Blob(nextCharBytes));
+        }
+
+        var finalValue =
+            KernelFunction.concat([mappedCharsValue, PineValue.List([.. charsItems])]);
 
         return () => new PrecompiledResult.FinalValue(finalValue, StackFrameCount: 0);
     }
@@ -4347,12 +4658,19 @@ public class Precompiled
                 break;
             }
 
-            if (currentCharBlob.Bytes.Length is not 1)
+            if (currentCharBlob.Bytes.Length is not 4)
             {
                 break;
             }
 
-            var byteValue = currentCharBlob.Bytes.Span[0];
+            if (currentCharBlob.Bytes.Span[0] is not 0 ||
+                currentCharBlob.Bytes.Span[1] is not 0 ||
+                currentCharBlob.Bytes.Span[2] is not 0)
+            {
+                break;
+            }
+
+            var byteValue = currentCharBlob.Bytes.Span[3];
 
             if (byteValue is 32)
             {
@@ -4409,15 +4727,15 @@ public class Precompiled
             case List.take 1 (List.drop offset src) of
                 actualChar :: _ ->
                     if isGood actualChar then
-                skipWhileWithoutLinebreakHelp isGood (offset + 1) row (col + 1) src indent
+                        skipWhileWithoutLinebreakHelp isGood (offset + 1) row (col + 1) src indent
 
-            else
+                    else
                         -- no match
                         PState src offset indent row col
 
                 [] ->
-                -- no match
-                PState src offset indent row col
+                    -- no match
+                    PState src offset indent row col
          * */
 
         var isGoodFunctionValue =
@@ -4454,12 +4772,19 @@ public class Precompiled
                 return false;
             }
 
-            if (blobValue.Bytes.Length is not 1)
+            if (blobValue.Bytes.Length is not 4)
             {
                 return false;
             }
 
-            var byteValue = blobValue.Bytes.Span[0];
+            if (blobValue.Bytes.Span[0] is not 0 ||
+                blobValue.Bytes.Span[1] is not 0 ||
+                blobValue.Bytes.Span[2] is not 0)
+            {
+                return false;
+            }
+
+            var byteValue = blobValue.Bytes.Span[3];
 
             return
                 (byteValue >= 48 && byteValue <= 57) ||
@@ -4486,12 +4811,19 @@ public class Precompiled
                 return false;
             }
 
-            if (blobValue.Bytes.Length is not 1)
+            if (blobValue.Bytes.Length is not 4)
+            {
+                return false;
+            }
+
+            if (blobValue.Bytes.Span[0] is not 0 ||
+                blobValue.Bytes.Span[1] is not 0 ||
+                blobValue.Bytes.Span[2] is not 0)
             {
                 return true;
             }
 
-            var byteValue = blobValue.Bytes.Span[0];
+            var byteValue = blobValue.Bytes.Span[3];
 
             return
                 byteValue != '"' && byteValue != '\\';
@@ -4602,16 +4934,51 @@ public class Precompiled
         PineVMParseCache parseCache)
     {
         var openChar =
-            PineValue.Blob([(byte)'{']);
+            PineValue.Blob([0, 0, 0, (byte)'{']);
 
         var closeChar =
-            PineValue.Blob([(byte)'-']);
+            PineValue.Blob([0, 0, 0, (byte)'-']);
 
         return
             ParserFast_skipWhileHelp(
                 environment,
                 charValuePredicate:
                 c => !(c == openChar || c == closeChar));
+    }
+
+    static PrecompiledResult.FinalValue? ParserFast_skipWhileHelp_not_ASCII_quote_or_backslash(
+        PineValue environment,
+        PineVMParseCache parseCache)
+    {
+        static bool charValuePredicate(PineValue charValue)
+        {
+            if (charValue is not PineValue.BlobValue blobValue)
+            {
+                return false;
+            }
+
+            if (blobValue.Bytes.Length is not 4)
+            {
+                return false;
+            }
+
+            if (blobValue.Bytes.Span[0] is not 0 ||
+                blobValue.Bytes.Span[1] is not 0 ||
+                blobValue.Bytes.Span[2] is not 0)
+            {
+                return true;
+            }
+
+            var byteValue = blobValue.Bytes.Span[3];
+
+            return
+                byteValue != '"' && byteValue != '\\';
+        }
+
+        return
+            ParserFast_skipWhileHelp(
+                environment,
+                charValuePredicate: charValuePredicate);
     }
 
     static PrecompiledResult.FinalValue? ParserFast_skipWhileHelp(
@@ -4902,7 +5269,7 @@ public class Precompiled
         ElmValueEncoding.ElmValueAsPineValue(ElmValue.TagInstance("Nothing", []));
 
     private static readonly PineValue Character_ASCII_Newline_Value =
-        PineValue.Blob([10]);
+        PineValue.Blob([0, 0, 0, 10]);
 
     private static PineValue.ListValue Tag_Just_Value(PineValue justValue) =>
         PineValue.List(

@@ -481,7 +481,8 @@ public static class ElmValueEncoding
         return recordFields;
     }
 
-    public static PineValue ElmValueAsPineValue(ElmValue elmValue) =>
+    public static PineValue ElmValueAsPineValue(
+        ElmValue elmValue) =>
         ElmValueAsPineValue(
             elmValue,
             additionalReusableEncodings: null,
@@ -508,7 +509,10 @@ public static class ElmValueEncoding
                 ElmValue.ElmList elmList =>
                 PineValue.List(
                     [.. elmList.Elements
-                    .Select(item => ElmValueAsPineValue(item, additionalReusableEncodings, reportNewEncoding))]),
+                    .Select(item => ElmValueAsPineValue(
+                        item,
+                        additionalReusableEncodings,
+                        reportNewEncoding))]),
 
                 ElmValue.ElmChar elmChar =>
                 IntegerEncoding.EncodeUnsignedInteger(elmChar.Value)
@@ -524,14 +528,20 @@ public static class ElmValueEncoding
                 TagAsPineValue(
                     elmTag.TagName,
                     [..elmTag.Arguments
-                    .Select(item => ElmValueAsPineValue(item,additionalReusableEncodings, reportNewEncoding))]),
+                    .Select(item => ElmValueAsPineValue(
+                        item,
+                        additionalReusableEncodings,
+                        reportNewEncoding))]),
 
                 ElmValue.ElmRecord elmRecord =>
                 ElmRecordAsPineValue(
                     [.. elmRecord.Fields
                     .OrderBy(field => field.FieldName)
                     .Select(field =>
-                    (field.FieldName, ElmValueAsPineValue(field.Value, additionalReusableEncodings, reportNewEncoding)))]),
+                    (field.FieldName, ElmValueAsPineValue(
+                        field.Value,
+                        additionalReusableEncodings,
+                        reportNewEncoding)))]),
 
                 ElmValue.ElmBytes elmBytes =>
                 PineValue.List(
@@ -577,11 +587,12 @@ public static class ElmValueEncoding
                 PineValue.List([..tagArguments])
             ]);
 
-    public static PineValue StringAsPineValue(string elmString) =>
+    public static PineValue StringAsPineValue(
+        string elmString) =>
         PineValue.List(
             [
             ElmValue.ElmStringTypeTagNameAsValue,
-            PineValue.List([StringEncoding.ValueFromString_2024(elmString)])
+            PineValue.List([StringEncoding.ValueFromString(elmString)])
             ]);
 
     /// <summary>
