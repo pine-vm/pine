@@ -31,11 +31,26 @@ public class JsonConverterForPineValueTests
             PineValue.Blob([32]),
             PineValue.Blob([10,11,13]),
 
+            PineValue.Blob([0]),
+
+            PineValue.Blob([0, 0]),
+
+            PineValue.Blob([0, 0, 0]),
+
             PineValue.List(
                 [PineValue.List([]), PineValue.List([])]),
 
             PineValue.List(
                 [PineValue.Blob([32])]),
+
+            PineValue.List(
+                [PineValue.Blob([0])]),
+
+            PineValue.List(
+                [PineValue.Blob([0, 0])]),
+
+            PineValue.List(
+                [PineValue.Blob([0, 41])]),
 
             StringEncoding.ValueFromString("Hello world!"),
 

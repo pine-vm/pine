@@ -157,11 +157,17 @@ public class JsonConverterForPineValue : JsonConverter<PineValue>
                         containsIncompatibleItem = true;
                         break;
                     }
+
+                    if (blobItem.Bytes.Span[0] is 0)
+                    {
+                        containsIncompatibleItem = true;
+                        break;
+                    }
                 }
 
                 if (!containsIncompatibleItem)
                 {
-                    if (StringEncoding.StringFromValue(value).IsOkOrNull() is { } asString && 0 < asString.Length)
+                    if (StringEncoding.StringFromListValue(listValue).IsOkOrNull() is { } asString && 0 < asString.Length)
                     {
                         if (!asString.All(asChar => (asChar & 0xff00) is 0x400 || (asChar & 0xff00) is 0x200))
                         {
