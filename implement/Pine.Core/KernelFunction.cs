@@ -499,8 +499,7 @@ public static class KernelFunction
             return firstBlob;
         }
 
-        var commonLength = firstBlob.Bytes.Length;
-        var otherBlobs = new PineValue.BlobValue[argumentsItems.Length - 1];
+        PineValue merged = firstBlob;
 
         for (var i = 1; i < argumentsItems.Length; ++i)
         {
@@ -509,30 +508,46 @@ public static class KernelFunction
                 return PineValue.EmptyList;
             }
 
-            otherBlobs[i - 1] = blobValue;
-
-            commonLength =
-                blobValue.Bytes.Length < commonLength
-                ?
-                blobValue.Bytes.Length
-                :
-                commonLength;
+            merged = bit_and_binary(merged, blobValue);
         }
 
-        var resultArray =
-            firstBlob.Bytes.Slice(firstBlob.Bytes.Length - commonLength, commonLength)
-            .ToArray();
+        return merged;
+    }
 
-        for (var i = 0; i < otherBlobs.Length; ++i)
+    public static PineValue bit_and_binary(
+        PineValue left,
+        PineValue right)
+    {
+        if (left is not PineValue.BlobValue leftBlob)
         {
-            var blob = otherBlobs[i];
+            return PineValue.EmptyList;
+        }
 
-            var blobOffset = blob.Bytes.Length - commonLength;
+        if (right is not PineValue.BlobValue rightBlob)
+        {
+            return PineValue.EmptyList;
+        }
 
-            for (var j = 0; j < commonLength; ++j)
-            {
-                resultArray[j] &= blob.Bytes.Span[j + blobOffset];
-            }
+        var commonLength =
+            leftBlob.Bytes.Length < rightBlob.Bytes.Length
+            ?
+            leftBlob.Bytes.Length
+            :
+            rightBlob.Bytes.Length;
+
+        var resultArray =
+            new byte[commonLength];
+
+        for (var i = 0; i < commonLength; ++i)
+        {
+            var leftByte =
+                leftBlob.Bytes.Span[leftBlob.Bytes.Length - commonLength + i];
+
+            var rightByte =
+                rightBlob.Bytes.Span[rightBlob.Bytes.Length - commonLength + i];
+
+            resultArray[i] =
+                (byte)(leftByte & rightByte);
         }
 
         return PineValue.Blob(resultArray);
@@ -562,8 +577,7 @@ public static class KernelFunction
             return firstBlob;
         }
 
-        var maxLength = firstBlob.Bytes.Length;
-        var otherBlobs = new PineValue.BlobValue[argumentsItems.Length - 1];
+        PineValue merged = firstBlob;
 
         for (var i = 1; i < argumentsItems.Length; ++i)
         {
@@ -572,30 +586,59 @@ public static class KernelFunction
                 return PineValue.EmptyList;
             }
 
-            otherBlobs[i - 1] = blobValue;
-
-            maxLength =
-                maxLength < blobValue.Bytes.Length
-                ?
-                blobValue.Bytes.Length
-                :
-                maxLength;
+            merged = bit_or_binary(merged, blobValue);
         }
 
-        var resultArray = new byte[maxLength];
+        return merged;
+    }
 
-        firstBlob.Bytes.CopyTo(resultArray.AsMemory(resultArray.Length - firstBlob.Bytes.Length));
-
-        for (var i = 0; i < otherBlobs.Length; ++i)
+    public static PineValue bit_or_binary(
+        PineValue left,
+        PineValue right)
+    {
+        if (left is not PineValue.BlobValue leftBlob)
         {
-            var blob = otherBlobs[i];
+            return PineValue.EmptyList;
+        }
 
-            var blobOffset = maxLength - blob.Bytes.Length;
+        if (right is not PineValue.BlobValue rightBlob)
+        {
+            return PineValue.EmptyList;
+        }
 
-            for (var j = 0; j < blob.Bytes.Length; ++j)
-            {
-                resultArray[j + blobOffset] |= blob.Bytes.Span[j];
-            }
+        var maxLength =
+            leftBlob.Bytes.Length > rightBlob.Bytes.Length
+            ?
+            leftBlob.Bytes.Length
+            :
+            rightBlob.Bytes.Length;
+
+        var resultArray =
+            new byte[maxLength];
+
+        for (var i = 0; i < maxLength; ++i)
+        {
+            var leftIndex =
+                leftBlob.Bytes.Length - maxLength + i;
+
+            var rightIndex =
+                rightBlob.Bytes.Length - maxLength + i;
+
+            var leftByte =
+                leftIndex < 0
+                ?
+                (byte)0
+                :
+                leftBlob.Bytes.Span[leftIndex];
+
+            var rightByte =
+                rightIndex < 0
+                ?
+                (byte)0
+                :
+                rightBlob.Bytes.Span[rightIndex];
+
+            resultArray[i] = (byte)(leftByte | rightByte);
         }
 
         return PineValue.Blob(resultArray);
@@ -625,8 +668,7 @@ public static class KernelFunction
             return firstBlob;
         }
 
-        var maxLength = firstBlob.Bytes.Length;
-        var otherBlobs = new PineValue.BlobValue[argumentsItems.Length - 1];
+        PineValue merged = firstBlob;
 
         for (var i = 1; i < argumentsItems.Length; ++i)
         {
@@ -635,32 +677,60 @@ public static class KernelFunction
                 return PineValue.EmptyList;
             }
 
-            otherBlobs[i - 1] = blobValue;
-
-            maxLength =
-                maxLength < blobValue.Bytes.Length
-                ?
-                blobValue.Bytes.Length
-                :
-                maxLength;
+            merged = bit_xor_binary(merged, blobValue);
         }
 
-        var resultArray = new byte[maxLength];
+        return merged;
+    }
 
-        firstBlob.Bytes.CopyTo(resultArray.AsMemory(resultArray.Length - firstBlob.Bytes.Length));
-
-        for (var i = 0; i < otherBlobs.Length; ++i)
+    public static PineValue bit_xor_binary(
+        PineValue left,
+        PineValue right)
+    {
+        if (left is not PineValue.BlobValue leftBlob)
         {
-            var blob = otherBlobs[i];
-
-            var blobOffset = maxLength - blob.Bytes.Length;
-
-            for (var j = 0; j < blob.Bytes.Length; ++j)
-            {
-                resultArray[j + blobOffset] ^= blob.Bytes.Span[j];
-            }
+            return PineValue.EmptyList;
         }
 
+        if (right is not PineValue.BlobValue rightBlob)
+        {
+            return PineValue.EmptyList;
+        }
+
+        var maxLength =
+            leftBlob.Bytes.Length > rightBlob.Bytes.Length
+            ?
+            leftBlob.Bytes.Length
+            :
+            rightBlob.Bytes.Length;
+
+        var resultArray =
+            new byte[maxLength];
+
+        for (var i = 0; i < maxLength; ++i)
+        {
+            var leftIndex =
+                leftBlob.Bytes.Length - maxLength + i;
+
+            var rightIndex =
+                rightBlob.Bytes.Length - maxLength + i;
+
+            var leftByte =
+                leftIndex < 0
+                ?
+                (byte)0
+                :
+                leftBlob.Bytes.Span[leftIndex];
+
+            var rightByte =
+                rightIndex < 0
+                ?
+                (byte)0
+                :
+                rightBlob.Bytes.Span[rightIndex];
+
+            resultArray[i] = (byte)(leftByte ^ rightByte);
+        }
         return PineValue.Blob(resultArray);
     }
 

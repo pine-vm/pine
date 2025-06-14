@@ -2167,7 +2167,22 @@ public class PineVM : IPineVM
                             var right = currentFrame.PopTopmostFromStack();
                             var left = currentFrame.PopTopmostFromStack();
 
-                            PineValue resultValue = KernelFunction.bit_and(PineValue.List([left, right]));
+                            PineValue resultValue = KernelFunction.bit_and_binary(left, right);
+
+                            currentFrame.PushInstructionResult(resultValue);
+
+                            continue;
+                        }
+
+                    case StackInstructionKind.Bit_And_Const:
+                        {
+                            var right = currentInstruction.Literal
+                                ??
+                                throw new Exception("Invalid operation form: Missing literal value");
+
+                            var left = currentFrame.PopTopmostFromStack();
+
+                            PineValue resultValue = KernelFunction.bit_and_binary(left, right);
 
                             currentFrame.PushInstructionResult(resultValue);
 
@@ -2179,7 +2194,22 @@ public class PineVM : IPineVM
                             var right = currentFrame.PopTopmostFromStack();
                             var left = currentFrame.PopTopmostFromStack();
 
-                            PineValue resultValue = KernelFunction.bit_or(PineValue.List([left, right]));
+                            PineValue resultValue = KernelFunction.bit_or_binary(left, right);
+
+                            currentFrame.PushInstructionResult(resultValue);
+
+                            continue;
+                        }
+
+                    case StackInstructionKind.Bit_Or_Const:
+                        {
+                            var right = currentInstruction.Literal
+                                ??
+                                throw new Exception("Invalid operation form: Missing literal value");
+
+                            var left = currentFrame.PopTopmostFromStack();
+
+                            PineValue resultValue = KernelFunction.bit_or_binary(left, right);
 
                             currentFrame.PushInstructionResult(resultValue);
 
@@ -2191,7 +2221,7 @@ public class PineVM : IPineVM
                             var right = currentFrame.PopTopmostFromStack();
                             var left = currentFrame.PopTopmostFromStack();
 
-                            PineValue resultValue = KernelFunction.bit_xor(PineValue.List([left, right]));
+                            PineValue resultValue = KernelFunction.bit_xor_binary(left, right);
 
                             currentFrame.PushInstructionResult(resultValue);
 
@@ -2229,6 +2259,27 @@ public class PineVM : IPineVM
                             continue;
                         }
 
+                    case StackInstructionKind.Bit_Shift_Left_Const:
+                        {
+                            var shiftCount =
+                                currentInstruction.ShiftCount
+                                ??
+                                throw new Exception("Invalid operation form: Missing literal value");
+
+                            var value = currentFrame.PopTopmostFromStack();
+
+                            PineValue resultValue = PineValue.EmptyList;
+
+                            if (value is PineValue.BlobValue blobValue)
+                            {
+                                resultValue = KernelFunction.bit_shift_left(shiftCount, blobValue);
+                            }
+
+                            currentFrame.PushInstructionResult(resultValue);
+
+                            continue;
+                        }
+
                     case StackInstructionKind.Bit_Shift_Right_Binary:
                         {
                             var shiftValue = currentFrame.PopTopmostFromStack();
@@ -2242,6 +2293,27 @@ public class PineVM : IPineVM
                                 {
                                     resultValue = KernelFunction.bit_shift_right(shiftCount, blobValue);
                                 }
+                            }
+
+                            currentFrame.PushInstructionResult(resultValue);
+
+                            continue;
+                        }
+
+                    case StackInstructionKind.Bit_Shift_Right_Const:
+                        {
+                            var shiftCount =
+                                currentInstruction.ShiftCount
+                                ??
+                                throw new Exception("Invalid operation form: Missing literal value");
+
+                            var value = currentFrame.PopTopmostFromStack();
+
+                            PineValue resultValue = PineValue.EmptyList;
+
+                            if (value is PineValue.BlobValue blobValue)
+                            {
+                                resultValue = KernelFunction.bit_shift_right(shiftCount, blobValue);
                             }
 
                             currentFrame.PushInstructionResult(resultValue);

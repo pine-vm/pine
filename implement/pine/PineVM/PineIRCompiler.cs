@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using System.Numerics;
 
 namespace Pine.PineVM;
 
@@ -1101,63 +1102,51 @@ public class PineIRCompiler
                             IntegerEncoding.EncodeSignedInteger(0)));
             }
 
-            if (listExpr.items.Count is 2)
-            {
-                if (listExpr.items[0] is Expression.Literal leftLiteralExpr &&
-                    KernelFunction.SignedIntegerFromValueRelaxed(leftLiteralExpr.Value) is { } leftInt)
-                {
-                    var afterRight =
-                        CompileExpressionTransitive(
-                            listExpr.items[1],
-                            context,
-                            prior);
-
-                    return
-                        afterRight
-                        .AppendInstruction(
-                            StackInstruction.Int_Add_Const(leftInt));
-                }
-
-                if (listExpr.items[1] is Expression.Literal rightLiteralExpr &&
-                    KernelFunction.SignedIntegerFromValueRelaxed(rightLiteralExpr.Value) is { } rightInt)
-                {
-                    var afterLeft =
-                        CompileExpressionTransitive(
-                            listExpr.items[0],
-                            context,
-                            prior);
-                    return
-                        afterLeft
-                        .AppendInstruction(
-                            StackInstruction.Int_Add_Const(rightInt));
-                }
-            }
-
-            var addOps = prior;
+            BigInteger constItemsSum = 0;
+            var varItemsAdd = new List<Expression>();
+            var varItemsSubtract = new List<Expression>();
 
             for (var i = 0; i < listExpr.items.Count; ++i)
             {
                 var itemExpr = listExpr.items[i];
 
-                if (0 < i && TryParseExprAsIntNegation(itemExpr) is { } negatedItemExpr)
+                if (itemExpr is Expression.Literal literalExpr)
                 {
-                    var itemOps =
-                        CompileExpressionTransitive(
-                            negatedItemExpr,
-                            context,
-                            addOps);
-
-                    addOps = itemOps;
-
-                    if (0 < i)
+                    if (KernelFunction.SignedIntegerFromValueRelaxed(literalExpr.Value) is not { } intValue)
                     {
-                        addOps =
-                            addOps.AppendInstruction(
-                                StackInstruction.Int_Sub_Binary);
+                        return
+                            prior
+                            .AppendInstruction(
+                                StackInstruction.Push_Literal(PineValue.EmptyList));
                     }
+
+                    constItemsSum += intValue;
                 }
                 else
                 {
+                    if (IsIntNegated(itemExpr) is { } subtractedExpr)
+                    {
+                        varItemsSubtract.Add(subtractedExpr);
+                    }
+                    else
+                    {
+                        varItemsAdd.Add(itemExpr);
+                    }
+                }
+            }
+
+            if (varItemsAdd.Count is 0)
+            {
+                var addOps =
+                    prior
+                    .AppendInstruction(
+                        StackInstruction.Push_Literal(
+                            IntegerEncoding.EncodeSignedInteger(constItemsSum)));
+
+                for (var i = 0; i < varItemsSubtract.Count; ++i)
+                {
+                    var itemExpr = varItemsSubtract[i];
+
                     var itemOps =
                         CompileExpressionTransitive(
                             itemExpr,
@@ -1166,18 +1155,67 @@ public class PineIRCompiler
 
                     addOps = itemOps;
 
-                    if (0 < i)
-                    {
-                        addOps =
-                            addOps.AppendInstruction(
-                                StackInstruction.Int_Add_Binary);
-                    }
+                    addOps =
+                        addOps.AppendInstruction(
+                            StackInstruction.Int_Sub_Binary);
                 }
             }
+            else
+            {
+                var firstVarItemAdd = varItemsAdd[0];
 
-            return addOps;
+                var addOps =
+                    CompileExpressionTransitive(
+                        firstVarItemAdd,
+                        context,
+                        prior);
+
+                for (var i = 1; i < varItemsAdd.Count; ++i)
+                {
+                    var itemExpr = varItemsAdd[i];
+
+                    var itemOps =
+                        CompileExpressionTransitive(
+                            itemExpr,
+                            context,
+                            addOps);
+
+                    addOps = itemOps;
+
+                    addOps =
+                        addOps.AppendInstruction(
+                            StackInstruction.Int_Add_Binary);
+                }
+
+                for (var i = 0; i < varItemsSubtract.Count; ++i)
+                {
+                    var itemExpr = varItemsSubtract[i];
+
+                    var itemOps =
+                        CompileExpressionTransitive(
+                            itemExpr,
+                            context,
+                            addOps);
+
+                    addOps = itemOps;
+
+                    addOps =
+                        addOps.AppendInstruction(
+                            StackInstruction.Int_Sub_Binary);
+                }
+
+                if (constItemsSum != 0)
+                {
+                    addOps =
+                        addOps
+                        .AppendInstruction(
+                            StackInstruction.Int_Add_Const(constItemsSum));
+                }
+
+                return addOps;
+            }
         }
-        else
+
         {
             return
                 CompileExpressionTransitive(
@@ -1186,6 +1224,42 @@ public class PineIRCompiler
                     prior)
                 .AppendInstruction(StackInstruction.Int_Add_Generic);
         }
+    }
+
+    private static Expression? IsIntNegated(Expression expr)
+    {
+        if (expr is Expression.KernelApplication kernelApp)
+        {
+            if (kernelApp.Function is nameof(KernelFunction.negate))
+            {
+                return kernelApp.Input;
+            }
+
+
+            if (kernelApp.Function is nameof(KernelFunction.int_mul) &&
+               kernelApp.Input is Expression.List mulListExpr && mulListExpr.items.Count is 2)
+            {
+                {
+                    if (mulListExpr.items[0] is Expression.Literal literalExpr &&
+                        KernelFunction.SignedIntegerFromValueRelaxed(literalExpr.Value) is { } leftInt &&
+                        leftInt == -1)
+                    {
+                        return mulListExpr.items[1];
+                    }
+                }
+
+                {
+                    if (mulListExpr.items[1] is Expression.Literal literalExpr &&
+                        KernelFunction.SignedIntegerFromValueRelaxed(literalExpr.Value) is { } rightInt &&
+                        rightInt == -1)
+                    {
+                        return mulListExpr.items[0];
+                    }
+                }
+            }
+        }
+
+        return null;
     }
 
     public static NodeCompilationResult CompileKernelApplication_Int_Mul(
@@ -1204,44 +1278,51 @@ public class PineIRCompiler
                             IntegerEncoding.EncodeSignedInteger(1)));
             }
 
-            if (listExpr.items.Count is 2)
-            {
-                if (listExpr.items[0] is Expression.Literal leftLiteralExpr &&
-                    KernelFunction.SignedIntegerFromValueRelaxed(leftLiteralExpr.Value) is { } leftInt)
-                {
-                    var afterRight =
-                        CompileExpressionTransitive(
-                            listExpr.items[1],
-                            context,
-                            prior);
-
-                    return
-                        afterRight
-                        .AppendInstruction(
-                            StackInstruction.Int_Mul_Const(leftInt));
-                }
-
-                if (listExpr.items[1] is Expression.Literal rightLiteralExpr &&
-                    KernelFunction.SignedIntegerFromValueRelaxed(rightLiteralExpr.Value) is { } rightInt)
-                {
-                    var afterLeft =
-                        CompileExpressionTransitive(
-                            listExpr.items[0],
-                            context,
-                            prior);
-
-                    return
-                        afterLeft
-                        .AppendInstruction(
-                            StackInstruction.Int_Mul_Const(rightInt));
-                }
-            }
-
-            var mulOps = prior;
+            BigInteger constItemsProduct = 1;
+            var varItems = new List<Expression>();
 
             for (var i = 0; i < listExpr.items.Count; ++i)
             {
                 var itemExpr = listExpr.items[i];
+
+                if (itemExpr is Expression.Literal literalExpr)
+                {
+                    if (KernelFunction.SignedIntegerFromValueRelaxed(literalExpr.Value) is not { } intValue)
+                    {
+                        return
+                            prior
+                            .AppendInstruction(
+                                StackInstruction.Push_Literal(PineValue.EmptyList));
+                    }
+
+                    constItemsProduct *= intValue;
+                }
+                else
+                {
+                    varItems.Add(itemExpr);
+                }
+            }
+
+            if (varItems.Count is 0)
+            {
+                return
+                    prior
+                    .AppendInstruction(
+                        StackInstruction.Push_Literal(
+                            IntegerEncoding.EncodeSignedInteger(constItemsProduct)));
+            }
+
+            var firstVarItem = varItems[0];
+
+            var mulOps =
+                CompileExpressionTransitive(
+                    firstVarItem,
+                    context,
+                    prior);
+
+            for (var i = 1; i < varItems.Count; ++i)
+            {
+                var itemExpr = varItems[i];
 
                 var itemOps =
                     CompileExpressionTransitive(
@@ -1251,12 +1332,17 @@ public class PineIRCompiler
 
                 mulOps = itemOps;
 
-                if (0 < i)
-                {
-                    mulOps =
-                        mulOps.AppendInstruction(
-                            StackInstruction.Int_Mul_Binary);
-                }
+                mulOps =
+                    mulOps.AppendInstruction(
+                        StackInstruction.Int_Mul_Binary);
+            }
+
+            if (constItemsProduct != 1)
+            {
+                mulOps =
+                    mulOps
+                    .AppendInstruction(
+                        StackInstruction.Int_Mul_Const(constItemsProduct));
             }
 
             return mulOps;
@@ -1400,11 +1486,28 @@ public class PineIRCompiler
                         StackInstruction.Push_Literal(PineValue.EmptyBlob));
             }
 
-            var andOps = prior;
+            var constItems = new List<PineValue>();
+            var varItems = new List<Expression>();
 
             for (var i = 0; i < listExpr.items.Count; ++i)
             {
                 var itemExpr = listExpr.items[i];
+
+                if (itemExpr is Expression.Literal literalExpr)
+                {
+                    constItems.Add(literalExpr.Value);
+                }
+                else
+                {
+                    varItems.Add(itemExpr);
+                }
+            }
+
+            var andOps = prior;
+
+            for (var i = 0; i < varItems.Count; ++i)
+            {
+                var itemExpr = varItems[i];
 
                 var itemOps =
                     CompileExpressionTransitive(
@@ -1420,6 +1523,15 @@ public class PineIRCompiler
                         andOps.AppendInstruction(
                             StackInstruction.Bit_And_Binary);
                 }
+            }
+
+            for (var i = 0; i < constItems.Count; ++i)
+            {
+                var constItem = constItems[i];
+
+                andOps =
+                    andOps.AppendInstruction(
+                        StackInstruction.Bit_And_Const(constItem));
             }
 
             return andOps;
@@ -1450,11 +1562,28 @@ public class PineIRCompiler
                         StackInstruction.Push_Literal(PineValue.EmptyBlob));
             }
 
-            var orOps = prior;
+            var constItems = new List<PineValue>();
+            var varItems = new List<Expression>();
 
             for (var i = 0; i < listExpr.items.Count; ++i)
             {
                 var itemExpr = listExpr.items[i];
+
+                if (itemExpr is Expression.Literal literalExpr)
+                {
+                    constItems.Add(literalExpr.Value);
+                }
+                else
+                {
+                    varItems.Add(itemExpr);
+                }
+            }
+
+            var orOps = prior;
+
+            for (var i = 0; i < varItems.Count; ++i)
+            {
+                var itemExpr = varItems[i];
 
                 var itemOps =
                     CompileExpressionTransitive(
@@ -1470,6 +1599,15 @@ public class PineIRCompiler
                         orOps.AppendInstruction(
                             StackInstruction.Bit_Or_Binary);
                 }
+            }
+
+            for (var i = 0; i < constItems.Count; ++i)
+            {
+                var constItem = constItems[i];
+
+                orOps =
+                    orOps.AppendInstruction(
+                        StackInstruction.Bit_Or_Const(constItem));
             }
 
             return orOps;
@@ -1555,15 +1693,33 @@ public class PineIRCompiler
     {
         if (input is Expression.List listExpr && listExpr.items.Count is 2)
         {
+            var shiftCountExpr =
+                listExpr.items[0];
+
+            var sourceExpr =
+                listExpr.items[1];
+
+            if (shiftCountExpr is Expression.Literal shiftCountLiteralExpr &&
+                KernelFunction.SignedIntegerFromValueRelaxed(shiftCountLiteralExpr.Value) is { } shiftCount)
+            {
+                return
+                    CompileExpressionTransitive(
+                        sourceExpr,
+                        context,
+                        prior)
+                    .AppendInstruction(
+                        StackInstruction.Bit_Shift_Left_Const((int)shiftCount));
+            }
+
             var sourceOps =
                 CompileExpressionTransitive(
-                    listExpr.items[1],
+                    sourceExpr,
                     context,
                     prior);
 
             var shiftCountOps =
                 CompileExpressionTransitive(
-                    listExpr.items[0],
+                    shiftCountExpr,
                     context,
                     sourceOps);
 
@@ -1571,6 +1727,7 @@ public class PineIRCompiler
                 shiftCountOps
                 .AppendInstruction(StackInstruction.Bit_Shift_Left_Binary);
         }
+
         return
             CompileExpressionTransitive(
                 input,
@@ -1586,15 +1743,33 @@ public class PineIRCompiler
     {
         if (input is Expression.List listExpr && listExpr.items.Count is 2)
         {
+            var shiftCountExpr =
+                listExpr.items[0];
+
+            var sourceExpr =
+                listExpr.items[1];
+
+            if (shiftCountExpr is Expression.Literal shiftCountLiteralExpr &&
+                KernelFunction.SignedIntegerFromValueRelaxed(shiftCountLiteralExpr.Value) is { } shiftCount)
+            {
+                return
+                    CompileExpressionTransitive(
+                        sourceExpr,
+                        context,
+                        prior)
+                    .AppendInstruction(
+                        StackInstruction.Bit_Shift_Right_Const((int)shiftCount));
+            }
+
             var sourceOps =
                 CompileExpressionTransitive(
-                    listExpr.items[1],
+                    sourceExpr,
                     context,
                     prior);
 
             var shiftCountOps =
                 CompileExpressionTransitive(
-                    listExpr.items[0],
+                    shiftCountExpr,
                     context,
                     sourceOps);
 

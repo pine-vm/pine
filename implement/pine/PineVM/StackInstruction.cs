@@ -407,8 +407,8 @@ public record StackInstruction(
     public static readonly StackInstruction Parse_And_Eval_Binary =
         new(StackInstructionKind.Parse_And_Eval_Binary);
 
-    public static StackInstruction Bit_And_Const(BigInteger integerLiteral) =>
-        new(StackInstructionKind.Bit_And_Const, IntegerLiteral: integerLiteral);
+    public static StackInstruction Bit_And_Const(PineValue blobValue) =>
+        new(StackInstructionKind.Bit_And_Const, Literal: blobValue);
 
     public static readonly StackInstruction Bit_And_Binary =
         new(StackInstructionKind.Bit_And_Binary);
@@ -416,8 +416,8 @@ public record StackInstruction(
     public static readonly StackInstruction Bit_Or_Generic =
         new(StackInstructionKind.Bit_Or_Generic);
 
-    public static StackInstruction Bit_Or_Const(BigInteger integerLiteral) =>
-        new(StackInstructionKind.Bit_Or_Const, IntegerLiteral: integerLiteral);
+    public static StackInstruction Bit_Or_Const(PineValue blobValue) =>
+        new(StackInstructionKind.Bit_Or_Const, Literal: blobValue);
 
     public static readonly StackInstruction Bit_Or_Binary =
         new(StackInstructionKind.Bit_Or_Binary);
@@ -840,9 +840,9 @@ public record StackInstruction(
                 new InstructionDetails(
                     PopCount: 1,
                     PushCount: 1,
-                    [instruction.IntegerLiteral?.ToString()
+                    [literalDisplayString(instruction.Literal
                     ?? throw new Exception(
-                        "Missing IntegerLiteral for BitAndConst instruction")]),
+                        "Missing Literal for BitAndConst instruction"))]),
 
             StackInstructionKind.Bit_Or_Generic =>
                 new InstructionDetails(
@@ -860,9 +860,9 @@ public record StackInstruction(
                 new InstructionDetails(
                     PopCount: 1,
                     PushCount: 1,
-                    [instruction.IntegerLiteral?.ToString()
+                    [literalDisplayString(instruction.Literal
                     ?? throw new Exception(
-                        "Missing IntegerLiteral for BitOrConst instruction")]),
+                        "Missing Literal for BitOrConst instruction"))]),
 
             StackInstructionKind.Bit_Xor_Generic =>
                 new InstructionDetails(

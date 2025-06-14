@@ -1725,6 +1725,160 @@ public class PineVMTests
                     ])
             },
 
+            new
+            {
+                expression =
+                (Expression)
+                new Expression.KernelApplication(
+                    function: nameof(KernelFunction.bit_and),
+                    input: Expression.ListInstance(
+                        [
+                            Expression.LiteralInstance(
+                                IntegerEncoding.EncodeSignedInteger(23)),
+
+                            Expression.EnvironmentInstance,
+                        ])),
+
+                expected =
+                new PineVM.StackFrameInstructions(
+                    [
+                        StackInstruction.Push_Environment,
+
+                        StackInstruction.Bit_And_Const(
+                            IntegerEncoding.EncodeSignedInteger(23)),
+
+                        StackInstruction.Return,
+                    ])
+            },
+
+            new
+            {
+                expression =
+                (Expression)
+                new Expression.KernelApplication(
+                    function: nameof(KernelFunction.bit_and),
+                    input: Expression.ListInstance(
+                        [
+                            Expression.EnvironmentInstance,
+
+                            Expression.LiteralInstance(
+                                IntegerEncoding.EncodeSignedInteger(27)),
+                        ])),
+
+                expected =
+                new PineVM.StackFrameInstructions(
+                    [
+                        StackInstruction.Push_Environment,
+
+                        StackInstruction.Bit_And_Const(
+                            IntegerEncoding.EncodeSignedInteger(27)),
+
+                        StackInstruction.Return,
+                    ])
+            },
+
+            new
+            {
+                expression =
+                (Expression)
+                new Expression.KernelApplication(
+                    function: nameof(KernelFunction.bit_or),
+                    input: Expression.ListInstance(
+                        [
+                            Expression.LiteralInstance(
+                                IntegerEncoding.EncodeSignedInteger(31)),
+
+                            Expression.EnvironmentInstance,
+                        ])),
+
+                expected =
+                new PineVM.StackFrameInstructions(
+                    [
+                        StackInstruction.Push_Environment,
+
+                        StackInstruction.Bit_Or_Const(
+                            IntegerEncoding.EncodeSignedInteger(31)),
+
+                        StackInstruction.Return,
+                    ])
+            },
+
+            new
+            {
+                expression =
+                (Expression)
+                new Expression.KernelApplication(
+                    function: nameof(KernelFunction.bit_or),
+                    input: Expression.ListInstance(
+                        [
+                            Expression.EnvironmentInstance,
+
+                            Expression.LiteralInstance(
+                                IntegerEncoding.EncodeSignedInteger(37)),
+                        ])),
+
+                expected =
+                new PineVM.StackFrameInstructions(
+                    [
+                        StackInstruction.Push_Environment,
+
+                        StackInstruction.Bit_Or_Const(
+                            IntegerEncoding.EncodeSignedInteger(37)),
+
+                        StackInstruction.Return,
+                    ])
+            },
+
+            new
+            {
+                expression =
+                (Expression)
+                new Expression.KernelApplication(
+                    function: nameof(KernelFunction.bit_shift_left),
+                    input: Expression.ListInstance(
+                        [
+                            Expression.LiteralInstance(
+                                IntegerEncoding.EncodeSignedInteger(13)),
+
+                            Expression.EnvironmentInstance,
+                        ])),
+
+                expected =
+                new PineVM.StackFrameInstructions(
+                    [
+                        StackInstruction.Push_Environment,
+
+                        StackInstruction.Bit_Shift_Left_Const(13),
+
+                        StackInstruction.Return,
+                    ])
+            },
+
+            new
+            {
+                expression =
+                (Expression)
+                new Expression.KernelApplication(
+                    function: nameof(KernelFunction.bit_shift_right),
+                    input: Expression.ListInstance(
+                        [
+                            Expression.LiteralInstance(
+                                IntegerEncoding.EncodeSignedInteger(17)),
+
+                            Expression.EnvironmentInstance,
+                        ])),
+
+                expected =
+                new PineVM.StackFrameInstructions(
+                    [
+                        StackInstruction.Push_Environment,
+
+                        StackInstruction.Bit_Shift_Right_Const(17),
+
+                        StackInstruction.Return,
+                    ])
+            },
+
         };
 
         var parseCache = new PineVMParseCache();
