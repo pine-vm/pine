@@ -1224,7 +1224,7 @@ compileElmSyntaxExpression stackBefore elmExpression =
                 recordNameSyntax
 
         Elm.Syntax.Expression.UnitExpr ->
-            Ok (ListExpression [])
+            Ok (LiteralExpression unitValue)
 
         Elm.Syntax.Expression.Floatable float ->
             Ok (LiteralExpression (valueFromFloat float))
@@ -2384,7 +2384,7 @@ compileElmSyntaxPatternListOrTupleItems compilation listItems addLengthCondition
             compilePatternOnlyEqualsCondition (ListExpression [])
 
         _ ->
-            case elmSyntaxListPatternAsLiteral [] listItems of
+            case elmSyntaxListPatternAsConst [] listItems of
                 Just literalValues ->
                     compilePatternOnlyEqualsCondition
                         (LiteralExpression (Pine.ListValue literalValues))
@@ -2396,63 +2396,67 @@ compileElmSyntaxPatternListOrTupleItems compilation listItems addLengthCondition
                         addLengthCondition
 
 
-elmSyntaxListPatternAsLiteral :
+elmSyntaxListPatternAsConst :
     List Pine.Value
     -> List (Elm.Syntax.Node.Node Elm.Syntax.Pattern.Pattern)
     -> Maybe (List Pine.Value)
-elmSyntaxListPatternAsLiteral processedItems listItems =
+elmSyntaxListPatternAsConst processedItems listItems =
     case listItems of
-        currentItemPatternNode :: followingItems ->
-            let
-                (Elm.Syntax.Node.Node _ currentItemPattern) =
-                    currentItemPatternNode
-            in
-            case currentItemPattern of
-                Elm.Syntax.Pattern.IntPattern int ->
-                    elmSyntaxListPatternAsLiteral
-                        (Pine.valueFromInt int :: processedItems)
-                        followingItems
-
-                Elm.Syntax.Pattern.HexPattern int ->
-                    elmSyntaxListPatternAsLiteral
-                        (Pine.valueFromInt int :: processedItems)
-                        followingItems
-
-                Elm.Syntax.Pattern.StringPattern string ->
-                    elmSyntaxListPatternAsLiteral
-                        (valueFromString string :: processedItems)
-                        followingItems
-
-                Elm.Syntax.Pattern.CharPattern char ->
-                    elmSyntaxListPatternAsLiteral
-                        (Pine.valueFromChar_2025 char :: processedItems)
-                        followingItems
-
-                Elm.Syntax.Pattern.ListPattern innerListItems ->
-                    case elmSyntaxListPatternAsLiteral [] innerListItems of
-                        Just innerLiteralValues ->
-                            elmSyntaxListPatternAsLiteral
-                                (Pine.ListValue innerLiteralValues :: processedItems)
-                                followingItems
-
-                        Nothing ->
-                            Nothing
-
-                Elm.Syntax.Pattern.TuplePattern innerTupleItems ->
-                    case elmSyntaxListPatternAsLiteral [] innerTupleItems of
-                        Just innerLiteralValues ->
-                            elmSyntaxListPatternAsLiteral
-                                (Pine.ListValue innerLiteralValues :: processedItems)
-                                followingItems
-
-                        Nothing ->
-                            Nothing
-
-                _ ->
+        (Elm.Syntax.Node.Node _ currentItemPattern) :: followingItems ->
+            case elmSyntaxPatternAsConst currentItemPattern of
+                Nothing ->
                     Nothing
+
+                Just currentItemValue ->
+                    elmSyntaxListPatternAsConst
+                        (currentItemValue :: processedItems)
+                        followingItems
 
         [] ->
             Just (List.reverse processedItems)
+
+
+elmSyntaxPatternAsConst :
+    Elm.Syntax.Pattern.Pattern
+    -> Maybe Pine.Value
+elmSyntaxPatternAsConst currentItemPattern =
+    case currentItemPattern of
+        Elm.Syntax.Pattern.IntPattern int ->
+            Just (Pine.valueFromInt int)
+
+        Elm.Syntax.Pattern.HexPattern int ->
+            Just (Pine.valueFromInt int)
+
+        Elm.Syntax.Pattern.StringPattern string ->
+            Just (valueFromString string)
+
+        Elm.Syntax.Pattern.CharPattern char ->
+            Just (Pine.valueFromChar_2025 char)
+
+        Elm.Syntax.Pattern.UnitPattern ->
+            Just unitValue
+
+        Elm.Syntax.Pattern.ListPattern innerListItems ->
+            case elmSyntaxListPatternAsConst [] innerListItems of
+                Just innerListValues ->
+                    Just (Pine.ListValue innerListValues)
+
+                Nothing ->
+                    Nothing
+
+        Elm.Syntax.Pattern.TuplePattern innerTupleItems ->
+            case elmSyntaxListPatternAsConst [] innerTupleItems of
+                Just innerListValues ->
+                    Just (Pine.ListValue innerListValues)
+
+                Nothing ->
+                    Nothing
+
+        Elm.Syntax.Pattern.FloatPattern float ->
+            Just (valueFromFloat float)
+
+        _ ->
+            Nothing
 
 
 compileElmSyntaxPatternListOrTupleItemsGeneric :
@@ -4788,6 +4792,11 @@ valueFromString string =
         [ elmStringTypeTagNameAsValue
         , Pine.ListValue [ Pine.computeValueFromString_2025 string ]
         ]
+
+
+unitValue : Pine.Value
+unitValue =
+    Pine.ListValue []
 
 
 valueFromFloat : Float -> Pine.Value
