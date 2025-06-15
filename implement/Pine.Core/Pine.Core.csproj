@@ -16,7 +16,7 @@
     <RepositoryUrl>https://github.com/pine-vm/pine.git</RepositoryUrl>
     <PackageProjectUrl>https://pine-vm.org</PackageProjectUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <Authors>Viir</Authors>
+    <Authors>Michael Rätzel</Authors>
     <PackageLicenseFile>License.txt</PackageLicenseFile>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <PackageIcon>package-icon.png</PackageIcon>
