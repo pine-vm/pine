@@ -2452,6 +2452,42 @@ elmSyntaxPatternAsConst currentItemPattern =
                 Nothing ->
                     Nothing
 
+        Elm.Syntax.Pattern.NamedPattern qualifiedName choiceTypeArgumentPatterns ->
+            if qualifiedName == { moduleName = [], name = "False" } then
+                Just Pine.falseValue
+
+            else if qualifiedName == { moduleName = [], name = "True" } then
+                Just Pine.trueValue
+
+            else
+                case elmSyntaxListPatternAsConst [] choiceTypeArgumentPatterns of
+                    Just innerListValues ->
+                        Just
+                            (Pine.ListValue
+                                [ Pine.valueFromString qualifiedName.name
+                                , Pine.ListValue innerListValues
+                                ]
+                            )
+
+                    Nothing ->
+                        Nothing
+
+        Elm.Syntax.Pattern.UnConsPattern (Elm.Syntax.Node.Node _ unconsLeft) (Elm.Syntax.Node.Node _ unconsRight) ->
+            case elmSyntaxPatternAsConst unconsLeft of
+                Just leftValue ->
+                    case elmSyntaxPatternAsConst unconsRight of
+                        Just (Pine.ListValue rightList) ->
+                            Just
+                                (Pine.ListValue
+                                    (leftValue :: rightList)
+                                )
+
+                        _ ->
+                            Nothing
+
+                Nothing ->
+                    Nothing
+
         Elm.Syntax.Pattern.FloatPattern float ->
             Just (valueFromFloat float)
 
