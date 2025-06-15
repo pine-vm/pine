@@ -237,6 +237,11 @@ public class PineVM : IPineVM
         }
     }
 
+    record struct StackFrameProfilingBaseline(
+        long BeginInstructionCount,
+        long BeginParseAndEvalCount,
+        long BeginStackFrameCount);
+
     record StackFrame(
         PineValue? ExpressionValue,
         Expression Expression,
@@ -244,9 +249,7 @@ public class PineVM : IPineVM
         PineValue EnvironmentValue,
         Memory<PineValue> StackValues,
         Memory<PineValue> LocalsValues,
-        long BeginInstructionCount,
-        long BeginParseAndEvalCount,
-        long BeginStackFrameCount,
+        StackFrameProfilingBaseline ProfilingBaseline,
         ApplyStepwise? Specialization)
     {
         public int InstructionPointer { get; set; } = 0;
@@ -413,9 +416,7 @@ public class PineVM : IPineVM
         PineValue? expressionValue,
         Expression expression,
         PineValue environment,
-        long beginInstructionCount,
-        long beginParseAndEvalCount,
-        long beginStackFrameCount)
+        StackFrameProfilingBaseline profilingBaseline)
     {
         var compilation = GetExpressionCompilation(expression);
 
@@ -428,9 +429,7 @@ public class PineVM : IPineVM
             EnvironmentValue: environment,
             StackValues: new PineValue[instructions.MaxStackUsage],
             LocalsValues: new PineValue[instructions.MaxLocalIndex + 1],
-            BeginInstructionCount: beginInstructionCount,
-            BeginParseAndEvalCount: beginParseAndEvalCount,
-            BeginStackFrameCount: beginStackFrameCount,
+            ProfilingBaseline: profilingBaseline,
             Specialization: null);
     }
 
@@ -1317,14 +1316,16 @@ public class PineVM : IPineVM
                                     EnvironmentValue: environmentValue,
                                     StackValues: null,
                                     LocalsValues: null,
-                                    BeginInstructionCount: instructionCount,
-                                    BeginParseAndEvalCount: parseAndEvalCount,
-                                    BeginStackFrameCount: stackFrameCount,
+                                    ProfilingBaseline:
+                                    new StackFrameProfilingBaseline(
+                                        BeginInstructionCount: instructionCount,
+                                        BeginParseAndEvalCount: parseAndEvalCount,
+                                        BeginStackFrameCount: stackFrameCount),
                                     Specialization: specialization.Stepwise);
 
                             pushStackFrame(
                                 newFrame,
-                                replaceCurrentFrame: replaceCurrentFrame);
+                                replaceCurrentFrame: false);
 
                             return null;
                         }
@@ -1354,14 +1355,22 @@ public class PineVM : IPineVM
             PineValue environmentValue,
             bool replaceCurrentFrame)
         {
+            var newFrameProfilingBaseline =
+                replaceCurrentFrame
+                ?
+                stack.Peek().ProfilingBaseline
+                :
+                new StackFrameProfilingBaseline(
+                    BeginInstructionCount: instructionCount,
+                    BeginParseAndEvalCount: parseAndEvalCount,
+                    BeginStackFrameCount: stackFrameCount);
+
             var newFrame =
                 StackFrameFromExpression(
                     expressionValue: expressionValue,
                     expression: expression,
                     environment: environmentValue,
-                    beginInstructionCount: instructionCount,
-                    beginParseAndEvalCount: parseAndEvalCount,
-                    beginStackFrameCount: stackFrameCount);
+                    profilingBaseline: newFrameProfilingBaseline);
 
             pushStackFrame(newFrame, replaceCurrentFrame: replaceCurrentFrame);
         }
@@ -1389,10 +1398,10 @@ public class PineVM : IPineVM
             if (currentFrame.ExpressionValue is { } currentFrameExprValue)
             {
                 var frameTotalInstructionCount =
-                    instructionCount - currentFrame.BeginInstructionCount;
+                    instructionCount - currentFrame.ProfilingBaseline.BeginInstructionCount;
 
-                var frameParseAndEvalCount = parseAndEvalCount - currentFrame.BeginParseAndEvalCount;
-                var frameStackFrameCount = stackFrameCount - currentFrame.BeginStackFrameCount;
+                var frameParseAndEvalCount = parseAndEvalCount - currentFrame.ProfilingBaseline.BeginParseAndEvalCount;
+                var frameStackFrameCount = stackFrameCount - currentFrame.ProfilingBaseline.BeginStackFrameCount;
 
                 if (frameTotalInstructionCount + frameStackFrameCount * 100 > 700 && EvalCache is { } evalCache)
                 {
