@@ -602,7 +602,7 @@ public class PineVMTests
                     StackInstruction.Push_Literal(
                         IntegerEncoding.EncodeSignedInteger(17)),
 
-                    StackInstruction.Jump_Unconditional(2),
+                    StackInstruction.Return,
 
                     StackInstruction.Push_Literal(
                         IntegerEncoding.EncodeSignedInteger(13)),
@@ -649,7 +649,7 @@ public class PineVMTests
                     StackInstruction.Push_Literal(
                         IntegerEncoding.EncodeSignedInteger(17)),
 
-                    StackInstruction.Jump_Unconditional(6),
+                    StackInstruction.Return,
 
                     StackInstruction.Push_Environment,
 
@@ -773,12 +773,12 @@ public class PineVMTests
 
                     StackInstruction.Parse_And_Eval_Binary,
 
-                    StackInstruction.Jump_Unconditional(2),
+                    StackInstruction.Return,
 
                     StackInstruction.Push_Literal(
                         IntegerEncoding.EncodeSignedInteger(21)),
 
-                    StackInstruction.Jump_Unconditional(2),
+                    StackInstruction.Return,
 
                     StackInstruction.Push_Literal(
                         IntegerEncoding.EncodeSignedInteger(23)),
@@ -895,12 +895,12 @@ public class PineVMTests
                     StackInstruction.Push_Literal(
                         IntegerEncoding.EncodeSignedInteger(27)),
 
-                    StackInstruction.Jump_Unconditional(2),
+                    StackInstruction.Return,
 
                     StackInstruction.Push_Literal(
                         IntegerEncoding.EncodeSignedInteger(23)),
 
-                    StackInstruction.Jump_Unconditional(2),
+                    StackInstruction.Return,
 
                     StackInstruction.Push_Literal(
                         IntegerEncoding.EncodeSignedInteger(13)),
@@ -1087,12 +1087,12 @@ public class PineVMTests
                     StackInstruction.Push_Literal(
                         IntegerEncoding.EncodeSignedInteger(27)),
 
-                    StackInstruction.Jump_Unconditional(2),
+                    StackInstruction.Return,
 
                     StackInstruction.Push_Literal(
                         IntegerEncoding.EncodeSignedInteger(23)),
 
-                    StackInstruction.Jump_Unconditional(2),
+                    StackInstruction.Return,
 
                     StackInstruction.Push_Literal(
                         IntegerEncoding.EncodeSignedInteger(13)),
