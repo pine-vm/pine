@@ -1513,12 +1513,80 @@ public class PineVMTests
                 (Expression)
                 new Expression.KernelApplication
                 (
-                    function: "equal",
+                    function: nameof(KernelFunction.equal),
                     input: Expression.ListInstance(
                         [
                         new Expression.KernelApplication
                         (
-                            function: "length",
+                            function: nameof(KernelFunction.head),
+                            input: Expression.EnvironmentInstance
+                            ),
+
+                        Expression.LiteralInstance(
+                            IntegerEncoding.EncodeSignedInteger(71)),
+                    ])
+                    ),
+
+                expected =
+                new PineVM.StackFrameInstructions(
+                    [
+                        StackInstruction.Push_Environment,
+
+                        StackInstruction.Head_Generic,
+
+                        StackInstruction.Equal_Binary_Const(
+                            IntegerEncoding.EncodeSignedInteger(71)),
+
+                        StackInstruction.Return,
+                    ])
+            },
+
+            new
+            {
+                expression =
+                (Expression)
+                new Expression.KernelApplication
+                (
+                    function: nameof(KernelFunction.equal),
+                    input: Expression.ListInstance(
+                        [
+                        Expression.LiteralInstance(
+                            IntegerEncoding.EncodeSignedInteger(73)),
+
+                        new Expression.KernelApplication
+                        (
+                            function: nameof(KernelFunction.head),
+                            input: Expression.EnvironmentInstance
+                            ),
+                    ])
+                    ),
+
+                expected =
+                new PineVM.StackFrameInstructions(
+                    [
+                        StackInstruction.Push_Environment,
+
+                        StackInstruction.Head_Generic,
+
+                        StackInstruction.Equal_Binary_Const(
+                            IntegerEncoding.EncodeSignedInteger(73)),
+
+                        StackInstruction.Return,
+                    ])
+            },
+
+            new
+            {
+                expression =
+                (Expression)
+                new Expression.KernelApplication
+                (
+                    function: nameof(KernelFunction.equal),
+                    input: Expression.ListInstance(
+                        [
+                        new Expression.KernelApplication
+                        (
+                            function: nameof(KernelFunction.length),
                             input: Expression.EnvironmentInstance
                             ),
 
@@ -1544,7 +1612,7 @@ public class PineVMTests
                 (Expression)
                 new Expression.KernelApplication
                 (
-                    function: "equal",
+                    function: nameof(KernelFunction.equal),
                     input: Expression.ListInstance(
                         [
                         Expression.LiteralInstance(
@@ -1552,7 +1620,7 @@ public class PineVMTests
 
                         new Expression.KernelApplication
                         (
-                            function: "length",
+                            function: nameof(KernelFunction.length),
                             input: Expression.EnvironmentInstance
                             ),
                     ])
