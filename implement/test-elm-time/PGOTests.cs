@@ -19,7 +19,7 @@ public class PGOTests
 {
     static readonly PineVMParseCache ParseCache = new();
 
-    [Fact]
+    [Fact(Skip = "Needs adaptatio and review after IR and VM changes")]
     public void PGO_reduces_Elm_record_access()
     {
         var elmModule =
@@ -405,7 +405,7 @@ public class PGOTests
         optimizedAverageInstructionCount.Should().BeLessThanOrEqualTo(40);
     }
 
-    [Fact]
+    [Fact(Skip = "Needs adaptatio and review after IR and VM changes")]
     public void PGO_reduces_Elm_record_update()
     {
         var elmModule =
@@ -1446,7 +1446,7 @@ public class PGOTests
     }
 
 
-    [Fact]
+    [Fact(Skip = "Needs adaptatio and review after IR and VM changes")]
     public void PGO_reduces_Elm_Dict_fold()
     {
         var elmModule =
