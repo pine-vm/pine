@@ -220,13 +220,18 @@ listUniqueHelp remaining accumulator =
 
 listCount : (a -> Bool) -> List a -> Int
 listCount predicate list =
+    listCountHelp 0 predicate list
+
+
+listCountHelp : Int -> (a -> Bool) -> List a -> Int
+listCountHelp count predicate list =
     case list of
         [] ->
-            0
+            count
 
         first :: rest ->
             if predicate first then
-                1 + listCount predicate rest
+                listCountHelp (count + 1) predicate rest
 
             else
-                listCount predicate rest
+                listCountHelp count predicate rest
