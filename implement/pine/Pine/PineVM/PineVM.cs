@@ -104,7 +104,7 @@ public class PineVM : IPineVM
                 ComputeMaxStackUsage(
                     Instructions,
                     instructionIndex: 0,
-                    stack: [],
+                    visited: [],
                     currentDepth: 0,
                     maxDepth: 0);
         }
@@ -112,33 +112,16 @@ public class PineVM : IPineVM
         private static int ComputeMaxStackUsage(
             IReadOnlyList<StackInstruction> Instructions,
             int instructionIndex,
-            ImmutableStack<(int instructionIndex, int currentDepth)> stack,
+            ImmutableHashSet<int> visited,
             int currentDepth,
             int maxDepth)
         {
-            if (!stack.IsEmpty)
-            {
-                var previousVisit =
-                    stack
-                    .FirstOrDefault(item => item.instructionIndex == instructionIndex);
+            if (visited.Contains(instructionIndex))
+                return maxDepth;
 
-                if (previousVisit.instructionIndex == instructionIndex)
-                {
-                    if (previousVisit.currentDepth != currentDepth)
-                    {
-                        throw new InvalidOperationException(
-                            "Stack depth mismatch for instruction " + instructionIndex +
-                            ": " + currentDepth + " vs. " + previousVisit.currentDepth);
-                    }
-
-                    // Already visited this instruction, no need to continue.
-                    return maxDepth;
-                }
-            }
-
-            var newStack =
-                stack
-                .Push((instructionIndex, currentDepth));
+            var visitedNew =
+                visited
+                .Add(instructionIndex);
 
             while (true)
             {
@@ -194,7 +177,7 @@ public class PineVM : IPineVM
                         ComputeMaxStackUsage(
                             Instructions,
                             instructionIndex: instructionIndex,
-                            stack: newStack,
+                            visited: visitedNew,
                             currentDepth: currentDepth,
                             maxDepth: maxDepth);
                 }
@@ -214,7 +197,7 @@ public class PineVM : IPineVM
                         ComputeMaxStackUsage(
                             Instructions,
                             instructionIndex: ifTrueNewInstructionIndex,
-                            stack: newStack,
+                            visited: visitedNew,
                             currentDepth: currentDepth,
                             maxDepth: maxDepth);
 
@@ -609,30 +592,17 @@ public class PineVM : IPineVM
                 disableRecurseAfterInline: false,
                 skipInlining: skipInlining);
 
-        IReadOnlyList<StackInstruction> allInstructionsBeforeReturn =
-            [.. InstructionsFromExpression(
+        var allInstructionsBeforeReturn =
+            InstructionsFromExpression(
                 rootExpression: reducedExpression,
                 rootExprAlternativeForms: [rootExpression],
                 envClass: enableTailRecursionOptimization ? envConstraintId : null,
                 parseCache)
-            ];
+            .ToArray();
 
-        bool doesInstructionLeadDirectlyToReturn(
-            int instructionIndex)
+        for (var instructionIndex = allInstructionsBeforeReturn.Length - 1; instructionIndex >= 0; instructionIndex--)
         {
-            if (allInstructionsBeforeReturn.Count <= instructionIndex)
-            {
-                // Base case: End of instructions.
-                return true;
-            }
-
             var instruction = allInstructionsBeforeReturn[instructionIndex];
-
-            if (instruction.Kind is StackInstructionKind.Return)
-            {
-                // Base case: Return instruction.
-                return true;
-            }
 
             if (instruction.Kind is StackInstructionKind.Jump_Const)
             {
@@ -642,16 +612,31 @@ public class PineVM : IPineVM
                     throw new InvalidOperationException(
                         "Jump instruction without offset: " + instruction);
 
-                // Recursive case: Jump to another instruction.
-                return doesInstructionLeadDirectlyToReturn(instructionIndex + jumpOffset);
-            }
+                var destInstructionIndex =
+                    instructionIndex + jumpOffset;
 
-            return false;
+                if (destInstructionIndex >= allInstructionsBeforeReturn.Length)
+                {
+                    allInstructionsBeforeReturn[instructionIndex] =
+                        StackInstruction.Return;
+
+                    continue;
+                }
+
+                var destInstruction =
+                    allInstructionsBeforeReturn[destInstructionIndex];
+
+                if (destInstruction.Kind is StackInstructionKind.Return)
+                {
+                    // Remove jump to return instruction.
+                    allInstructionsBeforeReturn[instructionIndex] =
+                        StackInstruction.Return;
+                }
+            }
         }
 
         IReadOnlyList<StackInstruction> allInstructions =
-            [.. allInstructionsBeforeReturn
-            .Select((instruction,instIndex) => doesInstructionLeadDirectlyToReturn(instIndex) ? StackInstruction.Return : instruction),
+            [.. allInstructionsBeforeReturn,
             StackInstruction.Return
             ];
 
