@@ -213,6 +213,38 @@ public static class PopularValues
         "shiftRightBy",
         "shiftRightZfBy",
 
+        // From the Elm kernel Bytes modules
+
+        "Bytes.Encode",
+        "Elm_Bytes",
+        "Bytes",
+        "Endianness",
+        "LE",
+        "BE",
+        "Encoder",
+        "I8",
+        "I16",
+        "I32",
+        "U8",
+        "U16",
+        "U32",
+        "SequenceEncoder",
+        "BytesEncoder",
+        "F32",
+        "F64",
+        "Seq",
+        "Utf8",
+
+        "unsignedInt8",
+        "unsignedInt16",
+        "unsignedInt32",
+        "signedInt8",
+        "signedInt16",
+        "signedInt32",
+        "float32",
+        "float64",
+        "encode",
+
         // From the Elm kernel Parser module
         "Parser",
         "DeadEnd",
@@ -672,6 +704,12 @@ public static class PopularValues
         static IReadOnlyList<ElmValue> ListOfCharsFromString(string s) =>
             [.. s.Select(c => ElmValue.CharInstance(c))];
 
+        var tagBE =
+            ElmValue.TagInstance("BE", []);
+
+        var tagLE =
+            ElmValue.TagInstance("LE", []);
+
         static IEnumerable<(string tagName, IReadOnlyList<ElmValue> tagArgs)> PopularTagUsages()
         {
             yield return ("Function", ListOfCharsFromString("Function"));
@@ -715,7 +753,35 @@ public static class PopularValues
             yield return ("Red", ListOfCharsFromString("Red"));
 
             yield return ("Red", ListOfCharsFromString("Black"));
+
+
+            yield return ("NullValue", []);
+
+            yield return ("BoolValue", [ElmValue.TagInstance("False", [])]);
+            yield return ("BoolValue", [ElmValue.TagInstance("True", [])]);
+
+            yield return ("IntValue", [ElmValue.Integer(0)]);
+            yield return ("IntValue", [ElmValue.Integer(1)]);
+            yield return ("IntValue", [ElmValue.Integer(2)]);
+            yield return ("IntValue", [ElmValue.Integer(3)]);
+            yield return ("IntValue", [ElmValue.Integer(4)]);
+            yield return ("IntValue", [ElmValue.Integer(5)]);
+            yield return ("IntValue", [ElmValue.Integer(6)]);
+            yield return ("IntValue", [ElmValue.Integer(7)]);
+            yield return ("IntValue", [ElmValue.Integer(8)]);
+            yield return ("IntValue", [ElmValue.Integer(9)]);
+
+            yield return ("StringValue", [ElmValue.StringInstance("")]);
+            yield return ("ArrayValue", [ElmValue.ListInstance([])]);
         }
+
+        yield return ElmValue.FalseValue;
+
+        yield return ElmValue.TrueValue;
+
+        yield return tagBE;
+
+        yield return tagLE;
 
         foreach (var (tagName, tagArgs) in PopularTagUsages())
         {
@@ -731,6 +797,46 @@ public static class PopularValues
                         [ElmValue.Integer(i),
                         ElmValue.Integer(j)
                         ]);
+            }
+        }
+
+        {
+            // Intermediate representations used in byte-encodings
+
+            /*
+             * 
+
+            type Endianness
+                = LE
+                | BE
+
+            type Encoder
+                = I8 Int
+                | I16 Endianness Int
+                | I32 Endianness Int
+                | U8 Int
+                | U16 Endianness Int
+                | U32 Endianness Int
+                | SequenceEncoder (List Encoder)
+                | BytesEncoder Bytes.Bytes
+             * */
+
+            // unsignedInt8
+
+            for (int i = 0; i < 0x1_00; i++)
+            {
+                yield return ElmValue.TagInstance(
+                    "I8",
+                    [ElmValue.Integer(i)]);
+            }
+
+            // unsignedInt16 BE
+
+            for (int i = 0; i < 0x1_00_00; i++)
+            {
+                yield return ElmValue.TagInstance(
+                    "U16",
+                    [tagBE, ElmValue.Integer(i)]);
             }
         }
     }

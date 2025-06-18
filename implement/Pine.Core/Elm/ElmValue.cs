@@ -203,11 +203,22 @@ public abstract record ElmValue
     /// </summary>
     /// <param name="Value">The integer value.</param>
     /// <returns>An <see cref="ElmInteger"/> instance.</returns>
-    public static ElmValue Integer(System.Numerics.BigInteger Value) =>
-        ReusedIntegerInstances?.TryGetValue(Value, out var reusedInstance) ?? false && reusedInstance is not null ?
-        reusedInstance
-        :
-        new ElmInteger(Value);
+    public static ElmValue Integer(System.Numerics.BigInteger Value)
+    {
+        if (Value < 0)
+        {
+            if (-Value < ReusedIntegerInstancesNegative.Span.Length)
+            {
+                return ReusedIntegerInstancesNegative.Span[(int)-Value];
+            }
+        }
+        else if (Value < ReusedIntegerInstancesPositive.Length)
+        {
+            return ReusedIntegerInstancesPositive.Span[(int)Value];
+        }
+
+        return new ElmInteger(Value);
+    }
 
     /// <summary>
     /// Creates an <see cref="ElmString"/> instance from a <see cref="string"/>.
@@ -238,7 +249,7 @@ public abstract record ElmValue
             return reusedInstance;
         }
 
-        return new ElmTag(TagName, Arguments);
+        return new ElmTag(tagStruct);
     }
 
     /// <summary>
@@ -248,16 +259,20 @@ public abstract record ElmValue
     /// <param name="Value">The Unicode code point of the character.</param>
     /// <returns>An <see cref="ElmChar"/> instance.</returns>
     public static ElmValue CharInstance(int Value) =>
-        Value < ReusedCharInstances?.Count && 0 <= Value ?
-        ReusedCharInstances[Value]
+        Value < ReusedCharInstances.Length && 0 <= Value ?
+        ReusedCharInstances.Span[Value]
         :
         new ElmChar(Value);
 
-    private static readonly FrozenDictionary<System.Numerics.BigInteger, ElmValue> ReusedIntegerInstances =
-        Enumerable.Range(-100, 400)
-        .ToFrozenDictionary(
-            keySelector: i => (System.Numerics.BigInteger)i,
-            elementSelector: i => Integer(i));
+    private static readonly ReadOnlyMemory<ElmValue> ReusedIntegerInstancesNegative =
+        Enumerable.Range(0, 10_000)
+        .Select(i => Integer(-i))
+        .ToArray();
+
+    private static readonly ReadOnlyMemory<ElmValue> ReusedIntegerInstancesPositive =
+        Enumerable.Range(0, 10_000)
+        .Select(i => Integer(i))
+        .ToArray();
 
     private static readonly FrozenDictionary<string, ElmValue> ReusedStringInstances =
         PopularValues.PopularStrings
@@ -265,9 +280,10 @@ public abstract record ElmValue
             keySelector: s => s,
             elementSelector: StringInstance);
 
-    private static readonly IReadOnlyList<ElmValue> ReusedCharInstances =
-        [..Enumerable.Range(0, 4000)
-        .Select(CharInstance)];
+    private static readonly ReadOnlyMemory<ElmValue> ReusedCharInstances =
+        Enumerable.Range(0, 10_000)
+        .Select(CharInstance)
+        .ToArray();
 
     /// <summary>
     /// An integer with unlimited precision, represented as a <see cref="System.Numerics.BigInteger"/>.

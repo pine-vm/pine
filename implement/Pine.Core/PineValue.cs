@@ -61,7 +61,7 @@ public abstract record PineValue : IEquatable<PineValue>
     /// <summary>
     /// Blob value for a single byte.
     /// </summary>
-    public static PineValue BlobSingleByte(byte value) =>
+    public static BlobValue BlobSingleByte(byte value) =>
         ReusedBlobSingle[value];
 
     /// <summary>
@@ -71,6 +71,17 @@ public abstract record PineValue : IEquatable<PineValue>
     {
         if (elements.Length is 0)
             return EmptyList;
+
+        if (elements.Length is 1)
+        {
+            if (ReusedInstances.Instance.SingletonListValues is { } reusedSingletonListValues)
+            {
+                if (reusedSingletonListValues.TryGetValue(elements.Span[0], out var existing))
+                {
+                    return existing;
+                }
+            }
+        }
 
         var asStruct = new ListValue.ListValueStruct(elements);
 

@@ -21,6 +21,8 @@ public record ReusedInstances(
 
     public FrozenDictionary<PineValue.ListValue.ListValueStruct, PineValue.ListValue>? ListValues { private set; get; }
 
+    public FrozenDictionary<PineValue, PineValue.ListValue>? SingletonListValues { private set; get; }
+
     public FrozenSet<Expression>? Expressions { private set; get; }
 
     public FrozenDictionary<PineValue, Expression.Literal>? LiteralExpressions { private set; get; }
@@ -48,7 +50,7 @@ public record ReusedInstances(
 
     static ReusedInstances()
     {
-        Instance.Build();
+        Instance.BuildFromEmbedded();
     }
 
     public static IEnumerable<Expression> ExpressionsSource()
@@ -364,7 +366,7 @@ public record ReusedInstances(
             PineValueLists);
     }
 
-    public void Build()
+    private void BuildFromEmbedded()
     {
         var loadedPineListValues =
             LoadPrecompiledFromEmbeddedOrDefault(
@@ -373,6 +375,13 @@ public record ReusedInstances(
 
         ListValues =
             BuildListValuesFromBundledListValues(loadedPineListValues.PineValueLists);
+
+        SingletonListValues =
+            ListValues
+            .Where(kvp => kvp.Value.Elements.Length is 1)
+            .ToFrozenDictionary(
+                keySelector: kvp => kvp.Value.Elements.Span[0],
+                elementSelector: kvp => kvp.Value);
 
         var valuesExpectedInCompilerSorted =
             PineValue.ReusedBlobInstances
