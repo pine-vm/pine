@@ -162,6 +162,8 @@ public class Precompiled
 
         var listMemberExposedValue = popularValueDictionary["List.member.exposed"];
 
+        var listMapExposedValue = popularValueDictionary["List.map.exposed"];
+
         var stringSliceExpression = popularExpressionDictionary["String.slice"];
 
         var stringSliceExposedValue = popularValueDictionary["String.slice.exposed"];
@@ -1170,6 +1172,32 @@ public class Precompiled
         }
 
         {
+            var bytesEncodeEncodeBlobExpression =
+                popularExpressionDictionary["Bytes.Encode.encodeBlob"];
+
+            var bytesEncodeEncodeBlobExpressionValue =
+                ExpressionEncoding.EncodeExpressionAsValue(bytesEncodeEncodeBlobExpression);
+
+            var envClass =
+                EnvConstraintId.Create(
+                    [
+                    new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                    [0, 0],
+                    listMapExposedValue),
+                    new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                    [0, 1],
+                    bytesEncodeEncodeBlobExpressionValue),
+                    ]);
+
+            yield return
+                new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
+                    bytesEncodeEncodeBlobExpression,
+                    [new PrecompiledEntry(
+                        envClass,
+                        BytesEncode_encodeBlob)]);
+        }
+
+        {
             var encodeToBytesBodyExpression =
                 popularExpressionDictionary["danfishgold.Base64.Encode.toBytes.body"];
 
@@ -1822,6 +1850,373 @@ public class Precompiled
                 ]);
 
         return new PrecompiledResult.FinalValue(elmStringValue, 0);
+    }
+
+    static PrecompiledResult.FinalValue? BytesEncode_encodeBlob(
+        PineValue environment,
+        PineVMParseCache parseCache)
+    {
+        /*
+         * 
+        encodeBlob : Encoder -> Int
+        encodeBlob builder =
+            case builder of
+                I8 n ->
+                    if Pine_kernel.int_is_sorted_asc [ 0, n ] then
+                        Pine_kernel.take [ 1, Pine_kernel.reverse n ]
+
+                    else
+                        Pine_kernel.take
+                            [ 1
+                            , Pine_kernel.reverse
+                                (Pine_kernel.bit_not (Pine_kernel.int_add [ n, 1 ]))
+                            ]
+
+                I16 e n ->
+                    let
+                        littleEndian =
+                            if Pine_kernel.int_is_sorted_asc [ 0, n ] then
+                                Pine_kernel.take
+                                    [ 2
+                                    , Pine_kernel.concat
+                                        [ Pine_kernel.reverse
+                                            (Pine_kernel.skip [ 1, n ])
+                                        , Pine_kernel.skip [ 1, 0 ]
+                                        ]
+                                    ]
+
+                            else
+                                Pine_kernel.take
+                                    [ 2
+                                    , Pine_kernel.concat
+                                        [ Pine_kernel.reverse
+                                            (Pine_kernel.skip
+                                                [ 1
+                                                , Pine_kernel.bit_not (Pine_kernel.int_add [ n, 1 ])
+                                                ]
+                                            )
+                                        , Pine_kernel.skip [ 1, 0xFF ]
+                                        ]
+                                    ]
+                    in
+                    if Pine_kernel.equal [ e, Bytes.LE ] then
+                        littleEndian
+
+                    else
+                        Pine_kernel.reverse littleEndian
+
+                I32 e n ->
+                    let
+                        littleEndian =
+                            if Pine_kernel.int_is_sorted_asc [ 0, n ] then
+                                Pine_kernel.take
+                                    [ 4
+                                    , Pine_kernel.concat
+                                        [ Pine_kernel.reverse
+                                            (Pine_kernel.skip [ 1, n ])
+                                        , Pine_kernel.skip [ 2, 0x01000000 ]
+                                        ]
+                                    ]
+
+                            else
+                                Pine_kernel.take
+                                    [ 4
+                                    , Pine_kernel.concat
+                                        [ Pine_kernel.reverse
+                                            (Pine_kernel.skip
+                                                [ 1
+                                                , Pine_kernel.bit_not (Pine_kernel.int_add [ n, 1 ])
+                                                ]
+                                            )
+                                        , Pine_kernel.skip [ 1, 0x00FFFFFF ]
+                                        ]
+                                    ]
+                    in
+                    if Pine_kernel.equal [ e, Bytes.LE ] then
+                        littleEndian
+
+                    else
+                        Pine_kernel.reverse littleEndian
+
+                U8 n ->
+                    Pine_kernel.take [ 1, Pine_kernel.reverse n ]
+
+                U16 e n ->
+                    let
+                        littleEndian =
+                            Pine_kernel.take
+                                [ 2
+                                , Pine_kernel.concat
+                                    [ Pine_kernel.reverse
+                                        (Pine_kernel.skip [ 1, n ])
+                                    , Pine_kernel.skip [ 1, 0 ]
+                                    ]
+                                ]
+                    in
+                    if Pine_kernel.equal [ e, Bytes.LE ] then
+                        littleEndian
+
+                    else
+                        Pine_kernel.reverse littleEndian
+
+                U32 e n ->
+                    let
+                        littleEndian =
+                            Pine_kernel.take
+                                [ 4
+                                , Pine_kernel.concat
+                                    [ Pine_kernel.reverse
+                                        (Pine_kernel.skip [ 1, n ])
+                                    , Pine_kernel.skip [ 2, 0x01000000 ]
+                                    ]
+                                ]
+                    in
+                    if Pine_kernel.equal [ e, Bytes.LE ] then
+                        littleEndian
+
+                    else
+                        Pine_kernel.reverse littleEndian
+
+                SequenceEncoder bs ->
+                    if Pine_kernel.equal [ bs, [] ] then
+                        Pine_kernel.take [ 0, 0 ]
+
+                    else
+                        Pine_kernel.concat (List.map encodeBlob bs)
+
+                BytesEncoder (Bytes.Elm_Bytes blob) ->
+                    blob
+         * */
+
+        var chunks = new List<ReadOnlyMemory<byte>>();
+
+        void collectChunks(PineValue argBuilder)
+        {
+            var argBuilderTagValue =
+                PineVM.ValueFromPathInValueOrEmptyList(argBuilder, [0]);
+
+            if (argBuilderTagValue == Tag_I8_Name_Value)
+            {
+                var nValue =
+                    PineVM.ValueFromPathInValueOrEmptyList(argBuilder, [1, 0]);
+
+                if (IntegerEncoding.ParseSignedIntegerRelaxed(nValue).IsOkOrNullable() is not { } n)
+                {
+                    return;
+                }
+
+                /*
+                var wrapped = (byte)(int)n;
+
+                if (wrapped < 0)
+                {
+                    wrapped = (byte)(256 + wrapped);
+                }
+
+                chunks.Add(PineValue.BlobSingleByte(wrapped).Bytes);
+                */
+
+                var asByte = (byte)(n & 0xff);
+
+                chunks.Add(PineValue.BlobSingleByte(asByte).Bytes);
+
+                return;
+            }
+
+            if (argBuilderTagValue == Tag_I16_Name_Value)
+            {
+                var eValue =
+                    PineVM.ValueFromPathInValueOrEmptyList(argBuilder, [1, 0]);
+
+                var nValue =
+                    PineVM.ValueFromPathInValueOrEmptyList(argBuilder, [1, 1]);
+
+                if (IntegerEncoding.ParseSignedIntegerRelaxed(nValue).IsOkOrNullable() is not { } n)
+                {
+                    return;
+                }
+
+                var littleEndian = eValue == Tag_LE_Value;
+
+                var bytes = new byte[2];
+
+                if (littleEndian)
+                {
+                    bytes[0] = (byte)(n & 0xFF);
+                    bytes[1] = (byte)((n >> 8) & 0xFF);
+                }
+                else
+                {
+                    bytes[0] = (byte)((n >> 8) & 0xFF);
+                    bytes[1] = (byte)(n & 0xFF);
+                }
+
+                chunks.Add(new ReadOnlyMemory<byte>(bytes));
+
+                return;
+            }
+
+            if (argBuilderTagValue == Tag_I32_Name_Value)
+            {
+                var eValue =
+                    PineVM.ValueFromPathInValueOrEmptyList(argBuilder, [1, 0]);
+
+                var nValue =
+                    PineVM.ValueFromPathInValueOrEmptyList(argBuilder, [1, 1]);
+
+                if (IntegerEncoding.ParseSignedIntegerRelaxed(nValue).IsOkOrNullable() is not { } n)
+                {
+                    return;
+                }
+
+                var littleEndian = eValue == Tag_LE_Value;
+                var bytes = new byte[4];
+
+                if (littleEndian)
+                {
+                    bytes[0] = (byte)(n & 0xFF);
+                    bytes[1] = (byte)((n >> 8) & 0xFF);
+                    bytes[2] = (byte)((n >> 16) & 0xFF);
+                    bytes[3] = (byte)((n >> 24) & 0xFF);
+                }
+                else
+                {
+                    bytes[0] = (byte)((n >> 24) & 0xFF);
+                    bytes[1] = (byte)((n >> 16) & 0xFF);
+                    bytes[2] = (byte)((n >> 8) & 0xFF);
+                    bytes[3] = (byte)(n & 0xFF);
+                }
+
+                chunks.Add(new ReadOnlyMemory<byte>(bytes));
+
+                return;
+            }
+
+            if (argBuilderTagValue == Tag_U8_Name_Value)
+            {
+                var nValue =
+                    PineVM.ValueFromPathInValueOrEmptyList(argBuilder, [1, 0]);
+
+                if (IntegerEncoding.ParseSignedIntegerRelaxed(nValue).IsOkOrNullable() is not { } n)
+                {
+                    return;
+                }
+
+                var asByte = (byte)(n & 0xff);
+
+                chunks.Add(PineValue.BlobSingleByte(asByte).Bytes);
+
+                return;
+            }
+
+            if (argBuilderTagValue == Tag_U16_Name_Value)
+            {
+                var eValue =
+                    PineVM.ValueFromPathInValueOrEmptyList(argBuilder, [1, 0]);
+
+                var nValue =
+                    PineVM.ValueFromPathInValueOrEmptyList(argBuilder, [1, 1]);
+
+                if (IntegerEncoding.ParseSignedIntegerRelaxed(nValue).IsOkOrNullable() is not { } n)
+                {
+                    return;
+                }
+
+                var littleEndian = eValue == Tag_LE_Value;
+                var bytes = new byte[2];
+
+                if (littleEndian)
+                {
+                    bytes[0] = (byte)(n & 0xFF);
+                    bytes[1] = (byte)((n >> 8) & 0xFF);
+                }
+                else
+                {
+                    bytes[0] = (byte)((n >> 8) & 0xFF);
+                    bytes[1] = (byte)(n & 0xFF);
+                }
+
+                chunks.Add(new ReadOnlyMemory<byte>(bytes));
+
+                return;
+            }
+
+            if (argBuilderTagValue == Tag_U32_Name_Value)
+            {
+                var eValue =
+                    PineVM.ValueFromPathInValueOrEmptyList(argBuilder, [1, 0]);
+
+                var nValue =
+                    PineVM.ValueFromPathInValueOrEmptyList(argBuilder, [1, 1]);
+
+                if (IntegerEncoding.ParseSignedIntegerRelaxed(nValue).IsOkOrNullable() is not { } n)
+                {
+                    return;
+                }
+
+                var littleEndian = eValue == Tag_LE_Value;
+                var bytes = new byte[4];
+
+                if (littleEndian)
+                {
+                    bytes[0] = (byte)(n & 0xFF);
+                    bytes[1] = (byte)((n >> 8) & 0xFF);
+                    bytes[2] = (byte)((n >> 16) & 0xFF);
+                    bytes[3] = (byte)((n >> 24) & 0xFF);
+                }
+                else
+                {
+                    bytes[0] = (byte)((n >> 24) & 0xFF);
+                    bytes[1] = (byte)((n >> 16) & 0xFF);
+                    bytes[2] = (byte)((n >> 8) & 0xFF);
+                    bytes[3] = (byte)(n & 0xFF);
+                }
+
+                chunks.Add(new ReadOnlyMemory<byte>(bytes));
+
+                return;
+            }
+
+            if (argBuilderTagValue == Tag_BytesEncoder_Name_Value)
+            {
+                var bytesBlobValue =
+                    PineVM.ValueFromPathInValueOrEmptyList(argBuilder, [1, 0, 1, 0]);
+
+                if (bytesBlobValue is PineValue.BlobValue bytesBlob)
+                {
+                    chunks.Add(bytesBlob.Bytes);
+                }
+
+                return;
+            }
+
+            if (argBuilderTagValue == Tag_SequenceEncoder_Name_Value)
+            {
+                var sequenceValue =
+                    PineVM.ValueFromPathInValueOrEmptyList(argBuilder, [1, 0]);
+
+                if (sequenceValue is PineValue.ListValue sequenceList)
+                {
+                    for (int i = 0; i < sequenceList.Elements.Length; ++i)
+                    {
+                        collectChunks(sequenceList.Elements.Span[i]);
+                    }
+                }
+
+                return;
+            }
+
+            throw new ParseExpressionException("Error in case-of block: No matching branch.");
+        }
+
+        var argBuilder =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+
+        collectChunks(argBuilder);
+
+        var concatenated = BytesConversions.Concat(chunks);
+
+        return new PrecompiledResult.FinalValue(PineValue.Blob(concatenated), 0);
     }
 
     private static PrecompiledResult.FinalValue? Danfishgold_Base64_Encode_toBytes(
@@ -5267,6 +5662,37 @@ public class Precompiled
 
     private static readonly PineValue Tag_Nothing_Value =
         ElmValueEncoding.ElmValueAsPineValue(ElmValue.TagInstance("Nothing", []));
+
+    private static readonly PineValue Tag_BE_Value =
+        ElmValueEncoding.ElmValueAsPineValue(ElmValue.TagInstance("BE", []));
+
+    private static readonly PineValue Tag_LE_Value =
+        ElmValueEncoding.ElmValueAsPineValue(ElmValue.TagInstance("LE", []));
+
+    private static readonly PineValue Tag_I8_Name_Value =
+        StringEncoding.ValueFromString("I8");
+
+    private static readonly PineValue Tag_I16_Name_Value =
+        StringEncoding.ValueFromString("I16");
+
+    private static readonly PineValue Tag_I32_Name_Value =
+        StringEncoding.ValueFromString("I32");
+
+    private static readonly PineValue Tag_U8_Name_Value =
+        StringEncoding.ValueFromString("U8");
+
+    private static readonly PineValue Tag_U16_Name_Value =
+        StringEncoding.ValueFromString("U16");
+
+    private static readonly PineValue Tag_U32_Name_Value =
+        StringEncoding.ValueFromString("U32");
+
+    private static readonly PineValue Tag_SequenceEncoder_Name_Value =
+        StringEncoding.ValueFromString("SequenceEncoder");
+
+    private static readonly PineValue Tag_BytesEncoder_Name_Value =
+        StringEncoding.ValueFromString("BytesEncoder");
+
 
     private static readonly PineValue Character_ASCII_Newline_Value =
         PineValue.Blob([0, 0, 0, 10]);
