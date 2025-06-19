@@ -159,6 +159,9 @@ public abstract record PineValue : IEquatable<PineValue>
     {
         private readonly int slimHashCode;
 
+        /// <summary>
+        /// Gets a read-only memory region containing the items of the list.
+        /// </summary>
         public ReadOnlyMemory<PineValue> Elements { get; }
 
         /// <summary>
@@ -186,77 +189,97 @@ public abstract record PineValue : IEquatable<PineValue>
 
         internal ListValue(ListValueStruct listValueStruct)
         {
-            Elements = listValueStruct.Elements;
+            Elements = listValueStruct.Items;
 
-            NodesCount = 0;
-            BlobsBytesCount = 0;
+            slimHashCode = listValueStruct.slimHashCode;
+            NodesCount = listValueStruct.nodesCount;
+            BlobsBytesCount = listValueStruct.blobsBytesCount;
+        }
 
-            var elementsSpan = Elements.Span;
+        private static void ComputeDerivations(
+            ReadOnlySpan<PineValue> items,
+            out int slimHashCode,
+            out long nodesCount,
+            out long blobsBytesCount)
+        {
+            var hash = new HashCode();
 
-            for (int i = 0; i < elementsSpan.Length; i++)
+            nodesCount = items.Length;
+            blobsBytesCount = 0;
+
+            int length = items.Length;
+
+            ref PineValue itemsFirst =
+                ref System.Runtime.InteropServices.MemoryMarshal.GetReference(items);
+
+            for (int i = 0; i < length; i++)
             {
-                var element = elementsSpan[i];
+                var item = System.Runtime.CompilerServices.Unsafe.Add(ref itemsFirst, i);
 
-                switch (element)
+                hash.Add(item.GetHashCode());
+
+                switch (item)
                 {
                     case ListValue listItem:
-                        NodesCount += listItem.NodesCount;
-                        BlobsBytesCount += listItem.BlobsBytesCount;
+                        nodesCount += listItem.NodesCount;
+                        blobsBytesCount += listItem.BlobsBytesCount;
                         break;
 
                     case BlobValue blobItem:
-                        BlobsBytesCount += blobItem.Bytes.Length;
+                        blobsBytesCount += blobItem.Bytes.Length;
                         break;
                 }
             }
 
-            NodesCount += Elements.Length;
-
-            slimHashCode = listValueStruct.slimHashCode;
-        }
-
-        private static int ComputeSlimHashCode(ReadOnlySpan<PineValue> elements)
-        {
-            var hash = new HashCode();
-
-            for (var i = 0; i < elements.Length; ++i)
-            {
-                hash.Add(elements[i].GetHashCode());
-            }
-
-            return hash.ToHashCode();
+            slimHashCode = hash.ToHashCode();
         }
 
         /// <inheritdoc/>
-        public virtual bool Equals(ListValue? other)
+        public virtual bool Equals(ListValue? other) =>
+            EqualStatic(this, other);
+
+        private static bool EqualStatic(ListValue self, ListValue? other)
         {
+            if (ReferenceEquals(self, other))
+                return true;
+
             if (other is null)
                 return false;
 
-            if (ReferenceEquals(this, other))
-                return true;
-
-            if (slimHashCode != other.slimHashCode ||
-                Elements.Length != other.Elements.Length ||
-                NodesCount != other.NodesCount)
+            if (self.slimHashCode != other.slimHashCode ||
+                self.NodesCount != other.NodesCount ||
+                self.BlobsBytesCount != other.BlobsBytesCount)
+            {
                 return false;
+            }
 
-            var selfSpan = Elements.Span;
+            var selfSpan = self.Elements.Span;
             var otherSpan = other.Elements.Span;
 
-            for (int i = 0; i < selfSpan.Length; i++)
-            {
-                var selfElement = selfSpan[i];
-                var otherElement = otherSpan[i];
+            if (selfSpan.Length != otherSpan.Length)
+                return false;
 
-                if (selfElement is ListValue selfList && otherElement is ListValue otherList)
+            int length = selfSpan.Length;
+
+            ref PineValue selfItemFirst =
+                ref System.Runtime.InteropServices.MemoryMarshal.GetReference(selfSpan);
+
+            ref PineValue otherItemFirst =
+                ref System.Runtime.InteropServices.MemoryMarshal.GetReference(otherSpan);
+
+            for (int i = 0; i < length; i++)
+            {
+                var selfItem = System.Runtime.CompilerServices.Unsafe.Add(ref selfItemFirst, i);
+                var otherItem = System.Runtime.CompilerServices.Unsafe.Add(ref otherItemFirst, i);
+
+                if (selfItem is ListValue selfItemList && otherItem is ListValue otherItemList)
                 {
-                    if (!selfList.Equals(otherList))
+                    if (!EqualStatic(selfItemList, otherItemList))
                         return false;
                 }
                 else
                 {
-                    if (!selfElement.Equals(otherElement))
+                    if (!selfItem.Equals(otherItem))
                         return false;
                 }
             }
@@ -275,54 +298,71 @@ public abstract record PineValue : IEquatable<PineValue>
         {
             internal readonly int slimHashCode;
 
-            public ReadOnlyMemory<PineValue> Elements { get; }
+            internal ReadOnlyMemory<PineValue> Items { get; }
+
+            internal readonly long nodesCount;
+
+            internal readonly long blobsBytesCount;
 
             /// <summary>
             /// Construct a list value from a sequence of other values.
             /// </summary>
-            public ListValueStruct(ReadOnlyMemory<PineValue> elements)
-                :
-                this(elements, ComputeSlimHashCode(elements.Span))
+            public ListValueStruct(ReadOnlyMemory<PineValue> items)
             {
+                Items = items;
+
+                ComputeDerivations(
+                    items.Span,
+                    out slimHashCode,
+                    out nodesCount,
+                    out blobsBytesCount);
             }
 
+            /// <summary>
+            /// Copy from an existing <see cref="ListValue"/> instance.
+            /// </summary>
             public ListValueStruct(ListValue instance)
-                :
-                this(instance.Elements, instance.slimHashCode)
             {
-            }
+                Items = instance.Elements;
 
-            private ListValueStruct(
-                ReadOnlyMemory<PineValue> elements,
-                int slimHashCode)
-            {
-                Elements = elements;
-
-                this.slimHashCode = slimHashCode;
+                slimHashCode = instance.slimHashCode;
+                nodesCount = instance.NodesCount;
+                blobsBytesCount = instance.BlobsBytesCount;
             }
 
             /// <inheritdoc/>
             public bool Equals(ListValueStruct other)
             {
-                if (slimHashCode != other.slimHashCode || Elements.Length != other.Elements.Length)
+                if (slimHashCode != other.slimHashCode)
                     return false;
 
-                var selfSpan = Elements.Span;
-                var otherSpan = other.Elements.Span;
+                var selfSpan = Items.Span;
+                var otherSpan = other.Items.Span;
 
-                for (int i = 0; i < selfSpan.Length; i++)
+                if (selfSpan.Length != otherSpan.Length)
+                    return false;
+
+                var length = selfSpan.Length;
+
+                ref PineValue selfItemFirst =
+                    ref System.Runtime.InteropServices.MemoryMarshal.GetReference(selfSpan);
+
+                ref PineValue otherItemFirst =
+                    ref System.Runtime.InteropServices.MemoryMarshal.GetReference(otherSpan);
+
+                for (int i = 0; i < length; i++)
                 {
-                    var selfElement = selfSpan[i];
-                    var otherElement = otherSpan[i];
+                    var selfItem = System.Runtime.CompilerServices.Unsafe.Add(ref selfItemFirst, i);
+                    var otherItem = System.Runtime.CompilerServices.Unsafe.Add(ref otherItemFirst, i);
 
-                    if (selfElement is ListValue selfList && otherElement is ListValue otherList)
+                    if (selfItem is ListValue selfItemList && otherItem is ListValue otherItemList)
                     {
-                        if (!selfList.Equals(otherList))
+                        if (!selfItemList.Equals(otherItemList))
                             return false;
                     }
                     else
                     {
-                        if (!selfElement.Equals(otherElement))
+                        if (!selfItem.Equals(otherItem))
                             return false;
                     }
                 }
@@ -342,8 +382,17 @@ public abstract record PineValue : IEquatable<PineValue>
     {
         private readonly int slimHashCode;
 
+        /// <summary>
+        /// Gets the underlying data as a read-only sequence of bytes.
+        /// </summary>
         public ReadOnlyMemory<byte> Bytes { get; }
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="BlobValue"/> class with the specified byte data.
+        /// </summary>
+        /// <remarks>The provided byte data is used to compute a hash code for the instance, which can be
+        /// used for efficient comparisons or storage in hash-based collections.</remarks>
+        /// <param name="bytes">The read-only memory containing the byte data to initialize the blob value.</param>
         public BlobValue(ReadOnlyMemory<byte> bytes)
         {
             Bytes = bytes;
@@ -364,9 +413,16 @@ public abstract record PineValue : IEquatable<PineValue>
             if (ReferenceEquals(this, other))
                 return true;
 
-            return
-                slimHashCode == other.slimHashCode &&
-                Bytes.Span.SequenceEqual(other.Bytes.Span);
+            if (slimHashCode != other.slimHashCode)
+                return false;
+
+            var selfSpan = Bytes.Span;
+            var otherSpan = other.Bytes.Span;
+
+            if (selfSpan.Length != otherSpan.Length)
+                return false;
+
+            return MemoryExtensions.SequenceEqual(selfSpan, otherSpan);
         }
 
         /// <inheritdoc/>
