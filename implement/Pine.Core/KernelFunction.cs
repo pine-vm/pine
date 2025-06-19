@@ -912,7 +912,7 @@ public static class KernelFunction
         var abs = new BigInteger(blobValue.Bytes.Span[(leadingSpaces + 1)..], isUnsigned: true, isBigEndian: true);
 
         return
-            blobValue.Bytes.Span[0] switch
+            blobValue.Bytes.Span[leadingSpaces] switch
             {
                 4 => abs,
                 2 => -abs,
