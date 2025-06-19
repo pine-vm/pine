@@ -813,15 +813,28 @@ public class PineIRCompiler
                     context,
                     prior);
 
-            var afterSkipCount =
-                CompileExpressionTransitive(
-                    listExpr.items[0],
-                    context,
-                    afterSource);
+            if (listExpr.items[0] is Expression.Literal literalExpr)
+            {
+                if (IntegerEncoding.ParseSignedIntegerRelaxed(literalExpr.Value).IsOkOrNullable() is { } skipCount)
+                {
+                    return
+                        afterSource
+                        .AppendInstruction(
+                            StackInstruction.Skip_Const((int)skipCount));
+                }
+            }
 
-            return
-                afterSkipCount
-                .AppendInstruction(StackInstruction.Skip_Binary);
+            {
+                var afterSkipCount =
+                    CompileExpressionTransitive(
+                        listExpr.items[0],
+                        context,
+                        afterSource);
+
+                return
+                    afterSkipCount
+                    .AppendInstruction(StackInstruction.Skip_Binary);
+            }
         }
 
         return
@@ -900,6 +913,17 @@ public class PineIRCompiler
                         listExpr.items[1],
                         context,
                         prior);
+
+                if (takeCountValueExpr is Expression.Literal takeCountLiteralExpr)
+                {
+                    if (KernelFunction.SignedIntegerFromValueRelaxed(takeCountLiteralExpr.Value) is { } takeCount)
+                    {
+                        return
+                            afterSource
+                            .AppendInstruction(
+                                StackInstruction.Take_Const((int)takeCount));
+                    }
+                }
 
                 var afterTakeCount =
                     CompileExpressionTransitive(

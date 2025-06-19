@@ -241,7 +241,7 @@ public class PineIRCompilerTests
 
                 StackInstruction.Length_Equal_Const(13),
 
-                StackInstruction.Jump_If_True(17),
+                StackInstruction.Jump_If_True(16),
 
                 StackInstruction.Local_Get(0),
 
@@ -261,10 +261,7 @@ public class PineIRCompilerTests
 
                 StackInstruction.Local_Get(2),
 
-                StackInstruction.Push_Literal(
-                    IntegerEncoding.EncodeSignedInteger(1)),
-
-                StackInstruction.Skip_Binary,
+                StackInstruction.Skip_Const(1),
 
                 StackInstruction.Build_List(2),
 
@@ -274,7 +271,7 @@ public class PineIRCompilerTests
 
                 StackInstruction.Pop,
 
-                StackInstruction.Jump_Unconditional(-22),
+                StackInstruction.Jump_Unconditional(-21),
 
                 StackInstruction.Jump_Unconditional(3),
 

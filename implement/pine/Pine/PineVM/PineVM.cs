@@ -1764,6 +1764,22 @@ public class PineVM : IPineVM
                             continue;
                         }
 
+                    case StackInstructionKind.Skip_Const:
+                        {
+                            var skipCount =
+                                currentInstruction.SkipCount
+                                ??
+                                throw new Exception("Invalid operation form: Missing skip count");
+
+                            var prevValue = currentFrame.PopTopmostFromStack();
+
+                            PineValue resultValue = KernelFunction.skip(skipCount, prevValue);
+
+                            currentFrame.PushInstructionResult(resultValue);
+
+                            continue;
+                        }
+
                     case StackInstructionKind.Take_Binary:
                         {
                             var takeCountValue = currentFrame.PopTopmostFromStack();
@@ -1776,6 +1792,22 @@ public class PineVM : IPineVM
                             {
                                 resultValue = KernelFunction.take(takeCount, prevValue);
                             }
+
+                            currentFrame.PushInstructionResult(resultValue);
+
+                            continue;
+                        }
+
+                    case StackInstructionKind.Take_Const:
+                        {
+                            var takeCount =
+                                currentInstruction.TakeCount
+                                ??
+                                throw new Exception("Invalid operation form: Missing take count");
+
+                            var prevValue = currentFrame.PopTopmostFromStack();
+
+                            PineValue resultValue = resultValue = KernelFunction.take(takeCount, prevValue);
 
                             currentFrame.PushInstructionResult(resultValue);
 

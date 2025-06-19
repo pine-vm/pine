@@ -89,9 +89,13 @@ public enum StackInstructionKind
 
     Skip_Binary,
 
+    Skip_Const,
+
     Take_Generic,
 
     Take_Binary,
+
+    Take_Const,
 
     /// <summary>
     /// From the second value on the stack, get the element at the index of the top value on the stack.
@@ -351,6 +355,9 @@ public record StackInstruction(
     public static readonly StackInstruction Skip_Binary =
         new(StackInstructionKind.Skip_Binary);
 
+    public static StackInstruction Skip_Const(int skipCount) =>
+        new(StackInstructionKind.Skip_Const, SkipCount: skipCount);
+
     public static readonly StackInstruction Bit_Not =
         new(StackInstructionKind.Bit_Not);
 
@@ -376,6 +383,9 @@ public record StackInstruction(
 
     public static readonly StackInstruction Take_Binary =
         new(StackInstructionKind.Take_Binary);
+
+    public static StackInstruction Take_Const(int takeCount) =>
+        new(StackInstructionKind.Take_Const, TakeCount: takeCount);
 
     public static readonly StackInstruction Concat_Binary =
         new(StackInstructionKind.Concat_Binary);
@@ -613,6 +623,15 @@ public record StackInstruction(
                     PushCount: 1,
                     []),
 
+            StackInstructionKind.Skip_Const =>
+                new InstructionDetails(
+                    PopCount: 1,
+                    PushCount: 1,
+                    [instruction.SkipCount?.ToString()
+                    ??
+                    throw new Exception(
+                        "Missing SkipCount for SkipConst instruction")]),
+
             StackInstructionKind.Take_Generic =>
                 new InstructionDetails(
                     PopCount: 1,
@@ -624,6 +643,15 @@ public record StackInstruction(
                     PopCount: 2,
                     PushCount: 1,
                     []),
+
+            StackInstructionKind.Take_Const =>
+                new InstructionDetails(
+                    PopCount: 1,
+                    PushCount: 1,
+                    [instruction.TakeCount?.ToString()
+                    ??
+                    throw new Exception(
+                        "Missing TakeCount for TakeConst instruction")]),
 
             StackInstructionKind.Skip_Head_Binary =>
                 new InstructionDetails(
