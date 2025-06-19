@@ -894,9 +894,11 @@ public static class KernelFunction
 
         int leadingSpaces = 0;
 
-        for (var i = 0; i < blobValue.Bytes.Length; ++i)
+        var blobBytes = blobValue.Bytes;
+
+        for (var i = 0; i < blobBytes.Length; ++i)
         {
-            if (blobValue.Bytes.Span[i] is 0)
+            if (blobBytes.Span[i] is 0)
             {
                 ++leadingSpaces;
             }
@@ -906,13 +908,27 @@ public static class KernelFunction
             }
         }
 
-        if (blobValue.Bytes.Length - leadingSpaces is < 2)
+        var firstValueByteIndex = leadingSpaces + 1;
+
+        var valueBytesCount =
+            blobBytes.Length - firstValueByteIndex;
+
+        if (valueBytesCount is < 1)
             return null;
 
-        var abs = new BigInteger(blobValue.Bytes.Span[(leadingSpaces + 1)..], isUnsigned: true, isBigEndian: true);
+        var abs =
+            valueBytesCount is 1
+            ?
+            (BigInteger)blobBytes.Span[firstValueByteIndex]
+            :
+            valueBytesCount is 2
+            ?
+            new BigInteger(blobBytes.Span[firstValueByteIndex] << 8 | blobBytes.Span[firstValueByteIndex + 1])
+            :
+            new BigInteger(blobBytes.Span[firstValueByteIndex..], isUnsigned: true, isBigEndian: true);
 
         return
-            blobValue.Bytes.Span[leadingSpaces] switch
+            blobBytes.Span[leadingSpaces] switch
             {
                 4 => abs,
                 2 => -abs,
