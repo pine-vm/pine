@@ -1399,28 +1399,62 @@ compileElmSyntaxLetBlock stackBefore letBlock =
             (\(Elm.Syntax.Node.Node _ letDeclaration) ->
                 case letDeclaration of
                     Elm.Syntax.Expression.LetFunction letFunction ->
-                        case letFunction.signature of
-                            Nothing ->
-                                Ok []
+                        let
+                            (Elm.Syntax.Node.Node _ letFunctionDecl) =
+                                letFunction.declaration
 
-                            Just (Elm.Syntax.Node.Node _ signature) ->
-                                let
-                                    (Elm.Syntax.Node.Node _ letFunctionDecl) =
-                                        letFunction.declaration
+                            (Elm.Syntax.Node.Node _ declName) =
+                                letFunctionDecl.name
 
-                                    (Elm.Syntax.Node.Node _ declName) =
-                                        letFunctionDecl.name
+                            maybeTypeAnnotation : Maybe Elm.Syntax.TypeAnnotation.TypeAnnotation
+                            maybeTypeAnnotation =
+                                case letFunction.signature of
+                                    Nothing ->
+                                        let
+                                            (Elm.Syntax.Node.Node _ expression) =
+                                                letFunctionDecl.expression
+                                        in
+                                        if exprProvenToBeInt stackBefore.knownTypes expression then
+                                            Just
+                                                (Elm.Syntax.TypeAnnotation.Typed
+                                                    (Elm.Syntax.Node.Node
+                                                        { start = { row = 0, column = 0 }
+                                                        , end = { row = 0, column = 0 }
+                                                        }
+                                                        ( [], "Int" )
+                                                    )
+                                                    []
+                                                )
 
-                                    (Elm.Syntax.Node.Node _ typeAnnotation) =
-                                        signature.typeAnnotation
-                                in
-                                Ok
-                                    [ ( declName
-                                      , ( Nothing
-                                        , Just typeAnnotation
-                                        )
-                                      )
-                                    ]
+                                        else if exprProvenToBeString stackBefore.knownTypes expression then
+                                            Just
+                                                (Elm.Syntax.TypeAnnotation.Typed
+                                                    (Elm.Syntax.Node.Node
+                                                        { start = { row = 0, column = 0 }
+                                                        , end = { row = 0, column = 0 }
+                                                        }
+                                                        ( [], "String" )
+                                                    )
+                                                    []
+                                                )
+
+                                        else
+                                            Nothing
+
+                                    Just (Elm.Syntax.Node.Node _ signature) ->
+                                        let
+                                            (Elm.Syntax.Node.Node _ typeAnnotation) =
+                                                signature.typeAnnotation
+                                        in
+                                        Just typeAnnotation
+                        in
+                        Ok
+                            [ ( declName
+                              , ( Nothing
+                                , maybeTypeAnnotation
+                                )
+                              )
+                            ]
 
                     Elm.Syntax.Expression.LetDestructuring (Elm.Syntax.Node.Node _ pattern) (Elm.Syntax.Node.Node _ destructuredExpressionElm) ->
                         case compileElmSyntaxExpression stackBefore destructuredExpressionElm of
@@ -3238,16 +3272,17 @@ typeCannotContainSetOrDict knownTypes typeAnnotation =
 
 functionCannotReturnSetOrDict : ( List String, String ) -> Bool
 functionCannotReturnSetOrDict ( moduleName, localName ) =
-    if functionProvenToReturnInt ( moduleName, localName ) then
-        True
+    case functionProvenToReturnInt ( moduleName, localName ) of
+        Just _ ->
+            True
 
-    else
-        case ( moduleName, localName ) of
-            ( [ "Basics" ], "compare" ) ->
-                True
+        Nothing ->
+            case ( moduleName, localName ) of
+                ( [ "Basics" ], "compare" ) ->
+                    True
 
-            _ ->
-                False
+                _ ->
+                    False
 
 
 exprProvenToBeInt :
@@ -3270,9 +3305,13 @@ exprProvenToBeInt knownTypes expr =
                 _ ->
                     False
 
-        Elm.Syntax.Expression.Application ((Elm.Syntax.Node.Node _ (Elm.Syntax.Expression.FunctionOrValue moduleName localName)) :: _) ->
-            functionProvenToReturnInt
-                ( moduleName, localName )
+        Elm.Syntax.Expression.Application ((Elm.Syntax.Node.Node _ (Elm.Syntax.Expression.FunctionOrValue moduleName localName)) :: arguments) ->
+            case functionProvenToReturnInt ( moduleName, localName ) of
+                Just paramCount ->
+                    List.length arguments == paramCount
+
+                Nothing ->
+                    False
 
         Elm.Syntax.Expression.OperatorApplication innerOp _ (Elm.Syntax.Node.Node _ innerLeft) (Elm.Syntax.Node.Node _ innerRight) ->
             case innerOp of
@@ -3392,21 +3431,66 @@ exprProvenToBeChar knownTypes expr =
             False
 
 
-functionProvenToReturnInt : ( List String, String ) -> Bool
+functionProvenToReturnInt : ( List String, String ) -> Maybe Int
 functionProvenToReturnInt ( moduleName, localName ) =
     case ( moduleName, localName ) of
         ( [ "List" ], "length" ) ->
-            True
+            Just 1
+
+        ( [ "Array" ], "length" ) ->
+            Just 1
+
+        ( [ "Basics" ], "floor" ) ->
+            Just 1
+
+        ( [ "Basics" ], "ceiling" ) ->
+            Just 1
+
+        ( [ "Basics" ], "modBy" ) ->
+            Just 2
+
+        ( [ "Basics" ], "remainderBy" ) ->
+            Just 2
 
         ( [ "String" ], "length" ) ->
-            True
+            Just 1
 
         ( [ "Pine_kernel" ], "length" ) ->
             -- Possibly another stage has already mapped from 'List.length' to 'Pine_kernel.length'.
-            True
+            Just 1
+
+        ( [ "Dict" ], "size" ) ->
+            Just 1
+
+        ( [ "Set" ], "size" ) ->
+            Just 1
+
+        ( [ "Char" ], "toCode" ) ->
+            Just 1
+
+        ( [ "Bitwise" ], "and" ) ->
+            Just 2
+
+        ( [ "Bitwise" ], "or" ) ->
+            Just 2
+
+        ( [ "Bitwise" ], "xor" ) ->
+            Just 2
+
+        ( [ "Bitwise" ], "complement" ) ->
+            Just 1
+
+        ( [ "Bitwise" ], "shiftLeftBy" ) ->
+            Just 2
+
+        ( [ "Bitwise" ], "shiftRightBy" ) ->
+            Just 2
+
+        ( [ "Bitwise" ], "shiftRightZfBy" ) ->
+            Just 2
 
         _ ->
-            False
+            Nothing
 
 
 funcAppProvenToReturnString : ( ( List String, String ), Int ) -> Bool
