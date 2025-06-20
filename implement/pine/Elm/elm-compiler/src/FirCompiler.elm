@@ -2385,6 +2385,106 @@ searchForExpressionReduction expression =
                         _ ->
                             attemptReduceViaEval ()
 
+                "int_add" ->
+                    case rootArgument of
+                        Pine.ListExpression argumentsBefore ->
+                            let
+                                argumentsFlattened : List Pine.Expression
+                                argumentsFlattened =
+                                    List.concatMap
+                                        (\operandExpr ->
+                                            let
+                                                operandReduced : Pine.Expression
+                                                operandReduced =
+                                                    case searchForExpressionReduction operandExpr of
+                                                        Just operandReducedExpr ->
+                                                            operandReducedExpr
+
+                                                        Nothing ->
+                                                            operandExpr
+                                            in
+                                            case operandReduced of
+                                                Pine.KernelApplicationExpression "int_add" (Pine.ListExpression argumentsInner) ->
+                                                    argumentsInner
+
+                                                _ ->
+                                                    [ operandExpr ]
+                                        )
+                                        argumentsBefore
+
+                                beforeEval : Pine.Expression
+                                beforeEval =
+                                    Pine.KernelApplicationExpression
+                                        "int_add"
+                                        (Pine.ListExpression argumentsFlattened)
+                            in
+                            if beforeEval == expression then
+                                attemptReduceViaEval ()
+
+                            else if pineExpressionIsIndependent beforeEval then
+                                case Pine.evaluateExpression Pine.emptyEvalEnvironment beforeEval of
+                                    Err _ ->
+                                        attemptReduceViaEval ()
+
+                                    Ok expressionValue ->
+                                        Just (Pine.LiteralExpression expressionValue)
+
+                            else
+                                Just beforeEval
+
+                        _ ->
+                            attemptReduceViaEval ()
+
+                "int_mul" ->
+                    case rootArgument of
+                        Pine.ListExpression argumentsBefore ->
+                            let
+                                argumentsFlattened : List Pine.Expression
+                                argumentsFlattened =
+                                    List.concatMap
+                                        (\operandExpr ->
+                                            let
+                                                operandReduced : Pine.Expression
+                                                operandReduced =
+                                                    case searchForExpressionReduction operandExpr of
+                                                        Just operandReducedExpr ->
+                                                            operandReducedExpr
+
+                                                        Nothing ->
+                                                            operandExpr
+                                            in
+                                            case operandReduced of
+                                                Pine.KernelApplicationExpression "int_mul" (Pine.ListExpression argumentsInner) ->
+                                                    argumentsInner
+
+                                                _ ->
+                                                    [ operandExpr ]
+                                        )
+                                        argumentsBefore
+
+                                beforeEval : Pine.Expression
+                                beforeEval =
+                                    Pine.KernelApplicationExpression
+                                        "int_mul"
+                                        (Pine.ListExpression argumentsFlattened)
+                            in
+                            if beforeEval == expression then
+                                attemptReduceViaEval ()
+
+                            else if pineExpressionIsIndependent beforeEval then
+                                case Pine.evaluateExpression Pine.emptyEvalEnvironment beforeEval of
+                                    Err _ ->
+                                        attemptReduceViaEval ()
+
+                                    Ok expressionValue ->
+                                        Just (Pine.LiteralExpression expressionValue)
+
+                            else
+                                Just beforeEval
+
+                        _ ->
+                            attemptReduceViaEval ()
+
                 _ ->
                     attemptReduceViaEval ()
 
