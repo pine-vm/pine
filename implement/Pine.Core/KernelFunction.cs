@@ -961,11 +961,14 @@ public static class KernelFunction
                 blobBytes[2]);
 
         if (blobBytes.Length is 4)
+        {
             return new BigInteger(
-                blobBytes[0] << 24 |
+                (uint)
+                (blobBytes[0] << 24 |
                 blobBytes[1] << 16 |
                 blobBytes[2] << 8 |
-                blobBytes[3]);
+                blobBytes[3]));
+        }
 
         return
             new BigInteger(blobBytes, isUnsigned: true, isBigEndian: true);
