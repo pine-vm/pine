@@ -1272,48 +1272,22 @@ sortWithMerge left right compareFunc =
     , """
 module Char exposing (..)
 
+import Basics exposing ((&&), (<=), (>=), (||), Bool, Int)
 
-import Basics exposing (Bool, Int, (&&), (||), (>=), (<=))
 
-
-type alias Char = Int
+type alias Char =
+    Int
 
 
 toCode : Char -> Int
 toCode char =
-    -- Add the sign prefix byte
-    if Pine_kernel.equal [ Pine_kernel.length char, 4 ] then
-        if
-            Pine_kernel.equal
-                [ Pine_kernel.skip [ 2, 0x01000000 ]
-                , Pine_kernel.take [ 3, char ]
-                ]
-        then
-            Pine_kernel.concat
-                [ Pine_kernel.take [ 1, 0 ]
-                , Pine_kernel.skip [ 3, char ]
-                ]
+    Pine_kernel.int_add
+        [ -- Add the sign prefix byte
+          Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], char ]
 
-        else if
-            Pine_kernel.equal
-                [ Pine_kernel.skip [ 2, 0x00010000 ]
-                , Pine_kernel.take [ 2, char ]
-                ]
-        then
-            Pine_kernel.concat
-                [ Pine_kernel.take [ 1, 0 ]
-                , Pine_kernel.skip [ 2, char ]
-                ]
-
-        else
-            -- Assume at most three bytes used
-            Pine_kernel.concat
-                [ Pine_kernel.take [ 1, 0 ]
-                , Pine_kernel.skip [ 1, char ]
-                ]
-
-    else
-        Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], char ]
+        -- Use kernel function 'add' to trim leading zeroes
+        , 0
+        ]
 
 
 fromCode : Int -> Char
@@ -1349,8 +1323,9 @@ fromCode code =
 isDigit : Char -> Bool
 isDigit char =
     let
+        code : Int
         code =
-            toCode char
+            Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], char ]
     in
     Pine_kernel.int_is_sorted_asc [ 0x30, code, 0x39 ]
 
@@ -1374,8 +1349,9 @@ isDigit char =
 isOctDigit : Char -> Bool
 isOctDigit char =
     let
+        code : Int
         code =
-            toCode char
+            Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], char ]
     in
     Pine_kernel.int_is_sorted_asc [ 0x30, code, 0x37 ]
 
@@ -1385,19 +1361,21 @@ isOctDigit char =
 isHexDigit : Char -> Bool
 isHexDigit char =
     let
+        code : Int
         code =
-            toCode char
+            Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], char ]
     in
-    (Pine_kernel.int_is_sorted_asc [ 0x30, code, 0x39 ])
-        || (Pine_kernel.int_is_sorted_asc [ 0x41, code, 0x46 ])
-        || (Pine_kernel.int_is_sorted_asc [ 0x61, code, 0x66 ])
+    Pine_kernel.int_is_sorted_asc [ 0x30, code, 0x39 ]
+        || Pine_kernel.int_is_sorted_asc [ 0x41, code, 0x46 ]
+        || Pine_kernel.int_is_sorted_asc [ 0x61, code, 0x66 ]
 
 
 isUpper : Char -> Bool
 isUpper char =
     let
+        code : Int
         code =
-            toCode char
+            Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], char ]
     in
     Pine_kernel.int_is_sorted_asc [ 0x41, code, 0x5A ]
 
@@ -1405,8 +1383,9 @@ isUpper char =
 isLower : Char -> Bool
 isLower char =
     let
+        code : Int
         code =
-            toCode char
+            Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], char ]
     in
     Pine_kernel.int_is_sorted_asc [ 0x61, code, 0x7A ]
 
@@ -1414,11 +1393,13 @@ isLower char =
 isAlpha : Char -> Bool
 isAlpha char =
     let
+        code : Int
         code =
-            toCode char
+            Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], char ]
     in
     if Pine_kernel.int_is_sorted_asc [ 0x41, code, 0x5A ] then
         True
+
     else
         Pine_kernel.int_is_sorted_asc [ 0x61, code, 0x7A ]
 

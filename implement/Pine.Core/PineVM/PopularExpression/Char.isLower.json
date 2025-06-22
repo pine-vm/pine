@@ -6,49 +6,38 @@
         [
           { "Literal": [ 97 ] },
           {
-            "ParseAndEval": [
-              {
-                "KernelApplication": [
-                  "head",
-                  {
-                    "KernelApplication": [
-                      "head",
-                      { "Environment": [] }
-                    ]
-                  }
-                ]
-              },
+            "KernelApplication": [
+              "concat",
               {
                 "List": [
                   [
-                    { "List": [ [] ] },
                     {
-                      "List": [
-                        [
-                          {
-                            "KernelApplication": [
-                              "head",
-                              {
-                                "KernelApplication": [
-                                  "head",
-                                  {
-                                    "KernelApplication": [
-                                      "skip",
-                                      {
-                                        "List": [
-                                          [
-                                            { "Literal": [ 1 ] },
-                                            { "Environment": [] }
-                                          ]
-                                        ]
-                                      }
+                      "KernelApplication": [
+                        "take",
+                        { "Literal": [ [ 1, 0 ] ] }
+                      ]
+                    },
+                    {
+                      "KernelApplication": [
+                        "head",
+                        {
+                          "KernelApplication": [
+                            "head",
+                            {
+                              "KernelApplication": [
+                                "skip",
+                                {
+                                  "List": [
+                                    [
+                                      { "Literal": [ 1 ] },
+                                      { "Environment": [] }
                                     ]
-                                  }
-                                ]
-                              }
-                            ]
-                          }
-                        ]
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
                       ]
                     }
                   ]

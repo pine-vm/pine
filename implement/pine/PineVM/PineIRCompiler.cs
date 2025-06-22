@@ -1228,8 +1228,13 @@ public class PineIRCompiler
                             StackInstruction.Int_Sub_Binary);
                 }
 
-                if (constItemsSum != 0)
+                if (constItemsSum != 0 || varItemsAdd.Count + varItemsSubtract.Count < 2)
                 {
+                    /*
+                     * Using the 'add' function returns canonically encoded integer,
+                     * so adding '0' does not always return the same value.
+                     * */
+
                     addOps =
                         addOps
                         .AppendInstruction(
@@ -1361,7 +1366,7 @@ public class PineIRCompiler
                         StackInstruction.Int_Mul_Binary);
             }
 
-            if (constItemsProduct != 1)
+            if (constItemsProduct != 1 || varItems.Count < 2)
             {
                 mulOps =
                     mulOps
