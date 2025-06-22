@@ -269,7 +269,7 @@ public class PineVMTests
 
                         StackInstruction.Return,
                     ])
-            },
+},
 
             new
             {
@@ -736,7 +736,7 @@ public class PineVMTests
                         falseBranch:
                         new Expression.ParseAndEval(
                             encoded: Expression.EnvironmentInstance,
-                            environment:Expression.EnvironmentInstance),
+                            environment: Expression.EnvironmentInstance),
                         trueBranch:
                         Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(21))),
                     trueBranch:
@@ -1984,6 +1984,341 @@ public class PineVMTests
                         StackInstruction.Return,
                     ])
             },
+
+            new
+            {
+                expression =
+                (Expression)
+                new Expression.KernelApplication(
+                    function: nameof(KernelFunction.int_add),
+                    Expression.ListInstance(
+                        [
+                            new Expression.KernelApplication
+                            (
+                                function: nameof(KernelFunction.concat),
+                                input:
+                                Expression.ListInstance(
+                                    [
+                                        new Expression.KernelApplication
+                                        (
+                                            function: nameof(KernelFunction.take),
+                                            input:
+                                            Expression.ListInstance(
+                                                [
+                                                    Expression.LiteralInstance(
+                                                        IntegerEncoding.EncodeSignedInteger(1)),
+
+                                                    Expression.LiteralInstance(
+                                                        IntegerEncoding.EncodeSignedInteger(0)),
+                                                ])
+                                        ),
+
+                                        new Expression.KernelApplication
+                                        (
+                                            function: nameof(KernelFunction.head),
+                                            input: Expression.EnvironmentInstance
+                                        ),
+                                    ])
+                            ),
+
+                            Expression.LiteralInstance(
+                                IntegerEncoding.EncodeSignedInteger(79)),
+                        ])),
+
+                expected =
+                new PineVM.StackFrameInstructions(
+                    [
+                        StackInstruction.Push_Environment,
+
+                        StackInstruction.Head_Generic,
+
+                        StackInstruction.Int_Unsigned_Add_Const(79),
+
+                        StackInstruction.Return,
+                    ])
+            },
+
+            new
+            {
+                expression =
+                (Expression)
+                new Expression.KernelApplication(
+                    function: nameof(KernelFunction.int_is_sorted_asc),
+                    Expression.ListInstance(
+                        [
+                            new Expression.KernelApplication
+                            (
+                                function: nameof(KernelFunction.concat),
+                                input:
+                                Expression.ListInstance(
+                                    [
+                                        new Expression.KernelApplication
+                                        (
+                                            function: nameof(KernelFunction.take),
+                                            input:
+                                            Expression.ListInstance(
+                                                [
+                                                    Expression.LiteralInstance(
+                                                        IntegerEncoding.EncodeSignedInteger(1)),
+
+                                                    Expression.LiteralInstance(
+                                                        IntegerEncoding.EncodeSignedInteger(0)),
+                                                ])
+                                        ),
+
+                                        new Expression.KernelApplication
+                                        (
+                                            function: nameof(KernelFunction.head),
+                                            input: Expression.EnvironmentInstance
+                                        ),
+                                    ])
+                            ),
+
+                            Expression.LiteralInstance(
+                                IntegerEncoding.EncodeSignedInteger(79)),
+                        ])),
+
+                expected =
+                new PineVM.StackFrameInstructions(
+                    [
+                        StackInstruction.Push_Environment,
+
+                        StackInstruction.Head_Generic,
+
+                        StackInstruction.Int_Unsigned_Less_Than_Or_Equal_Const(79),
+
+                        StackInstruction.Return,
+                    ])
+            },
+
+            new
+            {
+                expression =
+                (Expression)
+                new Expression.KernelApplication(
+                    function: nameof(KernelFunction.int_is_sorted_asc),
+                    Expression.ListInstance(
+                        [
+                            Expression.LiteralInstance(
+                                IntegerEncoding.EncodeSignedInteger(83)),
+
+                            new Expression.KernelApplication
+                            (
+                                function: nameof(KernelFunction.concat),
+                                input:
+                                Expression.ListInstance(
+                                    [
+                                        new Expression.KernelApplication
+                                        (
+                                            function: nameof(KernelFunction.take),
+                                            input:
+                                            Expression.ListInstance(
+                                                [
+                                                    Expression.LiteralInstance(
+                                                        IntegerEncoding.EncodeSignedInteger(1)),
+
+                                                    Expression.LiteralInstance(
+                                                        IntegerEncoding.EncodeSignedInteger(0)),
+                                                ])
+                                        ),
+
+                                        new Expression.KernelApplication
+                                        (
+                                            function: nameof(KernelFunction.head),
+                                            input: Expression.EnvironmentInstance
+                                        ),
+                                    ])
+                            ),
+                        ])),
+
+                expected =
+                new PineVM.StackFrameInstructions(
+                    [
+                        StackInstruction.Push_Environment,
+
+                        StackInstruction.Head_Generic,
+
+                        StackInstruction.Int_Unsigned_Greater_Than_Or_Equal_Const(83),
+
+                        StackInstruction.Return,
+                    ])
+            },
+
+            new
+            {
+                expression =
+                (Expression)
+                new Expression.KernelApplication(
+                    function: nameof(KernelFunction.int_is_sorted_asc),
+                    Expression.ListInstance(
+                        [
+                            Expression.LiteralInstance(
+                                IntegerEncoding.EncodeSignedInteger(83)),
+
+                            new Expression.KernelApplication
+                            (
+                                function: nameof(KernelFunction.concat),
+                                input:
+                                Expression.ListInstance(
+                                    [
+                                        new Expression.KernelApplication
+                                        (
+                                            function: nameof(KernelFunction.take),
+                                            input:
+                                            Expression.ListInstance(
+                                                [
+                                                    Expression.LiteralInstance(
+                                                        IntegerEncoding.EncodeSignedInteger(1)),
+
+                                                    Expression.LiteralInstance(
+                                                        IntegerEncoding.EncodeSignedInteger(0)),
+                                                ])
+                                        ),
+
+                                        new Expression.KernelApplication
+                                        (
+                                            function: nameof(KernelFunction.head),
+                                            input: Expression.EnvironmentInstance
+                                        ),
+                                    ])
+                            ),
+
+                            Expression.LiteralInstance(
+                                IntegerEncoding.EncodeSignedInteger(107)),
+                        ])),
+
+                expected =
+                new PineVM.StackFrameInstructions(
+                    [
+                        StackInstruction.Push_Environment,
+
+                        StackInstruction.Head_Generic,
+
+                        StackInstruction.Local_Set(0),
+
+                        StackInstruction.Int_Unsigned_Greater_Than_Or_Equal_Const(83),
+
+                        StackInstruction.Local_Get(0),
+
+                        StackInstruction.Int_Unsigned_Less_Than_Or_Equal_Const(107),
+
+                        StackInstruction.Logical_And_Binary,
+
+                        StackInstruction.Return,
+                    ])
+            },
+
+            new
+            {
+                expression =
+                (Expression)
+                Expression.ConditionalInstance(
+                    condition:
+                    new Expression.KernelApplication
+                    (
+                        function: nameof(KernelFunction.int_is_sorted_asc),
+                        Expression.ListInstance(
+                            [
+                                Expression.LiteralInstance(
+                                    IntegerEncoding.EncodeSignedInteger(83)),
+
+                                new Expression.KernelApplication
+                                (
+                                    function: nameof(KernelFunction.concat),
+                                    input:
+                                    Expression.ListInstance(
+                                        [
+                                            new Expression.KernelApplication
+                                            (
+                                                function: nameof(KernelFunction.take),
+                                                input:
+                                                Expression.ListInstance(
+                                                    [
+                                                        Expression.LiteralInstance(
+                                                            IntegerEncoding.EncodeSignedInteger(1)),
+
+                                                        Expression.LiteralInstance(
+                                                            IntegerEncoding.EncodeSignedInteger(0)),
+                                                    ])
+                                            ),
+
+                                            new Expression.KernelApplication
+                                            (
+                                                function: nameof(KernelFunction.head),
+                                                input: Expression.EnvironmentInstance
+                                            ),
+                                        ])
+                                ),
+                        ])),
+
+                    falseBranch:
+                    Expression.LiteralInstance(
+                        IntegerEncoding.EncodeSignedInteger(107)),
+
+                    trueBranch:
+                    new Expression.KernelApplication(
+                    function: nameof(KernelFunction.int_add),
+                    Expression.ListInstance(
+                        [
+                            new Expression.KernelApplication
+                            (
+                                function: nameof(KernelFunction.concat),
+                                input:
+                                Expression.ListInstance(
+                                    [
+                                        new Expression.KernelApplication
+                                        (
+                                            function: nameof(KernelFunction.take),
+                                            input:
+                                            Expression.ListInstance(
+                                                [
+                                                    Expression.LiteralInstance(
+                                                        IntegerEncoding.EncodeSignedInteger(1)),
+
+                                                    Expression.LiteralInstance(
+                                                        IntegerEncoding.EncodeSignedInteger(0)),
+                                                ])
+                                        ),
+
+                                        new Expression.KernelApplication
+                                        (
+                                            function: nameof(KernelFunction.head),
+                                            input: Expression.EnvironmentInstance
+                                        ),
+                                    ])
+                            ),
+
+                            Expression.LiteralInstance(
+                                IntegerEncoding.EncodeSignedInteger(79)),
+                        ]))
+                    ),
+
+                expected =
+                new PineVM.StackFrameInstructions(
+                    [
+                        StackInstruction.Push_Environment,
+
+                        StackInstruction.Head_Generic,
+
+                        StackInstruction.Int_Unsigned_Greater_Than_Or_Equal_Const(83),
+
+                        StackInstruction.Jump_If_True(2),
+
+                        StackInstruction.Push_Literal(
+                            IntegerEncoding.EncodeSignedInteger(107)),
+
+                        StackInstruction.Return,
+
+                        StackInstruction.Push_Environment,
+
+                        StackInstruction.Head_Generic,
+
+                        StackInstruction.Int_Unsigned_Add_Const(79),
+
+                        StackInstruction.Return,
+                    ])
+            },
+
         };
 
         var parseCache = new PineVMParseCache();

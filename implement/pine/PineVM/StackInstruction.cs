@@ -156,6 +156,10 @@ public enum StackInstructionKind
 
     Int_Greater_Than_Or_Equal_Const,
 
+    Int_Unsigned_Less_Than_Or_Equal_Const,
+
+    Int_Unsigned_Greater_Than_Or_Equal_Const,
+
     /// <summary>
     /// Jump to the offset from <see cref="StackInstruction.JumpOffset"/> if the top value on the stack is true.
     /// </summary>
@@ -186,6 +190,11 @@ public enum StackInstructionKind
     /// Add the integer literal from <see cref="StackInstruction.IntegerLiteral"/>.
     /// </summary>
     Int_Add_Const,
+
+    /// <summary>
+    /// Interpret the top value on the stack as unsigned integer and add the integer literal from <see cref="StackInstruction.IntegerLiteral"/>.
+    /// </summary>
+    Int_Unsigned_Add_Const,
 
     /// <summary>
     /// Add all items in the list from the top value from the stack.
@@ -334,6 +343,9 @@ public record StackInstruction(
     public static StackInstruction Int_Add_Const(BigInteger integerLiteral) =>
         new(StackInstructionKind.Int_Add_Const, IntegerLiteral: integerLiteral);
 
+    public static StackInstruction Int_Unsigned_Add_Const(BigInteger integerLiteral) =>
+        new(StackInstructionKind.Int_Unsigned_Add_Const, IntegerLiteral: integerLiteral);
+
     public static readonly StackInstruction Int_Add_Binary =
         new(StackInstructionKind.Int_Add_Binary);
 
@@ -461,6 +473,12 @@ public record StackInstruction(
 
     public static StackInstruction Int_Greater_Than_Or_Equal_Const(BigInteger integerLiteral) =>
         new(StackInstructionKind.Int_Greater_Than_Or_Equal_Const, IntegerLiteral: integerLiteral);
+
+    public static StackInstruction Int_Unsigned_Less_Than_Or_Equal_Const(BigInteger integerLiteral) =>
+        new(StackInstructionKind.Int_Unsigned_Less_Than_Or_Equal_Const, IntegerLiteral: integerLiteral);
+
+    public static StackInstruction Int_Unsigned_Greater_Than_Or_Equal_Const(BigInteger integerLiteral) =>
+        new(StackInstructionKind.Int_Unsigned_Greater_Than_Or_Equal_Const, IntegerLiteral: integerLiteral);
 
     public static readonly StackInstruction Slice_Skip_Var_Take_Var =
         new(StackInstructionKind.Slice_Skip_Var_Take_Var);
@@ -768,6 +786,14 @@ public record StackInstruction(
                     ?? throw new Exception(
                         "Missing IntegerLiteral for IntLessThanOrEqualConst instruction")]),
 
+            StackInstructionKind.Int_Unsigned_Less_Than_Or_Equal_Const =>
+            new InstructionDetails(
+                PopCount: 1,
+                PushCount: 1,
+                [instruction.IntegerLiteral?.ToString()
+                ?? throw new Exception(
+                    "Missing IntegerLiteral for Int_Unsigned_Less_Than_Or_Equal_Const instruction")]),
+
             StackInstructionKind.Int_Greater_Than_Or_Equal_Const =>
                 new InstructionDetails(
                     PopCount: 1,
@@ -775,6 +801,14 @@ public record StackInstruction(
                     [instruction.IntegerLiteral?.ToString()
                     ?? throw new Exception(
                         "Missing IntegerLiteral for IntGreaterThanOrEqualConst instruction")]),
+
+            StackInstructionKind.Int_Unsigned_Greater_Than_Or_Equal_Const =>
+            new InstructionDetails(
+                PopCount: 1,
+                PushCount: 1,
+                [instruction.IntegerLiteral?.ToString()
+                ?? throw new Exception(
+                    "Missing IntegerLiteral for Int_Unsigned_Greater_Than_Or_Equal_Const instruction")]),
 
             StackInstructionKind.Jump_If_True_Const =>
                 new InstructionDetails(
@@ -819,6 +853,14 @@ public record StackInstruction(
                     [instruction.IntegerLiteral?.ToString()
                     ?? throw new Exception(
                         "Missing IntegerLiteral for IntAddConst instruction")]),
+
+            StackInstructionKind.Int_Unsigned_Add_Const =>
+                new InstructionDetails(
+                    PopCount: 1,
+                    PushCount: 1,
+                    [instruction.IntegerLiteral?.ToString()
+                    ?? throw new Exception(
+                        "Missing IntegerLiteral for IntUnsignedAddConst instruction")]),
 
             StackInstructionKind.Int_Add_Generic =>
                 new InstructionDetails(

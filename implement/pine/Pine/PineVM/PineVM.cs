@@ -2000,6 +2000,27 @@ public class PineVM : IPineVM
                             continue;
                         }
 
+                    case StackInstructionKind.Int_Unsigned_Add_Const:
+                        {
+                            var rightInt =
+                                currentInstruction.IntegerLiteral
+                                ??
+                                throw new Exception("Invalid operation form: Missing literal value");
+
+                            var leftValue = currentFrame.PopTopmostFromStack();
+
+                            PineValue resultValue = PineValue.EmptyList;
+
+                            if (KernelFunction.UnsignedIntegerFromValueRelaxed(leftValue) is { } leftInt)
+                            {
+                                resultValue = IntegerEncoding.EncodeSignedInteger(leftInt + rightInt);
+                            }
+
+                            currentFrame.PushInstructionResult(resultValue);
+
+                            continue;
+                        }
+
                     case StackInstructionKind.Int_Sub_Binary:
                         {
                             var right = currentFrame.PopTopmostFromStack();
@@ -2144,6 +2165,29 @@ public class PineVM : IPineVM
                             continue;
                         }
 
+                    case StackInstructionKind.Int_Unsigned_Less_Than_Or_Equal_Const:
+                        {
+                            var right = currentInstruction.IntegerLiteral
+                                ??
+                                throw new Exception("Invalid operation form: Missing literal value");
+
+                            var left = currentFrame.PopTopmostFromStack();
+
+                            PineValue resultValue = PineValue.EmptyList;
+
+                            if (KernelFunction.UnsignedIntegerFromValueRelaxed(left) is { } leftInt)
+                            {
+                                resultValue =
+                                    leftInt <= right ?
+                                    PineVMValues.TrueValue :
+                                    PineVMValues.FalseValue;
+                            }
+
+                            currentFrame.PushInstructionResult(resultValue);
+
+                            continue;
+                        }
+
                     case StackInstructionKind.Int_Greater_Than_Or_Equal_Const:
                         {
                             var right =
@@ -2156,6 +2200,30 @@ public class PineVM : IPineVM
                             PineValue resultValue = PineValue.EmptyList;
 
                             if (KernelFunction.SignedIntegerFromValueRelaxed(left) is { } leftInt)
+                            {
+                                resultValue =
+                                    leftInt >= right ?
+                                    PineVMValues.TrueValue :
+                                    PineVMValues.FalseValue;
+                            }
+
+                            currentFrame.PushInstructionResult(resultValue);
+
+                            continue;
+                        }
+
+                    case StackInstructionKind.Int_Unsigned_Greater_Than_Or_Equal_Const:
+                        {
+                            var right =
+                                currentInstruction.IntegerLiteral
+                                ??
+                                throw new Exception("Invalid operation form: Missing literal value");
+
+                            var left = currentFrame.PopTopmostFromStack();
+
+                            PineValue resultValue = PineValue.EmptyList;
+
+                            if (KernelFunction.UnsignedIntegerFromValueRelaxed(left) is { } leftInt)
                             {
                                 resultValue =
                                     leftInt >= right ?

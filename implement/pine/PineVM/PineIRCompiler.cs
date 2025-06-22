@@ -1188,60 +1188,79 @@ public class PineIRCompiler
             {
                 var firstVarItemAdd = varItemsAdd[0];
 
-                var addOps =
-                    CompileExpressionTransitive(
-                        firstVarItemAdd,
-                        context,
-                        prior);
-
-                for (var i = 1; i < varItemsAdd.Count; ++i)
+                if (varItemsAdd.Count is 1 && varItemsSubtract.Count is 0)
                 {
-                    var itemExpr = varItemsAdd[i];
+                    if (IsIntUnsigned(firstVarItemAdd) is { } unsignedExpr)
+                    {
+                        var addOps =
+                            CompileExpressionTransitive(
+                                unsignedExpr,
+                                context,
+                                prior);
 
-                    var itemOps =
+                        return
+                            addOps
+                            .AppendInstruction(
+                                StackInstruction.Int_Unsigned_Add_Const(constItemsSum));
+                    }
+                }
+
+                {
+                    var addOps =
                         CompileExpressionTransitive(
-                            itemExpr,
+                            firstVarItemAdd,
                             context,
-                            addOps);
+                            prior);
 
-                    addOps = itemOps;
+                    for (var i = 1; i < varItemsAdd.Count; ++i)
+                    {
+                        var itemExpr = varItemsAdd[i];
 
-                    addOps =
-                        addOps.AppendInstruction(
-                            StackInstruction.Int_Add_Binary);
+                        var itemOps =
+                            CompileExpressionTransitive(
+                                itemExpr,
+                                context,
+                                addOps);
+
+                        addOps = itemOps;
+
+                        addOps =
+                            addOps.AppendInstruction(
+                                StackInstruction.Int_Add_Binary);
+                    }
+
+                    for (var i = 0; i < varItemsSubtract.Count; ++i)
+                    {
+                        var itemExpr = varItemsSubtract[i];
+
+                        var itemOps =
+                            CompileExpressionTransitive(
+                                itemExpr,
+                                context,
+                                addOps);
+
+                        addOps = itemOps;
+
+                        addOps =
+                            addOps.AppendInstruction(
+                                StackInstruction.Int_Sub_Binary);
+                    }
+
+                    if (constItemsSum != 0 || varItemsAdd.Count + varItemsSubtract.Count < 2)
+                    {
+                        /*
+                         * Using the 'add' function returns canonically encoded integer,
+                         * so adding '0' does not always return the same value.
+                         * */
+
+                        addOps =
+                            addOps
+                            .AppendInstruction(
+                                StackInstruction.Int_Add_Const(constItemsSum));
+                    }
+
+                    return addOps;
                 }
-
-                for (var i = 0; i < varItemsSubtract.Count; ++i)
-                {
-                    var itemExpr = varItemsSubtract[i];
-
-                    var itemOps =
-                        CompileExpressionTransitive(
-                            itemExpr,
-                            context,
-                            addOps);
-
-                    addOps = itemOps;
-
-                    addOps =
-                        addOps.AppendInstruction(
-                            StackInstruction.Int_Sub_Binary);
-                }
-
-                if (constItemsSum != 0 || varItemsAdd.Count + varItemsSubtract.Count < 2)
-                {
-                    /*
-                     * Using the 'add' function returns canonically encoded integer,
-                     * so adding '0' does not always return the same value.
-                     * */
-
-                    addOps =
-                        addOps
-                        .AppendInstruction(
-                            StackInstruction.Int_Add_Const(constItemsSum));
-                }
-
-                return addOps;
             }
         }
 
@@ -1253,6 +1272,66 @@ public class PineIRCompiler
                     prior)
                 .AppendInstruction(StackInstruction.Int_Add_Generic);
         }
+    }
+
+    private static Expression? IsIntUnsigned(Expression expr)
+    {
+        if (expr is Expression.KernelApplication kernelApp &&
+            kernelApp.Function is nameof(KernelFunction.concat) &&
+            kernelApp.Input is Expression.List inputList &&
+            inputList.items.Count is 2)
+        {
+            var prependedExpr = inputList.items[0];
+
+            if (!prependedExpr.ReferencesEnvironment)
+            {
+                if (CompilePineToDotNet.ReducePineExpression.TryEvaluateExpressionIndependent(
+                    prependedExpr).IsOkOrNull() is not
+                    { } prependedValue)
+                {
+                    return null;
+                }
+
+                if (prependedValue is PineValue.BlobValue prependedBlob &&
+                    prependedBlob.Bytes.Length is 1 &&
+                    prependedBlob.Bytes.Span[0] is 4)
+                {
+                    return inputList.items[1];
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static Expression? IsIntUnsignedNegated(Expression expr)
+    {
+        if (expr is Expression.KernelApplication kernelApp &&
+            kernelApp.Function is nameof(KernelFunction.concat) &&
+            kernelApp.Input is Expression.List inputList &&
+            inputList.items.Count is 2)
+        {
+            var prependedExpr = inputList.items[0];
+
+            if (!prependedExpr.ReferencesEnvironment)
+            {
+                if (CompilePineToDotNet.ReducePineExpression.TryEvaluateExpressionIndependent(
+                    prependedExpr).IsOkOrNull() is not
+                    { } prependedValue)
+                {
+                    return null;
+                }
+
+                if (prependedValue is PineValue.BlobValue prependedBlob &&
+                    prependedBlob.Bytes.Length is 1 &&
+                    prependedBlob.Bytes.Span[0] is 2)
+                {
+                    return inputList.items[1];
+                }
+            }
+        }
+
+        return null;
     }
 
     private static Expression? IsIntNegated(Expression expr)
@@ -1407,31 +1486,67 @@ public class PineIRCompiler
                 if (listExpr.items[0] is Expression.Literal leftLiteralExpr &&
                     KernelFunction.SignedIntegerFromValueRelaxed(leftLiteralExpr.Value) is { } leftInt)
                 {
-                    var afterRight =
-                        CompileExpressionTransitive(
-                            listExpr.items[1],
-                            context,
-                            prior);
+                    var rightExpr = listExpr.items[1];
 
-                    return
-                        afterRight
-                        .AppendInstruction(
-                            StackInstruction.Int_Greater_Than_Or_Equal_Const(leftInt));
+                    if (IsIntUnsigned(rightExpr) is { } rightUnsigned)
+                    {
+                        var afterRight =
+                            CompileExpressionTransitive(
+                                rightUnsigned,
+                                context,
+                                prior);
+
+                        return
+                            afterRight
+                            .AppendInstruction(
+                                StackInstruction.Int_Unsigned_Greater_Than_Or_Equal_Const(leftInt));
+                    }
+
+                    {
+                        var afterRight =
+                            CompileExpressionTransitive(
+                                rightExpr,
+                                context,
+                                prior);
+
+                        return
+                            afterRight
+                            .AppendInstruction(
+                                StackInstruction.Int_Greater_Than_Or_Equal_Const(leftInt));
+                    }
                 }
 
                 if (listExpr.items[1] is Expression.Literal rightLiteralExpr &&
                     KernelFunction.SignedIntegerFromValueRelaxed(rightLiteralExpr.Value) is { } rightInt)
                 {
-                    var afterLeft =
-                        CompileExpressionTransitive(
-                            listExpr.items[0],
-                            context,
-                            prior);
+                    var leftExpr = listExpr.items[0];
 
-                    return
-                        afterLeft
-                        .AppendInstruction(
-                            StackInstruction.Int_Less_Than_Or_Equal_Const(rightInt));
+                    if (IsIntUnsigned(leftExpr) is { } leftUnsigned)
+                    {
+                        var afterLeft =
+                            CompileExpressionTransitive(
+                                leftUnsigned,
+                                context,
+                                prior);
+
+                        return
+                            afterLeft
+                            .AppendInstruction(
+                                StackInstruction.Int_Unsigned_Less_Than_Or_Equal_Const(rightInt));
+                    }
+
+                    {
+                        var afterLeft =
+                            CompileExpressionTransitive(
+                                leftExpr,
+                                context,
+                                prior);
+
+                        return
+                            afterLeft
+                            .AppendInstruction(
+                                StackInstruction.Int_Less_Than_Or_Equal_Const(rightInt));
+                    }
                 }
 
                 {
@@ -1463,30 +1578,60 @@ public class PineIRCompiler
                     {
                         var middleExpr = listExpr.items[1];
 
-                        var contextSettingLocal =
-                            context
-                            with
-                            {
-                                CopyToLocal =
-                                    context.CopyToLocal.Add(middleExpr)
-                            };
+                        if (IsIntUnsigned(middleExpr) is { } middleUnsigned)
+                        {
+                            var contextSettingLocal =
+                                context
+                                with
+                                {
+                                    CopyToLocal =
+                                        context.CopyToLocal.Add(middleUnsigned)
+                                };
 
-                        var afterMiddle =
-                            CompileExpressionTransitive(
-                                middleExpr,
-                                contextSettingLocal,
-                                prior);
+                            var afterMiddle =
+                                CompileExpressionTransitive(
+                                    middleUnsigned,
+                                    contextSettingLocal,
+                                    prior);
 
-                        return
-                            afterMiddle
-                            .AppendInstruction(
-                                StackInstruction.Int_Greater_Than_Or_Equal_Const(leftInt))
-                            .AppendInstruction(
-                                StackInstruction.Local_Get(afterMiddle.LocalsSet[middleExpr]))
-                            .AppendInstruction(
-                                StackInstruction.Int_Less_Than_Or_Equal_Const(rightInt))
-                            .AppendInstruction(
-                                StackInstruction.Logical_And_Binary);
+                            return
+                                afterMiddle
+                                .AppendInstruction(
+                                    StackInstruction.Int_Unsigned_Greater_Than_Or_Equal_Const(leftInt))
+                                .AppendInstruction(
+                                    StackInstruction.Local_Get(afterMiddle.LocalsSet[middleUnsigned]))
+                                .AppendInstruction(
+                                    StackInstruction.Int_Unsigned_Less_Than_Or_Equal_Const(rightInt))
+                                .AppendInstruction(
+                                    StackInstruction.Logical_And_Binary);
+                        }
+
+                        {
+                            var contextSettingLocal =
+                                context
+                                with
+                                {
+                                    CopyToLocal =
+                                        context.CopyToLocal.Add(middleExpr)
+                                };
+
+                            var afterMiddle =
+                                CompileExpressionTransitive(
+                                    middleExpr,
+                                    contextSettingLocal,
+                                    prior);
+
+                            return
+                                afterMiddle
+                                .AppendInstruction(
+                                    StackInstruction.Int_Greater_Than_Or_Equal_Const(leftInt))
+                                .AppendInstruction(
+                                    StackInstruction.Local_Get(afterMiddle.LocalsSet[middleExpr]))
+                                .AppendInstruction(
+                                    StackInstruction.Int_Less_Than_Or_Equal_Const(rightInt))
+                                .AppendInstruction(
+                                    StackInstruction.Logical_And_Binary);
+                        }
                     }
                 }
             }

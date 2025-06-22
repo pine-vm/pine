@@ -936,6 +936,41 @@ public static class KernelFunction
             };
     }
 
+    public static BigInteger? UnsignedIntegerFromValueRelaxed(PineValue pineValue)
+    {
+        if (pineValue is not PineValue.BlobValue blobValue)
+            return null;
+
+        var blobBytes = blobValue.Bytes.Span;
+
+        if (blobBytes.Length is 0)
+            return null;
+
+        if (blobBytes.Length is 1)
+            return (BigInteger)blobBytes[0];
+
+        if (blobBytes.Length is 2)
+            return new BigInteger(
+                blobBytes[0] << 8 |
+                blobBytes[1]);
+
+        if (blobBytes.Length is 3)
+            return new BigInteger(
+                blobBytes[0] << 16 |
+                blobBytes[1] << 8 |
+                blobBytes[2]);
+
+        if (blobBytes.Length is 4)
+            return new BigInteger(
+                blobBytes[0] << 24 |
+                blobBytes[1] << 16 |
+                blobBytes[2] << 8 |
+                blobBytes[3]);
+
+        return
+            new BigInteger(blobBytes, isUnsigned: true, isBigEndian: true);
+    }
+
     public static PineValue KernelFunctionExpectingList(
         PineValue value,
         Func<ReadOnlyMemory<PineValue>, PineValue> continueWithList) =>
