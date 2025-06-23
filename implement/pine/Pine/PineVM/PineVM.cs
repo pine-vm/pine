@@ -2635,6 +2635,22 @@ public class PineVM : IPineVM
                             continue;
                         }
 
+                    case StackInstructionKind.Int_To_Canonical_Encoding:
+                        {
+                            var blobValue = currentFrame.PopTopmostFromStack();
+
+                            PineValue resultValue = PineValue.EmptyList;
+
+                            if (KernelFunction.SignedIntegerFromValueRelaxed(blobValue) is { } integerValue)
+                            {
+                                resultValue = IntegerEncoding.EncodeSignedInteger(integerValue);
+                            }
+
+                            currentFrame.PushInstructionResult(resultValue);
+
+                            continue;
+                        }
+
                     default:
                         throw new NotImplementedException(
                             "Unexpected instruction kind: " + instructionKind);
