@@ -1814,6 +1814,22 @@ public class PineVM : IPineVM
                             continue;
                         }
 
+                    case StackInstructionKind.Take_Last_Const:
+                        {
+                            var takeCount =
+                                currentInstruction.TakeCount
+                                ??
+                                throw new Exception("Invalid operation form: Missing take count");
+
+                            var prevValue = currentFrame.PopTopmostFromStack();
+
+                            PineValue resultValue = KernelFunction.takeLast(takeCount, prevValue);
+
+                            currentFrame.PushInstructionResult(resultValue);
+
+                            continue;
+                        }
+
                     case StackInstructionKind.Build_List:
                         {
                             var itemsCount =

@@ -214,6 +214,49 @@ public static class KernelFunction
             "Unexpected value type: " + value.GetType().FullName);
     }
 
+    public static PineValue takeLast(
+        int count,
+        PineValue value)
+    {
+        if (value is PineValue.ListValue listValue)
+        {
+            var listItems = listValue.Elements.Span;
+
+            if (listItems.Length <= count)
+                return value;
+
+            if (count <= 0)
+                return PineValue.EmptyList;
+
+            var resultingCount =
+                count <= listItems.Length
+                ?
+                count
+                :
+                listItems.Length;
+
+            var taken = new PineValue[resultingCount];
+
+            listItems[^resultingCount..].CopyTo(taken);
+
+            return PineValue.List(taken);
+        }
+
+        if (value is PineValue.BlobValue blobValue)
+        {
+            if (blobValue.Bytes.Length <= count)
+                return value;
+
+            if (count <= 0)
+                return PineValue.EmptyBlob;
+
+            return PineValue.Blob(blobValue.Bytes[^count..]);
+        }
+
+        throw new NotImplementedException(
+            "Unexpected value type: " + value.GetType().FullName);
+    }
+
     public static PineValue reverse(PineValue value)
     {
         if (value is PineValue.ListValue listValue)

@@ -269,7 +269,7 @@ public class PineVMTests
 
                         StackInstruction.Return,
                     ])
-},
+            },
 
             new
             {
@@ -2314,6 +2314,42 @@ public class PineVMTests
                         StackInstruction.Head_Generic,
 
                         StackInstruction.Int_Unsigned_Add_Const(79),
+
+                        StackInstruction.Return,
+                    ])
+            },
+
+            new
+            {
+                expression =
+                (Expression)
+                new Expression.KernelApplication
+                (
+                    function: nameof(KernelFunction.reverse),
+                    input:
+                    new Expression.KernelApplication
+                    (
+                        function: nameof(KernelFunction.take),
+                        input:
+                        Expression.ListInstance(
+                            [
+                            Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(3)),
+                            new Expression.KernelApplication
+                            (
+                                function: nameof(KernelFunction.reverse),
+                                input:
+                                Expression.EnvironmentInstance
+                            ),
+                            ])
+                    )
+                ),
+
+                expected =
+                new PineVM.StackFrameInstructions(
+                    [
+                        StackInstruction.Push_Environment,
+
+                        StackInstruction.Take_Last_Const(3),
 
                         StackInstruction.Return,
                     ])

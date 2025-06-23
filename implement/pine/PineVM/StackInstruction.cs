@@ -97,6 +97,8 @@ public enum StackInstructionKind
 
     Take_Const,
 
+    Take_Last_Const,
+
     /// <summary>
     /// From the second value on the stack, get the element at the index of the top value on the stack.
     /// </summary>
@@ -399,6 +401,9 @@ public record StackInstruction(
     public static StackInstruction Take_Const(int takeCount) =>
         new(StackInstructionKind.Take_Const, TakeCount: takeCount);
 
+    public static StackInstruction Take_Last_Const(int takeCount) =>
+        new(StackInstructionKind.Take_Last_Const, TakeCount: takeCount);
+
     public static readonly StackInstruction Concat_Binary =
         new(StackInstructionKind.Concat_Binary);
 
@@ -670,6 +675,15 @@ public record StackInstruction(
                     ??
                     throw new Exception(
                         "Missing TakeCount for TakeConst instruction")]),
+
+            StackInstructionKind.Take_Last_Const =>
+            new InstructionDetails(
+                PopCount: 1,
+                PushCount: 1,
+                [instruction.TakeCount?.ToString()
+                    ??
+                    throw new Exception(
+                        "Missing TakeCount for TakeLastConst instruction")]),
 
             StackInstructionKind.Skip_Head_Binary =>
                 new InstructionDetails(

@@ -820,7 +820,7 @@ public class PineIRCompiler
                     return
                         afterSource
                         .AppendInstruction(
-                            StackInstruction.Skip_Const((int)skipCount));
+                    StackInstruction.Skip_Const((int)skipCount));
                 }
             }
 
@@ -1014,6 +1014,37 @@ public class PineIRCompiler
         CompilationContext context,
         NodeCompilationResult prior)
     {
+        if (input is Expression.KernelApplication inputKernelApp &&
+            inputKernelApp.Function is nameof(KernelFunction.take) &&
+            inputKernelApp.Input is Expression.List takeInputList &&
+            takeInputList.items.Count is 2 &&
+            takeInputList.items[1] is Expression.KernelApplication innerKernelApp &&
+            innerKernelApp.Function is nameof(KernelFunction.reverse))
+        {
+            var takeCountValue = takeInputList.items[0];
+
+            if (!takeCountValue.ReferencesEnvironment)
+            {
+                if (CompilePineToDotNet.ReducePineExpression.TryEvaluateExpressionIndependent(
+                    takeCountValue).IsOkOrNull() is { } takeCountValueEvaluated)
+                {
+                    if (KernelFunction.SignedIntegerFromValueRelaxed(takeCountValueEvaluated) is { } takeCount)
+                    {
+                        var afterSource =
+                            CompileExpressionTransitive(
+                                innerKernelApp.Input,
+                                context,
+                                prior);
+
+                        return
+                            afterSource
+                            .AppendInstruction(
+                                StackInstruction.Take_Last_Const((int)takeCount));
+                    }
+                }
+            }
+        }
+
         return
             CompileExpressionTransitive(
                 input,
