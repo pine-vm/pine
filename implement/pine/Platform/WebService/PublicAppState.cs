@@ -201,7 +201,7 @@ public class PublicAppState(
         while (true)
         {
             var httpResponse =
-                GetResponseFromAppOrTimeout(TimeSpan.FromSeconds(60));
+                GetResponseFromAppOrTimeout(TimeSpan.FromMinutes(4));
 
             if (httpResponse is null)
             {
