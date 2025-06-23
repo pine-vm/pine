@@ -254,6 +254,8 @@ public enum StackInstructionKind
     Bit_Shift_Right_Generic,
 
     Logical_And_Binary,
+
+    Int_To_Canonical_Encoding,
 }
 
 /// <summary>
@@ -490,6 +492,9 @@ public record StackInstruction(
 
     public static readonly StackInstruction Logical_And_Binary =
         new(StackInstructionKind.Logical_And_Binary);
+
+    public static readonly StackInstruction Int_To_Canonical_Encoding =
+        new(StackInstructionKind.Int_To_Canonical_Encoding);
 
 
     public override string ToString()
@@ -1009,6 +1014,12 @@ public record StackInstruction(
             StackInstructionKind.Logical_And_Binary =>
                 new InstructionDetails(
                     PopCount: 2,
+                    PushCount: 1,
+                    []),
+
+            StackInstructionKind.Int_To_Canonical_Encoding =>
+                new InstructionDetails(
+                    PopCount: 1,
                     PushCount: 1,
                     []),
 

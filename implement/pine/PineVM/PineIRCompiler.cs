@@ -801,33 +801,34 @@ public class PineIRCompiler
     }
 
     public static NodeCompilationResult CompileKernelApplication_Skip(
-       Expression input,
-       CompilationContext context,
-       NodeCompilationResult prior)
+        Expression input,
+        CompilationContext context,
+        NodeCompilationResult prior)
     {
         if (input is Expression.List listExpr && listExpr.items.Count is 2)
         {
+            var skipCountExpr = listExpr.items[0];
+
+            var skipSourceExpr = listExpr.items[1];
+
             var afterSource =
                 CompileExpressionTransitive(
-                    listExpr.items[1],
+                    skipSourceExpr,
                     context,
                     prior);
 
-            if (listExpr.items[0] is Expression.Literal literalExpr)
+            if (TryParseExprAsIndependentSignedIntegerRelaxed(skipCountExpr) is { } skipCount)
             {
-                if (IntegerEncoding.ParseSignedIntegerRelaxed(literalExpr.Value).IsOkOrNullable() is { } skipCount)
-                {
-                    return
-                        afterSource
-                        .AppendInstruction(
-                    StackInstruction.Skip_Const((int)skipCount));
-                }
+                return
+                    afterSource
+                    .AppendInstruction(
+                        StackInstruction.Skip_Const((int)skipCount));
             }
 
             {
                 var afterSkipCount =
                     CompileExpressionTransitive(
-                        listExpr.items[0],
+                        skipCountExpr,
                         context,
                         afterSource);
 
@@ -1158,6 +1159,7 @@ public class PineIRCompiler
             }
 
             BigInteger constItemsSum = 0;
+            bool constItemsPresent = false;
             var varItemsAdd = new List<Expression>();
             var varItemsSubtract = new List<Expression>();
 
@@ -1175,6 +1177,7 @@ public class PineIRCompiler
                                 StackInstruction.Push_Literal(PineValue.EmptyList));
                     }
 
+                    constItemsPresent = true;
                     constItemsSum += intValue;
                 }
                 else
@@ -1277,17 +1280,26 @@ public class PineIRCompiler
                                 StackInstruction.Int_Sub_Binary);
                     }
 
-                    if (constItemsSum != 0 || varItemsAdd.Count + varItemsSubtract.Count < 2)
+                    if (constItemsPresent)
                     {
-                        /*
-                         * Using the 'add' function returns canonically encoded integer,
-                         * so adding '0' does not always return the same value.
-                         * */
-
-                        addOps =
-                            addOps
-                            .AppendInstruction(
-                                StackInstruction.Int_Add_Const(constItemsSum));
+                        if (constItemsSum != 0)
+                        {
+                            addOps =
+                                addOps
+                                .AppendInstruction(
+                                    StackInstruction.Int_Add_Const(constItemsSum));
+                        }
+                        else
+                        {
+                            /*
+                             * Using the 'add' function returns canonically encoded integer,
+                             * so adding '0' does not always return the same value.
+                             * */
+                            addOps =
+                                addOps
+                                .AppendInstruction(
+                                    StackInstruction.Int_To_Canonical_Encoding);
+                        }
                     }
 
                     return addOps;
@@ -1418,6 +1430,7 @@ public class PineIRCompiler
             }
 
             BigInteger constItemsProduct = 1;
+            bool constItemsPresent = false;
             var varItems = new List<Expression>();
 
             for (var i = 0; i < listExpr.items.Count; ++i)
@@ -1434,6 +1447,7 @@ public class PineIRCompiler
                                 StackInstruction.Push_Literal(PineValue.EmptyList));
                     }
 
+                    constItemsPresent = true;
                     constItemsProduct *= intValue;
                 }
                 else
@@ -1476,12 +1490,26 @@ public class PineIRCompiler
                         StackInstruction.Int_Mul_Binary);
             }
 
-            if (constItemsProduct != 1 || varItems.Count < 2)
+            if (constItemsPresent)
             {
-                mulOps =
-                    mulOps
-                    .AppendInstruction(
-                        StackInstruction.Int_Mul_Const(constItemsProduct));
+                if (constItemsProduct != 1)
+                {
+                    mulOps =
+                        mulOps
+                        .AppendInstruction(
+                            StackInstruction.Int_Mul_Const(constItemsProduct));
+                }
+                else
+                {
+                    /*
+                     * Using the 'mul' function returns canonically encoded integer,
+                     * so multiplying by '1' does not always return the same value.
+                     * */
+                    mulOps =
+                        mulOps
+                        .AppendInstruction(
+                            StackInstruction.Int_To_Canonical_Encoding);
+                }
             }
 
             return mulOps;
@@ -2022,6 +2050,31 @@ public class PineIRCompiler
         }
 
         return null;
+    }
+
+    private static BigInteger? TryParseExprAsIndependentSignedIntegerRelaxed(Expression expression)
+    {
+        if (TryEvaluateExpressionIndependent(expression) is not { } value)
+        {
+            return null;
+        }
+
+        return KernelFunction.SignedIntegerFromValueRelaxed(value);
+    }
+
+    private static PineValue? TryEvaluateExpressionIndependent(Expression expression)
+    {
+        if (expression.ReferencesEnvironment)
+        {
+            return null;
+        }
+
+        if (CompilePineToDotNet.ReducePineExpression.TryEvaluateExpressionIndependent(expression).IsOkOrNull() is not { } value)
+        {
+            return null;
+        }
+
+        return value;
     }
 
     public static bool ExpressionLargeEnoughForCSE(Expression expression)
