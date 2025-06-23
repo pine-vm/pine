@@ -254,6 +254,8 @@ public enum StackInstructionKind
     Bit_Shift_Right_Generic,
 
     Logical_And_Binary,
+
+    Blob_Trim_Leading_Zeros,
 }
 
 /// <summary>
@@ -490,6 +492,9 @@ public record StackInstruction(
 
     public static readonly StackInstruction Logical_And_Binary =
         new(StackInstructionKind.Logical_And_Binary);
+
+    public static StackInstruction Blob_Trim_Leading_Zeros(int minRemainingCount) =>
+        new(StackInstructionKind.Blob_Trim_Leading_Zeros, TakeCount: minRemainingCount);
 
 
     public override string ToString()
@@ -1009,6 +1014,12 @@ public record StackInstruction(
             StackInstructionKind.Logical_And_Binary =>
                 new InstructionDetails(
                     PopCount: 2,
+                    PushCount: 1,
+                    []),
+
+            StackInstructionKind.Blob_Trim_Leading_Zeros =>
+                new InstructionDetails(
+                    PopCount: 1,
                     PushCount: 1,
                     []),
 

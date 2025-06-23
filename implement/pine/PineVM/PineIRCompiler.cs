@@ -801,33 +801,85 @@ public class PineIRCompiler
     }
 
     public static NodeCompilationResult CompileKernelApplication_Skip(
-       Expression input,
-       CompilationContext context,
-       NodeCompilationResult prior)
+        Expression input,
+        CompilationContext context,
+        NodeCompilationResult prior)
     {
         if (input is Expression.List listExpr && listExpr.items.Count is 2)
         {
+            var skipCountExpr = listExpr.items[0];
+
+            var skipSourceExpr = listExpr.items[1];
+
             var afterSource =
                 CompileExpressionTransitive(
-                    listExpr.items[1],
+                    skipSourceExpr,
                     context,
                     prior);
 
-            if (listExpr.items[0] is Expression.Literal literalExpr)
+            if (TryParseExprAsIndependentSignedIntegerRelaxed(skipCountExpr) is { } skipCount)
             {
-                if (IntegerEncoding.ParseSignedIntegerRelaxed(literalExpr.Value).IsOkOrNullable() is { } skipCount)
+                if (skipCount.IsOne &&
+                    skipSourceExpr is Expression.KernelApplication skipSourceKernelApp &&
+                    skipSourceKernelApp.Function is nameof(KernelFunction.int_add) &&
+                    skipSourceKernelApp.Input is Expression.List skipSourceAddInputList &&
+                    skipSourceAddInputList.items.Count is 2)
                 {
-                    return
-                        afterSource
-                        .AppendInstruction(
-                    StackInstruction.Skip_Const((int)skipCount));
+                    NodeCompilationResult? ContinueForAddZeroOperand(Expression addZeroOperand)
+                    {
+                        if (addZeroOperand is Expression.KernelApplication addOperandKernelApp &&
+                            addOperandKernelApp.Function is nameof(KernelFunction.concat) &&
+                            addOperandKernelApp.Input is Expression.List concatList &&
+                            concatList.items.Count is 2 &&
+                            TryEvaluateExpressionIndependent(concatList.items[0]) is { } prependValue &&
+                            prependValue is PineValue.BlobValue prependBlob &&
+                            prependBlob.Bytes.Length is 1 &&
+                            prependBlob.Bytes.Span[0] is 2 or 4)
+                        {
+                            var afterSource =
+                                CompileExpressionTransitive(
+                                    concatList.items[1],
+                                    context,
+                                    prior);
+
+                            return
+                                afterSource
+                                .AppendInstruction(
+                                    StackInstruction.Blob_Trim_Leading_Zeros(minRemainingCount: 1));
+                        }
+
+                        return null;
+                    }
+
+                    {
+                        if (TryParseExprAsIndependentSignedIntegerRelaxed(skipSourceAddInputList.items[0]) is { } skipSourceAddValue &&
+                            skipSourceAddValue.IsZero &&
+                            ContinueForAddZeroOperand(skipSourceAddInputList.items[1]) is { } specialized)
+                        {
+                            return specialized;
+                        }
+                    }
+
+                    {
+                        if (TryParseExprAsIndependentSignedIntegerRelaxed(skipSourceAddInputList.items[1]) is { } skipSourceAddValue &&
+                            skipSourceAddValue.IsZero &&
+                            ContinueForAddZeroOperand(skipSourceAddInputList.items[0]) is { } specialized)
+                        {
+                            return specialized;
+                        }
+                    }
                 }
+
+                return
+                    afterSource
+                    .AppendInstruction(
+                        StackInstruction.Skip_Const((int)skipCount));
             }
 
             {
                 var afterSkipCount =
                     CompileExpressionTransitive(
-                        listExpr.items[0],
+                        skipCountExpr,
                         context,
                         afterSource);
 
@@ -2022,6 +2074,31 @@ public class PineIRCompiler
         }
 
         return null;
+    }
+
+    private static BigInteger? TryParseExprAsIndependentSignedIntegerRelaxed(Expression expression)
+    {
+        if (TryEvaluateExpressionIndependent(expression) is not { } value)
+        {
+            return null;
+        }
+
+        return KernelFunction.SignedIntegerFromValueRelaxed(value);
+    }
+
+    private static PineValue? TryEvaluateExpressionIndependent(Expression expression)
+    {
+        if (expression.ReferencesEnvironment)
+        {
+            return null;
+        }
+
+        if (CompilePineToDotNet.ReducePineExpression.TryEvaluateExpressionIndependent(expression).IsOkOrNull() is not { } value)
+        {
+            return null;
+        }
+
+        return value;
     }
 
     public static bool ExpressionLargeEnoughForCSE(Expression expression)
