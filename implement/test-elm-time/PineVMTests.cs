@@ -258,7 +258,8 @@ public class PineVMTests
             new
             {
                 expression =
-                (Expression)Expression.LiteralInstance(PineValue.EmptyBlob),
+                (Expression)
+                Expression.LiteralInstance(PineValue.EmptyBlob),
 
                 expected =
                 new PineVM.StackFrameInstructions(
@@ -2355,6 +2356,54 @@ public class PineVMTests
                     ])
             },
 
+            new
+            {
+                expression =
+                (Expression)
+                new Expression.KernelApplication
+                (
+                    function: nameof(KernelFunction.skip),
+                    input:
+                    Expression.ListInstance(
+                        [
+                        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(1)),
+
+                        new Expression.KernelApplication
+                        (
+                            function: nameof(KernelFunction.int_add),
+                            input:
+                            Expression.ListInstance(
+                                [
+                                    new Expression.KernelApplication
+                                    (
+                                        function: nameof(KernelFunction.concat),
+                                        input:
+                                        Expression.ListInstance(
+                                            [
+                                            Expression.LiteralInstance(
+                                                PineValue.BlobSingleByte(0x04)),
+
+                                            Expression.EnvironmentInstance,
+                                            ])
+                                    ),
+
+                                    Expression.LiteralInstance(
+                                        IntegerEncoding.EncodeSignedInteger(0)),
+                                ])
+                            ),
+                        ])
+                ),
+
+                expected =
+                new PineVM.StackFrameInstructions(
+                    [
+                        StackInstruction.Push_Environment,
+
+                        StackInstruction.Blob_Trim_Leading_Zeros(minRemainingCount:1),
+
+                        StackInstruction.Return,
+                    ])
+            },
         };
 
         var parseCache = new PineVMParseCache();

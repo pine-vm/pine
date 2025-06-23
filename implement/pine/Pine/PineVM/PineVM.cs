@@ -2635,6 +2635,58 @@ public class PineVM : IPineVM
                             continue;
                         }
 
+                    case StackInstructionKind.Blob_Trim_Leading_Zeros:
+                        {
+                            var minRemainingCount =
+                                currentInstruction.TakeCount
+                                ??
+                                throw new Exception("Invalid operation form: Missing min remaining count");
+
+                            var blobValue = currentFrame.PopTopmostFromStack();
+
+                            PineValue resultValue = PineValue.EmptyList;
+
+                            if (blobValue is PineValue.BlobValue blob)
+                            {
+                                var blobBytes = blob.Bytes.Span;
+
+                                if (minRemainingCount <= blobBytes.Length)
+                                {
+                                    int sliceStartIndex = 0;
+
+                                    while (sliceStartIndex < blobBytes.Length - minRemainingCount)
+                                    {
+                                        if (blobBytes[sliceStartIndex] is not 0)
+                                        {
+                                            break;
+                                        }
+
+                                        ++sliceStartIndex;
+                                    }
+
+                                    if (sliceStartIndex is 0)
+                                    {
+                                        resultValue = blobValue;
+                                    }
+                                    else if (sliceStartIndex < blob.Bytes.Length)
+                                    {
+                                        var trimmedBytes =
+                                            blob.Bytes[sliceStartIndex..];
+
+                                        resultValue = PineValue.Blob(trimmedBytes);
+                                    }
+                                    else
+                                    {
+                                        resultValue = PineValue.EmptyBlob;
+                                    }
+                                }
+                            }
+
+                            currentFrame.PushInstructionResult(resultValue);
+
+                            continue;
+                        }
+
                     default:
                         throw new NotImplementedException(
                             "Unexpected instruction kind: " + instructionKind);
