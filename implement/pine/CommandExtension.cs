@@ -1,4 +1,4 @@
-﻿using McMaster.Extensions.CommandLineUtils;
+using McMaster.Extensions.CommandLineUtils;
 using System.Linq;
 
 namespace ElmTime;

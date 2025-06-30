@@ -1,4 +1,4 @@
-﻿using ElmTime.StateShim.InterfaceToHost;
+using ElmTime.StateShim.InterfaceToHost;
 
 namespace ElmTime.StateShim;
 

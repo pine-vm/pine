@@ -1,4 +1,4 @@
-﻿using ElmTime.NativeDependency;
+using ElmTime.NativeDependency;
 using Pine.Core;
 using System;
 using System.Collections.Generic;

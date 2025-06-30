@@ -74,7 +74,7 @@ public class ElmPackageSource
             }
         }
 
-        // 2) No valid cache found — download from GitHub:
+        // 2) No valid cache found â€” download from GitHub:
         var zipData = await DownloadPackageZipAsync(packageName, versionId);
 
         var fromGitHub = LoadElmPackageFromZipBytes(zipData);

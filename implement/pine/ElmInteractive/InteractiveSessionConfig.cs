@@ -1,4 +1,4 @@
-﻿using Pine.Core;
+using Pine.Core;
 using System;
 
 namespace ElmTime.ElmInteractive;

@@ -16,7 +16,7 @@ public record Range(
 /// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#position
 /// 
 /// Position in a text document expressed as zero-based line and zero-based character offset.
-/// A position is between two characters like an ‘insert’ cursor in an editor.
+/// A position is between two characters like an â€˜insertâ€™ cursor in an editor.
 /// Special values like for example -1 to denote the end of a line are not supported.
 /// </summary>
 public record Position(

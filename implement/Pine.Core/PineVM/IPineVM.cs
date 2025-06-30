@@ -1,4 +1,4 @@
-﻿namespace Pine.Core.PineVM;
+namespace Pine.Core.PineVM;
 
 public interface IPineVM
 {
