@@ -22,7 +22,7 @@
   <ItemGroup>
     <PackageReference Include="AwesomeAssertions" Version="8.2.0" />
     <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="9.0.6" />
-    <PackageReference Include="Microsoft.Testing.Extensions.TrxReport" Version="1.7.2" />
+    <PackageReference Include="Microsoft.Testing.Extensions.TrxReport" Version="1.7.3" />
     <PackageReference Include="morelinq" Version="4.4.0" />
     <PackageReference Include="coverlet.collector" Version="6.0.4">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
