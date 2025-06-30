@@ -1,0 +1,8 @@
+<Solution>
+  <Project Path="implement/native-tools/native-tools.csproj" />
+  <Project Path="implement/Pine.Core/Pine.Core.csproj" />
+  <Project Path="implement/PineTest/Pine.UnitTests/Pine.UnitTests.csproj" />
+  <Project Path="implement/pine/pine.csproj" />
+  <Project Path="implement/prebuild/prebuild.csproj" />
+  <Project Path="implement/test-elm-time/test-elm-time.csproj" />
+</Solution>
