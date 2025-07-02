@@ -22,6 +22,7 @@ jobs:
         globalcdn.nuget.org,
         dist.nuget.org,
         symbols.nuget.org,
+        www.nuget.org,
         crl3.digicert.com,
         ocsp.digicert.com,
         pine-vm.org,
