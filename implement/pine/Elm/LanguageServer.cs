@@ -1951,9 +1951,9 @@ public class LanguageServer(
             return [new TextEdit(Range: range, NewText: "")];
         }
 
-        if (firstChangedLine < originalLines.Count && newLines.Count < originalLines.Count)
+        if (firstChangedLine < originalLines.Count && newLines.Count < originalLines.Count && replacementLines.Count() == 0)
         {
-            // Deletion in the middle - we need to delete some lines
+            // Pure deletion in the middle - we need to delete some lines without replacement
             // The range should include the newline that creates the line to be deleted
             int startLine = firstChangedLine > 0 ? firstChangedLine - 1 : 0;
             int startChar = firstChangedLine > 0 ? originalLines[startLine].Length : 0;
@@ -1963,8 +1963,6 @@ public class LanguageServer(
             var range = new Range(
                 Start: new Position(Line: (uint)startLine, Character: (uint)startChar),
                 End: new Position(Line: (uint)endLine, Character: (uint)endChar));
-
-            // Use the replacement text as calculated earlier
 
             var replacementText = string.Join("\n", replacementLines);
 

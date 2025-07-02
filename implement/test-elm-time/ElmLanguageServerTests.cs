@@ -365,6 +365,27 @@ public class ElmLanguageServerTests
                 "dec_a = 11\n\n\ndecl_b = 13",
                 ExpectedEdits: null
             ),
+
+            new(
+                OriginalText:
+                """
+                decl =
+                    func
+                        [ 
+                            argA
+                        , argB
+                        ]
+                """,
+                NewText:
+                """
+                decl =
+                    func
+                        [ argA
+                        , argB
+                        ]
+                """,
+                ExpectedEdits: null
+            ),
             ];
 
         for (var testCaseIndex = 0; testCaseIndex < testCases.Count; testCaseIndex++)
