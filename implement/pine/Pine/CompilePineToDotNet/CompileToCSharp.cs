@@ -1747,7 +1747,7 @@ public partial class CompileToCSharp
 
         void Traverse(Expression expr, bool isConditional)
         {
-            if (dictionary.TryGetValue(expr, out ExpressionUsageCount? currentCount))
+            if (dictionary.TryGetValue(expr, out var currentCount))
             {
                 dictionary[expr] = new ExpressionUsageCount(
                     isConditional ? currentCount.Unconditional : currentCount.Unconditional + 1,

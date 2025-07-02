@@ -297,7 +297,7 @@ public class ElmLanguageServiceTests
                 ") does not match expected completion items count (" + expectedCompletionItems.Count + ")");
         }
 
-        for (int i = 0; i < expectedCompletionItems.Count; i++)
+        for (var i = 0; i < expectedCompletionItems.Count; i++)
         {
             var expectedItem = expectedCompletionItems[i];
 

@@ -151,7 +151,7 @@ public abstract record Expression
 
             SubexpressionCount = items.Count;
 
-            for (int i = 0; i < items.Count; ++i)
+            for (var i = 0; i < items.Count; ++i)
             {
                 SubexpressionCount += items[i].SubexpressionCount;
 
@@ -175,7 +175,7 @@ public abstract record Expression
             if (items.Count != notNull.items.Count)
                 return false;
 
-            for (int i = 0; i < items.Count; ++i)
+            for (var i = 0; i < items.Count; ++i)
             {
                 if (!items[i].Equals(notNull.items[i]))
                     return false;
@@ -210,7 +210,7 @@ public abstract record Expression
             {
                 var hashCode = new HashCode();
 
-                for (int i = 0; i < items.Count; ++i)
+                for (var i = 0; i < items.Count; ++i)
                 {
                     hashCode.Add(items[i].GetHashCode());
                 }
@@ -548,7 +548,7 @@ public abstract record Expression
 
             components.Add(expression);
 
-            IReadOnlyList<Expression> childItems =
+            var childItems =
                 expression switch
                 {
                     List listExpression =>

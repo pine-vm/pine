@@ -513,7 +513,7 @@ public class ReducePineExpression
                                         if (argument is Expression.Literal subLiteral &&
                                             subLiteral.Value is PineValue.ListValue subLiteralList)
                                         {
-                                            for (int i = 0; i < subLiteralList.Elements.Length; i++)
+                                            for (var i = 0; i < subLiteralList.Elements.Length; i++)
                                             {
                                                 items.Add(Expression.LiteralInstance(subLiteralList.Elements.Span[i]));
                                             }
@@ -549,7 +549,7 @@ public class ReducePineExpression
                                 {
                                     int? aggregateLength = 0;
 
-                                    for (int i = 0; i < lengthConcatList.items.Count; i++)
+                                    for (var i = 0; i < lengthConcatList.items.Count; i++)
                                     {
                                         var lengthConcatListItem = lengthConcatList.items[i];
 
@@ -900,7 +900,7 @@ public class ReducePineExpression
         var changed = false;
         var newItems = new Expression[items.Count];
 
-        for (int i = 0; i < items.Count; i++)
+        for (var i = 0; i < items.Count; i++)
         {
             var reducedChild = ReduceExpressionBottomUp(items[i], dontReduceExpression);
 

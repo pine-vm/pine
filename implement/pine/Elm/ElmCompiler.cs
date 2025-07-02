@@ -663,7 +663,7 @@ public class ElmCompiler
         IReadOnlyList<string> rootFilePath,
         bool skipFilteringForSourceDirs)
     {
-        Func<IReadOnlyList<string>, bool> keepElmModuleAtFilePath =
+        var keepElmModuleAtFilePath =
             skipFilteringForSourceDirs
             ?
             _ => true
@@ -785,7 +785,7 @@ public class ElmCompiler
 
         // Walk upwards from the directory of entryPointFilePath to find the "closest" elm.json
         // that includes the entryPointFilePath in one of its source-directories:
-        IReadOnlyList<string> currentDirectory = DirectoryOf(entryPointFilePath);
+        var currentDirectory = DirectoryOf(entryPointFilePath);
 
         while (true)
         {

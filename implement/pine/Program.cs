@@ -799,7 +799,7 @@ public class Program
 
             langServerCommand.OnExecute(() =>
             {
-                string? logFileDirFromOption = logFileDirOption.Value();
+                var logFileDirFromOption = logFileDirOption.Value();
 
                 static string? logFileDirFromEnv()
                 {
@@ -1785,7 +1785,7 @@ public class Program
                         });
                 }
 
-                TreeNodeWithStringPath? contextAppCodeTreeBeforeFilter =
+                var contextAppCodeTreeBeforeFilter =
                 contextAppPaths is null
                 ?
                 null
@@ -2510,7 +2510,7 @@ public class Program
                 throw new Exception("Unexpected parse result type: " + parseFromEnvResult);
             }
 
-            PineValue elmBytesValue = parseFromEnvOk.declValue;
+            var elmBytesValue = parseFromEnvOk.declValue;
 
             if (parseFromEnvOk.functionRecord.ParameterCount is 1)
             {

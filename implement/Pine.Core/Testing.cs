@@ -9,7 +9,7 @@ public static class Testing
         IReadOnlyList<string> expectedChunks,
         string actual)
     {
-        int previousChunkEnd = 0;
+        var previousChunkEnd = 0;
 
         for (var chunkIndex = 0; chunkIndex < expectedChunks.Count; chunkIndex++)
         {

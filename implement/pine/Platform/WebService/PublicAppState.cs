@@ -227,7 +227,7 @@ public class PublicAppState(
 
             context.Response.Headers.XPoweredBy = "Pine";
 
-            ReadOnlyMemory<byte>? contentAsByteArray = httpResponse.Body;
+            var contentAsByteArray = httpResponse.Body;
 
             context.Response.ContentLength = contentAsByteArray?.Length ?? 0;
 

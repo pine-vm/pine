@@ -120,7 +120,7 @@ public static class LoadFromGitHubOrGitLab
             return "Failed to parse string '" + sourceUrl + "' as GitHub or GitLab URL.";
 
         string? branchName = null;
-        bool refLooksLikeCommit = false;
+        var refLooksLikeCommit = false;
 
         if (parsedUrl.inRepository != null)
         {

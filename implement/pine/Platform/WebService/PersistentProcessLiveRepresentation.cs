@@ -154,7 +154,7 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
     {
         foreach (var applyFuncReport in mutatingWebServiceApp.DequeueApplyFunctionReports())
         {
-            PineValue elmAppState = applyFuncReport.ResponseState;
+            var elmAppState = applyFuncReport.ResponseState;
 
             if (lastAppStatePersisted?.state == elmAppState)
             {
@@ -406,7 +406,7 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
 
         var recordHashBase16 = storeCompositionRecord();
 
-        System.Threading.Tasks.Task taskStoringReduction =
+        var taskStoringReduction =
             System.Threading.Tasks.Task.Run(() =>
             {
                 storeWriter.StoreProvisionalReduction(
@@ -1093,7 +1093,7 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
 
             var arguments = new PineValue[request.serializedArgumentsJson.Count];
 
-            for (int i = 0; i < request.serializedArgumentsJson.Count; i++)
+            for (var i = 0; i < request.serializedArgumentsJson.Count; i++)
             {
                 var argumentJsonString = request.serializedArgumentsJson[i];
 
@@ -1140,7 +1140,7 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
                 throw new Exception("Unexpected result: " + applyFunctionResult);
             }
 
-            bool committedResultingState = false;
+            var committedResultingState = false;
 
             if (request.commitResultingState)
             {
@@ -1159,7 +1159,7 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
                 committedResultingState = true;
             }
 
-            bool producedStateDifferentFromStateArgument = false;
+            var producedStateDifferentFromStateArgument = false;
 
             {
                 if (applyFunctionOk.AppState is { } appStateReturned)
@@ -1168,7 +1168,7 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
                 }
             }
 
-            Maybe<JsonElement> resultLessStateJson =
+            var resultLessStateJson =
                 applyFunctionOk.ResponseJsonValue is { } responseJsonValue
                 ?
                 Maybe<JsonElement>.just(

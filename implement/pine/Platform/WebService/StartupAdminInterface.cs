@@ -902,7 +902,7 @@ public class StartupAdminInterface
                     filePathsInProcessStorePartitions
                     .Select(partitionFilePaths => System.Threading.Tasks.Task.Run(() =>
                     {
-                        int partitionDeletedFilesCount = 0;
+                        var partitionDeletedFilesCount = 0;
 
                         foreach (var filePath in partitionFilePaths)
                         {

@@ -85,8 +85,8 @@ public class AVH4ElmFormatBinaries
             writer.Flush();
         }
 
-        string output = process.StandardOutput.ReadToEnd();
-        string error = process.StandardError.ReadToEnd();
+        var output = process.StandardOutput.ReadToEnd();
+        var error = process.StandardError.ReadToEnd();
 
         process.WaitForExit();
 

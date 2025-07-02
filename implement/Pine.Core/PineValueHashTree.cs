@@ -51,7 +51,7 @@ public static class PineValueHashTree
         {
             case PineValue.BlobValue blobValue:
                 {
-                    ReadOnlySpan<byte> blobPrefix = "blob "u8;
+                    var blobPrefix = "blob "u8;
 
                     var countEncoded = CountEncoding((uint)blobValue.Bytes.Length);
 
@@ -109,8 +109,8 @@ public static class PineValueHashTree
         Func<string, PineValue?>? valueFromCache,
         Action<string, PineValue>? valueLoadedForHash)
     {
-        int charSpaceIndex = 0;
-        int charNullIndex = 0;
+        var charSpaceIndex = 0;
+        var charNullIndex = 0;
 
         for (var i = 0; i < serializedValue.Length; i++)
         {

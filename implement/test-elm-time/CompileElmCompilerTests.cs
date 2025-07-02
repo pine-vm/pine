@@ -1096,7 +1096,7 @@ public class CompileElmCompilerTests
         */
 
         {
-            PineValue compiledNewEnvInCompiler =
+            var compiledNewEnvInCompiler =
                 ElmValueEncoding.ElmValueAsPineValue(pineValueEmptyListElmValue);
 
             foreach (var parsedModule in parsedCompilerModules)

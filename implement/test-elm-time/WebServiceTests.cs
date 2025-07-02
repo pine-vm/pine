@@ -295,7 +295,7 @@ public class WebServiceTests
             .Should().Be(0, "No HTTP response from the first batch has status code 'Too Many Requests'.");
         }
 
-        int storeAppendCountBeforeSecondBatch =
+        var storeAppendCountBeforeSecondBatch =
             fileStoreHistoryCountAppendOperations();
 
         {
@@ -313,7 +313,7 @@ public class WebServiceTests
                 "At least this many requests in the fast batch are expected to be answered with status code 'Too Many Requests'.");
         }
 
-        int storeAppendCountDuringSecondBatch =
+        var storeAppendCountDuringSecondBatch =
             fileStoreHistoryCountAppendOperations() - storeAppendCountBeforeSecondBatch;
 
         storeAppendCountDuringSecondBatch.Should()
@@ -323,7 +323,7 @@ public class WebServiceTests
 
         letTimePassInPersistentProcessHost(TimeSpan.FromSeconds(rateLimitWindowSize));
 
-        int storeAppendCountBeforeThirdBatch =
+        var storeAppendCountBeforeThirdBatch =
             fileStoreHistoryCountAppendOperations();
 
         {
@@ -339,7 +339,7 @@ public class WebServiceTests
             .Should().Be(0, "No HTTP response from the third batch has status code 'Too Many Requests'.");
         }
 
-        int storeAppendCountAfterThirdBatch =
+        var storeAppendCountAfterThirdBatch =
             fileStoreHistoryCountAppendOperations();
 
         storeAppendCountAfterThirdBatch.Should()

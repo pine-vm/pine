@@ -207,12 +207,12 @@ public abstract record PineValue : IEquatable<PineValue>
             nodesCount = items.Length;
             blobsBytesCount = 0;
 
-            int length = items.Length;
+            var length = items.Length;
 
-            ref PineValue itemsFirst =
+            ref var itemsFirst =
                 ref System.Runtime.InteropServices.MemoryMarshal.GetReference(items);
 
-            for (int i = 0; i < length; i++)
+            for (var i = 0; i < length; i++)
             {
                 var item = System.Runtime.CompilerServices.Unsafe.Add(ref itemsFirst, i);
 
@@ -259,15 +259,15 @@ public abstract record PineValue : IEquatable<PineValue>
             if (selfSpan.Length != otherSpan.Length)
                 return false;
 
-            int length = selfSpan.Length;
+            var length = selfSpan.Length;
 
-            ref PineValue selfItemFirst =
+            ref var selfItemFirst =
                 ref System.Runtime.InteropServices.MemoryMarshal.GetReference(selfSpan);
 
-            ref PineValue otherItemFirst =
+            ref var otherItemFirst =
                 ref System.Runtime.InteropServices.MemoryMarshal.GetReference(otherSpan);
 
-            for (int i = 0; i < length; i++)
+            for (var i = 0; i < length; i++)
             {
                 var selfItem = System.Runtime.CompilerServices.Unsafe.Add(ref selfItemFirst, i);
                 var otherItem = System.Runtime.CompilerServices.Unsafe.Add(ref otherItemFirst, i);
@@ -344,13 +344,13 @@ public abstract record PineValue : IEquatable<PineValue>
 
                 var length = selfSpan.Length;
 
-                ref PineValue selfItemFirst =
+                ref var selfItemFirst =
                     ref System.Runtime.InteropServices.MemoryMarshal.GetReference(selfSpan);
 
-                ref PineValue otherItemFirst =
+                ref var otherItemFirst =
                     ref System.Runtime.InteropServices.MemoryMarshal.GetReference(otherSpan);
 
-                for (int i = 0; i < length; i++)
+                for (var i = 0; i < length; i++)
                 {
                     var selfItem = System.Runtime.CompilerServices.Unsafe.Add(ref selfItemFirst, i);
                     var otherItem = System.Runtime.CompilerServices.Unsafe.Add(ref otherItemFirst, i);

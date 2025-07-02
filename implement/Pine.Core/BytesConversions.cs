@@ -95,7 +95,7 @@ public class BytesConversions
     {
         var aggregateLength = 0;
 
-        for (int i = 0; i < list.Count; ++i)
+        for (var i = 0; i < list.Count; ++i)
             aggregateLength += list[i].Length;
 
         var destArray = new T[aggregateLength];
@@ -104,7 +104,7 @@ public class BytesConversions
 
         var offset = 0;
 
-        for (int i = 0; i < list.Count; ++i)
+        for (var i = 0; i < list.Count; ++i)
         {
             var segment = list[i];
             segment.CopyTo(destMemory[offset..]);

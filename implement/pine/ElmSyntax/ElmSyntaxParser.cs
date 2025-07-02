@@ -1718,7 +1718,7 @@ public class ElmSyntaxParser
 
         private char Advance()
         {
-            char current = _input[_position];
+            var current = _input[_position];
             _position++;
 
             if (current is '\n')
@@ -1738,7 +1738,7 @@ public class ElmSyntaxParser
         {
             // Capture the start location for this token.
             Location start = new(_line, _column);
-            char current = Peek();
+            var current = Peek();
 
             // Handle whitespace and newlines
             if (char.IsWhiteSpace(current))
@@ -1751,7 +1751,7 @@ public class ElmSyntaxParser
                 }
                 else
                 {
-                    string whitespace = "";
+                    var whitespace = "";
 
                     while (!IsAtEnd() && char.IsWhiteSpace(Peek()) && Peek() != '\n')
                     {
@@ -1767,7 +1767,7 @@ public class ElmSyntaxParser
             // Handle single-line comments
             if (current is '-' && PeekNext() is '-')
             {
-                string comment = "";
+                var comment = "";
 
                 while (!IsAtEnd() && Peek() is not '\n')
                 {
@@ -1791,7 +1791,7 @@ public class ElmSyntaxParser
 
                 comment.Append(Advance()); // Consume '-'
 
-                int nestedLevel = 1;
+                var nestedLevel = 1;
 
                 while (!IsAtEnd() && nestedLevel > 0)
                 {
@@ -1889,7 +1889,7 @@ public class ElmSyntaxParser
             {
                 var number = new StringBuilder(capacity: 16);
 
-                bool isHex = false;
+                var isHex = false;
 
                 if (current is '0' && PeekNext() is 'x')
                 {
@@ -1973,7 +1973,7 @@ public class ElmSyntaxParser
 
                     if (CharCanAppearInOperator(Peek()))
                     {
-                        string operatorToken = "." + Advance();
+                        var operatorToken = "." + Advance();
 
                         return new Token(
                             TokenType.Operator,
@@ -1991,7 +1991,7 @@ public class ElmSyntaxParser
                     // Check if this is part of a two-character operator:
                     if (CharCanAppearInOperator(Peek()))
                     {
-                        string operatorToken = "=" + Advance();
+                        var operatorToken = "=" + Advance();
 
                         return new Token(
                             TokenType.Operator,
@@ -2010,7 +2010,7 @@ public class ElmSyntaxParser
 
                     if (CharCanAppearInOperator(Peek()))
                     {
-                        string operatorToken = "|" + Advance();
+                        var operatorToken = "|" + Advance();
 
                         return new Token(
                             TokenType.Operator,
@@ -2060,7 +2060,7 @@ public class ElmSyntaxParser
 
                     if (CharCanAppearInOperator(Peek()))
                     {
-                        string operatorToken = ":" + Advance();
+                        var operatorToken = ":" + Advance();
 
                         return new Token(
                             TokenType.Operator,
@@ -2077,7 +2077,7 @@ public class ElmSyntaxParser
 
                     if (CharCanAppearInOperator(current))
                     {
-                        string operatorToken = Advance().ToString();
+                        var operatorToken = Advance().ToString();
 
                         if (CharCanAppearInOperator(Peek()))
                         {
@@ -2114,7 +2114,7 @@ public class ElmSyntaxParser
                 {
                     var matchesTermination = true;
 
-                    for (int i = 1; i < termination.Length; i++)
+                    for (var i = 1; i < termination.Length; i++)
                     {
                         if (PeekNext(i) != termination[i])
                         {
@@ -2125,7 +2125,7 @@ public class ElmSyntaxParser
 
                     if (matchesTermination)
                     {
-                        for (int i = 0; i < termination.Length; i++)
+                        for (var i = 0; i < termination.Length; i++)
                         {
                             Advance(); // Consume the termination characters
                         }
@@ -2141,8 +2141,8 @@ public class ElmSyntaxParser
 
                     if (!IsAtEnd())
                     {
-                        char escaped = Advance(); // Consume the character after the backslash
-                                                  // Handle specific escape sequences
+                        var escaped = Advance(); // Consume the character after the backslash
+                                                 // Handle specific escape sequences
                         if (escaped is '"')
                         {
                             sb.Append('"'); // Escaped quote
@@ -2164,7 +2164,7 @@ public class ElmSyntaxParser
                         {
                             Advance(); // Consume the '{'
 
-                            string unicode = "";
+                            var unicode = "";
 
                             while (!IsAtEnd() && Peek() is not '}')
                             {
@@ -2223,7 +2223,7 @@ public class ElmSyntaxParser
                 ConsumeAllTrivia();
 
                 // Parse the module header
-                Node<Module> moduleDefinition = ParseModule();
+                var moduleDefinition = ParseModule();
 
                 ConsumeAllTrivia();
 
@@ -2424,7 +2424,7 @@ public class ElmSyntaxParser
                     ConsumeAllTrivia();
                 }
 
-                Node<Exposing> exposingNode = ParseExposing();
+                var exposingNode = ParseExposing();
 
                 var moduleData =
                     new EffectModuleData(
@@ -2477,7 +2477,7 @@ public class ElmSyntaxParser
 
                 ConsumeAllTrivia();
 
-                Node<Exposing> exposingNode = ParseExposing();
+                var exposingNode = ParseExposing();
 
                 // Build the module data and wrap it in a Module.NormalModule.
                 var moduleData = new DefaultModuleData(moduleNameNode, exposingNode);
@@ -2670,7 +2670,7 @@ public class ElmSyntaxParser
 
                     ConsumeAllTrivia();
 
-                    bool open = false;
+                    var open = false;
 
                     if (Peek.Type is TokenType.DotDot)
                     {
@@ -2683,7 +2683,7 @@ public class ElmSyntaxParser
 
                     var closeParen = Consume(TokenType.CloseParen);
 
-                    Range? openRange =
+                    var openRange =
                         open
                         ?
                         new Range(openParen.Start, closeParen.End)
@@ -2750,7 +2750,7 @@ public class ElmSyntaxParser
 
                 var precedenceToken = Consume(TokenType.NumberLiteral);
 
-                if (!int.TryParse(precedenceToken.Lexeme, out int precedence))
+                if (!int.TryParse(precedenceToken.Lexeme, out var precedence))
                 {
                     throw ExceptionForCurrentLocation(
                         "Infix precedence is not a number: " + precedenceToken.Lexeme);
@@ -2884,7 +2884,7 @@ public class ElmSyntaxParser
             {
                 // Parse type name
 
-                Token typeNameToken = ConsumeAnyIdentifier("type name");
+                var typeNameToken = ConsumeAnyIdentifier("type name");
 
                 ConsumeAllTrivia();
 
@@ -3070,7 +3070,7 @@ public class ElmSyntaxParser
 
             ConsumeAllTrivia();
 
-            Node<Expression> expression =
+            var expression =
                 ParseExpression(indentMin: functionFirstNameToken.Start.Column + 1);
 
             var functionImpl =
@@ -3194,7 +3194,7 @@ public class ElmSyntaxParser
 
         private Node<TypeAnnotation> ParseTypeAnnotationLessApplication(int indentMin)
         {
-            Token start = Peek;
+            var start = Peek;
 
             if (start.Type is TokenType.OpenParen)
             {
@@ -3460,7 +3460,7 @@ public class ElmSyntaxParser
             int minPrecedence = 0)
         {
             // Parse a primary expression first.
-            Node<Expression> left = ParsePrimaryExpression(indentMin);
+            var left = ParsePrimaryExpression(indentMin);
 
             ConsumeAllTrivia();
 
@@ -3472,11 +3472,11 @@ public class ElmSyntaxParser
             {
                 var opToken = Consume(TokenType.Operator);
 
-                InfixOperatorInfo opInfo = InfixOperatorInfo.GetInfo(opToken.Lexeme);
+                var opInfo = InfixOperatorInfo.GetInfo(opToken.Lexeme);
 
                 // Determine the next minimum precedence for the right-hand side.
                 // For left-associative operators, use (precedence + 1).
-                int nextMinPrecedence =
+                var nextMinPrecedence =
                     opInfo.Direction is InfixDirection.Left
                     ?
                     opInfo.Precedence + 1
@@ -3486,7 +3486,7 @@ public class ElmSyntaxParser
                 ConsumeAllTrivia();
 
                 // Recursively parse the right-hand side with the adjusted precedence.
-                Node<Expression> right =
+                var right =
                     ParseExpression(
                         indentMin: indentMin,
                         minPrecedence: nextMinPrecedence);
@@ -3623,7 +3623,7 @@ public class ElmSyntaxParser
         private Node<Expression> ParseBasicPrimaryExpressionLessRecordAccess(
             int indentMin)
         {
-            Token start = Peek;
+            var start = Peek;
 
             if (start.Type is TokenType.StringLiteral)
             {
@@ -4311,7 +4311,7 @@ public class ElmSyntaxParser
         private Node<Pattern> ParsePatternLessUncons(
             int indentMin)
         {
-            Token start = Peek;
+            var start = Peek;
 
             if (start.Type is TokenType.Identifier)
             {
@@ -4641,7 +4641,7 @@ public class ElmSyntaxParser
         private Node<Expression> ParseRecordExpr(
             int indentMin)
         {
-            Token start = Peek;
+            var start = Peek;
 
             Consume(TokenType.OpenBrace);
 

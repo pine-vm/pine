@@ -344,7 +344,7 @@ public static class KernelFunction
         {
             var blobs = new List<ReadOnlyMemory<byte>>(capacity: list.Length);
 
-            for (int i = 0; i < list.Length; ++i)
+            for (var i = 0; i < list.Length; ++i)
             {
                 if (list[i] is not PineValue.BlobValue blobValue)
                     continue;
@@ -935,7 +935,7 @@ public static class KernelFunction
         if (value is not PineValue.BlobValue blobValue)
             return null;
 
-        int leadingSpaces = 0;
+        var leadingSpaces = 0;
 
         var blobBytes = blobValue.Bytes;
 

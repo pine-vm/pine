@@ -28,7 +28,7 @@ public record EnvConstraintId
     {
         public bool SatisfiedByValue(PineValue envValue)
         {
-            for (int i = 0; i < Constraints.Length; ++i)
+            for (var i = 0; i < Constraints.Length; ++i)
             {
                 var (path, expectedValue) = Constraints.Span[i];
 
@@ -1199,7 +1199,7 @@ public class CodeAnalysis
                 if (observedPath.Count < classItemPath.Count)
                     continue;
 
-                bool mismatch = false;
+                var mismatch = false;
 
                 for (var i = 0; i < classItemPath.Count; i++)
                 {
@@ -1294,7 +1294,7 @@ public class CodeAnalysis
                 if (observedPath.Count < classItemPath.Count)
                     continue;
 
-                bool mismatch = false;
+                var mismatch = false;
 
                 for (var i = 0; i < classItemPath.Count; i++)
                 {

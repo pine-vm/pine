@@ -86,7 +86,7 @@ public class ElmValueJsonValueEncoding
         {
             var recordFields = new PineValue[elmRecord.Fields.Count];
 
-            for (int i = 0; i < elmRecord.Fields.Count; i++)
+            for (var i = 0; i < elmRecord.Fields.Count; i++)
             {
                 var (fieldName, fieldValue) = elmRecord.Fields[i];
 

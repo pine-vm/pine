@@ -211,8 +211,8 @@ public class FileStoreFromSystemIOFile(
             return operation();
         }
 
-        int attempts = 0;
-        TimeSpan delay = retryOptions.InitialRetryDelay;
+        var attempts = 0;
+        var delay = retryOptions.InitialRetryDelay;
 
         while (true)
         {
@@ -552,7 +552,7 @@ public class FileStoreFromConcurrentDictionary : IFileStoreWriter, IFileStoreRea
                 continue;
             }
 
-            bool isMismatch = false;
+            var isMismatch = false;
 
             for (var i = 0; i < directoryPath.Count; i++)
             {

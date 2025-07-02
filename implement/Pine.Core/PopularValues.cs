@@ -788,9 +788,9 @@ public static class PopularValues
             yield return ElmValue.TagInstance(tagName, tagArgs);
         }
 
-        for (int i = 1; i < 4; i++)
+        for (var i = 1; i < 4; i++)
         {
-            for (int j = 1; j < 4; j++)
+            for (var j = 1; j < 4; j++)
             {
                 yield return
                     new ElmValue.ElmList(
@@ -823,7 +823,7 @@ public static class PopularValues
 
             // unsignedInt8
 
-            for (int i = 0; i < 0x1_00; i++)
+            for (var i = 0; i < 0x1_00; i++)
             {
                 yield return ElmValue.TagInstance(
                     "I8",
@@ -832,7 +832,7 @@ public static class PopularValues
 
             // unsignedInt16 BE
 
-            for (int i = 0; i < 0x1_00_00; i++)
+            for (var i = 0; i < 0x1_00_00; i++)
             {
                 yield return ElmValue.TagInstance(
                     "U16",

@@ -170,7 +170,7 @@ public abstract record TreeNodeWithStringPath : IEquatable<TreeNodeWithStringPat
                 var items =
                     new (string name, TreeNodeWithStringPath component)[tree.Elements.Count - 1];
 
-                bool removed = false;
+                var removed = false;
 
                 for (var i = 0; i < tree.Elements.Count; i++)
                 {
@@ -266,7 +266,7 @@ public abstract record TreeNodeWithStringPath : IEquatable<TreeNodeWithStringPat
                 var items =
                     new (string name, TreeNodeWithStringPath component)[treeNode.Elements.Count + 1];
 
-                bool inserted = false;
+                var inserted = false;
 
                 for (var i = 0; i < treeNode.Elements.Count; i++)
                 {

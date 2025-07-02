@@ -288,7 +288,7 @@ public class ElmInteractive
             .Where(count => count.Value > 1)
             .ToImmutableDictionary(x => x.Key, x => x.Value);
 
-        int keyIndex = 0;
+        var keyIndex = 0;
 
         var dictionary = new Dictionary<PineValueMappedForTransport, string>();
 

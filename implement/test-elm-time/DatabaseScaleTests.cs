@@ -88,7 +88,7 @@ public class DatabaseScaleTests
 
         responseJsonSerializerOptions.Converters.Add(new TupleAsJsonArray.TupleConverterFactory());
 
-        for (int i = 0; i < 100; i++)
+        for (var i = 0; i < 100; i++)
         {
             var getResponse = await publicAppClient.GetAsync("/api/entry");
 

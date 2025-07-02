@@ -77,7 +77,7 @@ public class JsonConverterForChoiceType : JsonConverterFactory
     public override JsonConverter CreateConverter(
         Type typeToConvert, JsonSerializerOptions options)
     {
-        JsonConverter converter = (JsonConverter)Activator.CreateInstance(
+        var converter = (JsonConverter)Activator.CreateInstance(
             typeof(JsonConverterForChoiceType<>)
             .MakeGenericType(typeToConvert),
             BindingFlags.Instance | BindingFlags.Public,
@@ -257,7 +257,7 @@ public class JsonConverterForChoiceType<T> : JsonConverter<T>
             throw new JsonException("Expected property name next");
         }
 
-        string? propertyName =
+        var propertyName =
             reader.GetString()
             ?? throw new JsonException("Expected property name");
 
@@ -329,7 +329,7 @@ public class JsonConverterForChoiceType<T> : JsonConverter<T>
 
         JsonConverterForChoiceType.ParsedChoiceType.Variant? variant = null;
 
-        for (int i = 0; i < ParsedType.Variants.Count; ++i)
+        for (var i = 0; i < ParsedType.Variants.Count; ++i)
         {
             var v = ParsedType.Variants.ElementAt(i);
 

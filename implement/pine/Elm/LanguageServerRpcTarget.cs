@@ -57,7 +57,7 @@ public record LanguageServerRpcTarget(
             }
             else
             {
-                Task task = Task.Delay(TimeSpan.FromSeconds(1)).ContinueWith(_ =>
+                var task = Task.Delay(TimeSpan.FromSeconds(1)).ContinueWith(_ =>
                 {
                     Log("Sending requests on initialize after delay");
 

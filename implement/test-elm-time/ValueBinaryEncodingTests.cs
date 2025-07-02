@@ -137,9 +137,9 @@ public class ValueBinaryEncodingTests
             .First()
             ];
 
-        for (int i = 0; i < testCases.Count; i++)
+        for (var i = 0; i < testCases.Count; i++)
         {
-            PineValue testCase = testCases[i];
+            var testCase = testCases[i];
 
             try
             {

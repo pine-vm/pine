@@ -37,7 +37,7 @@ public class ElmTimeJsonAdapter
 
             hashCode.Add(ReturnType);
 
-            for (int i = 0; i < Parameters.Count; ++i)
+            for (var i = 0; i < Parameters.Count; ++i)
             {
                 hashCode.Add(Parameters[i]);
             }
@@ -62,7 +62,7 @@ public class ElmTimeJsonAdapter
                 return false;
             }
 
-            for (int i = 0; i < Parameters.Count; ++i)
+            for (var i = 0; i < Parameters.Count; ++i)
             {
                 if (!Parameters[i].Equals(other.Parameters[i]))
                 {
@@ -344,7 +344,7 @@ public class ElmTimeJsonAdapter
                     out migrateFunctionValue);
             }
 
-            ElmInteractiveEnvironment.FunctionRecord? migrateFunctionRecord =
+            var migrateFunctionRecord =
                 migrateFunctionValue is null
                 ?
                 null
@@ -368,7 +368,7 @@ public class ElmTimeJsonAdapter
 
             var exposedFunctions = new KeyValuePair<string, ExposedFunction>[exposedFunctionsList.Length];
 
-            for (int i = 0; i < exposedFunctionsList.Length; ++i)
+            for (var i = 0; i < exposedFunctionsList.Length; ++i)
             {
                 var parseExposedFunctionResult =
                     ParseExposedFunctionDictEntryValue(
@@ -646,7 +646,7 @@ public class ElmTimeJsonAdapter
 
             var parameters = new ExposedFunctionDescriptionParameter[parametersList.Elements.Count];
 
-            for (int i = 0; i < parametersList.Elements.Count; i++)
+            for (var i = 0; i < parametersList.Elements.Count; i++)
             {
                 var parseParamResult =
                     ParseExposedFunctionDescriptionParameter(
@@ -1173,7 +1173,7 @@ public class ElmTimeJsonAdapter
 
         var maybeStateIncludingShim = applyResponseSpan[0];
 
-        Result<string, PineValue> parseAppStateResult =
+        var parseAppStateResult =
             ElmValueInterop.ParseElmMaybeValue(
                 maybeStateIncludingShim,
                 nothing: () => Result<string, PineValue>.ok(null),
@@ -1186,7 +1186,7 @@ public class ElmTimeJsonAdapter
             return "Failed to parse app state: " + err;
         }
 
-        PineValue? responseJsonValue =
+        var responseJsonValue =
             ElmValueInterop.ParseElmMaybeValue(
                 applyResponseSpan[1],
                 nothing: () => null,

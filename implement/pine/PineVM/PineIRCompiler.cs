@@ -2114,7 +2114,7 @@ public class PineIRCompiler
 
         if (expression is Expression.List list)
         {
-            for (int i = 0; i < list.items.Count; ++i)
+            for (var i = 0; i < list.items.Count; ++i)
             {
                 if (ExpressionLargeEnoughForCSE(list.items[i]))
                     return true;

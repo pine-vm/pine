@@ -54,7 +54,7 @@ public class EncodePineExpressionAsJsonTests
 
             ];
 
-        for (int i = 0; i < testCases.Count; i++)
+        for (var i = 0; i < testCases.Count; i++)
         {
             var testCase = testCases[i];
 
@@ -82,7 +82,7 @@ public class EncodePineExpressionAsJsonTests
 
             ];
 
-        for (int i = 0; i < testCases.Count; i++)
+        for (var i = 0; i < testCases.Count; i++)
         {
             var testCase = testCases[i];
 

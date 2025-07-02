@@ -107,7 +107,7 @@ public static class PineValueBinaryEncoding
             .OrderBy(l => l.NodesCount)
             .ToArray();
 
-        long componentId = componentIdOffset;
+        var componentId = componentIdOffset;
 
         var declarationsDict = new Dictionary<PineValue, long>();
 
@@ -291,7 +291,7 @@ public static class PineValueBinaryEncoding
         {
             var itemsCount = BinaryPrimitives.ReadInt64BigEndian(sourceBytes.Span[(sourceBytesOffset + 4)..]);
 
-            int currentOffset = 12;
+            var currentOffset = 12;
 
             var items = new PineValue[itemsCount];
 

@@ -202,7 +202,7 @@ public record ReusedInstances(
 
         var blobValuesExpectedInCompiler = new HashSet<PineValue.BlobValue>();
 
-        for (int i = 0; i < valuesExpectedInCompilerList.Elements.Length; ++i)
+        for (var i = 0; i < valuesExpectedInCompilerList.Elements.Length; ++i)
         {
             var item = valuesExpectedInCompilerList.Elements.Span[i];
 
@@ -813,7 +813,7 @@ public record ReusedInstances(
 
             componentValues.Add(elmValue);
 
-            IReadOnlyList<ElmValue> childItems =
+            var childItems =
                 elmValue switch
                 {
                     ElmValue.ElmInteger =>

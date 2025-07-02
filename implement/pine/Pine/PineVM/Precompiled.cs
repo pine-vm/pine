@@ -1324,7 +1324,7 @@ public class Precompiled
             return PineVMValues.FalseValue;
         }
 
-        for (int i = 0; i < charBlob.Bytes.Length - 1; ++i)
+        for (var i = 0; i < charBlob.Bytes.Length - 1; ++i)
         {
             if (charBlob.Bytes.Span[i] is not 0)
             {
@@ -1358,7 +1358,7 @@ public class Precompiled
             return PineVMValues.FalseValue;
         }
 
-        for (int i = 0; i < charBlob.Bytes.Length - 1; ++i)
+        for (var i = 0; i < charBlob.Bytes.Length - 1; ++i)
         {
             if (charBlob.Bytes.Span[i] is not 0)
             {
@@ -1533,9 +1533,9 @@ public class Precompiled
 
         accBlob.Bytes.CopyTo(buffer);
 
-        int bytesWritten = accBlob.Bytes.Length;
+        var bytesWritten = accBlob.Bytes.Length;
 
-        int offsetInt = (int)offset;
+        var offsetInt = (int)offset;
 
         while (true)
         {
@@ -1741,7 +1741,7 @@ public class Precompiled
 
         var concatBufferInt32 = new int[blobUtf8.Bytes.Length];
 
-        for (int i = 0; i < charsList.Elements.Length; ++i)
+        for (var i = 0; i < charsList.Elements.Length; ++i)
         {
             if (IntegerEncoding.ParseUnsignedInteger(charsList.Elements.Span[i]).IsOkOrNullable() is not { } charCode)
             {
@@ -1837,7 +1837,7 @@ public class Precompiled
 
         var concatBuffer = new byte[writtenChars * 4];
 
-        for (int i = 0; i < writtenChars; ++i)
+        for (var i = 0; i < writtenChars; ++i)
         {
             BinaryPrimitives.WriteInt32BigEndian(concatBuffer.AsSpan(i * 4), concatBufferInt32[i]);
         }
@@ -2197,7 +2197,7 @@ public class Precompiled
 
                 if (sequenceValue is PineValue.ListValue sequenceList)
                 {
-                    for (int i = 0; i < sequenceList.Elements.Length; ++i)
+                    for (var i = 0; i < sequenceList.Elements.Length; ++i)
                     {
                         collectChunks(sequenceList.Elements.Span[i]);
                     }
@@ -2793,9 +2793,9 @@ public class Precompiled
         ReadOnlyMemory<PineValue> listA,
         ReadOnlyMemory<PineValue> listB)
     {
-        int totalCount = 0;
+        var totalCount = 0;
 
-        for (int i = 0; i < listA.Length; i++)
+        for (var i = 0; i < listA.Length; i++)
         {
             var (itemEq, itemCount) = BasicsEqRecursive(listA.Span[i], listB.Span[i]);
 
@@ -2834,7 +2834,7 @@ public class Precompiled
 
     static PrecompiledResult.FinalValue ListMember(PineValue item, ReadOnlyMemory<PineValue> list)
     {
-        int totalCount = 0;
+        var totalCount = 0;
 
         for (var i = 0; i < list.Length; ++i)
         {
@@ -2871,7 +2871,7 @@ public class Precompiled
     {
         if (list is PineValue.ListValue listValue)
         {
-            int totalCount = 0;
+            var totalCount = 0;
 
             for (var i = 0; i < listValue.Elements.Length; ++i)
             {
@@ -3502,7 +3502,7 @@ public class Precompiled
             return null;
         }
 
-        int newOffset = (int)offset;
+        var newOffset = (int)offset;
 
         for (; newOffset < bigCharsList.Elements.Length; ++newOffset)
         {
@@ -3512,7 +3512,7 @@ public class Precompiled
                 break;
             }
 
-            bool found = true;
+            var found = true;
 
             for (var j = 0; j < patternList.Elements.Length; ++j)
             {
@@ -3531,8 +3531,8 @@ public class Precompiled
 
         var consumedLength = newOffset - (int)offset;
 
-        int newRow = (int)row;
-        int newCol = (int)col;
+        var newRow = (int)row;
+        var newCol = (int)col;
 
         for (var i = (int)offset; i < offset + consumedLength; ++i)
         {
@@ -3728,7 +3728,7 @@ public class Precompiled
          * In contrast to countOffsetsInString, chompWhileHelp uses 1-based indexing for row and col.
          * */
 
-        int offset = (int)startOffset;
+        var offset = (int)startOffset;
 
         while (true)
         {
@@ -4516,7 +4516,7 @@ public class Precompiled
             return null;
         }
 
-        int offsetIndex = (int)offset;
+        var offsetIndex = (int)offset;
 
         var aggregateLength =
             accList.Elements.Length
@@ -4811,9 +4811,9 @@ public class Precompiled
             return null;
         }
 
-        int offsetInt = (int)offset;
+        var offsetInt = (int)offset;
 
-        int currentLineStartInt = (int)currentLineStart;
+        var currentLineStartInt = (int)currentLineStart;
 
         var linesValues = new List<PineValue>();
 
@@ -5443,7 +5443,7 @@ public class Precompiled
             return null;
         }
 
-        int offset = (int)startOffset;
+        var offset = (int)startOffset;
 
         while (true)
         {

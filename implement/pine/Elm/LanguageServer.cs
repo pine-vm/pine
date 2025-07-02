@@ -24,7 +24,7 @@ public class LanguageServer(
 
     private readonly System.Action<string>? logDelegate = logDelegate;
 
-    private System.Threading.Tasks.Task<Result<string, WorkspaceState>>? languageServiceStateTask;
+    private System.Threading.Tasks.Task<Result<string, WorkspaceState>>? _languageServiceStateTask;
 
     /*
      * TODO: Use the version identifier from elm.json as scope.
@@ -184,7 +184,7 @@ public class LanguageServer(
 
     void InitializeWorkspaceState(InitializeParams initializeParams)
     {
-        IEnumerable<string> composeDirectories()
+        IEnumerable<string> ComposeDirectories()
         {
             if (initializeParams.RootPath is { } rootPath)
             {
@@ -217,7 +217,7 @@ public class LanguageServer(
             }
         }
 
-        languageServiceStateTask = System.Threading.Tasks.Task.Run(() =>
+        _languageServiceStateTask = System.Threading.Tasks.Task.Run(() =>
         {
             var initResult = WorkspaceState.Init(workspaceFolders);
 
@@ -229,7 +229,7 @@ public class LanguageServer(
             return initResult;
         });
 
-        var taskResult = languageServiceStateTask.Result;
+        var taskResult = _languageServiceStateTask.Result;
 
         if (taskResult.IsErrOrNull() is { } err)
         {
@@ -243,7 +243,7 @@ public class LanguageServer(
                 "Unexpected language service state result type: " + taskResult.GetType());
         }
 
-        IReadOnlyList<string> sourceDirectories = [.. composeDirectories().Distinct()];
+        IReadOnlyList<string> sourceDirectories = [.. ComposeDirectories().Distinct()];
 
         Log("Starting to initialize files contents for " + sourceDirectories.Count + " directories");
 
@@ -428,7 +428,7 @@ public class LanguageServer(
             "Workspace_didChangeWatchedFiles: " + changes.Count + " changes: " +
             string.Join(", ", changes.Select(change => change.Uri)));
 
-        if (this.languageServiceStateTask is not { } languageServiceStateTask)
+        if (this._languageServiceStateTask is not { } languageServiceStateTask)
         {
             Log("Error processing file changes: language service state not initialized");
             return;
@@ -1044,17 +1044,17 @@ public class LanguageServer(
         clock.Restart();
 
         {
-            if (languageServiceStateTask?.Result.IsErrOrNull() is { } err)
+            if (_languageServiceStateTask?.Result.IsErrOrNull() is { } err)
             {
                 throw new System.NotImplementedException(
                     "Failed initializing language service: " + err);
             }
         }
 
-        if (languageServiceStateTask?.Result.IsOkOrNull() is not { } languageServiceState)
+        if (_languageServiceStateTask?.Result.IsOkOrNull() is not { } languageServiceState)
         {
             throw new System.NotImplementedException(
-                "Unexpected language service state result type: " + languageServiceStateTask?.Result.GetType());
+                "Unexpected language service state result type: " + _languageServiceStateTask?.Result.GetType());
         }
 
         languageServiceState.AddFile(
@@ -1083,7 +1083,7 @@ public class LanguageServer(
             CommandLineInterface.FormatIntegerForDisplay(clock.ElapsedMilliseconds) + " ms, returning " +
             documentSymbolsOk.Count + " items");
 
-        static SymbolKind mapSymbolKind(Interface.SymbolKind symbolKind)
+        static SymbolKind MapSymbolKind(Interface.SymbolKind symbolKind)
         {
             return symbolKind switch
             {
@@ -1108,12 +1108,12 @@ public class LanguageServer(
             };
         }
 
-        static DocumentSymbol mapDocumentSymbol(Interface.DocumentSymbolStruct documentSymbol)
+        static DocumentSymbol MapDocumentSymbol(Interface.DocumentSymbolStruct documentSymbol)
         {
             return new DocumentSymbol(
                 Name: documentSymbol.Name,
                 Detail: null,
-                Kind: mapSymbolKind(documentSymbol.Kind),
+                Kind: MapSymbolKind(documentSymbol.Kind),
                 Range: new Range(
                     Start: new Position(
                         Line: (uint)documentSymbol.Range.StartLineNumber - 1,
@@ -1130,12 +1130,12 @@ public class LanguageServer(
                         Character: (uint)documentSymbol.SelectionRange.EndColumn - 1)),
                 Children:
                 [..documentSymbol.Children
-                    .Select(cn => mapDocumentSymbol(cn.Struct))]);
+                    .Select(cn => MapDocumentSymbol(cn.Struct))]);
         }
 
         return
             [..documentSymbolsOk
-            .Select(ds => mapDocumentSymbol(ds.Struct))];
+            .Select(ds => MapDocumentSymbol(ds.Struct))];
     }
 
     public IReadOnlyList<Location> TextDocument_references(
@@ -1645,7 +1645,7 @@ public class LanguageServer(
     public Result<string, Interface.Response> HandleRequest(
         Interface.Request request)
     {
-        if (this.languageServiceStateTask is not { } languageServiceStateTask)
+        if (this._languageServiceStateTask is not { } languageServiceStateTask)
         {
             return "Language service state not initialized";
         }
@@ -1846,7 +1846,7 @@ public class LanguageServer(
                 var newContent = before + edit.NewText + after;
 
                 // Remove the lines in the range
-                for (int i = endLine; i >= startLine; i--)
+                for (var i = endLine; i >= startLine; i--)
                 {
                     lines.RemoveAt(i);
                 }
@@ -1854,7 +1854,7 @@ public class LanguageServer(
                 // Split new content into lines and insert
                 var newLines = newContent.ModuleLines().ToList();
 
-                for (int i = 0; i < newLines.Count; i++)
+                for (var i = 0; i < newLines.Count; i++)
                 {
                     lines.Insert(startLine + i, newLines[i]);
                 }
@@ -1882,9 +1882,9 @@ public class LanguageServer(
             newText.ModuleLines().ToList();
 
         // Find common prefix (lines that are the same at the beginning)
-        int commonPrefixLength = 0;
+        var commonPrefixLength = 0;
 
-        int minLength =
+        var minLength =
             originalLines.Count < newLines.Count
             ? originalLines.Count
             : newLines.Count;
@@ -1897,11 +1897,11 @@ public class LanguageServer(
         }
 
         // Find common suffix (lines that are the same at the end)
-        int commonSuffixLength = 0;
-        int remainingOriginal = originalLines.Count - commonPrefixLength;
-        int remainingNew = newLines.Count - commonPrefixLength;
+        var commonSuffixLength = 0;
+        var remainingOriginal = originalLines.Count - commonPrefixLength;
+        var remainingNew = newLines.Count - commonPrefixLength;
 
-        int maxSuffixLength =
+        var maxSuffixLength =
             remainingOriginal < remainingNew
             ? remainingOriginal
             : remainingNew;
@@ -1914,18 +1914,18 @@ public class LanguageServer(
         }
 
         // Calculate what needs to be replaced
-        int firstChangedLine = commonPrefixLength;
-        int lastChangedLineInOriginal = originalLines.Count - commonSuffixLength - 1;
+        var firstChangedLine = commonPrefixLength;
+        var lastChangedLineInOriginal = originalLines.Count - commonSuffixLength - 1;
 
         // Get the replacement text (the lines from new text that differ)
         var replacementLines =
-            newLines.Skip(commonPrefixLength).Take(newLines.Count - commonPrefixLength - commonSuffixLength);
+            newLines.Slice(start: commonPrefixLength, length: newLines.Count - commonPrefixLength - commonSuffixLength);
 
         if (firstChangedLine >= originalLines.Count)
         {
             // Insertion at the end of the document
-            int lastExistingLine = originalLines.Count - 1;
-            int lastExistingLineLength = lastExistingLine >= 0 ? originalLines[lastExistingLine].Length : 0;
+            var lastExistingLine = originalLines.Count - 1;
+            var lastExistingLineLength = lastExistingLine >= 0 ? originalLines[lastExistingLine].Length : 0;
 
             var range = new Range(
                 Start: new Position(Line: (uint)lastExistingLine, Character: (uint)lastExistingLineLength),
@@ -1939,10 +1939,10 @@ public class LanguageServer(
         if (newLines.Count < originalLines.Count && firstChangedLine >= newLines.Count)
         {
             // Deletion from the end - delete extra lines from original
-            int lastKeptLine = newLines.Count - 1;
-            int lastKeptLineLength = lastKeptLine >= 0 ? originalLines[lastKeptLine].Length : 0;
-            int lastDeletedLine = originalLines.Count - 1;
-            int lastDeletedLineLength = originalLines[lastDeletedLine].Length;
+            var lastKeptLine = newLines.Count - 1;
+            var lastKeptLineLength = lastKeptLine >= 0 ? originalLines[lastKeptLine].Length : 0;
+            var lastDeletedLine = originalLines.Count - 1;
+            var lastDeletedLineLength = originalLines[lastDeletedLine].Length;
 
             var range = new Range(
                 Start: new Position(Line: (uint)lastKeptLine, Character: (uint)lastKeptLineLength),
@@ -1951,14 +1951,14 @@ public class LanguageServer(
             return [new TextEdit(Range: range, NewText: "")];
         }
 
-        if (firstChangedLine < originalLines.Count && newLines.Count < originalLines.Count && replacementLines.Count() == 0)
+        if (firstChangedLine < originalLines.Count && newLines.Count < originalLines.Count && replacementLines.Count is 0)
         {
             // Pure deletion in the middle - we need to delete some lines without replacement
             // The range should include the newline that creates the line to be deleted
-            int startLine = firstChangedLine > 0 ? firstChangedLine - 1 : 0;
-            int startChar = firstChangedLine > 0 ? originalLines[startLine].Length : 0;
-            int endLine = lastChangedLineInOriginal;
-            int endChar = originalLines[endLine].Length;
+            var startLine = firstChangedLine > 0 ? firstChangedLine - 1 : 0;
+            var startChar = firstChangedLine > 0 ? originalLines[startLine].Length : 0;
+            var endLine = lastChangedLineInOriginal;
+            var endChar = originalLines[endLine].Length;
 
             var range = new Range(
                 Start: new Position(Line: (uint)startLine, Character: (uint)startChar),

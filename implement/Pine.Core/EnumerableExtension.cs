@@ -182,7 +182,7 @@ public static class EnumerableExtension
     {
         var regex = new Regex(@"\d+", RegexOptions.Compiled);
 
-        int maxDigits =
+        var maxDigits =
             items
             .SelectMany(i => regex.Matches(selector(i)).Cast<Match>().Select(digitChunk => (int?)digitChunk.Value.Length))
             .Max() ?? 0;

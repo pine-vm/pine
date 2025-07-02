@@ -340,7 +340,7 @@ public abstract record ElmValue
 
             ContainedNodesCount = 0;
 
-            for (int i = 0; i < Arguments.Count; i++)
+            for (var i = 0; i < Arguments.Count; i++)
             {
                 ContainedNodesCount += Arguments[i].ContainedNodesCount + 1;
             }
@@ -364,7 +364,7 @@ public abstract record ElmValue
             if (Arguments.Count != otherTag.Arguments.Count)
                 return false;
 
-            for (int i = 0; i < Arguments.Count; i++)
+            for (var i = 0; i < Arguments.Count; i++)
             {
                 if (!Arguments[i].Equals(otherTag.Arguments[i]))
                     return false;
@@ -430,7 +430,7 @@ public abstract record ElmValue
                 if (Arguments.Count != otherTag.Arguments.Count)
                     return false;
 
-                for (int i = 0; i < Arguments.Count; i++)
+                for (var i = 0; i < Arguments.Count; i++)
                 {
                     if (!Arguments[i].Equals(otherTag.Arguments[i]))
                         return false;
@@ -453,7 +453,7 @@ public abstract record ElmValue
 
                 hashCode.Add(TagName);
 
-                for (int i = 0; i < Arguments.Count; i++)
+                for (var i = 0; i < Arguments.Count; i++)
                 {
                     hashCode.Add(Arguments[i]);
                 }
@@ -499,7 +499,7 @@ public abstract record ElmValue
 
             ContainedNodesCount = 0;
 
-            for (int i = 0; i < Elements.Count; i++)
+            for (var i = 0; i < Elements.Count; i++)
             {
                 ContainedNodesCount += Elements[i].ContainedNodesCount + 1;
             }
@@ -514,7 +514,7 @@ public abstract record ElmValue
             if (Elements.Count != otherList.Elements.Count)
                 return false;
 
-            for (int i = 0; i < Elements.Count; i++)
+            for (var i = 0; i < Elements.Count; i++)
             {
                 if (!Elements[i].Equals(otherList.Elements[i]))
                     return false;
@@ -533,7 +533,7 @@ public abstract record ElmValue
         {
             var hashCode = new HashCode();
 
-            for (int i = 0; i < elements.Count; i++)
+            for (var i = 0; i < elements.Count; i++)
             {
                 hashCode.Add(elements[i].GetHashCode());
             }
@@ -588,7 +588,7 @@ public abstract record ElmValue
             if (Fields.Count != otherRecord.Fields.Count)
                 return false;
 
-            for (int i = 0; i < Fields.Count; i++)
+            for (var i = 0; i < Fields.Count; i++)
             {
                 if (Fields[i].FieldName != otherRecord.Fields[i].FieldName)
                     return false;
@@ -605,7 +605,7 @@ public abstract record ElmValue
         {
             var hashCode = new HashCode();
 
-            for (int i = 0; i < Fields.Count; i++)
+            for (var i = 0; i < Fields.Count; i++)
             {
                 hashCode.Add(Fields[i].FieldName);
                 hashCode.Add(Fields[i].Value);
@@ -980,7 +980,7 @@ public abstract record ElmValue
 
         var firstElementType = list[0];
 
-        for (int i = 1; i < list.Count; i++)
+        for (var i = 1; i < list.Count; i++)
         {
             var comparisonResult = AreElmValueTypesEqual(firstElementType, list[i]);
 

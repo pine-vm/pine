@@ -191,7 +191,7 @@ public class BundledElmEnvironments
     public static (IReadOnlyList<PineValueCompactBuild.ListEntry>, ReadOnlyMemory<byte>) BuildBundleResourceFileJsonUtf8(
         IReadOnlyDictionary<TreeNodeWithStringPath, PineValue> compiledEnvironments)
     {
-        IReadOnlyList<PineValueCompactBuild.ListEntry> allEntries =
+        var allEntries =
             BuildBundleResourceFileListItems(compiledEnvironments);
 
         return (allEntries, System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(allEntries));

@@ -480,7 +480,7 @@ public class CompilePineToDotNetTests
 
         ];
 
-        for (int testCaseIndex = 0; testCaseIndex < testCases.Count; ++testCaseIndex)
+        for (var testCaseIndex = 0; testCaseIndex < testCases.Count; ++testCaseIndex)
         {
             var testCase = testCases[testCaseIndex];
 

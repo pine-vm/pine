@@ -227,7 +227,7 @@ public class InteractiveSessionPine : IInteractiveSession
         var initialStateElmValueInCompiler =
             ElmValueEncoding.ElmValueAsPineValue(initialStateElmValue);
 
-        PineValue compiledNewEnvInCompiler = initialStateElmValueInCompiler;
+        var compiledNewEnvInCompiler = initialStateElmValueInCompiler;
 
         var defaultKernelModulesTree =
             ElmCompiler.ElmCoreAndKernelModuleFilesDefault.Value;
@@ -495,7 +495,7 @@ public class InteractiveSessionPine : IInteractiveSession
         ElmCompiler elmCompiler,
         IPineVM pineVM)
     {
-        PineValue compiledNewEnvInCompiler = initialStateElmValueInCompiler;
+        var compiledNewEnvInCompiler = initialStateElmValueInCompiler;
 
         var modulesToCompile =
             ElmInteractive.ModulesFilePathsAndTextsFromAppCodeTree(

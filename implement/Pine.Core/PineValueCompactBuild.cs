@@ -34,7 +34,7 @@ public class PineValueCompactBuild
             {
                 var items = new PineValue[listItemsKeys.Count];
 
-                for (int i = 0; i < items.Length; ++i)
+                for (var i = 0; i < items.Length; ++i)
                 {
                     items[i] = mutatedDict[listItemsKeys[i]];
                 }
@@ -122,7 +122,7 @@ public class PineValueCompactBuild
         {
             var itemsIds = new string[itemValues.Length];
 
-            for (int i = 0; i < itemValues.Length; ++i)
+            for (var i = 0; i < itemValues.Length; ++i)
             {
                 itemsIds[i] = itemId(itemValues.Span[i]);
             }

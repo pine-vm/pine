@@ -209,13 +209,13 @@ public static class ElmModule
     {
         var textWithoutLeadingComments = RemoveLeadingTrivia(moduleText);
 
-        bool inTripleQuotedString = false;
+        var inTripleQuotedString = false;
 
         foreach (var line in ModuleLines(textWithoutLeadingComments))
         {
             // We'll do a simple toggle for every """ we see on the line.
             // Each occurrence flips us from outside->inside or inside->outside.
-            int searchStart = 0;
+            var searchStart = 0;
             while (true)
             {
                 var index = line.IndexOf("\"\"\"", searchStart, StringComparison.Ordinal);
@@ -272,7 +272,7 @@ public static class ElmModule
     /// </summary>
     public static IEnumerable<string> ModuleLines(this string moduleText)
     {
-        int lastLineStartIndex = 0;
+        var lastLineStartIndex = 0;
 
         foreach (var (lineEnd, lineStart) in ModuleLinesBounds(moduleText))
         {
@@ -303,7 +303,7 @@ public static class ElmModule
     /// </summary>
     public static IEnumerable<(int lineEnd, int lineStart)> ModuleLinesBounds(this string moduleText)
     {
-        for (int charIndex = 0; charIndex < moduleText.Length; charIndex++)
+        for (var charIndex = 0; charIndex < moduleText.Length; charIndex++)
         {
             var currentChar = moduleText[charIndex];
 

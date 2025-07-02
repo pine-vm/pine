@@ -105,7 +105,7 @@ public static class ElmValueEncoding
         {
             if (IntegerEncoding.ParseUnsignedInteger(blobValue).IsOkOrNullable() is { } asBigInt)
             {
-                int asInt = (int)asBigInt;
+                var asInt = (int)asBigInt;
 
                 if (asInt is 0 || UnicodeUtility.IsValidUnicodeScalar(asInt))
                 {
@@ -239,7 +239,7 @@ public static class ElmValueEncoding
                             {
                                 if (tagName.Length is not 0 && char.IsAsciiLetterUpper(tagName[0]))
                                 {
-                                    bool tagNameContainsInvalidChar = false;
+                                    var tagNameContainsInvalidChar = false;
 
                                     for (var charIndex = 1; charIndex < tagName.Length; charIndex++)
                                     {
@@ -254,7 +254,7 @@ public static class ElmValueEncoding
                                     {
                                         var tagArgumentsListResults = new ElmValue[tagArgumentsList.Elements.Length];
 
-                                        bool failedTagArguments = false;
+                                        var failedTagArguments = false;
 
                                         for (var argIndex = 0; argIndex < tagArgumentsList.Elements.Length; argIndex++)
                                         {

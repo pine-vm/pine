@@ -519,7 +519,7 @@ public class ProcessStoreReaderInFileStore(
         var sharedDictionary =
             PineValueCompactBuild.BuildDictionaryFromEntries(dictionaryEntries);
 
-        PineValue largestValue = sharedDictionary.First().Value;
+        var largestValue = sharedDictionary.First().Value;
 
         foreach (var entry in sharedDictionary)
         {

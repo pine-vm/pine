@@ -158,7 +158,7 @@ public class MessageItemConverter : JsonConverter<MessageItem>
     {
         if (reader.TokenType is JsonTokenType.String)
         {
-            string str = reader.GetString()!;
+            var str = reader.GetString()!;
 
             return new MessageItem.StringMessage(str);
         }

@@ -524,7 +524,7 @@ public static class CompileModuleToCSharp
     {
         var sb = new StringBuilder(paramEnvName);
 
-        for (int i = 0; i < path.Length; ++i)
+        for (var i = 0; i < path.Length; ++i)
         {
             sb.Append("_" + path.Span[i]);
         }
@@ -884,8 +884,8 @@ public static class CompileModuleToCSharp
     private static IEnumerable<SSAInstruction> SSAInstructionsFromIRCompilationResult(
         IReadOnlyList<StackInstruction> instructions)
     {
-        int pushCount = 0;
-        int popCount = 0;
+        var pushCount = 0;
+        var popCount = 0;
 
         for (var i = 0; i < instructions.Count; ++i)
         {

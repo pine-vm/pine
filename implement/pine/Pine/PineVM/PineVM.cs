@@ -375,7 +375,7 @@ public class PineVM : IPineVM
             {
                 var specialization = Specialized[i];
 
-                bool foundMismatch = false;
+                var foundMismatch = false;
 
                 for (var specializationIndex = 0; specializationIndex < specialization.constraint.Count; specializationIndex++)
                 {
@@ -1466,7 +1466,7 @@ public class PineVM : IPineVM
 
             var stackTrace = new Expression[frameCount];
 
-            for (int i = 0; i < frameCount; i++)
+            for (var i = 0; i < frameCount; i++)
             {
                 stackTrace[i] = stack.ElementAt(i + 1).Expression;
             }
@@ -1773,7 +1773,7 @@ public class PineVM : IPineVM
 
                             var prevValue = currentFrame.PopTopmostFromStack();
 
-                            PineValue resultValue = KernelFunction.skip(skipCount, prevValue);
+                            var resultValue = KernelFunction.skip(skipCount, prevValue);
 
                             currentFrame.PushInstructionResult(resultValue);
 
@@ -1823,7 +1823,7 @@ public class PineVM : IPineVM
 
                             var prevValue = currentFrame.PopTopmostFromStack();
 
-                            PineValue resultValue = KernelFunction.takeLast(takeCount, prevValue);
+                            var resultValue = KernelFunction.takeLast(takeCount, prevValue);
 
                             currentFrame.PushInstructionResult(resultValue);
 
@@ -1839,7 +1839,7 @@ public class PineVM : IPineVM
 
                             var items = new PineValue[itemsCount];
 
-                            for (int i = 0; i < itemsCount; ++i)
+                            for (var i = 0; i < itemsCount; ++i)
                             {
                                 items[itemsCount - i - 1] = currentFrame.PopTopmostFromStack();
                             }
@@ -2433,7 +2433,7 @@ public class PineVM : IPineVM
                             var right = currentFrame.PopTopmostFromStack();
                             var left = currentFrame.PopTopmostFromStack();
 
-                            PineValue resultValue = KernelFunction.bit_and_binary(left, right);
+                            var resultValue = KernelFunction.bit_and_binary(left, right);
 
                             currentFrame.PushInstructionResult(resultValue);
 
@@ -2448,7 +2448,7 @@ public class PineVM : IPineVM
 
                             var left = currentFrame.PopTopmostFromStack();
 
-                            PineValue resultValue = KernelFunction.bit_and_binary(left, right);
+                            var resultValue = KernelFunction.bit_and_binary(left, right);
 
                             currentFrame.PushInstructionResult(resultValue);
 
@@ -2460,7 +2460,7 @@ public class PineVM : IPineVM
                             var right = currentFrame.PopTopmostFromStack();
                             var left = currentFrame.PopTopmostFromStack();
 
-                            PineValue resultValue = KernelFunction.bit_or_binary(left, right);
+                            var resultValue = KernelFunction.bit_or_binary(left, right);
 
                             currentFrame.PushInstructionResult(resultValue);
 
@@ -2475,7 +2475,7 @@ public class PineVM : IPineVM
 
                             var left = currentFrame.PopTopmostFromStack();
 
-                            PineValue resultValue = KernelFunction.bit_or_binary(left, right);
+                            var resultValue = KernelFunction.bit_or_binary(left, right);
 
                             currentFrame.PushInstructionResult(resultValue);
 
@@ -2487,7 +2487,7 @@ public class PineVM : IPineVM
                             var right = currentFrame.PopTopmostFromStack();
                             var left = currentFrame.PopTopmostFromStack();
 
-                            PineValue resultValue = KernelFunction.bit_xor_binary(left, right);
+                            var resultValue = KernelFunction.bit_xor_binary(left, right);
 
                             currentFrame.PushInstructionResult(resultValue);
 
@@ -2498,7 +2498,7 @@ public class PineVM : IPineVM
                         {
                             var value = currentFrame.PopTopmostFromStack();
 
-                            PineValue resultValue = KernelFunction.bit_not(value);
+                            var resultValue = KernelFunction.bit_not(value);
 
                             currentFrame.PushInstructionResult(resultValue);
 
@@ -2623,7 +2623,7 @@ public class PineVM : IPineVM
                             var right = currentFrame.PopTopmostFromStack();
                             var left = currentFrame.PopTopmostFromStack();
 
-                            PineValue resultValue = PineVMValues.FalseValue;
+                            var resultValue = PineVMValues.FalseValue;
 
                             if (left == PineVMValues.TrueValue && right == PineVMValues.TrueValue)
                             {
@@ -2652,7 +2652,7 @@ public class PineVM : IPineVM
 
                                 if (minRemainingCount <= blobBytes.Length)
                                 {
-                                    int sliceStartIndex = 0;
+                                    var sliceStartIndex = 0;
 
                                     while (sliceStartIndex < blobBytes.Length - minRemainingCount)
                                     {

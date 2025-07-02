@@ -1404,7 +1404,7 @@ public class PGOTests
             RunScenariosWithGivenVM(optimizedPineVM);
 
 
-        long nonOptimizedAverageInvocationCount =
+        var nonOptimizedAverageInvocationCount =
             ReportsAverageInvocationCount(nonOptimizedScenariosStats);
 
         Console.WriteLine("\nAverage invocation count not optimized: " + nonOptimizedAverageInvocationCount + "\n");
@@ -1794,7 +1794,7 @@ public class PGOTests
             RunScenariosWithGivenVM(optimizedPineVM);
 
 
-        long nonOptimizedAverageInvocationCount =
+        var nonOptimizedAverageInvocationCount =
             ReportsAverageInvocationCount(nonOptimizedScenariosStats);
 
         Console.WriteLine("\nAverage invocation count not optimized: " + nonOptimizedAverageInvocationCount + "\n");

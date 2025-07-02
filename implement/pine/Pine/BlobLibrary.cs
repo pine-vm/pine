@@ -40,7 +40,7 @@ public class BlobLibrary
     {
         try
         {
-            ReadOnlyMemory<byte>? blobCandidate =
+            var blobCandidate =
                 OverrideGetBlobWithSHA256?.Invoke(hash => GetBlobWithSHA256Cached(hash)?.content)(sha256)
                 ??
                 GetBlobWithSHA256Cached(sha256)?.content;
@@ -363,7 +363,7 @@ public class BlobLibrary
         if (retryCountLimit <= 0)
             throw new ArgumentOutOfRangeException(nameof(retryCountLimit));
 
-        for (int attempts = 1; ; attempts++)
+        for (var attempts = 1; ; attempts++)
         {
             try
             {
