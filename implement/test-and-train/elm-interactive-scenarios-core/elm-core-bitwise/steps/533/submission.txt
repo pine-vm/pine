@@ -1,0 +1,1 @@
+Bitwise.and  0xffffffff  -12148532240
