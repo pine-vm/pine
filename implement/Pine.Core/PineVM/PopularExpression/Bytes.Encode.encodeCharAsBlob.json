@@ -186,14 +186,8 @@
                                               [
                                                 [
                                                   [
-                                                    { "BlobAsString": "KernelApplication" },
-                                                    [
-                                                      { "BlobAsString": "bit_and" },
-                                                      [
-                                                        { "BlobAsString": "Literal" },
-                                                        [ { "ListAsString_2024": "\u04F0\u00FF" } ]
-                                                      ]
-                                                    ]
+                                                    { "BlobAsString": "Literal" },
+                                                    { "ListAsString_2024": "\u00F0" }
                                                   ],
                                                   [
                                                     { "BlobAsString": "ParseAndEval" },
@@ -1839,7 +1833,7 @@
               ]
             ]
           },
-          { "List": [ [] ] }
+          { "Literal": [ [] ] }
         ]
       ]
     }

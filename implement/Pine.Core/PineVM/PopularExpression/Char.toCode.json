@@ -10,12 +10,7 @@
               {
                 "List": [
                   [
-                    {
-                      "KernelApplication": [
-                        "take",
-                        { "Literal": [ [ 1, 0 ] ] }
-                      ]
-                    },
+                    { "Literal": [ { "AsBase64": "BA==" } ] },
                     {
                       "KernelApplication": [
                         "head",

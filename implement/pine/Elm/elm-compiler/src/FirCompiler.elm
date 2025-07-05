@@ -794,9 +794,20 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
 
         emitFunction : DeclBlockFunctionEntry -> Result String Pine.Expression
         emitFunction (DeclBlockFunctionEntry functionEntryParams functionEntryInnerExpression) =
-            emitExpression
-                (emitFunctionStack (closureParameterFromParameters 0 functionEntryParams))
-                functionEntryInnerExpression
+            case
+                emitExpression
+                    (emitFunctionStack (closureParameterFromParameters 0 functionEntryParams))
+                    functionEntryInnerExpression
+            of
+                Err err ->
+                    Err err
+
+                Ok emittedExpression ->
+                    Ok
+                        (searchForExpressionReductionRecursive
+                            3
+                            emittedExpression
+                        )
 
         emitBlockDeclarationsResult : Result String (List ( String, ( DeclBlockFunctionEntry, Pine.Expression ) ))
         emitBlockDeclarationsResult =
@@ -902,7 +913,10 @@ emitDeclarationBlock stackBefore blockDeclarations (DeclBlockClosureCaptures con
                     in
                     Ok
                         ( emitFunctionStack []
-                        , EmitDeclarationBlockResult newEnvFunctionsValues parseAndEmitFunction envFunctionsExpression
+                        , EmitDeclarationBlockResult
+                            newEnvFunctionsValues
+                            parseAndEmitFunction
+                            envFunctionsExpression
                         )
 
 
@@ -1606,10 +1620,17 @@ emitFunctionApplication functionExpression arguments compilation =
                                         Err ("Failed emitting function body: " ++ err)
 
                                     Ok funcBodyEmitted ->
+                                        let
+                                            funcBodyReduced : Pine.Expression
+                                            funcBodyReduced =
+                                                searchForExpressionReductionRecursive
+                                                    5
+                                                    funcBodyEmitted
+                                        in
                                         Ok
                                             (Pine.ParseAndEvalExpression
                                                 (Pine.LiteralExpression
-                                                    (Pine.encodeExpressionAsValue funcBodyEmitted)
+                                                    (Pine.encodeExpressionAsValue funcBodyReduced)
                                                 )
                                                 (Pine.ListExpression
                                                     [ prevEnvFunctionsExpr
@@ -1925,11 +1946,15 @@ partialApplicationExpressionFromListOfArguments arguments emitStack function =
 
 emitWrapperForPartialApplication : Pine.Expression -> Int -> Pine.Expression -> Pine.Expression
 emitWrapperForPartialApplication envFunctionsExpression parameterCount innerExpression =
+    let
+        innerExpressionReduced =
+            searchForExpressionReductionRecursive 5 innerExpression
+    in
     case parameterCount of
         0 ->
             emitWrapperForPartialApplicationZero
                 { getFunctionInnerExpression =
-                    innerExpression
+                    innerExpressionReduced
                         |> Pine.encodeExpressionAsValue
                         |> Pine.LiteralExpression
                 , getEnvFunctionsExpression = envFunctionsExpression
@@ -1938,7 +1963,7 @@ emitWrapperForPartialApplication envFunctionsExpression parameterCount innerExpr
         _ ->
             buildRecordOfPartiallyAppliedFunction
                 { getFunctionInnerExpression =
-                    innerExpression
+                    innerExpressionReduced
                         |> Pine.encodeExpressionAsValue
                         |> Pine.LiteralExpression
                 , parameterCount = parameterCount
@@ -2371,16 +2396,21 @@ searchForExpressionReduction expression =
 
                 "skip" ->
                     case rootArgument of
-                        Pine.ListExpression [ Pine.LiteralExpression skipCountLiteral, Pine.ListExpression expressionList ] ->
+                        Pine.ListExpression [ Pine.LiteralExpression skipCountLiteral, sourceExpr ] ->
                             case Pine.intFromValue skipCountLiteral of
                                 Err _ ->
                                     attemptReduceViaEval ()
 
                                 Ok skipCount ->
-                                    Just
-                                        (Pine.ListExpression
-                                            (List.drop skipCount expressionList)
-                                        )
+                                    case sourceExpr of
+                                        Pine.ListExpression expressionList ->
+                                            Just
+                                                (Pine.ListExpression
+                                                    (List.drop skipCount expressionList)
+                                                )
+
+                                        _ ->
+                                            attemptReduceViaEval ()
 
                         _ ->
                             attemptReduceViaEval ()

@@ -616,7 +616,7 @@
                                                                     { "Environment": [] }
                                                                   ]
                                                                 },
-                                                                { "List": [ [] ] }
+                                                                { "Literal": [ [] ] }
                                                               ]
                                                             ]
                                                           }
@@ -678,12 +678,7 @@
                                     }
                                   ]
                                 },
-                                {
-                                  "KernelApplication": [
-                                    "take",
-                                    { "Literal": [ [ 0, 0 ] ] }
-                                  ]
-                                }
+                                { "Literal": [ { "AsBase64": "" } ] }
                               ]
                             }
                           ]
@@ -954,12 +949,7 @@
                                                                 }
                                                               ]
                                                             },
-                                                            {
-                                                              "KernelApplication": [
-                                                                "skip",
-                                                                { "Literal": [ [ 2, 16777216 ] ] }
-                                                              ]
-                                                            }
+                                                            { "Literal": [ { "AsBase64": "AAAA" } ] }
                                                           ]
                                                         ]
                                                       }
@@ -973,7 +963,7 @@
                                       ]
                                     ]
                                   },
-                                  { "List": [ [] ] }
+                                  { "Literal": [ [] ] }
                                 ]
                               ]
                             }
@@ -1247,12 +1237,7 @@
                                                             }
                                                           ]
                                                         },
-                                                        {
-                                                          "KernelApplication": [
-                                                            "skip",
-                                                            { "Literal": [ [ 1, 0 ] ] }
-                                                          ]
-                                                        }
+                                                        { "Literal": [ { "AsBase64": "AA==" } ] }
                                                       ]
                                                     ]
                                                   }
@@ -1266,7 +1251,7 @@
                                   ]
                                 ]
                               },
-                              { "List": [ [] ] }
+                              { "Literal": [ [] ] }
                             ]
                           ]
                         }
@@ -1692,12 +1677,7 @@
                                                         }
                                                       ]
                                                     },
-                                                    {
-                                                      "KernelApplication": [
-                                                        "skip",
-                                                        { "Literal": [ [ 1, 16777215 ] ] }
-                                                      ]
-                                                    }
+                                                    { "Literal": [ { "AsBase64": "////" } ] }
                                                   ]
                                                 ]
                                               }
@@ -1795,12 +1775,7 @@
                                                         }
                                                       ]
                                                     },
-                                                    {
-                                                      "KernelApplication": [
-                                                        "skip",
-                                                        { "Literal": [ [ 2, 16777216 ] ] }
-                                                      ]
-                                                    }
+                                                    { "Literal": [ { "AsBase64": "AAAA" } ] }
                                                   ]
                                                 ]
                                               }
@@ -1816,7 +1791,7 @@
                           ]
                         ]
                       },
-                      { "List": [ [] ] }
+                      { "Literal": [ [] ] }
                     ]
                   ]
                 }
@@ -2178,12 +2153,7 @@
                                                     }
                                                   ]
                                                 },
-                                                {
-                                                  "KernelApplication": [
-                                                    "skip",
-                                                    { "Literal": [ [ 1, 255 ] ] }
-                                                  ]
-                                                }
+                                                { "Literal": [ { "AsBase64": "/w==" } ] }
                                               ]
                                             ]
                                           }
@@ -2281,12 +2251,7 @@
                                                     }
                                                   ]
                                                 },
-                                                {
-                                                  "KernelApplication": [
-                                                    "skip",
-                                                    { "Literal": [ [ 1, 0 ] ] }
-                                                  ]
-                                                }
+                                                { "Literal": [ { "AsBase64": "AA==" } ] }
                                               ]
                                             ]
                                           }
@@ -2302,7 +2267,7 @@
                       ]
                     ]
                   },
-                  { "List": [ [] ] }
+                  { "Literal": [ [] ] }
                 ]
               ]
             }
