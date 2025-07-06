@@ -39,12 +39,7 @@
               }
             ]
           },
-          {
-            "KernelApplication": [
-              "take",
-              { "Literal": [ [ 0, 0 ] ] }
-            ]
-          }
+          { "Literal": [ { "AsBase64": "" } ] }
         ]
       ]
     }

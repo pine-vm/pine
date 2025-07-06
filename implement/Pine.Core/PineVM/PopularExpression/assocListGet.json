@@ -108,7 +108,7 @@
         },
         {
           "ParseAndEval": [
-            { "Literal": [ { "ListAsString": "Error in case-of block: No matching branch." } ] },
+            { "Literal": [ { "BlobAsString": "Error in case-of block: No matching branch." } ] },
             {
               "KernelApplication": [
                 "head",
@@ -428,7 +428,7 @@
             {
               "List": [
                 [
-                  { "Literal": [ { "ListAsString": "Just" } ] },
+                  { "Literal": [ { "BlobAsString": "Just" } ] },
                   {
                     "List": [
                       [
@@ -502,7 +502,7 @@
     {
       "Literal": [
         [
-          { "ListAsString": "Nothing" },
+          { "BlobAsString": "Nothing" },
           []
         ]
       ]

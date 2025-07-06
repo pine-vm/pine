@@ -16,7 +16,7 @@ public class Program
     public const string DestinationFilePath = "./Pine.Core/" + ReusedInstances.EmbeddedResourceFilePath;
 
     public const string PreviousCompilerFilePath =
-        "./history/2025-06-13-compiler-bundle/elm-syntax-parser-and-compiler.json.gzip";
+        "./history/2025-07-06-compiler-bundle/elm-syntax-parser-and-compiler.json.gzip";
 
     public static void Main()
     {
@@ -261,16 +261,16 @@ public class Program
         ImmutableDictionary<OSPlatform, (string hash, string remoteSource)>.Empty
         .Add(
             OSPlatform.Linux,
-            ("49a6624f4c989b793514f61a3c05b0c24e855447b65abb25b80be6291acdb7be",
-            @"https://github.com/pine-vm/pine/releases/download/v0.4.7/pine-bin-v0.4.7-linux-x64.zip"))
+            ("db7034cf78b17773a3718d9156d07f77a33852526468d3181142c8ac9c035062",
+            @"https://github.com/pine-vm/pine/releases/download/v0.4.9/pine-bin-v0.4.9-linux-x64.zip"))
         .Add(
             OSPlatform.Windows,
-            ("ed9b166ef27bd8bcef94cd920bd5e69600ef44f0abd7112edd08d70f89b124e6",
-            @"https://github.com/pine-vm/pine/releases/download/v0.4.7/pine-bin-v0.4.7-win-x64.zip"))
+            ("eb109da9ee7f6049f1bfd44721254050f0c130f5f1472c05abcee1db0b642c16",
+            @"https://github.com/pine-vm/pine/releases/download/v0.4.9/pine-bin-v0.4.9-win-x64.zip"))
         .Add(
             OSPlatform.OSX,
-            ("d50af2e3db01e74d3b9848499ab5f857fe5b290b5371fce238b7e6aa2e8b5fed",
-            @"https://github.com/pine-vm/pine/releases/download/v0.4.7/pine-bin-v0.4.7-osx-x64.zip"));
+            ("9d2f9b720a973c5111603d8a07ccd4d5d8d5c86fa2d9a34d40cf0472f94d161c",
+            @"https://github.com/pine-vm/pine/releases/download/v0.4.9/pine-bin-v0.4.9-osx-x64.zip"));
 
     private readonly static Lazy<string> executableFilePathCached = new(() =>
     {

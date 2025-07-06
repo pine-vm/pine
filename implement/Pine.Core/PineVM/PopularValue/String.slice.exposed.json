@@ -181,7 +181,7 @@
                                                   ]
                                                 ],
                                                 [
-                                                  { "BlobAsString": "List" },
+                                                  { "BlobAsString": "Literal" },
                                                   [ [] ]
                                                 ]
                                               ]
@@ -248,7 +248,7 @@
                                                             ]
                                                           ],
                                                           [
-                                                            { "BlobAsString": "List" },
+                                                            { "BlobAsString": "Literal" },
                                                             [ [] ]
                                                           ]
                                                         ]
@@ -380,14 +380,8 @@
                                             ]
                                           ],
                                           [
-                                            { "BlobAsString": "KernelApplication" },
-                                            [
-                                              { "BlobAsString": "take" },
-                                              [
-                                                { "BlobAsString": "Literal" },
-                                                [ [ 1, -1 ] ]
-                                              ]
-                                            ]
+                                            { "BlobAsString": "Literal" },
+                                            { "ListAsString_2024": "\u0002" }
                                           ]
                                         ]
                                       ]
@@ -785,7 +779,7 @@
                                                             ]
                                                           ],
                                                           [
-                                                            { "BlobAsString": "List" },
+                                                            { "BlobAsString": "Literal" },
                                                             [ [] ]
                                                           ]
                                                         ]
@@ -971,7 +965,7 @@
                     ]
                   ],
                   [
-                    { "BlobAsString": "List" },
+                    { "BlobAsString": "Literal" },
                     [ [] ]
                   ]
                 ]
