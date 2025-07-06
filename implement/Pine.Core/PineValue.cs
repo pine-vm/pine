@@ -291,6 +291,16 @@ public abstract record PineValue : IEquatable<PineValue>
         public override int GetHashCode() =>
             slimHashCode;
 
+        /// <inheritdoc/>
+        public override string ToString()
+        {
+            return
+                ToString(
+                    itemsCount: Elements.Length,
+                    nodesCount: NodesCount,
+                    blobsBytesCount: BlobsBytesCount);
+        }
+
         /// <summary>
         /// Value type variant of <see cref="ListValue"/>.
         /// </summary>
@@ -372,6 +382,35 @@ public abstract record PineValue : IEquatable<PineValue>
 
             /// <inheritdoc/>
             public override int GetHashCode() => slimHashCode;
+
+            /// <inheritdoc/>
+            public override string ToString()
+            {
+                return
+                    ListValue.ToString(
+                        itemsCount: Items.Length,
+                        nodesCount: nodesCount,
+                        blobsBytesCount: blobsBytesCount);
+            }
+        }
+
+        private static string ToString(
+            long itemsCount,
+            long nodesCount,
+            long blobsBytesCount)
+        {
+            /*
+             * Example:
+             * 
+             * ListValue { ItemsCount = 85, NodesCount = 6_523_426_362, BlobsBytesCount = 91_790_840_965 }
+             * */
+
+            return
+                nameof(ListValue) +
+                " { ItemsCount = " + CommandLineInterface.FormatIntegerForDisplay(itemsCount) +
+                ", NodesCount = " + CommandLineInterface.FormatIntegerForDisplay(nodesCount) +
+                ", BlobsBytesCount = " + CommandLineInterface.FormatIntegerForDisplay(blobsBytesCount) +
+                " }";
         }
     }
 
@@ -427,6 +466,14 @@ public abstract record PineValue : IEquatable<PineValue>
 
         /// <inheritdoc/>
         public override int GetHashCode() => slimHashCode;
+
+        /// <inheritdoc/>
+        public override string ToString()
+        {
+            return
+                nameof(BlobValue) +
+                " { BytesCount = " + CommandLineInterface.FormatIntegerForDisplay(Bytes.Length) + " }";
+        }
     }
 
     /// <summary>
@@ -489,4 +536,3 @@ public abstract record PineValue : IEquatable<PineValue>
         return (collectedLists, collectedBlobs);
     }
 }
-
