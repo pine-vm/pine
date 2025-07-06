@@ -732,41 +732,6 @@ public class Precompiled
         }
 
         {
-            var unsafeUnsignedBlobValueFromIntExpression =
-                popularExpressionDictionary["Pine.unsafeUnsignedBlobValueFromInt"];
-
-            var unsafeUnsignedBlobValueFromIntExpressionValue =
-                ExpressionEncoding.EncodeExpressionAsValue(unsafeUnsignedBlobValueFromIntExpression);
-
-            var valueFromCharExpression =
-                popularExpressionDictionary["Pine.valueFromChar"];
-
-            var valueFromCharExpressionValue =
-                ExpressionEncoding.EncodeExpressionAsValue(valueFromCharExpression);
-
-            var computeValueFromStringRecursiveExpr =
-                popularExpressionDictionary["Pine.computeValueFromString_2024"];
-
-            var computeValueFromStringRecursiveExprValue =
-                ExpressionEncoding.EncodeExpressionAsValue(computeValueFromStringRecursiveExpr);
-
-            var envClass =
-                EnvConstraintId.Create(
-                    [
-                    new KeyValuePair<IReadOnlyList<int>, PineValue>(
-                        [0],
-                        popularValueDictionary["Pine.computeValueFromString_2024.aggregate-env"]),
-                    ]);
-
-            yield return
-                new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
-                    computeValueFromStringRecursiveExpr,
-                    [new PrecompiledEntry(
-                        envClass,
-                        PineComputeValueFromString_2024_Recursive)]);
-        }
-
-        {
             var computeValueFromString_2025Expr =
                 popularExpressionDictionary["Pine.computeValueFromString_2025.body"];
 
