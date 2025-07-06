@@ -98,119 +98,99 @@ public class PineVM : IPineVM
             ComputeMaxStackUsage(Instructions);
 
         public static int ComputeMaxStackUsage(
-            IReadOnlyList<StackInstruction> Instructions)
+            IReadOnlyList<StackInstruction> instructions)
         {
-            return
-                ComputeMaxStackUsage(
-                    Instructions,
-                    instructionIndex: 0,
-                    visited: [],
-                    currentDepth: 0,
-                    maxDepth: 0);
-        }
-
-        private static int ComputeMaxStackUsage(
-            IReadOnlyList<StackInstruction> Instructions,
-            int instructionIndex,
-            ImmutableHashSet<int> visited,
-            int currentDepth,
-            int maxDepth)
-        {
-            if (visited.Contains(instructionIndex))
-                return maxDepth;
-
-            var visitedNew =
-                visited
-                .Add(instructionIndex);
-
-            while (true)
+            IEnumerable<int> GetSuccessors(
+                int instructionIndex)
             {
-                if (Instructions.Count <= instructionIndex)
-                {
-                    // Base case: End of instructions.
-                    return maxDepth;
-                }
+                var inst = instructions[instructionIndex];
 
-                var instruction = Instructions[instructionIndex];
+                switch (inst.Kind)
+                {
+                    case StackInstructionKind.Return:
+                        yield break;
+
+                    case StackInstructionKind.Jump_Const:
+
+                        yield return
+                            instructionIndex +
+                            (inst.JumpOffset ?? throw new InvalidOperationException(
+                                $"Jump without offset at {instructionIndex}."));
+
+                        break;
+
+                    case StackInstructionKind.Jump_If_True_Const:
+
+                        // fall-through
+                        yield return instructionIndex + 1;
+
+                        yield return
+                            instructionIndex + 1 +
+                            (inst.JumpOffset ?? throw new InvalidOperationException(
+                                $"Jump without offset at {instructionIndex}."));
+
+                        break;
+
+                    default:
+                        // ordinary instruction
+                        yield return instructionIndex + 1;
+                        break;
+                }
+            }
+
+            var instructionsDetails =
+                instructions.Select(StackInstruction.GetDetails).ToArray();
+
+            var stackDepthIn = new int?[instructions.Count];     // stack height *before* executing i
+
+            var worklist = new Stack<int>();
+
+            stackDepthIn[0] = 0;
+            worklist.Push(0);
+
+            var maxDepth = 0;
+
+            while (worklist.Count > 0)
+            {
+                var instructionIndex = worklist.Pop();
 
                 var instructionDetails =
-                    StackInstruction.GetDetails(instruction);
+                    instructionsDetails[instructionIndex];
 
-                currentDepth =
-                    currentDepth - instructionDetails.PopCount + instructionDetails.PushCount;
+                var inDepth =
+                    stackDepthIn[instructionIndex]!.Value;
 
-                if (currentDepth < 0)
+                var delta =
+                    -instructionDetails.PopCount + instructionDetails.PushCount;
+
+                var outDepth = inDepth + delta;
+
+                if (outDepth < 0)
+                    throw new InvalidOperationException($"Stack under-flow at instruction {instructionIndex}.");
+
+                maxDepth = Math.Max(maxDepth, outDepth);
+
+                foreach (var successorIndex in GetSuccessors(instructionIndex))
                 {
-                    var instructionSequenceString =
-                        string.Join(
-                            "\n",
-                            Instructions
-                            .Select((instruction, index) => "[" + index + "] " + instruction));
+                    if (successorIndex >= instructions.Count)
+                        continue;
 
-                    throw new InvalidOperationException(
-                        "Instruction sequence pops more items than available:\n" + instructionSequenceString);
-                }
-
-                maxDepth =
-                    maxDepth < currentDepth
-                    ?
-                    currentDepth
-                    :
-                    maxDepth;
-
-                if (instruction.Kind is StackInstructionKind.Return)
-                {
-                    return maxDepth;
-                }
-
-                if (instruction.Kind is StackInstructionKind.Jump_Const)
-                {
-                    var jumpOffset =
-                        instruction.JumpOffset
-                        ??
+                    if (stackDepthIn[successorIndex] is null)
+                    {
+                        stackDepthIn[successorIndex] = outDepth;
+                        worklist.Push(successorIndex);
+                    }
+                    else if (stackDepthIn[successorIndex] != outDepth)
+                    {
+                        // Byte-code would be ill-formed; surface a clear error.
                         throw new InvalidOperationException(
-                            "Jump instruction without offset: " + instruction);
-
-                    instructionIndex += jumpOffset;
-
-                    return
-                        ComputeMaxStackUsage(
-                            Instructions,
-                            instructionIndex: instructionIndex,
-                            visited: visitedNew,
-                            currentDepth: currentDepth,
-                            maxDepth: maxDepth);
+                            $"Inconsistent stack depth at {successorIndex} " +
+                            $"({stackDepthIn[successorIndex]} vs {outDepth}).");
+                    }
                 }
-
-                if (instruction.Kind is StackInstructionKind.Jump_If_True_Const)
-                {
-                    var jumpOffset =
-                        instruction.JumpOffset
-                        ??
-                        throw new InvalidOperationException(
-                            "Jump instruction without offset: " + instruction);
-
-                    var ifTrueNewInstructionIndex =
-                        instructionIndex + 1 + jumpOffset;
-
-                    var ifTrueMaxDepth =
-                        ComputeMaxStackUsage(
-                            Instructions,
-                            instructionIndex: ifTrueNewInstructionIndex,
-                            visited: visitedNew,
-                            currentDepth: currentDepth,
-                            maxDepth: maxDepth);
-
-                    maxDepth =
-                        maxDepth < ifTrueMaxDepth
-                        ?
-                        ifTrueMaxDepth
-                        :
-                        maxDepth;
-                }
-
-                ++instructionIndex;
             }
+
+            return maxDepth;
         }
 
         public virtual bool Equals(StackFrameInstructions? other)
