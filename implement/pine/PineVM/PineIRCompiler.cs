@@ -659,6 +659,19 @@ public class PineIRCompiler
         CompilationContext context,
         NodeCompilationResult prior)
     {
+        if (KernelApplication_Equal_TryParseAs_Starting_With(input) is { } startingWith)
+        {
+            var afterExpr =
+                CompileExpressionTransitive(
+                    startingWith.expr,
+                    context,
+                    prior);
+            return
+                afterExpr
+                .AppendInstruction(
+                    StackInstruction.Starts_With_Const(startingWith.start));
+        }
+
         if (input is Expression.List listExpr)
         {
             if (listExpr.items.Count is 2)
@@ -752,6 +765,53 @@ public class PineIRCompiler
                 context,
                 prior)
             .AppendInstruction(StackInstruction.Equal_Generic);
+    }
+
+    private static (Expression expr, PineValue start)? KernelApplication_Equal_TryParseAs_Starting_With(Expression input)
+    {
+        if (input is not Expression.List inputList)
+        {
+            return null;
+        }
+
+        if (inputList.items.Count is not 2)
+        {
+            return null;
+        }
+
+        {
+            if (TryEvaluateExpressionIndependent(inputList.items[0]) is { } leftValue &&
+                inputList.items[1] is Expression.KernelApplication rightKernelApp &&
+                rightKernelApp.Function is nameof(KernelFunction.take) &&
+                rightKernelApp.Input is Expression.List rightInputList &&
+                rightInputList.items.Count is 2 &&
+                TryParseExprAsIndependentSignedIntegerRelaxed(rightInputList.items[0]) is { } takeCount)
+            {
+                if (leftValue is PineValue.BlobValue leftBlob &&
+                    leftBlob.Bytes.Length == takeCount)
+                {
+                    return (rightInputList.items[1], leftBlob);
+                }
+            }
+        }
+
+        {
+            if (inputList.items[0] is Expression.KernelApplication leftKernelApp &&
+                leftKernelApp.Function is nameof(KernelFunction.take) &&
+                leftKernelApp.Input is Expression.List leftInputList &&
+                leftInputList.items.Count is 2 &&
+                TryParseExprAsIndependentSignedIntegerRelaxed(leftInputList.items[0]) is { } takeCount &&
+                    TryEvaluateExpressionIndependent(inputList.items[1]) is { } rightValue)
+            {
+                if (rightValue is PineValue.BlobValue rightBlob &&
+                    rightBlob.Bytes.Length == takeCount)
+                {
+                    return (leftInputList.items[1], rightBlob);
+                }
+            }
+        }
+
+        return null;
     }
 
     public static NodeCompilationResult CompileKernelApplication_Head(
@@ -1554,6 +1614,17 @@ public class PineIRCompiler
         CompilationContext context,
         NodeCompilationResult prior)
     {
+        if (Int_Is_Sorted_Asc_TryParseIsIntegerSign(input) is { } isIntegerWithSign)
+        {
+            return
+                CompileExpressionTransitive(
+                    isIntegerWithSign.expr,
+                    context,
+                    prior)
+                .AppendInstruction(
+                    StackInstruction.Starts_With_Const(PineValue.BlobSingleByte(isIntegerWithSign.sign)));
+        }
+
         if (input is Expression.List listExpr)
         {
             if (listExpr.items.Count is 0 || listExpr.items.Count is 1)
@@ -1726,6 +1797,31 @@ public class PineIRCompiler
                 context,
                 prior)
             .AppendInstruction(StackInstruction.Int_Is_Sorted_Asc_Generic);
+    }
+
+    private static (Expression expr, byte sign)? Int_Is_Sorted_Asc_TryParseIsIntegerSign(Expression input)
+    {
+        if (input is not Expression.List inputList)
+        {
+            return null;
+        }
+
+        if (inputList.items.Count is not 2)
+        {
+            return null;
+        }
+
+        if (TryParseExprAsIndependentSignedIntegerRelaxed(inputList.items[0]) == 0)
+        {
+            return (inputList.items[1], 4);
+        }
+
+        if (TryParseExprAsIndependentSignedIntegerRelaxed(inputList.items[1]) == -1)
+        {
+            return (inputList.items[0], 2);
+        }
+
+        return null;
     }
 
     public static NodeCompilationResult CompileKernelApplication_Bit_And(

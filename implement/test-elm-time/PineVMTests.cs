@@ -2404,6 +2404,95 @@ public class PineVMTests
                         StackInstruction.Return,
                     ])
             },
+
+            new
+            {
+                expression =
+                (Expression)
+                new Expression.KernelApplication(
+                    function: nameof(KernelFunction.int_is_sorted_asc),
+                    input:
+                    Expression.ListInstance(
+                        [
+                        Expression.LiteralInstance(
+                            IntegerEncoding.EncodeSignedInteger(0)),
+
+                        Expression.EnvironmentInstance,
+                        ])),
+
+                expected =
+                new PineVM.StackFrameInstructions(
+                    [
+                        StackInstruction.Push_Environment,
+
+                        StackInstruction.Starts_With_Const(
+                            PineValue.BlobSingleByte(4)),
+
+                        StackInstruction.Return,
+                    ])
+            },
+
+            new
+            {
+                expression =
+                (Expression)
+                new Expression.KernelApplication(
+                    function: nameof(KernelFunction.int_is_sorted_asc),
+                    input:
+                    Expression.ListInstance(
+                        [
+                        Expression.EnvironmentInstance,
+
+                        Expression.LiteralInstance(
+                            IntegerEncoding.EncodeSignedInteger(-1)),
+                        ])),
+
+                expected =
+                new PineVM.StackFrameInstructions(
+                    [
+                        StackInstruction.Push_Environment,
+
+                        StackInstruction.Starts_With_Const(
+                            PineValue.BlobSingleByte(2)),
+
+                        StackInstruction.Return,
+                    ])
+            },
+
+            new
+            {
+                expression =
+                (Expression)
+                new Expression.KernelApplication(
+                    function: nameof(KernelFunction.equal),
+                    input:
+                    Expression.ListInstance(
+                        [
+                        new Expression.KernelApplication(
+                            function: nameof(KernelFunction.take),
+                            input:
+                            Expression.ListInstance(
+                                [
+                                Expression.LiteralInstance(
+                                    IntegerEncoding.EncodeSignedInteger(0)),
+
+                                Expression.EnvironmentInstance,
+                                ])),
+
+                        Expression.LiteralInstance(PineValue.EmptyBlob),
+                        ])),
+
+                expected =
+                new PineVM.StackFrameInstructions(
+                    [
+                        StackInstruction.Push_Environment,
+
+                        StackInstruction.Starts_With_Const(
+                            PineValue.EmptyBlob),
+
+                        StackInstruction.Return,
+                    ])
+            },
         };
 
         var parseCache = new PineVMParseCache();

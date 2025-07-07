@@ -2667,6 +2667,61 @@ public class PineVM : IPineVM
                             continue;
                         }
 
+                    case StackInstructionKind.Starts_With_Const:
+                        {
+                            var prefixValue =
+                                currentInstruction.Literal
+                                ??
+                                throw new Exception("Invalid operation form: Missing prefix value");
+
+                            var value = currentFrame.PopTopmostFromStack();
+
+                            var resultValue = PineVMValues.FalseValue;
+
+                            if (prefixValue is PineValue.BlobValue prefixBlob)
+                            {
+                                if (value is PineValue.BlobValue valueBlob)
+                                {
+                                    var valueBytes = valueBlob.Bytes.Span;
+
+                                    if (valueBytes.Length >= prefixBlob.Bytes.Length &&
+                                        valueBytes[..prefixBlob.Bytes.Length].SequenceEqual(prefixBlob.Bytes.Span))
+                                    {
+                                        resultValue = PineVMValues.TrueValue;
+                                    }
+                                }
+                            }
+
+                            if (prefixValue is PineValue.ListValue prefixList)
+                            {
+                                if (value is PineValue.ListValue valueList)
+                                {
+                                    if (valueList.Elements.Length >= prefixList.Elements.Length)
+                                    {
+                                        var allItemsMatch = true;
+
+                                        for (var i = 0; i < prefixList.Elements.Length; i++)
+                                        {
+                                            if (valueList.Elements.Span[i] != prefixList.Elements.Span[i])
+                                            {
+                                                allItemsMatch = false;
+                                                break;
+                                            }
+                                        }
+
+                                        if (allItemsMatch)
+                                        {
+                                            resultValue = PineVMValues.TrueValue;
+                                        }
+                                    }
+                                }
+                            }
+
+                            currentFrame.PushInstructionResult(resultValue);
+
+                            continue;
+                        }
+
                     default:
                         throw new NotImplementedException(
                             "Unexpected instruction kind: " + instructionKind);
