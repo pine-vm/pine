@@ -181,7 +181,20 @@ public class ElmValueInterop
             var itemValue = byteItems[i];
 
             if (itemValue is not ElmValue.ElmInteger byteElement)
-                return "Invalid element in BlobValue tag at index " + i + ": " + itemValue.ToString();
+            {
+                return
+                    "Invalid item under BlobValue tag at index " + i + " of " + byteItems.Count +
+                    ": " +
+                    itemValue.ToString();
+            }
+
+            if (byteElement.Value < 0 || byteElement.Value > 0xff)
+            {
+                return
+                    "Invalid item under BlobValue tag at index " + i + " of " + byteItems.Count +
+                    ": Integer out of range: " +
+                    byteElement.Value;
+            }
 
             bytes[i] = (byte)byteElement.Value;
         }
@@ -207,15 +220,25 @@ public class ElmValueInterop
                     additionalReusableEncodings,
                     reportNewEncoding);
 
-            if (itemResult is Result<string, PineValue>.Ok itemOk)
+            if (itemResult.IsOkOrNull() is { } itemOk)
             {
-                items[i] = itemOk.Value;
+                items[i] = itemOk;
                 continue;
             }
 
-            if (itemResult is Result<string, PineValue>.Err itemErr)
+            string? tagName = null;
+
+            if (items.Length is 2 && i is 1)
             {
-                return "Error decoding list item at index " + i + ": " + itemErr.Value;
+                tagName = StringEncoding.StringFromValue(items[0]).IsOkOrNull();
+            }
+
+            if (itemResult.IsErrOrNull() is { } itemErr)
+            {
+                return
+                    "Error decoding list item at index " + i + " of " + listItems.Count +
+                    (tagName is null ? null : " (after tag '" + tagName + "')") +
+                    ": " + itemErr;
             }
 
             throw new NotImplementedException(
@@ -243,7 +266,7 @@ public class ElmValueInterop
             return reusedDecoding;
         }
 
-        Result<string, Expression> withoutReport()
+        Result<string, Expression> WithoutReport()
         {
             if (tag.TagName is "LiteralExpression")
             {
@@ -260,14 +283,14 @@ public class ElmValueInterop
                         literalAdditionalReusableDecodings,
                         literalReportNewDecoding);
 
-                if (literalValueResult is Result<string, PineValue>.Ok literalValueOk)
+                if (literalValueResult.IsOkOrNull() is { } literalValueOk)
                 {
-                    return Expression.LiteralInstance(literalValueOk.Value);
+                    return Expression.LiteralInstance(literalValueOk);
                 }
 
-                if (literalValueResult is Result<string, PineValue>.Err literalValueErr)
+                if (literalValueResult.IsErrOrNull() is { } literalValueErr)
                 {
-                    return literalValueErr.Value;
+                    return literalValueErr;
                 }
 
                 throw new NotImplementedException(
@@ -300,15 +323,15 @@ public class ElmValueInterop
                             literalAdditionalReusableDecodings,
                             literalReportNewDecoding);
 
-                    if (itemResult is Result<string, Expression>.Ok itemOk)
+                    if (itemResult.IsOkOrNull() is { } itemOk)
                     {
-                        items[i] = itemOk.Value;
+                        items[i] = itemOk;
                         continue;
                     }
 
-                    if (itemResult is Result<string, Expression>.Err itemErr)
+                    if (itemResult.IsErrOrNull() is { } itemErr)
                     {
-                        return "Failed for list item [" + i + "]: " + itemErr.Value;
+                        return "Failed for list item [" + i + "]: " + itemErr;
                     }
 
                     throw new NotImplementedException(
@@ -336,13 +359,13 @@ public class ElmValueInterop
                         literalAdditionalReusableDecodings,
                         literalReportNewDecoding);
 
-                if (encodedResult is Result<string, Expression>.Err encodedErr)
+                if (encodedResult.IsOkOrNull() is not { } encodedOk)
                 {
-                    return "Failed for parse and eval encoded: " + encodedErr.Value;
-                }
+                    if (encodedResult.IsErrOrNull() is { } encodedErr)
+                    {
+                        return "Failed for parse and eval encoded: " + encodedErr;
+                    }
 
-                if (encodedResult is not Result<string, Expression>.Ok encodedOk)
-                {
                     throw new NotImplementedException(
                         "Unexpected result type for encoded: " + encodedResult.GetType().FullName);
                 }
@@ -355,18 +378,18 @@ public class ElmValueInterop
                         literalAdditionalReusableDecodings,
                         literalReportNewDecoding);
 
-                if (environmentResult is Result<string, Expression>.Err environmentErr)
+                if (environmentResult.IsOkOrNull() is not { } environmentOk)
                 {
-                    return "Failed for parse and eval environment: " + environmentErr.Value;
-                }
+                    if (environmentResult.IsErrOrNull() is { } environmentErr)
+                    {
+                        return "Failed for parse and eval environment: " + environmentErr;
+                    }
 
-                if (environmentResult is not Result<string, Expression>.Ok environmentOk)
-                {
                     throw new NotImplementedException(
                         "Unexpected result type for environment: " + environmentResult.GetType().FullName);
                 }
 
-                return new Expression.ParseAndEval(encodedOk.Value, environmentOk.Value);
+                return new Expression.ParseAndEval(encodedOk, environmentOk);
             }
 
             if (tag.TagName is "KernelApplicationExpression")
@@ -525,7 +548,7 @@ public class ElmValueInterop
             return "Unexpected tag name: " + tag.TagName;
         }
 
-        var decodeResult = withoutReport();
+        var decodeResult = WithoutReport();
 
         if (reportNewDecoding is not null && decodeResult.IsOkOrNull() is { } decodeOk)
         {
