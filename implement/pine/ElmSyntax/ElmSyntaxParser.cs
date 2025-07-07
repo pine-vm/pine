@@ -661,6 +661,10 @@ public class ElmSyntaxParser
             infix left  5 (|=) = keeper
             infix left  6 (|.) = ignorer
 
+            https://github.com/elm/url/blob/384b1dcf84065a500a71402ec367f3982b35093d/src/Url/Parser.elm#L49-L50
+            infix right 7 (</>) = slash
+            infix left  8 (<?>) = questionMark
+
              * */
             symbol switch
             {
@@ -694,6 +698,9 @@ public class ElmSyntaxParser
 
                 "|=" => new InfixOperatorInfo(5, InfixDirection.Left),
                 "|." => new InfixOperatorInfo(6, InfixDirection.Left),
+
+                "</>" => new InfixOperatorInfo(7, InfixDirection.Right),
+                "<?>" => new InfixOperatorInfo(8, InfixDirection.Left),
 
                 _ =>
                 throw new ArgumentException("Unknown operator: " + symbol),
