@@ -13,7 +13,7 @@ toCode char =
         [ -- Add the sign prefix byte
           Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], char ]
 
-        -- Use kernel function 'add' to trim leading zeroes
+        -- Use kernel function 'add' to ensure canonical form
         , 0
         ]
 

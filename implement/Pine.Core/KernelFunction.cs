@@ -935,23 +935,17 @@ public static class KernelFunction
         if (value is not PineValue.BlobValue blobValue)
             return null;
 
-        var leadingSpaces = 0;
-
         var blobBytes = blobValue.Bytes;
 
-        for (var i = 0; i < blobBytes.Length; ++i)
-        {
-            if (blobBytes.Span[i] is 0)
-            {
-                ++leadingSpaces;
-            }
-            else
-            {
-                break;
-            }
-        }
+        if (blobBytes.Length is < 2)
+            return null;
 
-        var firstValueByteIndex = leadingSpaces + 1;
+        var signByte = blobBytes.Span[0];
+
+        if (signByte is not 2 and not 4)
+            return null;
+
+        var firstValueByteIndex = 1;
 
         var valueBytesCount =
             blobBytes.Length - firstValueByteIndex;
@@ -962,21 +956,38 @@ public static class KernelFunction
         var abs =
             valueBytesCount is 1
             ?
-            (BigInteger)blobBytes.Span[firstValueByteIndex]
+            (BigInteger)blobBytes.Span[1]
             :
             valueBytesCount is 2
             ?
-            new BigInteger(blobBytes.Span[firstValueByteIndex] << 8 | blobBytes.Span[firstValueByteIndex + 1])
+            new BigInteger(
+                blobBytes.Span[1] << 8 |
+                blobBytes.Span[2])
+            :
+            valueBytesCount is 3
+            ?
+            new BigInteger(
+                blobBytes.Span[1] << 16 |
+                blobBytes.Span[2] << 8 |
+                blobBytes.Span[3])
+            :
+            valueBytesCount is 4
+            ?
+            new BigInteger(
+                (uint)
+                (blobBytes.Span[1] << 24 |
+                blobBytes.Span[2] << 16 |
+                blobBytes.Span[3] << 8 |
+                blobBytes.Span[4]))
             :
             new BigInteger(blobBytes.Span[firstValueByteIndex..], isUnsigned: true, isBigEndian: true);
 
-        return
-            blobBytes.Span[leadingSpaces] switch
-            {
-                4 => abs,
-                2 => -abs,
-                _ => null
-            };
+        if (signByte is 2)
+        {
+            return -abs;
+        }
+
+        return abs;
     }
 
     public static BigInteger? UnsignedIntegerFromValueRelaxed(PineValue pineValue)

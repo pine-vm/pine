@@ -11,7 +11,7 @@ namespace Pine.Core.PopularEncodings;
 /// </para>
 /// <para>
 /// When parsing, the 'strict' variant means we only accept the canonical encodings as produced by the encoding functions.
-/// In 'relaxed' parsing, we accept non-canonical encodings like negative zero or leading zeros.
+/// In 'relaxed' parsing, we accept non-canonical encodings like negative zero or zeros bytes directly after the sign byte.
 /// </para>
 /// </summary>
 public static class IntegerEncoding
@@ -22,7 +22,7 @@ public static class IntegerEncoding
     /// </summary>
     public static Result<string, PineValue> EncodeUnsignedInteger(System.Numerics.BigInteger integer)
     {
-        if (ReusedValueFromUnsignedInteger is { } reused && integer < reused.Count && 0 <= integer)
+        if (s_reusedValueFromUnsignedInteger is { } reused && integer < reused.Count && 0 <= integer)
         {
             return reused[(int)integer];
         }
@@ -33,9 +33,9 @@ public static class IntegerEncoding
         return PineValue.Blob(EncodeUnsignedIntegerBlobThrowing(integer));
     }
 
-    private static readonly IReadOnlyList<PineValue> ReusedValueFromUnsignedInteger =
+    private static readonly IReadOnlyList<PineValue> s_reusedValueFromUnsignedInteger =
         [..Enumerable.Range(0, 10_000)
-        .Select(Range => EncodeUnsignedInteger(Range).Extract(err => throw new Exception(err)))];
+        .Select(range => EncodeUnsignedInteger(range).Extract(err => throw new Exception(err)))];
 
     /// <summary>
     /// Returns a reused instance of a <see cref="PineValue"/> encoding <paramref name="integer"/> in unsigned form.
@@ -45,7 +45,7 @@ public static class IntegerEncoding
     /// </summary>
     public static PineValue? ReusedInstanceForUnsignedInteger(int integer)
     {
-        if (integer < 0 || ReusedValueFromUnsignedInteger is not { } reused)
+        if (integer < 0 || s_reusedValueFromUnsignedInteger is not { } reused)
             return null;
 
         if (integer < reused.Count)
@@ -67,7 +67,7 @@ public static class IntegerEncoding
             throw new ArgumentOutOfRangeException(nameof(integer), "Argument is a negative integer.");
         }
 
-        if (ReusedValueFromUnsignedInteger is { } reusedUnsigned &&
+        if (s_reusedValueFromUnsignedInteger is { } reusedUnsigned &&
             integer < reusedUnsigned.Count)
         {
             if (reusedUnsigned[(int)integer] is PineValue.BlobValue blob)
