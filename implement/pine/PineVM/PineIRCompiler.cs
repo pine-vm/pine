@@ -659,13 +659,14 @@ public class PineIRCompiler
         CompilationContext context,
         NodeCompilationResult prior)
     {
-        if (KernelApplication_Equal_TryParseAs_Starting_With(input) is { } startingWith)
+        if (KernelApplication_Equal_TryParse_Starting_With(input) is { } startingWith)
         {
             var afterExpr =
                 CompileExpressionTransitive(
                     startingWith.expr,
                     context,
                     prior);
+
             return
                 afterExpr
                 .AppendInstruction(
@@ -676,9 +677,9 @@ public class PineIRCompiler
         {
             if (listExpr.items.Count is 2)
             {
-                if (listExpr.items[0] is Expression.Literal leftLiteralExpr)
+                if (TryEvalIndependent(listExpr.items[0]) is { } leftLiteralValue)
                 {
-                    if (IntegerEncoding.ParseSignedIntegerRelaxed(leftLiteralExpr.Value).IsOkOrNullable() is { } leftInteger &&
+                    if (IntegerEncoding.ParseSignedIntegerRelaxed(leftLiteralValue).IsOkOrNullable() is { } leftInteger &&
                         listExpr.items[1] is Expression.KernelApplication rightKernelApp &&
                         rightKernelApp.Function is nameof(KernelFunction.length))
                     {
@@ -704,13 +705,13 @@ public class PineIRCompiler
                         return
                             afterRight
                             .AppendInstruction(
-                                StackInstruction.Equal_Binary_Const(leftLiteralExpr.Value));
+                                StackInstruction.Equal_Binary_Const(leftLiteralValue));
                     }
                 }
 
-                if (listExpr.items[1] is Expression.Literal rightLiteralExpr)
+                if (TryEvalIndependent(listExpr.items[1]) is { } rightLiteralValue)
                 {
-                    if (IntegerEncoding.ParseSignedIntegerRelaxed(rightLiteralExpr.Value).IsOkOrNullable() is { } rightInteger &&
+                    if (IntegerEncoding.ParseSignedIntegerRelaxed(rightLiteralValue).IsOkOrNullable() is { } rightInteger &&
                         listExpr.items[0] is Expression.KernelApplication leftKernelApp &&
                         leftKernelApp.Function is nameof(KernelFunction.length))
                     {
@@ -735,7 +736,7 @@ public class PineIRCompiler
                         return
                             afterLeft
                             .AppendInstruction(
-                                StackInstruction.Equal_Binary_Const(rightLiteralExpr.Value));
+                                StackInstruction.Equal_Binary_Const(rightLiteralValue));
                     }
                 }
 
@@ -767,9 +768,9 @@ public class PineIRCompiler
             .AppendInstruction(StackInstruction.Equal_Generic);
     }
 
-    private static (Expression expr, PineValue start)? KernelApplication_Equal_TryParseAs_Starting_With(Expression input)
+    private static (Expression expr, PineValue start)? KernelApplication_Equal_TryParse_Starting_With(Expression equalInput)
     {
-        if (input is not Expression.List inputList)
+        if (equalInput is not Expression.List inputList)
         {
             return null;
         }
@@ -780,33 +781,25 @@ public class PineIRCompiler
         }
 
         {
-            if (TryEvaluateExpressionIndependent(inputList.items[0]) is { } leftValue &&
-                inputList.items[1] is Expression.KernelApplication rightKernelApp &&
-                rightKernelApp.Function is nameof(KernelFunction.take) &&
-                rightKernelApp.Input is Expression.List rightInputList &&
-                rightInputList.items.Count is 2 &&
-                TryParseExprAsIndependentSignedIntegerRelaxed(rightInputList.items[0]) is { } takeCount)
+            if (TryEvalIndependent(inputList.items[0]) is { } leftValue &&
+                TryParse_KernelTake_Const(inputList.items[1]) is { } rightTake)
             {
                 if (leftValue is PineValue.BlobValue leftBlob &&
-                    leftBlob.Bytes.Length == takeCount)
+                    leftBlob.Bytes.Length == rightTake.takeCount)
                 {
-                    return (rightInputList.items[1], leftBlob);
+                    return (rightTake.sourceExpr, leftBlob);
                 }
             }
         }
 
         {
-            if (inputList.items[0] is Expression.KernelApplication leftKernelApp &&
-                leftKernelApp.Function is nameof(KernelFunction.take) &&
-                leftKernelApp.Input is Expression.List leftInputList &&
-                leftInputList.items.Count is 2 &&
-                TryParseExprAsIndependentSignedIntegerRelaxed(leftInputList.items[0]) is { } takeCount &&
-                    TryEvaluateExpressionIndependent(inputList.items[1]) is { } rightValue)
+            if (TryEvalIndependent(inputList.items[1]) is { } rightValue &&
+                TryParse_KernelTake_Const(inputList.items[0]) is { } leftTake)
             {
                 if (rightValue is PineValue.BlobValue rightBlob &&
-                    rightBlob.Bytes.Length == takeCount)
+                    rightBlob.Bytes.Length == leftTake.takeCount)
                 {
-                    return (leftInputList.items[1], rightBlob);
+                    return (leftTake.sourceExpr, rightBlob);
                 }
             }
         }
@@ -819,37 +812,31 @@ public class PineIRCompiler
         CompilationContext context,
         NodeCompilationResult prior)
     {
-        if (input is Expression.KernelApplication innerKernelApp && innerKernelApp.Function is "skip")
+        if (TryParse_KernelSkip(input) is { } skip)
         {
-            if (innerKernelApp.Input is Expression.List skipList && skipList.items.Count is 2)
+            var afterSource =
+                CompileExpressionTransitive(
+                    skip.sourceExpr,
+                    context,
+                    prior);
+
+            if (TryParse_IndependentSignedIntegerRelaxed(skip.skipCountExpr) is { } skipCountConst)
             {
-                var afterSource =
-                    CompileExpressionTransitive(
-                        skipList.items[1],
-                        context,
-                        prior);
-
-                if (skipList.items[0] is Expression.Literal literalExpr)
-                {
-                    if (IntegerEncoding.ParseSignedIntegerRelaxed(literalExpr.Value).IsOkOrNullable() is { } skipCount)
-                    {
-                        return
-                            afterSource
-                            .AppendInstruction(
-                                StackInstruction.Skip_Head_Const((int)skipCount));
-                    }
-                }
-
-                var afterSkipCount =
-                    CompileExpressionTransitive(
-                        skipList.items[0],
-                        context,
-                        afterSource);
-
                 return
-                    afterSkipCount
-                    .AppendInstruction(StackInstruction.Skip_Head_Binary);
+                    afterSource
+                    .AppendInstruction(
+                        StackInstruction.Skip_Head_Const((int)skipCountConst));
             }
+
+            var afterSkipCount =
+                CompileExpressionTransitive(
+                    skip.skipCountExpr,
+                    context,
+                    afterSource);
+
+            return
+                afterSkipCount
+                .AppendInstruction(StackInstruction.Skip_Head_Binary);
         }
 
         return
@@ -877,7 +864,7 @@ public class PineIRCompiler
                     context,
                     prior);
 
-            if (TryParseExprAsIndependentSignedIntegerRelaxed(skipCountExpr) is { } skipCount)
+            if (TryParse_IndependentSignedIntegerRelaxed(skipCountExpr) is { } skipCount)
             {
                 if (skipCount.IsOne &&
                     skipSourceExpr is Expression.KernelApplication skipSourceKernelApp &&
@@ -891,7 +878,7 @@ public class PineIRCompiler
                             addOperandKernelApp.Function is nameof(KernelFunction.concat) &&
                             addOperandKernelApp.Input is Expression.List concatList &&
                             concatList.items.Count is 2 &&
-                            TryEvaluateExpressionIndependent(concatList.items[0]) is { } prependValue &&
+                            TryEvalIndependent(concatList.items[0]) is { } prependValue &&
                             prependValue is PineValue.BlobValue prependBlob &&
                             prependBlob.Bytes.Length is 1 &&
                             prependBlob.Bytes.Span[0] is 2 or 4)
@@ -912,7 +899,7 @@ public class PineIRCompiler
                     }
 
                     {
-                        if (TryParseExprAsIndependentSignedIntegerRelaxed(skipSourceAddInputList.items[0]) is { } skipSourceAddValue &&
+                        if (TryParse_IndependentSignedIntegerRelaxed(skipSourceAddInputList.items[0]) is { } skipSourceAddValue &&
                             skipSourceAddValue.IsZero &&
                             ContinueForAddZeroOperand(skipSourceAddInputList.items[1]) is { } specialized)
                         {
@@ -921,7 +908,7 @@ public class PineIRCompiler
                     }
 
                     {
-                        if (TryParseExprAsIndependentSignedIntegerRelaxed(skipSourceAddInputList.items[1]) is { } skipSourceAddValue &&
+                        if (TryParse_IndependentSignedIntegerRelaxed(skipSourceAddInputList.items[1]) is { } skipSourceAddValue &&
                             skipSourceAddValue.IsZero &&
                             ContinueForAddZeroOperand(skipSourceAddInputList.items[0]) is { } specialized)
                         {
@@ -966,56 +953,39 @@ public class PineIRCompiler
         {
             var takeCountValueExpr = listExpr.items[0];
 
-            if (listExpr.items[1] is Expression.KernelApplication sourceKernelApp &&
-                sourceKernelApp.Function is nameof(KernelFunction.skip))
+            if (TryParse_KernelSkip(listExpr.items[1]) is { } sourceSkip)
             {
-                if (sourceKernelApp.Input is Expression.List skipList && skipList.items.Count is 2)
+                var afterSource =
+                    CompileExpressionTransitive(
+                        sourceSkip.sourceExpr,
+                        context,
+                        prior);
+
+                var afterSkipCount =
+                    CompileExpressionTransitive(
+                        sourceSkip.skipCountExpr,
+                        context,
+                        afterSource);
+
+                if (TryParse_IndependentSignedIntegerRelaxed(takeCountValueExpr) is { } takeCount)
                 {
-                    var afterSource =
+                    return
+                        afterSkipCount
+                        .AppendInstruction(
+                            StackInstruction.Slice_Skip_Var_Take_Const((int)takeCount));
+                }
+
+                {
+                    var afterTakeCount =
                         CompileExpressionTransitive(
-                            skipList.items[1],
+                            takeCountValueExpr,
                             context,
-                            prior);
+                            afterSkipCount);
 
-                    /*
-                     * Earlier reduction pass should already have reduced the contents in take to
-                     * literal at this point, if at all possible, so don't reach for more general eval here.
-                     */
-                    if (takeCountValueExpr is Expression.Literal takeCountLiteral)
-                    {
-                        if (KernelFunction.SignedIntegerFromValueRelaxed(takeCountLiteral.Value) is { } takeCount)
-                        {
-                            var afterSkipCount =
-                                CompileExpressionTransitive(
-                                    skipList.items[0],
-                                    context,
-                                    afterSource);
-
-                            return
-                                afterSkipCount
-                                .AppendInstruction(
-                                    StackInstruction.Slice_Skip_Var_Take_Const((int)takeCount));
-                        }
-                    }
-
-                    {
-                        var afterSkipCount =
-                            CompileExpressionTransitive(
-                                skipList.items[0],
-                                context,
-                                afterSource);
-
-                        var afterTakeCount =
-                            CompileExpressionTransitive(
-                                takeCountValueExpr,
-                                context,
-                                afterSkipCount);
-
-                        return
-                            afterTakeCount
-                            .AppendInstruction(
-                                StackInstruction.Slice_Skip_Var_Take_Var);
-                    }
+                    return
+                        afterTakeCount
+                        .AppendInstruction(
+                            StackInstruction.Slice_Skip_Var_Take_Var);
                 }
             }
 
@@ -1126,35 +1096,19 @@ public class PineIRCompiler
         CompilationContext context,
         NodeCompilationResult prior)
     {
-        if (input is Expression.KernelApplication inputKernelApp &&
-            inputKernelApp.Function is nameof(KernelFunction.take) &&
-            inputKernelApp.Input is Expression.List takeInputList &&
-            takeInputList.items.Count is 2 &&
-            takeInputList.items[1] is Expression.KernelApplication innerKernelApp &&
-            innerKernelApp.Function is nameof(KernelFunction.reverse))
+        if (TryParse_KernelTake_Const(input) is { } takeConst &&
+            takeConst.sourceExpr is Expression.KernelApplication takeSourceKernelApp &&
+            takeSourceKernelApp.Function is nameof(KernelFunction.reverse))
         {
-            var takeCountValue = takeInputList.items[0];
+            var afterSource =
+                CompileExpressionTransitive(
+                    takeSourceKernelApp.Input,
+                    context,
+                    prior);
 
-            if (!takeCountValue.ReferencesEnvironment)
-            {
-                if (CompilePineToDotNet.ReducePineExpression.TryEvaluateExpressionIndependent(
-                    takeCountValue).IsOkOrNull() is { } takeCountValueEvaluated)
-                {
-                    if (KernelFunction.SignedIntegerFromValueRelaxed(takeCountValueEvaluated) is { } takeCount)
-                    {
-                        var afterSource =
-                            CompileExpressionTransitive(
-                                innerKernelApp.Input,
-                                context,
-                                prior);
-
-                        return
-                            afterSource
-                            .AppendInstruction(
-                                StackInstruction.Take_Last_Const((int)takeCount));
-                    }
-                }
-            }
+            return
+                afterSource
+                .AppendInstruction(StackInstruction.Take_Last_Const((int)takeConst.takeCount));
         }
 
         return
@@ -1811,12 +1765,12 @@ public class PineIRCompiler
             return null;
         }
 
-        if (TryParseExprAsIndependentSignedIntegerRelaxed(inputList.items[0]) == 0)
+        if (TryParse_IndependentSignedIntegerRelaxed(inputList.items[0]) == 0)
         {
             return (inputList.items[1], 4);
         }
 
-        if (TryParseExprAsIndependentSignedIntegerRelaxed(inputList.items[1]) == -1)
+        if (TryParse_IndependentSignedIntegerRelaxed(inputList.items[1]) == -1)
         {
             return (inputList.items[0], 2);
         }
@@ -2139,19 +2093,19 @@ public class PineIRCompiler
             .AppendInstruction(StackInstruction.Bit_Shift_Right_Generic);
     }
 
-    public static Expression? TryParseExprAsIntNegation(Expression expression)
+    public static Expression? TryParse_IntNegation(Expression expression)
     {
         if (expression is not Expression.KernelApplication kernelApp)
         {
             return null;
         }
 
-        if (kernelApp.Function is "negate")
+        if (kernelApp.Function is nameof(KernelFunction.negate))
         {
             return kernelApp.Input;
         }
 
-        if (kernelApp.Function is "int_mul" &&
+        if (kernelApp.Function is nameof(KernelFunction.int_mul) &&
             kernelApp.Input is Expression.List mulList && mulList.items.Count is 2)
         {
             if (mulList.items[0] is Expression.Literal literalExpr &&
@@ -2172,9 +2126,72 @@ public class PineIRCompiler
         return null;
     }
 
-    private static BigInteger? TryParseExprAsIndependentSignedIntegerRelaxed(Expression expression)
+    private static (BigInteger skipCount, Expression sourceExpr)? TryParse_KernelSkip_Const(Expression expression)
     {
-        if (TryEvaluateExpressionIndependent(expression) is not { } value)
+        if (TryParse_KernelSkip(expression) is not { } parsed)
+        {
+            return null;
+        }
+
+        if (TryParse_IndependentSignedIntegerRelaxed(parsed.skipCountExpr) is not { } skipCount)
+        {
+            return null;
+        }
+
+        return (skipCount, parsed.sourceExpr);
+    }
+
+    private static (Expression skipCountExpr, Expression sourceExpr)? TryParse_KernelSkip(Expression expression)
+    {
+        if (expression is not Expression.KernelApplication kernelApp ||
+            kernelApp.Function is not nameof(KernelFunction.skip) ||
+            kernelApp.Input is not Expression.List skipList ||
+            skipList.items.Count is not 2)
+        {
+            return null;
+        }
+
+        var skipCountExpr = skipList.items[0];
+        var sourceExpr = skipList.items[1];
+
+        return (skipCountExpr, sourceExpr);
+    }
+
+    private static (BigInteger takeCount, Expression sourceExpr)? TryParse_KernelTake_Const(Expression expression)
+    {
+        if (TryParse_KernelTake(expression) is not { } parsed)
+        {
+            return null;
+        }
+
+        if (TryParse_IndependentSignedIntegerRelaxed(parsed.takeCountExpr) is not { } takeCount)
+        {
+            return null;
+        }
+
+        return (takeCount, parsed.sourceExpr);
+    }
+
+    private static (Expression takeCountExpr, Expression sourceExpr)? TryParse_KernelTake(Expression expression)
+    {
+        if (expression is not Expression.KernelApplication kernelApp ||
+            kernelApp.Function is not nameof(KernelFunction.take) ||
+            kernelApp.Input is not Expression.List takeList ||
+            takeList.items.Count is not 2)
+        {
+            return null;
+        }
+
+        var takeCountExpr = takeList.items[0];
+
+        var sourceExpr = takeList.items[1];
+
+        return (takeCountExpr, sourceExpr);
+    }
+
+    private static BigInteger? TryParse_IndependentSignedIntegerRelaxed(Expression expression)
+    {
+        if (TryEvalIndependent(expression) is not { } value)
         {
             return null;
         }
@@ -2182,19 +2199,16 @@ public class PineIRCompiler
         return KernelFunction.SignedIntegerFromValueRelaxed(value);
     }
 
-    private static PineValue? TryEvaluateExpressionIndependent(Expression expression)
+    private static PineValue? TryEvalIndependent(Expression expression)
     {
         if (expression.ReferencesEnvironment)
         {
             return null;
         }
 
-        if (CompilePineToDotNet.ReducePineExpression.TryEvaluateExpressionIndependent(expression).IsOkOrNull() is not { } value)
-        {
-            return null;
-        }
-
-        return value;
+        return
+            CompilePineToDotNet.ReducePineExpression.TryEvaluateExpressionIndependent(expression)
+            .IsOkOrNull();
     }
 
     public static bool ExpressionLargeEnoughForCSE(Expression expression)
