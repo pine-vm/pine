@@ -1,4 +1,4 @@
-﻿using System.CommandLine;
+using System.CommandLine;
 using System.Threading.Tasks;
 
 namespace native_tools;

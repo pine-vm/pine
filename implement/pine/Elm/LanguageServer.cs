@@ -1956,13 +1956,13 @@ public class LanguageServer(
         {
             // This can happen when we have an insertion in the middle
             // In this case, we need to insert at the position between common prefix and suffix
-            
+
             if (firstChangedLine > 0 && replacementLines.Count > 0)
             {
                 // Insert after the last line of common prefix
                 var insertLine = firstChangedLine - 1;
                 var insertChar = originalLines[insertLine].Length;
-                
+
                 var range = new Range(
                     Start: new Position(Line: (uint)insertLine, Character: (uint)insertChar),
                     End: new Position(Line: (uint)insertLine, Character: (uint)insertChar));
@@ -1982,7 +1982,7 @@ public class LanguageServer(
 
                 return [new TextEdit(Range: range, NewText: replacementText)];
             }
-            
+
             // If no replacement lines, this might be a degenerate case - return no edits
             return [];
         }
