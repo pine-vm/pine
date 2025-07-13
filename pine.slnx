@@ -4,5 +4,5 @@
   <Project Path="implement/PineTest/Pine.UnitTests/Pine.UnitTests.csproj" />
   <Project Path="implement/pine/pine.csproj" />
   <Project Path="implement/prebuild/prebuild.csproj" />
-  <Project Path="implement/test-elm-time/test-elm-time.csproj" />
+  <Project Path="implement/Pine.IntegrationTests/Pine.IntegrationTests.csproj" />
 </Solution>

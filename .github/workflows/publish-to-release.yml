@@ -39,7 +39,7 @@ jobs:
       run: dotnet --info
 
     - name: Clean package cache as a temporary workaround for https://github.com/actions/setup-dotnet/issues/155
-      run: dotnet clean ./implement/test-elm-time/test-elm-time.csproj && dotnet nuget locals all --clear
+      run: dotnet clean ./implement/Pine.IntegrationTests/Pine.IntegrationTests.csproj && dotnet nuget locals all --clear
 
     - name: Prebuild
       working-directory: ./implement/

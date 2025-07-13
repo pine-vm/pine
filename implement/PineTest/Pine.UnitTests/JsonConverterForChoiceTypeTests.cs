@@ -5,7 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Xunit;
 
-namespace TestElmTime;
+namespace Pine.IntegrationTests;
 
 public class JsonConverterForChoiceTypeTests
 {

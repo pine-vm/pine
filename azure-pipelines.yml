@@ -22,7 +22,7 @@ steps:
     command: restore
     projects: |
       **/pine.csproj
-      **/test-elm-time.csproj
+      **/Pine.IntegrationTests.csproj
 
 - script: dotnet  run  --project ./prebuild/prebuild.csproj  --configuration Release
   displayName: 'Prebuild'
@@ -33,7 +33,7 @@ steps:
   inputs:
     command: test
     projects: |
-      **/test-elm-time.csproj
+      **/Pine.IntegrationTests.csproj
     arguments:  --logger trx
     publishTestResults: false
 

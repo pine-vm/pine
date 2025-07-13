@@ -41,14 +41,14 @@ jobs:
     - name: Clean package cache as a temporary workaround for https://github.com/actions/setup-dotnet/issues/155
       run: |
         dotnet clean ./implement/PineTest/Pine.UnitTests/Pine.UnitTests.csproj && dotnet nuget locals all --clear
-        dotnet clean ./implement/test-elm-time/test-elm-time.csproj && dotnet nuget locals all --clear
+        dotnet clean ./implement/Pine.IntegrationTests/Pine.IntegrationTests.csproj && dotnet nuget locals all --clear
 
     - name: Check formatting in .NET source code
       run: |
         dotnet  format  ./implement/Pine.Core  --verify-no-changes  --verbosity detailed
         dotnet  format  ./implement/PineTest/Pine.UnitTests  --verify-no-changes  --verbosity detailed
         dotnet  format  ./implement/pine  --verify-no-changes  --verbosity detailed
-        dotnet  format  ./implement/test-elm-time  --verify-no-changes  --verbosity detailed
+        dotnet  format  ./implement/Pine.IntegrationTests  --verify-no-changes  --verbosity detailed
         dotnet  format  ./implement/prebuild  --verify-no-changes  --verbosity detailed
 
     - name: Prebuild
@@ -62,14 +62,14 @@ jobs:
 
     - name: Run integration tests
       run: |
-        dotnet  run  --project=./implement/test-elm-time/test-elm-time.csproj  --  --report-xunit-trx  --diagnostic
+        dotnet  run  --project=./implement/Pine.IntegrationTests/Pine.IntegrationTests.csproj  --  --report-xunit-trx  --diagnostic
 
     - name: Publish test results
       uses: actions/upload-artifact@v4
       if: always()
       with:
         name: test-results-${{ github.sha }}-${{ matrix.environment }}
-        # path: ./implement/test-elm-time/TestResults
+        # path: ./implement/Pine.IntegrationTests/TestResults
         path: ./implement/**/TestResults
 
     - name: Compile Overview of Test Results

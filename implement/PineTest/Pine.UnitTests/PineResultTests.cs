@@ -3,7 +3,7 @@ using Pine.Core;
 using System.Text.Json;
 using Xunit;
 
-namespace TestElmTime;
+namespace Pine.IntegrationTests;
 
 public class PineResultTests
 {
