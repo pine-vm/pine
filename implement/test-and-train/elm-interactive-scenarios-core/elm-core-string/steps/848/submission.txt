@@ -1,0 +1,1 @@
+Basics.compare  (String.toFloat "1")  (String.toFloat "1.000")
