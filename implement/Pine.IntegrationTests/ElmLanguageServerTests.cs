@@ -402,6 +402,24 @@ public class ElmLanguageServerTests
                     "Derived " + actualEdits.Count + " edits:\n" +
                     string.Join('\n', actualEdits.Select(e => JsonSerializer.Serialize(e))));
 
+                for (var editIndex = 0; editIndex < actualEdits.Count; editIndex++)
+                {
+                    var edit = actualEdits[editIndex];
+
+                    edit.Range.Start.Line.Should().BeGreaterThanOrEqualTo(0);
+                    edit.Range.Start.Character.Should().BeGreaterThanOrEqualTo(0);
+                    edit.Range.End.Line.Should().BeGreaterThanOrEqualTo(0);
+                    edit.Range.End.Character.Should().BeGreaterThanOrEqualTo(0);
+
+                    // Ensure the end position is after the start position
+                    edit.Range.End.Line.Should().BeGreaterThanOrEqualTo(edit.Range.Start.Line);
+
+                    if (edit.Range.End.Line == edit.Range.Start.Line)
+                    {
+                        edit.Range.End.Character.Should().BeGreaterThanOrEqualTo(edit.Range.Start.Character);
+                    }
+                }
+
                 var resultingText =
                     Elm.LanguageServer.ApplyTextEdits(testCase.OriginalText, actualEdits);
 
