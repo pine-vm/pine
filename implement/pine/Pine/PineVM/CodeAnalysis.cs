@@ -1,22 +1,23 @@
+using Pine.Core;
+using Pine.Core.Internal;
+using Pine.Core.PopularEncodings;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
-using Pine.Core;
-using Pine.Core.PopularEncodings;
 
 namespace Pine.PineVM;
 
 public record EnvConstraintId
 {
-    readonly static CompilePineToDotNet.CompilerMutableCache compilerCache = new();
+    readonly static CompilePineToDotNet.CompilerMutableCache s_compilerCache = new();
 
     public IReadOnlyDictionary<IReadOnlyList<int>, PineValue> ParsedEnvItems { get; }
 
     readonly public string HashBase16;
 
-    readonly private FastRepresentation fastRepresentation;
+    readonly private FastRepresentation _fastRepresentation;
 
     /// <summary>
     /// Representation optimized for fast check at runtime.
@@ -62,7 +63,7 @@ public record EnvConstraintId
 
         var constraintsMemory = new ReadOnlyMemory<(ReadOnlyMemory<int>, PineValue)>(constraintsList);
 
-        fastRepresentation = new FastRepresentation(constraintsMemory);
+        _fastRepresentation = new FastRepresentation(constraintsMemory);
     }
 
     public PineValue? TryGetValue(IReadOnlyList<int> path)
@@ -138,7 +139,7 @@ public record EnvConstraintId
                 envItem.Value]))];
 
         var hashBase16 =
-            Convert.ToHexStringLower(compilerCache.ComputeHash(PineValue.List(parsedEnvItemsPineValues)).Span);
+            Convert.ToHexStringLower(s_compilerCache.ComputeHash(PineValue.List(parsedEnvItemsPineValues)).Span);
 
         return new EnvConstraintId(
             parsedEnvItems.ToImmutableSortedDictionary(keyComparer: IntPathComparer.Instance),
@@ -150,7 +151,7 @@ public record EnvConstraintId
 
     public bool SatisfiedByValue(PineValue envValue)
     {
-        return fastRepresentation.SatisfiedByValue(envValue);
+        return _fastRepresentation.SatisfiedByValue(envValue);
     }
 
     public bool SatisfiedByConstraint(EnvConstraintId otherEnvConstraintId)
@@ -976,7 +977,7 @@ public class CodeAnalysis
             if (1 < path.Length)
                 return null;
 
-            return KernelFunction.skip(path[0], blobValue);
+            return KernelFunctionSpecialized.skip(path[0], blobValue);
         }
 
         if (environment is not PineValue.ListValue listValue)

@@ -7,6 +7,8 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 
+using KernelFunctionSpecialized = Pine.Core.Internal.KernelFunctionSpecialized;
+
 namespace Pine.PineVM;
 
 
@@ -1736,7 +1738,7 @@ public class PineVM : IPineVM
 
                             if (KernelFunction.SignedIntegerFromValueRelaxed(skipCountValue) is { } skipCount)
                             {
-                                resultValue = KernelFunction.skip(skipCount, prevValue);
+                                resultValue = KernelFunctionSpecialized.skip(skipCount, prevValue);
                             }
 
                             currentFrame.PushInstructionResult(resultValue);
@@ -1753,7 +1755,7 @@ public class PineVM : IPineVM
 
                             var prevValue = currentFrame.PopTopmostFromStack();
 
-                            var resultValue = KernelFunction.skip(skipCount, prevValue);
+                            var resultValue = KernelFunctionSpecialized.skip(skipCount, prevValue);
 
                             currentFrame.PushInstructionResult(resultValue);
 
@@ -1770,7 +1772,7 @@ public class PineVM : IPineVM
 
                             if (KernelFunction.SignedIntegerFromValueRelaxed(takeCountValue) is { } takeCount)
                             {
-                                resultValue = KernelFunction.take(takeCount, prevValue);
+                                resultValue = KernelFunctionSpecialized.take(takeCount, prevValue);
                             }
 
                             currentFrame.PushInstructionResult(resultValue);
@@ -1787,7 +1789,8 @@ public class PineVM : IPineVM
 
                             var prevValue = currentFrame.PopTopmostFromStack();
 
-                            PineValue resultValue = resultValue = KernelFunction.take(takeCount, prevValue);
+                            PineValue resultValue = resultValue =
+                                KernelFunctionSpecialized.take(takeCount, prevValue);
 
                             currentFrame.PushInstructionResult(resultValue);
 
@@ -1803,7 +1806,8 @@ public class PineVM : IPineVM
 
                             var prevValue = currentFrame.PopTopmostFromStack();
 
-                            var resultValue = KernelFunction.takeLast(takeCount, prevValue);
+                            var resultValue =
+                                KernelFunctionSpecialized.takeLast(takeCount, prevValue);
 
                             currentFrame.PushInstructionResult(resultValue);
 
@@ -1834,7 +1838,7 @@ public class PineVM : IPineVM
                             var right = currentFrame.PopTopmostFromStack();
                             var left = currentFrame.PopTopmostFromStack();
 
-                            currentFrame.PushInstructionResult(KernelFunction.concat(left, right));
+                            currentFrame.PushInstructionResult(KernelFunctionSpecialized.concat(left, right));
 
                             continue;
                         }
@@ -1968,7 +1972,7 @@ public class PineVM : IPineVM
                             var right = currentFrame.PopTopmostFromStack();
                             var left = currentFrame.PopTopmostFromStack();
 
-                            var resultValue = KernelFunction.int_add(left, right);
+                            var resultValue = KernelFunctionSpecialized.int_add(left, right);
 
                             currentFrame.PushInstructionResult(resultValue);
 
@@ -2413,7 +2417,8 @@ public class PineVM : IPineVM
                             var right = currentFrame.PopTopmostFromStack();
                             var left = currentFrame.PopTopmostFromStack();
 
-                            var resultValue = KernelFunction.bit_and_binary(left, right);
+                            var resultValue =
+                                KernelFunctionSpecialized.bit_and_binary(left, right);
 
                             currentFrame.PushInstructionResult(resultValue);
 
@@ -2428,7 +2433,8 @@ public class PineVM : IPineVM
 
                             var left = currentFrame.PopTopmostFromStack();
 
-                            var resultValue = KernelFunction.bit_and_binary(left, right);
+                            var resultValue =
+                                KernelFunctionSpecialized.bit_and_binary(left, right);
 
                             currentFrame.PushInstructionResult(resultValue);
 
@@ -2440,7 +2446,8 @@ public class PineVM : IPineVM
                             var right = currentFrame.PopTopmostFromStack();
                             var left = currentFrame.PopTopmostFromStack();
 
-                            var resultValue = KernelFunction.bit_or_binary(left, right);
+                            var resultValue =
+                                KernelFunctionSpecialized.bit_or_binary(left, right);
 
                             currentFrame.PushInstructionResult(resultValue);
 
@@ -2455,7 +2462,8 @@ public class PineVM : IPineVM
 
                             var left = currentFrame.PopTopmostFromStack();
 
-                            var resultValue = KernelFunction.bit_or_binary(left, right);
+                            var resultValue =
+                                KernelFunctionSpecialized.bit_or_binary(left, right);
 
                             currentFrame.PushInstructionResult(resultValue);
 
@@ -2467,7 +2475,8 @@ public class PineVM : IPineVM
                             var right = currentFrame.PopTopmostFromStack();
                             var left = currentFrame.PopTopmostFromStack();
 
-                            var resultValue = KernelFunction.bit_xor_binary(left, right);
+                            var resultValue =
+                                KernelFunctionSpecialized.bit_xor_binary(left, right);
 
                             currentFrame.PushInstructionResult(resultValue);
 
@@ -2496,7 +2505,8 @@ public class PineVM : IPineVM
                             {
                                 if (KernelFunction.SignedIntegerFromValueRelaxed(shiftValue) is { } shiftCount)
                                 {
-                                    resultValue = KernelFunction.bit_shift_left(shiftCount, blobValue);
+                                    resultValue =
+                                        KernelFunctionSpecialized.bit_shift_left(shiftCount, blobValue);
                                 }
                             }
 
@@ -2518,7 +2528,8 @@ public class PineVM : IPineVM
 
                             if (value is PineValue.BlobValue blobValue)
                             {
-                                resultValue = KernelFunction.bit_shift_left(shiftCount, blobValue);
+                                resultValue =
+                                    KernelFunctionSpecialized.bit_shift_left(shiftCount, blobValue);
                             }
 
                             currentFrame.PushInstructionResult(resultValue);
@@ -2537,7 +2548,8 @@ public class PineVM : IPineVM
                             {
                                 if (KernelFunction.SignedIntegerFromValueRelaxed(shiftValue) is { } shiftCount)
                                 {
-                                    resultValue = KernelFunction.bit_shift_right(shiftCount, blobValue);
+                                    resultValue =
+                                        KernelFunctionSpecialized.bit_shift_right(shiftCount, blobValue);
                                 }
                             }
 
@@ -2559,7 +2571,8 @@ public class PineVM : IPineVM
 
                             if (value is PineValue.BlobValue blobValue)
                             {
-                                resultValue = KernelFunction.bit_shift_right(shiftCount, blobValue);
+                                resultValue =
+                                    KernelFunctionSpecialized.bit_shift_right(shiftCount, blobValue);
                             }
 
                             currentFrame.PushInstructionResult(resultValue);

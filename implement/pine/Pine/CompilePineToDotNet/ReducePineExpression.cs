@@ -6,6 +6,8 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 
+using KernelFunctionSpecialized = Pine.Core.Internal.KernelFunctionSpecialized;
+
 namespace Pine.CompilePineToDotNet;
 
 public class ReducePineExpression
@@ -377,7 +379,7 @@ public class ReducePineExpression
                                                 {
                                                     return Expression.LiteralInstance(
                                                         KernelFunction.head(
-                                                            KernelFunction.skip(skipCountClamped, headSkipLiteral.Value)));
+                                                            KernelFunctionSpecialized.skip(skipCountClamped, headSkipLiteral.Value)));
                                                 }
                                             }
                                         }
@@ -405,7 +407,7 @@ public class ReducePineExpression
                                         if (inputList.items[1] is Expression.Literal literal)
                                         {
                                             return Expression.LiteralInstance(
-                                                KernelFunction.skip((int)okSkipCount, literal.Value));
+                                                KernelFunctionSpecialized.skip((int)okSkipCount, literal.Value));
                                         }
 
                                         if (inputList.items[1] is Expression.KernelApplication innerKernelApp)

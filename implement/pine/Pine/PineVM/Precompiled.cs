@@ -1,15 +1,16 @@
 using ElmTime.ElmInteractive;
 using Pine.Core;
-using Pine.Core.PopularEncodings;
 using Pine.Core.Elm;
+using Pine.Core.Internal;
 using Pine.Core.Json;
+using Pine.Core.PopularEncodings;
 using System;
+using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
-using System.Buffers.Binary;
 
 namespace Pine.PineVM;
 
@@ -2370,8 +2371,8 @@ public class Precompiled
             var numB = PineVM.ValueFromPathInValueOrEmptyList(bTagArgs, [0]);
             var denomB = PineVM.ValueFromPathInValueOrEmptyList(bTagArgs, [1]);
 
-            var leftProduct = KernelFunction.int_mul(numA, denomB);
-            var rightProduct = KernelFunction.int_mul(numB, denomA);
+            var leftProduct = KernelFunctionSpecialized.int_mul(numA, denomB);
+            var rightProduct = KernelFunctionSpecialized.int_mul(numB, denomA);
 
             if (leftProduct == rightProduct)
             {
@@ -2393,7 +2394,7 @@ public class Precompiled
             var numA = PineVM.ValueFromPathInValueOrEmptyList(aTagArgs, [0]);
             var denomA = PineVM.ValueFromPathInValueOrEmptyList(aTagArgs, [1]);
 
-            var rightProduct = KernelFunction.int_mul(denomA, b);
+            var rightProduct = KernelFunctionSpecialized.int_mul(denomA, b);
 
             if (numA == rightProduct)
             {
@@ -2415,7 +2416,7 @@ public class Precompiled
             var numB = PineVM.ValueFromPathInValueOrEmptyList(bTagArgs, [0]);
             var denomB = PineVM.ValueFromPathInValueOrEmptyList(bTagArgs, [1]);
 
-            var leftProduct = KernelFunction.int_mul(a, denomB);
+            var leftProduct = KernelFunctionSpecialized.int_mul(a, denomB);
 
             if (leftProduct == numB)
             {
@@ -2910,7 +2911,7 @@ public class Precompiled
                             Tag_Just_Value(
                                 PineValue.List(
                                 [
-                                    KernelFunction.int_add(index, IntegerEncoding.EncodeSignedInteger(i)),
+                                    KernelFunctionSpecialized.int_add(index, IntegerEncoding.EncodeSignedInteger(i)),
                                     itemListValue
                                 ])),
                         StackFrameCount: itemEqStackFrameCount);
@@ -3818,7 +3819,7 @@ public class Precompiled
             }
 
             var resultValue =
-                KernelFunction.concat([mappedReversed, PineValue.List(itemsResults)]);
+                KernelFunctionSpecialized.concat(mappedReversed, PineValue.List(itemsResults));
 
             return new PineVM.ApplyStepwise.StepResult.Complete(resultValue);
         }
@@ -4108,9 +4109,9 @@ public class Precompiled
             }
 
             var resultValue =
-                KernelFunction.concat(
-                    [accumulatedReversed,
-                    PineValue.List(includedItems[..includedItemCount])]);
+                KernelFunctionSpecialized.concat(
+                    accumulatedReversed,
+                    PineValue.List(includedItems[..includedItemCount]));
 
             return new PineVM.ApplyStepwise.StepResult.Complete(resultValue);
         }
@@ -4238,9 +4239,9 @@ public class Precompiled
             }
 
             var resultValue =
-                KernelFunction.concat(
-                    [accumulatedReversed,
-                    PineValue.List(includedItems[..includedItemCount])]);
+                KernelFunctionSpecialized.concat(
+                    accumulatedReversed,
+                    PineValue.List(includedItems[..includedItemCount]));
 
             return new PineVM.ApplyStepwise.StepResult.Complete(resultValue);
         }
@@ -4863,7 +4864,8 @@ public class Precompiled
                 ]));
 
         var finalValue =
-            KernelFunction.concat([currentLinesValue, PineValue.List([.. linesValues])]);
+            KernelFunctionSpecialized.concat(
+                currentLinesValue, PineValue.List([.. linesValues]));
 
         return
             () => new PrecompiledResult.FinalValue(finalValue, StackFrameCount: 0);
@@ -4938,7 +4940,8 @@ public class Precompiled
         }
 
         var finalValue =
-            KernelFunction.concat([mappedCharsValue, PineValue.List([.. charsItems])]);
+            KernelFunctionSpecialized.concat(
+                mappedCharsValue, PineValue.List([.. charsItems]));
 
         return () => new PrecompiledResult.FinalValue(finalValue, StackFrameCount: 0);
     }
