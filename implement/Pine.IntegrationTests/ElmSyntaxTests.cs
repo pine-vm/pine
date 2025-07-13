@@ -1,5 +1,5 @@
 using ElmTime.ElmSyntax;
-using FluentAssertions;
+using AwesomeAssertions;
 using Pine.Core;
 using System.Collections.Generic;
 using System.Collections.Immutable;

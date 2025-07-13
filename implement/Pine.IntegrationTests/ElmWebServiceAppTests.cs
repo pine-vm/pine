@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using MoreLinq;
 using Pine.Core;
 using System.Linq;

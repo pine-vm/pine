@@ -1,5 +1,5 @@
 using ElmTime.Platform.WebService.ProcessStoreSupportingMigrations;
-using FluentAssertions;
+using AwesomeAssertions;
 using System.Collections.Immutable;
 using Xunit;
 

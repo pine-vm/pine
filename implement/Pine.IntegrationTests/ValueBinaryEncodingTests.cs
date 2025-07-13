@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Pine.Core;
 using Pine.Core.PopularEncodings;
 using System.Collections.Generic;

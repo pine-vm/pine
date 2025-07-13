@@ -1,5 +1,5 @@
 using ElmTime.ElmInteractive;
-using FluentAssertions;
+using AwesomeAssertions;
 using Pine.Core;
 using Pine.Core.Elm;
 using Pine.Core.PopularEncodings;

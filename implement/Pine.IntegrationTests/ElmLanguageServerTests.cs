@@ -1,3 +1,4 @@
+using AwesomeAssertions;
 using Pine.Core.LanguageServerProtocol;
 using Pine.Elm;
 using StreamJsonRpc;
@@ -9,7 +10,6 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Xunit;
-using FluentAssertions;
 using System.Text.Json;
 
 namespace Pine.IntegrationTests;
