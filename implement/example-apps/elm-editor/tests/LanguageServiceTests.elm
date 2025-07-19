@@ -1192,6 +1192,131 @@ decl_alfa = 1
         ]
 
 
+find_definition : Test.Test
+find_definition =
+    let
+        otherFiles =
+            [ ( [ "src", "Alpha.elm" ]
+              , String.trimLeft """
+module Alpha exposing (..)
+
+{-| Documentation comment on module Alpha
+-}
+
+from_alpha = 123
+
+
+"""
+              )
+            , ( [ "src", "Delta.elm" ]
+              , String.trimLeft """
+module Delta exposing (..)
+
+{-| Module comment
+-}
+
+
+{-| Comment on function
+-}
+from_delta : ( Int, String )
+from_delta =
+    ( 1, "" )
+
+"""
+              )
+            ]
+
+        expectationFromScenarioInMain : String -> List LanguageServiceInterface.LocationInFile -> Expect.Expectation
+        expectationFromScenarioInMain mainModuleText expectedItems =
+            definitionExpectationFromScenario
+                otherFiles
+                ( [ "src", "Main.elm" ], mainModuleText )
+                expectedItems
+    in
+    Test.describe "Find definition"
+        [ Test.test "On module name in import statement" <|
+            \_ ->
+                expectationFromScenarioInMain
+                    """
+module Main exposing (State)
+
+import A👈🚁lpha
+
+
+init =
+    0
+"""
+                    [ { fileLocation = fileLocationFromPathItems [ "src", "Alpha.elm" ]
+                      , range =
+                            { startLineNumber = 1
+                            , startColumn = 1
+                            , endLineNumber = 1
+                            , endColumn = 27
+                            }
+                      }
+                    ]
+        ]
+
+
+definitionExpectationFromScenario :
+    List ( List String, String )
+    -> ( List String, String )
+    -> List LanguageServiceInterface.LocationInFile
+    -> Expect.Expectation
+definitionExpectationFromScenario otherFiles ( fileOpenedInEditorPath, fileOpenedInEditorText ) expectedItems =
+    case String.split "👈🚁" (String.trimLeft fileOpenedInEditorText) of
+        [ textUntilCursor, textAfterCursor ] ->
+            definitionExpectationFromScenarioDescribingOpenFile
+                otherFiles
+                { filePath = fileOpenedInEditorPath
+                , textUntilCursor = textUntilCursor
+                , textAfterCursor = textAfterCursor
+                }
+                expectedItems
+
+        splitElements ->
+            Expect.fail
+                ("Unexpected shape of fileOpenedInEditorText: Unexpected number of split symbols: "
+                    ++ String.fromInt (List.length splitElements - 1)
+                )
+
+
+definitionExpectationFromScenarioDescribingOpenFile :
+    List ( List String, String )
+    -> { filePath : List String, textUntilCursor : String, textAfterCursor : String }
+    -> List LanguageServiceInterface.LocationInFile
+    -> Expect.Expectation
+definitionExpectationFromScenarioDescribingOpenFile otherFiles fileOpenedInEditor expectedItems =
+    let
+        languageServiceState =
+            buildLanguageServiceStateFindingParsableModuleText
+                { maxLinesToRemoveBeforeCursor = 0 }
+                otherFiles
+                fileOpenedInEditor
+
+        positionLineNumber =
+            fileOpenedInEditor.textUntilCursor |> String.lines |> List.length
+
+        positionColumn =
+            fileOpenedInEditor.textUntilCursor
+                |> String.lines
+                |> List.reverse
+                |> List.head
+                |> Maybe.map (String.length >> (+) 1)
+                |> Maybe.withDefault 0
+
+        computedItems : List LanguageServiceInterface.LocationInFile
+        computedItems =
+            LanguageService.provideDefinition
+                { fileLocation = fileLocationFromPathItems fileOpenedInEditor.filePath
+                , positionLineNumber = positionLineNumber
+                , positionColumn = positionColumn
+                }
+                languageServiceState
+    in
+    Expect.equal expectedItems computedItems
+
+
 completionItemsExpectationFromScenario :
     (LanguageService.LanguageServiceState -> LanguageService.LanguageServiceState)
     -> List ( List String, String )

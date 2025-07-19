@@ -557,7 +557,7 @@ hoverItemsFromParsedModule ( parsedModuleSyntax, currentModuleDeclarations, curr
                         )
                     )
 
-        fromImportSyntax : List ( Range, String )
+        fromImportSyntax : List ( Range, LocationInFile DeclarationRange, String )
         fromImportSyntax =
             importedModules
                 |> List.concatMap
@@ -567,6 +567,10 @@ hoverItemsFromParsedModule ( parsedModuleSyntax, currentModuleDeclarations, curr
                                 []
 
                             Just ( importedModuleParsedSyntax, _ ) ->
+                                let
+                                    (Elm.Syntax.Node.Node moduleDeclSyntaxRange _) =
+                                        importedModuleParsedSyntax.moduleDefinition
+                                in
                                 importedModule.referencesRanges
                                     |> List.map
                                         (\range ->
@@ -579,6 +583,12 @@ hoverItemsFromParsedModule ( parsedModuleSyntax, currentModuleDeclarations, curr
                                                         importedModuleParsedSyntax
                                             in
                                             ( rangeFromRecordRange range
+                                            , LocationInFile
+                                                importedModule.fileLocation
+                                                (DeclarationRange
+                                                    (rangeFromRecordRange moduleDeclSyntaxRange)
+                                                    []
+                                                )
                                             , documentation
                                             )
                                         )
@@ -742,9 +752,16 @@ hoverItemsFromParsedModule ( parsedModuleSyntax, currentModuleDeclarations, curr
                 , forNameInModule
                 ]
 
+        fromDeclarationsRefs : List ( Range, LocationInFile DeclarationRange, String )
+        fromDeclarationsRefs =
+            List.concatMap getForHoversForReferenceNode parsedReferences
+
         fromDeclarations : List ( Range, LocationInFile DeclarationRange, String )
         fromDeclarations =
-            List.concatMap getForHoversForReferenceNode parsedReferences
+            List.concat
+                [ fromImportSyntax
+                , fromDeclarationsRefs
+                ]
 
         fromDeclarationsLessSourceLocation : List ( Range, String )
         fromDeclarationsLessSourceLocation =
@@ -754,8 +771,7 @@ hoverItemsFromParsedModule ( parsedModuleSyntax, currentModuleDeclarations, curr
         hoverItems : List ( Range, String )
         hoverItems =
             List.concat
-                [ fromImportSyntax
-                , fromDeclarationsLessSourceLocation
+                [ fromDeclarationsLessSourceLocation
                 ]
     in
     { fromDeclarations = fromDeclarations
