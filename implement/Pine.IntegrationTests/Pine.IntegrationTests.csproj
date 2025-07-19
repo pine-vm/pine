@@ -30,7 +30,7 @@
     </PackageReference>
     <PackageReference Include="SharpCompress" Version="0.40.0" />
     <PackageReference Include="StreamJsonRpc" Version="2.22.11" />
-    <PackageReference Include="xunit.v3.core" Version="2.0.3" />
+    <PackageReference Include="xunit.v3.core" Version="3.0.0" />
   </ItemGroup>
 
   <ItemGroup>
