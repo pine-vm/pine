@@ -1822,24 +1822,29 @@ contains (String patternList) (String stringList) =
         True
 
     else
-        containsOnList patternList stringList
+        containsOnBlob 0 patternList stringList
 
 
-containsOnList : List Char -> List Char -> Bool
-containsOnList pattern string =
-    if
-        Pine_kernel.equal
-            [ Pine_kernel.take [ Pine_kernel.length pattern, string ]
-            , pattern
-            ]
-    then
+containsOnBlob : Int -> Int -> Int -> Bool
+containsOnBlob offset patternBytes stringBytes =
+    let
+        stringSlice =
+            Pine_kernel.take
+                [ Pine_kernel.length patternBytes
+                , Pine_kernel.skip [ offset, stringBytes ]
+                ]
+    in
+    if Pine_kernel.equal [ stringSlice, patternBytes ] then
         True
 
-    else if Pine_kernel.int_is_sorted_asc [ Pine_kernel.length string, Pine_kernel.length pattern ] then
+    else if Pine_kernel.equal [ Pine_kernel.length stringSlice, 0 ] then
         False
 
     else
-        containsOnList pattern (Pine_kernel.skip [ 1, string ])
+        containsOnBlob
+            (Pine_kernel.int_add [ offset, 4 ])
+            patternBytes
+            stringBytes
 
 
 startsWith : String -> String -> Bool
