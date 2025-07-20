@@ -9,8 +9,20 @@ namespace Pine.Core;
 
 #pragma warning disable IDE1006
 
+
+/// <summary>
+/// Pine kernel functions: the minimal primitive operations of the Pine expression language.
+/// Pine’s value model has only two forms: blobs (byte sequences) and lists (heterogeneous sequences).
+/// All primitives are invoked by name with a single <see cref="PineValue"/> argument that may be a list
+/// encoding multiple logical parameters (e.g. <c>[ count, sequence ]</c> for <c>skip</c>/<c>take</c>).
+/// </summary>
 public static class KernelFunction
 {
+    /// <summary>
+    /// For a list, reports if all elements are equal. For a blob, reports if all bytes are equal.
+    /// </summary>
+    /// <param name="value">The input value, which can be a list or a blob.</param>
+    /// <returns>A PineValue representing true or false.</returns>
     public static PineValue equal(PineValue value)
     {
         if (value is PineValue.ListValue listValue)
@@ -71,6 +83,11 @@ public static class KernelFunction
             PineValue.EmptyList
         };
 
+    /// <summary>
+    /// For a list, returns the number of elements. For a blob, returns the number of bytes.
+    /// </summary>
+    /// <param name="value">The input value, which can be a list or a blob.</param>
+    /// <returns>A PineValue representing the length as a signed integer.</returns>
     public static PineValue length(PineValue value) =>
         IntegerEncoding.EncodeSignedInteger(
             value switch
@@ -86,6 +103,12 @@ public static class KernelFunction
                     "Unexpected value type: " + value.GetType().FullName)
             });
 
+    /// <summary>
+    /// For a list or blob, returns a new sequence with the first 'count' elements/bytes removed.
+    /// The argument is a list of two elements: [count, sequence].
+    /// </summary>
+    /// <param name="value">A list containing the count and the sequence (list or blob).</param>
+    /// <returns>A new sequence with the specified number of elements/bytes removed from the beginning, or an empty list on error.</returns>
     public static PineValue skip(PineValue value) =>
         value switch
         {
@@ -110,6 +133,12 @@ public static class KernelFunction
             throw new NotImplementedException()
         };
 
+    /// <summary>
+    /// For a list or blob, returns a new sequence with the first 'count' elements/bytes.
+    /// The argument is a list of two elements: [count, sequence].
+    /// </summary>
+    /// <param name="value">A list containing the count and the sequence (list or blob).</param>
+    /// <returns>A new sequence with the first 'count' elements/bytes, or an empty list on error.</returns>
     public static PineValue take(PineValue value) =>
         value switch
         {
@@ -133,6 +162,12 @@ public static class KernelFunction
             throw new NotImplementedException()
         };
 
+    /// <summary>
+    /// For a list, returns a new list with the elements in reverse order.
+    /// For a blob, returns a new blob with the bytes in reverse order.
+    /// </summary>
+    /// <param name="value">The input value, which can be a list or a blob.</param>
+    /// <returns>A new sequence with the elements/bytes in reverse order.</returns>
     public static PineValue reverse(PineValue value)
     {
         if (value is PineValue.ListValue listValue)
