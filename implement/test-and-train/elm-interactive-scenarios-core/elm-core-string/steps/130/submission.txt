@@ -1,4 +1,6 @@
-[ String.contains "the" "theory"
+[ String.contains "" ""
+, String.contains "the" "theory"
 , String.contains "hat" "theory"
+, String.contains "or" "theory"
 , String.contains "THE" "theory"
 ]
