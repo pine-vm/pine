@@ -441,6 +441,13 @@ public static class KernelFunction
         return PineValue.Blob(resultArray);
     }
 
+    /// <summary>
+    /// Expects a list with exactly two elements: [shiftCount, blob].
+    /// If the input does not match this structure, returns an empty list.
+    /// Applies a left bitwise shift to the blob by the specified count.
+    /// The resulting blob has the same length as the input blob,
+    /// with zeros filling one end and bits falling off the other end.
+    /// </summary>
     public static PineValue bit_shift_left(PineValue value)
     {
         if (value is not PineValue.ListValue argumentsList)
@@ -468,6 +475,13 @@ public static class KernelFunction
         return Internal.KernelFunctionSpecialized.bit_shift_left(shiftCount, blobValue);
     }
 
+    /// <summary>
+    /// Expects a list with exactly two elements: [shiftCount, blob].
+    /// If the input does not match this structure, returns an empty list.
+    /// Applies a right bitwise shift to the blob by the specified count.
+    /// The resulting blob has the same length as the input blob,
+    /// with zeros filling one end and bits falling off the other end.
+    /// </summary>
     public static PineValue bit_shift_right(PineValue value)
     {
         if (value is not PineValue.ListValue argumentsList)
