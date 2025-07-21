@@ -63,7 +63,7 @@ For a detailed description of this app, see the readme file at <https://github.c
 As an integrated development environment, it assists us in reading, writing, and testing Elm programs and in collaborating with other developers.
 
 <a href="https://github.com/pine-vm/pine/tree/main/implement/example-apps/elm-editor/README.md">
-<img src="./guide/image/2021-03-17-elm-editor-user-interface.png" width="500" />
+<img src="./guide/image/2025-07-21-elm-editor-user-interface.png" width="500" />
 </a>
 
 To see Elm Editor in action, check out the public instance at https://elm-editor.com

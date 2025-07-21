@@ -11,7 +11,7 @@ To see Elm Editor in action, check out the public instance at https://elm-editor
 This video is a short demonstration of a code editing cycle in Elm Editor:
 https://youtu.be/x6RpeuLtiXY
 
-![running an app in Elm Editor](./../../../guide/image/2021-03-17-elm-editor-user-interface.png)
+![running an app in Elm Editor](./../../../guide/image/2025-07-21-elm-editor-user-interface.png)
 
 ## Overview of Features
 
