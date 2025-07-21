@@ -220,7 +220,18 @@ public static class KernelFunction
             return listValue.Elements.Span[0];
         }
 
-        return PineValue.EmptyList;
+        if (value is PineValue.BlobValue blobValue)
+        {
+            if (blobValue.Bytes.Length is 0)
+            {
+                return PineValue.EmptyBlob;
+            }
+
+            return PineValue.BlobSingleByte(blobValue.Bytes.Span[0]);
+        }
+
+        throw new NotImplementedException(
+            "Unexpected value type: " + value.GetType().FullName);
     }
 
     public static PineValue int_add(PineValue value) =>
