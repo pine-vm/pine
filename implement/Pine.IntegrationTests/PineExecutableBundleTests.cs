@@ -9,7 +9,7 @@ namespace Pine.IntegrationTests;
 public class PineExecutableBundleTests
 {
     [Fact]
-    public void Bundles_default_elm_compiler()
+    public void Bundles_default_elm_compiler_bootstrapping()
     {
         var compilerSourceFiles =
             Elm.ElmCompiler.CompilerSourceFilesDefault.Value;
@@ -35,21 +35,30 @@ public class PineExecutableBundleTests
                 overrideElmCompiler: elmCompilerFromBundle)
             .Extract(err => throw new System.Exception(err));
 
+        // Verify bootstrapping...
+
         var elmCompiler =
             Elm.ElmCompiler.BuildCompilerFromSourceFiles(compilerSourceFiles)
             .Extract(err => throw new System.Exception(err));
 
-        System.Console.WriteLine(
-            string.Join(
-                "\n",
-                [
-                    ..CompileElmCompilerTests.CompareCompiledEnvironmentsAndAssertEqual(
+        {
+            /*
+             * Instead of simply failing the test with a generic error when the equality check fails,
+             * generate a more specific error message that highlights the differing module and declaration.
+             * */
+            System.Console.WriteLine(
+                string.Join(
+                    "\n",
+                    [
+                        ..CompileElmCompilerTests.CompareCompiledEnvironmentsAndAssertEqual(
                         expectedEnv: freshEnvironment,
                         actualEnv: elmCompilerFromBundleValue)
-                ]));
+                    ]));
+        }
 
         freshEnvironment.Should().Be(elmCompilerFromBundleValue);
 
+        // Verify the Elm compiler we get compiling from source is the same as the one bundled with the distribution.
         elmCompiler.CompilerEnvironment.Should().Be(elmCompilerFromBundleValue);
     }
 

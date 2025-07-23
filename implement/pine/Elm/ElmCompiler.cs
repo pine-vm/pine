@@ -126,6 +126,11 @@ public class ElmCompiler
             compilerSourceFiles => Task.Run(() => BuildCompilerFromSourceFiles(compilerSourceFiles)));
     }
 
+    /// <summary>
+    /// Compile an Elm compiler from the given tree of Elm source files.
+    /// Typical applications for compiling the Elm compiler from source are verifying bootstrapping or
+    /// experimenting with modifications to the emit stage.
+    /// </summary>
     public static Result<string, ElmCompiler> BuildCompilerFromSourceFiles(
         TreeNodeWithStringPath compilerSourceFiles,
         ElmCompiler? overrideElmCompiler = null)
