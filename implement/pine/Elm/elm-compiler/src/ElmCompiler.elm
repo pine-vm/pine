@@ -3277,8 +3277,35 @@ functionCannotReturnSetOrDict ( moduleName, localName ) =
             True
 
         Nothing ->
-            case ( moduleName, localName ) of
-                ( [ "Basics" ], "compare" ) ->
+            case moduleName of
+                [ "Basics" ] ->
+                    True
+
+                [ "List" ] ->
+                    True
+
+                [ "Array" ] ->
+                    True
+
+                [ "Bitwise" ] ->
+                    True
+
+                [ "Char" ] ->
+                    True
+
+                [ "Tuple" ] ->
+                    True
+
+                [ "String" ] ->
+                    True
+
+                [ "Maybe" ] ->
+                    True
+
+                [ "Result" ] ->
+                    True
+
+                [ "Pine_kernel" ] ->
                     True
 
                 _ ->
@@ -3443,6 +3470,12 @@ functionProvenToReturnInt ( moduleName, localName ) =
         ( [ "Basics" ], "floor" ) ->
             Just 1
 
+        ( [ "Basics" ], "truncate" ) ->
+            Just 1
+
+        ( [ "Basics" ], "round" ) ->
+            Just 1
+
         ( [ "Basics" ], "ceiling" ) ->
             Just 1
 
@@ -3450,6 +3483,9 @@ functionProvenToReturnInt ( moduleName, localName ) =
             Just 2
 
         ( [ "Basics" ], "remainderBy" ) ->
+            Just 2
+
+        ( [ "Basics" ], "(//)" ) ->
             Just 2
 
         ( [ "String" ], "length" ) ->
@@ -4386,7 +4422,11 @@ emitRecursionDomain { exposedDeclarationsNames, allModuleDeclarations, importedF
 
                                                             getFunctionInnerExpression : Pine.Expression
                                                             getFunctionInnerExpression =
-                                                                case Common.assocListGetWithIndex ( [], declName ) blockEmitStack.environmentFunctions of
+                                                                case
+                                                                    Common.assocListGetWithIndex
+                                                                        ( [], declName )
+                                                                        blockEmitStack.environmentFunctions
+                                                                of
                                                                     Just ( indexInBlock, _ ) ->
                                                                         getFunctionInnerExpressionFromIndex indexInBlock
 
