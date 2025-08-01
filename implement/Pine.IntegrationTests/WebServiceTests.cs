@@ -1565,7 +1565,7 @@ public class WebServiceTests
                 logger: null)
             .Extract(err => throw new Exception(err)).process)
         {
-            var restoredProcessLastDeployedAppComponent = restoredProcess.LastAppConfig.appConfigComponent;
+            var restoredProcessLastDeployedAppComponent = restoredProcess.LastAppConfig.AppConfigComponent;
 
             restoredProcessLastDeployedAppComponent.Should().NotBeNull("Restored process has app deployed.");
 

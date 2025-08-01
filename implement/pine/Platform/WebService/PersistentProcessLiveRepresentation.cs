@@ -25,9 +25,9 @@ public record struct StoreProvisionalReductionReport(
     int? storeDependenciesTimeSpentMilli);
 
 public record struct ProcessAppConfig(
-    PineValue appConfigComponent);
+    PineValue AppConfigComponent);
 
-public class PersistentProcessLiveRepresentation : IAsyncDisposable
+public sealed class PersistentProcessLiveRepresentation : IAsyncDisposable
 {
     private static readonly TimeSpan s_storeReductionIntervalDefault = TimeSpan.FromMinutes(10);
 
@@ -92,14 +92,14 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
 
         _appConfigParsed =
             WebServiceConfigFromDeployment(
-                lastAppConfig.appConfigComponent,
+                lastAppConfig.AppConfigComponent,
                 overrideElmAppInterfaceConfig);
 
         _mutatingWebServiceApp =
             new MutatingWebServiceApp(_appConfigParsed);
 
         _volatileProcessHost =
-            new VolatileProcessHost([lastAppConfig.appConfigComponent]);
+            new VolatileProcessHost([lastAppConfig.AppConfigComponent]);
 
         if (lastAppState is not null)
         {
@@ -359,9 +359,6 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
         return pineValue;
     }
 
-    private static readonly IImmutableDictionary<string, Expression> popularExpressionDictionary =
-        PopularExpression.BuildPopularExpressionDictionary();
-
     private record struct StoreAppStateResetAndReductionReport(
         DateTimeOffset Time,
         PineValue ElmAppState,
@@ -377,7 +374,7 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
             _storeWriter.StoreComponent(elmAppState);
 
         var appConfigHash =
-            _storeWriter.StoreComponent(LastAppConfig.appConfigComponent);
+            _storeWriter.StoreComponent(LastAppConfig.AppConfigComponent);
 
         var compositionEvent =
             new CompositionLogRecordInFile.CompositionEvent
@@ -438,7 +435,9 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
         GetFilesForRestoreProcess(
         IFileStoreReader fileStoreReader)
     {
-        var filesForProcessRestore = new ConcurrentDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
+        var filesForProcessRestore =
+            new ConcurrentDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>(
+                EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
 
         var recordingReader = new DelegatingFileStoreReader
         (
@@ -737,7 +736,7 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
 
             var appConfigParsedBefore =
                 WebServiceConfigFromDeployment(
-                    lastAppConfig.appConfigComponent,
+                    lastAppConfig.AppConfigComponent,
                     overrideElmAppInterfaceConfig);
 
             var appConfigTreeNext =

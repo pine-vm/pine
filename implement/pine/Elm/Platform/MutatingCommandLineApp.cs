@@ -15,37 +15,37 @@ public class MutatingCommandLineApp
 {
     public int? ExitCode { private set; get; } = null;
 
-    private readonly ConcurrentQueue<ReadOnlyMemory<byte>> stdOut = new();
+    private readonly ConcurrentQueue<ReadOnlyMemory<byte>> _stdOut = new();
 
-    private readonly ConcurrentQueue<ReadOnlyMemory<byte>> stdErr = new();
+    private readonly ConcurrentQueue<ReadOnlyMemory<byte>> _stdErr = new();
 
-    private readonly PineVM.PineVMCache pineVMCache = new();
+    private readonly PineVM.PineVMCache _pineVMCache = new();
 
-    private readonly PineVM.PineVM pineVM;
+    private readonly PineVM.PineVM _pineVM;
 
-    private readonly CommandLineAppConfig appConfig;
+    private readonly CommandLineAppConfig _appConfig;
 
-    private PineValue appState;
+    private PineValue _appState;
 
     public IReadOnlyList<ReadOnlyMemory<byte>> DequeueStdOut() =>
-        [.. stdOut.DequeueAllEnumerable()];
+        [.. _stdOut.DequeueAllEnumerable()];
 
     public IReadOnlyList<ReadOnlyMemory<byte>> DequeueStdErr() =>
-        [.. stdErr.DequeueAllEnumerable()];
+        [.. _stdErr.DequeueAllEnumerable()];
 
     public MutatingCommandLineApp(
         CommandLineAppConfig appConfig,
         CommandLineAppConfig.CommandLineAppInitEnvironment environment)
     {
-        this.appConfig = appConfig;
+        this._appConfig = appConfig;
 
-        pineVM = new PineVM.PineVM(pineVMCache.EvalCache);
+        _pineVM = new PineVM.PineVM(_pineVMCache.EvalCache);
 
-        (appState, var initResponse) =
+        (_appState, var initResponse) =
             CommandLineAppConfig.Init(
                 appConfig,
                 environment,
-                pineVM);
+                _pineVM);
 
         MutateConsolidatingAppResponse(initResponse);
     }
@@ -54,17 +54,17 @@ public class MutatingCommandLineApp
     {
         var eventHandled =
             CommandLineAppConfig.EventStdIn(
-                appConfig,
+                _appConfig,
                 input,
-                appState,
-                pineVM);
+                _appState,
+                _pineVM);
 
         if (eventHandled is null)
         {
             return null;
         }
 
-        (appState, var eventResponse) = eventHandled.Value;
+        (_appState, var eventResponse) = eventHandled.Value;
 
         MutateConsolidatingAppResponse(eventResponse);
 
@@ -73,20 +73,20 @@ public class MutatingCommandLineApp
 
     private void MutateConsolidatingAppResponse(CommandLineAppConfig.CommandLineAppEventResponse eventResponse)
     {
-        ExitCode = ExitCode ?? eventResponse.Exit;
+        ExitCode ??= eventResponse.Exit;
 
         foreach (var cmd in eventResponse.Commands)
         {
             if (cmd is CommandLineAppConfig.CommandLineAppCommand.SendToStdOutCmd sendToStdOutCmd)
             {
-                stdOut.Enqueue(sendToStdOutCmd.Output);
+                _stdOut.Enqueue(sendToStdOutCmd.Output);
 
                 continue;
             }
 
             if (cmd is CommandLineAppConfig.CommandLineAppCommand.SendToStdErrCmd sendToStdErrCmd)
             {
-                stdErr.Enqueue(sendToStdErrCmd.Output);
+                _stdErr.Enqueue(sendToStdErrCmd.Output);
 
                 continue;
             }
@@ -143,7 +143,7 @@ public record CommandLineAppConfig(
     ElmTime.ElmInteractive.ElmInteractiveEnvironment.FunctionRecord InitFromEnvironment,
     ElmTime.ElmInteractive.ElmInteractiveEnvironment.FunctionRecord SubscriptionsFromState)
 {
-    private static readonly PineVM.PineVMParseCache parseCache = new();
+    private static readonly PineVM.PineVMParseCache s_parseCache = new();
 
     public static CommandLineAppConfig ConfigFromSourceFilesAndModuleName(
         TreeNodeWithStringPath sourceFiles,
@@ -168,7 +168,7 @@ public record CommandLineAppConfig(
                 compiledModulesValue,
                 moduleName: string.Join(".", moduleName),
                 declarationName: "runRoot",
-                parseCache)
+                s_parseCache)
             .Extract(err => throw new Exception(
                 "Failed parsing runRoot declaration from module " + string.Join(".", moduleName) + ": " + err));
 
@@ -206,13 +206,13 @@ public record CommandLineAppConfig(
         var initFunctionRecord =
             ElmTime.ElmInteractive.ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(
                 runRootInitFunctionValue,
-                parseCache)
+                s_parseCache)
             .Extract(err => throw new Exception("Failed parsing init function: " + err));
 
         var subscriptionsFunctionRecord =
             ElmTime.ElmInteractive.ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(
                 runRootSubscriptionsFunctionValue,
-                parseCache)
+                s_parseCache)
             .Extract(err => throw new Exception("Failed parsing subscriptions function: " + err));
 
         return new CommandLineAppConfig(
@@ -303,7 +303,7 @@ public record CommandLineAppConfig(
         var functionRecord =
             ElmTime.ElmInteractive.ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(
                 functionRecordValue,
-                parseCache)
+                s_parseCache)
             .Extract(err => throw new Exception("Failed parsing stdIn function record: " + err));
 
         if (functionRecord.ParameterCount is not 2)

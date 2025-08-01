@@ -17,17 +17,16 @@ public class PublicAppState(
     ServerAndElmAppConfig serverAndElmAppConfig,
     Func<DateTimeOffset> getDateTimeOffset)
 {
-    private long nextHttpRequestIndex = 0;
+    private long _nextHttpRequestIndex = 0;
 
-    public readonly System.Threading.CancellationTokenSource applicationStoppingCancellationTokenSource = new();
+    public readonly System.Threading.CancellationTokenSource ApplicationStoppingCancellationTokenSource = new();
 
-    private readonly ServerAndElmAppConfig serverAndElmAppConfig = serverAndElmAppConfig;
-    private readonly Func<DateTimeOffset> getDateTimeOffset = getDateTimeOffset;
+    private readonly ServerAndElmAppConfig _serverAndElmAppConfig = serverAndElmAppConfig;
+    private readonly Func<DateTimeOffset> _getDateTimeOffset = getDateTimeOffset;
 
     public WebApplication Build(
         WebApplicationBuilder appBuilder,
         ILogger logger,
-        IHostEnvironment env,
         IReadOnlyList<string> publicWebHostUrls,
         bool? disableLetsEncrypt,
         bool disableHttps)
@@ -39,7 +38,7 @@ public class PublicAppState(
         });
 
         var enableUseFluffySpoonLetsEncrypt =
-            serverAndElmAppConfig.ServerConfig?.letsEncryptOptions is not null && !(disableLetsEncrypt ?? false);
+            _serverAndElmAppConfig.ServerConfig?.letsEncryptOptions is not null && !(disableLetsEncrypt ?? false);
 
         var canUseHttps =
             enableUseFluffySpoonLetsEncrypt;
@@ -73,14 +72,9 @@ public class PublicAppState(
                 ConfigureServices(services, logger);
             })
             .UseUrls([.. publicWebHostUrlsFilteredForHttps])
-            .WithSettingDateTimeOffsetDelegate(getDateTimeOffset);
+            .WithSettingDateTimeOffsetDelegate(_getDateTimeOffset);
 
         var app = appBuilder.Build();
-
-        if (env.IsDevelopment())
-        {
-            app.UseDeveloperExceptionPage();
-        }
 
         if (enableUseFluffySpoonLetsEncrypt)
         {
@@ -91,14 +85,14 @@ public class PublicAppState(
 
         app.Lifetime.ApplicationStopping.Register(() =>
         {
-            applicationStoppingCancellationTokenSource.Cancel();
+            ApplicationStoppingCancellationTokenSource.Cancel();
             app.Logger?.LogInformation("Public app noticed ApplicationStopping.");
         });
 
         app.Run(async context =>
         {
             await Asp.MiddlewareFromWebServiceConfig(
-                serverAndElmAppConfig.ServerConfig,
+                _serverAndElmAppConfig.ServerConfig,
                 context,
                 () => HandleRequestAsync(context));
         });
@@ -115,7 +109,7 @@ public class PublicAppState(
             options.EnableForHttps = true;
         });
 
-        var letsEncryptOptions = serverAndElmAppConfig.ServerConfig?.letsEncryptOptions;
+        var letsEncryptOptions = _serverAndElmAppConfig.ServerConfig?.letsEncryptOptions;
 
         if (letsEncryptOptions is null)
         {
@@ -123,7 +117,7 @@ public class PublicAppState(
         }
         else
         {
-            if (serverAndElmAppConfig.DisableLetsEncrypt ?? false)
+            if (_serverAndElmAppConfig.DisableLetsEncrypt ?? false)
             {
                 logger.LogInformation(
                     "I found 'letsEncryptOptions' in the configuration, but 'disableLetsEncrypt' is set to true. I continue without Let's Encrypt.");
@@ -144,16 +138,16 @@ public class PublicAppState(
 
     private async System.Threading.Tasks.Task HandleRequestAsync(HttpContext context)
     {
-        var currentDateTime = getDateTimeOffset();
+        var currentDateTime = _getDateTimeOffset();
         var timeMilli = currentDateTime.ToUnixTimeMilliseconds();
-        var httpRequestIndex = System.Threading.Interlocked.Increment(ref nextHttpRequestIndex);
+        var httpRequestIndex = System.Threading.Interlocked.Increment(ref _nextHttpRequestIndex);
 
         var httpRequestId = timeMilli + "-" + httpRequestIndex;
 
         var httpRequest =
             await Asp.AsInterfaceHttpRequestAsync(context.Request);
 
-        if (serverAndElmAppConfig.ServerConfig?.httpRequestEventSizeLimit is { } httpRequestEventSizeLimit)
+        if (_serverAndElmAppConfig.ServerConfig?.httpRequestEventSizeLimit is { } httpRequestEventSizeLimit)
         {
             if (httpRequestEventSizeLimit < EstimateHttpRequestEventSize(httpRequest))
             {
@@ -172,7 +166,7 @@ public class PublicAppState(
                 Request: httpRequest);
 
         var task =
-            serverAndElmAppConfig.ProcessHttpRequestAsync(httpRequestEvent);
+            _serverAndElmAppConfig.ProcessHttpRequestAsync(httpRequestEvent);
 
         var waitForHttpResponseClock = System.Diagnostics.Stopwatch.StartNew();
 
@@ -211,18 +205,18 @@ public class PublicAppState(
 
             var headerContentType =
                 httpResponse.HeadersToAdd
-                ?.FirstOrDefault(header => header.Name?.ToLowerInvariant() == "content-type")
+                ?.FirstOrDefault(header => header.Name?.Equals("content-type", StringComparison.OrdinalIgnoreCase) ?? false)
                 ?.Values?.FirstOrDefault();
 
             context.Response.StatusCode = httpResponse.StatusCode;
 
-            foreach (var headerToAdd in httpResponse.HeadersToAdd.EmptyIfNull())
+            foreach (var headerToAdd in httpResponse.HeadersToAdd ?? [])
             {
                 context.Response.Headers[headerToAdd.Name] =
                     new Microsoft.Extensions.Primitives.StringValues([.. headerToAdd.Values]);
             }
 
-            if (headerContentType != null)
+            if (headerContentType is not null)
                 context.Response.ContentType = headerContentType;
 
             context.Response.Headers.XPoweredBy = "Pine";
@@ -231,7 +225,7 @@ public class PublicAppState(
 
             context.Response.ContentLength = contentAsByteArray?.Length ?? 0;
 
-            if (contentAsByteArray != null)
+            if (contentAsByteArray is not null)
                 await context.Response.Body.WriteAsync(contentAsByteArray.Value);
 
             break;

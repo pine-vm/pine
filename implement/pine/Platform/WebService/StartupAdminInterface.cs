@@ -281,7 +281,7 @@ public class StartupAdminInterface
                             IReadOnlyList<string> publicWebHostUrls)
                         {
                             var appConfigTree =
-                                PineValueComposition.ParseAsTreeWithStringPath(processAppConfig.appConfigComponent)
+                                PineValueComposition.ParseAsTreeWithStringPath(processAppConfig.AppConfigComponent)
                                 .Extract(error => throw new Exception(error.ToString()));
 
                             var appConfigFilesNamesAndContents =
@@ -306,7 +306,7 @@ public class StartupAdminInterface
                                 new ServerAndElmAppConfig(
                                     ServerConfig: webServiceConfig,
                                     ProcessHttpRequestAsync: processLiveRepresentation.ProcessHttpRequestAsync,
-                                    SourceComposition: processAppConfig.appConfigComponent,
+                                    SourceComposition: processAppConfig.AppConfigComponent,
                                     InitOrMigrateCmds: restoreProcessOk.initOrMigrateCmds,
                                     DisableLetsEncrypt: disableLetsEncrypt,
                                     DisableHttps: disableHttps);
@@ -330,10 +330,14 @@ public class StartupAdminInterface
                                 publicAppState.Build(
                                     appBuilder,
                                     logger,
-                                    env,
                                     publicWebHostUrls: publicWebHostUrls,
                                     disableLetsEncrypt: disableLetsEncrypt,
                                     disableHttps: aspHostConfig.DisableHttps);
+
+                            if (env.IsDevelopment())
+                            {
+                                app.UseDeveloperExceptionPage();
+                            }
 
                             return app;
                         }
@@ -585,7 +589,7 @@ public class StartupAdminInterface
                         methods : ImmutableDictionary<string, ApiRouteMethodConfig>.Empty
                         .Add("get", async (context, publicAppHost) =>
                         {
-                            var appConfig = publicAppHost?.ProcessLiveRepresentation?.LastAppConfig.appConfigComponent;
+                            var appConfig = publicAppHost?.ProcessLiveRepresentation?.LastAppConfig.AppConfigComponent;
 
                             if (appConfig == null)
                             {

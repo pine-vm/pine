@@ -14,17 +14,17 @@ using RequestToVolatileProcessResult =
     Result<WebServiceInterface.RequestToVolatileProcessError, WebServiceInterface.RequestToVolatileProcessComplete>;
 
 public class VolatileProcessHost(
-    IReadOnlyList<PineValue> SourceCompositions)
+    IReadOnlyList<PineValue> sourceCompositions)
     : IAsyncDisposable
 {
-    private int createVolatileProcessAttempts = 0;
+    private int _createVolatileProcessAttempts = 0;
 
-    private readonly ConcurrentDictionary<string, VolatileProcess> volatileProcesses = new();
+    private readonly ConcurrentDictionary<string, VolatileProcess> _volatileProcesses = new();
 
-    private readonly ConcurrentQueue<WebServiceInterface.Command> commands = new();
+    private readonly ConcurrentQueue<WebServiceInterface.Command> _commands = new();
 
     public IReadOnlyList<WebServiceInterface.Command> DequeueCommands() =>
-        [.. commands.DequeueAllEnumerable()];
+        [.. _commands.DequeueAllEnumerable()];
 
     private readonly ConcurrentDictionary<Task<TaskResult>, object?> tasks = [];
 
@@ -68,7 +68,7 @@ public class VolatileProcessHost(
             }
             else
             {
-                commands.Enqueue(cmd);
+                _commands.Enqueue(cmd);
             }
         }
 
@@ -137,7 +137,7 @@ public class VolatileProcessHost(
 
         if (cmd is WebServiceInterface.Command.TerminateVolatileProcess terminateVolatileProcess)
         {
-            volatileProcesses.TryRemove(terminateVolatileProcess.ProcessId, out var volatileProcess);
+            _volatileProcesses.TryRemove(terminateVolatileProcess.ProcessId, out var volatileProcess);
 
             (volatileProcess as IDisposable)?.Dispose();
         }
@@ -200,9 +200,9 @@ public class VolatileProcessHost(
                     scriptGlobals: null);
 
             var volatileProcessId =
-                System.Threading.Interlocked.Increment(ref createVolatileProcessAttempts).ToString();
+                System.Threading.Interlocked.Increment(ref _createVolatileProcessAttempts).ToString();
 
-            volatileProcesses[volatileProcessId] = volatileProcess;
+            _volatileProcesses[volatileProcessId] = volatileProcess;
 
             return
                 new WebServiceInterface.CreateVolatileProcessComplete(
@@ -235,9 +235,9 @@ public class VolatileProcessHost(
                     createVolatileProcess);
 
             var volatileProcessId =
-                System.Threading.Interlocked.Increment(ref createVolatileProcessAttempts).ToString();
+                System.Threading.Interlocked.Increment(ref _createVolatileProcessAttempts).ToString();
 
-            volatileProcesses[volatileProcessId] = volatileProcess;
+            _volatileProcesses[volatileProcessId] = volatileProcess;
 
             return
                 new WebServiceInterface.CreateVolatileProcessComplete(ProcessId: volatileProcessId);
@@ -262,7 +262,7 @@ public class VolatileProcessHost(
     public RequestToVolatileProcessResult PerformProcessTaskRequestToVolatileProcess(
         WebServiceInterface.RequestToVolatileProcessStruct requestToVolatileProcess)
     {
-        volatileProcesses.TryGetValue(requestToVolatileProcess.ProcessId, out var volatileProcess);
+        _volatileProcesses.TryGetValue(requestToVolatileProcess.ProcessId, out var volatileProcess);
 
         if (volatileProcess is null)
         {
@@ -270,9 +270,9 @@ public class VolatileProcessHost(
         }
 
         string? returnValueToString = null;
-        string? exceptionToString = null;
-
         var clock = System.Diagnostics.Stopwatch.StartNew();
+
+        string? exceptionToString;
 
         try
         {
@@ -325,7 +325,7 @@ public class VolatileProcessHost(
     public Result<WebServiceInterface.RequestToVolatileProcessError, object> PerformWriteToVolatileProcessNativeStdIn(
         WebServiceInterface.WriteToVolatileProcessNativeStdInStruct writeToVolatileProcessNativeStdIn)
     {
-        volatileProcesses.TryGetValue(writeToVolatileProcessNativeStdIn.ProcessId, out var volatileProcess);
+        _volatileProcesses.TryGetValue(writeToVolatileProcessNativeStdIn.ProcessId, out var volatileProcess);
 
         if (volatileProcess is null)
         {
@@ -366,7 +366,7 @@ public class VolatileProcessHost(
         PerformReadAllFromVolatileProcessNative(
         WebServiceInterface.ReadAllFromVolatileProcessNativeStruct readAllFromVolatileProcessNative)
     {
-        volatileProcesses.TryGetValue(readAllFromVolatileProcessNative.ProcessId, out var volatileProcess);
+        _volatileProcesses.TryGetValue(readAllFromVolatileProcessNative.ProcessId, out var volatileProcess);
 
         if (volatileProcess is null)
         {
@@ -400,7 +400,7 @@ public class VolatileProcessHost(
     private byte[]? GetBlobWithSHA256(byte[] sha256)
     {
         var matchFromSourceComposition =
-            SourceCompositions
+            sourceCompositions
             .Select(sourceComposition => PineValueHashTree.FindNodeByHash(sourceComposition, sha256))
             .WhereNotNull()
             .FirstOrDefault();
@@ -423,7 +423,7 @@ public class VolatileProcessHost(
     {
         await
             Task.WhenAll(
-                volatileProcesses.Select(kvp =>
+                _volatileProcesses.Select(kvp =>
                 Task.Run(() =>
                 {
                     (kvp.Value as IDisposable)?.Dispose();
