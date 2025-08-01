@@ -17,12 +17,10 @@ public class PublicAppState(
     ServerAndElmAppConfig serverAndElmAppConfig,
     Func<DateTimeOffset> getDateTimeOffset)
 {
-    private long _nextHttpRequestIndex = 0;
-
     public readonly System.Threading.CancellationTokenSource ApplicationStoppingCancellationTokenSource = new();
 
     private readonly ServerAndElmAppConfig _serverAndElmAppConfig = serverAndElmAppConfig;
-    private readonly Func<DateTimeOffset> _getDateTimeOffset = getDateTimeOffset;
+    private readonly HttpRequestHandler _httpRequestHandler = HttpRequestHandler.FromServerAndElmAppConfig(serverAndElmAppConfig, getDateTimeOffset);
 
     public WebApplication Build(
         WebApplicationBuilder appBuilder,
@@ -72,7 +70,7 @@ public class PublicAppState(
                 ConfigureServices(services, logger);
             })
             .UseUrls([.. publicWebHostUrlsFilteredForHttps])
-            .WithSettingDateTimeOffsetDelegate(_getDateTimeOffset);
+            .WithSettingDateTimeOffsetDelegate(getDateTimeOffset);
 
         var app = appBuilder.Build();
 
@@ -94,7 +92,7 @@ public class PublicAppState(
             await Asp.MiddlewareFromWebServiceConfig(
                 _serverAndElmAppConfig.ServerConfig,
                 context,
-                () => HandleRequestAsync(context));
+                () => _httpRequestHandler.HandleRequestAsync(context));
         });
 
         return app;
@@ -134,119 +132,6 @@ public class PublicAppState(
         }
 
         Asp.ConfigureServices(services);
-    }
-
-    private async System.Threading.Tasks.Task HandleRequestAsync(HttpContext context)
-    {
-        var currentDateTime = _getDateTimeOffset();
-        var timeMilli = currentDateTime.ToUnixTimeMilliseconds();
-        var httpRequestIndex = System.Threading.Interlocked.Increment(ref _nextHttpRequestIndex);
-
-        var httpRequestId = timeMilli + "-" + httpRequestIndex;
-
-        var httpRequest =
-            await Asp.AsInterfaceHttpRequestAsync(context.Request);
-
-        if (_serverAndElmAppConfig.ServerConfig?.httpRequestEventSizeLimit is { } httpRequestEventSizeLimit)
-        {
-            if (httpRequestEventSizeLimit < EstimateHttpRequestEventSize(httpRequest))
-            {
-                context.Response.StatusCode = StatusCodes.Status413RequestEntityTooLarge;
-                await context.Response.WriteAsync("Request is too large.");
-                return;
-            }
-        }
-
-        var httpRequestEvent =
-            new WebServiceInterface.HttpRequestEventStruct(
-                HttpRequestId: httpRequestId.ToString(),
-                PosixTimeMilli: timeMilli,
-                new WebServiceInterface.HttpRequestContext(
-                    ClientAddress: context.Connection.RemoteIpAddress?.ToString()),
-                Request: httpRequest);
-
-        var task =
-            _serverAndElmAppConfig.ProcessHttpRequestAsync(httpRequestEvent);
-
-        var waitForHttpResponseClock = System.Diagnostics.Stopwatch.StartNew();
-
-        WebServiceInterface.HttpResponse? GetResponseFromAppOrTimeout(TimeSpan timeout)
-        {
-            if (task.IsCompleted)
-            {
-                return task.Result;
-            }
-
-            if (timeout <= waitForHttpResponseClock.Elapsed)
-            {
-                return
-                    new WebServiceInterface.HttpResponse(
-                        StatusCode: 500,
-                        Body: System.Text.Encoding.UTF8.GetBytes(
-                            "The app did not return an HTTP response within " +
-                            (int)waitForHttpResponseClock.Elapsed.TotalSeconds +
-                            " seconds."),
-                        HeadersToAdd: []);
-            }
-
-            return null;
-        }
-
-        while (true)
-        {
-            var httpResponse =
-                GetResponseFromAppOrTimeout(TimeSpan.FromMinutes(4));
-
-            if (httpResponse is null)
-            {
-                await System.Threading.Tasks.Task.Delay(TimeSpan.FromMilliseconds(30));
-                continue;
-            }
-
-            var headerContentType =
-                httpResponse.HeadersToAdd
-                ?.FirstOrDefault(header => header.Name?.Equals("content-type", StringComparison.OrdinalIgnoreCase) ?? false)
-                ?.Values?.FirstOrDefault();
-
-            context.Response.StatusCode = httpResponse.StatusCode;
-
-            foreach (var headerToAdd in httpResponse.HeadersToAdd ?? [])
-            {
-                context.Response.Headers[headerToAdd.Name] =
-                    new Microsoft.Extensions.Primitives.StringValues([.. headerToAdd.Values]);
-            }
-
-            if (headerContentType is not null)
-                context.Response.ContentType = headerContentType;
-
-            context.Response.Headers.XPoweredBy = "Pine";
-
-            var contentAsByteArray = httpResponse.Body;
-
-            context.Response.ContentLength = contentAsByteArray?.Length ?? 0;
-
-            if (contentAsByteArray is not null)
-                await context.Response.Body.WriteAsync(contentAsByteArray.Value);
-
-            break;
-        }
-    }
-
-    public static long EstimateHttpRequestEventSize(
-        WebServiceInterface.HttpRequestProperties httpRequest)
-    {
-        var headersSize =
-            httpRequest.Headers
-            .Select(header => header.Name.Length + header.Values.Sum(value => value.Length))
-            .Sum();
-
-        var bodySize = httpRequest.Body?.Length ?? 0;
-
-        return
-            httpRequest.Method.Length +
-            httpRequest.Uri.Length +
-            headersSize +
-            bodySize;
     }
 }
 
