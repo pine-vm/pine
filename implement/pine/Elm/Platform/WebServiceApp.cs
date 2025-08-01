@@ -13,7 +13,7 @@ namespace Pine.Elm.Platform;
 /// </summary>
 public class MutatingWebServiceApp
 {
-    private readonly System.Threading.Lock stateLock = new();
+    private readonly System.Threading.Lock _stateLock = new();
 
     private record CacheAndVM(
         PineVMCache PineVMCache,
@@ -28,35 +28,35 @@ public class MutatingWebServiceApp
         }
     }
 
-    private readonly CacheAndVM cacheAndVM = CacheAndVM.Create();
+    private readonly CacheAndVM _cacheAndVM = CacheAndVM.Create();
 
-    private readonly WebServiceInterface.WebServiceConfig appConfig;
+    private readonly WebServiceInterface.WebServiceConfig _appConfig;
 
-    private (PineValue appState, WebServiceInterface.Subscriptions subscriptions) appStateAndSubscriptions;
+    private (PineValue appState, WebServiceInterface.Subscriptions subscriptions) _appStateAndSubscriptions;
 
-    public PineValue AppState => appStateAndSubscriptions.appState;
+    public PineValue AppState => _appStateAndSubscriptions.appState;
 
-    private readonly ConcurrentQueue<ApplyUpdateReport<WebServiceInterface.Command>> applyFunctionReports = new();
+    private readonly ConcurrentQueue<ApplyUpdateReport<WebServiceInterface.Command>> _applyFunctionReports = new();
 
     public IReadOnlyList<ApplyUpdateReport<WebServiceInterface.Command>> DequeueApplyFunctionReports() =>
-        [.. applyFunctionReports.DequeueAllEnumerable()];
+        [.. _applyFunctionReports.DequeueAllEnumerable()];
 
-    public IPineVM PineVM => cacheAndVM.PineVM;
+    public IPineVM PineVM => _cacheAndVM.PineVM;
 
     public long? PosixTimeSubscriptionMinimumTime =>
-        appStateAndSubscriptions.subscriptions?.PosixTimeIsPast?.MinimumPosixTimeMilli;
+        _appStateAndSubscriptions.subscriptions?.PosixTimeIsPast?.MinimumPosixTimeMilli;
 
-    public ElmTime.ElmTimeJsonAdapter.Parsed JsonAdapter => appConfig.JsonAdapter;
+    public ElmTime.ElmTimeJsonAdapter.Parsed JsonAdapter => _appConfig.JsonAdapter;
 
-    private readonly ConcurrentDictionary<string, WebServiceInterface.Command.RespondToHttpRequest> httpResponses = new();
+    private readonly ConcurrentDictionary<string, WebServiceInterface.Command.RespondToHttpRequest> _httpResponses = new();
 
-    private readonly ConcurrentQueue<WebServiceInterface.Command> commands = new();
+    private readonly ConcurrentQueue<WebServiceInterface.Command> _commands = new();
 
     public IReadOnlyList<WebServiceInterface.Command.RespondToHttpRequest> CopyHttpResponses() =>
-        [.. httpResponses.Values];
+        [.. _httpResponses.Values];
 
     public IReadOnlyList<WebServiceInterface.Command> DequeueCommands() =>
-        [.. commands.DequeueAllEnumerable()];
+        [.. _commands.DequeueAllEnumerable()];
 
     public void ResetAppState(PineValue appState)
     {
@@ -67,14 +67,14 @@ public class MutatingWebServiceApp
         ApplyUpdateReport<WebServiceInterface.Command> applyFunctionReport,
         bool discardIfResultingStateSame)
     {
-        lock (stateLock)
+        lock (_stateLock)
         {
             if (discardIfResultingStateSame && applyFunctionReport.ResponseState == AppState)
             {
                 return;
             }
 
-            applyFunctionReports.Enqueue(applyFunctionReport);
+            _applyFunctionReports.Enqueue(applyFunctionReport);
 
             SetAppState(applyFunctionReport.ResponseState);
         }
@@ -82,36 +82,36 @@ public class MutatingWebServiceApp
 
     private void SetAppState(PineValue appState)
     {
-        lock (stateLock)
+        lock (_stateLock)
         {
             var subscriptions =
-                WebServiceInterface.WebServiceConfig.ParseSubscriptions(appConfig, appState, cacheAndVM.PineVM);
+                WebServiceInterface.WebServiceConfig.ParseSubscriptions(_appConfig, appState, _cacheAndVM.PineVM);
 
-            appStateAndSubscriptions = (appState, subscriptions);
+            _appStateAndSubscriptions = (appState, subscriptions);
         }
     }
 
     public MutatingWebServiceApp(
         WebServiceInterface.WebServiceConfig appConfig)
     {
-        this.appConfig = appConfig;
+        this._appConfig = appConfig;
 
         ResetAppState(appConfig.Init.State);
 
         foreach (var (_, cmdParsed) in appConfig.Init.Commands)
         {
-            commands.Enqueue(cmdParsed);
+            _commands.Enqueue(cmdParsed);
         }
     }
 
     public ApplyUpdateReport<WebServiceInterface.Command> EventHttpRequest(
         WebServiceInterface.HttpRequestEventStruct httpRequest)
     {
-        lock (stateLock)
+        lock (_stateLock)
         {
             var eventConfig =
                 WebServiceInterface.WebServiceConfig.EventHttpRequest(
-                    appStateAndSubscriptions.subscriptions,
+                    _appStateAndSubscriptions.subscriptions,
                     httpRequest);
 
             return ApplyUpdate(eventConfig);
@@ -120,7 +120,7 @@ public class MutatingWebServiceApp
 
     public ApplyUpdateReport<WebServiceInterface.Command>? UpdateForPosixTime(long posixTimeMilli)
     {
-        if (appStateAndSubscriptions.subscriptions.PosixTimeIsPast is not { } posixTimeSub)
+        if (_appStateAndSubscriptions.subscriptions.PosixTimeIsPast is not { } posixTimeSub)
         {
             return null;
         }
@@ -164,14 +164,14 @@ public class MutatingWebServiceApp
         FunctionRecordValueAndParsed updateFunction,
         IReadOnlyList<PineValue> updateArgsBeforeState)
     {
-        lock (stateLock)
+        lock (_stateLock)
         {
             var eventResponse =
                 WebServiceInterface.WebServiceConfig.ApplyUpdate(
                     updateFunction,
                     updateArgsBeforeState,
                     AppState,
-                    cacheAndVM.PineVM);
+                    _cacheAndVM.PineVM);
 
             TrackAppliedFunction(
                 eventResponse,
@@ -182,9 +182,9 @@ public class MutatingWebServiceApp
             {
                 // TODO: Use overlap and warmup to reduce response delays.
 
-                if (cacheAndVM.PineVMCache.EvalCache.Count > 10_000)
+                if (_cacheAndVM.PineVMCache.EvalCache.Count > 10_000)
                 {
-                    cacheAndVM.PineVMCache.EvalCache.Clear();
+                    _cacheAndVM.PineVMCache.EvalCache.Clear();
                 }
             }
 
@@ -199,11 +199,11 @@ public class MutatingWebServiceApp
         {
             if (cmdParsed is WebServiceInterface.Command.RespondToHttpRequest httpResponseCmd)
             {
-                httpResponses[httpResponseCmd.Respond.HttpRequestId] = httpResponseCmd;
+                _httpResponses[httpResponseCmd.Respond.HttpRequestId] = httpResponseCmd;
             }
             else
             {
-                commands.Enqueue(cmdParsed);
+                _commands.Enqueue(cmdParsed);
             }
         }
     }
@@ -221,7 +221,7 @@ public class MutatingWebServiceApp
                 {
                     cancellationToken.ThrowIfCancellationRequested();
 
-                    if (httpResponses.TryRemove(
+                    if (_httpResponses.TryRemove(
                         httpRequest.HttpRequestId,
                         out var httpResponse))
                     {

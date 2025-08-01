@@ -29,31 +29,31 @@ public record struct ProcessAppConfig(
 
 public class PersistentProcessLiveRepresentation : IAsyncDisposable
 {
-    private static readonly TimeSpan StoreReductionIntervalDefault = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan s_storeReductionIntervalDefault = TimeSpan.FromMinutes(10);
 
-    private readonly Pine.CompilePineToDotNet.CompilerMutableCache hashCache = new();
+    private readonly Pine.CompilePineToDotNet.CompilerMutableCache _hashCache = new();
 
-    private readonly System.Threading.Lock processLock = new();
+    private readonly System.Threading.Lock _processLock = new();
 
-    public readonly ProcessAppConfig lastAppConfig;
+    public readonly ProcessAppConfig LastAppConfig;
 
-    private readonly Func<DateTimeOffset> getDateTimeOffset;
+    private readonly Func<DateTimeOffset> _getDateTimeOffset;
 
-    private readonly WebServiceInterface.WebServiceConfig appConfigParsed;
+    private readonly WebServiceInterface.WebServiceConfig _appConfigParsed;
 
-    private readonly MutatingWebServiceApp mutatingWebServiceApp;
+    private readonly MutatingWebServiceApp _mutatingWebServiceApp;
 
-    private readonly VolatileProcessHost volatileProcessHost;
+    private readonly VolatileProcessHost _volatileProcessHost;
 
-    private readonly IProcessStoreWriter storeWriter;
+    private readonly IProcessStoreWriter _storeWriter;
 
-    private (PineValue state, CompositionLogRecordInFile.CompositionEvent compositionLogEvent, string hashBase16)? lastAppStatePersisted;
+    private (PineValue state, CompositionLogRecordInFile.CompositionEvent compositionLogEvent, string hashBase16)? _lastAppStatePersisted;
 
-    private StoreAppStateResetAndReductionReport? lastStoreReduction = null;
+    private StoreAppStateResetAndReductionReport? _lastStoreReduction = null;
 
     private DateTimeOffset StartTime { init; get; }
 
-    private readonly System.Threading.Timer notifyTimeHasArrivedTimer;
+    private readonly System.Threading.Timer _notifyTimeHasArrivedTimer;
 
     public record struct CompositionLogRecordWithResolvedDependencies(
         CompositionLogRecordInFile CompositionRecord,
@@ -85,33 +85,33 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
         ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null,
         System.Threading.CancellationToken cancellationToken = default)
     {
-        this.lastAppConfig = lastAppConfig;
-        this.storeWriter = storeWriter;
-        this.getDateTimeOffset = getDateTimeOffset;
+        LastAppConfig = lastAppConfig;
+        _storeWriter = storeWriter;
+        _getDateTimeOffset = getDateTimeOffset;
         StartTime = getDateTimeOffset();
 
-        appConfigParsed =
+        _appConfigParsed =
             WebServiceConfigFromDeployment(
                 lastAppConfig.appConfigComponent,
                 overrideElmAppInterfaceConfig);
 
-        mutatingWebServiceApp =
-            new MutatingWebServiceApp(appConfigParsed);
+        _mutatingWebServiceApp =
+            new MutatingWebServiceApp(_appConfigParsed);
 
-        volatileProcessHost =
+        _volatileProcessHost =
             new VolatileProcessHost([lastAppConfig.appConfigComponent]);
 
         if (lastAppState is not null)
         {
-            mutatingWebServiceApp.ResetAppState(lastAppState);
+            _mutatingWebServiceApp.ResetAppState(lastAppState);
         }
 
-        notifyTimeHasArrivedTimer = new System.Threading.Timer(
+        _notifyTimeHasArrivedTimer = new System.Threading.Timer(
             callback: _ =>
             {
                 if (cancellationToken.IsCancellationRequested)
                 {
-                    notifyTimeHasArrivedTimer?.Dispose();
+                    _notifyTimeHasArrivedTimer?.Dispose();
                     return;
                 }
 
@@ -130,7 +130,7 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
         WebServiceInterface.HttpRequestEventStruct requestEvent)
     {
         var response =
-            await mutatingWebServiceApp.HttpRequestSendAsync(requestEvent);
+            await _mutatingWebServiceApp.HttpRequestSendAsync(requestEvent);
 
         await ProcessElmAppCmdsAsync();
 
@@ -139,7 +139,7 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
 
     public void ProcessEventTimeHasArrived(DateTimeOffset currentTime)
     {
-        mutatingWebServiceApp.UpdateForPosixTime(
+        _mutatingWebServiceApp.UpdateForPosixTime(
             posixTimeMilli: currentTime.ToUnixTimeMilliseconds());
     }
 
@@ -147,29 +147,29 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
     {
         EnsurePersisted();
 
-        await volatileProcessHost.ExchangeAsync(mutatingWebServiceApp);
+        await _volatileProcessHost.ExchangeAsync(_mutatingWebServiceApp);
     }
 
     private void EnsurePersisted()
     {
-        foreach (var applyFuncReport in mutatingWebServiceApp.DequeueApplyFunctionReports())
+        foreach (var applyFuncReport in _mutatingWebServiceApp.DequeueApplyFunctionReports())
         {
             var elmAppState = applyFuncReport.ResponseState;
 
-            if (lastAppStatePersisted?.state == elmAppState)
+            if (_lastAppStatePersisted?.state == elmAppState)
             {
                 continue;
             }
 
-            lock (processLock)
+            lock (_processLock)
             {
                 var asApplyFunction =
                     AsApplyFunctionOnLiteralsAndStateEvent(applyFuncReport);
 
-                storeWriter.StoreComponent(asApplyFunction.Function);
+                _storeWriter.StoreComponent(asApplyFunction.Function);
 
                 var functionHash =
-                    Convert.ToHexStringLower(hashCache.ComputeHash(asApplyFunction.Function).Span);
+                    Convert.ToHexStringLower(_hashCache.ComputeHash(asApplyFunction.Function).Span);
 
                 var argumentsJsonString =
                     ProcessStoreWriterInFileStore.SerializeValueToJsonString(
@@ -190,19 +190,19 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
                     };
 
                 var recordHash =
-                    storeWriter.AppendCompositionLogRecord(compositionEvent);
+                    _storeWriter.AppendCompositionLogRecord(compositionEvent);
 
-                lastAppStatePersisted =
+                _lastAppStatePersisted =
                     (elmAppState, compositionEvent, recordHash.recordHashBase16);
 
                 var lastStoreReductionAge =
-                    getDateTimeOffset() - (lastStoreReduction?.Time ?? StartTime);
+                    _getDateTimeOffset() - (_lastStoreReduction?.Time ?? StartTime);
 
-                if (StoreReductionIntervalDefault <= lastStoreReductionAge)
+                if (s_storeReductionIntervalDefault <= lastStoreReductionAge)
                 {
                     var resetEvent = StoreAppStateResetAndReduction(elmAppState);
 
-                    lastAppStatePersisted =
+                    _lastAppStatePersisted =
                         (elmAppState, resetEvent.CompositionLogEvent, resetEvent.RecordHashBase16);
                 }
             }
@@ -223,11 +223,11 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
                 PineValue.List([.. applyUpdateReport.Input.ArgsBeforeState]));
     }
 
-    private readonly ConcurrentDictionary<FunctionRecordValueAndParsed, PineValue> applyFunctionCache = new();
+    private readonly ConcurrentDictionary<FunctionRecordValueAndParsed, PineValue> _applyFunctionCache = new();
 
     private PineValue ApplyUpdateExpression(
         FunctionRecordValueAndParsed applyFunction) =>
-        applyFunctionCache.GetOrAdd(
+        _applyFunctionCache.GetOrAdd(
             applyFunction,
             _ => BuildApplyUpdateExpression(applyFunction));
 
@@ -374,10 +374,10 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
         PineValue elmAppState)
     {
         var appStateHash =
-            storeWriter.StoreComponent(elmAppState);
+            _storeWriter.StoreComponent(elmAppState);
 
         var appConfigHash =
-            storeWriter.StoreComponent(lastAppConfig.appConfigComponent);
+            _storeWriter.StoreComponent(LastAppConfig.appConfigComponent);
 
         var compositionEvent =
             new CompositionLogRecordInFile.CompositionEvent
@@ -388,28 +388,28 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
                 }
             };
 
-        var currentTime = getDateTimeOffset();
+        var currentTime = _getDateTimeOffset();
 
-        string storeCompositionRecord()
+        string StoreCompositionRecord()
         {
-            lock (processLock)
+            lock (_processLock)
             {
                 var recordHash =
-                    storeWriter.AppendCompositionLogRecord(compositionEvent);
+                    _storeWriter.AppendCompositionLogRecord(compositionEvent);
 
-                lastAppStatePersisted =
+                _lastAppStatePersisted =
                     (elmAppState, compositionEvent, recordHash.recordHashBase16);
 
                 return recordHash.recordHashBase16;
             }
         }
 
-        var recordHashBase16 = storeCompositionRecord();
+        var recordHashBase16 = StoreCompositionRecord();
 
         var taskStoringReduction =
             System.Threading.Tasks.Task.Run(() =>
             {
-                storeWriter.StoreProvisionalReduction(
+                _storeWriter.StoreProvisionalReduction(
                     new ProvisionalReductionRecordInFile(
                         reducedCompositionHashBase16: recordHashBase16,
                         elmAppState:
@@ -429,7 +429,7 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
                 RecordHashBase16: recordHashBase16,
                 TaskStoringReduction: taskStoringReduction);
 
-        lastStoreReduction = report;
+        _lastStoreReduction = report;
 
         return report;
     }
@@ -618,7 +618,7 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
             PersistentProcessLiveRepresentationDuringRestore process,
             CompositionLogRecordWithResolvedDependencies compositionLogRecord)
         {
-            Result<string, PersistentProcessLiveRepresentationDuringRestore> continueOk(
+            Result<string, PersistentProcessLiveRepresentationDuringRestore> ContinueOk(
                 PersistentProcessLiveRepresentationDuringRestore process) =>
                 Result<string, PersistentProcessLiveRepresentationDuringRestore>.ok(process
                 with
@@ -631,7 +631,7 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
             if (compositionLogRecord.Reduction is { } reductionWithResolvedDependencies)
             {
                 return
-                    continueOk(
+                    ContinueOk(
                         process
                         with
                         {
@@ -652,7 +652,7 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
                         ", but previous version in the enumerated sequence was " + process.LastCompositionLogRecordHashBase16 + ".";
                 }
 
-                return continueOk(process);
+                return ContinueOk(process);
             }
 
             return
@@ -662,7 +662,7 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
                     pineVM,
                     pineVMParseCache: pineVM.parseCache,
                     overrideElmAppInterfaceConfig)
-                .AndThen(continueOk);
+                .AndThen(ContinueOk);
         }
 
         var aggregateLogRecordsResult =
@@ -877,7 +877,7 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
         IProcessStoreReader storeReader,
         Dictionary<string, PineValue> componentCache)
     {
-        PineValue loadComponentFromValueInFileStructure(
+        PineValue LoadComponentFromValueInFileStructure(
             ValueInFileStructure valueInFileStructure,
             bool cacheFromStore)
         {
@@ -896,11 +896,11 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
                 JsonSerializer.Serialize(valueInFileStructure));
         }
 
-        TreeNodeWithStringPath loadComponentFromStoreAndAssertIsTree(
+        TreeNodeWithStringPath LoadComponentFromStoreAndAssertIsTree(
             ValueInFileStructure valueInFileStructure)
         {
             var component =
-                loadComponentFromValueInFileStructure(valueInFileStructure, cacheFromStore: false);
+                LoadComponentFromValueInFileStructure(valueInFileStructure, cacheFromStore: false);
 
             return
                 PineValueComposition.ParseAsTreeWithStringPath(component)
@@ -912,7 +912,7 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
             return new CompositionEventWithResolvedDependencies
             {
                 SetElmAppState =
-                loadComponentFromValueInFileStructure(
+                LoadComponentFromValueInFileStructure(
                     setElmAppState,
                     cacheFromStore: false)
             };
@@ -923,7 +923,7 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
             return new CompositionEventWithResolvedDependencies
             {
                 DeployAppConfigAndMigrateElmAppState =
-                loadComponentFromStoreAndAssertIsTree(deployAppConfigAndMigrateElmAppState),
+                LoadComponentFromStoreAndAssertIsTree(deployAppConfigAndMigrateElmAppState),
             };
         }
 
@@ -932,7 +932,7 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
             return new CompositionEventWithResolvedDependencies
             {
                 DeployAppConfigAndInitElmAppState =
-                loadComponentFromStoreAndAssertIsTree(deployAppConfigAndInitElmAppState),
+                LoadComponentFromStoreAndAssertIsTree(deployAppConfigAndInitElmAppState),
             };
         }
 
@@ -943,12 +943,12 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
                 ApplyFunctionOnLiteralsAndState =
                 new ApplyFunctionOnLiteralsAndStateEvent(
                     Function:
-                    loadComponentFromValueInFileStructure(
+                    LoadComponentFromValueInFileStructure(
                         applyFunctionOnLiteralAndState.Function,
                         cacheFromStore: true),
 
                     Arguments:
-                    loadComponentFromValueInFileStructure(
+                    LoadComponentFromValueInFileStructure(
                         applyFunctionOnLiteralAndState.Arguments,
                         cacheFromStore: false))
             };
@@ -1015,23 +1015,33 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
     public Result<string, (CompositionLogRecordInFile.CompositionEvent compositionLogEvent, string)>
         SetStateOnMainBranch(JsonElement appState)
     {
-        lock (processLock)
+        var appStateJsonString = JsonSerializer.Serialize(appState);
+
+        var jsonStringEncoded = ElmValueEncoding.StringAsPineValue(appStateJsonString);
+
+        var pineVMCache = new PineVMCache();
+
+        var pineVM = new PineVM(pineVMCache.EvalCache);
+
+        var appStateDecodeResult =
+            _appConfigParsed.JsonAdapter.DecodeAppStateFromJsonString(
+                jsonStringEncoded,
+                pineVM);
+
+        if (appStateDecodeResult.IsErrOrNull() is { } err)
         {
-            var appStateJsonString = JsonSerializer.Serialize(appState);
+            return "Failed to decode app state: " + err;
+        }
 
-            var jsonStringEncoded = ElmValueEncoding.StringAsPineValue(appStateJsonString);
+        if (appStateDecodeResult.IsOkOrNull() is not { } appStateDecoded)
+        {
+            throw new NotImplementedException(
+                "Unexpected result type: " + appStateDecodeResult);
+        }
 
-            var pineVMCache = new PineVMCache();
-
-            var pineVM = new PineVM(pineVMCache.EvalCache);
-
-            var appStateDecoded =
-                appConfigParsed.JsonAdapter.DecodeAppStateFromJsonString(
-                    jsonStringEncoded,
-                    pineVM)
-                .Extract(err => throw new Exception("Failed to decode app state: " + err));
-
-            mutatingWebServiceApp.ResetAppState(appStateDecoded);
+        lock (_processLock)
+        {
+            _mutatingWebServiceApp.ResetAppState(appStateDecoded);
 
             var storeReductionReport =
                 StoreAppStateResetAndReduction(appStateDecoded);
@@ -1043,14 +1053,14 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
 
     public Result<string, JsonElement> GetAppStateOnMainBranch()
     {
-        var appState = mutatingWebServiceApp.AppState;
+        var appState = _mutatingWebServiceApp.AppState;
 
         var pineVMCache = new PineVMCache();
 
         var pineVM = new PineVM(pineVMCache.EvalCache);
 
         var jsonStringResult =
-            appConfigParsed.JsonAdapter.EncodeAppStateAsJsonString(appState, pineVM);
+            _appConfigParsed.JsonAdapter.EncodeAppStateAsJsonString(appState, pineVM);
 
         {
             if (jsonStringResult.IsErrOrNull() is { } err)
@@ -1071,18 +1081,18 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
     public Result<string, AdminInterface.ApplyDatabaseFunctionSuccess> ApplyFunctionOnMainBranch(
         AdminInterface.ApplyDatabaseFunctionRequest request)
     {
-        lock (processLock)
+        lock (_processLock)
         {
             var clock = System.Diagnostics.Stopwatch.StartNew();
 
-            var appState = mutatingWebServiceApp.AppState;
+            var appState = _mutatingWebServiceApp.AppState;
 
             var pineVMCache = new PineVMCache();
 
             var pineVM = new PineVM(pineVMCache.EvalCache);
 
             var matchingExposedFunction =
-                appConfigParsed.JsonAdapter.ExposedFunctions
+                _appConfigParsed.JsonAdapter.ExposedFunctions
                 .FirstOrDefault(exposedFunc => exposedFunc.Key == request.functionName)
                 .Value;
 
@@ -1098,7 +1108,7 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
                 var argumentJsonString = request.serializedArgumentsJson[i];
 
                 var parseArgumentResult =
-                    appConfigParsed.JsonAdapter.DecodeElmJsonValueFromString(
+                    _appConfigParsed.JsonAdapter.DecodeElmJsonValueFromString(
                         argumentJsonString,
                         pineVM);
 
@@ -1118,7 +1128,7 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
             }
 
             var posixTimeMilli =
-                getDateTimeOffset().ToUnixTimeMilliseconds();
+                _getDateTimeOffset().ToUnixTimeMilliseconds();
 
             var applyFunctionResult =
                 ElmTimeJsonAdapter.ApplyExposedFunction(
@@ -1152,7 +1162,7 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
                         " did not return a new app state.";
                 }
 
-                mutatingWebServiceApp.ResetAppState(appStateReturned);
+                _mutatingWebServiceApp.ResetAppState(appStateReturned);
 
                 StoreAppStateResetAndReduction(appStateReturned);
 
@@ -1197,7 +1207,7 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
         IPineVM pineVM)
     {
         var encodeResult =
-            appConfigParsed.JsonAdapter.EncodeJsonValueAsJsonString(
+            _appConfigParsed.JsonAdapter.EncodeJsonValueAsJsonString(
                 elmJsonValue,
                 indent: 0,
                 pineVM);
@@ -1222,7 +1232,7 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
     {
         return
             Result<string, IReadOnlyList<StateShim.InterfaceToHost.NamedExposedFunction>>.ok(
-            [..appConfigParsed.JsonAdapter.ExposedFunctions
+            [.._appConfigParsed.JsonAdapter.ExposedFunctions
             .Select(exposedFunc => new StateShim.InterfaceToHost.NamedExposedFunction(
                 functionName: exposedFunc.Key,
                 functionDescription: MapExposedFunctionDescription(exposedFunc.Value)))
@@ -1250,8 +1260,8 @@ public class PersistentProcessLiveRepresentation : IAsyncDisposable
 
     public async System.Threading.Tasks.ValueTask DisposeAsync()
     {
-        await notifyTimeHasArrivedTimer.DisposeAsync();
+        await _notifyTimeHasArrivedTimer.DisposeAsync();
 
-        await volatileProcessHost.DisposeAsync();
+        await _volatileProcessHost.DisposeAsync();
     }
 }

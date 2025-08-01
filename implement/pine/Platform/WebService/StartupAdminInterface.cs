@@ -338,7 +338,7 @@ public class StartupAdminInterface
                             return app;
                         }
 
-                        if (processLiveRepresentation?.lastAppConfig is { } lastAppConfig)
+                        if (processLiveRepresentation?.LastAppConfig is { } lastAppConfig)
                         {
                             var publicWebHostUrls = configuration.GetSettingPublicWebHostUrls();
 
@@ -585,7 +585,7 @@ public class StartupAdminInterface
                         methods : ImmutableDictionary<string, ApiRouteMethodConfig>.Empty
                         .Add("get", async (context, publicAppHost) =>
                         {
-                            var appConfig = publicAppHost?.ProcessLiveRepresentation?.lastAppConfig.appConfigComponent;
+                            var appConfig = publicAppHost?.ProcessLiveRepresentation?.LastAppConfig.appConfigComponent;
 
                             if (appConfig == null)
                             {
