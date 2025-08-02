@@ -18,7 +18,7 @@ namespace Pine.IntegrationTests;
 public class StaticAppSnapshottingViaJsonTests
 {
     [Fact]
-    public async Task StaticAppSnapshottingViaJson_basic_functionality_test()
+    public async Task StaticAppSnapshottingViaJson_debug_snapshot_saving()
     {
         // Set up file store in memory using RecordingFileStoreWriter
         var recordingFileStoreWriter = new RecordingFileStoreWriter();
@@ -39,65 +39,87 @@ public class StaticAppSnapshottingViaJsonTests
 
         using var cancellationTokenSource = new CancellationTokenSource();
 
-        // Create first instance of StaticAppSnapshottingViaJson
-        var firstInstance = new StaticAppSnapshottingViaJson(
+        // Create instance
+        var instance = new StaticAppSnapshottingViaJson(
             webServiceAppSourceFiles: webServiceAppSourceFiles,
             fileStore: fileStore,
             logMessage: logMessage,
             cancellationToken: cancellationTokenSource.Token);
 
-        // Check initial log messages
-        logMessage("=== INITIAL LOGS ===");
-        foreach (var msg in logMessages.ToArray())
-        {
-            logMessage("INITIAL: " + msg);
-        }
+        logMessage("=== Created instance, checking initial state ===");
 
-        // Clear log messages for next phase
-        logMessages.Clear();
+        // Check what's in the file store initially
+        var initialFiles = fileStore.ListFilesInDirectory([]);
+        logMessage("Initial files in store: " + string.Join(", ", initialFiles.Select(f => string.Join("/", f))));
 
-        // Create the JSON request body like TestSetup does
-        var addition = 5;
-        var requestJson = System.Text.Json.JsonSerializer.Serialize(new { addition });
-        logMessage("REQUEST JSON: " + requestJson);
+        logMessage("=== Making HTTP request ===");
 
-        // Create minimal HTTP request using the same format as existing tests
+        // Create HTTP request  
         var context = new DefaultHttpContext();
         context.Request.Method = "POST";
         context.Request.Path = "/";
-        context.Request.ContentType = "text/plain"; // Use text/plain like the existing tests
+        context.Request.ContentType = "text/plain";
         
+        var requestJson = System.Text.Json.JsonSerializer.Serialize(new { addition = 5 });
         var requestBytes = Encoding.UTF8.GetBytes(requestJson);
         context.Request.Body = new MemoryStream(requestBytes);
         context.Request.ContentLength = requestBytes.Length;
         context.Response.Body = new MemoryStream();
 
-        logMessage("=== BEFORE HTTP REQUEST ===");
-        
-        // Test the HTTP request
-        await firstInstance.HandleRequestAsync(context, logMessage);
+        // Custom log action that logs everything
+        Action<string> verboseLogMessage = message => 
+        {
+            logMessages.Enqueue("HTTP_LOG: " + message);
+            Console.WriteLine("[HTTP LOG] " + message);
+        };
 
-        logMessage("=== AFTER HTTP REQUEST ===");
+        // Make the request
+        var handleTask = instance.HandleRequestAsync(context, verboseLogMessage);
+        
+        logMessage("HandleRequestAsync returned, waiting for completion...");
+        
+        await handleTask;
+        
+        logMessage("HandleRequestAsync completed");
 
         // Check response
         context.Response.Body.Seek(0, SeekOrigin.Begin);
         using var reader = new StreamReader(context.Response.Body);
         var responseBody = reader.ReadToEnd();
         
-        logMessage("RESPONSE BODY: " + responseBody);
-        logMessage("RESPONSE STATUS: " + context.Response.StatusCode);
+        logMessage("Response: " + responseBody + " (Status: " + context.Response.StatusCode + ")");
 
-        // Wait for async operations
-        await Task.Delay(2000);
+        // Wait longer for any background tasks
+        logMessage("Waiting for background operations...");
+        await Task.Delay(5000);
 
-        logMessage("=== FINAL LOGS ===");
+        // Check file store after request
+        var filesAfterRequest = fileStore.ListFilesInDirectory([]);
+        logMessage("Files after request: " + string.Join(", ", filesAfterRequest.Select(f => string.Join("/", f))));
+
+        // Check if snapshot file was created
+        var snapshotPath = ImmutableList.Create("app-state-snapshot.json");
+        var snapshotContent = fileStore.GetFileContent(snapshotPath);
+        if (snapshotContent.HasValue)
+        {
+            logMessage("Snapshot file found! Content: " + Encoding.UTF8.GetString(snapshotContent.Value.Span));
+        }
+        else
+        {
+            logMessage("No snapshot file found");
+        }
+
+        logMessage("=== All logs ===");
         foreach (var msg in logMessages.ToArray())
         {
             logMessage("FINAL: " + msg);
         }
 
-        // Basic assertion that something happened
-        responseBody.Should().NotBeNullOrEmpty();
+        // Basic assertions
+        responseBody.Should().Be("5");
+        
+        // The main assertion - snapshot should have been saved
+        snapshotContent.Should().NotBeNull("Snapshot file should have been created after HTTP request");
     }
 
     private static HttpContext CreateHttpContextForCounterRequest(int addition)

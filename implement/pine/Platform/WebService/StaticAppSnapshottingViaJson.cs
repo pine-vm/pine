@@ -116,46 +116,36 @@ public record StaticAppSnapshottingViaJson
         HttpContext context,
         Action<string>? logMessage = null)
     {
-        await
-            _publicAppState.HandleRequestAsync(context)
-            .ContinueWith(
-                task =>
-                {
-                    if (task.IsFaulted)
-                    {
-                        context.Response.StatusCode = 500;
-                        context.Response.WriteAsync("Internal Server Error");
-                    }
-                    else if (task.IsCompletedSuccessfully)
-                    {
-                        context.Response.StatusCode = 200;
-                    }
+        await _publicAppState.HandleRequestAsync(context);
 
-                    var newAppStateSnapshotResult = _process.GetAppStateOnMainBranch(_pineVM);
+        // Get the app state and save snapshot if it changed
+        var newAppStateSnapshotResult = _process.GetAppStateOnMainBranch(_pineVM);
 
-                    _pineVMCache.EvalCache.Clear();
+        _pineVMCache.EvalCache.Clear();
 
-                    if (newAppStateSnapshotResult.IsOkOrNull() is { } snapshotJsonString)
-                    {
-                        if (snapshotJsonString == _lastAppStateSnapshot)
-                        {
-                            return; // No change, no need to write to file store.
-                        }
+        if (newAppStateSnapshotResult.IsOkOrNull() is { } snapshotJsonString)
+        {
+            if (snapshotJsonString == _lastAppStateSnapshot)
+            {
+                return; // No change, no need to write to file store.
+            }
 
-                        var snapshotJsonBytes = Encoding.UTF8.GetBytes(snapshotJsonString);
+            var snapshotJsonBytes = Encoding.UTF8.GetBytes(snapshotJsonString);
 
-                        logMessage?.Invoke(
-                            "App state snapshot updated, new size: " +
-                            CommandLineInterface.FormatIntegerForDisplay(snapshotJsonString.Length) +
-                            " bytes.");
+            logMessage?.Invoke(
+                "App state snapshot updated, new size: " +
+                CommandLineInterface.FormatIntegerForDisplay(snapshotJsonString.Length) +
+                " bytes.");
 
-                        _fileStore.SetFileContent(
-                            s_appStateSnapshotFilePath,
-                            fileContent: snapshotJsonBytes);
+            _fileStore.SetFileContent(
+                s_appStateSnapshotFilePath,
+                fileContent: snapshotJsonBytes);
 
-                        _lastAppStateSnapshot = snapshotJsonString;
-                    }
-                },
-                TaskScheduler.Default);
+            _lastAppStateSnapshot = snapshotJsonString;
+        }
+        else
+        {
+            logMessage?.Invoke("Failed to get app state snapshot: " + newAppStateSnapshotResult);
+        }
     }
 }
