@@ -10,6 +10,7 @@ using Pine.Elm.Platform;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace ElmTime.Platform.WebService;
 
@@ -20,9 +21,6 @@ public class PublicAppState(
     private long _nextHttpRequestIndex = 0;
 
     public readonly System.Threading.CancellationTokenSource ApplicationStoppingCancellationTokenSource = new();
-
-    private readonly ServerAndElmAppConfig _serverAndElmAppConfig = serverAndElmAppConfig;
-    private readonly Func<DateTimeOffset> _getDateTimeOffset = getDateTimeOffset;
 
     public WebApplication Build(
         WebApplicationBuilder appBuilder,
@@ -38,7 +36,7 @@ public class PublicAppState(
         });
 
         var enableUseFluffySpoonLetsEncrypt =
-            _serverAndElmAppConfig.ServerConfig?.letsEncryptOptions is not null && !(disableLetsEncrypt ?? false);
+            serverAndElmAppConfig.ServerConfig?.letsEncryptOptions is not null && !(disableLetsEncrypt ?? false);
 
         var canUseHttps =
             enableUseFluffySpoonLetsEncrypt;
@@ -69,10 +67,10 @@ public class PublicAppState(
             })
             .ConfigureServices(services =>
             {
-                ConfigureServices(services, logger);
+                ConfigureServices(serverAndElmAppConfig, services, logger);
             })
             .UseUrls([.. publicWebHostUrlsFilteredForHttps])
-            .WithSettingDateTimeOffsetDelegate(_getDateTimeOffset);
+            .WithSettingDateTimeOffsetDelegate(getDateTimeOffset);
 
         var app = appBuilder.Build();
 
@@ -92,7 +90,7 @@ public class PublicAppState(
         app.Run(async context =>
         {
             await Asp.MiddlewareFromWebServiceConfig(
-                _serverAndElmAppConfig.ServerConfig,
+                serverAndElmAppConfig.ServerConfig,
                 context,
                 () => HandleRequestAsync(context));
         });
@@ -100,7 +98,8 @@ public class PublicAppState(
         return app;
     }
 
-    private void ConfigureServices(
+    private static void ConfigureServices(
+        ServerAndElmAppConfig serverAndElmAppConfig,
         IServiceCollection services,
         ILogger logger)
     {
@@ -109,15 +108,13 @@ public class PublicAppState(
             options.EnableForHttps = true;
         });
 
-        var letsEncryptOptions = _serverAndElmAppConfig.ServerConfig?.letsEncryptOptions;
-
-        if (letsEncryptOptions is null)
+        if (serverAndElmAppConfig.ServerConfig?.letsEncryptOptions is not { } letsEncryptOptions)
         {
             logger.LogInformation("I did not find 'letsEncryptOptions' in the configuration. I continue without Let's Encrypt.");
         }
         else
         {
-            if (_serverAndElmAppConfig.DisableLetsEncrypt ?? false)
+            if (serverAndElmAppConfig.DisableLetsEncrypt ?? false)
             {
                 logger.LogInformation(
                     "I found 'letsEncryptOptions' in the configuration, but 'disableLetsEncrypt' is set to true. I continue without Let's Encrypt.");
@@ -136,9 +133,12 @@ public class PublicAppState(
         Asp.ConfigureServices(services);
     }
 
-    private async System.Threading.Tasks.Task HandleRequestAsync(HttpContext context)
+    /// <summary>
+    /// Handles an HTTP request from an ASP.NET Core HttpContext.
+    /// </summary>
+    public async Task HandleRequestAsync(HttpContext context)
     {
-        var currentDateTime = _getDateTimeOffset();
+        var currentDateTime = getDateTimeOffset();
         var timeMilli = currentDateTime.ToUnixTimeMilliseconds();
         var httpRequestIndex = System.Threading.Interlocked.Increment(ref _nextHttpRequestIndex);
 
@@ -147,7 +147,7 @@ public class PublicAppState(
         var httpRequest =
             await Asp.AsInterfaceHttpRequestAsync(context.Request);
 
-        if (_serverAndElmAppConfig.ServerConfig?.httpRequestEventSizeLimit is { } httpRequestEventSizeLimit)
+        if (serverAndElmAppConfig.ServerConfig?.httpRequestEventSizeLimit is { } httpRequestEventSizeLimit)
         {
             if (httpRequestEventSizeLimit < EstimateHttpRequestEventSize(httpRequest))
             {
@@ -165,8 +165,7 @@ public class PublicAppState(
                     ClientAddress: context.Connection.RemoteIpAddress?.ToString()),
                 Request: httpRequest);
 
-        var task =
-            _serverAndElmAppConfig.ProcessHttpRequestAsync(httpRequestEvent);
+        var task = serverAndElmAppConfig.ProcessHttpRequestAsync(httpRequestEvent);
 
         var waitForHttpResponseClock = System.Diagnostics.Stopwatch.StartNew();
 
@@ -199,14 +198,27 @@ public class PublicAppState(
 
             if (httpResponse is null)
             {
-                await System.Threading.Tasks.Task.Delay(TimeSpan.FromMilliseconds(30));
+                await Task.Delay(TimeSpan.FromMilliseconds(30));
                 continue;
             }
 
-            var headerContentType =
-                httpResponse.HeadersToAdd
-                ?.FirstOrDefault(header => header.Name?.Equals("content-type", StringComparison.OrdinalIgnoreCase) ?? false)
-                ?.Values?.FirstOrDefault();
+            string? headerContentType = null;
+
+            if (httpResponse.HeadersToAdd is { } headersToAdd)
+            {
+                foreach (var header in headersToAdd)
+                {
+                    if (header.Name?.Equals("content-type", StringComparison.OrdinalIgnoreCase) ?? false)
+                    {
+                        if (header.Values is { } values && values.Count > 0)
+                        {
+                            headerContentType = header.Values[0];
+                        }
+
+                        break;
+                    }
+                }
+            }
 
             context.Response.StatusCode = httpResponse.StatusCode;
 
@@ -232,13 +244,23 @@ public class PublicAppState(
         }
     }
 
+    /// <summary>
+    /// Estimates the size of an HTTP request event for size limit checks.
+    /// </summary>
     public static long EstimateHttpRequestEventSize(
         WebServiceInterface.HttpRequestProperties httpRequest)
     {
-        var headersSize =
-            httpRequest.Headers
-            .Select(header => header.Name.Length + header.Values.Sum(value => value.Length))
-            .Sum();
+        var headersSize = 0;
+
+        foreach (var header in httpRequest.Headers)
+        {
+            headersSize += header.Name.Length + 10;
+
+            foreach (var value in header.Values)
+            {
+                headersSize += value.Length + 10;
+            }
+        }
 
         var bodySize = httpRequest.Body?.Length ?? 0;
 
