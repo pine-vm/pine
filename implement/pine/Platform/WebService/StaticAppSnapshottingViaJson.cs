@@ -31,6 +31,8 @@ public sealed record StaticAppSnapshottingViaJson : IAsyncDisposable
 
     private readonly PineVM.PineVM _pineVM;
 
+    private readonly Lock _pineVMLock = new();
+
     const string AppStateSnapshotFileName = "app-state-snapshot.json";
 
     static readonly IImmutableList<string> s_appStateSnapshotFilePath = [AppStateSnapshotFileName];
@@ -118,10 +120,22 @@ public sealed record StaticAppSnapshottingViaJson : IAsyncDisposable
     {
         await _publicAppState.HandleRequestAsync(context);
 
-        // Get the app state and save snapshot if it changed
-        var newAppStateSnapshotResult = _process.GetAppStateOnMainBranch(_pineVM);
+        Result<string, string> GetAppStateOnMainBranch()
+        {
+            lock (_pineVMLock)
+            {
+                var newAppStateSnapshotResult = _process.GetAppStateOnMainBranch(_pineVM);
 
-        _pineVMCache.EvalCache.Clear();
+                if (10_000 < _pineVMCache.EvalCache.Count)
+                {
+                    _pineVMCache.EvalCache.Clear();
+                }
+
+                return newAppStateSnapshotResult;
+            }
+        }
+
+        var newAppStateSnapshotResult = GetAppStateOnMainBranch();
 
         if (newAppStateSnapshotResult.IsOkOrNull() is { } snapshotJsonString)
         {
