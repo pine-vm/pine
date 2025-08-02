@@ -391,7 +391,7 @@ public class WebServiceTests
     [Fact]
     public async System.Threading.Tasks.Task Web_host_supports_setting_elm_app_state_only_after_authorization()
     {
-        const string adminPassword = "Password_1234567";
+        const string AdminPassword = "Password_1234567";
 
         static async System.Threading.Tasks.Task<HttpResponseMessage> HttpSetElmAppStateAsync(
             HttpClient client, string state) =>
@@ -399,10 +399,14 @@ public class WebServiceTests
                 StartupAdminInterface.PathApiElmAppState,
                 new StringContent(state, System.Text.Encoding.UTF8));
 
+        static async System.Threading.Tasks.Task<HttpResponseMessage> HttpGetElmAppStateAsync(
+            HttpClient client) =>
+            await client.GetAsync(StartupAdminInterface.PathApiElmAppState);
+
         using var testSetup =
             WebHostAdminInterfaceTestSetup.Setup(
                 deployAppAndInitElmState: ElmWebServiceAppTests.StringBuilderWebApp,
-                adminPassword: adminPassword);
+                adminPassword: AdminPassword);
 
         using (var server = testSetup.StartWebHost())
         {
@@ -425,6 +429,10 @@ public class WebServiceTests
 
             using (var client = testSetup.BuildAdminInterfaceHttpClient())
             {
+                (await HttpGetElmAppStateAsync(client)).StatusCode
+                    .Should().Be(HttpStatusCode.Unauthorized,
+                        "HTTP status code for authorized request to get elm app state.");
+
                 (await HttpSetElmAppStateAsync(client, "new-state")).StatusCode
                     .Should().Be(HttpStatusCode.Unauthorized,
                         "HTTP status code for unauthorized request to set elm app state.");
@@ -437,7 +445,19 @@ public class WebServiceTests
                     new AuthenticationHeaderValue(
                         "Basic",
                         Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
-                            Configuration.BasicAuthenticationForAdmin(adminPassword))));
+                            Configuration.BasicAuthenticationForAdmin(AdminPassword))));
+
+                {
+                    var getElmAppStateResponse = await HttpGetElmAppStateAsync(client);
+
+                    getElmAppStateResponse.StatusCode
+                        .Should().Be(HttpStatusCode.OK,
+                            "HTTP status code for authorized request to get elm app state after authorization.");
+
+                    (await getElmAppStateResponse.Content.ReadAsStringAsync())
+                        .Should().Be(@"""part-a-⚙️-part-b""",
+                            "State after getting elm app state after authorization.");
+                }
 
                 (await HttpSetElmAppStateAsync(client, @"""new-state""")).StatusCode
                     .Should().Be(HttpStatusCode.OK,

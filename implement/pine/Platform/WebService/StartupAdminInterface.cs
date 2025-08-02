@@ -642,10 +642,18 @@ public class StartupAdminInterface
 
                             var encodeAppStateResult = processLiveRepresentation.GetAppStateOnMainBranch();
 
-                            var appStateString =
+                            var appStateJsonElement =
                                 encodeAppStateResult
-                                .Extract(fromErr: _ => throw new Exception("Failed to encode app state."));
+                                .Extract(fromErr: err => throw new Exception("Failed to encode app state: " + err));
 
+                            context.Response.StatusCode = 200;
+
+                            context.Response.ContentType = "application/json";
+                            context.Response.Headers.ContentLength = null; // Let ASP.NET Core set the content length automatically.
+                            context.Response.Headers.ContentDisposition =
+                            new ContentDispositionHeaderValue("inline") { FileName = "app-state.json" }.ToString();
+
+                            await context.Response.WriteAsJsonAsync(appStateJsonElement);
                         })
                         .Add("post", async (context, publicAppHost) =>
                         {

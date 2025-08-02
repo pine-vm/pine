@@ -929,9 +929,23 @@ public class ElmTimeJsonAdapter
             PineValue appState,
             IPineVM pineVM)
         {
+            var appStateJsonResult = EncodeAppStateAsJsonValue(appState, pineVM);
+
+            {
+                if (appStateJsonResult.IsErrOrNull() is { } err)
+                {
+                    return Result<string, string>.err("Failed to encode app state as JSON value: " + err);
+                }
+            }
+
+            if (appStateJsonResult.IsOkOrNull() is not { } appStateJsonOk)
+            {
+                throw new System.Exception("Unexpected appStateJsonResult: " + appStateJsonResult);
+            }
+
             return
                 EncodeJsonValueAsJsonString(
-                    appState,
+                    appStateJsonOk,
                     indent: 0,
                     pineVM);
         }

@@ -1016,11 +1016,22 @@ public sealed class PersistentProcessLiveRepresentation : IAsyncDisposable
     {
         var appStateJsonString = JsonSerializer.Serialize(appState);
 
-        var jsonStringEncoded = ElmValueEncoding.StringAsPineValue(appStateJsonString);
-
         var pineVMCache = new PineVMCache();
 
         var pineVM = new PineVM(pineVMCache.EvalCache);
+
+        return
+            SetStateOnMainBranch(
+                appStateJsonString,
+                pineVM);
+    }
+
+    public Result<string, (CompositionLogRecordInFile.CompositionEvent compositionLogEvent, string)>
+        SetStateOnMainBranch(
+        string appStateJsonString,
+        PineVM pineVM)
+    {
+        var jsonStringEncoded = ElmValueEncoding.StringAsPineValue(appStateJsonString);
 
         var appStateDecodeResult =
             _appConfigParsed.JsonAdapter.DecodeAppStateFromJsonString(
@@ -1052,11 +1063,19 @@ public sealed class PersistentProcessLiveRepresentation : IAsyncDisposable
 
     public Result<string, JsonElement> GetAppStateOnMainBranch()
     {
-        var appState = _mutatingWebServiceApp.AppState;
-
         var pineVMCache = new PineVMCache();
 
         var pineVM = new PineVM(pineVMCache.EvalCache);
+
+        return
+            GetAppStateOnMainBranch(pineVM)
+            .Map(jsonString => JsonSerializer.Deserialize<JsonElement>(jsonString));
+    }
+
+    public Result<string, string> GetAppStateOnMainBranch(
+        PineVM pineVM)
+    {
+        var appState = _mutatingWebServiceApp.AppState;
 
         var jsonStringResult =
             _appConfigParsed.JsonAdapter.EncodeAppStateAsJsonString(appState, pineVM);
@@ -1064,7 +1083,7 @@ public sealed class PersistentProcessLiveRepresentation : IAsyncDisposable
         {
             if (jsonStringResult.IsErrOrNull() is { } err)
             {
-                return err;
+                return Result<string, string>.err(err);
             }
         }
 
@@ -1073,8 +1092,7 @@ public sealed class PersistentProcessLiveRepresentation : IAsyncDisposable
             throw new Exception("Unexpected result: " + jsonStringResult);
         }
 
-        return
-            JsonSerializer.Deserialize<JsonElement>(jsonString);
+        return Result<string, string>.ok(jsonString);
     }
 
     public Result<string, AdminInterface.ApplyDatabaseFunctionSuccess> ApplyFunctionOnMainBranch(
