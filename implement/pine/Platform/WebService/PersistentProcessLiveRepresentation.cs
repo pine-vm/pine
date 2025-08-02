@@ -77,6 +77,23 @@ public sealed class PersistentProcessLiveRepresentation : IAsyncDisposable
         PineValue Function,
         PineValue Arguments);
 
+    public static PersistentProcessLiveRepresentation Create(
+        ProcessAppConfig lastAppConfig,
+        PineValue? lastAppState,
+        IProcessStoreWriter storeWriter,
+        Func<DateTimeOffset> getDateTimeOffset,
+        ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null,
+        System.Threading.CancellationToken cancellationToken = default)
+    {
+        return new PersistentProcessLiveRepresentation(
+            lastAppConfig,
+            lastAppState,
+            storeWriter,
+            getDateTimeOffset,
+            overrideElmAppInterfaceConfig,
+            cancellationToken);
+    }
+
     private PersistentProcessLiveRepresentation(
         ProcessAppConfig lastAppConfig,
         PineValue? lastAppState,
@@ -688,7 +705,7 @@ public sealed class PersistentProcessLiveRepresentation : IAsyncDisposable
                 return
                     (Result<string, RestoreFromCompositionEventSequenceResult>)
                     new RestoreFromCompositionEventSequenceResult(
-                        new PersistentProcessLiveRepresentation(
+                        Create(
                             lastAppConfig: lastAppConfig,
                             lastAppState: aggregateOk.LastAppState,
                             storeWriter: storeWriter,
@@ -848,7 +865,7 @@ public sealed class PersistentProcessLiveRepresentation : IAsyncDisposable
     {
         var appConfigTree =
             PineValueComposition.ParseAsTreeWithStringPath(deploymentValue)
-            .Extract(err => throw new Exception("Failed to parse app config: " + err));
+            .Extract(err => throw new Exception("Failed to parse app config as file tree: " + err));
 
         return WebServiceConfigFromDeployment(appConfigTree, overrideElmAppInterfaceConfig);
     }
