@@ -515,12 +515,12 @@ public class FileStoreReaderFromTreeNodeWithStringPath(
 
 public class FileStoreFromConcurrentDictionary : IFileStoreWriter, IFileStoreReader
 {
-    private readonly ConcurrentDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> files =
+    private readonly ConcurrentDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> _files =
         new(EnumerableExtension.EqualityComparer<IImmutableList<string>>());
 
     public void AppendFileContent(IImmutableList<string> path, ReadOnlyMemory<byte> fileContent)
     {
-        files.AddOrUpdate(
+        _files.AddOrUpdate(
             path,
             addValueFactory:
             _ => fileContent,
@@ -530,12 +530,12 @@ public class FileStoreFromConcurrentDictionary : IFileStoreWriter, IFileStoreRea
 
     public void DeleteFile(IImmutableList<string> path)
     {
-        files.TryRemove(path, out _);
+        _files.TryRemove(path, out _);
     }
 
     public ReadOnlyMemory<byte>? GetFileContent(IImmutableList<string> path)
     {
-        if (!files.TryGetValue(path, out var fileContent))
+        if (!_files.TryGetValue(path, out var fileContent))
         {
             return null;
         }
@@ -545,7 +545,7 @@ public class FileStoreFromConcurrentDictionary : IFileStoreWriter, IFileStoreRea
 
     public IEnumerable<IImmutableList<string>> ListFilesInDirectory(IImmutableList<string> directoryPath)
     {
-        foreach (var file in files)
+        foreach (var file in _files)
         {
             if (file.Key.Count < directoryPath.Count)
             {
@@ -576,6 +576,6 @@ public class FileStoreFromConcurrentDictionary : IFileStoreWriter, IFileStoreRea
 
     public void SetFileContent(IImmutableList<string> path, ReadOnlyMemory<byte> fileContent)
     {
-        files[path] = fileContent;
+        _files[path] = fileContent;
     }
 }
