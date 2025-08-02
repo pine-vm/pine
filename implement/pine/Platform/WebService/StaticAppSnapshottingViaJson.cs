@@ -5,7 +5,6 @@ using Pine.Core;
 using Pine.PineVM;
 using System;
 using System.Collections.Immutable;
-using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -39,6 +38,7 @@ public record StaticAppSnapshottingViaJson
     public StaticAppSnapshottingViaJson(
         TreeNodeWithStringPath webServiceAppSourceFiles,
         IFileStore fileStore,
+        Action<string> logMessage,
         CancellationToken cancellationToken)
     {
         _fileStore = fileStore;
@@ -74,6 +74,11 @@ public record StaticAppSnapshottingViaJson
 
         if (_fileStore.GetFileContent(s_appStateSnapshotFilePath) is { } appStateSnapshotBytes)
         {
+            logMessage(
+                "App state snapshot file found, attempting to deserialize from " +
+                CommandLineInterface.FormatIntegerForDisplay(appStateSnapshotBytes.Length) +
+                " bytes.");
+
             try
             {
                 var appStateSnapshotJsonString = Encoding.UTF8.GetString(appStateSnapshotBytes.Span);
@@ -82,13 +87,28 @@ public record StaticAppSnapshottingViaJson
 
                 if (appStateSnapshotJsonString is not null)
                 {
-                    _process.SetStateOnMainBranch(appStateSnapshotJsonString, _pineVM);
+                    var setStateResult =
+                        _process.SetStateOnMainBranch(appStateSnapshotJsonString, _pineVM);
+
+                    if (setStateResult.IsErrOrNull() is { } error)
+                    {
+                        logMessage($"Failed to set app state from snapshot: {error}");
+                    }
+                    else
+                    {
+                        logMessage("App state snapshot successfully deserialized and applied.");
+                    }
                 }
             }
             catch (JsonException ex)
             {
-                Debug.WriteLine($"Failed to deserialize app state snapshot: {ex.Message}");
+                // If deserialization fails, we log the error and initialize from the default state.
+                logMessage($"Failed to deserialize app state snapshot: {ex.Message}");
             }
+        }
+        else
+        {
+            logMessage("App state snapshot file not found, initializing from default.");
         }
     }
 
