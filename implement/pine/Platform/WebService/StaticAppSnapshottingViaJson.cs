@@ -1,4 +1,4 @@
-﻿using ElmTime.Platform.WebService;
+using ElmTime.Platform.WebService;
 using ElmTime.Platform.WebService.ProcessStoreSupportingMigrations;
 using Microsoft.AspNetCore.Http;
 using Pine.Core;
