@@ -112,7 +112,9 @@ public record StaticAppSnapshottingViaJson
         }
     }
 
-    public async Task HandleRequestAsync(HttpContext context)
+    public async Task HandleRequestAsync(
+        HttpContext context,
+        Action<string>? logMessage = null)
     {
         await
             _publicAppState.HandleRequestAsync(context)
@@ -141,6 +143,11 @@ public record StaticAppSnapshottingViaJson
                         }
 
                         var snapshotJsonBytes = Encoding.UTF8.GetBytes(snapshotJsonString);
+
+                        logMessage?.Invoke(
+                            "App state snapshot updated, new size: " +
+                            CommandLineInterface.FormatIntegerForDisplay(snapshotJsonString.Length) +
+                            " bytes.");
 
                         _fileStore.SetFileContent(
                             s_appStateSnapshotFilePath,
