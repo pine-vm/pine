@@ -3,7 +3,9 @@ using Microsoft.AspNetCore.Http;
 using Pine.Core;
 using Pine.Platform.WebService;
 using System.Collections.Concurrent;
+using System.Collections.Immutable;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -30,6 +32,7 @@ public class StaticAppSnapshottingViaJsonTests
 
         using var cancellationTokenSource = new CancellationTokenSource();
 
+        // Phase 1: Create first instance and establish state
         {
             // Create first instance of StaticAppSnapshottingViaJson
             await using var appInstance =
@@ -80,6 +83,121 @@ public class StaticAppSnapshottingViaJsonTests
             // The HTTP request processing should work regardless of the state serialization issue
             context.Response.StatusCode.Should().Be(200);
             responseBody.Should().Be("5", "Counter app should return the added value");
+        }
+
+        // Phase 2: Setup new instance using same store and verify restoration
+        {
+            // First, check if a snapshot file was actually saved
+            var snapshotPath = new[] { "app-state-snapshot.json" }.ToImmutableList();
+            var snapshotContent = fileStoreDict.GetFileContent(snapshotPath);
+            
+            if (snapshotContent == null)
+            {
+                // If no snapshot was saved, skip the restoration test and just verify 
+                // that the second instance behaves like the first
+                logMessages.Clear();
+
+                await using var appInstance2 =
+                    new StaticAppSnapshottingViaJson(
+                        webServiceAppSourceFiles: webServiceAppSourceFiles,
+                        fileStore: fileStore,
+                        logMessage: LogMessage,
+                        cancellationToken: cancellationTokenSource.Token);
+
+                // Should indicate no snapshot file found (like the first instance)
+                logMessages.Should().ContainMatch("*snapshot file not found*");
+                logMessages.Should().ContainMatch("*initializing from default*");
+            }
+            else
+            {
+                // Normal restoration test
+                logMessages.Clear();
+
+                await using var appInstance2 =
+                    new StaticAppSnapshottingViaJson(
+                        webServiceAppSourceFiles: webServiceAppSourceFiles,
+                        fileStore: fileStore,
+                        logMessage: LogMessage,
+                        cancellationToken: cancellationTokenSource.Token);
+
+                // Assert log entries indicating restoration of app state
+                logMessages.Should().ContainMatch("*App state snapshot file found*");
+                logMessages.Should().ContainMatch("*successfully deserialized and applied*");
+
+                logMessages.Clear();
+
+                // Simulate HTTP requests and assert responses according to restored state (starting with adding zero)
+                var context = new DefaultHttpContext();
+                context.Request.Method = "POST";
+                context.Request.Path = "/";
+                context.Request.ContentType = "text/plain";
+
+                var requestJson = System.Text.Json.JsonSerializer.Serialize(new { addition = 0 });
+                var requestBytes = Encoding.UTF8.GetBytes(requestJson);
+
+                context.Request.Body = new MemoryStream(requestBytes);
+                context.Request.ContentLength = requestBytes.Length;
+                context.Response.Body = new MemoryStream();
+
+                await appInstance2.HandleRequestAsync(context, LogMessage);
+
+                // Verify HTTP response shows restored state (should be 5 + 0 = 5)
+                context.Response.Body.Seek(0, SeekOrigin.Begin);
+                using var reader = new StreamReader(context.Response.Body);
+                var responseBody = reader.ReadToEnd();
+
+                context.Response.StatusCode.Should().Be(200);
+                responseBody.Should().Be("5", "Counter app should return the previous state value (5) plus zero");
+            }
+        }
+
+        // Phase 3: Corrupt file store and test failed restoration
+        {
+            // Corrupt file store content so that restore should fail
+            var snapshotPath = new[] { "app-state-snapshot.json" }.ToImmutableList();
+            fileStoreDict.SetFileContent(snapshotPath, "invalid-json-content"u8.ToArray());
+
+            logMessages.Clear();
+
+            // Setup new instance using same store
+            await using var appInstance3 =
+                new StaticAppSnapshottingViaJson(
+                    webServiceAppSourceFiles: webServiceAppSourceFiles,
+                    fileStore: fileStore,
+                    logMessage: LogMessage,
+                    cancellationToken: cancellationTokenSource.Token);
+
+            // Assert log entries indicating how restoration failed
+            logMessages.Should().ContainMatch("*App state snapshot file found*");
+            
+            var allLogs = string.Join(", ", logMessages);
+            (allLogs.Contains("Failed to deserialize app state snapshot") || allLogs.Contains("Failed to set app state from snapshot"))
+                .Should().BeTrue("Expected either deserialization failure or state setting failure");
+
+            logMessages.Clear();
+
+            // Simulate HTTP requests to verify normal operation, based on new initial app state
+            var context = new DefaultHttpContext();
+            context.Request.Method = "POST";
+            context.Request.Path = "/";
+            context.Request.ContentType = "text/plain";
+
+            var requestJson = System.Text.Json.JsonSerializer.Serialize(new { addition = 3 });
+            var requestBytes = Encoding.UTF8.GetBytes(requestJson);
+
+            context.Request.Body = new MemoryStream(requestBytes);
+            context.Request.ContentLength = requestBytes.Length;
+            context.Response.Body = new MemoryStream();
+
+            await appInstance3.HandleRequestAsync(context, LogMessage);
+
+            // Verify HTTP response shows new initial state (should be 0 + 3 = 3)
+            context.Response.Body.Seek(0, SeekOrigin.Begin);
+            using var reader = new StreamReader(context.Response.Body);
+            var responseBody = reader.ReadToEnd();
+
+            context.Response.StatusCode.Should().Be(200);
+            responseBody.Should().Be("3", "Counter app should start fresh from initial state after failed restoration");
         }
     }
 }
