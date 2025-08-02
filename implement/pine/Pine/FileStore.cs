@@ -52,6 +52,28 @@ public record DelegatingFileStoreWriter(
         SetFileContentDelegate((path, fileContent));
 }
 
+/// <summary>
+/// Implements <see cref="IFileStoreWriter"/> but does not perform any operations.
+/// </summary>
+public record DiscardingFileStoreWriter
+    : IFileStoreWriter
+{
+    public void AppendFileContent(IImmutableList<string> path, ReadOnlyMemory<byte> fileContent)
+    {
+        // No operation
+    }
+
+    public void DeleteFile(IImmutableList<string> path)
+    {
+        // No operation
+    }
+
+    public void SetFileContent(IImmutableList<string> path, ReadOnlyMemory<byte> fileContent)
+    {
+        // No operation
+    }
+}
+
 public interface IFileStore : IFileStoreReader, IFileStoreWriter
 {
 }
