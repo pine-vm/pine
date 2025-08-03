@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Http;
 using Pine.Core;
 using Pine.Platform.WebService;
 using System.Collections.Concurrent;
-using System.Collections.Immutable;
 using System.IO;
 using System.Text;
 using System.Threading;
@@ -35,7 +34,7 @@ public class StaticAppSnapshottingViaJsonTests
         {
             // Create first instance of StaticAppSnapshottingViaJson
             await using var appInstance =
-                new StaticAppSnapshottingViaJson(
+                new StaticAppSnapshottingState(
                     webServiceAppSourceFiles: webServiceAppSourceFiles,
                     fileStore: fileStore,
                     logMessage: LogMessage,
@@ -88,7 +87,7 @@ public class StaticAppSnapshottingViaJsonTests
             logMessages.Clear();
 
             await using var appInstance =
-                new StaticAppSnapshottingViaJson(
+                new StaticAppSnapshottingState(
                     webServiceAppSourceFiles: webServiceAppSourceFiles,
                     fileStore: fileStore,
                     logMessage: LogMessage,
@@ -96,7 +95,6 @@ public class StaticAppSnapshottingViaJsonTests
 
             // Assert log entries indicating restoration of app state
             logMessages.Should().ContainMatch("*App state snapshot file found*");
-            logMessages.Should().ContainMatch("*successfully deserialized and applied*");
 
             logMessages.Clear();
 
@@ -127,15 +125,17 @@ public class StaticAppSnapshottingViaJsonTests
         // Phase 3: Corrupt file store and test failed restoration
         {
             // Corrupt file store content so that restore should fail
-            var snapshotPath = new[] { "app-state-snapshot.json" }.ToImmutableList();
 
-            fileStoreDict.SetFileContent(snapshotPath, "invalid-json-content"u8.ToArray());
+            foreach (var filePath in fileStoreDict.ListFiles())
+            {
+                fileStoreDict.SetFileContent(filePath, "invalid-content"u8.ToArray());
+            }
 
             logMessages.Clear();
 
             // Setup new instance using same store
             await using var appInstance =
-                new StaticAppSnapshottingViaJson(
+                new StaticAppSnapshottingState(
                     webServiceAppSourceFiles: webServiceAppSourceFiles,
                     fileStore: fileStore,
                     logMessage: LogMessage,

@@ -640,7 +640,7 @@ public class StartupAdminInterface
                                 return;
                             }
 
-                            var encodeAppStateResult = processLiveRepresentation.GetAppStateOnMainBranch();
+                            var encodeAppStateResult = processLiveRepresentation.GetAppStateOnMainBranchAsJson();
 
                             var appStateJsonElement =
                                 encodeAppStateResult
@@ -666,7 +666,7 @@ public class StartupAdminInterface
                             Result<string, PublicHostProcess?>.ok(publicAppHost)
                             .AndThen(maybeNull => Maybe.NothingFromNull(maybeNull).ToResult("Not possible because there is no app (state)."))
                             .AndThen(publicAppHost =>
-                            publicAppHost.ProcessLiveRepresentation.SetStateOnMainBranch(
+                            publicAppHost.ProcessLiveRepresentation.SetStateOnMainBranchFromJson(
                                 elmAppStateToSet))
                             .Map(compositionLogEventAndResponse =>
                             new AttemptContinueWithCompositionEventReport

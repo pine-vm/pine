@@ -1029,7 +1029,7 @@ public sealed class PersistentProcessLiveRepresentation : IAsyncDisposable
     }
 
     public Result<string, (CompositionLogRecordInFile.CompositionEvent compositionLogEvent, string)>
-        SetStateOnMainBranch(JsonElement appState)
+        SetStateOnMainBranchFromJson(JsonElement appState)
     {
         var appStateJsonString = JsonSerializer.Serialize(appState);
 
@@ -1038,13 +1038,13 @@ public sealed class PersistentProcessLiveRepresentation : IAsyncDisposable
         var pineVM = new PineVM(pineVMCache.EvalCache);
 
         return
-            SetStateOnMainBranch(
+            SetStateOnMainBranchFromJson(
                 appStateJsonString,
                 pineVM);
     }
 
     public Result<string, (CompositionLogRecordInFile.CompositionEvent compositionLogEvent, string)>
-        SetStateOnMainBranch(
+        SetStateOnMainBranchFromJson(
         string appStateJsonString,
         PineVM pineVM)
     {
@@ -1066,30 +1066,40 @@ public sealed class PersistentProcessLiveRepresentation : IAsyncDisposable
                 "Unexpected result type: " + appStateDecodeResult);
         }
 
+        return ResetAppStateIgnoringTypeChecking(appStateDecoded);
+    }
+
+    public (CompositionLogRecordInFile.CompositionEvent compositionLogEvent, string) ResetAppStateIgnoringTypeChecking(
+        PineValue appState)
+    {
         lock (_processLock)
         {
-            _mutatingWebServiceApp.ResetAppState(appStateDecoded);
+            _mutatingWebServiceApp.ResetAppState(appState);
 
             var storeReductionReport =
-                StoreAppStateResetAndReduction(appStateDecoded);
+                StoreAppStateResetAndReduction(appState);
 
-            return
-                (storeReductionReport.CompositionLogEvent, storeReductionReport.RecordHashBase16);
+            return (storeReductionReport.CompositionLogEvent, storeReductionReport.RecordHashBase16);
         }
     }
 
-    public Result<string, JsonElement> GetAppStateOnMainBranch()
+    public PineValue GetAppStateOnMainBranch()
+    {
+        return _mutatingWebServiceApp.AppState;
+    }
+
+    public Result<string, JsonElement> GetAppStateOnMainBranchAsJson()
     {
         var pineVMCache = new PineVMCache();
 
         var pineVM = new PineVM(pineVMCache.EvalCache);
 
         return
-            GetAppStateOnMainBranch(pineVM)
+            GetAppStateOnMainBranchAsJson(pineVM)
             .Map(jsonString => JsonSerializer.Deserialize<JsonElement>(jsonString));
     }
 
-    public Result<string, string> GetAppStateOnMainBranch(
+    public Result<string, string> GetAppStateOnMainBranchAsJson(
         PineVM pineVM)
     {
         var appState = _mutatingWebServiceApp.AppState;

@@ -2,11 +2,9 @@ using ElmTime.Platform.WebService;
 using ElmTime.Platform.WebService.ProcessStoreSupportingMigrations;
 using Microsoft.AspNetCore.Http;
 using Pine.Core;
-using Pine.PineVM;
+using Pine.Core.PopularEncodings;
 using System;
 using System.Collections.Immutable;
-using System.Text;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -17,7 +15,7 @@ namespace Pine.Platform.WebService;
 /// If loading of the app state snapshot from the file store fails (as can happen after a schema change),
 /// it uses the app state from the init function of the web service app configuration.
 /// </summary>
-public sealed record StaticAppSnapshottingViaJson : IAsyncDisposable
+public sealed record StaticAppSnapshottingState : IAsyncDisposable
 {
     private readonly PersistentProcessLiveRepresentation _process;
 
@@ -25,19 +23,17 @@ public sealed record StaticAppSnapshottingViaJson : IAsyncDisposable
 
     private readonly IFileStore _fileStore;
 
-    private string? _lastAppStateSnapshot = null;
+    private PineValue? _lastAppStateSnapshot = null;
 
-    private readonly PineVMCache _pineVMCache = new();
+    private readonly Lock _processAndStoreLock = new();
 
-    private readonly PineVM.PineVM _pineVM;
+    const string AppStateSnapshotFileName = "app-state-snapshot";
 
-    private readonly Lock _pineVMLock = new();
+    private readonly string _webServiceAppHash;
 
-    const string AppStateSnapshotFileName = "app-state-snapshot.json";
+    private readonly IImmutableList<string> _appStateSnapshotFilePath;
 
-    static readonly IImmutableList<string> s_appStateSnapshotFilePath = [AppStateSnapshotFileName];
-
-    public StaticAppSnapshottingViaJson(
+    public StaticAppSnapshottingState(
         TreeNodeWithStringPath webServiceAppSourceFiles,
         IFileStore fileStore,
         Action<string> logMessage,
@@ -45,12 +41,16 @@ public sealed record StaticAppSnapshottingViaJson : IAsyncDisposable
     {
         _fileStore = fileStore;
 
-        _pineVM = new PineVM.PineVM(evalCache: _pineVMCache.EvalCache);
-
-        var discardingWriter = new DiscardingStoreWriter();
-
         var sourceComposition =
             PineValueComposition.FromTreeWithStringPath(webServiceAppSourceFiles);
+
+        _webServiceAppHash =
+            Convert.ToHexStringLower(PineValueHashTree.ComputeHash(sourceComposition).Span);
+
+        _appStateSnapshotFilePath =
+            ["v-" + _webServiceAppHash[..8], AppStateSnapshotFileName];
+
+        var discardingWriter = new DiscardingStoreWriter();
 
         _process =
             PersistentProcessLiveRepresentation.Create(
@@ -72,9 +72,12 @@ public sealed record StaticAppSnapshottingViaJson : IAsyncDisposable
                     DisableHttps: true),
                 getDateTimeOffset: () => DateTimeOffset.UtcNow);
 
+        logMessage(
+            "Initializing web service app " + _webServiceAppHash[..8]);
+
         // Attempt to load the app state snapshot from the file store.
 
-        if (_fileStore.GetFileContent(s_appStateSnapshotFilePath) is { } appStateSnapshotBytes)
+        if (_fileStore.GetFileContent(_appStateSnapshotFilePath) is { } appStateSnapshotBytes)
         {
             logMessage(
                 "App state snapshot file found, attempting to deserialize from " +
@@ -83,26 +86,15 @@ public sealed record StaticAppSnapshottingViaJson : IAsyncDisposable
 
             try
             {
-                var appStateSnapshotJsonString = Encoding.UTF8.GetString(appStateSnapshotBytes.Span);
+                var appState =
+                    PineValueBinaryEncoding.DecodeRoot(appStateSnapshotBytes);
 
-                _lastAppStateSnapshot = appStateSnapshotJsonString;
+                var setStateResult =
+                    _process.ResetAppStateIgnoringTypeChecking(appState);
 
-                if (appStateSnapshotJsonString is not null)
-                {
-                    var setStateResult =
-                        _process.SetStateOnMainBranch(appStateSnapshotJsonString, _pineVM);
-
-                    if (setStateResult.IsErrOrNull() is { } error)
-                    {
-                        logMessage($"Failed to set app state from snapshot: {error}");
-                    }
-                    else
-                    {
-                        logMessage("App state snapshot successfully deserialized and applied.");
-                    }
-                }
+                _lastAppStateSnapshot = appState;
             }
-            catch (JsonException ex)
+            catch (Exception ex)
             {
                 // If deserialization fails, we log the error and initialize from the default state.
                 logMessage($"Failed to deserialize app state snapshot: {ex.Message}");
@@ -132,7 +124,7 @@ public sealed record StaticAppSnapshottingViaJson : IAsyncDisposable
 
                 var httpRequestProperties = httpRequestTask.Result;
 
-                lock (_pineVMLock)
+                lock (_processAndStoreLock)
                 {
                     var httpResponse =
                         _publicAppState.HandleRequestAsync(
@@ -142,34 +134,26 @@ public sealed record StaticAppSnapshottingViaJson : IAsyncDisposable
                             httpRequestEventSizeLimit: httpRequestEventSizeLimit,
                             cancellationToken: context.RequestAborted).Result;
 
-                    var newAppStateSnapshotResult = _process.GetAppStateOnMainBranch(_pineVM);
+                    var newAppStateSnapshot = _process.GetAppStateOnMainBranch();
 
-                    if (10_000 < _pineVMCache.EvalCache.Count)
+                    if (!newAppStateSnapshot.Equals(_lastAppStateSnapshot))
                     {
-                        _pineVMCache.EvalCache.Clear();
-                    }
+                        using var stream = new System.IO.MemoryStream();
 
-                    if (newAppStateSnapshotResult.IsOkOrNull() is { } snapshotJsonString)
-                    {
-                        if (snapshotJsonString != _lastAppStateSnapshot)
-                        {
-                            var snapshotJsonBytes = Encoding.UTF8.GetBytes(snapshotJsonString);
+                        PineValueBinaryEncoding.Encode(stream, newAppStateSnapshot);
 
-                            logMessage?.Invoke(
-                                "App state snapshot updated, new size: " +
-                                CommandLineInterface.FormatIntegerForDisplay(snapshotJsonString.Length) +
-                                " bytes.");
+                        logMessage?.Invoke(
+                            "App state snapshot updated, new size: " +
+                            CommandLineInterface.FormatIntegerForDisplay(stream.Length) +
+                            " bytes.");
 
-                            _fileStore.SetFileContent(
-                                s_appStateSnapshotFilePath,
-                                fileContent: snapshotJsonBytes);
+                        stream.Seek(0, System.IO.SeekOrigin.Begin);
 
-                            _lastAppStateSnapshot = snapshotJsonString;
-                        }
-                    }
-                    else
-                    {
-                        logMessage?.Invoke("Failed to get app state snapshot: " + newAppStateSnapshotResult);
+                        _fileStore.SetFileContent(
+                            _appStateSnapshotFilePath,
+                            fileContent: stream.ToArray());
+
+                        _lastAppStateSnapshot = newAppStateSnapshot;
                     }
 
                     return httpResponse;
