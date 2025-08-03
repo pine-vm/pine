@@ -1,10 +1,9 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.Extensions.DependencyInjection;
-using Pine.Core;
 using System;
 using System.Collections.Concurrent;
-using System.Collections.Immutable;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -32,25 +31,26 @@ public static class Asp
         HttpContext context,
         Func<Task> next)
     {
-        string clientId()
+        const string DefaultClientId = "MapToIPv4-failed";
+
+        string ClientId()
         {
-            const string defaultClientId = "MapToIPv4-failed";
             try
             {
-                return context.Connection.RemoteIpAddress?.MapToIPv4().ToString() ?? defaultClientId;
+                return context.Connection.RemoteIpAddress?.MapToIPv4().ToString() ?? DefaultClientId;
             }
             catch
             {
-                return defaultClientId;
+                return DefaultClientId;
             }
         }
 
         var rateLimitFromClientId =
-            context.RequestServices.GetService<ClientsRateLimitStateContainer>()!.RateLimitFromClientId;
+            context.RequestServices.GetService<ClientsRateLimitStateContainer>()?.RateLimitFromClientId;
 
         var clientRateLimitState =
-            rateLimitFromClientId.GetOrAdd(
-                clientId(), _ => BuildRateLimitContainerForClient(serverConfig));
+            rateLimitFromClientId?
+            .GetOrAdd(ClientId(), _ => BuildRateLimitContainerForClient(serverConfig));
 
         if (clientRateLimitState?.AttemptPass(Configuration.GetDateTimeOffset(context).ToUnixTimeMilliseconds()) ?? true)
         {
@@ -64,27 +64,40 @@ public static class Asp
 
     private static IMutableRateLimit BuildRateLimitContainerForClient(WebServiceConfigJson? jsonStructure)
     {
-        if (jsonStructure?.singleRateLimitWindowPerClientIPv4Address == null)
+        if (jsonStructure?.singleRateLimitWindowPerClientIPv4Address is not { } singleRateLimitWindowPerClientIPv4Address)
             return new MutableRateLimitAlwaysPassing();
 
         return new RateLimitMutableContainer(new RateLimitStateSingleWindow
         (
-            limit: jsonStructure.singleRateLimitWindowPerClientIPv4Address.limit,
-            windowSize: jsonStructure.singleRateLimitWindowPerClientIPv4Address.windowSizeInMs,
-            passes: ImmutableQueue<long>.Empty
+            limit: singleRateLimitWindowPerClientIPv4Address.limit,
+            windowSize: singleRateLimitWindowPerClientIPv4Address.windowSizeInMs,
+            passes: []
         ));
     }
 
     public static async Task<Pine.Elm.Platform.WebServiceInterface.HttpRequestProperties>
         AsInterfaceHttpRequestAsync(HttpRequest httpRequest)
     {
-        var httpHeaders =
-            httpRequest.Headers
-            .Select(header =>
-            new Pine.Elm.Platform.WebServiceInterface.HttpHeader(
-                Name: header.Key,
-                Values: [.. header.Value.ToArray().WhereNotNull()]))
-            .ToArray();
+        var httpHeaders = new List<Pine.Elm.Platform.WebServiceInterface.HttpHeader>(httpRequest.Headers.Count);
+
+        // Convert the headers to the interface representation.
+        for (var i = 0; i < httpRequest.Headers.Count; i++)
+        {
+            var header = httpRequest.Headers.ElementAt(i);
+
+            var values = new List<string>(header.Value.Count);
+
+            for (var j = 0; j < header.Value.Count; j++)
+            {
+                if (header.Value[j] is { } value)
+                    values.Add(value);
+            }
+
+            httpHeaders.Add(
+                new Pine.Elm.Platform.WebServiceInterface.HttpHeader(
+                    Name: header.Key,
+                    Values: values));
+        }
 
         var httpRequestBody = await CopyRequestBodyAsync(httpRequest);
 

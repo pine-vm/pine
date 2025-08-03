@@ -1,4 +1,5 @@
 using Pine.Core;
+using Pine.Core.PineVM;
 using Pine.Core.PopularEncodings;
 using System;
 using System.Collections.Generic;
@@ -1586,7 +1587,7 @@ public class PineIRCompiler
                 return
                     prior
                     .AppendInstruction(
-                        StackInstruction.Push_Literal(PineVMValues.TrueValue));
+                        StackInstruction.Push_Literal(PineKernelValues.TrueValue));
             }
 
             if (listExpr.items.Count is 2)

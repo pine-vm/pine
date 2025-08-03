@@ -1,19 +1,20 @@
 namespace Pine.Core.PineVM;
 
-public class LockingPineVM : IPineVM
+/// <summary>
+/// Wrapper around an <see cref="IPineVM"/> instance that adds a lock on invocation of the
+/// <see cref="IPineVM.EvaluateExpression"/> method to ensure thread safety.
+/// </summary>
+public class LockingPineVM(IPineVM pineVM) : IPineVM
 {
-    private readonly IPineVM pineVM;
+    private readonly System.Threading.Lock _pineVMLock = new();
 
-    private readonly System.Threading.Lock pineVMLock = new();
-
-    public LockingPineVM(IPineVM pineVM)
-    {
-        this.pineVM = pineVM;
-    }
-
+    /// <summary>
+    /// Forwards the evaluation of an expression to the underlying PineVM instance,
+    /// while ensuring thread safety.
+    /// </summary>
     public Result<string, PineValue> EvaluateExpression(Expression expression, PineValue environment)
     {
-        lock (pineVMLock)
+        lock (_pineVMLock)
         {
             return pineVM.EvaluateExpression(expression, environment);
         }
