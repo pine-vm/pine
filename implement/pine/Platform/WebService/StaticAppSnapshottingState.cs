@@ -2,7 +2,9 @@ using ElmTime.Platform.WebService;
 using Microsoft.AspNetCore.Http;
 using Pine.Core;
 using Pine.Core.PopularEncodings;
+using Pine.Elm.Platform;
 using System;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Threading;
 using System.Threading.Tasks;
@@ -36,38 +38,78 @@ public sealed record StaticAppSnapshottingState : IAsyncDisposable
         TreeNodeWithStringPath webServiceAppSourceFiles,
         IFileStore fileStore,
         Action<string> logMessage,
+        CancellationToken cancellationToken) =>
+        Create(
+            webServiceAppSourceFiles,
+            entryFileName: ["src", "Backend", "Main.elm"],
+            fileStore: fileStore,
+            logMessage: logMessage,
+            cancellationToken: cancellationToken);
+
+    public static StaticAppSnapshottingState Create(
+        TreeNodeWithStringPath webServiceAppSourceFiles,
+        IReadOnlyList<string> entryFileName,
+        IFileStore fileStore,
+        Action<string> logMessage,
         CancellationToken cancellationToken)
     {
-        return new StaticAppSnapshottingState(
-            webServiceAppSourceFiles, fileStore, logMessage, cancellationToken);
+        var webServiceCompiledModules =
+            WebServiceInterface.CompiledModulesFromSourceFilesAndEntryFileName(
+                webServiceAppSourceFiles,
+                entryFileName: entryFileName);
+
+        return
+            new StaticAppSnapshottingState(
+                webServiceCompiledModules,
+                fileStore,
+                logMessage,
+                cancellationToken);
+    }
+
+    public static StaticAppSnapshottingState Create(
+        PineValue webServiceCompiledModules,
+        IFileStore fileStore,
+        Action<string> logMessage,
+        CancellationToken cancellationToken)
+    {
+        return
+            new StaticAppSnapshottingState(
+                webServiceCompiledModules,
+                fileStore,
+                logMessage,
+                cancellationToken);
     }
 
     public StaticAppSnapshottingState(
-        TreeNodeWithStringPath webServiceAppSourceFiles,
+        PineValue webServiceCompiledModules,
         IFileStore fileStore,
         Action<string> logMessage,
         CancellationToken cancellationToken)
     {
         _fileStore = fileStore;
 
-        var sourceComposition =
-            PineValueComposition.FromTreeWithStringPath(webServiceAppSourceFiles);
-
         _webServiceAppHash =
-            Convert.ToHexStringLower(PineValueHashTree.ComputeHash(sourceComposition).Span);
+            Convert.ToHexStringLower(PineValueHashTree.ComputeHash(webServiceCompiledModules).Span);
 
         _appStateSnapshotFilePath =
             ["v-" + _webServiceAppHash[..8], AppStateSnapshotFileName];
+
+        var webServiceConfig =
+            WebServiceInterface.ConfigFromCompiledModules(
+                webServiceCompiledModules,
+                entryModuleName: "Backend.Main",
+                entryDeclName: "webServiceMain")
+            .Extract(err => throw new Exception("Failed to parse WebServiceConfig: " + err));
 
         var discardingWriter = new DiscardingProgressWriter();
 
         _process =
             ProcessLiveRepresentation.Create(
-                new ProcessAppConfig(sourceComposition),
+                webServiceConfig,
                 lastAppState: null,
                 progressWriter: discardingWriter,
                 getDateTimeOffset: () => DateTimeOffset.UtcNow,
-                overrideElmAppInterfaceConfig: null,
+                artifactSourceCompositions: [webServiceCompiledModules],
                 cancellationToken: cancellationToken);
 
         _publicAppState =
@@ -75,7 +117,6 @@ public sealed record StaticAppSnapshottingState : IAsyncDisposable
                 serverAndElmAppConfig: new ServerAndElmAppConfig(
                     ServerConfig: null,
                     ProcessHttpRequestAsync: _process.ProcessHttpRequestAsync,
-                    SourceComposition: sourceComposition,
                     InitOrMigrateCmds: null,
                     DisableLetsEncrypt: true,
                     DisableHttps: true),

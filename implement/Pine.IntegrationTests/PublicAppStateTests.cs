@@ -6,7 +6,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Pine.Elm.Platform;
-using Pine.Core;
 using System;
 using System.Net.Http;
 using System.Text;
@@ -50,7 +49,6 @@ public class PublicAppStateTests
                 new ServerAndElmAppConfig(
                     ServerConfig: new WebServiceConfigJson(httpRequestEventSizeLimit: 1_000_000),
                     ProcessHttpRequestAsync: MockProcessRequest,
-                    SourceComposition: PineValue.EmptyList,
                     InitOrMigrateCmds: null,
                     DisableLetsEncrypt: true,
                     DisableHttps: true),
@@ -155,7 +153,6 @@ public class PublicAppStateTests
                 new ServerAndElmAppConfig(
                     ServerConfig: new WebServiceConfigJson(httpRequestEventSizeLimit: 50), // 50 bytes limit
                     ProcessHttpRequestAsync: MockProcessRequest,
-                    SourceComposition: PineValue.EmptyList,
                     InitOrMigrateCmds: null,
                     DisableLetsEncrypt: true,
                     DisableHttps: true),

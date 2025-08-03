@@ -19,11 +19,10 @@ public class DiscardingProgressWriter : IProgressWriter
 {
     public void FunctionApplications(IReadOnlyList<ApplyUpdateReport<WebServiceInterface.Command>> reports)
     {
-        // No-op
     }
+
     public void StoreReduction(PineValue appState)
     {
-        // No-op
     }
 }
 
@@ -88,44 +87,41 @@ public sealed class ProcessLiveRepresentation : IAsyncDisposable
         PineValue Arguments);
 
     public static ProcessLiveRepresentation Create(
-        ProcessAppConfig lastAppConfig,
+        WebServiceInterface.WebServiceConfig webServiceConfig,
         PineValue? lastAppState,
         IProgressWriter progressWriter,
         Func<DateTimeOffset> getDateTimeOffset,
-        ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null,
+        IEnumerable<PineValue> artifactSourceCompositions,
         System.Threading.CancellationToken cancellationToken = default)
     {
         return new ProcessLiveRepresentation(
-            lastAppConfig,
+            webServiceConfig,
             lastAppState,
             progressWriter,
             getDateTimeOffset,
-            overrideElmAppInterfaceConfig,
+            artifactSourceCompositions,
             cancellationToken);
     }
 
     private ProcessLiveRepresentation(
-        ProcessAppConfig lastAppConfig,
+        WebServiceInterface.WebServiceConfig webServiceConfig,
         PineValue? lastAppState,
         IProgressWriter progressWriter,
         Func<DateTimeOffset> getDateTimeOffset,
-        ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null,
+        IEnumerable<PineValue> artifactSourceCompositions,
         System.Threading.CancellationToken cancellationToken = default)
     {
         _getDateTimeOffset = getDateTimeOffset;
         _progressWriter = progressWriter;
         StartTime = getDateTimeOffset();
 
-        _appConfigParsed =
-            WebServiceConfigFromDeployment(
-                lastAppConfig.AppConfigComponent,
-                overrideElmAppInterfaceConfig);
+        _appConfigParsed = webServiceConfig;
 
         _mutatingWebServiceApp =
             new MutatingWebServiceApp(_appConfigParsed);
 
         _volatileProcessHost =
-            new VolatileProcessHost([lastAppConfig.AppConfigComponent]);
+            new VolatileProcessHost([.. artifactSourceCompositions]);
 
         if (lastAppState is not null)
         {
@@ -187,34 +183,6 @@ public sealed class ProcessLiveRepresentation : IAsyncDisposable
         CompositionLogRecordInFile.CompositionEvent CompositionLogEvent,
         string RecordHashBase16,
         System.Threading.Tasks.Task TaskStoringReduction);
-
-    private static WebServiceInterface.WebServiceConfig WebServiceConfigFromDeployment(
-        PineValue deploymentValue,
-        ElmAppInterfaceConfig? overrideElmAppInterfaceConfig)
-    {
-        var appConfigTree =
-            PineValueComposition.ParseAsTreeWithStringPath(deploymentValue)
-            .Extract(err => throw new Exception("Failed to parse app config as file tree: " + err));
-
-        return WebServiceConfigFromDeployment(appConfigTree, overrideElmAppInterfaceConfig);
-    }
-
-    private static WebServiceInterface.WebServiceConfig WebServiceConfigFromDeployment(
-        TreeNodeWithStringPath appConfigTree,
-        ElmAppInterfaceConfig? overrideElmAppInterfaceConfig)
-    {
-        var compilationRootFilePath =
-            overrideElmAppInterfaceConfig?.CompilationRootFilePath
-            ??
-            ["src", "Backend", "Main.elm"];
-
-        var appConfigParsed =
-            WebServiceInterface.ConfigFromSourceFilesAndEntryFileName(
-                appConfigTree,
-                compilationRootFilePath);
-
-        return appConfigParsed;
-    }
 
     public int ResetAppStateIgnoringTypeChecking(
         PineValue appState)

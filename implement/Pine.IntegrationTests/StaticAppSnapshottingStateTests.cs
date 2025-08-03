@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.AspNetCore.Http;
 using Pine.Core;
+using Pine.Elm.Platform;
 using Pine.Platform.WebService;
 using System.Collections.Concurrent;
 using System.IO;
@@ -11,7 +12,7 @@ using Xunit;
 
 namespace Pine.IntegrationTests;
 
-public class StaticAppSnapshottingViaJsonTests
+public class StaticAppSnapshottingStateTests
 {
     [Fact]
     public async Task StaticAppSnapshottingViaJson_integration_test()
@@ -21,8 +22,10 @@ public class StaticAppSnapshottingViaJsonTests
         var fileStore =
             new FileStoreFromWriterAndReader(fileStoreDict, fileStoreDict);
 
-        var webServiceAppSourceFiles =
-            PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(TestSetup.CounterElmWebApp);
+        var webServiceCompiled =
+            WebServiceInterface.CompiledModulesFromSourceFilesAndEntryFileName(
+                PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(TestSetup.CounterElmWebApp),
+                entryFileName: ["src", "Backend", "Main.elm"]);
 
         var logMessages = new ConcurrentQueue<string>();
 
@@ -35,7 +38,7 @@ public class StaticAppSnapshottingViaJsonTests
             // Create first instance of StaticAppSnapshottingViaJson
             await using var appInstance =
                 StaticAppSnapshottingState.Create(
-                    webServiceAppSourceFiles: webServiceAppSourceFiles,
+                    webServiceCompiledModules: webServiceCompiled,
                     fileStore: fileStore,
                     logMessage: LogMessage,
                     cancellationToken: cancellationTokenSource.Token);
@@ -88,7 +91,7 @@ public class StaticAppSnapshottingViaJsonTests
 
             await using var appInstance =
                 StaticAppSnapshottingState.Create(
-                    webServiceAppSourceFiles: webServiceAppSourceFiles,
+                    webServiceCompiledModules: webServiceCompiled,
                     fileStore: fileStore,
                     logMessage: LogMessage,
                     cancellationToken: cancellationTokenSource.Token);
@@ -136,7 +139,7 @@ public class StaticAppSnapshottingViaJsonTests
             // Setup new instance using same store
             await using var appInstance =
                 StaticAppSnapshottingState.Create(
-                    webServiceAppSourceFiles: webServiceAppSourceFiles,
+                    webServiceCompiledModules: webServiceCompiled,
                     fileStore: fileStore,
                     logMessage: LogMessage,
                     cancellationToken: cancellationTokenSource.Token);

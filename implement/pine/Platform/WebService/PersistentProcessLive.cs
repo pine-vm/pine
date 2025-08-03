@@ -114,11 +114,11 @@ public sealed class PersistentProcessLive : IAsyncDisposable
 
         _processLiveRepresentation =
             ProcessLiveRepresentation.Create(
-                lastAppConfig: lastAppConfig,
+                webServiceConfig: _appConfigParsed,
                 lastAppState: lastAppState,
                 progressWriter: progressWriter,
                 getDateTimeOffset: getDateTimeOffset,
-                overrideElmAppInterfaceConfig: overrideElmAppInterfaceConfig,
+                artifactSourceCompositions: [lastAppConfig.AppConfigComponent],
                 cancellationToken: cancellationToken);
     }
 
@@ -820,7 +820,7 @@ public sealed class PersistentProcessLive : IAsyncDisposable
         return "Unexpected shape of composition event: " + JsonSerializer.Serialize(compositionEvent);
     }
 
-    private static WebServiceInterface.WebServiceConfig WebServiceConfigFromDeployment(
+    public static WebServiceInterface.WebServiceConfig WebServiceConfigFromDeployment(
         PineValue deploymentValue,
         ElmAppInterfaceConfig? overrideElmAppInterfaceConfig)
     {
@@ -831,7 +831,7 @@ public sealed class PersistentProcessLive : IAsyncDisposable
         return WebServiceConfigFromDeployment(appConfigTree, overrideElmAppInterfaceConfig);
     }
 
-    private static WebServiceInterface.WebServiceConfig WebServiceConfigFromDeployment(
+    public static WebServiceInterface.WebServiceConfig WebServiceConfigFromDeployment(
         TreeNodeWithStringPath appConfigTree,
         ElmAppInterfaceConfig? overrideElmAppInterfaceConfig)
     {

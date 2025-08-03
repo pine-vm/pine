@@ -306,7 +306,6 @@ public class StartupAdminInterface
                                 new ServerAndElmAppConfig(
                                     ServerConfig: webServiceConfig,
                                     ProcessHttpRequestAsync: processLiveRepresentation.ProcessHttpRequestAsync,
-                                    SourceComposition: processAppConfig.AppConfigComponent,
                                     InitOrMigrateCmds: restoreProcessOk.initOrMigrateCmds,
                                     DisableLetsEncrypt: disableLetsEncrypt,
                                     DisableHttps: disableHttps);

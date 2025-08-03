@@ -5,7 +5,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Pine.Core;
 using Pine.Elm.Platform;
 using System;
 using System.Collections.Generic;
@@ -256,7 +255,6 @@ public class PublicAppState(
 public record ServerAndElmAppConfig(
     WebServiceConfigJson? ServerConfig,
     Func<WebServiceInterface.HttpRequestEventStruct, Task<WebServiceInterface.HttpResponse>> ProcessHttpRequestAsync,
-    PineValue SourceComposition,
     InterfaceToHost.BackendEventResponseStruct? InitOrMigrateCmds,
     bool? DisableLetsEncrypt,
     bool DisableHttps);
