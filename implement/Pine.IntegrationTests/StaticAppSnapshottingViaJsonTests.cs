@@ -60,7 +60,6 @@ public class StaticAppSnapshottingViaJsonTests
             context.Request.ContentLength = requestBytes.Length;
             context.Response.Body = new MemoryStream();
 
-            // This should now complete properly with the async fix
             await appInstance.HandleRequestAsync(context, LogMessage);
 
             // Verify that the async continuation completed - we should see either:
@@ -88,7 +87,7 @@ public class StaticAppSnapshottingViaJsonTests
         {
             logMessages.Clear();
 
-            await using var appInstance2 =
+            await using var appInstance =
                 new StaticAppSnapshottingViaJson(
                     webServiceAppSourceFiles: webServiceAppSourceFiles,
                     fileStore: fileStore,
@@ -114,7 +113,7 @@ public class StaticAppSnapshottingViaJsonTests
             context.Request.ContentLength = requestBytes.Length;
             context.Response.Body = new MemoryStream();
 
-            await appInstance2.HandleRequestAsync(context, LogMessage);
+            await appInstance.HandleRequestAsync(context, LogMessage);
 
             // Verify HTTP response shows restored state (should be 5 + 0 = 5)
             context.Response.Body.Seek(0, SeekOrigin.Begin);
@@ -129,12 +128,13 @@ public class StaticAppSnapshottingViaJsonTests
         {
             // Corrupt file store content so that restore should fail
             var snapshotPath = new[] { "app-state-snapshot.json" }.ToImmutableList();
+
             fileStoreDict.SetFileContent(snapshotPath, "invalid-json-content"u8.ToArray());
 
             logMessages.Clear();
 
             // Setup new instance using same store
-            await using var appInstance3 =
+            await using var appInstance =
                 new StaticAppSnapshottingViaJson(
                     webServiceAppSourceFiles: webServiceAppSourceFiles,
                     fileStore: fileStore,
@@ -163,7 +163,7 @@ public class StaticAppSnapshottingViaJsonTests
             context.Request.ContentLength = requestBytes.Length;
             context.Response.Body = new MemoryStream();
 
-            await appInstance3.HandleRequestAsync(context, LogMessage);
+            await appInstance.HandleRequestAsync(context, LogMessage);
 
             // Verify HTTP response shows new initial state (should be 0 + 3 = 3)
             context.Response.Body.Seek(0, SeekOrigin.Begin);

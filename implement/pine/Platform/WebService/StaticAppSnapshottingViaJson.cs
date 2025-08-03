@@ -114,53 +114,81 @@ public sealed record StaticAppSnapshottingViaJson : IAsyncDisposable
         }
     }
 
-    public async Task HandleRequestAsync(
+    public Task HandleRequestAsync(
         HttpContext context,
-        Action<string>? logMessage = null)
+        Action<string>? logMessage = null,
+        int? httpRequestEventSizeLimit = null)
     {
-        await _publicAppState.HandleRequestAsync(context);
-
-        Result<string, string> GetAppStateOnMainBranch()
-        {
-            lock (_pineVMLock)
+        return
+            Asp.AsInterfaceHttpRequestAsync(context.Request)
+            .ContinueWith(httpRequestTask =>
             {
-                var newAppStateSnapshotResult = _process.GetAppStateOnMainBranch(_pineVM);
-
-                if (10_000 < _pineVMCache.EvalCache.Count)
+                if (httpRequestTask.IsFaulted)
                 {
-                    _pineVMCache.EvalCache.Clear();
+                    logMessage?.Invoke("Failed to convert HTTP request: " + httpRequestTask.Exception);
+
+                    context.Response.StatusCode = 500;
                 }
 
-                return newAppStateSnapshotResult;
-            }
-        }
+                var httpRequestProperties = httpRequestTask.Result;
 
-        var newAppStateSnapshotResult = GetAppStateOnMainBranch();
+                lock (_pineVMLock)
+                {
+                    var httpResponse =
+                        _publicAppState.HandleRequestAsync(
+                            httpRequestProperties,
+                            new Elm.Platform.WebServiceInterface.HttpRequestContext(
+                                ClientAddress: context.Connection.RemoteIpAddress?.ToString()),
+                            httpRequestEventSizeLimit: httpRequestEventSizeLimit,
+                            cancellationToken: context.RequestAborted).Result;
 
-        if (newAppStateSnapshotResult.IsOkOrNull() is { } snapshotJsonString)
-        {
-            if (snapshotJsonString == _lastAppStateSnapshot)
+                    var newAppStateSnapshotResult = _process.GetAppStateOnMainBranch(_pineVM);
+
+                    if (10_000 < _pineVMCache.EvalCache.Count)
+                    {
+                        _pineVMCache.EvalCache.Clear();
+                    }
+
+                    if (newAppStateSnapshotResult.IsOkOrNull() is { } snapshotJsonString)
+                    {
+                        if (snapshotJsonString != _lastAppStateSnapshot)
+                        {
+                            var snapshotJsonBytes = Encoding.UTF8.GetBytes(snapshotJsonString);
+
+                            logMessage?.Invoke(
+                                "App state snapshot updated, new size: " +
+                                CommandLineInterface.FormatIntegerForDisplay(snapshotJsonString.Length) +
+                                " bytes.");
+
+                            _fileStore.SetFileContent(
+                                s_appStateSnapshotFilePath,
+                                fileContent: snapshotJsonBytes);
+
+                            _lastAppStateSnapshot = snapshotJsonString;
+                        }
+                    }
+                    else
+                    {
+                        logMessage?.Invoke("Failed to get app state snapshot: " + newAppStateSnapshotResult);
+                    }
+
+                    return httpResponse;
+                }
+            })
+            .ContinueWith(httpResponseTask =>
             {
-                return; // No change, no need to write to file store.
-            }
+                if (httpResponseTask.IsFaulted)
+                {
+                    logMessage?.Invoke("Failed to handle HTTP request: " + httpResponseTask.Exception);
+                    context.Response.StatusCode = 500;
 
-            var snapshotJsonBytes = Encoding.UTF8.GetBytes(snapshotJsonString);
-
-            logMessage?.Invoke(
-                "App state snapshot updated, new size: " +
-                CommandLineInterface.FormatIntegerForDisplay(snapshotJsonString.Length) +
-                " bytes.");
-
-            _fileStore.SetFileContent(
-                s_appStateSnapshotFilePath,
-                fileContent: snapshotJsonBytes);
-
-            _lastAppStateSnapshot = snapshotJsonString;
-        }
-        else
-        {
-            logMessage?.Invoke("Failed to get app state snapshot: " + newAppStateSnapshotResult);
-        }
+                    return Task.CompletedTask;
+                }
+                else
+                {
+                    return Asp.SendHttpResponseAsync(context, httpResponseTask.Result);
+                }
+            });
     }
 
     public ValueTask DisposeAsync()
