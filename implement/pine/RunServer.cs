@@ -117,10 +117,11 @@ public class RunServer
                     appConfigValueInFile: appConfigValueInFile,
                     initElmAppState: initElmAppState);
 
-            var testDeployResult = PersistentProcessLiveRepresentation.TestContinueWithCompositionEvent(
-                compositionLogEvent: compositionLogEvent,
-                fileStoreReader: processStoreFileStore)
-            .Extract(error => throw new Exception("Attempt to deploy app config failed: " + error));
+            var testDeployResult =
+                PersistentProcessLive.TestContinueWithCompositionEvent(
+                    compositionLogEvent: compositionLogEvent,
+                    fileStoreReader: processStoreFileStore)
+                .Extract(error => throw new Exception("Attempt to deploy app config failed: " + error));
 
             foreach (var (filePath, fileContent) in testDeployResult.ProjectedFiles)
                 processStoreFileStore.SetFileContent(filePath, fileContent);
@@ -253,6 +254,6 @@ public class RunServer
             }
         );
 
-        return PersistentProcessLiveRepresentation.GetFilesForRestoreProcess(processHistoryFileStoreRemoteReader);
+        return PersistentProcessLive.GetFilesForRestoreProcess(processHistoryFileStoreRemoteReader);
     }
 }

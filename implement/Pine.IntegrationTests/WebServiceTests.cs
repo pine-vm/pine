@@ -1576,7 +1576,7 @@ public class WebServiceTests
             promptForPasswordOnConsole: false);
 
         await using (var restoredProcess =
-            PersistentProcessLiveRepresentation.LoadFromStoreAndRestoreProcess(
+            PersistentProcessLive.LoadFromStoreAndRestoreProcess(
                 new ElmTime.Platform.WebService.ProcessStoreSupportingMigrations.ProcessStoreReaderInFileStore(
                     new FileStoreFromSystemIOFile(testDirectory)),
                 new ElmTime.Platform.WebService.ProcessStoreSupportingMigrations.DiscardingStoreWriter(),

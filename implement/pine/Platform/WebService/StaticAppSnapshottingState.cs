@@ -1,5 +1,4 @@
 using ElmTime.Platform.WebService;
-using ElmTime.Platform.WebService.ProcessStoreSupportingMigrations;
 using Microsoft.AspNetCore.Http;
 using Pine.Core;
 using Pine.Core.PopularEncodings;
@@ -17,7 +16,7 @@ namespace Pine.Platform.WebService;
 /// </summary>
 public sealed record StaticAppSnapshottingState : IAsyncDisposable
 {
-    private readonly PersistentProcessLiveRepresentation _process;
+    private readonly ProcessLiveRepresentation _process;
 
     private readonly PublicAppState _publicAppState;
 
@@ -32,6 +31,16 @@ public sealed record StaticAppSnapshottingState : IAsyncDisposable
     private readonly string _webServiceAppHash;
 
     private readonly IImmutableList<string> _appStateSnapshotFilePath;
+
+    public static StaticAppSnapshottingState Create(
+        TreeNodeWithStringPath webServiceAppSourceFiles,
+        IFileStore fileStore,
+        Action<string> logMessage,
+        CancellationToken cancellationToken)
+    {
+        return new StaticAppSnapshottingState(
+            webServiceAppSourceFiles, fileStore, logMessage, cancellationToken);
+    }
 
     public StaticAppSnapshottingState(
         TreeNodeWithStringPath webServiceAppSourceFiles,
@@ -50,13 +59,13 @@ public sealed record StaticAppSnapshottingState : IAsyncDisposable
         _appStateSnapshotFilePath =
             ["v-" + _webServiceAppHash[..8], AppStateSnapshotFileName];
 
-        var discardingWriter = new DiscardingStoreWriter();
+        var discardingWriter = new DiscardingProgressWriter();
 
         _process =
-            PersistentProcessLiveRepresentation.Create(
+            ProcessLiveRepresentation.Create(
                 new ProcessAppConfig(sourceComposition),
                 lastAppState: null,
-                storeWriter: discardingWriter,
+                progressWriter: discardingWriter,
                 getDateTimeOffset: () => DateTimeOffset.UtcNow,
                 overrideElmAppInterfaceConfig: null,
                 cancellationToken: cancellationToken);
@@ -134,27 +143,7 @@ public sealed record StaticAppSnapshottingState : IAsyncDisposable
                             httpRequestEventSizeLimit: httpRequestEventSizeLimit,
                             cancellationToken: context.RequestAborted).Result;
 
-                    var newAppStateSnapshot = _process.GetAppStateOnMainBranch();
-
-                    if (!newAppStateSnapshot.Equals(_lastAppStateSnapshot))
-                    {
-                        using var stream = new System.IO.MemoryStream();
-
-                        PineValueBinaryEncoding.Encode(stream, newAppStateSnapshot);
-
-                        logMessage?.Invoke(
-                            "App state snapshot updated, new size: " +
-                            CommandLineInterface.FormatIntegerForDisplay(stream.Length) +
-                            " bytes.");
-
-                        stream.Seek(0, System.IO.SeekOrigin.Begin);
-
-                        _fileStore.SetFileContent(
-                            _appStateSnapshotFilePath,
-                            fileContent: stream.ToArray());
-
-                        _lastAppStateSnapshot = newAppStateSnapshot;
-                    }
+                    EnsurePersisted(logMessage);
 
                     return httpResponse;
                 }
@@ -173,6 +162,35 @@ public sealed record StaticAppSnapshottingState : IAsyncDisposable
                     return Asp.SendHttpResponseAsync(context, httpResponseTask.Result);
                 }
             });
+    }
+
+    private void EnsurePersisted(
+        Action<string>? logMessage)
+    {
+        lock (_processAndStoreLock)
+        {
+            var newAppStateSnapshot = _process.GetAppStateOnMainBranch();
+
+            if (!newAppStateSnapshot.Equals(_lastAppStateSnapshot))
+            {
+                using var stream = new System.IO.MemoryStream();
+
+                PineValueBinaryEncoding.Encode(stream, newAppStateSnapshot);
+
+                logMessage?.Invoke(
+                    "App state snapshot updated, new size: " +
+                    CommandLineInterface.FormatIntegerForDisplay(stream.Length) +
+                    " bytes.");
+
+                stream.Seek(0, System.IO.SeekOrigin.Begin);
+
+                _fileStore.SetFileContent(
+                    _appStateSnapshotFilePath,
+                    fileContent: stream.ToArray());
+
+                _lastAppStateSnapshot = newAppStateSnapshot;
+            }
+        }
     }
 
     public ValueTask DisposeAsync()

@@ -270,7 +270,7 @@ type alias LoadDependencyStruct =
             var httpRequestFunctionRecord =
                 ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(
                     httpRequestFieldValue,
-                    parseCache)
+                    s_parseCache)
                 .Extract(err => throw new Exception("Failed parsing httpRequest function record: " + err));
 
             var posixTimeIsPastFieldValue =
@@ -291,7 +291,7 @@ type alias LoadDependencyStruct =
 
             return new Subscriptions(
                 HttpRequest:
-                FunctionRecordValueAndParsed.ParseOrThrow(httpRequestFieldValue, parseCache),
+                FunctionRecordValueAndParsed.ParseOrThrow(httpRequestFieldValue, s_parseCache),
                 PosixTimeIsPast: posixTimeIsPastSubscription);
         }
 
@@ -325,7 +325,7 @@ type alias LoadDependencyStruct =
             }
 
             var updateFunctionRecord =
-                FunctionRecordValueAndParsed.ParseOrThrow(updateField, parseCache);
+                FunctionRecordValueAndParsed.ParseOrThrow(updateField, s_parseCache);
 
             if (updateFunctionRecord.Parsed.ParameterCount is not 2)
             {
@@ -352,7 +352,7 @@ type alias LoadDependencyStruct =
                 .Extract(err => throw new Exception("Failed applying function: " + err));
 
             var parseResponseResult =
-                ParseWebServiceEventResponse(responseValue, elmCompilerCache, parseCache);
+                ParseWebServiceEventResponse(responseValue, s_elmCompilerCache, s_parseCache);
 
             {
                 if (parseResponseResult.IsErrOrNull() is { } err)
@@ -1138,7 +1138,7 @@ type alias LoadDependencyStruct =
         var parseUpdateOk =
             FunctionRecordValueAndParsed.ParseOrThrow(
                 pineValue,
-                parseCache);
+                s_parseCache);
 
         var remainingParamCount =
             parseUpdateOk.Parsed.ParameterCount -
@@ -2192,10 +2192,25 @@ type alias LoadDependencyStruct =
             (int)durationInMilliseconds);
     }
 
-    private static readonly ElmCompilerCache elmCompilerCache = new();
-    private static readonly PineVMParseCache parseCache = new();
+    private static readonly ElmCompilerCache s_elmCompilerCache = new();
+    private static readonly PineVMParseCache s_parseCache = new();
 
     public static WebServiceConfig ConfigFromSourceFilesAndEntryFileName(
+        TreeNodeWithStringPath sourceFiles,
+        IReadOnlyList<string> entryFileName)
+    {
+        var compiledModulesValue =
+            CompiledModulesFromSourceFilesAndEntryFileName(sourceFiles, entryFileName);
+
+        return
+            ConfigFromCompiledModules(
+                compiledModulesValue,
+                entryModuleName: "Backend.Main",
+                entryDeclName: "webServiceMain")
+            .Extract(err => throw new Exception("Failed to parse WebServiceConfig: " + err));
+    }
+
+    public static PineValue CompiledModulesFromSourceFilesAndEntryFileName(
         TreeNodeWithStringPath sourceFiles,
         IReadOnlyList<string> entryFileName)
     {
@@ -2232,68 +2247,77 @@ type alias LoadDependencyStruct =
                 loweredTreeCleaned,
                 ["src", "Backend", "InterfaceToHost_Root.elm"]);
 
-        PineValue build()
-        {
-            var pineVMAndCache =
-                InteractiveSessionPine.BuildPineVM(
-                    caching: true,
-                    autoPGO: null);
+        var pineVMAndCache =
+            InteractiveSessionPine.BuildPineVM(
+                caching: true,
+                autoPGO: null);
 
-            var elmCompilerFromBundle =
-                BundledElmEnvironments.BundledElmCompilerCompiledEnvValue()
-                ??
-                throw new Exception("Failed to load Elm compiler from bundle.");
+        var elmCompilerFromBundle =
+            BundledElmEnvironments.BundledElmCompilerCompiledEnvValue()
+            ??
+            throw new Exception("Failed to load Elm compiler from bundle.");
 
-            var elmCompiler =
-                ElmCompiler.ElmCompilerFromEnvValue(elmCompilerFromBundle)
-                .Extract(err => throw new Exception("Failed to load Elm compiler: " + err));
+        var elmCompiler =
+            ElmCompiler.ElmCompilerFromEnvValue(elmCompilerFromBundle)
+            .Extract(err => throw new Exception("Failed to load Elm compiler: " + err));
 
-            return
-                InteractiveSessionPine.CompileInteractiveEnvironment(
-                    appCodeTree: compilationUnitsPrepared.files,
-                    overrideSkipLowering: true,
-                    entryPointsFilePaths: null,
-                    skipFilteringForSourceDirs: false,
-                    elmCompiler)
-                .Extract(err => throw new Exception("Failed to compile interactive environment: " + err));
-        }
+        return
+            InteractiveSessionPine.CompileInteractiveEnvironment(
+                appCodeTree: compilationUnitsPrepared.files,
+                overrideSkipLowering: true,
+                entryPointsFilePaths: null,
+                skipFilteringForSourceDirs: false,
+                elmCompiler: elmCompiler)
+            .Extract(err => throw new Exception("Failed to compile interactive environment: " + err));
+    }
 
-        var compiledModulesValue = build();
-
-        var (declValue, _) =
+    public static Result<string, WebServiceConfig> ConfigFromCompiledModules(
+        PineValue compiledModulesValue,
+        string entryModuleName,
+        string entryDeclName)
+    {
+        var parseFunctionResult =
             ElmInteractiveEnvironment.ParseFunctionFromElmModule(
                 compiledModulesValue,
-                moduleName: "Backend.Main",
-                declarationName: "webServiceMain",
-                parseCache)
-            .Extract(err => throw new Exception(
-                $"Failed parsing webServiceMain declaration from module {string.Join(".", compilationUnitsPrepared.entryModuleName)}: {err}"));
+                moduleName: entryModuleName,
+                declarationName: entryDeclName,
+                s_parseCache);
+
+        if (parseFunctionResult.IsErrOrNull() is { } err)
+        {
+            return "Failed parsing declaration " + entryDeclName + " from module " + entryModuleName + ": " + err;
+        }
+
+        if (parseFunctionResult.IsOkOrNullable() is not { } parseDeclOk)
+        {
+            return "Unexpected return type from parsing declaration: " + parseFunctionResult;
+        }
 
         var parseJsonAdapterResult =
             ElmTimeJsonAdapter.Parsed.ParseFromCompiled(
                 compiledModulesValue,
-                parseCache);
+                s_parseCache);
 
         var parsedJsonAdapter =
             parseJsonAdapterResult
             .Extract(err => throw new Exception("Failed parsing JsonAdapter: " + err));
 
-        return ConfigFromDeclarationValue(declValue, parsedJsonAdapter);
+        return ConfigFromDeclarationValue(parseDeclOk.declValue, parsedJsonAdapter);
     }
 
-    public static WebServiceConfig ConfigFromDeclarationValue(
+    public static Result<string, WebServiceConfig> ConfigFromDeclarationValue(
         PineValue webServiceMainDeclValue,
         ElmTimeJsonAdapter.Parsed jsonAdapter)
     {
-        var webServiceMainRecordResult =
+        var entryDeclRecordResult =
             ElmValueEncoding.ParsePineValueAsRecordTagged(webServiceMainDeclValue);
 
-        if (webServiceMainRecordResult.IsErrOrNull() is { } recordErr)
-            throw new Exception($"Failed to parse webServiceMain record: {recordErr}");
+        if (entryDeclRecordResult.IsErrOrNull() is { } recordErr)
+            return "Failed to parse declaration: " + recordErr;
 
-        if (webServiceMainRecordResult.IsOkOrNull() is not { } webServiceMainRecord)
+        if (entryDeclRecordResult.IsOkOrNull() is not { } webServiceMainRecord)
         {
-            throw new Exception("Unexpected return type: " + webServiceMainRecordResult);
+            throw new Exception("Unexpected return type: " + entryDeclRecordResult);
         }
 
         var initField =
@@ -2301,24 +2325,33 @@ type alias LoadDependencyStruct =
 
         if (initField is null)
         {
-            throw new Exception("Missing init field in webServiceMain declaration");
+            return "Missing init field in declaration record";
         }
 
-        var initResult =
-            ParseWebServiceConfigInit(initField, elmCompilerCache, parseCache)
-            .Extract(err => throw new Exception("Failed parsing init function: " + err));
+        var parseInitResult =
+            ParseWebServiceConfigInit(initField, s_elmCompilerCache, s_parseCache);
+
+        if (parseInitResult.IsErrOrNull() is { } initErr)
+        {
+            return "Failed parsing init function: " + initErr;
+        }
+
+        if (parseInitResult.IsOkOrNull() is not { } initResult)
+        {
+            throw new Exception("Unexpected return type from parsing init function: " + parseInitResult);
+        }
 
         var subscriptionsField =
             webServiceMainRecord.FirstOrDefault(f => f.fieldName is "subscriptions").fieldValue;
 
         if (subscriptionsField is null)
         {
-            throw new Exception("Missing subscriptions field in webServiceMain declaration");
+            return "Missing subscriptions field in declaration record";
         }
 
         var subscriptionsFunctionRecord =
             ElmInteractiveEnvironment
-            .ParseFunctionRecordFromValueTagged(subscriptionsField, parseCache)
+            .ParseFunctionRecordFromValueTagged(subscriptionsField, s_parseCache)
             .Extract(err => throw new Exception("Failed parsing subscriptions function: " + err));
 
         return new WebServiceConfig(

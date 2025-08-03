@@ -27,7 +27,7 @@ public record struct StoreProvisionalReductionReport(
 public record struct ProcessAppConfig(
     PineValue AppConfigComponent);
 
-public sealed class PersistentProcessLiveRepresentation : IAsyncDisposable
+public sealed class PersistentProcessLive : IAsyncDisposable
 {
     private static readonly TimeSpan s_storeReductionIntervalDefault = TimeSpan.FromMinutes(10);
 
@@ -41,10 +41,6 @@ public sealed class PersistentProcessLiveRepresentation : IAsyncDisposable
 
     private readonly WebServiceInterface.WebServiceConfig _appConfigParsed;
 
-    private readonly MutatingWebServiceApp _mutatingWebServiceApp;
-
-    private readonly VolatileProcessHost _volatileProcessHost;
-
     private readonly IProcessStoreWriter _storeWriter;
 
     private (PineValue state, CompositionLogRecordInFile.CompositionEvent compositionLogEvent, string hashBase16)? _lastAppStatePersisted;
@@ -53,7 +49,7 @@ public sealed class PersistentProcessLiveRepresentation : IAsyncDisposable
 
     private DateTimeOffset StartTime { init; get; }
 
-    private readonly System.Threading.Timer _notifyTimeHasArrivedTimer;
+    private readonly ProcessLiveRepresentation _processLiveRepresentation;
 
     public record struct CompositionLogRecordWithResolvedDependencies(
         CompositionLogRecordInFile CompositionRecord,
@@ -72,12 +68,11 @@ public sealed class PersistentProcessLiveRepresentation : IAsyncDisposable
         TreeNodeWithStringPath? DeployAppConfigAndMigrateElmAppState = null,
         ApplyFunctionOnLiteralsAndStateEvent? ApplyFunctionOnLiteralsAndState = null);
 
-
     public record ApplyFunctionOnLiteralsAndStateEvent(
         PineValue Function,
         PineValue Arguments);
 
-    public static PersistentProcessLiveRepresentation Create(
+    public static PersistentProcessLive Create(
         ProcessAppConfig lastAppConfig,
         PineValue? lastAppState,
         IProcessStoreWriter storeWriter,
@@ -85,7 +80,7 @@ public sealed class PersistentProcessLiveRepresentation : IAsyncDisposable
         ElmAppInterfaceConfig? overrideElmAppInterfaceConfig = null,
         System.Threading.CancellationToken cancellationToken = default)
     {
-        return new PersistentProcessLiveRepresentation(
+        return new PersistentProcessLive(
             lastAppConfig,
             lastAppState,
             storeWriter,
@@ -94,7 +89,7 @@ public sealed class PersistentProcessLiveRepresentation : IAsyncDisposable
             cancellationToken);
     }
 
-    private PersistentProcessLiveRepresentation(
+    private PersistentProcessLive(
         ProcessAppConfig lastAppConfig,
         PineValue? lastAppState,
         IProcessStoreWriter storeWriter,
@@ -112,64 +107,31 @@ public sealed class PersistentProcessLiveRepresentation : IAsyncDisposable
                 lastAppConfig.AppConfigComponent,
                 overrideElmAppInterfaceConfig);
 
-        _mutatingWebServiceApp =
-            new MutatingWebServiceApp(_appConfigParsed);
+        var progressWriter =
+            new DelegatingProgressWriter(
+                DelegateFunctionApplications: EnsurePersisted,
+                DelegateStoreReduction: (value) => StoreAppStateResetAndReduction(value));
 
-        _volatileProcessHost =
-            new VolatileProcessHost([lastAppConfig.AppConfigComponent]);
-
-        if (lastAppState is not null)
-        {
-            _mutatingWebServiceApp.ResetAppState(lastAppState);
-        }
-
-        _notifyTimeHasArrivedTimer = new System.Threading.Timer(
-            callback: _ =>
-            {
-                if (cancellationToken.IsCancellationRequested)
-                {
-                    _notifyTimeHasArrivedTimer?.Dispose();
-                    return;
-                }
-
-                ProcessElmAppCmdsAsync().Wait();
-
-                ProcessEventTimeHasArrived(getDateTimeOffset());
-            },
-            state: null,
-            dueTime: TimeSpan.Zero,
-            period: TimeSpan.FromMilliseconds(100));
-
-        ProcessEventTimeHasArrived(getDateTimeOffset());
+        _processLiveRepresentation =
+            ProcessLiveRepresentation.Create(
+                lastAppConfig: lastAppConfig,
+                lastAppState: lastAppState,
+                progressWriter: progressWriter,
+                getDateTimeOffset: getDateTimeOffset,
+                overrideElmAppInterfaceConfig: overrideElmAppInterfaceConfig,
+                cancellationToken: cancellationToken);
     }
 
     public async System.Threading.Tasks.Task<WebServiceInterface.HttpResponse> ProcessHttpRequestAsync(
         WebServiceInterface.HttpRequestEventStruct requestEvent)
     {
-        var response =
-            await _mutatingWebServiceApp.HttpRequestSendAsync(requestEvent);
-
-        await ProcessElmAppCmdsAsync();
-
-        return response;
+        return await _processLiveRepresentation.ProcessHttpRequestAsync(requestEvent);
     }
 
-    public void ProcessEventTimeHasArrived(DateTimeOffset currentTime)
+    private void EnsurePersisted(
+        IReadOnlyList<ApplyUpdateReport<WebServiceInterface.Command>> reports)
     {
-        _mutatingWebServiceApp.UpdateForPosixTime(
-            posixTimeMilli: currentTime.ToUnixTimeMilliseconds());
-    }
-
-    private async System.Threading.Tasks.Task ProcessElmAppCmdsAsync()
-    {
-        EnsurePersisted();
-
-        await _volatileProcessHost.ExchangeAsync(_mutatingWebServiceApp);
-    }
-
-    private void EnsurePersisted()
-    {
-        foreach (var applyFuncReport in _mutatingWebServiceApp.DequeueApplyFunctionReports())
+        foreach (var applyFuncReport in reports)
         {
             var elmAppState = applyFuncReport.ResponseState;
 
@@ -384,8 +346,7 @@ public sealed class PersistentProcessLiveRepresentation : IAsyncDisposable
         System.Threading.Tasks.Task TaskStoringReduction);
 
     private StoreAppStateResetAndReductionReport
-        StoreAppStateResetAndReduction(
-        PineValue elmAppState)
+        StoreAppStateResetAndReduction(PineValue elmAppState)
     {
         var appStateHash =
             _storeWriter.StoreComponent(elmAppState);
@@ -597,7 +558,7 @@ public sealed class PersistentProcessLiveRepresentation : IAsyncDisposable
     }
 
     public record RestoreFromCompositionEventSequenceResult(
-        PersistentProcessLiveRepresentation process,
+        PersistentProcessLive process,
         InterfaceToHost.BackendEventResponseStruct? initOrMigrateCmds);
 
     public static Result<string, RestoreFromCompositionEventSequenceResult>
@@ -1072,10 +1033,10 @@ public sealed class PersistentProcessLiveRepresentation : IAsyncDisposable
     public (CompositionLogRecordInFile.CompositionEvent compositionLogEvent, string) ResetAppStateIgnoringTypeChecking(
         PineValue appState)
     {
+        _processLiveRepresentation.ResetAppStateIgnoringTypeChecking(appState);
+
         lock (_processLock)
         {
-            _mutatingWebServiceApp.ResetAppState(appState);
-
             var storeReductionReport =
                 StoreAppStateResetAndReduction(appState);
 
@@ -1085,7 +1046,7 @@ public sealed class PersistentProcessLiveRepresentation : IAsyncDisposable
 
     public PineValue GetAppStateOnMainBranch()
     {
-        return _mutatingWebServiceApp.AppState;
+        return _processLiveRepresentation.GetAppStateOnMainBranch();
     }
 
     public Result<string, JsonElement> GetAppStateOnMainBranchAsJson()
@@ -1102,7 +1063,7 @@ public sealed class PersistentProcessLiveRepresentation : IAsyncDisposable
     public Result<string, string> GetAppStateOnMainBranchAsJson(
         PineVM pineVM)
     {
-        var appState = _mutatingWebServiceApp.AppState;
+        var appState = _processLiveRepresentation.GetAppStateOnMainBranch();
 
         var jsonStringResult =
             _appConfigParsed.JsonAdapter.EncodeAppStateAsJsonString(appState, pineVM);
@@ -1129,7 +1090,7 @@ public sealed class PersistentProcessLiveRepresentation : IAsyncDisposable
         {
             var clock = System.Diagnostics.Stopwatch.StartNew();
 
-            var appState = _mutatingWebServiceApp.AppState;
+            var appState = _processLiveRepresentation.GetAppStateOnMainBranch();
 
             var pineVMCache = new PineVMCache();
 
@@ -1206,9 +1167,10 @@ public sealed class PersistentProcessLiveRepresentation : IAsyncDisposable
                         " did not return a new app state.";
                 }
 
-                _mutatingWebServiceApp.ResetAppState(appStateReturned);
+                _processLiveRepresentation.ResetAppStateIgnoringTypeChecking(appStateReturned);
 
-                StoreAppStateResetAndReduction(appStateReturned);
+                var storeReductionReport =
+                    StoreAppStateResetAndReduction(appStateReturned);
 
                 committedResultingState = true;
             }
@@ -1304,8 +1266,6 @@ public sealed class PersistentProcessLiveRepresentation : IAsyncDisposable
 
     public async System.Threading.Tasks.ValueTask DisposeAsync()
     {
-        await _notifyTimeHasArrivedTimer.DisposeAsync();
-
-        await _volatileProcessHost.DisposeAsync();
+        await _processLiveRepresentation.DisposeAsync();
     }
 }

@@ -94,7 +94,7 @@ public class StartupAdminInterface
     }
 
     public record PublicHostProcess(
-        PersistentProcessLiveRepresentation ProcessLiveRepresentation,
+        PersistentProcessLive ProcessLiveRepresentation,
         AspHostConfig AspHostConfig,
         IHost WebHost);
 
@@ -251,7 +251,7 @@ public class StartupAdminInterface
                 logger.LogInformation("Begin to build the process live representation.");
 
                 var restoreProcessResult =
-                    PersistentProcessLiveRepresentation.LoadFromStoreAndRestoreProcess(
+                    PersistentProcessLive.LoadFromStoreAndRestoreProcess(
                         new ProcessStoreReaderInFileStore(processStoreFileStore),
                         processStoreWriter,
                         applicationStoppingCancellationTokenSource.Token,
@@ -583,7 +583,7 @@ public class StartupAdminInterface
 
         apiRoutes =
         [
-                new ApiRoute
+            new ApiRoute
                     (
                         path : PathApiGetDeployedAppConfig,
                         methods : ImmutableDictionary<string, ApiRouteMethodConfig>.Empty
@@ -901,7 +901,7 @@ public class StartupAdminInterface
                 var getFilesForRestoreStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
                 var filesForRestore =
-                    PersistentProcessLiveRepresentation.GetFilesForRestoreProcess(
+                    PersistentProcessLive.GetFilesForRestoreProcess(
                         processStoreFileStore).files
                     .Select(filePathAndContent => filePathAndContent.Key)
                     .ToImmutableHashSet(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
@@ -1157,14 +1157,15 @@ public class StartupAdminInterface
 
         var logEntries = new List<StringMessageWithTimeMilli>();
 
-        var testContinueResult = PersistentProcessLiveRepresentation.TestContinueWithCompositionEvent(
-            compositionLogEvent: compositionLogEvent,
-            fileStoreReader: processStoreFileStore,
-            logger: message =>
-            {
-                logEntries.Add(new StringMessageWithTimeMilli(message, totalStopwatch.ElapsedMilliseconds));
-                testContinueLogger?.Invoke(message);
-            });
+        var testContinueResult =
+            PersistentProcessLive.TestContinueWithCompositionEvent(
+                compositionLogEvent: compositionLogEvent,
+                fileStoreReader: processStoreFileStore,
+                logger: message =>
+                {
+                    logEntries.Add(new StringMessageWithTimeMilli(message, totalStopwatch.ElapsedMilliseconds));
+                    testContinueLogger?.Invoke(message);
+                });
 
         var testContinueTimeSpentMilli = totalStopwatch.ElapsedMilliseconds;
 

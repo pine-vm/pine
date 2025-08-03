@@ -34,7 +34,7 @@ public class StaticAppSnapshottingViaJsonTests
         {
             // Create first instance of StaticAppSnapshottingViaJson
             await using var appInstance =
-                new StaticAppSnapshottingState(
+                StaticAppSnapshottingState.Create(
                     webServiceAppSourceFiles: webServiceAppSourceFiles,
                     fileStore: fileStore,
                     logMessage: LogMessage,
@@ -87,7 +87,7 @@ public class StaticAppSnapshottingViaJsonTests
             logMessages.Clear();
 
             await using var appInstance =
-                new StaticAppSnapshottingState(
+                StaticAppSnapshottingState.Create(
                     webServiceAppSourceFiles: webServiceAppSourceFiles,
                     fileStore: fileStore,
                     logMessage: LogMessage,
@@ -135,7 +135,7 @@ public class StaticAppSnapshottingViaJsonTests
 
             // Setup new instance using same store
             await using var appInstance =
-                new StaticAppSnapshottingState(
+                StaticAppSnapshottingState.Create(
                     webServiceAppSourceFiles: webServiceAppSourceFiles,
                     fileStore: fileStore,
                     logMessage: LogMessage,
