@@ -3,6 +3,7 @@ using Pine.Core;
 using Pine.Core.Elm;
 using Pine.Core.Internal;
 using Pine.Core.Json;
+using Pine.Core.PineVM;
 using Pine.Core.PopularEncodings;
 using System;
 using System.Buffers.Binary;
@@ -1287,14 +1288,14 @@ public class Precompiled
 
         if (charValue is not PineValue.BlobValue charBlob || charBlob.Bytes.Length < 1)
         {
-            return PineVMValues.FalseValue;
+            return PineKernelValues.FalseValue;
         }
 
         for (var i = 0; i < charBlob.Bytes.Length - 1; ++i)
         {
             if (charBlob.Bytes.Span[i] is not 0)
             {
-                return PineVMValues.FalseValue;
+                return PineKernelValues.FalseValue;
             }
         }
 
@@ -1307,9 +1308,9 @@ public class Precompiled
         return
             isLower
             ?
-            PineVMValues.TrueValue
+            PineKernelValues.TrueValue
             :
-            PineVMValues.FalseValue;
+            PineKernelValues.FalseValue;
     }
 
     static PineValue CharIsUpper(
@@ -1321,14 +1322,14 @@ public class Precompiled
 
         if (charValue is not PineValue.BlobValue charBlob || charBlob.Bytes.Length < 1)
         {
-            return PineVMValues.FalseValue;
+            return PineKernelValues.FalseValue;
         }
 
         for (var i = 0; i < charBlob.Bytes.Length - 1; ++i)
         {
             if (charBlob.Bytes.Span[i] is not 0)
             {
-                return PineVMValues.FalseValue;
+                return PineKernelValues.FalseValue;
             }
         }
 
@@ -1341,9 +1342,9 @@ public class Precompiled
         return
             isUpper
             ?
-            PineVMValues.TrueValue
+            PineKernelValues.TrueValue
             :
-            PineVMValues.FalseValue;
+            PineKernelValues.FalseValue;
     }
 
     static PineValue BytesEncode_encodeCharsAsBlobHelp(
@@ -2379,7 +2380,7 @@ public class Precompiled
                 return Tag_EQ_Value;
             }
 
-            if (KernelFunction.int_is_sorted_asc(PineValue.List([leftProduct, rightProduct])) == PineVMValues.TrueValue)
+            if (KernelFunction.int_is_sorted_asc(PineValue.List([leftProduct, rightProduct])) == PineKernelValues.TrueValue)
             {
                 return Tag_LT_Value;
             }
@@ -2401,7 +2402,7 @@ public class Precompiled
                 return Tag_EQ_Value;
             }
 
-            if (KernelFunction.int_is_sorted_asc(PineValue.List([numA, rightProduct])) == PineVMValues.TrueValue)
+            if (KernelFunction.int_is_sorted_asc(PineValue.List([numA, rightProduct])) == PineKernelValues.TrueValue)
             {
                 return Tag_LT_Value;
             }
@@ -2423,7 +2424,7 @@ public class Precompiled
                 return Tag_EQ_Value;
             }
 
-            if (KernelFunction.int_is_sorted_asc(PineValue.List([leftProduct, numB])) == PineVMValues.TrueValue)
+            if (KernelFunction.int_is_sorted_asc(PineValue.List([leftProduct, numB])) == PineKernelValues.TrueValue)
             {
                 return Tag_LT_Value;
             }
@@ -2436,7 +2437,7 @@ public class Precompiled
             return CompareLists(a, b);
         }
 
-        if (KernelFunction.int_is_sorted_asc(PineValue.List([a, b])) == PineVMValues.TrueValue)
+        if (KernelFunction.int_is_sorted_asc(PineValue.List([a, b])) == PineKernelValues.TrueValue)
         {
             return Tag_LT_Value;
         }
@@ -2584,7 +2585,7 @@ public class Precompiled
         return
             stringA == stringB
             ? Tag_EQ_Value
-            : KernelFunction.int_is_sorted_asc(PineValue.List([stringA, stringB])) == PineVMValues.TrueValue
+            : KernelFunction.int_is_sorted_asc(PineValue.List([stringA, stringB])) == PineKernelValues.TrueValue
             ? Tag_LT_Value
             : Tag_GT_Value;
     }
@@ -2604,7 +2605,7 @@ public class Precompiled
         var (isEq, stackFrameCount) = BasicsEqRecursive(a, b);
 
         return new PrecompiledResult.FinalValue(
-            isEq ? PineVMValues.TrueValue : PineVMValues.FalseValue,
+            isEq ? PineKernelValues.TrueValue : PineKernelValues.FalseValue,
             StackFrameCount: stackFrameCount);
     }
 
@@ -2794,7 +2795,7 @@ public class Precompiled
         }
 
         return new PrecompiledResult.FinalValue(
-            PineVMValues.FalseValue,
+            PineKernelValues.FalseValue,
             StackFrameCount: 0);
     }
 
@@ -2811,13 +2812,13 @@ public class Precompiled
             if (itemEq)
             {
                 return new PrecompiledResult.FinalValue(
-                    PineVMValues.TrueValue,
+                    PineKernelValues.TrueValue,
                     StackFrameCount: totalCount);
             }
         }
 
         return new PrecompiledResult.FinalValue(
-            PineVMValues.FalseValue,
+            PineKernelValues.FalseValue,
             StackFrameCount: totalCount);
     }
 
@@ -2958,7 +2959,7 @@ public class Precompiled
 
             var (isMember, _) = ListMember(item, newUnique.ToArray());
 
-            if (isMember != PineVMValues.TrueValue)
+            if (isMember != PineKernelValues.TrueValue)
             {
                 newUnique.Add(item);
             }
@@ -4090,7 +4091,7 @@ public class Precompiled
 
         PineVM.ApplyStepwise.StepResult step(PineValue itemResultValue)
         {
-            if (itemResultValue == PineVMValues.TrueValue)
+            if (itemResultValue == PineKernelValues.TrueValue)
             {
                 includedItems[includedItemCount] = itemsList.Elements.Span[itemIndex];
 
@@ -4273,7 +4274,7 @@ public class Precompiled
 
         if (itemsListValue.Elements.Length < 1)
         {
-            return () => new PrecompiledResult.FinalValue(PineVMValues.TrueValue, StackFrameCount: 0);
+            return () => new PrecompiledResult.FinalValue(PineKernelValues.TrueValue, StackFrameCount: 0);
         }
 
         if (ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(argumentMapFunction, parseCache)
@@ -4312,9 +4313,9 @@ public class Precompiled
 
         PineVM.ApplyStepwise.StepResult step(PineValue itemResultValue)
         {
-            if (itemResultValue != PineVMValues.TrueValue)
+            if (itemResultValue != PineKernelValues.TrueValue)
             {
-                return new PineVM.ApplyStepwise.StepResult.Complete(PineVMValues.FalseValue);
+                return new PineVM.ApplyStepwise.StepResult.Complete(PineKernelValues.FalseValue);
             }
 
             ++itemIndex;
@@ -4329,7 +4330,7 @@ public class Precompiled
             }
 
             return
-                new PineVM.ApplyStepwise.StepResult.Complete(PineVMValues.TrueValue);
+                new PineVM.ApplyStepwise.StepResult.Complete(PineKernelValues.TrueValue);
         }
 
         return
@@ -4359,7 +4360,7 @@ public class Precompiled
 
         if (itemsListValue.Elements.Length < 1)
         {
-            return () => new PrecompiledResult.FinalValue(PineVMValues.FalseValue, StackFrameCount: 0);
+            return () => new PrecompiledResult.FinalValue(PineKernelValues.FalseValue, StackFrameCount: 0);
         }
 
         if (ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(argumentMapFunction, parseCache)
@@ -4398,9 +4399,9 @@ public class Precompiled
 
         PineVM.ApplyStepwise.StepResult step(PineValue itemResultValue)
         {
-            if (itemResultValue == PineVMValues.TrueValue)
+            if (itemResultValue == PineKernelValues.TrueValue)
             {
-                return new PineVM.ApplyStepwise.StepResult.Complete(PineVMValues.TrueValue);
+                return new PineVM.ApplyStepwise.StepResult.Complete(PineKernelValues.TrueValue);
             }
 
             ++itemIndex;
@@ -4415,7 +4416,7 @@ public class Precompiled
             }
 
             return
-                new PineVM.ApplyStepwise.StepResult.Complete(PineVMValues.FalseValue);
+                new PineVM.ApplyStepwise.StepResult.Complete(PineKernelValues.FalseValue);
         }
 
         return

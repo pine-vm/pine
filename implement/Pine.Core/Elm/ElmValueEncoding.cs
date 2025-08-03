@@ -1,5 +1,5 @@
+using Pine.Core.PineVM;
 using Pine.Core.PopularEncodings;
-using Pine.PineVM;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -15,10 +15,10 @@ public static class ElmValueEncoding
     {
         ArgumentNullException.ThrowIfNull(pineValue);
 
-        if (pineValue == PineVMValues.TrueValue)
+        if (pineValue == PineKernelValues.TrueValue)
             return ElmValue.TrueValue;
 
-        if (pineValue == PineVMValues.FalseValue)
+        if (pineValue == PineKernelValues.FalseValue)
             return ElmValue.FalseValue;
 
         if (additionalReusableDecodings?.TryGetValue(pineValue, out var reused) ?? false)

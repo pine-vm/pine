@@ -1,7 +1,7 @@
 using Pine.Core;
 using Pine.Core.Elm;
+using Pine.Core.PineVM;
 using Pine.Core.PopularEncodings;
-using Pine.PineVM;
 using System;
 using System.Linq;
 
@@ -56,12 +56,12 @@ public class ElmValueJsonValueEncoding
         {
             if (elmTag.TagName is "True")
             {
-                return ("BoolValue", PineVMValues.TrueValue);
+                return ("BoolValue", PineKernelValues.TrueValue);
             }
 
             if (elmTag.TagName is "False")
             {
-                return ("BoolValue", PineVMValues.FalseValue);
+                return ("BoolValue", PineKernelValues.FalseValue);
             }
 
             /*

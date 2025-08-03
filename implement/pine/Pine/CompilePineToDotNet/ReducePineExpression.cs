@@ -1,4 +1,5 @@
 using Pine.Core;
+using Pine.Core.PineVM;
 using Pine.Core.PopularEncodings;
 using Pine.PineVM;
 using System;
@@ -163,7 +164,7 @@ public class ReducePineExpression
                 "Unexpected result type from evaluating condition: " + evalConditionResult);
         }
 
-        if (conditionOk == PineVMValues.TrueValue)
+        if (conditionOk == PineKernelValues.TrueValue)
         {
             return TryEvaluateExpressionIndependent(conditionalExpr.TrueBranch);
         }
@@ -287,7 +288,7 @@ public class ReducePineExpression
                                         {
                                             if (listConcreteValues[i] != listConcreteValues[0])
                                             {
-                                                return Expression.LiteralInstance(PineVMValues.FalseValue);
+                                                return Expression.LiteralInstance(PineKernelValues.FalseValue);
                                             }
                                         }
                                     }
@@ -322,7 +323,7 @@ public class ReducePineExpression
                                             if (itemFixedLength < listLengthLowerBound ||
                                                 (prevItemFixedLength.HasValue && itemFixedLength.Value != prevItemFixedLength.Value))
                                             {
-                                                return Expression.LiteralInstance(PineVMValues.FalseValue);
+                                                return Expression.LiteralInstance(PineKernelValues.FalseValue);
                                             }
 
                                             prevItemFixedLength = itemFixedLength;
@@ -599,7 +600,7 @@ public class ReducePineExpression
                         if (TryEvaluateExpressionIndependent(conditional.Condition).IsOkOrNull() is { } conditionValue)
                         {
                             return
-                                conditionValue == PineVMValues.TrueValue
+                                conditionValue == PineKernelValues.TrueValue
                                 ?
                                 conditional.TrueBranch
                                 :

@@ -1,5 +1,5 @@
+using Pine.Core.PineVM;
 using Pine.Core.PopularEncodings;
-using Pine.PineVM;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -35,17 +35,17 @@ public static class KernelFunction
             var listItems = listValue.Elements.Span;
 
             if (listItems.Length < 1)
-                return PineVMValues.TrueValue;
+                return PineKernelValues.TrueValue;
 
             var firstItem = listItems[0];
 
             for (var i = 1; i < listItems.Length; ++i)
             {
                 if (!listItems[i].Equals(firstItem))
-                    return PineVMValues.FalseValue;
+                    return PineKernelValues.FalseValue;
             }
 
-            return PineVMValues.TrueValue;
+            return PineKernelValues.TrueValue;
         }
 
         if (value is PineValue.BlobValue blobValue)
@@ -53,9 +53,9 @@ public static class KernelFunction
             return
                 BlobAllBytesEqual(blobValue.Bytes)
                 ?
-                PineVMValues.TrueValue
+                PineKernelValues.TrueValue
                 :
-                PineVMValues.FalseValue;
+                PineKernelValues.FalseValue;
         }
 
         throw new NotImplementedException(
@@ -653,6 +653,6 @@ public static class KernelFunction
 
     public static PineValue ValueFromBool(bool b) =>
         b ?
-        PineVMValues.TrueValue :
-        PineVMValues.FalseValue;
+        PineKernelValues.TrueValue :
+        PineKernelValues.FalseValue;
 }

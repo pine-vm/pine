@@ -1558,7 +1558,7 @@ public class PineVM : IPineVM
                             var areEqual = left == right;
 
                             currentFrame.PushInstructionResult(
-                                areEqual ? PineVMValues.TrueValue : PineVMValues.FalseValue);
+                                areEqual ? PineKernelValues.TrueValue : PineKernelValues.FalseValue);
 
                             continue;
                         }
@@ -1574,7 +1574,7 @@ public class PineVM : IPineVM
                             var areEqual = left == right;
 
                             currentFrame.PushInstructionResult(
-                                areEqual ? PineVMValues.TrueValue : PineVMValues.FalseValue);
+                                areEqual ? PineKernelValues.TrueValue : PineKernelValues.FalseValue);
 
                             continue;
                         }
@@ -1587,7 +1587,7 @@ public class PineVM : IPineVM
                             var areEqual = left == right;
 
                             currentFrame.PushInstructionResult(
-                                areEqual ? PineVMValues.FalseValue : PineVMValues.TrueValue);
+                                areEqual ? PineKernelValues.FalseValue : PineKernelValues.TrueValue);
 
                             continue;
                         }
@@ -1603,7 +1603,7 @@ public class PineVM : IPineVM
                             var areEqual = left == right;
 
                             currentFrame.PushInstructionResult(
-                                areEqual ? PineVMValues.FalseValue : PineVMValues.TrueValue);
+                                areEqual ? PineKernelValues.FalseValue : PineKernelValues.TrueValue);
 
                             continue;
                         }
@@ -1646,7 +1646,7 @@ public class PineVM : IPineVM
                             var areEqual = lengthValue == testedLength;
 
                             currentFrame.PushInstructionResult(
-                                areEqual ? PineVMValues.TrueValue : PineVMValues.FalseValue);
+                                areEqual ? PineKernelValues.TrueValue : PineKernelValues.FalseValue);
 
                             continue;
                         }
@@ -2089,8 +2089,8 @@ public class PineVM : IPineVM
                             {
                                 resultValue =
                                     leftInt < rightInt ?
-                                    PineVMValues.TrueValue :
-                                    PineVMValues.FalseValue;
+                                    PineKernelValues.TrueValue :
+                                    PineKernelValues.FalseValue;
                             }
 
                             currentFrame.PushInstructionResult(resultValue);
@@ -2110,8 +2110,8 @@ public class PineVM : IPineVM
                             {
                                 resultValue =
                                     leftInt <= rightInt ?
-                                    PineVMValues.TrueValue :
-                                    PineVMValues.FalseValue;
+                                    PineKernelValues.TrueValue :
+                                    PineKernelValues.FalseValue;
                             }
 
                             currentFrame.PushInstructionResult(resultValue);
@@ -2133,8 +2133,8 @@ public class PineVM : IPineVM
                             {
                                 resultValue =
                                     leftInt < right ?
-                                    PineVMValues.TrueValue :
-                                    PineVMValues.FalseValue;
+                                    PineKernelValues.TrueValue :
+                                    PineKernelValues.FalseValue;
                             }
 
                             currentFrame.PushInstructionResult(resultValue);
@@ -2156,8 +2156,8 @@ public class PineVM : IPineVM
                             {
                                 resultValue =
                                     leftInt <= right ?
-                                    PineVMValues.TrueValue :
-                                    PineVMValues.FalseValue;
+                                    PineKernelValues.TrueValue :
+                                    PineKernelValues.FalseValue;
                             }
 
                             currentFrame.PushInstructionResult(resultValue);
@@ -2179,8 +2179,8 @@ public class PineVM : IPineVM
                             {
                                 resultValue =
                                     leftInt <= right ?
-                                    PineVMValues.TrueValue :
-                                    PineVMValues.FalseValue;
+                                    PineKernelValues.TrueValue :
+                                    PineKernelValues.FalseValue;
                             }
 
                             currentFrame.PushInstructionResult(resultValue);
@@ -2203,8 +2203,8 @@ public class PineVM : IPineVM
                             {
                                 resultValue =
                                     leftInt >= right ?
-                                    PineVMValues.TrueValue :
-                                    PineVMValues.FalseValue;
+                                    PineKernelValues.TrueValue :
+                                    PineKernelValues.FalseValue;
                             }
 
                             currentFrame.PushInstructionResult(resultValue);
@@ -2227,8 +2227,8 @@ public class PineVM : IPineVM
                             {
                                 resultValue =
                                     leftInt >= right ?
-                                    PineVMValues.TrueValue :
-                                    PineVMValues.FalseValue;
+                                    PineKernelValues.TrueValue :
+                                    PineKernelValues.FalseValue;
                             }
 
                             currentFrame.PushInstructionResult(resultValue);
@@ -2389,7 +2389,7 @@ public class PineVM : IPineVM
                         {
                             var conditionValue = currentFrame.PopTopmostFromStack();
 
-                            if (conditionValue == PineVMValues.TrueValue)
+                            if (conditionValue == PineKernelValues.TrueValue)
                             {
                                 var jumpOffset =
                                     currentInstruction.JumpOffset
@@ -2616,11 +2616,11 @@ public class PineVM : IPineVM
                             var right = currentFrame.PopTopmostFromStack();
                             var left = currentFrame.PopTopmostFromStack();
 
-                            var resultValue = PineVMValues.FalseValue;
+                            var resultValue = PineKernelValues.FalseValue;
 
-                            if (left == PineVMValues.TrueValue && right == PineVMValues.TrueValue)
+                            if (left == PineKernelValues.TrueValue && right == PineKernelValues.TrueValue)
                             {
-                                resultValue = PineVMValues.TrueValue;
+                                resultValue = PineKernelValues.TrueValue;
                             }
 
                             currentFrame.PushInstructionResult(resultValue);
@@ -2689,7 +2689,7 @@ public class PineVM : IPineVM
 
                             var value = currentFrame.PopTopmostFromStack();
 
-                            var resultValue = PineVMValues.FalseValue;
+                            var resultValue = PineKernelValues.FalseValue;
 
                             if (prefixValue is PineValue.BlobValue prefixBlob)
                             {
@@ -2700,7 +2700,7 @@ public class PineVM : IPineVM
                                     if (valueBytes.Length >= prefixBlob.Bytes.Length &&
                                         valueBytes[..prefixBlob.Bytes.Length].SequenceEqual(prefixBlob.Bytes.Span))
                                     {
-                                        resultValue = PineVMValues.TrueValue;
+                                        resultValue = PineKernelValues.TrueValue;
                                     }
                                 }
                             }
@@ -2724,7 +2724,7 @@ public class PineVM : IPineVM
 
                                         if (allItemsMatch)
                                         {
-                                            resultValue = PineVMValues.TrueValue;
+                                            resultValue = PineKernelValues.TrueValue;
                                         }
                                     }
                                 }
@@ -3165,7 +3165,7 @@ public class PineVM : IPineVM
                 environment,
                 stackPrevValues: stackPrevValues);
 
-        if (conditionValue == PineVMValues.TrueValue)
+        if (conditionValue == PineKernelValues.TrueValue)
         {
             return EvaluateExpressionDefaultLessStack(
                 conditional.TrueBranch,
