@@ -138,31 +138,50 @@ public class PublicAppState(
     /// </summary>
     public async Task HandleRequestAsync(HttpContext context)
     {
+        var httpRequest =
+            await Asp.AsInterfaceHttpRequestAsync(context.Request);
+
+        var httpResponse =
+            await HandleRequestAsync(
+                httpRequest,
+                new WebServiceInterface.HttpRequestContext(
+                    ClientAddress: context.Connection.RemoteIpAddress?.ToString()),
+                httpRequestEventSizeLimit: serverAndElmAppConfig.ServerConfig?.httpRequestEventSizeLimit,
+                ApplicationStoppingCancellationTokenSource.Token);
+
+        await Asp.SendHttpResponseAsync(context, httpResponse);
+    }
+
+    /// <summary>
+    /// Handles an HTTP request.
+    /// </summary>
+    public async Task<WebServiceInterface.HttpResponse> HandleRequestAsync(
+        WebServiceInterface.HttpRequestProperties httpRequest,
+        WebServiceInterface.HttpRequestContext httpRequestContext,
+        int? httpRequestEventSizeLimit,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        if (httpRequestEventSizeLimit is { } limit &&
+            EstimateHttpRequestEventSize(httpRequest) > limit)
+        {
+            return
+                new WebServiceInterface.HttpResponse(
+                    StatusCode: StatusCodes.Status413RequestEntityTooLarge,
+                    Body: System.Text.Encoding.UTF8.GetBytes("Request is too large."),
+                    HeadersToAdd: []);
+        }
+
         var currentDateTime = getDateTimeOffset();
         var timeMilli = currentDateTime.ToUnixTimeMilliseconds();
         var httpRequestIndex = System.Threading.Interlocked.Increment(ref _nextHttpRequestIndex);
 
         var httpRequestId = timeMilli + "-" + httpRequestIndex;
 
-        var httpRequest =
-            await Asp.AsInterfaceHttpRequestAsync(context.Request);
-
-        if (serverAndElmAppConfig.ServerConfig?.httpRequestEventSizeLimit is { } httpRequestEventSizeLimit)
-        {
-            if (httpRequestEventSizeLimit < EstimateHttpRequestEventSize(httpRequest))
-            {
-                context.Response.StatusCode = StatusCodes.Status413RequestEntityTooLarge;
-                await context.Response.WriteAsync("Request is too large.");
-                return;
-            }
-        }
-
         var httpRequestEvent =
             new WebServiceInterface.HttpRequestEventStruct(
                 HttpRequestId: httpRequestId.ToString(),
                 PosixTimeMilli: timeMilli,
-                new WebServiceInterface.HttpRequestContext(
-                    ClientAddress: context.Connection.RemoteIpAddress?.ToString()),
+                httpRequestContext,
                 Request: httpRequest);
 
         var task = serverAndElmAppConfig.ProcessHttpRequestAsync(httpRequestEvent);
@@ -196,51 +215,13 @@ public class PublicAppState(
             var httpResponse =
                 GetResponseFromAppOrTimeout(TimeSpan.FromMinutes(4));
 
-            if (httpResponse is null)
-            {
-                await Task.Delay(TimeSpan.FromMilliseconds(30));
-                continue;
-            }
+            if (httpResponse is not null)
+                return httpResponse;
 
-            string? headerContentType = null;
+            cancellationToken.ThrowIfCancellationRequested();
 
-            if (httpResponse.HeadersToAdd is { } headersToAdd)
-            {
-                foreach (var header in headersToAdd)
-                {
-                    if (header.Name?.Equals("content-type", StringComparison.OrdinalIgnoreCase) ?? false)
-                    {
-                        if (header.Values is { } values && values.Count > 0)
-                        {
-                            headerContentType = header.Values[0];
-                        }
-
-                        break;
-                    }
-                }
-            }
-
-            context.Response.StatusCode = httpResponse.StatusCode;
-
-            foreach (var headerToAdd in httpResponse.HeadersToAdd ?? [])
-            {
-                context.Response.Headers[headerToAdd.Name] =
-                    new Microsoft.Extensions.Primitives.StringValues([.. headerToAdd.Values]);
-            }
-
-            if (headerContentType is not null)
-                context.Response.ContentType = headerContentType;
-
-            context.Response.Headers.XPoweredBy = "Pine";
-
-            var contentAsByteArray = httpResponse.Body;
-
-            context.Response.ContentLength = contentAsByteArray?.Length ?? 0;
-
-            if (contentAsByteArray is not null)
-                await context.Response.Body.WriteAsync(contentAsByteArray.Value);
-
-            break;
+            await Task.Delay(TimeSpan.FromMilliseconds(30), cancellationToken);
+            continue;
         }
     }
 

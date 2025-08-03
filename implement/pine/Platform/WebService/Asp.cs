@@ -10,6 +10,9 @@ using System.Threading.Tasks;
 
 namespace ElmTime.Platform.WebService;
 
+/// <summary>
+/// Integrations for ASP.NET (https://learn.microsoft.com/en-us/aspnet/overview)
+/// </summary>
 public static class Asp
 {
     private class ClientsRateLimitStateContainer
@@ -108,6 +111,50 @@ public static class Asp
             Body: httpRequestBody,
             Headers: httpHeaders
         );
+    }
+
+    public static async Task SendHttpResponseAsync(
+        HttpContext httpContext,
+        Pine.Elm.Platform.WebServiceInterface.HttpResponse httpResponse)
+    {
+        httpContext.Response.StatusCode = httpResponse.StatusCode;
+
+        string? headerContentType = null;
+
+        if (httpResponse.HeadersToAdd is { } headersToAdd)
+        {
+            foreach (var headerToAdd in headersToAdd)
+            {
+                if (headerToAdd.Name.Equals("content-type", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (headerToAdd.Values is { } values && values.Count > 0)
+                    {
+                        headerContentType = headerToAdd.Values[0];
+                    }
+
+                    break;
+                }
+
+                httpContext.Response.Headers[headerToAdd.Name] =
+                    new Microsoft.Extensions.Primitives.StringValues([.. headerToAdd.Values]);
+            }
+        }
+
+        if (headerContentType is not null)
+            httpContext.Response.ContentType = headerContentType;
+
+        httpContext.Response.Headers.XPoweredBy = "Pine";
+
+        if (httpResponse.Body is { } contentAsByteArray)
+        {
+            httpContext.Response.ContentLength = contentAsByteArray.Length;
+
+            await httpContext.Response.Body.WriteAsync(contentAsByteArray);
+        }
+        else
+        {
+            httpContext.Response.ContentLength = 0;
+        }
     }
 
     public static async Task<ReadOnlyMemory<byte>> CopyRequestBodyAsync(HttpRequest httpRequest)
