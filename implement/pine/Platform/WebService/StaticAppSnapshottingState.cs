@@ -208,6 +208,8 @@ public sealed record StaticAppSnapshottingState : IAsyncDisposable
     private void EnsurePersisted(
         Action<string>? logMessage)
     {
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+
         lock (_processAndStoreLock)
         {
             var newAppStateSnapshot = _process.GetAppStateOnMainBranch();
@@ -218,16 +220,18 @@ public sealed record StaticAppSnapshottingState : IAsyncDisposable
 
                 PineValueBinaryEncoding.Encode(stream, newAppStateSnapshot);
 
-                logMessage?.Invoke(
-                    "App state snapshot updated, new size: " +
-                    CommandLineInterface.FormatIntegerForDisplay(stream.Length) +
-                    " bytes.");
-
                 stream.Seek(0, System.IO.SeekOrigin.Begin);
 
                 _fileStore.SetFileContent(
                     _appStateSnapshotFilePath,
                     fileContent: stream.ToArray());
+
+                logMessage?.Invoke(
+                    "App state snapshot updated in " +
+                    CommandLineInterface.FormatIntegerForDisplay(clock.ElapsedMilliseconds) +
+                    " ms, new size: " +
+                    CommandLineInterface.FormatIntegerForDisplay(stream.Length) +
+                    " bytes.");
 
                 _lastAppStateSnapshot = newAppStateSnapshot;
             }
