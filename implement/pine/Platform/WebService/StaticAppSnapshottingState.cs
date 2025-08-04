@@ -21,6 +21,8 @@ public sealed record StaticAppSnapshottingState : IAsyncDisposable
 
     private readonly PublicAppState _publicAppState;
 
+    private readonly WebServiceConfigJson? _serverConfig;
+
     private readonly IFileStore _fileStore;
 
     private PineValue? _lastAppStateSnapshot = null;
@@ -93,6 +95,7 @@ public sealed record StaticAppSnapshottingState : IAsyncDisposable
         CancellationToken cancellationToken)
     {
         _fileStore = fileStore;
+        _serverConfig = serverConfig;
 
         _webServiceAppHash =
             Convert.ToHexStringLower(PineValueHashTree.ComputeHash(webServiceCompiledModules).Span);
@@ -164,8 +167,7 @@ public sealed record StaticAppSnapshottingState : IAsyncDisposable
 
     public Task HandleRequestAsync(
         HttpContext context,
-        Action<string>? logMessage = null,
-        int? httpRequestEventSizeLimit = null)
+        Action<string>? logMessage = null)
     {
         return
             Asp.AsInterfaceHttpRequestAsync(context.Request)
@@ -187,7 +189,7 @@ public sealed record StaticAppSnapshottingState : IAsyncDisposable
                             httpRequestProperties,
                             new Elm.Platform.WebServiceInterface.HttpRequestContext(
                                 ClientAddress: context.Connection.RemoteIpAddress?.ToString()),
-                            httpRequestEventSizeLimit: httpRequestEventSizeLimit,
+                            httpRequestEventSizeLimit: _serverConfig?.httpRequestEventSizeLimit,
                             cancellationToken: context.RequestAborted).Result;
 
                     EnsurePersisted(logMessage);

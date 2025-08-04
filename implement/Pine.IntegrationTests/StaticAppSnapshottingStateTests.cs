@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using ElmTime.Platform.WebService;
 using Microsoft.AspNetCore.Http;
 using Pine.Core;
 using Pine.Elm.Platform;
@@ -178,6 +179,128 @@ public class StaticAppSnapshottingStateTests
 
             context.Response.StatusCode.Should().Be(200);
             responseBody.Should().Be("3", "Counter app should start fresh from initial state after failed restoration");
+        }
+    }
+
+    [Fact]
+    public async Task HttpRequestSizeLimit_integration_test()
+    {
+        var fileStoreDict = new FileStoreFromConcurrentDictionary();
+        var fileStore = new FileStoreFromWriterAndReader(fileStoreDict, fileStoreDict);
+
+        // Configure a small HTTP request size limit for testing
+        var serverConfig = new WebServiceConfigJson(httpRequestEventSizeLimit: 10_000);
+
+        var webServiceCompiled =
+            WebServiceInterface.CompiledModulesFromSourceFilesAndEntryFileName(
+                PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(TestSetup.CounterElmWebApp),
+                entryFileName: ["src", "Backend", "Main.elm"]);
+
+        var logMessages = new ConcurrentQueue<string>();
+        void LogMessage(string message) => logMessages.Enqueue(message);
+
+        using var cancellationTokenSource = new CancellationTokenSource();
+
+        await using var appInstance =
+            StaticAppSnapshottingState.Create(
+                webServiceCompiledModules: webServiceCompiled,
+                serverConfig: serverConfig,
+                fileStore: fileStore,
+                logMessage: LogMessage,
+                cancellationToken: cancellationTokenSource.Token);
+
+        // Test sequence: small, large, small HTTP requests
+
+        // First request: Small request (should succeed)
+        {
+            var context = new DefaultHttpContext();
+            context.Request.Method = "POST";
+            context.Request.Path = "/";
+            context.Request.ContentType = "text/plain";
+
+            var requestJson =
+                System.Text.Json.JsonSerializer.Serialize(
+                    new
+                    {
+                        addition = 1,
+                        other = new string('x', 1_000)
+                    });
+
+            var requestBytes = Encoding.UTF8.GetBytes(requestJson);
+
+            context.Request.Body = new MemoryStream(requestBytes);
+            context.Request.ContentLength = requestBytes.Length;
+            context.Response.Body = new MemoryStream();
+
+            await appInstance.HandleRequestAsync(context, LogMessage);
+
+            // Verify small request succeeds
+            context.Response.StatusCode.Should().Be(200, "Small HTTP request should succeed");
+
+            context.Response.Body.Seek(0, SeekOrigin.Begin);
+            using var reader = new StreamReader(context.Response.Body);
+            var responseBody = reader.ReadToEnd();
+            responseBody.Should().Be("1", "Counter app should return the added value");
+        }
+
+        // Second request: Large request (should be rejected)
+        {
+            var context = new DefaultHttpContext();
+            context.Request.Method = "POST";
+            context.Request.Path = "/";
+            context.Request.ContentType = "text/plain";
+
+            // Create a large JSON payload well over the limit
+            var largeContent = new string('x', 10_000); // 10000-character string
+
+            var requestJson =
+                System.Text.Json.JsonSerializer.Serialize(
+                    new
+                    {
+                        addition = 2,
+                        other = largeContent
+                    });
+
+            var requestBytes = Encoding.UTF8.GetBytes(requestJson);
+
+            context.Request.Body = new MemoryStream(requestBytes);
+            context.Request.ContentLength = requestBytes.Length;
+            context.Response.Body = new MemoryStream();
+
+            await appInstance.HandleRequestAsync(context, LogMessage);
+
+            // Verify large request is rejected with 413 status
+            context.Response.StatusCode.Should().Be(413, "Large HTTP request should be rejected with 413 Request Entity Too Large");
+
+            context.Response.Body.Seek(0, SeekOrigin.Begin);
+            using var reader = new StreamReader(context.Response.Body);
+            var responseBody = reader.ReadToEnd();
+            responseBody.Should().Be("Request is too large.", "Large request should return expected error message");
+        }
+
+        // Third request: Small request again (should succeed, proving service still works)
+        {
+            var context = new DefaultHttpContext();
+            context.Request.Method = "POST";
+            context.Request.Path = "/";
+            context.Request.ContentType = "text/plain";
+
+            var requestJson = System.Text.Json.JsonSerializer.Serialize(new { addition = 3 });
+            var requestBytes = Encoding.UTF8.GetBytes(requestJson);
+
+            context.Request.Body = new MemoryStream(requestBytes);
+            context.Request.ContentLength = requestBytes.Length;
+            context.Response.Body = new MemoryStream();
+
+            await appInstance.HandleRequestAsync(context, LogMessage);
+
+            // Verify small request succeeds again
+            context.Response.StatusCode.Should().Be(200, "Small HTTP request should succeed after large request rejection");
+
+            context.Response.Body.Seek(0, SeekOrigin.Begin);
+            using var reader = new StreamReader(context.Response.Body);
+            var responseBody = reader.ReadToEnd();
+            responseBody.Should().Be("4", "Counter app should return 1 + 3 = 4 (large request was rejected so counter state is preserved)");
         }
     }
 }
