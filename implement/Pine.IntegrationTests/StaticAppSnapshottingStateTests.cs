@@ -39,6 +39,7 @@ public class StaticAppSnapshottingStateTests
             await using var appInstance =
                 StaticAppSnapshottingState.Create(
                     webServiceCompiledModules: webServiceCompiled,
+                    serverConfig: null,
                     fileStore: fileStore,
                     logMessage: LogMessage,
                     cancellationToken: cancellationTokenSource.Token);
@@ -92,6 +93,7 @@ public class StaticAppSnapshottingStateTests
             await using var appInstance =
                 StaticAppSnapshottingState.Create(
                     webServiceCompiledModules: webServiceCompiled,
+                    serverConfig: null,
                     fileStore: fileStore,
                     logMessage: LogMessage,
                     cancellationToken: cancellationTokenSource.Token);
@@ -140,6 +142,7 @@ public class StaticAppSnapshottingStateTests
             await using var appInstance =
                 StaticAppSnapshottingState.Create(
                     webServiceCompiledModules: webServiceCompiled,
+                    serverConfig: null,
                     fileStore: fileStore,
                     logMessage: LogMessage,
                     cancellationToken: cancellationTokenSource.Token);

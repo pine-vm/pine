@@ -2,7 +2,6 @@ using ElmTime.Platform.WebService;
 using Microsoft.AspNetCore.Http;
 using Pine.Core;
 using Pine.Core.PopularEncodings;
-using Pine.Elm.Platform;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -36,11 +35,13 @@ public sealed record StaticAppSnapshottingState : IAsyncDisposable
 
     public static StaticAppSnapshottingState Create(
         TreeNodeWithStringPath webServiceAppSourceFiles,
+        WebServiceConfigJson? serverConfig,
         IFileStore fileStore,
         Action<string> logMessage,
         CancellationToken cancellationToken) =>
         Create(
             webServiceAppSourceFiles,
+            serverConfig: serverConfig,
             entryFileName: ["src", "Backend", "Main.elm"],
             fileStore: fileStore,
             logMessage: logMessage,
@@ -48,19 +49,21 @@ public sealed record StaticAppSnapshottingState : IAsyncDisposable
 
     public static StaticAppSnapshottingState Create(
         TreeNodeWithStringPath webServiceAppSourceFiles,
+        WebServiceConfigJson? serverConfig,
         IReadOnlyList<string> entryFileName,
         IFileStore fileStore,
         Action<string> logMessage,
         CancellationToken cancellationToken)
     {
         var webServiceCompiledModules =
-            WebServiceInterface.CompiledModulesFromSourceFilesAndEntryFileName(
+            Elm.Platform.WebServiceInterface.CompiledModulesFromSourceFilesAndEntryFileName(
                 webServiceAppSourceFiles,
                 entryFileName: entryFileName);
 
         return
             new StaticAppSnapshottingState(
                 webServiceCompiledModules,
+                serverConfig,
                 fileStore,
                 logMessage,
                 cancellationToken);
@@ -68,6 +71,7 @@ public sealed record StaticAppSnapshottingState : IAsyncDisposable
 
     public static StaticAppSnapshottingState Create(
         PineValue webServiceCompiledModules,
+        WebServiceConfigJson? serverConfig,
         IFileStore fileStore,
         Action<string> logMessage,
         CancellationToken cancellationToken)
@@ -75,6 +79,7 @@ public sealed record StaticAppSnapshottingState : IAsyncDisposable
         return
             new StaticAppSnapshottingState(
                 webServiceCompiledModules,
+                serverConfig,
                 fileStore,
                 logMessage,
                 cancellationToken);
@@ -82,6 +87,7 @@ public sealed record StaticAppSnapshottingState : IAsyncDisposable
 
     public StaticAppSnapshottingState(
         PineValue webServiceCompiledModules,
+        WebServiceConfigJson? serverConfig,
         IFileStore fileStore,
         Action<string> logMessage,
         CancellationToken cancellationToken)
@@ -95,7 +101,7 @@ public sealed record StaticAppSnapshottingState : IAsyncDisposable
             ["v-" + _webServiceAppHash[..8], AppStateSnapshotFileName];
 
         var webServiceConfig =
-            WebServiceInterface.ConfigFromCompiledModules(
+            Elm.Platform.WebServiceInterface.ConfigFromCompiledModules(
                 webServiceCompiledModules,
                 entryModuleName: "Backend.Main",
                 entryDeclName: "webServiceMain")
@@ -115,7 +121,7 @@ public sealed record StaticAppSnapshottingState : IAsyncDisposable
         _publicAppState =
             new PublicAppState(
                 serverAndElmAppConfig: new ServerAndElmAppConfig(
-                    ServerConfig: null,
+                    ServerConfig: serverConfig,
                     ProcessHttpRequestAsync: _process.ProcessHttpRequestAsync,
                     InitOrMigrateCmds: null,
                     DisableLetsEncrypt: true,
