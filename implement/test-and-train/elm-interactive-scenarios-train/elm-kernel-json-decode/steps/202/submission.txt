@@ -1,1 +1,1 @@
-1.Json.Decode.decodeString Json.Decode.value "{\"name\": \"Alice\", \"age\": 30}"
+Json.Decode.decodeString Json.Decode.value "{\"name\": \"Alice\", \"age\": 30}"
