@@ -1097,13 +1097,23 @@ If it is a high surrogate in [0xD800..0xDBFF], look for a following "\\uXXXX"
 as a low surrogate in [0xDC00..0xDFFF]. If both are found, combine them into
 a single codepoint (e.g. "\\uD83C\\uDF32" --> 🌲).
 -}
-parseUnicodeEscape : List Char -> Int -> List Char -> ( Result String (List Char), Int )
+-- Helper function to get a substring of specified length starting at offset
+getSubstringAt : String -> Int -> Int -> String
+getSubstringAt src offset length =
+    String.slice offset (offset + length) src
+
+
+parseUnicodeEscape : String -> Int -> List Char -> ( Result String (List Char), Int )
 parseUnicodeEscape source offset soFar =
     let
-        -- First, parse the 4 hex digits after the "\u"
+        -- Get the 4 hex characters after the "\u"
+        fourHexString : String
+        fourHexString =
+            getSubstringAt source offset 4
+
         fourHexChars : List Char
         fourHexChars =
-            List.take 4 (List.drop offset source)
+            String.toList fourHexString
 
         ( codeUnit, offsetAfterHex ) =
             convert1OrMoreHexadecimal 0 fourHexChars
@@ -1124,13 +1134,19 @@ parseUnicodeEscape source offset soFar =
         0xD800 <= hi && hi <= 0xDBFF
     then
         -- Possibly part of a surrogate pair; check the next 2 chars for "\u"
-        case List.take 2 (List.drop (offset + 4) source) of
-            [ '\\', 'u' ] ->
+        let
+            nextTwoString = getSubstringAt source (offset + 4) 2
+        in
+        if nextTwoString == "\\u" then
                 -- Parse the next 4 hex digits (the low surrogate)
                 let
+                    fourHexString2 : String
+                    fourHexString2 =
+                        getSubstringAt source (offset + 4 + 2) 4
+
                     fourHexChars2 : List Char
                     fourHexChars2 =
-                        List.take 4 (List.drop (offset + 4 + 2) source)
+                        String.toList fourHexString2
 
                     ( codeUnit2, offsetAfterHex2 ) =
                         convert1OrMoreHexadecimal 0 fourHexChars2
@@ -1173,12 +1189,12 @@ parseUnicodeEscape source offset soFar =
                         (offset + 4)
                         (soFar ++ [ Char.fromCode hi ])
 
-            _ ->
-                -- No second "\u"—so decode `hi` as-is.
-                parseJsonString
-                    source
-                    (offset + 4)
-                    (soFar ++ [ Char.fromCode hi ])
+        else
+            -- No second "\u"—so decode `hi` as-is.
+            parseJsonString
+                source
+                (offset + 4)
+                (soFar ++ [ Char.fromCode hi ])
 
     else
         -- Not a high surrogate, just parse `\uXXXX` as a single character
