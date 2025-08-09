@@ -132,7 +132,7 @@ public class TestElmInteractive
         var allSteps =
             scenariosResults
             .SelectMany(scenario => scenario.Value.StepsReports.Select(step => (scenario, step)))
-        .ToImmutableList();
+            .ToImmutableList();
 
         console.WriteLine(scenariosResults.Count + " scenario(s) resulted in " + allSteps.Count + " steps.");
 
@@ -175,8 +175,12 @@ public class TestElmInteractive
         {
             var scenarioId = failedScenario.Value.Key;
 
+            var scenario = scenarios.NamedDistinctScenarios[scenarioId];
+
             console.WriteLine(
-                "Failed " + failedScenario.Value.Count() + " step(s) in scenario " + scenarioId + ":",
+                "Failed " + failedScenario.Value.Count() +
+                " of " + scenario.Steps.Count +
+                " step(s) in scenario " + scenarioId + ":",
                 color: IConsole.TextColor.Red);
 
             foreach (var failedStep in failedScenario.Value)
@@ -236,7 +240,7 @@ public class TestElmInteractive
             parsedScenario.Steps
             .Select(sessionStep =>
             {
-                Result<InteractiveScenarioTestStepFailure, InteractiveScenarioTestStepSuccess> continueWithErrorMessage(
+                Result<InteractiveScenarioTestStepFailure, InteractiveScenarioTestStepSuccess> ContinueWithErrorMessage(
                     string errorMessage)
                 {
                     if (sessionStep.step.ExpectedErrorContains is { } expectedErrorContains)
@@ -267,7 +271,7 @@ public class TestElmInteractive
                         errorAsText: errorMessage);
                 }
 
-                Result<InteractiveScenarioTestStepFailure, InteractiveScenarioTestStepSuccess> getResult()
+                Result<InteractiveScenarioTestStepFailure, InteractiveScenarioTestStepSuccess> GetResult()
                 {
                     try
                     {
@@ -287,14 +291,14 @@ public class TestElmInteractive
                         return
                         submissionResult
                         .Unpack(
-                            fromErr: err => continueWithErrorMessage("Submission result has error: " + err),
+                            fromErr: err => ContinueWithErrorMessage("Submission result has error: " + err),
                             fromOk: submissionResultOk =>
                             {
                                 if (sessionStep.step.ExpectedResponse is { } expectedResponse)
                                 {
                                     if (submissionResultOk.InteractiveResponse?.DisplayText is not { } responseDisplayText)
                                     {
-                                        return continueWithErrorMessage(
+                                        return ContinueWithErrorMessage(
                                             "Expected response but got null as display text");
                                     }
 
@@ -337,11 +341,11 @@ public class TestElmInteractive
                     }
                     catch (Exception e)
                     {
-                        return continueWithErrorMessage("Runtime exception:\n" + e);
+                        return ContinueWithErrorMessage("Runtime exception:\n" + e);
                     }
                 }
 
-                return (sessionStep.stepName, getResult());
+                return (sessionStep.stepName, GetResult());
             })
             .ToImmutableList();
 
