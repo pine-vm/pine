@@ -38,6 +38,7 @@ module Json.Decode exposing
 
 import Array
 import Json.Encode exposing (Value(..))
+import String
 
 
 {-| A structured error describing exactly how the decoder failed. You can use
@@ -578,20 +579,15 @@ decodeString decoder jsonString =
 
 parseJsonStringToValue : String -> Result String Value
 parseJsonStringToValue jsonString =
-    let
-        jsonChars : List Char
-        jsonChars =
-            String.toList jsonString
-    in
-    case parseValue jsonChars 0 of
+    case parseValue jsonString 0 of
         ( Ok ok, consumed ) ->
             let
                 afterWhitespaceOffset : Int
                 afterWhitespaceOffset =
-                    skipWhitespace jsonChars consumed
+                    skipWhitespace jsonString consumed
             in
-            case List.take 1 (List.drop afterWhitespaceOffset jsonChars) of
-                [ c ] ->
+            case getCharAt jsonString afterWhitespaceOffset of
+                Just c ->
                     Err
                         ("Unexpected character at end of JSON, at offset "
                             ++ String.fromInt afterWhitespaceOffset
@@ -600,7 +596,7 @@ parseJsonStringToValue jsonString =
                             ++ "'"
                         )
 
-                _ ->
+                Nothing ->
                     Ok ok
 
         ( Err err, consumed ) ->
@@ -608,10 +604,53 @@ parseJsonStringToValue jsonString =
 
 
 type alias Parser a =
-    List Char -> Int -> ( Result String a, Int )
+    String -> Int -> ( Result String a, Int )
 
 
-parseValue : List Char -> Int -> ( Result String Value, Int )
+-- Helper function to get character at a specific offset in a String
+getCharAt : String -> Int -> Maybe Char
+getCharAt (String.String stringBlob) offset =
+    let
+        charBytes =
+            Pine_kernel.take
+                [ 4
+                , Pine_kernel.skip [ offset * 4, stringBlob ]
+                ]
+    in
+    if Pine_kernel.equal [ Pine_kernel.length charBytes, 0 ] then
+        Nothing
+    else
+        Just charBytes
+
+
+-- Helper function to check if we have characters remaining
+hasCharAt : String -> Int -> Bool
+hasCharAt (String.String stringBlob) offset =
+    let
+        charBytes =
+            Pine_kernel.take
+                [ 4
+                , Pine_kernel.skip [ offset * 4, stringBlob ]
+                ]
+    in
+    Pine_kernel.equal [ Pine_kernel.length charBytes, 4 ]
+
+
+-- Helper function to check if string matches expected text starting at offset
+matchesTextAt : String -> Int -> String -> Bool
+matchesTextAt (String.String stringBlob) offset (String.String expectedBlob) =
+    let
+        expectedLength = Pine_kernel.length expectedBlob
+        actualSlice =
+            Pine_kernel.take
+                [ expectedLength
+                , Pine_kernel.skip [ offset * 4, stringBlob ]
+                ]
+    in
+    Pine_kernel.equal [ actualSlice, expectedBlob ]
+
+
+parseValue : String -> Int -> ( Result String Value, Int )
 parseValue src offset0 =
     let
         -- First, skip any whitespace from offset0 forward
@@ -621,10 +660,10 @@ parseValue src offset0 =
 
         -- Peek at the next character
         nextChar =
-            List.take 1 (List.drop offset1 src)
+            getCharAt src offset1
     in
     case nextChar of
-        [ c ] ->
+        Just c ->
             case c of
                 'n' ->
                     -- Attempt to parse `null`
@@ -679,39 +718,33 @@ parseValue src offset0 =
                         , offset1
                         )
 
-        _ ->
+        Nothing ->
             -- We ran out of input
             ( Err "Unexpected end of input while parsing value", offset1 )
 
 
-parseNull : List Char -> Int -> ( Result String Value, Int )
+parseNull : String -> Int -> ( Result String Value, Int )
 parseNull src offset0 =
-    case List.take 4 (List.drop offset0 src) of
-        [ 'n', 'u', 'l', 'l' ] ->
-            ( Ok NullValue, offset0 + 4 )
-
-        _ ->
-            ( Err "Expecting 'null'", offset0 )
+    if matchesTextAt src offset0 "null" then
+        ( Ok NullValue, offset0 + 4 )
+    else
+        ( Err "Expecting 'null'", offset0 )
 
 
-parseTrue : List Char -> Int -> ( Result String Value, Int )
+parseTrue : String -> Int -> ( Result String Value, Int )
 parseTrue src offset0 =
-    case List.take 4 (List.drop offset0 src) of
-        [ 't', 'r', 'u', 'e' ] ->
-            ( Ok (BoolValue True), offset0 + 4 )
-
-        _ ->
-            ( Err "Expecting 'true'", offset0 )
+    if matchesTextAt src offset0 "true" then
+        ( Ok (BoolValue True), offset0 + 4 )
+    else
+        ( Err "Expecting 'true'", offset0 )
 
 
-parseFalse : List Char -> Int -> ( Result String Value, Int )
+parseFalse : String -> Int -> ( Result String Value, Int )
 parseFalse src offset0 =
-    case List.take 5 (List.drop offset0 src) of
-        [ 'f', 'a', 'l', 's', 'e' ] ->
-            ( Ok (BoolValue False), offset0 + 5 )
-
-        _ ->
-            ( Err "Expecting 'false'", offset0 )
+    if matchesTextAt src offset0 "false" then
+        ( Ok (BoolValue False), offset0 + 5 )
+    else
+        ( Err "Expecting 'false'", offset0 )
 
 
 parseString : Parser (List Char)
@@ -719,7 +752,7 @@ parseString str offset =
     parseJsonString str offset []
 
 
-parseNumber : List Char -> Int -> ( Result String Value, Int )
+parseNumber : String -> Int -> ( Result String Value, Int )
 parseNumber src offset0 =
     -- We need to parse a number, which could be an integer or a float.
     -- We'll start by parsing an integer, then look for a decimal point.
@@ -734,10 +767,10 @@ parseNumber src offset0 =
             -- If we successfully parsed an integer, look for a decimal point
             let
                 nextChar =
-                    List.take 1 (List.drop offset1 src)
+                    getCharAt src offset1
             in
             case nextChar of
-                [ '.' ] ->
+                Just '.' ->
                     -- If we see a decimal point, parse the fractional part
                     let
                         ( denominatorResult, offset2 ) =
@@ -748,7 +781,7 @@ parseNumber src offset0 =
                             -- For now we just take the string as is
                             ( Ok
                                 (FloatValue
-                                    (String.fromList (List.take (offset2 - offset0) (List.drop offset0 src)))
+                                    (String.slice offset0 offset2 src)
                                 )
                             , offset2
                             )
@@ -1155,14 +1188,14 @@ parseUnicodeEscape source offset soFar =
             (soFar ++ [ Char.fromCode hi ])
 
 
-parseInt : List Char -> Int -> ( Result String Int, Int )
+parseInt : String -> Int -> ( Result String Int, Int )
 parseInt src offset0 =
     let
         nextChar =
-            List.take 1 (List.drop offset0 src)
+            getCharAt src offset0
     in
     case nextChar of
-        [ '-' ] ->
+        Just '-' ->
             -- If we see a minus sign, parse the rest as an unsigned integer
             let
                 ( unsignedResult, offset1 ) =
@@ -1180,74 +1213,74 @@ parseInt src offset0 =
             parseUnsignedInt src offset0
 
 
-parseUnsignedInt : List Char -> Int -> ( Result String Int, Int )
+parseUnsignedInt : String -> Int -> ( Result String Int, Int )
 parseUnsignedInt src offset0 =
-    case List.take 1 (List.drop offset0 src) of
-        [ '0' ] ->
+    case getCharAt src offset0 of
+        Just '0' ->
             ( Ok 0, offset0 + 1 )
 
-        [ '1' ] ->
+        Just '1' ->
             parseUnsignedIntRec 1 src (offset0 + 1)
 
-        [ '2' ] ->
+        Just '2' ->
             parseUnsignedIntRec 2 src (offset0 + 1)
 
-        [ '3' ] ->
+        Just '3' ->
             parseUnsignedIntRec 3 src (offset0 + 1)
 
-        [ '4' ] ->
+        Just '4' ->
             parseUnsignedIntRec 4 src (offset0 + 1)
 
-        [ '5' ] ->
+        Just '5' ->
             parseUnsignedIntRec 5 src (offset0 + 1)
 
-        [ '6' ] ->
+        Just '6' ->
             parseUnsignedIntRec 6 src (offset0 + 1)
 
-        [ '7' ] ->
+        Just '7' ->
             parseUnsignedIntRec 7 src (offset0 + 1)
 
-        [ '8' ] ->
+        Just '8' ->
             parseUnsignedIntRec 8 src (offset0 + 1)
 
-        [ '9' ] ->
+        Just '9' ->
             parseUnsignedIntRec 9 src (offset0 + 1)
 
         _ ->
             ( Err "Expecting a digit", offset0 )
 
 
-parseUnsignedIntRec : Int -> List Char -> Int -> ( Result String Int, Int )
+parseUnsignedIntRec : Int -> String -> Int -> ( Result String Int, Int )
 parseUnsignedIntRec upper src offset0 =
-    case List.take 1 (List.drop offset0 src) of
-        [ '0' ] ->
+    case getCharAt src offset0 of
+        Just '0' ->
             parseUnsignedIntRec (upper * 10) src (offset0 + 1)
 
-        [ '1' ] ->
+        Just '1' ->
             parseUnsignedIntRec (upper * 10 + 1) src (offset0 + 1)
 
-        [ '2' ] ->
+        Just '2' ->
             parseUnsignedIntRec (upper * 10 + 2) src (offset0 + 1)
 
-        [ '3' ] ->
+        Just '3' ->
             parseUnsignedIntRec (upper * 10 + 3) src (offset0 + 1)
 
-        [ '4' ] ->
+        Just '4' ->
             parseUnsignedIntRec (upper * 10 + 4) src (offset0 + 1)
 
-        [ '5' ] ->
+        Just '5' ->
             parseUnsignedIntRec (upper * 10 + 5) src (offset0 + 1)
 
-        [ '6' ] ->
+        Just '6' ->
             parseUnsignedIntRec (upper * 10 + 6) src (offset0 + 1)
 
-        [ '7' ] ->
+        Just '7' ->
             parseUnsignedIntRec (upper * 10 + 7) src (offset0 + 1)
 
-        [ '8' ] ->
+        Just '8' ->
             parseUnsignedIntRec (upper * 10 + 8) src (offset0 + 1)
 
-        [ '9' ] ->
+        Just '9' ->
             parseUnsignedIntRec (upper * 10 + 9) src (offset0 + 1)
 
         _ ->
@@ -1400,19 +1433,19 @@ convert0OrMoreHexadecimal soFar offset src =
             ( soFar, offset )
 
 
-skipWhitespace : List Char -> Int -> Int
+skipWhitespace : String -> Int -> Int
 skipWhitespace str offset =
-    case List.take 1 (List.drop offset str) of
-        [ ' ' ] ->
+    case getCharAt str offset of
+        Just ' ' ->
             skipWhitespace str (offset + 1)
 
-        [ '\t' ] ->
+        Just '\t' ->
             skipWhitespace str (offset + 1)
 
-        [ '\n' ] ->
+        Just '\n' ->
             skipWhitespace str (offset + 1)
 
-        [ '\u{000D}' ] ->
+        Just '\u{000D}' ->
             skipWhitespace str (offset + 1)
 
         _ ->
