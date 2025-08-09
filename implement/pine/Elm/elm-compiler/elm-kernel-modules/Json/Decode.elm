@@ -808,7 +808,7 @@ parseNumber src offset0 =
         --> ( Ok [ BoolValue True, BoolValue False, NullValue ], finalOffset )
 
 -}
-parseArray : List Char -> Int -> ( Result String (List Value), Int )
+parseArray : String -> Int -> ( Result String (List Value), Int )
 parseArray src offset0 =
     -- First, skip any whitespace
     let
@@ -817,15 +817,15 @@ parseArray src offset0 =
 
         -- Look at the next character
         nextChar =
-            List.take 1 (List.drop offset1 src)
+            getCharAt src offset1
     in
     case nextChar of
-        [] ->
+        Nothing ->
             -- We ran out of characters entirely
             ( Err "Unexpected end of input while parsing array", offset1 )
 
         -- If it's a ']', that means an empty array: "[]"
-        [ ']' ] ->
+        Just ']' ->
             ( Ok [], offset1 + 1 )
 
         -- Otherwise, parse one or more items
@@ -839,7 +839,7 @@ parseArray src offset0 =
     Returns (Ok items, newOffset) or (Err msg, newOffset).
 
 -}
-parseArrayItems : List Value -> List Char -> Int -> ( Result String (List Value), Int )
+parseArrayItems : List Value -> String -> Int -> ( Result String (List Value), Int )
 parseArrayItems itemsBefore src offset0 =
     -- First parse a single Value
     let
@@ -860,30 +860,30 @@ parseArrayItems itemsBefore src offset0 =
                     skipWhitespace src offsetAfterVal
 
                 nextChar =
-                    List.take 1 (List.drop offset1 src)
+                    getCharAt src offset1
 
                 items : List Value
                 items =
                     Pine_kernel.concat [ itemsBefore, [ val ] ]
             in
             case nextChar of
-                [ ',' ] ->
+                Just ',' ->
                     -- If we see a comma, skip it and parse the next item
                     parseArrayItems items src (offset1 + 1)
 
-                [ ']' ] ->
+                Just ']' ->
                     -- End of array
                     ( Ok items, offset1 + 1 )
 
-                [ c ] ->
+                Just c ->
                     ( Err ("Expecting ',' or ']', got '" ++ String.fromChar c ++ "'"), offset1 )
 
-                _ ->
+                Nothing ->
                     -- We ran out unexpectedly, missing a ']' or another item
                     ( Err "Unclosed array, expected ',' or ']'", offset1 )
 
 
-parseObjectRec : List ( String, Value ) -> List Char -> Int -> ( Result String (List ( String, Value )), Int )
+parseObjectRec : List ( String, Value ) -> String -> Int -> ( Result String (List ( String, Value )), Int )
 parseObjectRec fieldsBefore src offset0 =
     -- First, skip any whitespace
     let
@@ -893,15 +893,15 @@ parseObjectRec fieldsBefore src offset0 =
 
         -- Look at the next character
         nextChar =
-            List.take 1 (List.drop offset1 src)
+            getCharAt src offset1
     in
     case nextChar of
         -- If it's a '}', that means an empty object: "{}"
-        [ '}' ] ->
+        Just '}' ->
             ( Ok fieldsBefore, offset1 + 1 )
 
         -- Otherwise, parse one or more key-value pairs
-        [ '"' ] ->
+        Just '"' ->
             let
                 ( keyResult, offsetAfterKey ) =
                     parseString src (offset1 + 1)
@@ -925,10 +925,10 @@ parseObjectRec fieldsBefore src offset0 =
                             skipWhitespace src offsetAfterKey
 
                         nextChar2 =
-                            List.take 1 (List.drop offset2 src)
+                            getCharAt src offset2
                     in
                     case nextChar2 of
-                        [ ':' ] ->
+                        Just ':' ->
                             -- If we see a colon, skip it and parse the value
                             let
                                 offset3 =
@@ -949,35 +949,35 @@ parseObjectRec fieldsBefore src offset0 =
                                             skipWhitespace src offsetAfterVal
 
                                         nextChar3 =
-                                            List.take 1 (List.drop offset4 src)
+                                            getCharAt src offset4
 
                                         fields : List ( String, Value )
                                         fields =
                                             Pine_kernel.concat [ fieldsBefore, [ ( keyString, val ) ] ]
                                     in
                                     case nextChar3 of
-                                        [ ',' ] ->
+                                        Just ',' ->
                                             -- If we see a comma, skip it and parse the next item
                                             parseObjectRec fields src (offset4 + 1)
 
-                                        [ '}' ] ->
+                                        Just '}' ->
                                             -- End of object
                                             ( Ok fields, offset4 + 1 )
 
-                                        [ c ] ->
+                                        Just c ->
                                             ( Err ("Expecting ',' or '}', got '" ++ String.fromChar c ++ "'"), offset4 )
 
-                                        _ ->
+                                        Nothing ->
                                             -- We ran out unexpectedly, missing a '}' or another item
                                             ( Err "Unclosed object, expected ',' or '}'", offset4 )
 
                         _ ->
                             ( Err ("Expecting ':' after object key '" ++ keyString ++ "'"), offset2 )
 
-        [ c ] ->
+        Just c ->
             ( Err ("Expecting '\"' to start object key, got '" ++ String.fromChar c ++ "'"), offset1 )
 
-        _ ->
+        Nothing ->
             -- We ran out of characters entirely
             ( Err "Unexpected end of input while parsing object", offset1 )
 
@@ -1011,10 +1011,10 @@ Example usage:
     --> Ok ("hello\nworld", 13)
 
 -}
-parseJsonString : List Char -> Int -> List Char -> ( Result String (List Char), Int )
+parseJsonString : String -> Int -> List Char -> ( Result String (List Char), Int )
 parseJsonString source offset soFar =
-    case List.take 1 (List.drop offset source) of
-        [ c ] ->
+    case getCharAt source offset of
+        Just c ->
             case c of
                 -- End of the JSON string if we encounter "
                 '"' ->
@@ -1028,7 +1028,7 @@ parseJsonString source offset soFar =
                 _ ->
                     parseJsonString source (offset + 1) (List.concat [ soFar, [ c ] ])
 
-        _ ->
+        Nothing ->
             -- We ran out of characters before finding a closing quote
             ( Err "Unexpected end of input while reading JSON string", offset )
 
@@ -1040,11 +1040,11 @@ parseJsonString source offset soFar =
 {-| Handle a backslash-escape character.
 We consume the `\` at position `offset`, so we look at `(offset + 1)` for the next char.
 -}
-parseEscape : List Char -> Int -> List Char -> ( Result String (List Char), Int )
+parseEscape : String -> Int -> List Char -> ( Result String (List Char), Int )
 parseEscape source offset soFar =
     -- We already know source !! offset == '\\'
-    case List.take 1 (List.drop (offset + 1) source) of
-        [ e ] ->
+    case getCharAt source (offset + 1) of
+        Just e ->
             case e of
                 -- Standard JSON escapes
                 'n' ->
@@ -1085,7 +1085,7 @@ parseEscape source offset soFar =
                     , offset + 2
                     )
 
-        _ ->
+        Nothing ->
             -- No character after the backslash
             ( Err "Unexpected end of input after backslash in string escape"
             , offset + 1
