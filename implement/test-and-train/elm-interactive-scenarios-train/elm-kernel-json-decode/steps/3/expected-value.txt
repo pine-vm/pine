@@ -1,1 +1,1 @@
-1.Ok (StringValue "hello")
+Ok (StringValue "hello")

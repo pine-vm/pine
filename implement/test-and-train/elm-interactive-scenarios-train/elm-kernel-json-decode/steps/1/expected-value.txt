@@ -1,1 +1,1 @@
-1.Ok (BoolValue True)
+Ok (BoolValue True)

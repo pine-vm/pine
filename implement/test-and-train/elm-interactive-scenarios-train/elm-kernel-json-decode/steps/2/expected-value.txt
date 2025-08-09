@@ -1,1 +1,1 @@
-1.Ok (NumberValue 42)
+Ok (NumberValue 42)
