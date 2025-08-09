@@ -1,0 +1,1 @@
+1.Json.Decode.decodeString Json.Decode.value "{\"users\": [{\"id\": 1, \"name\": \"Alice\", \"settings\": {\"theme\": \"dark\", \"notifications\": true}}, {\"id\": 2, \"name\": \"Bob\", \"settings\": {\"theme\": \"light\", \"notifications\": false}}], \"metadata\": {\"total\": 2, \"version\": \"1.0\"}}"

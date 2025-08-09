@@ -1,0 +1,1 @@
+1.Ok (ObjectValue [("age",NumberValue 30),("name",StringValue "Alice")])
