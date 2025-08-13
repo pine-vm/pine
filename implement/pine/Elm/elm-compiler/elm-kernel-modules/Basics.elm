@@ -88,7 +88,7 @@ type Bool
 
 
 type String
-    = String (List Char.Char)
+    = String Int
       -- We need another tag to prevent the compiler from assuming that the condition for tag 'String' is always true.
     | AnyOtherKind_String
 

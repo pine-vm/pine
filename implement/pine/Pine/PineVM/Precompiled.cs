@@ -713,6 +713,28 @@ public class Precompiled
                     [new PrecompiledEntry(adaptivePartialApplicationEnvClass, ElmCompiledAdaptivePartialApplication)]);
         }
 
+        {
+            var parseJsonStringSimpleCharsExpr =
+                popularExpressionDictionary["Elm.Kernel.Json.Decode.parseJsonStringSimpleChars"];
+
+            var parseJsonStringSimpleCharsExprValue =
+                ExpressionEncoding.EncodeExpressionAsValue(parseJsonStringSimpleCharsExpr);
+
+            var envClass =
+                EnvConstraintId.Create(
+                    [
+                    new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                        [0, 0],
+                        parseJsonStringSimpleCharsExprValue),
+                    ]);
+
+            yield return
+                new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
+                    parseJsonStringSimpleCharsExpr,
+                    [new PrecompiledEntry(
+                        envClass,
+                        ElmKernelJsonDecode_parseJsonStringSimpleChars)]);
+        }
 
         {
             var countPineValueContentEnvClass =
@@ -5594,6 +5616,82 @@ public class Precompiled
             () => new PrecompiledResult.ContinueParseAndEval(
                 EnvironmentValue: newEnvironment,
                 ExpressionValue: functionRecord.Elements.Span[0]);
+    }
+
+    private static Func<PrecompiledResult>? ElmKernelJsonDecode_parseJsonStringSimpleChars(
+        PineValue environment,
+        PineVMParseCache parseCache)
+    {
+        /*
+        parseJsonStringSimpleChars : Int -> Int -> Int
+        parseJsonStringSimpleChars sourceBytes offset =
+            let
+                nextChar =
+                    Pine_kernel.take
+                        [ 4
+                        , Pine_kernel.skip [ offset, sourceBytes ]
+                        ]
+            in
+            if Pine_kernel.equal [ Pine_kernel.length nextChar, 0 ] then
+                -- We ran out of characters before finding a closing quote or escape
+                offset
+
+            else if Pine_kernel.equal [ nextChar, '"' ] then
+                -- Found a quote or backslash escape, stop here
+                offset
+
+            else if Pine_kernel.equal [ nextChar, '\\' ] then
+                -- Found a backslash escape, stop here
+                offset
+
+            else
+                -- Keep going to the next character
+                parseJsonStringSimpleChars
+                    sourceBytes
+                    (Pine_kernel.int_add [ offset, 4 ])
+
+         * */
+
+        var sourceBytesArg =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+
+        var offsetArg =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
+
+        if (sourceBytesArg is not PineValue.BlobValue sourceBytesBlob)
+        {
+            return null;
+        }
+
+        if (KernelFunction.SignedIntegerFromValueRelaxed(offsetArg) is not { } offset)
+        {
+            return null;
+        }
+
+        var offsetInt = (int)offset;
+
+        while (offsetInt < sourceBytesBlob.Bytes.Length - 3)
+        {
+            var nextChar =
+                BinaryPrimitives.ReadInt32BigEndian(sourceBytesBlob.Bytes.Span[offsetInt..]);
+
+            if (nextChar is '"')
+            {
+                break;
+            }
+
+            if (nextChar is '\\')
+            {
+                break;
+            }
+
+            offsetInt += 4;
+        }
+
+        return
+            () => new PrecompiledResult.FinalValue(
+                IntegerEncoding.EncodeSignedInteger(offsetInt),
+                StackFrameCount: 0);
     }
 
     private static readonly PineValue IntegerOneValue =

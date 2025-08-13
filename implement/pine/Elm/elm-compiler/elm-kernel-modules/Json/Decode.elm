@@ -52,6 +52,12 @@ type Error
     | Failure String Value
 
 
+type String
+    = String Int
+      -- We need another tag to prevent the compiler from assuming that the condition for tag 'String' is always true.
+    | AnyOtherKind_String
+
+
 type alias Decoder a =
     Value -> Result Error a
 
@@ -577,31 +583,49 @@ decodeString decoder jsonString =
 
 
 parseJsonStringToValue : String -> Result String Value
-parseJsonStringToValue jsonString =
-    let
-        jsonChars : List Char
-        jsonChars =
-            String.toList jsonString
-    in
-    case parseValue jsonChars 0 of
-        ( Ok ok, consumed ) ->
+parseJsonStringToValue (String jsonStringBytes) =
+    case parseValue jsonStringBytes 0 of
+        ( Ok ok, consumedBytes ) ->
             let
-                afterWhitespaceOffset : Int
-                afterWhitespaceOffset =
-                    skipWhitespace jsonChars consumed
+                afterTrimOffsetBytes : Int
+                afterTrimOffsetBytes =
+                    skipWhitespace
+                        jsonStringBytes
+                        consumedBytes
             in
-            case List.take 1 (List.drop afterWhitespaceOffset jsonChars) of
-                [ c ] ->
-                    Err
-                        ("Unexpected character at end of JSON, at offset "
-                            ++ String.fromInt afterWhitespaceOffset
-                            ++ ": '"
-                            ++ String.fromChar c
-                            ++ "'"
-                        )
+            if
+                Pine_kernel.equal
+                    [ afterTrimOffsetBytes
+                    , Pine_kernel.length jsonStringBytes
+                    ]
+            then
+                -- We successfully parsed the entire JSON string
+                Ok ok
 
-                _ ->
-                    Ok ok
+            else
+                let
+                    followingChar =
+                        Pine_kernel.take
+                            [ 4
+                            , Pine_kernel.skip [ afterTrimOffsetBytes, jsonStringBytes ]
+                            ]
+                in
+                -- There are still characters left after parsing, which is unexpected
+                let
+                    afterTrimOffsetChars : Int
+                    afterTrimOffsetChars =
+                        Pine_kernel.concat
+                            [ Pine_kernel.take [ 1, 0 ]
+                            , Pine_kernel.bit_shift_right [ 2, Pine_kernel.skip [ 1, afterTrimOffsetBytes ] ]
+                            ]
+                in
+                Err
+                    ("Unexpected character at end of JSON, at offset "
+                        ++ String.fromInt afterTrimOffsetChars
+                        ++ ": '"
+                        ++ String.fromChar followingChar
+                        ++ "'"
+                    )
 
         ( Err err, consumed ) ->
             Err ("Error at character " ++ String.fromInt consumed ++ ": " ++ err)
@@ -611,156 +635,172 @@ type alias Parser a =
     List Char -> Int -> ( Result String a, Int )
 
 
-parseValue : List Char -> Int -> ( Result String Value, Int )
-parseValue src offset0 =
+parseValue : Int -> Int -> ( Result String Value, Int )
+parseValue srcBytes offset0 =
     let
         -- First, skip any whitespace from offset0 forward
         offset1 : Int
         offset1 =
-            skipWhitespace src offset0
+            skipWhitespace srcBytes offset0
 
         -- Peek at the next character
         nextChar =
-            List.take 1 (List.drop offset1 src)
+            Pine_kernel.take [ 4, Pine_kernel.skip [ offset1, srcBytes ] ]
     in
-    case nextChar of
-        [ c ] ->
-            case c of
-                'n' ->
-                    -- Attempt to parse `null`
-                    parseNull src offset1
+    if Pine_kernel.equal [ Pine_kernel.length nextChar, 0 ] then
+        -- We ran out of input
+        ( Err "Unexpected end of input while parsing value", offset1 )
 
-                't' ->
-                    -- Attempt to parse `true`
-                    parseTrue src offset1
+    else
+        -- We have at least one character to work with
+        case nextChar of
+            'n' ->
+                -- Attempt to parse `null`
+                parseNull srcBytes offset1
 
-                'f' ->
-                    -- Attempt to parse `false`
-                    parseFalse src offset1
+            't' ->
+                -- Attempt to parse `true`
+                parseTrue srcBytes offset1
 
-                '"' ->
-                    -- Parse a JSON string (the leading quote is consumed here)
-                    case parseString src (offset1 + 1) of
-                        ( Ok str, offset2 ) ->
-                            ( Ok (StringValue (String.fromList str)), offset2 )
+            'f' ->
+                -- Attempt to parse `false`
+                parseFalse srcBytes offset1
 
-                        ( Err err, offset2 ) ->
-                            ( Err err, offset2 )
+            '"' ->
+                -- Parse a JSON string (the leading quote is consumed here)
+                case parseJsonStringLiteral srcBytes (offset1 + 4) of
+                    ( Ok str, offset2 ) ->
+                        ( Ok (StringValue str), offset2 )
 
-                '[' ->
-                    -- Parse an array (leading '[' is already consumed).
-                    case parseArray src (offset1 + 1) of
-                        ( Ok values, offset2 ) ->
-                            ( Ok (ArrayValue values), offset2 )
+                    ( Err err, offset2 ) ->
+                        ( Err err, offset2 )
 
-                        ( Err err, offset2 ) ->
-                            ( Err err, offset2 )
+            '[' ->
+                -- Parse an array (leading '[' is already consumed).
+                case parseArray srcBytes (offset1 + 4) of
+                    ( Ok values, offset2 ) ->
+                        ( Ok (ArrayValue values), offset2 )
 
-                '{' ->
-                    -- Parse an object (leading '{' is already consumed).
-                    case parseObjectRec [] src (offset1 + 1) of
-                        ( Ok fields, offset2 ) ->
-                            ( Ok (ObjectValue fields), offset2 )
+                    ( Err err, offset2 ) ->
+                        ( Err err, offset2 )
 
-                        ( Err err, offset2 ) ->
-                            ( Err err, offset2 )
+            '{' ->
+                -- Parse an object (leading '{' is already consumed).
+                case parseObjectRec [] srcBytes (offset1 + 4) of
+                    ( Ok fields, offset2 ) ->
+                        ( Ok (ObjectValue fields), offset2 )
 
-                '-' ->
-                    -- Could be a negative number
-                    parseNumber src offset1
+                    ( Err err, offset2 ) ->
+                        ( Err err, offset2 )
 
-                _ ->
-                    if Char.isDigit c then
-                        -- It’s some digit, so parse a (positive) number
-                        parseNumber src offset1
+            '-' ->
+                -- Could be a negative number
+                parseNumber srcBytes offset1
 
-                    else
-                        ( Err ("Unexpected character while parsing value: '" ++ String.fromChar c ++ "'")
-                        , offset1
-                        )
+            _ ->
+                if Char.isDigit nextChar then
+                    -- It’s some digit, so parse a (positive) number
+                    parseNumber srcBytes offset1
 
-        _ ->
-            -- We ran out of input
-            ( Err "Unexpected end of input while parsing value", offset1 )
-
-
-parseNull : List Char -> Int -> ( Result String Value, Int )
-parseNull src offset0 =
-    case List.take 4 (List.drop offset0 src) of
-        [ 'n', 'u', 'l', 'l' ] ->
-            ( Ok NullValue, offset0 + 4 )
-
-        _ ->
-            ( Err "Expecting 'null'", offset0 )
+                else
+                    ( Err ("Unexpected character while parsing value: '" ++ String.fromChar nextChar ++ "'")
+                    , offset1
+                    )
 
 
-parseTrue : List Char -> Int -> ( Result String Value, Int )
-parseTrue src offset0 =
-    case List.take 4 (List.drop offset0 src) of
-        [ 't', 'r', 'u', 'e' ] ->
-            ( Ok (BoolValue True), offset0 + 4 )
+parseNull : Int -> Int -> ( Result String Value, Int )
+parseNull srcBytes offset0 =
+    let
+        -- We expect the next 4 characters to be "null"
+        nextChars =
+            Pine_kernel.take [ 16, Pine_kernel.skip [ offset0, srcBytes ] ]
+    in
+    if Pine_kernel.equal [ nextChars, Pine_kernel.concat [ 'n', 'u', 'l', 'l' ] ] then
+        ( Ok NullValue, offset0 + 16 )
 
-        _ ->
-            ( Err "Expecting 'true'", offset0 )
-
-
-parseFalse : List Char -> Int -> ( Result String Value, Int )
-parseFalse src offset0 =
-    case List.take 5 (List.drop offset0 src) of
-        [ 'f', 'a', 'l', 's', 'e' ] ->
-            ( Ok (BoolValue False), offset0 + 5 )
-
-        _ ->
-            ( Err "Expecting 'false'", offset0 )
+    else
+        ( Err "Expecting 'null'", offset0 )
 
 
-parseString : Parser (List Char)
-parseString str offset =
-    parseJsonString str offset []
+parseTrue : Int -> Int -> ( Result String Value, Int )
+parseTrue srcBytes offset0 =
+    let
+        -- We expect the next 4 characters to be "true"
+        nextChars =
+            Pine_kernel.take [ 16, Pine_kernel.skip [ offset0, srcBytes ] ]
+    in
+    if Pine_kernel.equal [ nextChars, Pine_kernel.concat [ 't', 'r', 'u', 'e' ] ] then
+        ( Ok (BoolValue True), offset0 + 16 )
+
+    else
+        ( Err "Expecting 'true'", offset0 )
 
 
-parseNumber : List Char -> Int -> ( Result String Value, Int )
-parseNumber src offset0 =
+parseFalse : Int -> Int -> ( Result String Value, Int )
+parseFalse srcBytes offset0 =
+    let
+        -- We expect the next 5 characters to be "false"
+        nextChars =
+            Pine_kernel.take [ 20, Pine_kernel.skip [ offset0, srcBytes ] ]
+    in
+    if Pine_kernel.equal [ nextChars, Pine_kernel.concat [ 'f', 'a', 'l', 's', 'e' ] ] then
+        ( Ok (BoolValue False), offset0 + 20 )
+
+    else
+        ( Err "Expecting 'false'", offset0 )
+
+
+parseNumber : Int -> Int -> ( Result String Value, Int )
+parseNumber srcBytes offset0 =
     -- We need to parse a number, which could be an integer or a float.
     -- We'll start by parsing an integer, then look for a decimal point.
-    let
-        ( intResult, offset1 ) =
-            parseInt src offset0
-
-        -- <--- assumes you have parseInt (Int) returning (Result String Int, Int)
-    in
-    case intResult of
-        Ok intVal ->
+    case parseInt srcBytes offset0 of
+        ( Ok intVal, offset1 ) ->
             -- If we successfully parsed an integer, look for a decimal point
             let
                 nextChar =
-                    List.take 1 (List.drop offset1 src)
+                    Pine_kernel.take
+                        [ 4
+                        , Pine_kernel.skip [ offset1, srcBytes ]
+                        ]
             in
-            case nextChar of
-                [ '.' ] ->
-                    -- If we see a decimal point, parse the fractional part
-                    let
-                        ( denominatorResult, offset2 ) =
-                            parseUnsignedInt src (offset1 + 1)
-                    in
-                    case denominatorResult of
-                        Ok _ ->
-                            -- For now we just take the string as is
-                            ( Ok
-                                (FloatValue
-                                    (String.fromList (List.take (offset2 - offset0) (List.drop offset0 src)))
-                                )
-                            , offset2
-                            )
+            if Pine_kernel.equal [ nextChar, '.' ] then
+                -- If we see a decimal point, parse the fractional part
+                let
+                    ( denominatorResult, offset2 ) =
+                        parseUnsignedInt
+                            srcBytes
+                            (Pine_kernel.int_add [ offset1, 4 ])
+                in
+                case denominatorResult of
+                    Ok _ ->
+                        -- For now we just take the string as is
+                        let
+                            sliceLength : Int
+                            sliceLength =
+                                Pine_kernel.int_add
+                                    [ offset2
+                                    , Pine_kernel.int_mul [ offset0, -1 ]
+                                    ]
 
-                        Err err ->
-                            ( Err err, offset2 )
+                            sliceBytes =
+                                Pine_kernel.take
+                                    [ sliceLength
+                                    , Pine_kernel.skip [ offset0, srcBytes ]
+                                    ]
+                        in
+                        ( Ok (FloatValue (String sliceBytes))
+                        , offset2
+                        )
 
-                _ ->
-                    -- If no decimal point, we're done: it's an integer
-                    ( Ok (IntValue intVal), offset1 )
+                    Err err ->
+                        ( Err err, offset2 )
 
-        Err err ->
+            else
+                -- If no decimal point, we're done: it's an integer
+                ( Ok (IntValue intVal), offset1 )
+
+        ( Err err, offset1 ) ->
             ( Err err, offset1 )
 
 
@@ -775,45 +815,35 @@ parseNumber src offset0 =
         --> ( Ok [ BoolValue True, BoolValue False, NullValue ], finalOffset )
 
 -}
-parseArray : List Char -> Int -> ( Result String (List Value), Int )
-parseArray src offset0 =
+parseArray : Int -> Int -> ( Result String (List Value), Int )
+parseArray srcBytes offset0 =
     -- First, skip any whitespace
     let
         offset1 =
-            skipWhitespace src offset0
+            skipWhitespace srcBytes offset0
 
         -- Look at the next character
         nextChar =
-            List.take 1 (List.drop offset1 src)
+            Pine_kernel.take [ 4, Pine_kernel.skip [ offset1, srcBytes ] ]
     in
-    case nextChar of
-        [] ->
-            -- We ran out of characters entirely
-            ( Err "Unexpected end of input while parsing array", offset1 )
+    if Pine_kernel.equal [ Pine_kernel.length nextChar, 0 ] then
+        -- We ran out of characters entirely
+        ( Err "Unexpected end of input while parsing array", offset1 )
 
+    else if Pine_kernel.equal [ nextChar, ']' ] then
         -- If it's a ']', that means an empty array: "[]"
-        [ ']' ] ->
-            ( Ok [], offset1 + 1 )
+        ( Ok [], offset1 + 4 )
 
+    else
         -- Otherwise, parse one or more items
-        _ ->
-            parseArrayItems [] src offset1
+        parseArrayItems [] srcBytes offset1
 
 
-{-|
-
-    parseArrayItems accumulates items in `acc` until we see a ']' or run out.
-    Returns (Ok items, newOffset) or (Err msg, newOffset).
-
--}
-parseArrayItems : List Value -> List Char -> Int -> ( Result String (List Value), Int )
-parseArrayItems itemsBefore src offset0 =
-    -- First parse a single Value
+parseArrayItems : List Value -> Int -> Int -> ( Result String (List Value), Int )
+parseArrayItems itemsBefore srcBytes offset0 =
     let
         ( valResult, offsetAfterVal ) =
-            parseValue src offset0
-
-        -- <--- assumes you have parseValue (Value) returning (Result String Value, Int)
+            parseValue srcBytes offset0
     in
     case valResult of
         Err msg ->
@@ -824,129 +854,126 @@ parseArrayItems itemsBefore src offset0 =
             -- We successfully parsed one item: accumulate it, then look for comma or closing bracket
             let
                 offset1 =
-                    skipWhitespace src offsetAfterVal
+                    skipWhitespace srcBytes offsetAfterVal
 
                 nextChar =
-                    List.take 1 (List.drop offset1 src)
+                    Pine_kernel.take [ 4, Pine_kernel.skip [ offset1, srcBytes ] ]
 
                 items : List Value
                 items =
                     Pine_kernel.concat [ itemsBefore, [ val ] ]
             in
-            case nextChar of
-                [ ',' ] ->
-                    -- If we see a comma, skip it and parse the next item
-                    parseArrayItems items src (offset1 + 1)
+            if Pine_kernel.equal [ Pine_kernel.length nextChar, 0 ] then
+                -- We ran out unexpectedly, missing a ']' or another item
+                ( Err "Unclosed array, expected ',' or ']'", offset1 )
 
-                [ ']' ] ->
-                    -- End of array
-                    ( Ok items, offset1 + 1 )
+            else
+                case nextChar of
+                    ',' ->
+                        -- If we see a comma, skip it and parse the next item
+                        parseArrayItems items srcBytes (offset1 + 4)
 
-                [ c ] ->
-                    ( Err ("Expecting ',' or ']', got '" ++ String.fromChar c ++ "'"), offset1 )
+                    ']' ->
+                        -- End of array
+                        ( Ok items, offset1 + 4 )
 
-                _ ->
-                    -- We ran out unexpectedly, missing a ']' or another item
-                    ( Err "Unclosed array, expected ',' or ']'", offset1 )
+                    _ ->
+                        ( Err ("Expecting ',' or ']', got '" ++ String.fromChar nextChar ++ "'"), offset1 )
 
 
-parseObjectRec : List ( String, Value ) -> List Char -> Int -> ( Result String (List ( String, Value )), Int )
-parseObjectRec fieldsBefore src offset0 =
+parseObjectRec : List ( String, Value ) -> Int -> Int -> ( Result String (List ( String, Value )), Int )
+parseObjectRec fieldsBefore srcBytes offset0 =
     -- First, skip any whitespace
     let
         offset1 : Int
         offset1 =
-            skipWhitespace src offset0
+            skipWhitespace srcBytes offset0
 
         -- Look at the next character
         nextChar =
-            List.take 1 (List.drop offset1 src)
+            Pine_kernel.take [ 4, Pine_kernel.skip [ offset1, srcBytes ] ]
     in
-    case nextChar of
-        -- If it's a '}', that means an empty object: "{}"
-        [ '}' ] ->
-            ( Ok fieldsBefore, offset1 + 1 )
+    if Pine_kernel.equal [ Pine_kernel.length nextChar, 0 ] then
+        -- We ran out of characters entirely
+        ( Err "Unexpected end of input while parsing object", offset1 )
 
-        -- Otherwise, parse one or more key-value pairs
-        [ '"' ] ->
-            let
-                ( keyResult, offsetAfterKey ) =
-                    parseString src (offset1 + 1)
+    else
+        case nextChar of
+            -- If it's a '}', that means an empty object: "{}"
+            '}' ->
+                ( Ok fieldsBefore, offset1 + 4 )
 
-                -- <--- assumes you have parseString (List Char) returning (Result String (List Char), Int)
-            in
-            case keyResult of
-                Err msg ->
-                    -- If the key fails, we bubble up the error
-                    ( Err msg, offsetAfterKey )
+            -- Otherwise, parse one or more key-value pairs
+            '"' ->
+                let
+                    ( keyResult, offsetAfterKey ) =
+                        parseJsonStringLiteral srcBytes (offset1 + 4)
+                in
+                case keyResult of
+                    Err msg ->
+                        -- If the key fails, we bubble up the error
+                        ( Err msg, offsetAfterKey )
 
-                Ok keyChars ->
-                    -- We successfully parsed one key: accumulate it, then look for colon and value
-                    let
-                        keyString : String
-                        keyString =
-                            String.fromList keyChars
+                    Ok keyString ->
+                        -- We successfully parsed one key: accumulate it, then look for colon and value
+                        let
+                            offset2 : Int
+                            offset2 =
+                                skipWhitespace srcBytes offsetAfterKey
 
-                        offset2 : Int
-                        offset2 =
-                            skipWhitespace src offsetAfterKey
+                            nextChar2 =
+                                Pine_kernel.take [ 4, Pine_kernel.skip [ offset2, srcBytes ] ]
+                        in
+                        case nextChar2 of
+                            ':' ->
+                                -- If we see a colon, skip it and parse the value
+                                let
+                                    offset3 =
+                                        skipWhitespace srcBytes (offset2 + 4)
 
-                        nextChar2 =
-                            List.take 1 (List.drop offset2 src)
-                    in
-                    case nextChar2 of
-                        [ ':' ] ->
-                            -- If we see a colon, skip it and parse the value
-                            let
-                                offset3 =
-                                    skipWhitespace src (offset2 + 1)
+                                    ( valResult, offsetAfterVal ) =
+                                        parseValue srcBytes offset3
+                                in
+                                case valResult of
+                                    Err err ->
+                                        -- If the value fails, we bubble up the error
+                                        ( Err ("Error parsing object value: " ++ err), offsetAfterVal )
 
-                                ( valResult, offsetAfterVal ) =
-                                    parseValue src offset3
-                            in
-                            case valResult of
-                                Err err ->
-                                    -- If the value fails, we bubble up the error
-                                    ( Err ("Error parsing object value: " ++ err), offsetAfterVal )
+                                    Ok val ->
+                                        -- We successfully parsed one value: accumulate it, then look for comma or closing brace
+                                        let
+                                            offset4 =
+                                                skipWhitespace srcBytes offsetAfterVal
 
-                                Ok val ->
-                                    -- We successfully parsed one value: accumulate it, then look for comma or closing brace
-                                    let
-                                        offset4 =
-                                            skipWhitespace src offsetAfterVal
+                                            nextChar3 =
+                                                Pine_kernel.take [ 4, Pine_kernel.skip [ offset4, srcBytes ] ]
 
-                                        nextChar3 =
-                                            List.take 1 (List.drop offset4 src)
+                                            fields : List ( String, Value )
+                                            fields =
+                                                Pine_kernel.concat [ fieldsBefore, [ ( keyString, val ) ] ]
+                                        in
+                                        if Pine_kernel.equal [ Pine_kernel.length nextChar3, 0 ] then
+                                            -- We ran out of characters before finding a comma or closing brace
+                                            ( Err "Unexpected end of input while reading JSON object", offset4 )
 
-                                        fields : List ( String, Value )
-                                        fields =
-                                            Pine_kernel.concat [ fieldsBefore, [ ( keyString, val ) ] ]
-                                    in
-                                    case nextChar3 of
-                                        [ ',' ] ->
-                                            -- If we see a comma, skip it and parse the next item
-                                            parseObjectRec fields src (offset4 + 1)
+                                        else
+                                            case nextChar3 of
+                                                ',' ->
+                                                    -- If we see a comma, skip it and parse the next item
+                                                    parseObjectRec fields srcBytes (offset4 + 4)
 
-                                        [ '}' ] ->
-                                            -- End of object
-                                            ( Ok fields, offset4 + 1 )
+                                                '}' ->
+                                                    -- End of object
+                                                    ( Ok fields, offset4 + 4 )
 
-                                        [ c ] ->
-                                            ( Err ("Expecting ',' or '}', got '" ++ String.fromChar c ++ "'"), offset4 )
+                                                _ ->
+                                                    ( Err ("Expecting ',' or '}', got '" ++ String.fromChar nextChar3 ++ "'"), offset4 )
 
-                                        _ ->
-                                            -- We ran out unexpectedly, missing a '}' or another item
-                                            ( Err "Unclosed object, expected ',' or '}'", offset4 )
+                            _ ->
+                                ( Err ("Expecting ':' after object key '" ++ keyString ++ "'"), offset2 )
 
-                        _ ->
-                            ( Err ("Expecting ':' after object key '" ++ keyString ++ "'"), offset2 )
-
-        [ c ] ->
-            ( Err ("Expecting '\"' to start object key, got '" ++ String.fromChar c ++ "'"), offset1 )
-
-        _ ->
-            -- We ran out of characters entirely
-            ( Err "Unexpected end of input while parsing object", offset1 )
+            _ ->
+                ( Err ("Expecting '\"' to start object key, got '" ++ String.fromChar nextChar ++ "'"), offset1 )
 
 
 errorToString : Error -> String
@@ -959,118 +986,171 @@ errorToString err =
             "Index " ++ String.fromInt offset ++ ": " ++ errorToString subError
 
         OneOf errors ->
-            "One of the following errors occurred:\n\n"
+            "One of the following errors occurred:\\n\\n"
                 ++ String.join "\n\n" (List.map errorToString errors)
 
         Failure message failValue ->
-            message ++ "\n\n" ++ Json.Encode.encode 4 failValue
+            message ++ "\\n\\n" ++ Json.Encode.encode 4 failValue
 
 
-{-| Parse a JSON string from a `List Char`, starting at a given `offset`,
-accumulating into `soFar`. Returns either:
+parseJsonStringLiteral : Int -> Int -> ( Result String String, Int )
+parseJsonStringLiteral sourceBytes offset =
+    let
+        ( result, newOffset ) =
+            parseJsonStringSegments sourceBytes offset []
+    in
+    case result of
+        Ok segments ->
+            let
+                allStringBytes =
+                    Pine_kernel.concat segments
+            in
+            ( Ok (String allStringBytes), newOffset )
 
-  - `Ok (parsedString, newIndex)`
-  - `Err message`
+        Err message ->
+            ( Err message, newOffset )
 
-Example usage:
 
-    parseJsonString (String.toList "\"hello\\nworld\" trailing stuff") 0 []
-    --> Ok ("hello\nworld", 13)
+parseJsonStringSegments : Int -> Int -> List Int -> ( Result String (List Int), Int )
+parseJsonStringSegments sourceBytes offset slicesSoFar =
+    let
+        simpleSegmentEndOffset =
+            parseJsonStringSimpleChars sourceBytes offset
 
+        simpleSegmentSliceLength =
+            simpleSegmentEndOffset - offset
+
+        simpleSegmentSlice =
+            Pine_kernel.take
+                [ simpleSegmentSliceLength
+                , Pine_kernel.skip [ offset, sourceBytes ]
+                ]
+
+        nextChar =
+            Pine_kernel.take
+                [ 4
+                , Pine_kernel.skip [ simpleSegmentEndOffset, sourceBytes ]
+                ]
+    in
+    if Pine_kernel.equal [ nextChar, '"' ] then
+        ( Ok (Pine_kernel.concat [ slicesSoFar, [ simpleSegmentSlice ] ])
+        , Pine_kernel.int_add [ simpleSegmentEndOffset, 4 ]
+        )
+
+    else if Pine_kernel.equal [ nextChar, '\\' ] then
+        -- We have a backslash escape sequence
+        case parseEscape sourceBytes simpleSegmentEndOffset of
+            ( Ok escapedChar, newOffset ) ->
+                parseJsonStringSegments
+                    sourceBytes
+                    newOffset
+                    (Pine_kernel.concat [ slicesSoFar, [ simpleSegmentSlice, escapedChar ] ])
+
+            ( Err message, newOffset ) ->
+                ( Err message
+                , newOffset
+                )
+
+    else
+        ( Err "Unexpected end of input while reading JSON string", simpleSegmentEndOffset )
+
+
+{-| Advance the pointer up to the next char that needs special treatment, like a quote or start of an escape sequence
 -}
-parseJsonString : List Char -> Int -> List Char -> ( Result String (List Char), Int )
-parseJsonString source offset soFar =
-    case List.take 1 (List.drop offset source) of
-        [ c ] ->
-            case c of
-                -- End of the JSON string if we encounter "
-                '"' ->
-                    ( Ok soFar, offset + 1 )
+parseJsonStringSimpleChars : Int -> Int -> Int
+parseJsonStringSimpleChars sourceBytes offset =
+    let
+        nextChar =
+            Pine_kernel.take
+                [ 4
+                , Pine_kernel.skip [ offset, sourceBytes ]
+                ]
+    in
+    if Pine_kernel.equal [ Pine_kernel.length nextChar, 0 ] then
+        -- We ran out of characters before finding a closing quote or escape
+        offset
 
-                -- Check for backslash escape
-                '\\' ->
-                    parseEscape source offset soFar
+    else if Pine_kernel.equal [ nextChar, '"' ] then
+        -- Found a quote or backslash escape, stop here
+        offset
 
-                -- Otherwise, accumulate this character and keep going
-                _ ->
-                    parseJsonString source (offset + 1) (List.concat [ soFar, [ c ] ])
+    else if Pine_kernel.equal [ nextChar, '\\' ] then
+        -- Found a backslash escape, stop here
+        offset
 
-        _ ->
-            -- We ran out of characters before finding a closing quote
-            ( Err "Unexpected end of input while reading JSON string", offset )
-
-
-
--- HELPERS
+    else
+        -- Keep going to the next character
+        parseJsonStringSimpleChars
+            sourceBytes
+            (Pine_kernel.int_add [ offset, 4 ])
 
 
-{-| Handle a backslash-escape character.
-We consume the `\` at position `offset`, so we look at `(offset + 1)` for the next char.
--}
-parseEscape : List Char -> Int -> List Char -> ( Result String (List Char), Int )
-parseEscape source offset soFar =
+parseEscape : Int -> Int -> ( Result String Int, Int )
+parseEscape sourceBytes offset =
     -- We already know source !! offset == '\\'
-    case List.take 1 (List.drop (offset + 1) source) of
-        [ e ] ->
-            case e of
-                -- Standard JSON escapes
-                'n' ->
-                    -- Append newline and continue
-                    parseJsonString source (offset + 2) (soFar ++ [ '\n' ])
+    let
+        nextChar =
+            Pine_kernel.take
+                [ 4
+                , Pine_kernel.skip [ offset + 4, sourceBytes ]
+                ]
+    in
+    case nextChar of
+        -- Standard JSON escapes
+        'n' ->
+            -- Append newline and continue
+            ( Ok '\n', offset + 8 )
 
-                'r' ->
-                    parseJsonString source (offset + 2) (soFar ++ [ '\u{000D}' ])
+        'r' ->
+            ( Ok '\u{000D}', offset + 8 )
 
-                't' ->
-                    parseJsonString source (offset + 2) (soFar ++ [ '\t' ])
+        't' ->
+            ( Ok '\t', offset + 8 )
 
-                '"' ->
-                    parseJsonString source (offset + 2) (soFar ++ [ '"' ])
+        '"' ->
+            ( Ok '"', offset + 8 )
 
-                '\\' ->
-                    parseJsonString source (offset + 2) (soFar ++ [ '\\' ])
+        '\\' ->
+            ( Ok '\\', offset + 8 )
 
-                '/' ->
-                    parseJsonString source (offset + 2) (soFar ++ [ '/' ])
+        '/' ->
+            ( Ok '/', offset + 8 )
 
-                'b' ->
-                    -- Typically backspace is ASCII 8, but some folks map it differently.
-                    -- For now, let's do ASCII 8 (BS).
-                    parseJsonString source (offset + 2) (soFar ++ [ Char.fromCode 8 ])
+        'b' ->
+            -- Typically backspace is ASCII 8, but some folks map it differently.
+            -- For now, let's do ASCII 8 (BS).
+            ( Ok (Char.fromCode 8), offset + 8 )
 
-                'f' ->
-                    -- Typically form feed is ASCII 12.
-                    parseJsonString source (offset + 2) (soFar ++ [ Char.fromCode 12 ])
+        'f' ->
+            -- Typically form feed is ASCII 12.
+            ( Ok (Char.fromCode 12), offset + 8 )
 
-                'u' ->
-                    -- JSON allows \uXXXX (4 hex digits)
-                    parseUnicodeEscape source (offset + 2) soFar
+        'u' ->
+            -- JSON allows \\uXXXX (4 hex digits)
+            parseUnicodeEscape
+                sourceBytes
+                (offset + 8)
 
-                -- Unrecognized escape
-                _ ->
-                    ( Err ("Unrecognized escape sequence: \\" ++ String.fromChar e)
-                    , offset + 2
-                    )
-
+        -- Unrecognized escape
         _ ->
-            -- No character after the backslash
-            ( Err "Unexpected end of input after backslash in string escape"
-            , offset + 1
+            ( Err ("Unrecognized escape sequence: " ++ String.fromChar nextChar)
+            , offset + 8
             )
 
 
-{-| Parse a JSON Unicode escape of the form "\\uXXXX" where XXXX are 4 hex digits.
-If it is a high surrogate in [0xD800..0xDBFF], look for a following "\\uXXXX"
+{-| Parse a JSON Unicode escape of the form "\\\\uXXXX" where XXXX are 4 hex digits.
+If it is a high surrogate in [0xD800..0xDBFF], look for a following "\\\\uXXXX"
 as a low surrogate in [0xDC00..0xDFFF]. If both are found, combine them into
-a single codepoint (e.g. "\\uD83C\\uDF32" --> 🌲).
+a single codepoint (e.g. "\\\\uD83C\\\\uDF32" --> 🌲).
 -}
-parseUnicodeEscape : List Char -> Int -> List Char -> ( Result String (List Char), Int )
-parseUnicodeEscape source offset soFar =
+parseUnicodeEscape : Int -> Int -> ( Result String Int, Int )
+parseUnicodeEscape sourceBytes offset =
     let
-        -- First, parse the 4 hex digits after the "\u"
-        fourHexChars : List Char
         fourHexChars =
-            List.take 4 (List.drop offset source)
+            Pine_kernel.take
+                [ 16
+                , Pine_kernel.skip [ offset, sourceBytes ]
+                ]
 
         ( codeUnit, offsetAfterHex ) =
             convert1OrMoreHexadecimal 0 fourHexChars
@@ -1078,26 +1158,25 @@ parseUnicodeEscape source offset soFar =
         hi : Int
         hi =
             codeUnit
-    in
-    if offsetAfterHex /= 4 then
-        -- We did not get 4 valid hex digits
-        ( Err "Unexpected end of input in \\u escape (need 4 hex digits)"
-        , offset + 6
-        )
 
-    else
-    -- We have a potential code unit, see if it's a high surrogate
-    if
-        0xD800 <= hi && hi <= 0xDBFF
-    then
-        -- Possibly part of a surrogate pair; check the next 2 chars for "\u"
-        case List.take 2 (List.drop (offset + 4) source) of
-            [ '\\', 'u' ] ->
+        followingTwoChars =
+            Pine_kernel.take
+                [ 8
+                , Pine_kernel.skip [ offset + 16, sourceBytes ]
+                ]
+    in
+    if Pine_kernel.equal [ offsetAfterHex, 16 ] then
+        -- We have a potential code unit, see if it's a high surrogate
+        if Pine_kernel.int_is_sorted_asc [ 0xD800, hi, 0xDBFF ] then
+            -- Possibly part of a surrogate pair; check the next 2 chars for "\u"
+            if Pine_kernel.equal [ followingTwoChars, Pine_kernel.concat [ '\\', 'u' ] ] then
                 -- Parse the next 4 hex digits (the low surrogate)
                 let
-                    fourHexChars2 : List Char
                     fourHexChars2 =
-                        List.take 4 (List.drop (offset + 4 + 2) source)
+                        Pine_kernel.take
+                            [ 16
+                            , Pine_kernel.skip [ offset + 24, sourceBytes ]
+                            ]
 
                     ( codeUnit2, offsetAfterHex2 ) =
                         convert1OrMoreHexadecimal 0 fourHexChars2
@@ -1110,310 +1189,329 @@ parseUnicodeEscape source offset soFar =
                     offset2 =
                         offsetAfterHex2
                 in
-                if offset2 /= 4 then
-                    -- The next \u did not have 4 valid hex digits
-                    ( Err "Unexpected end of input in second \\u of a surrogate pair"
-                    , offset + 4 + 2 + 6
-                    )
+                if Pine_kernel.equal [ offset2, 16 ] then
+                    if Pine_kernel.int_is_sorted_asc [ 0xDC00, lo, 0xDFFF ] then
+                        -- Combine into a single code point
+                        let
+                            fullCodePoint =
+                                0x00010000
+                                    + ((hi - 0xD800) * 0x0400)
+                                    + (lo - 0xDC00)
+                        in
+                        ( Ok (Char.fromCode fullCodePoint)
+                        , offset + 16 + 8 + 16
+                        )
 
-                else if 0xDC00 <= lo && lo <= 0xDFFF then
-                    -- Combine into a single code point
-                    let
-                        fullCodePoint =
-                            0x00010000
-                                + ((hi - 0xD800) * 0x0400)
-                                + (lo - 0xDC00)
-                    in
-                    parseJsonString
-                        source
-                        -- We used 4 hex digits + 2 extra chars "\u" + 4 more digits
-                        (offset + 4 + 2 + 4)
-                        (soFar ++ [ Char.fromCode fullCodePoint ])
+                    else
+                        -- We found "\\u" but it’s not in the low surrogate range.
+                        -- Option A: treat `hi` as a normal code unit; ignore the extra "\\u"
+                        -- Option B: throw an error.
+                        -- This example will just treat the high code as a normal char:
+                        ( Ok (Char.fromCode hi)
+                        , offset + 16
+                        )
 
                 else
-                    -- We found "\u" but it’s not in the low surrogate range.
-                    -- Option A: treat `hi` as a normal code unit; ignore the extra "\u"
-                    -- Option B: throw an error.
-                    -- This example will just treat the high code as a normal char:
-                    parseJsonString
-                        source
-                        (offset + 4)
-                        (soFar ++ [ Char.fromCode hi ])
+                    -- The next \u did not have 4 valid hex digits
+                    ( Err "Unexpected end of input in second \\u of a surrogate pair"
+                    , offset + 16 + 8 + 24
+                    )
 
-            _ ->
+            else
                 -- No second "\u"—so decode `hi` as-is.
-                parseJsonString
-                    source
-                    (offset + 4)
-                    (soFar ++ [ Char.fromCode hi ])
+                ( Ok (Char.fromCode hi), offset + 16 )
+
+        else
+            -- Not a high surrogate, just parse `\\uXXXX` as a single character
+            ( Ok (Char.fromCode hi), offset + 16 )
 
     else
-        -- Not a high surrogate, just parse `\uXXXX` as a single character
-        parseJsonString
-            source
-            (offset + 4)
-            (soFar ++ [ Char.fromCode hi ])
+        -- We did not get 4 valid hex digits
+        ( Err "Unexpected end of input in \\u escape (need 4 hex digits)"
+        , offset + 6
+        )
 
 
-parseInt : List Char -> Int -> ( Result String Int, Int )
-parseInt src offset0 =
+parseInt : Int -> Int -> ( Result String Int, Int )
+parseInt srcBytes offset0 =
     let
         nextChar =
-            List.take 1 (List.drop offset0 src)
+            Pine_kernel.take [ 4, Pine_kernel.skip [ offset0, srcBytes ] ]
     in
-    case nextChar of
-        [ '-' ] ->
-            -- If we see a minus sign, parse the rest as an unsigned integer
-            let
-                ( unsignedResult, offset1 ) =
-                    parseUnsignedInt src (offset0 + 1)
-            in
-            case unsignedResult of
-                Ok unsignedVal ->
-                    ( Ok -unsignedVal, offset1 )
+    if Pine_kernel.equal [ nextChar, '-' ] then
+        -- If we see a minus sign, parse the rest as an unsigned integer
+        let
+            ( unsignedResult, offset1 ) =
+                parseUnsignedInt
+                    srcBytes
+                    (Pine_kernel.int_add [ offset0, 4 ])
+        in
+        case unsignedResult of
+            Ok unsignedVal ->
+                ( Ok -unsignedVal
+                , offset1
+                )
 
-                Err err ->
-                    ( Err err, offset1 )
+            Err err ->
+                ( Err err
+                , offset1
+                )
 
-        _ ->
-            -- If no minus sign, parse the rest as an unsigned integer
-            parseUnsignedInt src offset0
+    else
+        -- If no minus sign, parse the rest as an unsigned integer
+        parseUnsignedInt srcBytes offset0
 
 
-parseUnsignedInt : List Char -> Int -> ( Result String Int, Int )
-parseUnsignedInt src offset0 =
-    case List.take 1 (List.drop offset0 src) of
-        [ '0' ] ->
-            ( Ok 0, offset0 + 1 )
+parseUnsignedInt : Int -> Int -> ( Result String Int, Int )
+parseUnsignedInt srcBytes offset0 =
+    case Pine_kernel.take [ 4, Pine_kernel.skip [ offset0, srcBytes ] ] of
+        '0' ->
+            ( Ok 0, offset0 + 4 )
 
-        [ '1' ] ->
-            parseUnsignedIntRec 1 src (offset0 + 1)
+        '1' ->
+            parseUnsignedIntRec 1 srcBytes (offset0 + 4)
 
-        [ '2' ] ->
-            parseUnsignedIntRec 2 src (offset0 + 1)
+        '2' ->
+            parseUnsignedIntRec 2 srcBytes (offset0 + 4)
 
-        [ '3' ] ->
-            parseUnsignedIntRec 3 src (offset0 + 1)
+        '3' ->
+            parseUnsignedIntRec 3 srcBytes (offset0 + 4)
 
-        [ '4' ] ->
-            parseUnsignedIntRec 4 src (offset0 + 1)
+        '4' ->
+            parseUnsignedIntRec 4 srcBytes (offset0 + 4)
 
-        [ '5' ] ->
-            parseUnsignedIntRec 5 src (offset0 + 1)
+        '5' ->
+            parseUnsignedIntRec 5 srcBytes (offset0 + 4)
 
-        [ '6' ] ->
-            parseUnsignedIntRec 6 src (offset0 + 1)
+        '6' ->
+            parseUnsignedIntRec 6 srcBytes (offset0 + 4)
 
-        [ '7' ] ->
-            parseUnsignedIntRec 7 src (offset0 + 1)
+        '7' ->
+            parseUnsignedIntRec 7 srcBytes (offset0 + 4)
 
-        [ '8' ] ->
-            parseUnsignedIntRec 8 src (offset0 + 1)
+        '8' ->
+            parseUnsignedIntRec 8 srcBytes (offset0 + 4)
 
-        [ '9' ] ->
-            parseUnsignedIntRec 9 src (offset0 + 1)
+        '9' ->
+            parseUnsignedIntRec 9 srcBytes (offset0 + 4)
 
         _ ->
             ( Err "Expecting a digit", offset0 )
 
 
-parseUnsignedIntRec : Int -> List Char -> Int -> ( Result String Int, Int )
-parseUnsignedIntRec upper src offset0 =
-    case List.take 1 (List.drop offset0 src) of
-        [ '0' ] ->
-            parseUnsignedIntRec (upper * 10) src (offset0 + 1)
+parseUnsignedIntRec : Int -> Int -> Int -> ( Result String Int, Int )
+parseUnsignedIntRec upper srcBytes offset0 =
+    case Pine_kernel.take [ 4, Pine_kernel.skip [ offset0, srcBytes ] ] of
+        '0' ->
+            parseUnsignedIntRec (upper * 10) srcBytes (offset0 + 4)
 
-        [ '1' ] ->
-            parseUnsignedIntRec (upper * 10 + 1) src (offset0 + 1)
+        '1' ->
+            parseUnsignedIntRec (upper * 10 + 1) srcBytes (offset0 + 4)
 
-        [ '2' ] ->
-            parseUnsignedIntRec (upper * 10 + 2) src (offset0 + 1)
+        '2' ->
+            parseUnsignedIntRec (upper * 10 + 2) srcBytes (offset0 + 4)
 
-        [ '3' ] ->
-            parseUnsignedIntRec (upper * 10 + 3) src (offset0 + 1)
+        '3' ->
+            parseUnsignedIntRec (upper * 10 + 3) srcBytes (offset0 + 4)
 
-        [ '4' ] ->
-            parseUnsignedIntRec (upper * 10 + 4) src (offset0 + 1)
+        '4' ->
+            parseUnsignedIntRec (upper * 10 + 4) srcBytes (offset0 + 4)
 
-        [ '5' ] ->
-            parseUnsignedIntRec (upper * 10 + 5) src (offset0 + 1)
+        '5' ->
+            parseUnsignedIntRec (upper * 10 + 5) srcBytes (offset0 + 4)
 
-        [ '6' ] ->
-            parseUnsignedIntRec (upper * 10 + 6) src (offset0 + 1)
+        '6' ->
+            parseUnsignedIntRec (upper * 10 + 6) srcBytes (offset0 + 4)
 
-        [ '7' ] ->
-            parseUnsignedIntRec (upper * 10 + 7) src (offset0 + 1)
+        '7' ->
+            parseUnsignedIntRec (upper * 10 + 7) srcBytes (offset0 + 4)
 
-        [ '8' ] ->
-            parseUnsignedIntRec (upper * 10 + 8) src (offset0 + 1)
+        '8' ->
+            parseUnsignedIntRec (upper * 10 + 8) srcBytes (offset0 + 4)
 
-        [ '9' ] ->
-            parseUnsignedIntRec (upper * 10 + 9) src (offset0 + 1)
+        '9' ->
+            parseUnsignedIntRec (upper * 10 + 9) srcBytes (offset0 + 4)
 
         _ ->
             ( Ok upper, offset0 )
 
 
-convert1OrMoreHexadecimal : Int -> List Char -> ( Int, Int )
-convert1OrMoreHexadecimal offset src =
-    case List.take 1 (List.drop offset src) of
-        [ '0' ] ->
-            convert0OrMoreHexadecimal 0 (offset + 1) src
+convert1OrMoreHexadecimal : Int -> Int -> ( Int, Int )
+convert1OrMoreHexadecimal offset srcBytes =
+    case Pine_kernel.take [ 4, Pine_kernel.skip [ offset, srcBytes ] ] of
+        '0' ->
+            convert0OrMoreHexadecimal 0 (offset + 4) srcBytes
 
-        [ '1' ] ->
-            convert0OrMoreHexadecimal 1 (offset + 1) src
+        '1' ->
+            convert0OrMoreHexadecimal 1 (offset + 4) srcBytes
 
-        [ '2' ] ->
-            convert0OrMoreHexadecimal 2 (offset + 1) src
+        '2' ->
+            convert0OrMoreHexadecimal 2 (offset + 4) srcBytes
 
-        [ '3' ] ->
-            convert0OrMoreHexadecimal 3 (offset + 1) src
+        '3' ->
+            convert0OrMoreHexadecimal 3 (offset + 4) srcBytes
 
-        [ '4' ] ->
-            convert0OrMoreHexadecimal 4 (offset + 1) src
+        '4' ->
+            convert0OrMoreHexadecimal 4 (offset + 4) srcBytes
 
-        [ '5' ] ->
-            convert0OrMoreHexadecimal 5 (offset + 1) src
+        '5' ->
+            convert0OrMoreHexadecimal 5 (offset + 4) srcBytes
 
-        [ '6' ] ->
-            convert0OrMoreHexadecimal 6 (offset + 1) src
+        '6' ->
+            convert0OrMoreHexadecimal 6 (offset + 4) srcBytes
 
-        [ '7' ] ->
-            convert0OrMoreHexadecimal 7 (offset + 1) src
+        '7' ->
+            convert0OrMoreHexadecimal 7 (offset + 4) srcBytes
 
-        [ '8' ] ->
-            convert0OrMoreHexadecimal 8 (offset + 1) src
+        '8' ->
+            convert0OrMoreHexadecimal 8 (offset + 4) srcBytes
 
-        [ '9' ] ->
-            convert0OrMoreHexadecimal 9 (offset + 1) src
+        '9' ->
+            convert0OrMoreHexadecimal 9 (offset + 4) srcBytes
 
-        [ 'a' ] ->
-            convert0OrMoreHexadecimal 10 (offset + 1) src
+        'a' ->
+            convert0OrMoreHexadecimal 10 (offset + 4) srcBytes
 
-        [ 'A' ] ->
-            convert0OrMoreHexadecimal 10 (offset + 1) src
+        'A' ->
+            convert0OrMoreHexadecimal 10 (offset + 4) srcBytes
 
-        [ 'b' ] ->
-            convert0OrMoreHexadecimal 11 (offset + 1) src
+        'b' ->
+            convert0OrMoreHexadecimal 11 (offset + 4) srcBytes
 
-        [ 'B' ] ->
-            convert0OrMoreHexadecimal 11 (offset + 1) src
+        'B' ->
+            convert0OrMoreHexadecimal 11 (offset + 4) srcBytes
 
-        [ 'c' ] ->
-            convert0OrMoreHexadecimal 12 (offset + 1) src
+        'c' ->
+            convert0OrMoreHexadecimal 12 (offset + 4) srcBytes
 
-        [ 'C' ] ->
-            convert0OrMoreHexadecimal 12 (offset + 1) src
+        'C' ->
+            convert0OrMoreHexadecimal 12 (offset + 4) srcBytes
 
-        [ 'd' ] ->
-            convert0OrMoreHexadecimal 13 (offset + 1) src
+        'd' ->
+            convert0OrMoreHexadecimal 13 (offset + 4) srcBytes
 
-        [ 'D' ] ->
-            convert0OrMoreHexadecimal 13 (offset + 1) src
+        'D' ->
+            convert0OrMoreHexadecimal 13 (offset + 4) srcBytes
 
-        [ 'e' ] ->
-            convert0OrMoreHexadecimal 14 (offset + 1) src
+        'e' ->
+            convert0OrMoreHexadecimal 14 (offset + 4) srcBytes
 
-        [ 'E' ] ->
-            convert0OrMoreHexadecimal 14 (offset + 1) src
+        'E' ->
+            convert0OrMoreHexadecimal 14 (offset + 4) srcBytes
 
-        [ 'f' ] ->
-            convert0OrMoreHexadecimal 15 (offset + 1) src
+        'f' ->
+            convert0OrMoreHexadecimal 15 (offset + 4) srcBytes
 
-        [ 'F' ] ->
-            convert0OrMoreHexadecimal 15 (offset + 1) src
+        'F' ->
+            convert0OrMoreHexadecimal 15 (offset + 4) srcBytes
 
         _ ->
             ( 0, -1 )
 
 
-convert0OrMoreHexadecimal : Int -> Int -> List Char -> ( Int, Int )
-convert0OrMoreHexadecimal soFar offset src =
-    case List.take 1 (List.drop offset src) of
-        [ '0' ] ->
-            convert0OrMoreHexadecimal (soFar * 16) (offset + 1) src
+convert0OrMoreHexadecimal : Int -> Int -> Int -> ( Int, Int )
+convert0OrMoreHexadecimal soFar offset srcBytes =
+    let
+        nextChar =
+            Pine_kernel.take [ 4, Pine_kernel.skip [ offset, srcBytes ] ]
+    in
+    if Pine_kernel.equal [ Pine_kernel.length nextChar, 0 ] then
+        -- We ran out of characters, return what we have so far
+        ( soFar, offset )
 
-        [ '1' ] ->
-            convert0OrMoreHexadecimal (soFar * 16 + 1) (offset + 1) src
+    else
+        case nextChar of
+            '0' ->
+                convert0OrMoreHexadecimal (soFar * 16) (offset + 4) srcBytes
 
-        [ '2' ] ->
-            convert0OrMoreHexadecimal (soFar * 16 + 2) (offset + 1) src
+            '1' ->
+                convert0OrMoreHexadecimal (soFar * 16 + 1) (offset + 4) srcBytes
 
-        [ '3' ] ->
-            convert0OrMoreHexadecimal (soFar * 16 + 3) (offset + 1) src
+            '2' ->
+                convert0OrMoreHexadecimal (soFar * 16 + 2) (offset + 4) srcBytes
 
-        [ '4' ] ->
-            convert0OrMoreHexadecimal (soFar * 16 + 4) (offset + 1) src
+            '3' ->
+                convert0OrMoreHexadecimal (soFar * 16 + 3) (offset + 4) srcBytes
 
-        [ '5' ] ->
-            convert0OrMoreHexadecimal (soFar * 16 + 5) (offset + 1) src
+            '4' ->
+                convert0OrMoreHexadecimal (soFar * 16 + 4) (offset + 4) srcBytes
 
-        [ '6' ] ->
-            convert0OrMoreHexadecimal (soFar * 16 + 6) (offset + 1) src
+            '5' ->
+                convert0OrMoreHexadecimal (soFar * 16 + 5) (offset + 4) srcBytes
 
-        [ '7' ] ->
-            convert0OrMoreHexadecimal (soFar * 16 + 7) (offset + 1) src
+            '6' ->
+                convert0OrMoreHexadecimal (soFar * 16 + 6) (offset + 4) srcBytes
 
-        [ '8' ] ->
-            convert0OrMoreHexadecimal (soFar * 16 + 8) (offset + 1) src
+            '7' ->
+                convert0OrMoreHexadecimal (soFar * 16 + 7) (offset + 4) srcBytes
 
-        [ '9' ] ->
-            convert0OrMoreHexadecimal (soFar * 16 + 9) (offset + 1) src
+            '8' ->
+                convert0OrMoreHexadecimal (soFar * 16 + 8) (offset + 4) srcBytes
 
-        [ 'a' ] ->
-            convert0OrMoreHexadecimal (soFar * 16 + 10) (offset + 1) src
+            '9' ->
+                convert0OrMoreHexadecimal (soFar * 16 + 9) (offset + 4) srcBytes
 
-        [ 'A' ] ->
-            convert0OrMoreHexadecimal (soFar * 16 + 10) (offset + 1) src
+            'a' ->
+                convert0OrMoreHexadecimal (soFar * 16 + 10) (offset + 4) srcBytes
 
-        [ 'b' ] ->
-            convert0OrMoreHexadecimal (soFar * 16 + 11) (offset + 1) src
+            'A' ->
+                convert0OrMoreHexadecimal (soFar * 16 + 10) (offset + 4) srcBytes
 
-        [ 'B' ] ->
-            convert0OrMoreHexadecimal (soFar * 16 + 11) (offset + 1) src
+            'b' ->
+                convert0OrMoreHexadecimal (soFar * 16 + 11) (offset + 4) srcBytes
 
-        [ 'c' ] ->
-            convert0OrMoreHexadecimal (soFar * 16 + 12) (offset + 1) src
+            'B' ->
+                convert0OrMoreHexadecimal (soFar * 16 + 11) (offset + 4) srcBytes
 
-        [ 'C' ] ->
-            convert0OrMoreHexadecimal (soFar * 16 + 12) (offset + 1) src
+            'c' ->
+                convert0OrMoreHexadecimal (soFar * 16 + 12) (offset + 4) srcBytes
 
-        [ 'd' ] ->
-            convert0OrMoreHexadecimal (soFar * 16 + 13) (offset + 1) src
+            'C' ->
+                convert0OrMoreHexadecimal (soFar * 16 + 12) (offset + 4) srcBytes
 
-        [ 'D' ] ->
-            convert0OrMoreHexadecimal (soFar * 16 + 13) (offset + 1) src
+            'd' ->
+                convert0OrMoreHexadecimal (soFar * 16 + 13) (offset + 4) srcBytes
 
-        [ 'e' ] ->
-            convert0OrMoreHexadecimal (soFar * 16 + 14) (offset + 1) src
+            'D' ->
+                convert0OrMoreHexadecimal (soFar * 16 + 13) (offset + 4) srcBytes
 
-        [ 'E' ] ->
-            convert0OrMoreHexadecimal (soFar * 16 + 14) (offset + 1) src
+            'e' ->
+                convert0OrMoreHexadecimal (soFar * 16 + 14) (offset + 4) srcBytes
 
-        [ 'f' ] ->
-            convert0OrMoreHexadecimal (soFar * 16 + 15) (offset + 1) src
+            'E' ->
+                convert0OrMoreHexadecimal (soFar * 16 + 14) (offset + 4) srcBytes
 
-        [ 'F' ] ->
-            convert0OrMoreHexadecimal (soFar * 16 + 15) (offset + 1) src
+            'f' ->
+                convert0OrMoreHexadecimal (soFar * 16 + 15) (offset + 4) srcBytes
 
-        _ ->
-            ( soFar, offset )
+            'F' ->
+                convert0OrMoreHexadecimal (soFar * 16 + 15) (offset + 4) srcBytes
+
+            _ ->
+                ( 0, -1 )
 
 
-skipWhitespace : List Char -> Int -> Int
-skipWhitespace str offset =
-    case List.take 1 (List.drop offset str) of
-        [ ' ' ] ->
-            skipWhitespace str (offset + 1)
+skipWhitespace : Int -> Int -> Int
+skipWhitespace strBytes offset =
+    let
+        nextChar =
+            Pine_kernel.take
+                [ 4
+                , Pine_kernel.skip [ offset, strBytes ]
+                ]
+    in
+    case nextChar of
+        ' ' ->
+            skipWhitespace strBytes (offset + 4)
 
-        [ '\t' ] ->
-            skipWhitespace str (offset + 1)
+        '\t' ->
+            skipWhitespace strBytes (offset + 4)
 
-        [ '\n' ] ->
-            skipWhitespace str (offset + 1)
+        '\n' ->
+            skipWhitespace strBytes (offset + 4)
 
-        [ '\u{000D}' ] ->
-            skipWhitespace str (offset + 1)
+        '\u{000D}' ->
+            skipWhitespace strBytes (offset + 1)
 
         _ ->
             offset
