@@ -21,25 +21,6 @@ faviconPath =
     "favicon.svg"
 
 
-commonPrefixLength : List a -> List a -> Int
-commonPrefixLength listA listB =
-    case listA of
-        [] ->
-            0
-
-        a :: restA ->
-            case listB of
-                [] ->
-                    0
-
-                b :: restB ->
-                    if a == b then
-                        1 + commonPrefixLength restA restB
-
-                    else
-                        0
-
-
 listFind : (a -> Bool) -> List a -> Maybe a
 listFind predicate list =
     case list of
@@ -76,6 +57,20 @@ assocListGet key list =
 
             else
                 assocListGet key rest
+
+
+assocListInsert : key -> value -> List ( key, value ) -> List ( key, value )
+assocListInsert key value list =
+    case assocListGetWithIndex key list of
+        Just ( index, _ ) ->
+            List.concat
+                [ List.take index list
+                , [ ( key, value ) ]
+                , List.drop (index + 1) list
+                ]
+
+        Nothing ->
+            ( key, value ) :: list
 
 
 listMapFind : (a -> Maybe b) -> List a -> Maybe b
@@ -197,6 +192,25 @@ resultListIndexedMapCombineHelper index completeList mapItem sourceList =
                     Err err
 
 
+commonPrefixLength : List a -> List a -> Int
+commonPrefixLength listA listB =
+    case listA of
+        [] ->
+            0
+
+        a :: restA ->
+            case listB of
+                [] ->
+                    0
+
+                b :: restB ->
+                    if a == b then
+                        1 + commonPrefixLength restA restB
+
+                    else
+                        0
+
+
 {-| Remove duplicate values, keeping the first instance of each element which appears more than once.
 
     unique [ 0, 1, 1, 0, 1 ]
@@ -224,13 +238,18 @@ listUniqueHelp remaining accumulator =
 
 listCount : (a -> Bool) -> List a -> Int
 listCount predicate list =
+    listCountHelp 0 predicate list
+
+
+listCountHelp : Int -> (a -> Bool) -> List a -> Int
+listCountHelp count predicate list =
     case list of
         [] ->
-            0
+            count
 
         first :: rest ->
             if predicate first then
-                1 + listCount predicate rest
+                listCountHelp (count + 1) predicate rest
 
             else
-                listCount predicate rest
+                listCountHelp count predicate rest

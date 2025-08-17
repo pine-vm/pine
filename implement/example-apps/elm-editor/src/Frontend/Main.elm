@@ -1927,7 +1927,7 @@ prepareCompileForFileOpenedInEditor workspace =
                             CompileElmApp.asCompletelyLoweredElmApp
                                 CompileElmApp.defaultEntryPoints
                                 { compilationInterfaceElmModuleNamePrefixes = [ "CompilationInterface" ]
-                                , sourceFiles = Dict.fromList filesBeforeLoweringOnlyAsBytes
+                                , sourceFiles = filesBeforeLoweringOnlyAsBytes
                                 , dependencies = dependencies
                                 , compilationRootFilePath = entryPointFilePath
                                 , interfaceToHostRootModuleName = []
@@ -2029,7 +2029,6 @@ continueLowering dependenciesFromCompletedIterations compilationOrigin =
                         { elmMakeRequest =
                             { files =
                                 missingDependencyElmMake.files
-                                    |> Dict.toList
                                     |> mapFilesToRequestToBackendStructure base64FromBytes
                             , workingDirectoryPath = []
                             , entryPointFilePathFromWorkingDirectory = missingDependencyElmMake.entryPointFilePath
@@ -2053,7 +2052,6 @@ continueLowering dependenciesFromCompletedIterations compilationOrigin =
 
                 files =
                     completedLowering
-                        |> Dict.toList
                         |> List.filter (Tuple.first >> CompileElmApp.includeFilePathInElmMakeRequest)
             in
             LoweringComplete
