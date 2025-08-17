@@ -195,7 +195,7 @@ public class ReducePineExpression
 
     public static Expression? SearchForExpressionReduction(
         Expression expression,
-        EnvConstraintId? envConstraintId)
+        PineValueClass? envConstraintId)
     {
         if (expression is Expression.Literal)
             return null;
@@ -623,7 +623,7 @@ public class ReducePineExpression
 
     public static IEnumerable<int> TryInferListLengthLowerBounds(
         Expression expression,
-        EnvConstraintId envConstraintId)
+        PineValueClass envConstraintId)
     {
         if (expression is Expression.Literal literalExpr)
         {
@@ -644,7 +644,7 @@ public class ReducePineExpression
         {
             var itemConstraint = envConstraintId.PartUnderPath(itemPath.Path);
 
-            foreach (var itemConstraintItem in itemConstraint.ParsedEnvItems)
+            foreach (var itemConstraintItem in itemConstraint.ParsedItems)
             {
                 if (itemConstraintItem.Key.Count is 0)
                 {
@@ -815,7 +815,7 @@ public class ReducePineExpression
     public static Expression SearchForExpressionReductionRecursive(
         int maxDepth,
         Expression expression,
-        EnvConstraintId? envConstraintId = null,
+        PineValueClass? envConstraintId = null,
         Func<Expression, bool>? dontReduceExpression = null)
     {
         if (maxDepth < 1)

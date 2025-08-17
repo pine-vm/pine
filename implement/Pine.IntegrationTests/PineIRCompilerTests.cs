@@ -78,7 +78,7 @@ public class PineIRCompilerTests
             ExpressionEncoding.EncodeExpressionAsValue(recursiveFunctionSum);
 
         var compilationEnvClass =
-              EnvConstraintId.Create(
+              PineValueClass.Create(
                   [new KeyValuePair<IReadOnlyList<int>, PineValue>(
                         key:
                         [0,0],
@@ -307,7 +307,7 @@ public class PineIRCompilerTests
         }
 
         var compilationEnvClasses =
-            ImmutableDictionary<Expression, IReadOnlyList<EnvConstraintId>>.Empty
+            ImmutableDictionary<Expression, IReadOnlyList<PineValueClass>>.Empty
             .SetItem(recursiveFunctionSum, [compilationEnvClass]);
 
         var pineVM =

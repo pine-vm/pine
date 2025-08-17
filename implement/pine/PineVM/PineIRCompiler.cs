@@ -72,7 +72,7 @@ public class PineIRCompiler
     public static NodeCompilationResult CompileExpression(
         Expression rootExpression,
         ImmutableHashSet<Expression> rootExprAlternativeForms,
-        EnvConstraintId? envClass,
+        PineValueClass? envClass,
         PineVMParseCache parseCache)
     {
         /*
@@ -144,7 +144,7 @@ public class PineIRCompiler
 
     public static bool IsRecursiveCall(
         Expression.ParseAndEval parseAndEval,
-        EnvConstraintId envClass,
+        PineValueClass envClass,
         ImmutableHashSet<Expression> rootExprForms,
         PineVMParseCache parseCache)
     {

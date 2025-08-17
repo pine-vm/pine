@@ -31,7 +31,7 @@ public static class PineCSharpSyntaxFactory
 
     public static StatementSyntax BranchForEnvId(
         Expression expr,
-        PineVM.EnvConstraintId envConstraint,
+        PineVM.PineValueClass envConstraint,
         FunctionCompilationEnv compilationEnv,
         StatementSyntax[]? prependStatments)
     {
@@ -54,13 +54,13 @@ public static class PineCSharpSyntaxFactory
                     SyntaxFactory.ReturnStatement(branchInvocation.Syntax)
                     ]));
 
-        if (envConstraint.ParsedEnvItems.Count is 0)
+        if (envConstraint.ParsedItems.Count is 0)
         {
             return branchInvocationBlock;
         }
 
         var envListItemsConditionsExprs =
-            envConstraint.ParsedEnvItems
+            envConstraint.ParsedItems
             .OrderBy(envListItem => envListItem.Key, PineVM.IntPathComparer.Instance)
             .Select(envListItem =>
             {

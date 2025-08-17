@@ -134,14 +134,14 @@ public partial class CompileToCSharp
                     var availableSpecialized =
                     expressionsUsages
                     .SelectMany(exprUsage =>
-                    exprUsage.Expression == expr && exprUsage.EnvId is { } envId ? (IReadOnlyList<EnvConstraintId>)[envId] : [])
+                    exprUsage.Expression == expr && exprUsage.EnvId is { } envId ? (IReadOnlyList<PineValueClass>)[envId] : [])
                     .Distinct()
                     .Select(envConstraint =>
                     {
                         var envConstraintFunctionInterface =
                         BuildFunctionSpecializedCompilationInterface(functionInterfaceBase, expr, envConstraint);
 
-                        return new KeyValuePair<EnvConstraintId, ExprFunctionCompilationInterface>(
+                        return new KeyValuePair<PineValueClass, ExprFunctionCompilationInterface>(
                             envConstraint,
                             envConstraintFunctionInterface);
                     })
@@ -490,8 +490,8 @@ public partial class CompileToCSharp
     public static Result<string, (BlockSyntax blockSyntax, CompiledExpressionDependencies dependencies)>
         CompileToCSharpFunctionBlockSyntax(
             Expression expression,
-            EnvConstraintId? constrainedEnvId,
-            IReadOnlyList<EnvConstraintId> branchesEnvIds,
+            PineValueClass? constrainedEnvId,
+            IReadOnlyList<PineValueClass> branchesEnvIds,
             FunctionCompilationEnv compilationEnv)
     {
         if (constrainedEnvId is { })
@@ -517,9 +517,9 @@ public partial class CompileToCSharp
     public static Result<string, (BlockSyntax blockSyntax, CompiledExpressionDependencies dependencies)>
         CompileToCSharpGeneralFunctionBlockSyntax(
             Expression expression,
-            IReadOnlyList<EnvConstraintId> branchesEnvIds,
+            IReadOnlyList<PineValueClass> branchesEnvIds,
             FunctionCompilationEnv compilationEnv,
-            EnvConstraintId? envConstraint) =>
+            PineValueClass? envConstraint) =>
         CompileToCSharpExpression(
             ReducePineExpression.SearchForExpressionReductionRecursive(
                 maxDepth: 5,
@@ -550,7 +550,7 @@ public partial class CompileToCSharp
                 var branchesForSpecializedRepr =
                 branchesEnvIds
                 // Order by number of items, to prioritize the more specialized branches.
-                .OrderByDescending(envId => envId.ParsedEnvItems.Count)
+                .OrderByDescending(envId => envId.ParsedItems.Count)
                 .Select(envId =>
                 {
                     return
@@ -567,7 +567,7 @@ public partial class CompileToCSharp
                 with
                 {
                     Values =
-                    branchesEnvIds.SelectMany(envId => envId.ParsedEnvItems.Select(item => item.Value))
+                    branchesEnvIds.SelectMany(envId => envId.ParsedItems.Select(item => item.Value))
                     .ToImmutableHashSet()
                 };
 
@@ -1217,11 +1217,11 @@ public partial class CompileToCSharp
                             {
                                 var specializedMostConstrainedFirst =
                                     exprEntry.AvailableSpecialized
-                                    .OrderByDescending(kv => kv.Key.ParsedEnvItems.Count);
+                                    .OrderByDescending(kv => kv.Key.ParsedItems.Count);
 
                                 foreach (var specializedEnvConstraint in specializedMostConstrainedFirst)
                                 {
-                                    if (specializedEnvConstraint.Key.ParsedEnvItems.All(ChildEnvContstraintItemSatisfied))
+                                    if (specializedEnvConstraint.Key.ParsedItems.All(ChildEnvContstraintItemSatisfied))
                                     {
                                         return
                                         InvocationExpressionForCompiledExpressionFunction(
@@ -1278,7 +1278,7 @@ public partial class CompileToCSharp
     public static Result<string, CompiledExpression> InvocationExpressionForCompiledExpressionFunction(
         ExpressionCompilationEnvironment currentEnv,
         Expression invokedExpr,
-        EnvConstraintId? envConstraint,
+        PineValueClass? envConstraint,
         Expression parseAndEvalEnvExpr)
     {
         var invokedExprFunctionId =
@@ -1378,7 +1378,7 @@ public partial class CompileToCSharp
     public static ExprFunctionCompilationInterface BuildFunctionSpecializedCompilationInterface(
         ExprFunctionCompilationInterface baseEnv,
         Expression compiledExpr,
-        EnvConstraintId? envConstraint)
+        PineValueClass? envConstraint)
     {
         var invokedExprEnvItemsPaths =
             ExprFunctionCompilationInterface.CompileEnvItemsPathsForExprFunction(compiledExpr, envConstraint);
@@ -1414,11 +1414,11 @@ public partial class CompileToCSharp
 
     public static string MemberNameForCompiledExpressionFunction(
         CompiledExpressionId derivedId,
-        EnvConstraintId? envConstraint) =>
+        PineValueClass? envConstraint) =>
         "expr_function_" + derivedId.ExpressionHashBase16[..10] +
         (envConstraint is null ? null : "_env_" + MemberNameForConstrainedEnv(envConstraint));
 
-    static string MemberNameForConstrainedEnv(EnvConstraintId constrainedEnv) =>
+    static string MemberNameForConstrainedEnv(PineValueClass constrainedEnv) =>
         constrainedEnv.HashBase16[..8];
 
     public static Result<string, Expression> TransformPineExpressionWithOptionalReplacement(
@@ -1764,7 +1764,7 @@ public partial class CompileToCSharp
 
             switch (expr)
             {
-                case Expression.Literal _:
+                case Expression.Literal:
                     // Leaf node, no further traversal needed
                     break;
                 case Expression.List listExpr:
@@ -1785,7 +1785,7 @@ public partial class CompileToCSharp
                     Traverse(conditionalExpr.TrueBranch, true);
                     Traverse(conditionalExpr.FalseBranch, true);
                     break;
-                case Expression.Environment _:
+                case Expression.Environment:
                     // Leaf node, no further traversal needed
                     break;
                 case Expression.StringTag stringTagExpr:

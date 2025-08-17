@@ -348,11 +348,11 @@ public class PGOTests
                     Console.WriteLine(
                         "\nEnvironment class [" + i + "] " + envClass.HashBase16[..8] +
                         " for expr " + Convert.ToHexStringLower(exprValueHash.Span)[..8] +
-                        " has " + envClass.ParsedEnvItems.Count + " env items:");
+                        " has " + envClass.ParsedItems.Count + " env items:");
 
-                    var envItems = envClass.ParsedEnvItems.ToArray();
+                    var envItems = envClass.ParsedItems.ToArray();
 
-                    for (var j = 0; j < envClass.ParsedEnvItems.Count; j++)
+                    for (var j = 0; j < envClass.ParsedItems.Count; j++)
                     {
                         var envItem = envItems[j];
 
@@ -950,11 +950,11 @@ public class PGOTests
                     Console.WriteLine(
                         "\nEnvironment class [" + i + "] " + envClass.HashBase16[..8] +
                         " for expr " + Convert.ToHexStringLower(exprValueHash.Span)[..8] +
-                        " has " + envClass.ParsedEnvItems.Count + " env items:");
+                        " has " + envClass.ParsedItems.Count + " env items:");
 
-                    var envItems = envClass.ParsedEnvItems.ToArray();
+                    var envItems = envClass.ParsedItems.ToArray();
 
-                    for (var j = 0; j < envClass.ParsedEnvItems.Count; j++)
+                    for (var j = 0; j < envClass.ParsedItems.Count; j++)
                     {
                         var envItem = envItems[j];
 
@@ -1359,11 +1359,11 @@ public class PGOTests
                     Console.WriteLine(
                         "\nEnvironment class [" + i + "] " + envClass.HashBase16[..8] +
                         " for expr " + Convert.ToHexStringLower(exprValueHash.Span)[..8] +
-                        " has " + envClass.ParsedEnvItems.Count + " env items:");
+                        " has " + envClass.ParsedItems.Count + " env items:");
 
-                    var envItems = envClass.ParsedEnvItems.ToArray();
+                    var envItems = envClass.ParsedItems.ToArray();
 
-                    for (var j = 0; j < envClass.ParsedEnvItems.Count; j++)
+                    for (var j = 0; j < envClass.ParsedItems.Count; j++)
                     {
                         var envItem = envItems[j];
 
@@ -1749,11 +1749,11 @@ public class PGOTests
                     Console.WriteLine(
                         "\nEnvironment class [" + i + "] " + envClass.HashBase16[..8] +
                         " for expr " + Convert.ToHexStringLower(exprValueHash.Span)[..8] +
-                        " has " + envClass.ParsedEnvItems.Count + " env items:");
+                        " has " + envClass.ParsedItems.Count + " env items:");
 
-                    var envItems = envClass.ParsedEnvItems.ToArray();
+                    var envItems = envClass.ParsedItems.ToArray();
 
-                    for (var j = 0; j < envClass.ParsedEnvItems.Count; j++)
+                    for (var j = 0; j < envClass.ParsedItems.Count; j++)
                     {
                         var envItem = envItems[j];
 

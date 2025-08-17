@@ -20,14 +20,14 @@ public class CompilerMutableCache
 
     public record CompileExpressionFunctionParameters(
         Expression Expression,
-        PineVM.EnvConstraintId? ConstrainedEnvId,
-        IReadOnlyList<PineVM.EnvConstraintId> BranchesConstrainedEnvIds,
+        PineVM.PineValueClass? ConstrainedEnvId,
+        IReadOnlyList<PineVM.PineValueClass> BranchesConstrainedEnvIds,
         FunctionCompilationEnv CompilationEnv);
 
     public CompileExpressionFunctionBlockResult
         CompileToCSharpFunctionBlockSyntax(
         PineVM.ExpressionUsageAnalysis expressionUsage,
-        IReadOnlyList<PineVM.EnvConstraintId> branchesConstrainedEnvIds,
+        IReadOnlyList<PineVM.PineValueClass> branchesConstrainedEnvIds,
         FunctionCompilationEnv compilationEnv) =>
         CompileToCSharpFunctionBlockSyntax(
             new CompileExpressionFunctionParameters(

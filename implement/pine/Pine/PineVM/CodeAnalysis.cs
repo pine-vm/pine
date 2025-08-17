@@ -1,6 +1,5 @@
 using Pine.Core;
 using Pine.Core.Internal;
-using Pine.Core.PopularEncodings;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -8,349 +7,6 @@ using System.Collections.Immutable;
 using System.Linq;
 
 namespace Pine.PineVM;
-
-public record EnvConstraintId
-{
-    readonly static CompilePineToDotNet.CompilerMutableCache s_compilerCache = new();
-
-    public IReadOnlyDictionary<IReadOnlyList<int>, PineValue> ParsedEnvItems { get; }
-
-    readonly public string HashBase16;
-
-    readonly private FastRepresentation _fastRepresentation;
-
-    /// <summary>
-    /// Representation optimized for fast check at runtime.
-    /// Independent of the identity of the constraint, this internal representation could
-    /// use different ordering to check the most distinctive items first.
-    /// </summary>
-    private record FastRepresentation(
-        ReadOnlyMemory<(ReadOnlyMemory<int>, PineValue)> Constraints)
-    {
-        public bool SatisfiedByValue(PineValue envValue)
-        {
-            for (var i = 0; i < Constraints.Length; ++i)
-            {
-                var (path, expectedValue) = Constraints.Span[i];
-
-                if (CodeAnalysis.ValueFromPathInValue(envValue, path.Span) is not { } pathValue)
-                    return false;
-
-                if (!pathValue.Equals(expectedValue))
-                    return false;
-            }
-
-            return true;
-        }
-    }
-
-    private EnvConstraintId(
-        IReadOnlyDictionary<IReadOnlyList<int>, PineValue> parsedEnvItems,
-        string hashBase16)
-    {
-        ParsedEnvItems = parsedEnvItems;
-
-        HashBase16 = hashBase16;
-
-        var constraintsList = new (ReadOnlyMemory<int>, PineValue)[parsedEnvItems.Count];
-
-        for (var i = 0; i < parsedEnvItems.Count; ++i)
-        {
-            var kv = parsedEnvItems.ElementAt(i);
-
-            constraintsList[i] = (new ReadOnlyMemory<int>([.. kv.Key]), kv.Value);
-        }
-
-        var constraintsMemory = new ReadOnlyMemory<(ReadOnlyMemory<int>, PineValue)>(constraintsList);
-
-        _fastRepresentation = new FastRepresentation(constraintsMemory);
-    }
-
-    public PineValue? TryGetValue(IReadOnlyList<int> path)
-    {
-        if (ParsedEnvItems.TryGetValue(path, out var value))
-            return value;
-
-        if (path.Count is 0)
-            return null;
-
-        if (TryGetValue([.. path.SkipLast(1)]) is not { } parentValue)
-            return null;
-
-        return CodeAnalysis.ValueFromPathInValue(parentValue, [.. path.TakeLast(1)]);
-    }
-
-    public override int GetHashCode()
-    {
-        return HashBase16.GetHashCode();
-    }
-
-    public static bool Equal(EnvConstraintId? id0, EnvConstraintId? id1)
-    {
-        if (ReferenceEquals(id0, id1))
-            return true;
-
-        if (id0 is null || id1 is null)
-            return false;
-
-        return id0.HashBase16 == id1.HashBase16;
-    }
-
-    public static EnvConstraintId CreateEquals(PineValue pineValue) =>
-        Create([new KeyValuePair<IReadOnlyList<int>, PineValue>([], pineValue)]);
-
-    public static EnvConstraintId Create(
-        ExpressionEnvClass.ConstrainedEnv envClass,
-        PineValue envValue,
-        bool skipUnavailableItems)
-    {
-        var parsedEnvItems =
-            envClass.ParsedEnvItems
-            .SelectMany(path =>
-            {
-                var itemValue = CodeAnalysis.ValueFromPathInValue(envValue, [.. path]);
-
-                if (itemValue is null)
-                {
-                    if (skipUnavailableItems)
-                        return Enumerable.Empty<KeyValuePair<IReadOnlyList<int>, PineValue>>();
-
-                    throw new Exception("Item value null for path " + string.Join(", ", path));
-                }
-
-                return [new KeyValuePair<IReadOnlyList<int>, PineValue>(path, itemValue)];
-            })
-            .OrderBy(kv => kv.Key, IntPathComparer.Instance)
-            .ToImmutableArray();
-
-        return Create(parsedEnvItems);
-    }
-
-    public static EnvConstraintId Create(
-        IReadOnlyList<KeyValuePair<IReadOnlyList<int>, PineValue>> parsedEnvItems)
-    {
-        PineValue[] parsedEnvItemsPineValues =
-            [.. parsedEnvItems
-            .OrderBy(kv => kv.Key, IntPathComparer.Instance)
-            .Select(envItem =>
-            (PineValue)
-            PineValue.List(
-                [PineValue.List([.. envItem.Key.Select(pathItem => IntegerEncoding.EncodeSignedInteger(pathItem))]),
-                envItem.Value]))];
-
-        var hashBase16 =
-            Convert.ToHexStringLower(s_compilerCache.ComputeHash(PineValue.List(parsedEnvItemsPineValues)).Span);
-
-        return new EnvConstraintId(
-            parsedEnvItems.ToImmutableSortedDictionary(keyComparer: IntPathComparer.Instance),
-            hashBase16: hashBase16);
-    }
-
-    public virtual bool Equals(EnvConstraintId? other) =>
-        Equal(this, other);
-
-    public bool SatisfiedByValue(PineValue envValue)
-    {
-        return _fastRepresentation.SatisfiedByValue(envValue);
-    }
-
-    public bool SatisfiedByConstraint(EnvConstraintId otherEnvConstraintId)
-    {
-        foreach (var envItem in ParsedEnvItems)
-        {
-            if (envItem.Value is not { } expectedValue)
-                return false;
-
-            if (otherEnvConstraintId.TryGetValue(envItem.Key) is not { } pathValue)
-                return false;
-
-            if (!pathValue.Equals(expectedValue))
-                return false;
-        }
-
-        return true;
-    }
-
-    public static EnvConstraintId CreateIntersection(
-        PineValue valueA,
-        PineValue valueB,
-        int depthLimit) =>
-        Create(Intersection(valueA, valueB, depthLimit));
-
-
-    public static IReadOnlyList<KeyValuePair<IReadOnlyList<int>, PineValue>> Intersection(
-        PineValue valueA,
-        PineValue valueB,
-        int depthLimit)
-    {
-        var intersectionTree = IntersectionTree(valueA, valueB, depthLimit);
-
-        var mutatedCollection = new List<KeyValuePair<IReadOnlyList<int>, PineValue>>();
-
-        void collectLeafesRecursively(ImmutableQueue<int> stack, IntersectionNode node)
-        {
-            if (node is IntersectionNode.IntersectionLeaf leaf)
-            {
-                mutatedCollection.Add(new KeyValuePair<IReadOnlyList<int>, PineValue>([.. stack], leaf.Value));
-            }
-
-            if (node is IntersectionNode.IntersectionBranch branch)
-            {
-                foreach (var (offset, childNode) in branch.Children)
-                {
-                    collectLeafesRecursively(stack.Enqueue(offset), childNode);
-                }
-            }
-        }
-
-        collectLeafesRecursively([], intersectionTree);
-
-        return mutatedCollection;
-    }
-
-    private abstract record IntersectionNode
-    {
-        public sealed record IntersectionLeaf(PineValue Value)
-            : IntersectionNode;
-
-        public sealed record IntersectionBranch(IReadOnlyList<(int offset, IntersectionNode childNode)> Children)
-            : IntersectionNode;
-    }
-
-    private static IntersectionNode IntersectionTree(
-        PineValue valueA,
-        PineValue valueB,
-        int depthLimit)
-    {
-        if (valueA == valueB)
-        {
-            return new IntersectionNode.IntersectionLeaf(valueA);
-        }
-
-        if (depthLimit < 1)
-        {
-            return new IntersectionNode.IntersectionBranch([]);
-        }
-
-        if (valueA is not PineValue.ListValue listA || valueB is not PineValue.ListValue listB)
-        {
-            return new IntersectionNode.IntersectionBranch([]);
-        }
-
-        var commonLength =
-            listA.Elements.Length < listB.Elements.Length ?
-            listA.Elements.Length :
-            listB.Elements.Length;
-
-        var children = new List<(int, IntersectionNode)>();
-
-        for (var i = 0; i < commonLength; ++i)
-        {
-            var childNode = IntersectionTree(listA.Elements.Span[i], listB.Elements.Span[i], depthLimit - 1);
-
-            if (childNode is IntersectionNode.IntersectionBranch branch && branch.Children.Count is 0)
-                continue;
-
-            children.Add((i, childNode));
-        }
-
-        return new IntersectionNode.IntersectionBranch(children);
-    }
-
-    public static EnvConstraintId CreateIntersection(EnvConstraintId constraint, PineValue value)
-    {
-        if (constraint.SatisfiedByValue(value))
-            return constraint;
-
-        var intersectionEnvItems = new Dictionary<IReadOnlyList<int>, PineValue>();
-
-        foreach (var envItem in constraint.ParsedEnvItems)
-        {
-            if (CodeAnalysis.ValueFromPathInValue(value, [.. envItem.Key]) is not { } pathValue)
-                continue;
-
-            if (pathValue.Equals(envItem.Value))
-            {
-                intersectionEnvItems[envItem.Key] = envItem.Value;
-                continue;
-            }
-
-            if (envItem.Value is not PineValue.ListValue constraintItemList || pathValue is not PineValue.ListValue valueItemList)
-            {
-                continue;
-            }
-
-            for (var i = 0; i < constraintItemList.Elements.Length && i < valueItemList.Elements.Length; ++i)
-            {
-                var constraintChildEnvItem = constraintItemList.Elements.Span[i];
-                var foundChildEnvItem = valueItemList.Elements.Span[i];
-
-                var childConstraint = CreateEquals(constraintChildEnvItem);
-
-                var childConstraintIntersection = CreateIntersection(childConstraint, foundChildEnvItem);
-
-                foreach (var childEnvConstraintItem in childConstraintIntersection.ParsedEnvItems)
-                {
-                    intersectionEnvItems[[.. envItem.Key, i, .. childEnvConstraintItem.Key]] = childEnvConstraintItem.Value;
-                }
-            }
-        }
-
-        return Create([.. intersectionEnvItems]);
-    }
-
-    public EnvConstraintId PartUnderPath(IReadOnlyList<int> path)
-    {
-        return Create(
-            [..
-            ParsedEnvItems
-            .SelectMany(item =>
-            {
-                if (!item.Key.Take(path.Count).SequenceEqual(path))
-                {
-                    return (IReadOnlyList<KeyValuePair<IReadOnlyList<int>, PineValue>>)[];
-                }
-
-                return [new KeyValuePair<IReadOnlyList<int>, PineValue>([.. item.Key.Skip(path.Count)], item.Value)];
-            })]);
-    }
-}
-
-public class EnvironmentClassSpecificityComparer : IComparer<EnvConstraintId>
-{
-    public readonly static EnvironmentClassSpecificityComparer Instance = new();
-
-    public int Compare(EnvConstraintId? x, EnvConstraintId? y)
-    {
-        if (x is null && y is null)
-            return 0;
-
-        if (x is null)
-            return -1;
-
-        if (y is null)
-            return 1;
-
-        if (x.SatisfiedByConstraint(y))
-        {
-            if (!y.SatisfiedByConstraint(x))
-            {
-                return -1;
-            }
-        }
-
-        if (y.SatisfiedByConstraint(x))
-        {
-            if (!x.SatisfiedByConstraint(y))
-            {
-                return 1;
-            }
-        }
-
-        return x.ParsedEnvItems.Count - y.ParsedEnvItems.Count;
-    }
-}
-
 
 
 public abstract record ExprMappedToParentEnv
@@ -449,12 +105,12 @@ public class IntPathMemoryComparer : IComparer<ReadOnlyMemory<int>>
 public record RecursiveAnalysisResult(
     ExpressionEnvClass RootEnvClass,
     ImmutableHashSet<ExprOnRecursionPathEntry> ExprOnRecursionPath,
-    ImmutableHashSet<(Expression expr, EnvConstraintId expandedConstraint)> UsagesCompleteForRecursion);
+    ImmutableHashSet<(Expression expr, PineValueClass expandedConstraint)> UsagesCompleteForRecursion);
 
 public record ExprOnRecursionPathEntry(
-    EnvConstraintId RootConstraint,
+    PineValueClass RootConstraint,
     Expression RootExpr,
-    EnvConstraintId Constraint,
+    PineValueClass Constraint,
     Expression Expr);
 
 public abstract record ExpressionEnvClass
@@ -543,7 +199,7 @@ public class CodeAnalysis
     public record ExprUsageAnalysisStackEntry(
         Expression Expression,
         CompilePineToDotNet.CompiledExpressionId ExpressionId,
-        EnvConstraintId EnvConstraintId,
+        PineValueClass EnvConstraintId,
         PineValue Environment);
 
     public record ParseSubExpression(
@@ -646,7 +302,7 @@ public class CodeAnalysis
             new ExpressionEnvClass.ConstrainedEnv(selfParsedEnvItems);
 
         var selfEnvConstraintId =
-            EnvConstraintId.Create(
+            PineValueClass.Create(
                 selfStackFrameEnv,
                 environment,
                 skipUnavailableItems: true);
@@ -793,7 +449,7 @@ public class CodeAnalysis
                 .SelectMany(parsedEnvItemMapped =>
                 parsedEnvItemMapped switch
                 {
-                    ExprMappedToParentEnv.LiteralInParentEnv _ =>
+                    ExprMappedToParentEnv.LiteralInParentEnv =>
                     (IReadOnlyList<IReadOnlyList<int>>)[],
 
                     ExprMappedToParentEnv.PathInParentEnv pathInParentEnv =>
@@ -808,7 +464,7 @@ public class CodeAnalysis
                 .ToImmutableArray();
 
             var childConstraintId =
-                EnvConstraintId.Create(
+                PineValueClass.Create(
                     childConstrainedEnv,
                     childEnvValue,
                     skipUnavailableItems: true);
@@ -839,7 +495,7 @@ public class CodeAnalysis
             .ToImmutableHashSet();
 
         var mergedConstraintId =
-            EnvConstraintId.Create(
+            PineValueClass.Create(
                 new ExpressionEnvClass.ConstrainedEnv(mergedParsedEnvItems),
                 environment,
                 skipUnavailableItems: true);
@@ -857,7 +513,7 @@ public class CodeAnalysis
                     entry.RootConstraint.SatisfiedByConstraint(mergedConstraintId) &&
                     entry.Constraint.SatisfiedByConstraint(mergedConstraintId))
                 {
-                    return (IEnumerable<(Expression, EnvConstraintId)>)[(entry.Expr, mergedConstraintId)];
+                    return (IEnumerable<(Expression, PineValueClass)>)[(entry.Expr, mergedConstraintId)];
                 }
 
                 return [];
@@ -1053,7 +709,7 @@ public class CodeAnalysis
         }
     }
 
-    public static IReadOnlyDictionary<Expression, IReadOnlyList<EnvConstraintId>> EnvironmentClassesFromInvocationReports(
+    public static IReadOnlyDictionary<Expression, IReadOnlyList<PineValueClass>> EnvironmentClassesFromInvocationReports(
         IReadOnlyList<PineVM.EvaluationReport> invocationReports,
         int limitInvocationSampleCount,
         int limitSampleCountPerSample,
@@ -1067,7 +723,7 @@ public class CodeAnalysis
             classUsageCountMin: classUsageCountMin,
             limitClassesPerExpression: limitClassesPerExpression);
 
-    public static IReadOnlyDictionary<Expression, IReadOnlyList<EnvConstraintId>> EnvironmentClassesFromInvocationReports(
+    public static IReadOnlyDictionary<Expression, IReadOnlyList<PineValueClass>> EnvironmentClassesFromInvocationReports(
         IReadOnlyList<PineVM.EvaluationReport> invocationReports,
         IReadOnlySet<Expression> expressionsToIgnore,
         int limitInvocationSampleCount,
@@ -1108,7 +764,7 @@ public class CodeAnalysis
     }
 
 
-    public static IReadOnlyList<EnvConstraintId> EnvironmentClassesFromExpressionInvocationReports(
+    public static IReadOnlyList<PineValueClass> EnvironmentClassesFromExpressionInvocationReports(
         Expression expression,
         IReadOnlyList<PineValue> invocationsEnvironments,
         int limitSampleCountPerSample,
@@ -1133,9 +789,9 @@ public class CodeAnalysis
             .Take(limitClassesCount * 10)
             .ToImmutableArray();
 
-        var classSimplifications = new Dictionary<EnvConstraintId, EnvConstraintId>();
+        var classSimplifications = new Dictionary<PineValueClass, PineValueClass>();
 
-        var simplifiedClasses = new HashSet<EnvConstraintId>();
+        var simplifiedClasses = new HashSet<PineValueClass>();
 
         foreach (var (envClass, _) in environmentClassesToSimplify)
         {
@@ -1161,7 +817,7 @@ public class CodeAnalysis
                     depthMax: 6,
                     parseCache: parseCache);
 
-            if (0 < envClassSimplified.ParsedEnvItems.Count)
+            if (0 < envClassSimplified.ParsedItems.Count)
             {
                 simplifiedClasses.Add(envClassSimplified);
             }
@@ -1178,9 +834,9 @@ public class CodeAnalysis
         return [.. simplifiedClassesRanked.Take(limitClassesCount)];
     }
 
-    static EnvConstraintId SimplifyEnvClassShallow(
+    static PineValueClass SimplifyEnvClassShallow(
         Expression expression,
-        EnvConstraintId envClass)
+        PineValueClass envClass)
     {
         var shallowObservedPaths =
             Expression.EnumerateSelfAndDescendants(expression)
@@ -1221,23 +877,23 @@ public class CodeAnalysis
         }
 
         var itemsToKeep =
-            envClass.ParsedEnvItems
+            envClass.ParsedItems
             .Where(classItem => keepClassItemPath(classItem.Key))
             .ToList();
 
-        if (itemsToKeep.Count == envClass.ParsedEnvItems.Count)
+        if (itemsToKeep.Count == envClass.ParsedItems.Count)
             return envClass;
 
-        return EnvConstraintId.Create(itemsToKeep);
+        return PineValueClass.Create(itemsToKeep);
     }
 
 
     static public long SimplifyEnvClassCount { private set; get; } = 0;
 
 
-    static EnvConstraintId SimplifyEnvClass(
+    static PineValueClass SimplifyEnvClass(
         Expression rootExpression,
-        EnvConstraintId envClass,
+        PineValueClass envClass,
         int depthMax,
         PineVMParseCache parseCache)
     {
@@ -1316,21 +972,21 @@ public class CodeAnalysis
         }
 
         var itemsToKeep =
-            envClass.ParsedEnvItems
+            envClass.ParsedItems
             .Where(classItem => keepClassItemPath(classItem.Key))
             .ToList();
 
-        if (itemsToKeep.Count == envClass.ParsedEnvItems.Count)
+        if (itemsToKeep.Count == envClass.ParsedItems.Count)
             return envClass;
 
-        return EnvConstraintId.Create(itemsToKeep);
+        return PineValueClass.Create(itemsToKeep);
     }
 
 
-    static (EnvConstraintId, ImmutableDictionary<EnvConstraintId, EnvConstraintId>) SimplifyEnvClassRecursive(
+    static (PineValueClass, ImmutableDictionary<PineValueClass, PineValueClass>) SimplifyEnvClassRecursive(
         Expression expression,
-        EnvConstraintId envClass,
-        IReadOnlyDictionary<EnvConstraintId, EnvConstraintId> simplifications,
+        PineValueClass envClass,
+        IReadOnlyDictionary<PineValueClass, PineValueClass> simplifications,
         PineVMParseCache parseCache)
     {
         if (simplifications.TryGetValue(envClass, out var simplification))
@@ -1339,7 +995,7 @@ public class CodeAnalysis
         }
 
         var itemsToTestRemove =
-            envClass.ParsedEnvItems
+            envClass.ParsedItems
             .Where(item => 1 < item.Key.Count)
             .OrderByDescending(item => item.Key.Count)
             .ToArray();
@@ -1347,13 +1003,13 @@ public class CodeAnalysis
         foreach (var itemToTestRemove in itemsToTestRemove)
         {
             var envClassSimplifiedItems =
-                envClass.ParsedEnvItems
+                envClass.ParsedItems
                 .Except([itemToTestRemove]);
 
             var envClassSimplified =
-                EnvConstraintId.Create([.. envClassSimplifiedItems]);
+                PineValueClass.Create([.. envClassSimplifiedItems]);
 
-            Expression projectCompilation(EnvConstraintId envClass) =>
+            Expression projectCompilation(PineValueClass envClass) =>
                 PineVM.ReduceExpressionAndInlineRecursive(
                     rootExpression: expression,
                     rootExprAlternativeForms: [],
@@ -1384,10 +1040,10 @@ public class CodeAnalysis
             }
         }
 
-        return (envClass, ImmutableDictionary<EnvConstraintId, EnvConstraintId>.Empty);
+        return (envClass, ImmutableDictionary<PineValueClass, PineValueClass>.Empty);
     }
 
-    public static IReadOnlyList<(EnvConstraintId envClass, int matchCount)> GenerateEnvironmentClasses(
+    public static IReadOnlyList<(PineValueClass envClass, int matchCount)> GenerateEnvironmentClasses(
         IReadOnlyList<PineValue> values,
         int limitIntersectionCountPerValue,
         int classDepthLimit)
@@ -1402,9 +1058,9 @@ public class CodeAnalysis
                 SubsequenceWithEvenDistribution(
                     [.. values.Where(otherValue => otherValue != value)],
                     limitIntersectionCountPerValue)
-                .Select(otherValue => EnvConstraintId.CreateIntersection(value, otherValue, depthLimit: classDepthLimit));
+                .Select(otherValue => PineValueClass.CreateIntersection(value, otherValue, depthLimit: classDepthLimit));
             })
-            .Where(envClass => envClass.ParsedEnvItems.Any())
+            .Where(envClass => envClass.ParsedItems.Any())
             .ToImmutableArray();
 
         return

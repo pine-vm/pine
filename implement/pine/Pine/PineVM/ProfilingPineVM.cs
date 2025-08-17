@@ -26,9 +26,9 @@ public record ExpressionUsageAnalysis
 
     public CompilePineToDotNet.CompiledExpressionId CompiledExpressionId { init; get; }
 
-    public EnvConstraintId? EnvId { get; init; }
+    public PineValueClass? EnvId { get; init; }
 
-    public ExpressionUsageAnalysis(Expression expression, EnvConstraintId? envId)
+    public ExpressionUsageAnalysis(Expression expression, PineValueClass? envId)
     {
         Expression = expression;
         EnvId = envId;
@@ -54,7 +54,7 @@ public record ExpressionUsageAnalysis
         if (CompiledExpressionId.ExpressionHashBase16 != other.CompiledExpressionId.ExpressionHashBase16)
             return false;
 
-        return EnvConstraintId.Equal(EnvId, other.EnvId);
+        return PineValueClass.Equal(EnvId, other.EnvId);
     }
 }
 
@@ -184,7 +184,7 @@ public class ProfilingPineVM
             ?
             null
             :
-            EnvConstraintId.Create(
+            PineValueClass.Create(
                 constrained,
                 environment,
                 skipUnavailableItems: true);

@@ -41,11 +41,11 @@ public class Precompiled
     }
 
     record PrecompiledEntry(
-        EnvConstraintId EnvConstraint,
+        PineValueClass EnvConstraint,
         Func<PineValue, PineVMParseCache, Func<PrecompiledResult>?> PrecompiledDelegate)
     {
         public PrecompiledEntry(
-            EnvConstraintId EnvConstraint,
+            PineValueClass EnvConstraint,
             Func<PineValue, PineVMParseCache, PrecompiledResult?> PrecompiledDelegate)
             : this(
                 EnvConstraint,
@@ -64,7 +64,7 @@ public class Precompiled
         }
 
         public static PrecompiledEntry FinalValueForAnyEnvironment(
-            EnvConstraintId EnvConstraint,
+            PineValueClass EnvConstraint,
             Func<PineValue, PineVMParseCache, PineValue> delegateForAnyEnv) =>
             new(
                 EnvConstraint,
@@ -289,7 +289,7 @@ public class Precompiled
 
         {
             var compareExpressionEnvClass =
-                EnvConstraintId.Create(
+                PineValueClass.Create(
                     [
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
                     [0],
@@ -310,7 +310,7 @@ public class Precompiled
 
         {
             var eqExpressionEnvClass =
-                EnvConstraintId.Create(
+                PineValueClass.Create(
                     [
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
                     [0],
@@ -333,7 +333,7 @@ public class Precompiled
 
         {
             var listMemberExpressionEnvClass =
-                EnvConstraintId.Create(
+                PineValueClass.Create(
                     [
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
                     [0],
@@ -352,7 +352,7 @@ public class Precompiled
 
         {
             var listMapHelpEnvClass =
-                EnvConstraintId.Create(
+                PineValueClass.Create(
                     [
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
                     [0],
@@ -372,7 +372,7 @@ public class Precompiled
 
         {
             var concatMapEnvClass =
-                EnvConstraintId.Create(
+                PineValueClass.Create(
                     [
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
                     [0],
@@ -393,7 +393,7 @@ public class Precompiled
 
         {
             var listFoldlEnvClass =
-                EnvConstraintId.Create(
+                PineValueClass.Create(
                     [
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
                     [0,0],
@@ -410,7 +410,7 @@ public class Precompiled
 
         {
             var listFilterEnvClass =
-                EnvConstraintId.Create(
+                PineValueClass.Create(
                     [
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
                     [0],
@@ -437,7 +437,7 @@ public class Precompiled
                 ExpressionEncoding.EncodeExpressionAsValue(listFilterMapHelpExpression);
 
             var listFilterMapEnvClass =
-                EnvConstraintId.Create(
+                PineValueClass.Create(
                     [
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
                     [0],
@@ -458,7 +458,7 @@ public class Precompiled
 
         {
             var listAllEnvClass =
-                EnvConstraintId.Create(
+                PineValueClass.Create(
                     [
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
                     [0],
@@ -479,7 +479,7 @@ public class Precompiled
 
         {
             var listAnyEnvClass =
-                EnvConstraintId.Create(
+                PineValueClass.Create(
                     [
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
                     [0],
@@ -506,7 +506,7 @@ public class Precompiled
                 ExpressionEncoding.EncodeExpressionAsValue(listIntersperseHelpExpression);
 
             var envClass =
-                EnvConstraintId.Create(
+                PineValueClass.Create(
                     [
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
                     [0, 0],
@@ -523,7 +523,7 @@ public class Precompiled
 
         {
             var stringSliceEnvClass =
-                EnvConstraintId.Create(
+                PineValueClass.Create(
                     [
                     ]);
 
@@ -542,7 +542,7 @@ public class Precompiled
                 ExpressionEncoding.EncodeExpressionAsValue(stringLinesHelperExpression);
 
             var stringLinesHelperEnvClass =
-                EnvConstraintId.Create(
+                PineValueClass.Create(
                     [
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
                     [0, 0],
@@ -564,7 +564,7 @@ public class Precompiled
                 ExpressionEncoding.EncodeExpressionAsValue(stringToListRecursiveExpression);
 
             var stringToListRecursiveEnvClass =
-                EnvConstraintId.Create(
+                PineValueClass.Create(
                     [
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
                     [0, 0],
@@ -581,7 +581,7 @@ public class Precompiled
 
         {
             var assocListGetExpressionEnvClass =
-                EnvConstraintId.Create(
+                PineValueClass.Create(
                     [
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
                     [0],
@@ -600,7 +600,7 @@ public class Precompiled
 
         {
             var commonAssocListGetWithIndexHelperEnvClass =
-                EnvConstraintId.Create(
+                PineValueClass.Create(
                     [
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
                     [0],
@@ -619,7 +619,7 @@ public class Precompiled
 
         {
             var listUniqueHelpExpressionEnvClass =
-                EnvConstraintId.Create(
+                PineValueClass.Create(
                     [
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
                     [0],
@@ -639,7 +639,7 @@ public class Precompiled
 
         {
             var dictGetExpressionEnvClass =
-                EnvConstraintId.Create(
+                PineValueClass.Create(
                     [
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
                     [0],
@@ -660,7 +660,7 @@ public class Precompiled
 
         {
             var dictSizeHelpEnvClass =
-                EnvConstraintId.Create(
+                PineValueClass.Create(
                     [
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
                     [0],
@@ -680,7 +680,7 @@ public class Precompiled
 
         {
             var elmCompiledRecordAccessEnvClass =
-                EnvConstraintId.Create(
+                PineValueClass.Create(
                     [
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
                     [0],
@@ -696,7 +696,7 @@ public class Precompiled
 
         {
             var adaptivePartialApplicationEnvClass =
-                EnvConstraintId.Create(
+                PineValueClass.Create(
                     [
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
                     [0],
@@ -721,7 +721,7 @@ public class Precompiled
                 ExpressionEncoding.EncodeExpressionAsValue(parseJsonStringSimpleCharsExpr);
 
             var envClass =
-                EnvConstraintId.Create(
+                PineValueClass.Create(
                     [
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
                         [0, 0],
@@ -738,7 +738,7 @@ public class Precompiled
 
         {
             var countPineValueContentEnvClass =
-                EnvConstraintId.Create(
+                PineValueClass.Create(
                     [
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
                     [0],
@@ -760,7 +760,7 @@ public class Precompiled
                 popularExpressionDictionary["Pine.computeValueFromString_2025.body"];
 
             var envClass =
-                EnvConstraintId.Create(
+                PineValueClass.Create(
                     [
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
                         [0],
@@ -778,7 +778,7 @@ public class Precompiled
 
         {
             var countOffsetsInStringEnvClass =
-                EnvConstraintId.Create(
+                PineValueClass.Create(
                     [
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
                     [0, 0],
@@ -795,7 +795,7 @@ public class Precompiled
 
         {
             var findSubStringEnvClass =
-                EnvConstraintId.Create(
+                PineValueClass.Create(
                     [
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
                     [0, 0],
@@ -820,7 +820,7 @@ public class Precompiled
              * */
 
             var chompWhileHelpEnvClass =
-                EnvConstraintId.Create(
+                PineValueClass.Create(
                     [
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
                         [0, 0],
@@ -830,11 +830,11 @@ public class Precompiled
                         elmKernelParser_chompWhileHelpExpressionValue),
                 ]);
 
-            EnvConstraintId chompWhileHelpEnvClassFromPredicate(PineValue predicateValue)
+            PineValueClass chompWhileHelpEnvClassFromPredicate(PineValue predicateValue)
             {
                 return
-                    EnvConstraintId.Create(
-                        [..chompWhileHelpEnvClass.ParsedEnvItems
+                    PineValueClass.Create(
+                        [..chompWhileHelpEnvClass.ParsedItems
                         ,new KeyValuePair<IReadOnlyList<int>, PineValue>(
                             [1, 0],
                             predicateValue)]);
@@ -898,7 +898,7 @@ public class Precompiled
                 ExpressionEncoding.EncodeExpressionAsValue(skipWhileWhitespaceHelpExpression);
 
             var skipWhileWhitespaceHelpEnvClass =
-                EnvConstraintId.Create(
+                PineValueClass.Create(
                     [
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
                         [0, 0],
@@ -924,7 +924,7 @@ public class Precompiled
                 ExpressionEncoding.EncodeExpressionAsValue(skipWhileWithoutLinebreakHelpExpression);
 
             var skipWhileWithoutLinebreakHelpEnvClass =
-                EnvConstraintId.Create(
+                PineValueClass.Create(
                     [
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
                         [0,0],
@@ -935,11 +935,11 @@ public class Precompiled
                         skipWhileWithoutLinebreakHelpExpressionValue),
                     ]);
 
-            EnvConstraintId envClassFromPredicate(PineValue predicateValue)
+            PineValueClass envClassFromPredicate(PineValue predicateValue)
             {
                 return
-                    EnvConstraintId.Create(
-                        [..skipWhileWithoutLinebreakHelpEnvClass.ParsedEnvItems
+                    PineValueClass.Create(
+                        [..skipWhileWithoutLinebreakHelpEnvClass.ParsedItems
                         ,new KeyValuePair<IReadOnlyList<int>, PineValue>(
                             [1, 0],
                             predicateValue)]);
@@ -979,7 +979,7 @@ public class Precompiled
                 ExpressionEncoding.EncodeExpressionAsValue(skipWhileHelpExpression);
 
             var skipWhileHelpEnvClass =
-                EnvConstraintId.Create(
+                PineValueClass.Create(
                     [
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
                         [0,0],
@@ -990,11 +990,11 @@ public class Precompiled
                         skipWhileHelpExpressionValue),
                     ]);
 
-            EnvConstraintId envClassFromPredicate(PineValue predicateValue)
+            PineValueClass envClassFromPredicate(PineValue predicateValue)
             {
                 return
-                    EnvConstraintId.Create(
-                        [..skipWhileHelpEnvClass.ParsedEnvItems
+                    PineValueClass.Create(
+                        [..skipWhileHelpEnvClass.ParsedItems
                         ,new KeyValuePair<IReadOnlyList<int>, PineValue>(
                             [1, 0],
                             predicateValue)]);
@@ -1037,7 +1037,7 @@ public class Precompiled
                 new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
                     prependToExpression,
                     [PrecompiledEntry.FinalValueForAnyEnvironment(
-                        EnvConstraintId.Create([]),
+                        PineValueClass.Create([]),
                         RopePrependTo)]);
         }
 
@@ -1052,7 +1052,7 @@ public class Precompiled
                 popularExpressionDictionary["Char.isLower"];
 
             var envClass =
-                EnvConstraintId.Create(
+                PineValueClass.Create(
                     [
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
                     [0],
@@ -1075,7 +1075,7 @@ public class Precompiled
                 popularExpressionDictionary["Char.isUpper"];
 
             var envClass =
-                EnvConstraintId.Create(
+                PineValueClass.Create(
                     [
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
                     [0],
@@ -1107,7 +1107,7 @@ public class Precompiled
                 ExpressionEncoding.EncodeExpressionAsValue(encodeCharsAsBlobHelpExpression);
 
             var envClass =
-                EnvConstraintId.Create(
+                PineValueClass.Create(
                     [
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
                     [0, 0],
@@ -1142,7 +1142,7 @@ public class Precompiled
                 ExpressionEncoding.EncodeExpressionAsValue(decodeUtf8CharExpression);
 
             var envClass =
-                EnvConstraintId.Create(
+                PineValueClass.Create(
                     [
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
                     [0, 0],
@@ -1168,7 +1168,7 @@ public class Precompiled
                 ExpressionEncoding.EncodeExpressionAsValue(bytesEncodeEncodeBlobExpression);
 
             var envClass =
-                EnvConstraintId.Create(
+                PineValueClass.Create(
                     [
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
                     [0, 0],
@@ -1194,7 +1194,7 @@ public class Precompiled
                 popularValueDictionary["danfishgold.Base64.Encode.toBytes.aggregate-env-funcs"];
 
             var envClass =
-                EnvConstraintId.Create(
+                PineValueClass.Create(
                     [
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
                     [0],
@@ -1217,7 +1217,7 @@ public class Precompiled
                 popularValueDictionary["danfishgold.Base64.Decode.fromBytes.aggregate-env-funcs"];
 
             var envClass =
-                EnvConstraintId.Create(
+                PineValueClass.Create(
                     [
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
                     [0],
@@ -5789,6 +5789,6 @@ public class Precompiled
             (IReadOnlyList<PrecompiledEntry>)
             [..group
             .SelectMany(kv => kv.Value)
-            .OrderByDescending(entry => entry.EnvConstraint.ParsedEnvItems.Count)]);
+            .OrderByDescending(entry => entry.EnvConstraint.ParsedItems.Count)]);
 
 }

@@ -28,7 +28,7 @@ public class PineVM : IPineVM
 
     private readonly Action<EvaluationReport>? reportFunctionApplication;
 
-    private readonly IReadOnlyDictionary<Expression, IReadOnlyList<EnvConstraintId>>? compilationEnvClasses;
+    private readonly IReadOnlyDictionary<Expression, IReadOnlyList<PineValueClass>>? compilationEnvClasses;
 
     private readonly bool disableReductionInCompilation;
 
@@ -54,7 +54,7 @@ public class PineVM : IPineVM
         IDictionary<EvalCacheEntryKey, PineValue>? evalCache = null,
         EvaluationConfig? evaluationConfigDefault = null,
         Action<EvaluationReport>? reportFunctionApplication = null,
-        IReadOnlyDictionary<Expression, IReadOnlyList<EnvConstraintId>>? compilationEnvClasses = null,
+        IReadOnlyDictionary<Expression, IReadOnlyList<PineValueClass>>? compilationEnvClasses = null,
         bool disableReductionInCompilation = false,
         bool disablePrecompiled = false,
         bool enableTailRecursionOptimization = false,
@@ -88,7 +88,7 @@ public class PineVM : IPineVM
 
     public record StackFrameInstructions(
         IReadOnlyList<StackInstruction> Instructions,
-        EnvConstraintId? TrackEnvConstraint = null)
+        PineValueClass? TrackEnvConstraint = null)
     {
         public int MaxLocalIndex { init; get; } =
             Instructions
@@ -432,11 +432,11 @@ public class PineVM : IPineVM
 
     public ExpressionCompilation ExpressionCompilationLessCache(Expression rootExpression)
     {
-        IReadOnlyList<EnvConstraintId>? specializations = null;
+        IReadOnlyList<PineValueClass>? specializations = null;
 
         compilationEnvClasses?.TryGetValue(rootExpression, out specializations);
 
-        bool skipInlining(Expression expr, EnvConstraintId? envConstraintId)
+        bool skipInlining(Expression expr, PineValueClass? envConstraintId)
         {
             if (Precompiled.HasPrecompiledForExpression(expr))
             {
@@ -463,11 +463,11 @@ public class PineVM : IPineVM
 
     public static ExpressionCompilation CompileExpression(
         Expression rootExpression,
-        IReadOnlyList<EnvConstraintId> specializations,
+        IReadOnlyList<PineValueClass> specializations,
         PineVMParseCache parseCache,
         bool disableReduction,
         bool enableTailRecursionOptimization,
-        Func<Expression, EnvConstraintId?, bool> skipInlining)
+        Func<Expression, PineValueClass?, bool> skipInlining)
     {
         var generic =
             new StackFrameInstructions(
@@ -483,11 +483,11 @@ public class PineVM : IPineVM
         var specialized =
             specializations
             // Order to prefer more specific constraints when selecting at runtime.
-            .OrderDescending(EnvironmentClassSpecificityComparer.Instance)
+            .OrderDescending(PineValueClassSpecificityComparer.Instance)
             .Select(
                 specialization =>
                             ((IReadOnlyList<EnvConstraintItem>)
-                            [..specialization.ParsedEnvItems
+                            [..specialization.ParsedItems
                         .Select(envItem => new EnvConstraintItem(envItem.Key.ToArray(), envItem.Value))],
                             new StackFrameInstructions(
                                 InstructionsFromExpressionTransitive(
@@ -524,11 +524,11 @@ public class PineVM : IPineVM
 
     public static IReadOnlyList<StackInstruction> InstructionsFromExpressionTransitive(
         Expression rootExpression,
-        EnvConstraintId? envConstraintId,
+        PineValueClass? envConstraintId,
         PineVMParseCache parseCache,
         bool disableReduction,
         bool enableTailRecursionOptimization,
-        Func<Expression, EnvConstraintId?, bool> skipInlining)
+        Func<Expression, PineValueClass?, bool> skipInlining)
     {
         var inlinedStaticInvocations =
             disableReduction || enableTailRecursionOptimization
@@ -791,12 +791,12 @@ public class PineVM : IPineVM
     public static Expression ReduceExpressionAndInlineRecursive(
         Expression rootExpression,
         ImmutableHashSet<Expression> rootExprAlternativeForms,
-        EnvConstraintId? envConstraintId,
+        PineValueClass? envConstraintId,
         int maxDepth,
         int maxSubexpressionCount,
         PineVMParseCache parseCache,
         bool disableRecurseAfterInline,
-        Func<Expression, EnvConstraintId?, bool> skipInlining) =>
+        Func<Expression, PineValueClass?, bool> skipInlining) =>
         ReduceExpressionAndInlineRecursive(
             currentExpression: rootExpression,
             inlinedParents: [],
@@ -811,13 +811,13 @@ public class PineVM : IPineVM
     public static Expression ReduceExpressionAndInlineRecursive(
         Expression currentExpression,
         ImmutableStack<Expression> inlinedParents,
-        EnvConstraintId? envConstraintId,
+        PineValueClass? envConstraintId,
         ImmutableHashSet<Expression> rootExprForms,
         int maxDepth,
         int maxSubexpressionCount,
         PineVMParseCache parseCache,
         bool disableRecurseAfterInline,
-        Func<Expression, EnvConstraintId?, bool> skipInlining)
+        Func<Expression, PineValueClass?, bool> skipInlining)
     {
         var expressionSubstituted =
             envConstraintId is null
@@ -1094,7 +1094,7 @@ public class PineVM : IPineVM
 
     public static Expression SubstituteSubexpressionsForEnvironmentConstraint(
         Expression originalExpression,
-        EnvConstraintId envConstraintId)
+        PineValueClass envConstraintId)
     {
         return
             CompilePineToDotNet.ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
@@ -1125,7 +1125,7 @@ public class PineVM : IPineVM
     public static IReadOnlyList<StackInstruction> InstructionsFromExpression(
         Expression rootExpression,
         ImmutableHashSet<Expression> rootExprAlternativeForms,
-        EnvConstraintId? envClass,
+        PineValueClass? envClass,
         PineVMParseCache parseCache)
     {
         return

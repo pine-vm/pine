@@ -18,22 +18,22 @@ namespace Pine.IntegrationTests;
 
 public class CompilePineToDotNetTests
 {
-    public static readonly PineValue value_299b7decef = StringEncoding.ValueFromString("List");
+    public static readonly PineValue Value_299b7decef = StringEncoding.ValueFromString("List");
 
-    public static readonly PineValue value_d597fb92e5 = PineValue.List([value_299b7decef, PineValue.EmptyList]);
+    public static readonly PineValue Value_d597fb92e5 = PineValue.List([Value_299b7decef, PineValue.EmptyList]);
 
     [Fact]
     public void Test_sort_pine_value_for_declaration()
     {
-        value_d597fb92e5.ContainsInListTransitive(value_299b7decef).Should().BeTrue("value should contain value_299b7decef in list transitive");
+        Value_d597fb92e5.ContainsInListTransitive(Value_299b7decef).Should().BeTrue("value should contain value_299b7decef in list transitive");
 
         var listBeforeOrdering =
             new[]
             {
                 StringEncoding.ValueFromString("Err"),
-                value_d597fb92e5,
+                Value_d597fb92e5,
                 StringEncoding.ValueFromString("Ok"),
-                value_299b7decef
+                Value_299b7decef
             };
 
         var listWithHashes =
@@ -49,8 +49,8 @@ public class CompilePineToDotNetTests
             [
                 StringEncoding.ValueFromString("Ok"),
                 StringEncoding.ValueFromString("Err"),
-                value_299b7decef,
-                value_d597fb92e5
+                Value_299b7decef,
+                Value_d597fb92e5
             ], options => options.WithStrictOrdering());
     }
 
@@ -250,8 +250,8 @@ public class CompilePineToDotNetTests
                 new Expression.Environment(),
 
                 envConstraint =
-                EnvConstraintId.Create(
-                    envClass: new ExpressionEnvClass.ConstrainedEnv([]),
+                PineValueClass.Create(
+                    observedPart: new ExpressionEnvClass.ConstrainedEnv([]),
                     PineValue.EmptyList,
                     skipUnavailableItems: false),
 
@@ -266,8 +266,8 @@ public class CompilePineToDotNetTests
                     input: new Expression.Environment()),
 
                 envConstraint =
-                EnvConstraintId.Create(
-                    envClass: new ExpressionEnvClass.ConstrainedEnv([]),
+                PineValueClass.Create(
+                    observedPart: new ExpressionEnvClass.ConstrainedEnv([]),
                     PineValue.EmptyList,
                     skipUnavailableItems: false),
 
@@ -289,8 +289,8 @@ public class CompilePineToDotNetTests
                             ]))),
 
                 envConstraint =
-                EnvConstraintId.Create(
-                    envClass: new ExpressionEnvClass.ConstrainedEnv([]),
+                PineValueClass.Create(
+                    observedPart: new ExpressionEnvClass.ConstrainedEnv([]),
                     PineValue.EmptyList,
                     skipUnavailableItems: false),
 

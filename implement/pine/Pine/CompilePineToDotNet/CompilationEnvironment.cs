@@ -29,7 +29,7 @@ public record FunctionCompilationEnv(
 
     public static IReadOnlyList<IReadOnlyList<int>> CompileEnvItemsPathsForExprFunction(
         Expression expression,
-        EnvConstraintId? envConstraint)
+        PineValueClass? envConstraint)
     {
         var allSubexpressions =
             Expression.EnumerateSelfAndDescendants(expression)
@@ -146,7 +146,7 @@ public record ExprFunctionCompilationInterface(
 
     public static IReadOnlyList<IReadOnlyList<int>> CompileEnvItemsPathsForExprFunction(
         Expression expression,
-        EnvConstraintId? envConstraint)
+        PineValueClass? envConstraint)
     {
         var allSubexpressions =
             Expression.EnumerateSelfAndDescendants(expression)
@@ -222,7 +222,7 @@ public record ExprFunctionCompilationInterface(
     public static ExprResolvedInFunction? TryResolveExpressionInFunction(
         ExprFunctionCompilationInterface functionInterface,
         Expression expression,
-        EnvConstraintId? envConstraint)
+        PineValueClass? envConstraint)
     {
         if (CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(expression) is not { } exprMappedToParent)
             return null;
@@ -304,7 +304,7 @@ public record CompilationUnitEnv(
 
     public ExprFunctionCompilationInterface GetInterfaceForExprUsage(
         Expression expression,
-        EnvConstraintId? envConstraint)
+        PineValueClass? envConstraint)
     {
         if (AvailableExpr.TryGetValue(expression, out var exprEntry))
         {
@@ -321,7 +321,7 @@ public record CompilationUnitEnv(
 
 public record CompilationUnitEnvExprEntry(
     ExprFunctionCompilationInterface GenericReprInterface,
-    ImmutableDictionary<EnvConstraintId, ExprFunctionCompilationInterface> AvailableSpecialized)
+    ImmutableDictionary<PineValueClass, ExprFunctionCompilationInterface> AvailableSpecialized)
 {
     public virtual bool Equals(CompilationUnitEnvExprEntry? other)
     {
@@ -359,7 +359,7 @@ public record ExpressionCompilationEnvironment(
     FunctionCompilationEnv FunctionEnvironment,
     IReadOnlyDictionary<Expression, LetBinding> LetBindings,
     ExpressionCompilationEnvironment? ParentEnvironment,
-    EnvConstraintId? EnvConstraint)
+    PineValueClass? EnvConstraint)
 {
     public IEnumerable<ExpressionCompilationEnvironment> EnumerateAncestors()
     {
