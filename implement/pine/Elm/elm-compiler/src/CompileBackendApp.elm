@@ -134,156 +134,174 @@ loweredForBackendApp appDeclaration config sourceFiles =
                 Ok sourceFiles
 
             else
-                parseAppStateElmTypeAndDependenciesRecursively
-                    appDeclaration
-                    config.originalSourceModules
-                    ( config.compilationRootFilePath, config.compilationRootModule.parsedSyntax )
-                    |> Result.mapError (mapLocatedInSourceFiles ((++) "Failed to parse state type: "))
-                    |> Result.mapError (mapLocatedInSourceFiles OtherCompilationError >> List.singleton)
-                    |> Result.andThen
-                        (\appStateType ->
-                            parseMigrationConfig { originalSourceModules = config.originalSourceModules }
-                                |> Result.andThen
-                                    (\maybeMigrationConfig ->
-                                        parseExposeFunctionsToAdminConfig
-                                            { originalSourceModules = config.originalSourceModules
-                                            , backendStateType = appStateType.stateTypeAnnotation
-                                            }
-                                            |> Result.mapError (List.map (mapLocatedInSourceFiles OtherCompilationError))
-                                            |> Result.andThen
-                                                (\maybeExposeFunctionsToAdmin ->
-                                                    let
-                                                        mainDeclarationName : String
-                                                        mainDeclarationName =
-                                                            appDeclaration.declaration
-                                                                |> Elm.Syntax.Node.value
-                                                                |> .name
-                                                                |> Elm.Syntax.Node.value
+                case
+                    parseAppStateElmTypeAndDependenciesRecursively
+                        appDeclaration
+                        config.originalSourceModules
+                        ( config.compilationRootFilePath, config.compilationRootModule.parsedSyntax )
+                of
+                    Err locatedErr ->
+                        Err
+                            [ mapLocatedInSourceFiles
+                                (\errLessLocation ->
+                                    OtherCompilationError ("Failed to parse state type: " ++ errLessLocation)
+                                )
+                                locatedErr
+                            ]
 
-                                                        appRootDeclarationModuleName : String
-                                                        appRootDeclarationModuleName =
-                                                            config.compilationRootModule.parsedSyntax.moduleDefinition
-                                                                |> Elm.Syntax.Node.value
-                                                                |> Elm.Syntax.Module.moduleName
-                                                                |> String.join "."
+                    Ok appStateType ->
+                        case
+                            parseMigrationConfig
+                                { originalSourceModules = config.originalSourceModules }
+                        of
+                            Err err ->
+                                Err err
 
-                                                        mainDeclarationNameQualifiedName : String
-                                                        mainDeclarationNameQualifiedName =
-                                                            appRootDeclarationModuleName ++ "." ++ mainDeclarationName
+                            Ok maybeMigrationConfig ->
+                                case
+                                    parseExposeFunctionsToAdminConfig
+                                        { originalSourceModules = config.originalSourceModules
+                                        , backendStateType = appStateType.stateTypeAnnotation
+                                        }
+                                of
+                                    Err locatedErrs ->
+                                        Err
+                                            (List.map
+                                                (mapLocatedInSourceFiles OtherCompilationError)
+                                                locatedErrs
+                                            )
 
-                                                        rootModuleSupportingFunctionsMigrate =
-                                                            maybeMigrationConfig
-                                                                |> Maybe.map .rootModuleSupportingFunctions
-                                                                |> Maybe.withDefault []
+                                    Ok maybeExposeFunctionsToAdmin ->
+                                        let
+                                            (Elm.Syntax.Node.Node _ appDeclarationDeclaration) =
+                                                appDeclaration.declaration
 
-                                                        rootModuleSupportingFunctions =
-                                                            [ "config_init = "
-                                                                ++ mainDeclarationNameQualifiedName
-                                                                ++ ".init"
-                                                            , "config_subscriptions = "
-                                                                ++ mainDeclarationNameQualifiedName
-                                                                ++ ".subscriptions"
-                                                            ]
-                                                                ++ rootModuleSupportingFunctionsMigrate
+                                            (Elm.Syntax.Node.Node _ mainDeclarationName) =
+                                                appDeclarationDeclaration.name
 
-                                                        jsonConverterDeclarationsConfigs : List ( String, StateShimConfigJsonConverterConfig )
-                                                        jsonConverterDeclarationsConfigs =
+                                            (Elm.Syntax.Node.Node _ appRootModuleDefinition) =
+                                                config.compilationRootModule.parsedSyntax.moduleDefinition
+
+                                            appRootDeclarationModuleName : String
+                                            appRootDeclarationModuleName =
+                                                appRootModuleDefinition
+                                                    |> Elm.Syntax.Module.moduleName
+                                                    |> String.join "."
+
+                                            mainDeclarationNameQualifiedName : String
+                                            mainDeclarationNameQualifiedName =
+                                                appRootDeclarationModuleName ++ "." ++ mainDeclarationName
+
+                                            rootModuleSupportingFunctionsMigrate =
+                                                maybeMigrationConfig
+                                                    |> Maybe.map .rootModuleSupportingFunctions
+                                                    |> Maybe.withDefault []
+
+                                            rootModuleSupportingFunctions =
+                                                [ "config_init = "
+                                                    ++ mainDeclarationNameQualifiedName
+                                                    ++ ".init"
+                                                , "config_subscriptions = "
+                                                    ++ mainDeclarationNameQualifiedName
+                                                    ++ ".subscriptions"
+                                                ]
+                                                    ++ rootModuleSupportingFunctionsMigrate
+
+                                            jsonConverterDeclarationsConfigs : List ( String, StateShimConfigJsonConverterConfig )
+                                            jsonConverterDeclarationsConfigs =
+                                                []
+
+                                            jsonConverterDeclarationsMigrate =
+                                                maybeMigrationConfig
+                                                    |> Maybe.map .jsonConverterDeclarations
+                                                    |> Maybe.withDefault Dict.empty
+
+                                            jsonConverterDeclarationsExposedFunctionsToAdmin =
+                                                maybeExposeFunctionsToAdmin
+                                                    |> Maybe.map .jsonConverterDeclarations
+                                                    |> Maybe.withDefault Dict.empty
+
+                                            jsonConverterDeclarations =
+                                                [ ( "jsonEncodeAppState"
+                                                  , { isDecoder = False
+                                                    , typeAnnotation = appStateType.stateTypeAnnotation
+                                                    , dependencies = appStateType.dependencies
+                                                    }
+                                                  )
+                                                , ( "jsonDecodeAppState"
+                                                  , { isDecoder = True
+                                                    , typeAnnotation = appStateType.stateTypeAnnotation
+                                                    , dependencies = appStateType.dependencies
+                                                    }
+                                                  )
+                                                ]
+                                                    |> Dict.fromList
+                                                    |> Dict.union jsonConverterDeclarationsMigrate
+                                                    |> Dict.union jsonConverterDeclarationsExposedFunctionsToAdmin
+
+                                            modulesToImportMigrate =
+                                                maybeMigrationConfig
+                                                    |> Maybe.map .modulesToImport
+                                                    |> Maybe.withDefault []
+
+                                            modulesToImportExposeFunctionsToAdmin =
+                                                maybeExposeFunctionsToAdmin
+                                                    |> Maybe.map .modulesToImport
+                                                    |> Maybe.withDefault []
+
+                                            exposedFunctionsToAdmin =
+                                                maybeExposeFunctionsToAdmin
+                                                    |> Maybe.map .exposedFunctions
+                                                    |> Maybe.withDefault Dict.empty
+
+                                            exposedFunctions =
+                                                exposedFunctionsToAdmin
+                                        in
+                                        case
+                                            config.originalSourceModules
+                                                |> Common.listFind
+                                                    (\( _, candidate ) ->
+                                                        List.member
+                                                            candidate.moduleName
+                                                            platformModuleNameCandidates
+                                                    )
+                                        of
+                                            Nothing ->
+                                                Err
+                                                    [ LocatedInSourceFiles
+                                                        { filePath = config.compilationRootFilePath
+                                                        , locationInModuleText = Elm.Syntax.Range.emptyRange
+                                                        }
+                                                        (OtherCompilationError "Did not find platform module")
+                                                    ]
+
+                                            Just ( _, platformModule ) ->
+                                                let
+                                                    stateShimConfig : StateShimConfig
+                                                    stateShimConfig =
+                                                        { jsonConverterDeclarationsConfigs = jsonConverterDeclarationsConfigs
+                                                        , jsonConverterDeclarations = jsonConverterDeclarations
+                                                        , appStateType =
+                                                            { typeAnnotation = appStateType.stateTypeAnnotation
+                                                            , dependencies = appStateType.dependencies
+                                                            }
+                                                        , initAppShimStateExpression = ""
+                                                        , appStateLessShimExpression = ""
+                                                        , exposedFunctions = exposedFunctions
+                                                        , supportingModules =
                                                             []
-
-                                                        jsonConverterDeclarationsMigrate =
-                                                            maybeMigrationConfig
-                                                                |> Maybe.map .jsonConverterDeclarations
-                                                                |> Maybe.withDefault Dict.empty
-
-                                                        jsonConverterDeclarationsExposedFunctionsToAdmin =
-                                                            maybeExposeFunctionsToAdmin
-                                                                |> Maybe.map .jsonConverterDeclarations
-                                                                |> Maybe.withDefault Dict.empty
-
-                                                        jsonConverterDeclarations =
-                                                            [ ( "jsonEncodeAppState"
-                                                              , { isDecoder = False
-                                                                , typeAnnotation = appStateType.stateTypeAnnotation
-                                                                , dependencies = appStateType.dependencies
-                                                                }
-                                                              )
-                                                            , ( "jsonDecodeAppState"
-                                                              , { isDecoder = True
-                                                                , typeAnnotation = appStateType.stateTypeAnnotation
-                                                                , dependencies = appStateType.dependencies
-                                                                }
-                                                              )
-                                                            ]
-                                                                |> Dict.fromList
-                                                                |> Dict.union jsonConverterDeclarationsMigrate
-                                                                |> Dict.union jsonConverterDeclarationsExposedFunctionsToAdmin
-
-                                                        modulesToImportMigrate =
-                                                            maybeMigrationConfig
-                                                                |> Maybe.map .modulesToImport
-                                                                |> Maybe.withDefault []
-
-                                                        modulesToImportExposeFunctionsToAdmin =
-                                                            maybeExposeFunctionsToAdmin
-                                                                |> Maybe.map .modulesToImport
-                                                                |> Maybe.withDefault []
-
-                                                        exposedFunctionsToAdmin =
-                                                            maybeExposeFunctionsToAdmin
-                                                                |> Maybe.map .exposedFunctions
-                                                                |> Maybe.withDefault Dict.empty
-
-                                                        exposedFunctions =
-                                                            exposedFunctionsToAdmin
-                                                    in
-                                                    case
-                                                        config.originalSourceModules
-                                                            |> Common.listFind
-                                                                (\( _, candidate ) ->
-                                                                    List.member
-                                                                        candidate.moduleName
-                                                                        platformModuleNameCandidates
-                                                                )
-                                                    of
-                                                        Nothing ->
-                                                            Err
-                                                                [ LocatedInSourceFiles
-                                                                    { filePath = config.compilationRootFilePath
-                                                                    , locationInModuleText = Elm.Syntax.Range.emptyRange
-                                                                    }
-                                                                    (OtherCompilationError "Did not find platform module")
-                                                                ]
-
-                                                        Just ( _, platformModule ) ->
-                                                            let
-                                                                stateShimConfig : StateShimConfig
-                                                                stateShimConfig =
-                                                                    { jsonConverterDeclarationsConfigs = jsonConverterDeclarationsConfigs
-                                                                    , jsonConverterDeclarations = jsonConverterDeclarations
-                                                                    , appStateType =
-                                                                        { typeAnnotation = appStateType.stateTypeAnnotation
-                                                                        , dependencies = appStateType.dependencies
-                                                                        }
-                                                                    , initAppShimStateExpression = ""
-                                                                    , appStateLessShimExpression = ""
-                                                                    , exposedFunctions = exposedFunctions
-                                                                    , supportingModules =
-                                                                        []
-                                                                    , rootModuleSupportingFunctions = rootModuleSupportingFunctions
-                                                                    , modulesToImport =
-                                                                        modulesToImportMigrate ++ modulesToImportExposeFunctionsToAdmin
-                                                                    , appStateWithPlatformShimTypeAnnotationFromAppStateAnnotation =
-                                                                        identity
-                                                                    }
-                                                            in
-                                                            loweredForAppInStateManagementShim
-                                                                sourceDirs
-                                                                stateShimConfig
-                                                                config
-                                                                sourceFiles
-                                                )
-                                    )
-                        )
+                                                        , rootModuleSupportingFunctions = rootModuleSupportingFunctions
+                                                        , modulesToImport =
+                                                            modulesToImportMigrate ++ modulesToImportExposeFunctionsToAdmin
+                                                        , appStateWithPlatformShimTypeAnnotationFromAppStateAnnotation =
+                                                            identity
+                                                        }
+                                                in
+                                                loweredForAppInStateManagementShim
+                                                    sourceDirs
+                                                    stateShimConfig
+                                                    config
+                                                    sourceFiles
 
 
 parseMigrationConfig :

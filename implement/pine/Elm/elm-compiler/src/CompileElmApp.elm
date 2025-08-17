@@ -4655,7 +4655,9 @@ addImportsInElmModuleText imports moduleText =
 
                     importStatementsLines : List String
                     importStatementsLines =
-                        imports |> List.map importSyntaxTextFromModuleNameAndAlias
+                        List.map
+                            importSyntaxTextFromModuleNameAndAlias
+                            imports
                 in
                 (List.take insertionRow moduleTextLines
                     ++ importStatementsLines
@@ -5561,10 +5563,10 @@ elmMakeRequestsAreEqual a b =
 
 
 mapLocatedInSourceFiles : (a -> b) -> LocatedInSourceFiles a -> LocatedInSourceFiles b
-mapLocatedInSourceFiles mapLocated orig =
-    case orig of
-        LocatedInSourceFiles location located ->
-            LocatedInSourceFiles location (mapLocated located)
+mapLocatedInSourceFiles mapLocated (LocatedInSourceFiles location located) =
+    LocatedInSourceFiles
+        location
+        (mapLocated located)
 
 
 locatedInSourceFilesFromJustFilePath : { filePath : List String } -> err -> LocatedInSourceFiles err
