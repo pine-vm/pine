@@ -3,7 +3,6 @@ module Backend.Main exposing
     , webServiceMain
     )
 
-import Base64
 import Bytes.Encode
 import CompilationInterface.ElmMake
 import CompilationInterface.SourceFiles
@@ -52,8 +51,10 @@ updateForHttpRequestEvent httpRequestEvent stateBefore =
             then
                 { statusCode = 200
                 , body =
-                    CompilationInterface.ElmMake.elm_make____src_Frontend_Main_elm.debug.base64
-                        |> Base64.toBytes
+                    CompilationInterface.ElmMake.elm_make____src_Frontend_Main_elm.debug.utf8
+                        |> Bytes.Encode.string
+                        |> Bytes.Encode.encode
+                        |> Just
                 , headersToAdd =
                     [ { name = "Content-Type", values = [ "text/html" ] }
                     ]

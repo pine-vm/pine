@@ -3,7 +3,6 @@ module Frontend.Main exposing (Event(..), State, init, main, update, view)
 import Browser
 import Browser.Navigation as Navigation
 import CompilationInterface.GenerateJsonConverters
-import Dict
 import Element
 import Element.Background
 import Element.Font

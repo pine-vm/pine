@@ -18,7 +18,6 @@ module Backend.Main exposing
     , webServiceMain
     )
 
-import Base64
 import Bytes
 import Bytes.Encode
 import Platform.WebService
