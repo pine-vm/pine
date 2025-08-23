@@ -740,7 +740,7 @@ namespace ElmTime
             }
 
             var filePath =
-                filePathList.Elements
+                filePathList.Items
                 .Select(pathElement =>
                 {
                     if (pathElement is not ElmValue.ElmString pathString)
@@ -860,17 +860,17 @@ namespace ElmTime
                         "Expected Elm list value, got: " + argumentAsElmValue);
                 }
 
-                if (asElmList.Elements.Count is not 1)
+                if (asElmList.Items.Count is not 1)
                 {
                     throw new Exception(
-                        "Expected list with one element, got: " + asElmList.Elements.Count);
+                        "Expected list with one element, got: " + asElmList.Items.Count);
                 }
 
 
-                if (asElmList.Elements[0] is not ElmValue.ElmString asElmString)
+                if (asElmList.Items[0] is not ElmValue.ElmString asElmString)
                 {
                     throw new Exception(
-                        "Expected Elm string value, got: " + asElmList.Elements[0]);
+                        "Expected Elm string value, got: " + asElmList.Items[0]);
                 }
 
                 return new CompilerSerialInterface.CompilationError(
@@ -943,7 +943,7 @@ namespace ElmTime
             }
 
             IReadOnlyList<CompilerSerialInterface.AppCodeEntry> filesList =
-                [.. filesElmList.Elements
+                [.. filesElmList.Items
                 .Select(fileEntry =>
                 {
                     if (fileEntry is not ElmValue.ElmList fileEntryList)
@@ -951,12 +951,12 @@ namespace ElmTime
                         throw new Exception("Expected Elm list value, got: " + fileEntry);
                     }
 
-                    if (fileEntryList.Elements.Count is not 2)
+                    if (fileEntryList.Items.Count is not 2)
                     {
-                        throw new Exception("Expected list with two elements, got: " + fileEntryList.Elements.Count);
+                        throw new Exception("Expected list with two elements, got: " + fileEntryList.Items.Count);
                     }
 
-                    var pathValue = fileEntryList.Elements[0];
+                    var pathValue = fileEntryList.Items[0];
 
                     if (pathValue is not ElmValue.ElmList pathList)
                     {
@@ -964,7 +964,7 @@ namespace ElmTime
                     }
 
                     var path =
-                        pathList.Elements
+                        pathList.Items
                         .Select(pathElement =>
                         {
                             if (pathElement is not ElmValue.ElmString pathString)
@@ -975,7 +975,7 @@ namespace ElmTime
                         })
                         .ToImmutableList();
 
-                    var contentValue = fileEntryList.Elements[1];
+                    var contentValue = fileEntryList.Items[1];
 
                     if (contentValue is not ElmValue.ElmBytes contentBytes)
                     {
@@ -998,7 +998,7 @@ namespace ElmTime
             }
 
             var entryPointFilePath =
-                entryPointFilePathList.Elements
+                entryPointFilePathList.Items
                 .Select(pathElement =>
                 {
                     if (pathElement is not ElmValue.ElmString pathString)
@@ -1138,7 +1138,7 @@ namespace ElmTime
             }
 
             var compiledFiles =
-                compiledFilesElmList.Elements
+                compiledFilesElmList.Items
                 .Select(compiledFileElmValue =>
                 {
                     if (compiledFileElmValue is not ElmValue.ElmList compiledFileElmList)
@@ -1147,13 +1147,13 @@ namespace ElmTime
                             "Expected list value, got: " + compiledFileElmValue);
                     }
 
-                    if (compiledFileElmList.Elements.Count is not 2)
+                    if (compiledFileElmList.Items.Count is not 2)
                     {
                         throw new Exception(
-                            "Expected list with two elements, got: " + compiledFileElmList.Elements.Count);
+                            "Expected list with two elements, got: " + compiledFileElmList.Items.Count);
                     }
 
-                    var pathElmValue = compiledFileElmList.Elements[0];
+                    var pathElmValue = compiledFileElmList.Items[0];
 
                     if (pathElmValue is not ElmValue.ElmList pathElmList)
                     {
@@ -1162,7 +1162,7 @@ namespace ElmTime
                     }
 
                     var path =
-                        pathElmList.Elements
+                        pathElmList.Items
                         .Select(pathElement =>
                         {
                             if (pathElement is not ElmValue.ElmString pathString)
@@ -1174,7 +1174,7 @@ namespace ElmTime
                         })
                         .ToImmutableList();
 
-                    var contentElmValue = compiledFileElmList.Elements[1];
+                    var contentElmValue = compiledFileElmList.Items[1];
 
                     if (contentElmValue is not ElmValue.ElmBytes contentElmBytes)
                     {

@@ -46,7 +46,7 @@ public class ElmValueJsonValueEncoding
         if (elmValue is ElmValue.ElmList elmList)
         {
             var listItems =
-                elmList.Elements
+                elmList.Items
                 .Select(EncodeAsJsonValuePineValue).ToArray();
 
             return ("ArrayValue", PineValue.List(listItems));

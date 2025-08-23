@@ -94,7 +94,7 @@ public class MutatingWebServiceApp
     public MutatingWebServiceApp(
         WebServiceInterface.WebServiceConfig appConfig)
     {
-        this._appConfig = appConfig;
+        _appConfig = appConfig;
 
         ResetAppState(appConfig.Init.State);
 

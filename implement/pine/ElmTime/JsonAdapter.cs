@@ -644,13 +644,13 @@ public class ElmTimeJsonAdapter
                 return "Expected list in 'parameters' but got: " + parametersField;
             }
 
-            var parameters = new ExposedFunctionDescriptionParameter[parametersList.Elements.Count];
+            var parameters = new ExposedFunctionDescriptionParameter[parametersList.Items.Count];
 
-            for (var i = 0; i < parametersList.Elements.Count; i++)
+            for (var i = 0; i < parametersList.Items.Count; i++)
             {
                 var parseParamResult =
                     ParseExposedFunctionDescriptionParameter(
-                        parametersList.Elements[i]);
+                        parametersList.Items[i]);
 
                 {
                     if (parseParamResult.IsErrOrNull() is { } err)

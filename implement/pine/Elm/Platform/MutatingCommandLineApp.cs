@@ -37,7 +37,7 @@ public class MutatingCommandLineApp
         CommandLineAppConfig appConfig,
         CommandLineAppConfig.CommandLineAppInitEnvironment environment)
     {
-        this._appConfig = appConfig;
+        _appConfig = appConfig;
 
         _pineVM = new PineVM.PineVM(_pineVMCache.EvalCache);
 

@@ -133,7 +133,7 @@ public class ElmValueInterop
                     tag.Arguments switch
                     {
                         [ElmValue.ElmList firstArgument] =>
-                            ElmValueBlobValueDecodedAsInElmCompiler(firstArgument.Elements),
+                            ElmValueBlobValueDecodedAsInElmCompiler(firstArgument.Items),
 
                         _ =>
                             "Invalid arguments for BlobValue tag"
@@ -144,7 +144,7 @@ public class ElmValueInterop
                     {
                         [ElmValue.ElmList firstArgument] =>
                             ElmValueListValueDecodedAsInElmCompiler(
-                                firstArgument.Elements,
+                                firstArgument.Items,
                                 additionalReusableDecodings,
                                 reportNewDecoding),
 
@@ -311,13 +311,13 @@ public class ElmValueInterop
                     return "Invalid arguments for tag " + tag.TagName + ": " + tag;
                 }
 
-                var items = new Expression[firstList.Elements.Count];
+                var items = new Expression[firstList.Items.Count];
 
-                for (var i = 0; i < firstList.Elements.Count; i++)
+                for (var i = 0; i < firstList.Items.Count; i++)
                 {
                     var itemResult =
                         ElmValueFromCompilerDecodedAsExpression(
-                            firstList.Elements[i],
+                            firstList.Items[i],
                             additionalReusableDecodings,
                             reportNewDecoding,
                             literalAdditionalReusableDecodings,

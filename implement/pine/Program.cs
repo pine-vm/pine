@@ -2661,28 +2661,28 @@ public class Program
                 return "Expected Elm list value, but got: " + elmTag.Arguments[0];
             }
 
-            var children = new (string name, TreeNodeWithStringPath item)[elmList.Elements.Count];
+            var children = new (string name, TreeNodeWithStringPath item)[elmList.Items.Count];
 
-            for (var i = 0; i < elmList.Elements.Count; ++i)
+            for (var i = 0; i < elmList.Items.Count; ++i)
             {
-                var child = elmList.Elements[i];
+                var child = elmList.Items[i];
 
                 if (child is not ElmValue.ElmList tuple)
                 {
                     return "Child [" + i + "] is not a tuple: " + child;
                 }
 
-                if (tuple.Elements.Count is not 2)
+                if (tuple.Items.Count is not 2)
                 {
-                    return "Child [" + i + "]: Expected Elm tuple with two elements, but got: " + tuple.Elements.Count;
+                    return "Child [" + i + "]: Expected Elm tuple with two elements, but got: " + tuple.Items.Count;
                 }
 
-                if (tuple.Elements[0] is not ElmValue.ElmString name)
+                if (tuple.Items[0] is not ElmValue.ElmString name)
                 {
-                    return "Child [" + i + "]: Expected Elm string value, but got: " + tuple.Elements[0];
+                    return "Child [" + i + "]: Expected Elm string value, but got: " + tuple.Items[0];
                 }
 
-                var childTreeResult = ParseAsFileTree(tuple.Elements[1]);
+                var childTreeResult = ParseAsFileTree(tuple.Items[1]);
 
                 if (childTreeResult.IsErrOrNull() is { } childTreeErr)
                 {

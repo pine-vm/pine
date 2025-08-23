@@ -93,22 +93,10 @@ public abstract record ElmValue
         StringEncoding.ValueFromString(ElmRecordTypeTagName);
 
     /// <summary>
-    /// Represents the 'Elm_Record' tag name as a <see cref="PineValue"/> using the 2024 string encoding.
-    /// </summary>
-    public static readonly PineValue ElmRecordTypeTagNameAsValue_2024 =
-        StringEncoding.ValueFromString_2024(ElmRecordTypeTagName);
-
-    /// <summary>
     /// Represents the 'Elm_Bytes' tag name as a <see cref="PineValue"/> using the default string encoding.
     /// </summary>
     public static readonly PineValue ElmBytesTypeTagNameAsValue =
         StringEncoding.ValueFromString(ElmBytesTypeTagName);
-
-    /// <summary>
-    /// Represents the 'Elm_Bytes' tag name as a <see cref="PineValue"/> using the 2024 string encoding.
-    /// </summary>
-    public static readonly PineValue ElmBytesTypeTagNameAsValue_2024 =
-        StringEncoding.ValueFromString_2024(ElmBytesTypeTagName);
 
     /// <summary>
     /// Represents the 'String' tag name as a <see cref="PineValue"/> using the default string encoding.
@@ -117,22 +105,10 @@ public abstract record ElmValue
         StringEncoding.ValueFromString(ElmStringTypeTagName);
 
     /// <summary>
-    /// Represents the 'String' tag name as a <see cref="PineValue"/> using the 2024 string encoding.
-    /// </summary>
-    public static readonly PineValue ElmStringTypeTagNameAsValue_2024 =
-        StringEncoding.ValueFromString_2024(ElmStringTypeTagName);
-
-    /// <summary>
     /// Represents the 'Set_elm_builtin' tag name as a <see cref="PineValue"/> using the default string encoding.
     /// </summary>
     public static readonly PineValue ElmSetTypeTagNameAsValue =
         StringEncoding.ValueFromString(ElmSetTypeTagName);
-
-    /// <summary>
-    /// Represents the 'Set_elm_builtin' tag name as a <see cref="PineValue"/> using the 2024 string encoding.
-    /// </summary>
-    public static readonly PineValue ElmSetTypeTagNameAsValue_2024 =
-        StringEncoding.ValueFromString_2024(ElmSetTypeTagName);
 
     /// <summary>
     /// Represents the 'RBEmpty_elm_builtin' tag name as a <see cref="PineValue"/> using the default string encoding.
@@ -142,25 +118,11 @@ public abstract record ElmValue
         StringEncoding.ValueFromString(ElmDictEmptyTagName);
 
     /// <summary>
-    /// Represents the 'RBEmpty_elm_builtin' tag name as a <see cref="PineValue"/> using the 2024 string encoding.
-    /// This corresponds to an empty dictionary of the `Dict.Dict` type from the Elm core library.
-    /// </summary>
-    public static readonly PineValue ElmDictEmptyTagNameAsValue_2024 =
-        StringEncoding.ValueFromString_2024(ElmDictEmptyTagName);
-
-    /// <summary>
     /// Represents the 'RBNode_elm_builtin' tag name as a <see cref="PineValue"/> using the default string encoding.
     /// This corresponds to a non-empty dictionary of the `Dict.Dict` type from the Elm core library.
     /// </summary>
     public static readonly PineValue ElmDictNotEmptyTagNameAsValue =
         StringEncoding.ValueFromString(ElmDictNotEmptyTagName);
-
-    /// <summary>
-    /// Represents the 'RBNode_elm_builtin' tag name as a <see cref="PineValue"/> using the 2024 string encoding.
-    /// This corresponds to a non-empty dictionary of the `Dict.Dict` type from the Elm core library.
-    /// </summary>
-    public static readonly PineValue ElmDictNotEmptyTagNameAsValue_2024 =
-        StringEncoding.ValueFromString_2024(ElmDictNotEmptyTagName);
 
     /// <summary>
     /// Represents the 'Elm_Float' tag name as a <see cref="PineValue"/> using the default string encoding.
@@ -169,80 +131,74 @@ public abstract record ElmValue
         StringEncoding.ValueFromString(ElmFloatTypeTagName);
 
     /// <summary>
-    /// Represents the 'Elm_Float' tag name as a <see cref="PineValue"/> using the 2024 string encoding.
-    /// </summary>
-    public static readonly PineValue ElmFloatTypeTagNameAsValue_2024 =
-        StringEncoding.ValueFromString_2024(ElmFloatTypeTagName);
-
-    /// <summary>
     /// Represents an empty Elm dictionary.
     /// </summary>
     public static readonly ElmValue EmptyDict =
         TagInstance(ElmDictEmptyTagName, []);
 
     /// <summary>
-    /// Creates an <see cref="ElmList"/> instance from a read-only list of <see cref="ElmValue"/> elements.
+    /// Creates an <see cref="ElmList"/> instance from a read-only list of <see cref="ElmValue"/> items.
     /// </summary>
-    /// <param name="Elements">The elements of the list.</param>
+    /// <param name="items">The items in the list.</param>
     /// <returns>A new <see cref="ElmList"/> instance.</returns>
-    public static ElmValue ListInstance(IReadOnlyList<ElmValue> Elements) =>
-        new ElmList(Elements);
+    public static ElmValue ListInstance(IReadOnlyList<ElmValue> items) =>
+        new ElmList(items);
 
     /// <summary>
     /// Creates an Elm tuple (represented as an <see cref="ElmList"/>) from two <see cref="ElmValue"/> items.
     /// </summary>
-    /// <param name="Item1">The first item of the tuple.</param>
-    /// <param name="Item2">The second item of the tuple.</param>
+    /// <param name="item1">The first item of the tuple.</param>
+    /// <param name="item2">The second item of the tuple.</param>
     /// <returns>An <see cref="ElmList"/> representing the tuple.</returns>
-    public static ElmValue TupleInstance(ElmValue Item1, ElmValue Item2) =>
-        ListInstance([Item1, Item2]);
+    public static ElmValue TupleInstance(ElmValue item1, ElmValue item2) =>
+        ListInstance([item1, item2]);
 
     /// <summary>
     /// Creates an <see cref="ElmInteger"/> instance from a <see cref="System.Numerics.BigInteger"/>.
     /// This method may return a cached instance for frequently used integer values.
     /// </summary>
-    /// <param name="Value">The integer value.</param>
+    /// <param name="value">The integer value.</param>
     /// <returns>An <see cref="ElmInteger"/> instance.</returns>
-    public static ElmValue Integer(System.Numerics.BigInteger Value)
+    public static ElmValue Integer(System.Numerics.BigInteger value)
     {
-        if (Value < 0)
+        if (value < 0)
         {
-            if (-Value < ReusedIntegerInstancesNegative.Span.Length)
+            if (-value < s_reusedIntegerInstancesNegative.Span.Length)
             {
-                return ReusedIntegerInstancesNegative.Span[(int)-Value];
+                return s_reusedIntegerInstancesNegative.Span[(int)-value];
             }
         }
-        else if (Value < ReusedIntegerInstancesPositive.Length)
+        else if (value < s_reusedIntegerInstancesPositive.Length)
         {
-            return ReusedIntegerInstancesPositive.Span[(int)Value];
+            return s_reusedIntegerInstancesPositive.Span[(int)value];
         }
 
-        return new ElmInteger(Value);
+        return new ElmInteger(value);
     }
 
     /// <summary>
     /// Creates an <see cref="ElmString"/> instance from a <see cref="string"/>.
     /// This method may return a cached instance for frequently used string values.
     /// </summary>
-    /// <param name="Value">The string value.</param>
+    /// <param name="value">The string value.</param>
     /// <returns>An <see cref="ElmString"/> instance.</returns>
-    public static ElmValue StringInstance(string Value) =>
-        ReusedStringInstances?.TryGetValue(Value, out var reusedInstance) ?? false && reusedInstance is not null ?
+    public static ElmValue StringInstance(string value) =>
+        s_reusedStringInstances?.TryGetValue(value, out var reusedInstance) ?? false && reusedInstance is not null ?
         reusedInstance
         :
-        new ElmString(Value);
+        new ElmString(value);
 
     /// <summary>
     /// Creates an <see cref="ElmTag"/> instance.
     /// This method may return a cached instance for frequently used tags.
     /// </summary>
-    /// <param name="TagName">The name of the tag.</param>
-    /// <param name="Arguments">The arguments associated with the tag.</param>
+    /// <param name="tagName">The name of the tag.</param>
+    /// <param name="arguments">The arguments associated with the tag.</param>
     /// <returns>An <see cref="ElmTag"/> instance.</returns>
-    public static ElmTag TagInstance(string TagName, IReadOnlyList<ElmValue> Arguments)
+    public static ElmTag TagInstance(string tagName, IReadOnlyList<ElmValue> arguments)
     {
         var tagStruct =
-            new ElmTag.ElmTagStruct(TagName, Arguments);
+            new ElmTag.ElmTagStruct(tagName, arguments);
 
         if (ReusedInstances.Instance.ElmTagValues?.TryGetValue(tagStruct, out var reusedInstance) ?? false)
         {
@@ -256,31 +212,31 @@ public abstract record ElmValue
     /// Creates an <see cref="ElmChar"/> instance from an integer representing a Unicode code point.
     /// This method may return a cached instance for frequently used character values.
     /// </summary>
-    /// <param name="Value">The Unicode code point of the character.</param>
+    /// <param name="value">The Unicode code point of the character.</param>
     /// <returns>An <see cref="ElmChar"/> instance.</returns>
-    public static ElmValue CharInstance(int Value) =>
-        Value < ReusedCharInstances.Length && 0 <= Value ?
-        ReusedCharInstances.Span[Value]
+    public static ElmValue CharInstance(int value) =>
+        value < s_reusedCharInstances.Length && 0 <= value ?
+        s_reusedCharInstances.Span[value]
         :
-        new ElmChar(Value);
+        new ElmChar(value);
 
-    private static readonly ReadOnlyMemory<ElmValue> ReusedIntegerInstancesNegative =
+    private static readonly ReadOnlyMemory<ElmValue> s_reusedIntegerInstancesNegative =
         Enumerable.Range(0, 10_000)
         .Select(i => Integer(-i))
         .ToArray();
 
-    private static readonly ReadOnlyMemory<ElmValue> ReusedIntegerInstancesPositive =
+    private static readonly ReadOnlyMemory<ElmValue> s_reusedIntegerInstancesPositive =
         Enumerable.Range(0, 10_000)
         .Select(i => Integer(i))
         .ToArray();
 
-    private static readonly FrozenDictionary<string, ElmValue> ReusedStringInstances =
+    private static readonly FrozenDictionary<string, ElmValue> s_reusedStringInstances =
         PopularValues.PopularStrings
         .ToFrozenDictionary(
             keySelector: s => s,
             elementSelector: StringInstance);
 
-    private static readonly ReadOnlyMemory<ElmValue> ReusedCharInstances =
+    private static readonly ReadOnlyMemory<ElmValue> s_reusedCharInstances =
         Enumerable.Range(0, 10_000)
         .Select(CharInstance)
         .ToArray();
@@ -318,16 +274,16 @@ public abstract record ElmValue
         /// </summary>
         public IReadOnlyList<ElmValue> Arguments { get; }
 
-        readonly int slimHashCode;
+        readonly int _slimHashCode;
 
         /// <inheritdoc/>
         override public int ContainedNodesCount { get; }
 
         internal ElmTag(
-            string TagName,
-            IReadOnlyList<ElmValue> Arguments)
+            string tagName,
+            IReadOnlyList<ElmValue> arguments)
             :
-            this(new ElmTagStruct(TagName, Arguments))
+            this(new ElmTagStruct(tagName, arguments))
         {
         }
 
@@ -336,7 +292,7 @@ public abstract record ElmValue
             TagName = elmTagStruct.TagName;
             Arguments = elmTagStruct.Arguments;
 
-            slimHashCode = elmTagStruct.slimHashCode;
+            _slimHashCode = elmTagStruct.SlimHashCode;
 
             ContainedNodesCount = 0;
 
@@ -355,7 +311,7 @@ public abstract record ElmValue
             if (otherTag is null)
                 return false;
 
-            if (otherTag.slimHashCode != slimHashCode)
+            if (otherTag._slimHashCode != _slimHashCode)
                 return false;
 
             if (TagName != otherTag.TagName)
@@ -375,7 +331,7 @@ public abstract record ElmValue
 
         /// <inheritdoc/>
         override public int GetHashCode() =>
-            slimHashCode;
+            _slimHashCode;
 
         /// <summary>
         /// A struct representing the essential data of an <see cref="ElmTag"/>, used for efficient hashing and equality comparison.
@@ -395,24 +351,24 @@ public abstract record ElmValue
             /// <summary>
             /// Gets the precomputed hash code.
             /// </summary>
-            public readonly int slimHashCode;
+            public readonly int SlimHashCode;
 
             /// <summary>
             /// Initializes a new instance of the <see cref="ElmTagStruct"/> struct.
             /// </summary>
-            /// <param name="TagName">The name of the tag.</param>
-            /// <param name="Arguments">The arguments associated with the tag.</param>
-            public ElmTagStruct(string TagName, IReadOnlyList<ElmValue> Arguments)
+            /// <param name="tagName">The name of the tag.</param>
+            /// <param name="arguments">The arguments associated with the tag.</param>
+            public ElmTagStruct(string tagName, IReadOnlyList<ElmValue> arguments)
             {
-                this.TagName = TagName;
-                this.Arguments = Arguments;
+                TagName = tagName;
+                this.Arguments = arguments;
 
-                slimHashCode = ComputeHashCode(TagName, Arguments);
+                SlimHashCode = ComputeHashCode(tagName, arguments);
             }
 
             /// <inheritdoc/>
             public override int GetHashCode() =>
-                slimHashCode;
+                SlimHashCode;
 
             /// <summary>
             /// Determines whether the current <see cref="ElmTagStruct"/> is equal to another <see cref="ElmTagStruct"/>.
@@ -421,7 +377,7 @@ public abstract record ElmValue
             /// <returns><c>true</c> if the two tag structs are equal; otherwise, <c>false</c>.</returns>
             public bool Equals(ElmTagStruct otherTag)
             {
-                if (otherTag.slimHashCode != slimHashCode)
+                if (otherTag.SlimHashCode != SlimHashCode)
                     return false;
 
                 if (TagName != otherTag.TagName)
@@ -442,20 +398,20 @@ public abstract record ElmValue
             /// <summary>
             /// Computes the hash code for an Elm tag given its name and arguments.
             /// </summary>
-            /// <param name="TagName">The name of the tag.</param>
-            /// <param name="Arguments">The arguments of the tag.</param>
+            /// <param name="tagName">The name of the tag.</param>
+            /// <param name="arguments">The arguments of the tag.</param>
             /// <returns>The computed hash code.</returns>
             public static int ComputeHashCode(
-                string TagName,
-                IReadOnlyList<ElmValue> Arguments)
+                string tagName,
+                IReadOnlyList<ElmValue> arguments)
             {
                 var hashCode = new HashCode();
 
-                hashCode.Add(TagName);
+                hashCode.Add(tagName);
 
-                for (var i = 0; i < Arguments.Count; i++)
+                for (var i = 0; i < arguments.Count; i++)
                 {
-                    hashCode.Add(Arguments[i]);
+                    hashCode.Add(arguments[i]);
                 }
 
                 return hashCode.ToHashCode();
@@ -477,12 +433,12 @@ public abstract record ElmValue
         : ElmValue
     {
         /// <summary>
-        /// Gets the elements of the list.
+        /// Gets the items in the list.
         /// </summary>
-        public IReadOnlyList<ElmValue> Elements { init; get; }
+        public IReadOnlyList<ElmValue> Items { init; get; }
 
 
-        internal readonly int slimHashCode;
+        internal readonly int SlimHashCode;
 
         /// <inheritdoc/>
         public override int ContainedNodesCount { get; }
@@ -490,18 +446,18 @@ public abstract record ElmValue
         /// <summary>
         /// Initializes a new instance of the <see cref="ElmList"/> class.
         /// </summary>
-        /// <param name="Elements">The elements of the list.</param>
-        public ElmList(IReadOnlyList<ElmValue> Elements)
+        /// <param name="items">The items in the list.</param>
+        public ElmList(IReadOnlyList<ElmValue> items)
         {
-            this.Elements = Elements;
+            Items = items;
 
-            slimHashCode = ComputeSlimHashCode(Elements);
+            SlimHashCode = ComputeSlimHashCode(items);
 
             ContainedNodesCount = 0;
 
-            for (var i = 0; i < Elements.Count; i++)
+            for (var i = 0; i < items.Count; i++)
             {
-                ContainedNodesCount += Elements[i].ContainedNodesCount + 1;
+                ContainedNodesCount += items[i].ContainedNodesCount + 1;
             }
         }
 
@@ -511,12 +467,12 @@ public abstract record ElmValue
             if (otherList is null)
                 return false;
 
-            if (Elements.Count != otherList.Elements.Count)
+            if (Items.Count != otherList.Items.Count)
                 return false;
 
-            for (var i = 0; i < Elements.Count; i++)
+            for (var i = 0; i < Items.Count; i++)
             {
-                if (!Elements[i].Equals(otherList.Elements[i]))
+                if (!Items[i].Equals(otherList.Items[i]))
                     return false;
             }
 
@@ -526,16 +482,16 @@ public abstract record ElmValue
         /// <inheritdoc/>
         public override int GetHashCode()
         {
-            return slimHashCode;
+            return SlimHashCode;
         }
 
-        private static int ComputeSlimHashCode(IReadOnlyList<ElmValue> elements)
+        private static int ComputeSlimHashCode(IReadOnlyList<ElmValue> items)
         {
             var hashCode = new HashCode();
 
-            for (var i = 0; i < elements.Count; i++)
+            for (var i = 0; i < items.Count; i++)
             {
-                hashCode.Add(elements[i].GetHashCode());
+                hashCode.Add(items[i].GetHashCode());
             }
 
             return hashCode.ToHashCode();
@@ -674,20 +630,20 @@ public abstract record ElmValue
         public System.Numerics.BigInteger Denominator { get; }
 
         private ElmFloat(
-            System.Numerics.BigInteger Numerator,
-            System.Numerics.BigInteger Denominator)
+            System.Numerics.BigInteger numerator,
+            System.Numerics.BigInteger denominator)
         {
-            this.Numerator = Numerator;
-            this.Denominator = Denominator;
+            Numerator = numerator;
+            Denominator = denominator;
         }
 
         /// <summary>
         /// Store components verbatim without normalization.
         /// </summary>
         public static ElmFloat NotNormalized(
-            System.Numerics.BigInteger Numerator,
-            System.Numerics.BigInteger Denominator) =>
-            new(Numerator, Denominator);
+            System.Numerics.BigInteger numerator,
+            System.Numerics.BigInteger denominator) =>
+            new(numerator, denominator);
 
         /// <summary>
         /// Normalize the numerator and denominator to a canonical representation:
@@ -697,21 +653,21 @@ public abstract record ElmValue
         /// </list>
         /// </summary>
         public static ElmFloat Normalized(
-            System.Numerics.BigInteger Numerator,
-            System.Numerics.BigInteger Denominator)
+            System.Numerics.BigInteger numerator,
+            System.Numerics.BigInteger denominator)
         {
-            var sign = Numerator.Sign * Denominator.Sign;
+            var sign = numerator.Sign * denominator.Sign;
 
             var divisor =
-                Numerator == 0 || Denominator == 0
+                numerator.IsZero || denominator.IsZero
                 ?
                 1
                 :
-                System.Numerics.BigInteger.GreatestCommonDivisor(Numerator, Denominator);
+                System.Numerics.BigInteger.GreatestCommonDivisor(numerator, denominator);
 
             return new ElmFloat(
-                Numerator: System.Numerics.BigInteger.Abs(Numerator) / divisor * sign,
-                Denominator: System.Numerics.BigInteger.Abs(Denominator) / divisor);
+                numerator: System.Numerics.BigInteger.Abs(numerator) / divisor * sign,
+                denominator: System.Numerics.BigInteger.Abs(denominator) / divisor);
         }
 
         /// <summary>
@@ -735,8 +691,8 @@ public abstract record ElmValue
             var numeratorAbs = new System.Numerics.BigInteger(abs * denominator);
 
             return Normalized(
-                Numerator: fromDouble < 0 ? -numeratorAbs : numeratorAbs,
-                Denominator: new System.Numerics.BigInteger(denominator));
+                numerator: fromDouble < 0 ? -numeratorAbs : numeratorAbs,
+                denominator: new System.Numerics.BigInteger(denominator));
         }
 
         /// <inheritdoc/>
@@ -776,12 +732,12 @@ public abstract record ElmValue
                 ("'" + RenderCharAsElmExpression(charValue.Value) + "'", needsParens: false),
 
                 ElmList list =>
-                ElmListItemsLookLikeTupleItems(list.Elements) ?? false
+                ElmListItemsLookLikeTupleItems(list.Items) ?? false
                 ?
-                ("(" + string.Join(",", list.Elements.Select(item => RenderAsElmExpression(item).expressionString)) + ")",
+                ("(" + string.Join(",", list.Items.Select(item => RenderAsElmExpression(item).expressionString)) + ")",
                 needsParens: false)
                 :
-                ("[" + string.Join(",", list.Elements.Select(item => RenderAsElmExpression(item).expressionString)) + "]",
+                ("[" + string.Join(",", list.Items.Select(item => RenderAsElmExpression(item).expressionString)) + "]",
                 needsParens: false),
 
                 ElmString stringValue =>
@@ -890,7 +846,7 @@ public abstract record ElmValue
         string tagName,
         IReadOnlyList<ElmValue> arguments)
     {
-        static string applyNeedsParens((string expressionString, bool needsParens) tuple) =>
+        static string ApplyNeedsParens((string expressionString, bool needsParens) tuple) =>
             tuple.needsParens ? "(" + tuple.expressionString + ")" : tuple.expressionString;
 
         if (tagName is "Set_elm_builtin")
@@ -904,10 +860,10 @@ public abstract record ElmValue
                 if (singleArgumentDictToList.Count is 0)
                     return ("Set.empty", needsParens: false);
 
-                var setElements = singleArgumentDictToList.Select(field => field.key).ToList();
+                var setItems = singleArgumentDictToList.Select(field => field.key).ToList();
 
                 return
-                    ("Set.fromList [" + string.Join(",", setElements.Select(RenderAsElmExpression).Select(applyNeedsParens)) + "]",
+                    ("Set.fromList [" + string.Join(",", setItems.Select(RenderAsElmExpression).Select(ApplyNeedsParens)) + "]",
                     needsParens: true);
             }
         }
@@ -927,7 +883,7 @@ public abstract record ElmValue
                     (false, ""),
 
                     _ =>
-                    (true, " " + string.Join(" ", arguments.Select(RenderAsElmExpression).Select(applyNeedsParens)))
+                    (true, " " + string.Join(" ", arguments.Select(RenderAsElmExpression).Select(ApplyNeedsParens)))
                 };
 
             return (tagName + argumentsString, needsParens);
@@ -1020,11 +976,11 @@ public abstract record ElmValue
         if (list.Count <= 1)
             return true;
 
-        var firstElementType = list[0];
+        var firstItemType = list[0];
 
         for (var i = 1; i < list.Count; i++)
         {
-            var comparisonResult = AreElmValueTypesEqual(firstElementType, list[i]);
+            var comparisonResult = AreElmValueTypesEqual(firstItemType, list[i]);
 
             if (comparisonResult is false)
                 return false;
@@ -1045,7 +1001,7 @@ public abstract record ElmValue
     /// Returns <c>true</c> if both values are of the same concrete Elm type (e.g., both are ElmInteger, both ElmChar, both ElmString).
     /// Returns <c>false</c> if the types are definitively different (e.g., ElmInteger and ElmString), or if they are records with different field names.
     /// Returns <c>null</c> if the type equality is ambiguous. This occurs for:
-    /// - Two <see cref="ElmList"/> instances (as their element types would need further inspection).
+    /// - Two <see cref="ElmList"/> instances (as their item types would need further inspection).
     /// - Two <see cref="ElmRecord"/> instances with the same field names (as their field value types would need further inspection).
     /// - Two <see cref="ElmTag"/> instances (as their constructor names and argument types would need further inspection).
     /// - Two <see cref="ElmInternal"/> instances.

@@ -517,7 +517,7 @@ public record ReusedInstances(
 
                         ElmValue.ElmList elmList =>
                         new ElmValue.ElmList(
-                            [.. elmList.Elements.Select(item => reusedInstances[item])]),
+                            [.. elmList.Items.Select(item => reusedInstances[item])]),
 
                         ElmValue.ElmRecord elmRecord =>
                         new ElmValue.ElmRecord(
@@ -525,8 +525,8 @@ public record ReusedInstances(
 
                         ElmValue.ElmTag elmTag =>
                         ElmValue.TagInstance(
-                            TagName: elmTag.TagName,
-                            Arguments: [.. elmTag.Arguments.Select(arg => reusedInstances[arg])]),
+                            tagName: elmTag.TagName,
+                            arguments: [.. elmTag.Arguments.Select(arg => reusedInstances[arg])]),
 
                         ElmValue.ElmInternal elmInternal =>
                         elmValue,
@@ -826,7 +826,7 @@ public record ReusedInstances(
                     [],
 
                     ElmValue.ElmList elmList =>
-                    elmList.Elements,
+                    elmList.Items,
 
                     ElmValue.ElmRecord elmRecord =>
                     [.. elmRecord.Fields.Select(kvp => kvp.Value)],

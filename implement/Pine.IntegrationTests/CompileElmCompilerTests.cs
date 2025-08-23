@@ -170,7 +170,7 @@ public class CompileElmCompilerTests
             (ElmValue.ElmList)((ElmValue.ElmRecord)responseAsElmValue)["declarations"]!;
 
         var declarations =
-            declarationsList.Elements.Cast<ElmValue.ElmTag>()
+            declarationsList.Items.Cast<ElmValue.ElmTag>()
             .OrderBy(declarationNode =>
             ((ElmValue.ElmInteger)
             ((ElmValue.ElmRecord)((ElmValue.ElmRecord)declarationNode.Arguments[0])["start"]!)["row"]!).Value)

@@ -281,8 +281,8 @@ public class ElmValueJsonValueEncodingTests
                     input =
                     (ElmValue)
                     ElmValue.ElmFloat.Normalized(
-                        Numerator: 1,
-                        Denominator: 4),
+                        numerator: 1,
+                        denominator: 4),
 
                     expectedLibJsonValue =
                     ElmValue.TagInstance(

@@ -428,7 +428,7 @@ public class LanguageServer(
             "Workspace_didChangeWatchedFiles: " + changes.Count + " changes: " +
             string.Join(", ", changes.Select(change => change.Uri)));
 
-        if (this._languageServiceStateTask is not { } languageServiceStateTask)
+        if (_languageServiceStateTask is not { } languageServiceStateTask)
         {
             Log("Error processing file changes: language service state not initialized");
             return;
@@ -1645,7 +1645,7 @@ public class LanguageServer(
     public Result<string, Interface.Response> HandleRequest(
         Interface.Request request)
     {
-        if (this._languageServiceStateTask is not { } languageServiceStateTask)
+        if (_languageServiceStateTask is not { } languageServiceStateTask)
         {
             return "Language service state not initialized";
         }

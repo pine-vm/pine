@@ -1304,11 +1304,11 @@ type alias LoadDependencyStruct =
         }
 
         var environmentVariables =
-            new ProcessEnvironmentVariableStruct[environmentVariablesList.Elements.Count];
+            new ProcessEnvironmentVariableStruct[environmentVariablesList.Items.Count];
 
         for (var i = 0; i < environmentVariables.Length; i++)
         {
-            var environmentVariableValue = environmentVariablesList.Elements[i];
+            var environmentVariableValue = environmentVariablesList.Items[i];
 
             var parsedEnvironmentVariable =
                 ParseProcessEnvironmentVariableStruct(environmentVariableValue, elmCompilerCache);
@@ -1372,11 +1372,11 @@ type alias LoadDependencyStruct =
             return "Unexpected type in hintUrls: " + hintUrlsValue;
         }
 
-        var hintUrls = new string[hintUrlsList.Elements.Count];
+        var hintUrls = new string[hintUrlsList.Items.Count];
 
         for (var i = 0; i < hintUrls.Length; i++)
         {
-            var hintUrlValue = hintUrlsList.Elements[i];
+            var hintUrlValue = hintUrlsList.Items[i];
 
             if (hintUrlValue is not ElmValue.ElmString hintUrlString)
             {
@@ -1574,11 +1574,11 @@ type alias LoadDependencyStruct =
             return "Unexpected type in headersToAdd: " + headersToAddValue;
         }
 
-        var headersToAdd = new HttpHeader[headersToAddList.Elements.Count];
+        var headersToAdd = new HttpHeader[headersToAddList.Items.Count];
 
         for (var i = 0; i < headersToAdd.Length; i++)
         {
-            var headerValue = headersToAddList.Elements[i];
+            var headerValue = headersToAddList.Items[i];
 
             var parsedHeader = ParseHttpHeader(headerValue, elmCompilerCache);
             {
@@ -1641,11 +1641,11 @@ type alias LoadDependencyStruct =
             return "Unexpected type in values: " + valuesValue;
         }
 
-        var values = new string[valuesList.Elements.Count];
+        var values = new string[valuesList.Items.Count];
 
         for (var i = 0; i < values.Length; i++)
         {
-            var valueValue = valuesList.Elements[i];
+            var valueValue = valuesList.Items[i];
 
             if (valueValue is not ElmValue.ElmString valueString)
             {

@@ -250,15 +250,15 @@ public static class ResponseEncoding
                     responseTag.Arguments[0].GetType();
             }
 
-            var plainStrings = new string[responseList.Elements.Count];
+            var plainStrings = new string[responseList.Items.Count];
 
-            for (var i = 0; i < responseList.Elements.Count; i++)
+            for (var i = 0; i < responseList.Items.Count; i++)
             {
-                if (responseList.Elements[i] is not ElmValue.ElmString plainString)
+                if (responseList.Items[i] is not ElmValue.ElmString plainString)
                 {
                     return
                         "Unexpected response tag element type: " +
-                        responseList.Elements[i].GetType();
+                        responseList.Items[i].GetType();
                 }
 
                 plainStrings[i] = plainString.Value;
@@ -283,12 +283,12 @@ public static class ResponseEncoding
                     responseTag.Arguments[0].GetType();
             }
 
-            var completionItems = new MonacoEditor.MonacoCompletionItem[responseList.Elements.Count];
+            var completionItems = new MonacoEditor.MonacoCompletionItem[responseList.Items.Count];
 
-            for (var i = 0; i < responseList.Elements.Count; i++)
+            for (var i = 0; i < responseList.Items.Count; i++)
             {
                 var completionItemResult =
-                    MonacoEditor.CompletionItemEncoding.Decode(responseList.Elements[i]);
+                    MonacoEditor.CompletionItemEncoding.Decode(responseList.Items[i]);
 
                 {
                     if (completionItemResult.IsErrOrNull() is { } err)
@@ -352,12 +352,12 @@ public static class ResponseEncoding
                     responseTag.Arguments[0].GetType();
             }
 
-            var symbols = new DocumentSymbol[responseList.Elements.Count];
+            var symbols = new DocumentSymbol[responseList.Items.Count];
 
-            for (var i = 0; i < responseList.Elements.Count; i++)
+            for (var i = 0; i < responseList.Items.Count; i++)
             {
                 var symbolResult =
-                    DocumentSymbolEncoding.Decode(responseList.Elements[i]);
+                    DocumentSymbolEncoding.Decode(responseList.Items[i]);
 
                 {
                     if (symbolResult.IsErrOrNull() is { } err)
@@ -445,12 +445,12 @@ public static class ResponseEncoding
             return "Expected Elm list, got: " + elmValue.GetType();
         }
 
-        var locations = new LocationInFile[list.Elements.Count];
+        var locations = new LocationInFile[list.Items.Count];
 
-        for (var i = 0; i < list.Elements.Count; i++)
+        for (var i = 0; i < list.Items.Count; i++)
         {
             var locationResult =
-                LocationInFileEncoding.Decode(list.Elements[i]);
+                LocationInFileEncoding.Decode(list.Items[i]);
 
             {
                 if (locationResult.IsErrOrNull() is { } err)
@@ -681,11 +681,11 @@ public static class DocumentSymbolEncoding
             return "Expected field 'children' to be a list, got: " + childrenValue.GetType();
         }
 
-        var children = new DocumentSymbol[childrenList.Elements.Count];
+        var children = new DocumentSymbol[childrenList.Items.Count];
 
-        for (var i = 0; i < childrenList.Elements.Count; i++)
+        for (var i = 0; i < childrenList.Items.Count; i++)
         {
-            var childResult = Decode(childrenList.Elements[i]);
+            var childResult = Decode(childrenList.Items[i]);
             {
                 if (childResult.IsErrOrNull() is { } err)
                 {
@@ -897,11 +897,11 @@ public static class WorkspaceEditEncoding
         {
             return "Expected Elm list, got: " + elmValue.GetType();
         }
-        var textDocumentEdits = new TextDocumentEdit[list.Elements.Count];
-        for (var i = 0; i < list.Elements.Count; i++)
+        var textDocumentEdits = new TextDocumentEdit[list.Items.Count];
+        for (var i = 0; i < list.Items.Count; i++)
         {
             var textDocumentEditResult =
-                TextDocumentEditEncoding.Decode(list.Elements[i]);
+                TextDocumentEditEncoding.Decode(list.Items[i]);
             {
                 if (textDocumentEditResult.IsErrOrNull() is { } err)
                 {
@@ -959,11 +959,11 @@ public static class TextDocumentEditEncoding
             return "Expected field 'edits' to be a list, got: " + editsValue.GetType();
         }
 
-        var textEdits = new TextEdit[editsListValue.Elements.Count];
+        var textEdits = new TextEdit[editsListValue.Items.Count];
 
-        for (var i = 0; i < editsListValue.Elements.Count; i++)
+        for (var i = 0; i < editsListValue.Items.Count; i++)
         {
-            var textEditResult = TextEditEncoding.Decode(editsListValue.Elements[i]);
+            var textEditResult = TextEditEncoding.Decode(editsListValue.Items[i]);
             {
                 if (textEditResult.IsErrOrNull() is { } err)
                 {
@@ -1117,15 +1117,15 @@ public static class FileLocationEncoding
                     tag.Arguments[1].GetType();
             }
 
-            var modulePath = new string[modulePathList.Elements.Count];
+            var modulePath = new string[modulePathList.Items.Count];
 
-            for (var i = 0; i < modulePathList.Elements.Count; i++)
+            for (var i = 0; i < modulePathList.Items.Count; i++)
             {
-                if (modulePathList.Elements[i] is not ElmValue.ElmString modulePathString)
+                if (modulePathList.Items[i] is not ElmValue.ElmString modulePathString)
                 {
                     return
                         "Unexpected tag argument type: " +
-                        modulePathList.Elements[i].GetType();
+                        modulePathList.Items[i].GetType();
                 }
                 modulePath[i] = modulePathString.Value;
             }

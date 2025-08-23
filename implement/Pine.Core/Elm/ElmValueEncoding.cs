@@ -139,8 +139,7 @@ public static class ElmValueEncoding
                     {
                         // Optimize, especially for the case of an Elm String.
 
-                        if (tagCandidateValue == ElmValue.ElmStringTypeTagNameAsValue ||
-                            tagCandidateValue == ElmValue.ElmStringTypeTagNameAsValue_2024)
+                        if (tagCandidateValue == ElmValue.ElmStringTypeTagNameAsValue)
                         {
                             if (tagArgumentsList.Elements.Length is not 1)
                                 return "Failed to convert value under String tag: Expected a list of tag arguments with one element";
@@ -162,8 +161,7 @@ public static class ElmValueEncoding
                     {
                         // Optimize, especially for the case of an Elm Record.
 
-                        if (tagCandidateValue == ElmValue.ElmRecordTypeTagNameAsValue ||
-                            tagCandidateValue == ElmValue.ElmRecordTypeTagNameAsValue_2024)
+                        if (tagCandidateValue == ElmValue.ElmRecordTypeTagNameAsValue)
                         {
                             if (tagArgumentsList.Elements.Length is not 1)
                                 return "Failed to convert value under Record tag: Expected a list of tag arguments with one element";
@@ -190,8 +188,7 @@ public static class ElmValueEncoding
                     {
                         // case of Bytes.Bytes
 
-                        if (tagCandidateValue == ElmValue.ElmBytesTypeTagNameAsValue ||
-                            tagCandidateValue == ElmValue.ElmBytesTypeTagNameAsValue_2024)
+                        if (tagCandidateValue == ElmValue.ElmBytesTypeTagNameAsValue)
                         {
                             if (tagArgumentsList.Elements.Length is not 1)
                                 return "Failed to convert value under Bytes tag: Expected a list of tag arguments with single item";
@@ -206,8 +203,7 @@ public static class ElmValueEncoding
                     {
                         // Optimize for the case of an Elm Float.
 
-                        if (tagCandidateValue == ElmValue.ElmFloatTypeTagNameAsValue ||
-                            tagCandidateValue == ElmValue.ElmFloatTypeTagNameAsValue_2024)
+                        if (tagCandidateValue == ElmValue.ElmFloatTypeTagNameAsValue)
                         {
                             if (tagArgumentsList.Elements.Length is not 2)
                                 return "Failed to convert value under Float tag: Expected a list of tag arguments with two elements";
@@ -425,8 +421,7 @@ public static class ElmValueEncoding
 
         var tagNameValue = taggedRecordListElements[0];
 
-        if (tagNameValue != ElmValue.ElmRecordTypeTagNameAsValue &&
-            tagNameValue != ElmValue.ElmRecordTypeTagNameAsValue_2024)
+        if (tagNameValue != ElmValue.ElmRecordTypeTagNameAsValue)
             return "First element is not the record tag name.";
 
         var recordFieldsListList = taggedRecordListElements[1];
@@ -508,7 +503,7 @@ public static class ElmValueEncoding
             {
                 ElmValue.ElmList elmList =>
                 PineValue.List(
-                    [.. elmList.Elements
+                    [.. elmList.Items
                     .Select(item => ElmValueAsPineValue(
                         item,
                         additionalReusableEncodings,
