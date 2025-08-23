@@ -2,6 +2,7 @@ using ElmTime.Platform.WebService;
 using Microsoft.AspNetCore.Http;
 using Pine.Core;
 using Pine.Core.PopularEncodings;
+using Pine.Elm.Platform;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -167,7 +168,8 @@ public sealed record StaticAppSnapshottingState : IAsyncDisposable
 
     public Task HandleRequestAsync(
         HttpContext context,
-        Action<string>? logMessage = null)
+        Action<string>? logMessage = null,
+        Func<WebServiceInterface.HttpRequestProperties, WebServiceInterface.HttpRequestProperties>? modifyRequest = null)
     {
         return
             Asp.AsInterfaceHttpRequestAsync(context.Request)
@@ -182,12 +184,17 @@ public sealed record StaticAppSnapshottingState : IAsyncDisposable
 
                 var httpRequestProperties = httpRequestTask.Result;
 
+                if (modifyRequest is not null)
+                {
+                    httpRequestProperties = modifyRequest(httpRequestProperties);
+                }
+
                 lock (_processAndStoreLock)
                 {
                     var httpResponse =
                         _publicAppState.HandleRequestAsync(
                             httpRequestProperties,
-                            new Elm.Platform.WebServiceInterface.HttpRequestContext(
+                            new WebServiceInterface.HttpRequestContext(
                                 ClientAddress: context.Connection.RemoteIpAddress?.ToString()),
                             httpRequestEventSizeLimit: _serverConfig?.httpRequestEventSizeLimit,
                             cancellationToken: context.RequestAborted).Result;
