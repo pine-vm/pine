@@ -170,6 +170,39 @@ map func string =
     fromList (List.map func (toList string))
 
 
+filter : (Char -> Bool) -> String -> String
+filter predicate (String chars) =
+    charsFilter
+        0
+        (Pine_kernel.take [ 0, chars ])
+        predicate
+        chars
+
+
+charsFilter : Int -> Int -> (Char -> Bool) -> Int -> String
+charsFilter offset charsBytesFiltered predicate charsBytes =
+    let
+        char =
+            Pine_kernel.take [ 4, Pine_kernel.skip [ offset, charsBytes ] ]
+    in
+    if Pine_kernel.equal [ Pine_kernel.length char, 0 ] then
+        String charsBytesFiltered
+
+    else if predicate char then
+        charsFilter
+            (Pine_kernel.int_add [ offset, 4 ])
+            (Pine_kernel.concat [ charsBytesFiltered, char ])
+            predicate
+            charsBytes
+
+    else
+        charsFilter
+            (Pine_kernel.int_add [ offset, 4 ])
+            charsBytesFiltered
+            predicate
+            charsBytes
+
+
 repeat : Int -> String -> String
 repeat n (String chars) =
     String (Pine_kernel.concat (List.repeat n chars))
@@ -805,24 +838,6 @@ linesHelper currentLineStart currentLines offset charsBytes =
             (Pine_kernel.int_add [ offset, 8 ])
             charsBytes
 
-    else if Pine_kernel.equal [ nextTwoChars, Pine_kernel.concat [ '\n', '\u{000D}' ] ] then
-        let
-            currentLineLength =
-                Pine_kernel.int_add [ offset, -currentLineStart ]
-
-            currentLineChars : Int
-            currentLineChars =
-                Pine_kernel.take
-                    [ currentLineLength
-                    , Pine_kernel.skip [ currentLineStart, charsBytes ]
-                    ]
-        in
-        linesHelper
-            (Pine_kernel.int_add [ offset, 8 ])
-            (Pine_kernel.concat [ currentLines, [ String currentLineChars ] ])
-            (Pine_kernel.int_add [ offset, 8 ])
-            charsBytes
-
     else if Pine_kernel.equal [ nextChar, '\n' ] then
         let
             currentLineLength =
@@ -1291,6 +1306,30 @@ charsAny offset predicate charsBytes =
             (Pine_kernel.int_add [ offset, 4 ])
             predicate
             charsBytes
+
+
+all : (Char -> Bool) -> String -> Bool
+all predicate (String chars) =
+    charsAll 0 predicate chars
+
+
+charsAll : Int -> (Char -> Bool) -> Int -> Bool
+charsAll offset predicate charsBytes =
+    let
+        char =
+            Pine_kernel.take [ 4, Pine_kernel.skip [ offset, charsBytes ] ]
+    in
+    if Pine_kernel.equal [ Pine_kernel.length char, 0 ] then
+        True
+
+    else if predicate char then
+        charsAll
+            (Pine_kernel.int_add [ offset, 4 ])
+            predicate
+            charsBytes
+
+    else
+        False
 
 
 indexes : String -> String -> List Int

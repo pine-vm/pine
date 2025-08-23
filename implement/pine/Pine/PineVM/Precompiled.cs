@@ -4710,24 +4710,6 @@ public class Precompiled
                     (Pine_kernel.int_add [ offset, 8 ])
                     charsBytes
 
-            else if Pine_kernel.equal [ nextTwoChars, Pine_kernel.concat [ '\n', '\u{000D}' ] ] then
-                let
-                    currentLineLength =
-                        Pine_kernel.int_add [ offset, -currentLineStart ]
-
-                    currentLineChars : Int
-                    currentLineChars =
-                        Pine_kernel.take
-                            [ currentLineLength
-                            , Pine_kernel.skip [ currentLineStart, charsBytes ]
-                            ]
-                in
-                linesHelper
-                    (Pine_kernel.int_add [ offset, 8 ])
-                    (Pine_kernel.concat [ currentLines, [ String currentLineChars ] ])
-                    (Pine_kernel.int_add [ offset, 8 ])
-                    charsBytes
-
             else if Pine_kernel.equal [ nextChar, '\n' ] then
                 let
                     currentLineLength =
@@ -4828,8 +4810,7 @@ public class Precompiled
                 var nextNextChar =
                     BinaryPrimitives.ReadInt32BigEndian(charsBlob.Bytes.Span[(offsetInt + 4)..]);
 
-                if (nextChar is 0x0a && nextNextChar is 0x0d ||
-                    nextChar is 0x0d && nextNextChar is 0x0a)
+                if (nextChar is 0x0d && nextNextChar is 0x0a)
                 {
                     var currentLineLength =
                         offsetInt - currentLineStartInt;
