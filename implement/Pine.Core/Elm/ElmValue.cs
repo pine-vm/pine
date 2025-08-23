@@ -785,7 +785,7 @@ public abstract record ElmValue
                 needsParens: false),
 
                 ElmString stringValue =>
-                ("\"" + stringValue.Value.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"", needsParens: false),
+                (RenderElmDoubleQuotedStringExpression(stringValue.Value), needsParens: false),
 
                 ElmRecord record =>
                 record.Fields.Count < 1
@@ -818,12 +818,51 @@ public abstract record ElmValue
     }
 
     /// <summary>
+    /// String expression enclosed only in double quotes, with special characters escaped.
+    /// </summary>
+    private static string RenderElmDoubleQuotedStringExpression(string str)
+    {
+        var stringBuilder = new System.Text.StringBuilder("\"");
+
+        for (var i = 0; i < str.Length; i++)
+        {
+            var charValue = str[i];
+
+            if (charValue is '"')
+            {
+                stringBuilder.Append("\\\"");
+                continue;
+            }
+
+            if (CharDefaultEscaping(charValue) is { } escaped)
+            {
+                stringBuilder.Append(escaped);
+                continue;
+            }
+
+            stringBuilder.Append(charValue);
+        }
+
+        stringBuilder.Append('"');
+
+        return stringBuilder.ToString();
+    }
+
+    /// <summary>
     /// Renders a character's Unicode code point as a string suitable for an Elm character literal.
     /// Handles special characters like newline, carriage return, and tab.
     /// </summary>
     /// <param name="charValue">The Unicode code point of the character.</param>
     /// <returns>A string representation of the character for use in an Elm expression.</returns>
     public static string RenderCharAsElmExpression(int charValue)
+    {
+        return
+            charValue is 39 ? "\\'" : // single quote must be escaped in Elm char literals
+            CharDefaultEscaping(charValue) ??
+            char.ConvertFromUtf32(charValue);
+    }
+
+    private static string? CharDefaultEscaping(int charValue)
     {
         if (charValue is 10)
             return "\\n";
@@ -834,7 +873,10 @@ public abstract record ElmValue
         if (charValue is 9)
             return "\\t";
 
-        return char.ConvertFromUtf32(charValue);
+        if (charValue is 92)
+            return "\\\\";
+
+        return null;
     }
 
     /// <summary>

@@ -1,2 +1,1 @@
-Ok (ProvideHoverResponse ["    type alias MaybeInt =
-        Maybe Int"])
+Ok (ProvideHoverResponse ["    type alias MaybeInt =\n        Maybe Int"])

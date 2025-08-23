@@ -1,7 +1,1 @@
-"module Namespace.Beta exposing (..)
-
-
-type alias MaybeInt =
-    Maybe Int
-
-"
+"module Namespace.Beta exposing (..)\n\n\ntype alias MaybeInt =\n    Maybe Int\n\n"
