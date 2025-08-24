@@ -7,7 +7,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using Xunit;
 
-namespace Pine.IntegrationTests;
+namespace Pine.UnitTests;
 
 public class PineValueCompositionTests
 {

@@ -5,7 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Xunit;
 
-namespace Pine.IntegrationTests;
+namespace Pine.UnitTests;
 
 public class ValueBinaryEncodingTests
 {

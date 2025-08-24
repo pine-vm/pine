@@ -3,7 +3,7 @@ using Pine.Core;
 using System.Text.Json;
 using Xunit;
 
-namespace Pine.IntegrationTests;
+namespace Pine.UnitTests;
 
 public class PineMaybeTests
 {
