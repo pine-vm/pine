@@ -1069,7 +1069,7 @@ public class Program
 
                 if (gzipOption.HasValue())
                 {
-                    fileContent = BundledElmEnvironments.CompressResourceFile(fileContent);
+                    fileContent = BundledDeclarations.CompressResourceFile(fileContent);
 
                     Console.WriteLine(
                         "Applied gzip and compressed from " +

@@ -13,7 +13,7 @@ namespace prebuild;
 
 public class Program
 {
-    public const string DestinationFilePath = "./Pine.Core/" + ReusedInstances.EmbeddedResourceFilePath;
+    public const string DestinationDirectory = "./Pine.Core/";
 
     public const string PreviousCompilerFilePath =
         "./history/2025-07-06-compiler-bundle/elm-syntax-parser-and-compiler.json.gzip";
@@ -24,45 +24,31 @@ public class Program
             "Current working directory: " + Environment.CurrentDirectory);
 
         BuildAndSaveValueDictionary(
-            additionalRoots: []);
+            elmCompilers: []);
 
-        var elmCompilerValue = BundleElmCompiler();
+        var elmCompilerValue = BuildElmCompiler();
 
         BuildAndSaveValueDictionary(
-            additionalRoots: [elmCompilerValue]);
+            elmCompilers:
+            [
+                new KeyValuePair<TreeNodeWithStringPath, PineValue>(elmCompilerValue.sourceFiles, elmCompilerValue.compiled)
+                ]);
     }
 
     public static void BuildAndSaveValueDictionary(
-        IEnumerable<PineValue> additionalRoots)
+        IEnumerable<KeyValuePair<TreeNodeWithStringPath, PineValue>> elmCompilers)
     {
         var fromFreshBuild =
             ReusedInstances.BuildPineListValueReusedInstances(
                 ReusedInstances.ExpressionsSource(),
-                additionalRoots: additionalRoots);
+                additionalRoots: elmCompilers.Select(kvp => kvp.Value));
 
-        var file =
-            ReusedInstances.BuildPrecompiledDictFile(fromFreshBuild);
-
-        var absolutePath =
-            System.IO.Path.GetFullPath(DestinationFilePath) ??
-            throw new Exception("Failed to resolve absolute path for " + DestinationFilePath);
-
-        Console.WriteLine(
-            "Resolved the destination path of " + DestinationFilePath +
-            " to " + absolutePath);
-
-        System.IO.Directory.CreateDirectory(
-            System.IO.Path.GetDirectoryName(absolutePath) ??
-            throw new Exception("Failed to get directory name for " + absolutePath));
-
-        System.IO.File.WriteAllBytes(
-            absolutePath,
-            file.ToArray());
-
-        Console.WriteLine(
-            "Saved the prebuilt dictionary with " +
-            CommandLineInterface.FormatIntegerForDisplay(fromFreshBuild.PineValueLists.Count) +
-            " list values to " + absolutePath);
+        BundledDeclarations.CompressAndWriteBundleFile(
+            compiledEnvironments:
+            elmCompilers.ToDictionary(),
+            otherReusedValues:
+            ReusedInstances.PrebuildListEntries(fromFreshBuild),
+            destinationDirectory: DestinationDirectory);
     }
 
     public static ElmCompiler LoadPreviousCompiler()
@@ -72,7 +58,7 @@ public class Program
             .Extract(err => throw new Exception(err));
     }
 
-    public static PineValue BundleElmCompiler()
+    public static (TreeNodeWithStringPath sourceFiles, PineValue compiled) BuildElmCompiler()
     {
         var elmCompilerSource =
             ElmCompiler.CompilerSourceFilesDefault.Value;
@@ -119,15 +105,11 @@ public class Program
         Console.WriteLine(
             "Env compiled in second iteration is " + elmCompilerSecond.CompilerEnvironment);
 
-        BundledElmEnvironments.CompressAndWriteBundleFile(
-            ImmutableDictionary<TreeNodeWithStringPath, PineValue>.Empty
-            .SetItem(elmCompilerSource, elmCompilerSecond.CompilerEnvironment));
-
         Console.WriteLine(
             "Compressed and wrote bundle file in " +
             clock.Elapsed.TotalSeconds.ToString("0.00") + " seconds");
 
-        return elmCompilerSecond.CompilerEnvironment;
+        return (elmCompilerSource, elmCompilerSecond.CompilerEnvironment);
     }
 
     public static Result<string, PineValue> BuildElmCompilerFirstIteration(
@@ -227,10 +209,8 @@ public class Program
                 "Read " + CommandLineInterface.FormatIntegerForDisplay(fileContent.Length) +
                 " bytes from compact-build.json");
 
-            BundledElmEnvironments.CompressAndWriteBundleFile(fileContent);
-
             var loadResult =
-                BundledElmEnvironments.LoadBundledCompiledEnvironments(
+                BundledElmEnvironments.LoadBundledDeclarations(
                     new System.IO.MemoryStream(fileContent),
                     gzipDecompress: false);
 

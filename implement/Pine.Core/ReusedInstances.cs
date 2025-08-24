@@ -19,6 +19,8 @@ public record ReusedInstances(
     public static readonly ReusedInstances Instance =
         new(LoadExpressionRootsSource: ExpressionsSource);
 
+    public BundledDeclarations? BundledDeclarations { private set; get; }
+
     public FrozenDictionary<PineValue.ListValue.ListValueStruct, PineValue.ListValue>? ListValues { private set; get; }
 
     public FrozenDictionary<PineValue, PineValue.ListValue>? SingletonListValues { private set; get; }
@@ -64,15 +66,7 @@ public record ReusedInstances(
 
     const string expectedInCompilerKey = "expected-in-compiler-container";
 
-    public static System.ReadOnlyMemory<byte> BuildPrecompiledDictFile(
-        PineListValueReusedInstances source)
-    {
-        var entriesList = PrebuildListEntries(source);
-
-        return System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(entriesList);
-    }
-
-    public static IReadOnlyList<PineValueCompactBuild.ListEntry> PrebuildListEntries(
+    public static IReadOnlyDictionary<string, PineValue> PrebuildListEntries(
         PineListValueReusedInstances source)
     {
         var (_, allBlobs) =
@@ -113,24 +107,32 @@ public record ReusedInstances(
                 blobValues: allBlobs,
                 source.PineValueLists.Values.Concat(source.ValuesExpectedInCompilerLists).ToHashSet());
 
-        var ventry =
-            new PineValueCompactBuild.ListEntry(
-                Key: expectedInCompilerKey,
-                Value: entryValueFromListItems(
-                    source.ValuesExpectedInCompilerBlobs
-                    .Cast<PineValue>()
-                    .Concat(source.ValuesExpectedInCompilerLists)
-                    .ToArray()));
+        var mutatedDict = new Dictionary<string, PineValue>
+        {
+            [expectedInCompilerKey] =
+            PineValue.List(
+                [
+                    .. source.ValuesExpectedInCompilerBlobs
+                    .Cast<PineValue>(),
+                    .. source.ValuesExpectedInCompilerLists,
+                ])
+        };
 
-        return [.. basicItems, ventry];
+        mutatedDict["other-reused"] =
+            PineValue.List(
+                [
+                PineValue.List([..source.PineValueLists.Values]),
+                PineValue.List([..source.ValuesExpectedInCompilerLists]),
+                PineValue.List([..source.ValuesExpectedInCompilerBlobs]),
+                ]);
+
+        return mutatedDict;
     }
 
-    public const string EmbeddedResourceFilePath = "prebuilt-artifact/reused-pine-values.json";
-
     public static PineListValueReusedInstances LoadPrecompiledFromEmbeddedOrDefault(
-        System.Reflection.Assembly assembly,
-        System.Func<IEnumerable<Expression>> loadExpressionRootsSource) =>
-         LoadEmbeddedPrebuilt(assembly)
+        System.Func<IEnumerable<Expression>> loadExpressionRootsSource,
+        BundledDeclarations? bundledDeclarations) =>
+         LoadEmbeddedPrebuilt(bundledDeclarations)
         .Extract(err =>
         {
             System.Console.WriteLine("Failed loading from embedded resource: " + err);
@@ -140,57 +142,22 @@ public record ReusedInstances(
                 additionalRoots: []);
         });
 
-    public static Result<string, PineListValueReusedInstances> LoadEmbeddedPrebuilt(
-        System.Reflection.Assembly assembly,
-        string embeddedResourceFilePath = EmbeddedResourceFilePath)
+    private static Result<string, PineListValueReusedInstances> LoadEmbeddedPrebuilt(
+        BundledDeclarations? bundledDeclarations)
     {
-        /*
-        var inspect =
-            DotNetAssembly.LoadDirectoryFilesFromManifestEmbeddedFileProviderAsDictionary(
-            directoryPath: ["prebuilt-artifact"],
-            assembly: assembly);
-        */
-
-        var manifestEmbeddedProvider =
-            new Microsoft.Extensions.FileProviders.ManifestEmbeddedFileProvider(assembly);
-
-        var embeddedFileInfo = manifestEmbeddedProvider.GetFileInfo(embeddedResourceFilePath);
-
-        if (!embeddedFileInfo.Exists)
+        if (bundledDeclarations is not { } embeddedDecls)
         {
-            return "Did not find file " + embeddedResourceFilePath + " in assembly " + assembly.FullName;
+            return "No embedded declarations available";
         }
 
-        if (embeddedFileInfo.Length is 0)
-        {
-            return "File " + embeddedResourceFilePath + " in assembly " + assembly.FullName + " is empty";
-        }
-
-        using var readStream = embeddedFileInfo.CreateReadStream();
-
-        using var memoryStream = new System.IO.MemoryStream();
-
-        readStream.CopyTo(memoryStream);
-
-        return LoadFromPrebuiltJson(memoryStream.ToArray());
+        return LoadFromPrebuilt(embeddedDecls);
     }
 
-
-    public static PineListValueReusedInstances LoadFromPrebuiltJson(System.ReadOnlyMemory<byte> json)
+    private static PineListValueReusedInstances LoadFromPrebuilt(
+        BundledDeclarations bundledDeclarations)
     {
-        var parsed =
-            System.Text.Json.JsonSerializer.Deserialize<IReadOnlyList<PineValueCompactBuild.ListEntry>>(json.Span);
-
-        return LoadFromPrebuilt(parsed);
-    }
-
-    public static PineListValueReusedInstances LoadFromPrebuilt(
-        IReadOnlyList<PineValueCompactBuild.ListEntry> entries)
-    {
-        var overallDictionary =
-            PineValueCompactBuild.BuildDictionaryFromEntries(entries);
-
-        var valuesExpectedInCompilerContainer = overallDictionary[expectedInCompilerKey];
+        var valuesExpectedInCompilerContainer =
+            bundledDeclarations.EmbeddedDeclarations[expectedInCompilerKey];
 
         if (valuesExpectedInCompilerContainer is not PineValue.ListValue valuesExpectedInCompilerList)
         {
@@ -218,12 +185,9 @@ public record ReusedInstances(
 
         var valueListsDict = new Dictionary<PineValue.ListValue.ListValueStruct, PineValue.ListValue>();
 
-        foreach (var item in overallDictionary)
+        foreach (var item in bundledDeclarations.DecodedSequence)
         {
-            if (item.Key is expectedInCompilerKey)
-                continue;
-
-            if (item.Value is not PineValue.ListValue listValue)
+            if (item is not PineValue.ListValue listValue)
                 continue;
 
             valueListsDict[new PineValue.ListValue.ListValueStruct(listValue)] = listValue;
@@ -368,10 +332,13 @@ public record ReusedInstances(
 
     private void BuildFromEmbedded()
     {
+        BundledDeclarations =
+            BundledDeclarations.LoadFromEmbedded(System.Reflection.Assembly.GetExecutingAssembly());
+
         var loadedPineListValues =
             LoadPrecompiledFromEmbeddedOrDefault(
-                typeof(ReusedInstances).Assembly,
-                ExpressionsSource);
+                ExpressionsSource,
+                BundledDeclarations);
 
         ListValues =
             BuildListValuesFromBundledListValues(loadedPineListValues.PineValueLists);
@@ -409,7 +376,7 @@ public record ReusedInstances(
 
             var reusedInstancesInConstruction = new Dictionary<Expression, Expression>();
 
-            Expression reuseInstance(Expression expression) =>
+            Expression ReuseInstance(Expression expression) =>
                 reusedInstancesInConstruction[expression];
 
             foreach (var descendant in allDescendantsOrdered)
@@ -418,13 +385,13 @@ public record ReusedInstances(
                     descendant switch
                     {
                         Expression.List listExpression =>
-                        Expression.ListInstance([.. listExpression.items.Select(reuseInstance)]),
+                        Expression.ListInstance([.. listExpression.items.Select(ReuseInstance)]),
 
                         Expression.Conditional conditionalExpression =>
                         Expression.ConditionalInstance(
-                            condition: reuseInstance(conditionalExpression.Condition),
-                            falseBranch: reuseInstance(conditionalExpression.FalseBranch),
-                            trueBranch: reuseInstance(conditionalExpression.TrueBranch)),
+                            condition: ReuseInstance(conditionalExpression.Condition),
+                            falseBranch: ReuseInstance(conditionalExpression.FalseBranch),
+                            trueBranch: ReuseInstance(conditionalExpression.TrueBranch)),
 
                         _ =>
                         descendant
@@ -653,26 +620,26 @@ public record ReusedInstances(
     /// </summary>
     public void AssertReferenceEquality()
     {
-        var ListValues =
-            this.ListValues ?? throw new System.NullReferenceException();
+        var listValues =
+            ListValues ?? throw new System.NullReferenceException();
 
-        var ElmValues =
-            this.ElmValues ?? throw new System.NullReferenceException();
+        var elmValues =
+            ElmValues ?? throw new System.NullReferenceException();
 
-        var Expressions =
-            this.Expressions ?? throw new System.NullReferenceException();
+        var expressions =
+            Expressions ?? throw new System.NullReferenceException();
 
-        var ExpressionEncodings =
-            this.ExpressionEncodings ?? throw new System.NullReferenceException();
+        var expressionEncodings =
+            ExpressionEncodings ?? throw new System.NullReferenceException();
 
-        var ExpressionDecodings =
-            this.ExpressionDecodings ?? throw new System.NullReferenceException();
+        var expressionDecodings =
+            ExpressionDecodings ?? throw new System.NullReferenceException();
 
-        var ElmValueDecodedAsInElmCompiler =
-            this.ElmValueDecodedAsInElmCompiler ?? throw new System.NullReferenceException();
+        var elmValueDecodedAsInElmCompiler =
+            ElmValueDecodedAsInElmCompiler ?? throw new System.NullReferenceException();
 
-        var ElmValueEncodedAsInElmCompiler =
-            this.ElmValueEncodedAsInElmCompiler ?? throw new System.NullReferenceException();
+        var elmValueEncodedAsInElmCompiler =
+            ElmValueEncodedAsInElmCompiler ?? throw new System.NullReferenceException();
 
         static void AssertReferenceEqual<T>(T? refA, T? refB)
             where T : class
@@ -687,9 +654,9 @@ public record ReusedInstances(
                 (refB is null ? "null" : refB));
         }
 
-        foreach (var expressionEncoded in ExpressionEncodings)
+        foreach (var expressionEncoded in expressionEncodings)
         {
-            Expressions.TryGetValue(
+            expressions.TryGetValue(
                 expressionEncoded.Key,
                 out var fromReusedExpressions);
 
@@ -697,7 +664,7 @@ public record ReusedInstances(
                 fromReusedExpressions,
                 expressionEncoded.Key);
 
-            ListValues.TryGetValue(
+            listValues.TryGetValue(
                 new PineValue.ListValue.ListValueStruct(expressionEncoded.Value.Elements),
                 out var fromReusedListValues);
 
@@ -706,9 +673,9 @@ public record ReusedInstances(
                 expressionEncoded.Value);
         }
 
-        foreach (var expressionDecoded in ExpressionDecodings)
+        foreach (var expressionDecoded in expressionDecodings)
         {
-            Expressions.TryGetValue(
+            expressions.TryGetValue(
                 expressionDecoded.Value,
                 out var fromReusedExpr);
 
@@ -716,7 +683,7 @@ public record ReusedInstances(
                 fromReusedExpr,
                 expressionDecoded.Value);
 
-            ListValues.TryGetValue(
+            listValues.TryGetValue(
                 new PineValue.ListValue.ListValueStruct(expressionDecoded.Key.Elements),
                 out var fromReusedListValues);
 
@@ -725,15 +692,15 @@ public record ReusedInstances(
                 expressionDecoded.Key);
         }
 
-        foreach (var elmValueDecoded in ElmValueDecodedAsInElmCompiler)
+        foreach (var elmValueDecoded in elmValueDecodedAsInElmCompiler)
         {
-            ElmValues.TryGetValue(elmValueDecoded.Key, out var fromElmValues);
+            elmValues.TryGetValue(elmValueDecoded.Key, out var fromElmValues);
 
             AssertReferenceEqual(fromElmValues, elmValueDecoded.Key);
 
             if (elmValueDecoded.Value is PineValue.ListValue listValue)
             {
-                ListValues.TryGetValue(
+                listValues.TryGetValue(
                     new PineValue.ListValue.ListValueStruct(listValue.Elements),
                     out var fromPineValues);
 
@@ -741,15 +708,15 @@ public record ReusedInstances(
             }
         }
 
-        foreach (var elmValueEncoded in ElmValueEncodedAsInElmCompiler)
+        foreach (var elmValueEncoded in elmValueEncodedAsInElmCompiler)
         {
-            ElmValues.TryGetValue(elmValueEncoded.Value, out var fromElmValues);
+            elmValues.TryGetValue(elmValueEncoded.Value, out var fromElmValues);
 
             AssertReferenceEqual(fromElmValues, elmValueEncoded.Value);
 
             if (elmValueEncoded.Key is PineValue.ListValue elmList)
             {
-                ListValues.TryGetValue(
+                listValues.TryGetValue(
                     new PineValue.ListValue.ListValueStruct(elmList.Elements),
                     out var fromPineValues);
 
@@ -773,10 +740,13 @@ public record ReusedInstances(
 
         if (pineValue is PineValue.ListValue listValue)
         {
-            var ListValues =
-                this.ListValues ?? throw new System.NullReferenceException();
+            if (listValue.Elements.Length is 0)
+                return PineValue.EmptyList;
 
-            if (ListValues.TryGetValue(new PineValue.ListValue.ListValueStruct(listValue.Elements), out var reused))
+            var listValues =
+                ListValues ?? throw new System.NullReferenceException();
+
+            if (listValues.TryGetValue(new PineValue.ListValue.ListValueStruct(listValue.Elements), out var reused))
                 return reused;
 
             return null;
@@ -851,7 +821,7 @@ public record ReusedInstances(
         return componentValues;
     }
 
-    static IEnumerable<ElmValue> ProduceElmValuesEncodedInCompiler(
+    private static IEnumerable<ElmValue> ProduceElmValuesEncodedInCompiler(
         IEnumerable<PineValue> pineValues)
     {
         var encodedForCompilerDict = new Dictionary<PineValue, ElmValue>();

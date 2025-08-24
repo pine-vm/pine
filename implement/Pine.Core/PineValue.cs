@@ -42,19 +42,19 @@ public abstract record PineValue : IEquatable<PineValue>
         :
         bytes.Length is 2
         ?
-        ReusedBlobTuple[bytes.Span[0] * 256 + bytes.Span[1]]
+        s_reusedBlobTuple[bytes.Span[0] * 256 + bytes.Span[1]]
         :
         bytes.Length is 3 && bytes.Span[0] is 2
         ?
-        ReusedBlobInteger3ByteNegative[bytes.Span[1] * 256 + bytes.Span[2]]
+        s_reusedBlobInteger3ByteNegative[bytes.Span[1] * 256 + bytes.Span[2]]
         :
         bytes.Length is 3 && bytes.Span[0] is 4
         ?
-        ReusedBlobInteger3BytePositive[bytes.Span[1] * 256 + bytes.Span[2]]
+        s_reusedBlobInteger3BytePositive[bytes.Span[1] * 256 + bytes.Span[2]]
         :
         bytes.Length is 4 && bytes.Span[0] is 0 && bytes.Span[1] is 0
         ?
-        ReusedBlobChar4Byte[bytes.Span[2] * 256 + bytes.Span[3]]
+        s_reusedBlobChar4Byte[bytes.Span[2] * 256 + bytes.Span[3]]
         :
         new BlobValue(bytes);
 
@@ -62,7 +62,7 @@ public abstract record PineValue : IEquatable<PineValue>
     /// Blob value for a single byte.
     /// </summary>
     public static BlobValue BlobSingleByte(byte value) =>
-        ReusedBlobSingle[value];
+        s_reusedBlobSingle[value];
 
     /// <summary>
     /// Construct a list value from a sequence of other values.
@@ -74,7 +74,7 @@ public abstract record PineValue : IEquatable<PineValue>
 
         if (elements.Length is 1)
         {
-            if (ReusedInstances.Instance.SingletonListValues is { } reusedSingletonListValues)
+            if (ReusedInstances.Instance?.SingletonListValues is { } reusedSingletonListValues)
             {
                 if (reusedSingletonListValues.TryGetValue(elements.Span[0], out var existing))
                 {
@@ -109,46 +109,46 @@ public abstract record PineValue : IEquatable<PineValue>
     /// </summary>
     public static readonly BlobValue EmptyBlob = new(ReadOnlyMemory<byte>.Empty);
 
-    private static readonly BlobValue[] ReusedBlobSingle =
+    private static readonly BlobValue[] s_reusedBlobSingle =
         [..Enumerable.Range(0, 256)
         .Select(i => new BlobValue(new byte[] { (byte)i }))];
 
-    private static readonly BlobValue[] ReusedBlobTuple =
+    private static readonly BlobValue[] s_reusedBlobTuple =
         [..Enumerable.Range(0, 256)
         .SelectMany(i => Enumerable.Range(0, 256).Select(j => new BlobValue(new byte[] { (byte)i, (byte)j })))];
 
-    private static readonly BlobValue[] ReusedBlobInteger3ByteNegative =
+    private static readonly BlobValue[] s_reusedBlobInteger3ByteNegative =
         [..Enumerable.Range(0, 0x1_00_00)
         .Select(i => new BlobValue(new byte[] { 2, (byte)(i >> 8), (byte)(i & 0xff) }))];
 
-    private static readonly BlobValue[] ReusedBlobInteger3BytePositive =
+    private static readonly BlobValue[] s_reusedBlobInteger3BytePositive =
         [..Enumerable.Range(0, 0x1_00_00)
         .Select(i => new BlobValue(new byte[] { 4, (byte)(i >> 8), (byte)(i & 0xff) }))];
 
-    private static readonly BlobValue[] ReusedBlobChar4Byte =
+    private static readonly BlobValue[] s_reusedBlobChar4Byte =
         [..Enumerable.Range(0, 0x1_00_00)
         .Select(i => new BlobValue(new byte[] { 0, (byte)(i >> 16), (byte)(i >> 8), (byte)(i & 0xff) }))];
 
     public static BlobValue ReusedBlobTupleFromBytes(byte first, byte second) =>
-        ReusedBlobTuple[first * 256 + second];
+        s_reusedBlobTuple[first * 256 + second];
 
     public static BlobValue ReusedBlobInteger3ByteNegativeFromBytes(byte second, byte third) =>
-        ReusedBlobInteger3ByteNegative[second * 256 + third];
+        s_reusedBlobInteger3ByteNegative[second * 256 + third];
 
     public static BlobValue ReusedBlobInteger3BytePositiveFromBytes(byte second, byte third) =>
-        ReusedBlobInteger3BytePositive[second * 256 + third];
+        s_reusedBlobInteger3BytePositive[second * 256 + third];
 
     public static BlobValue ReusedBlobCharFourByte(byte third, byte fourth) =>
-        ReusedBlobChar4Byte[third * 256 + fourth];
+        s_reusedBlobChar4Byte[third * 256 + fourth];
 
     public static readonly FrozenSet<BlobValue> ReusedBlobInstances =
         new HashSet<BlobValue>(
             [EmptyBlob,
-            .. ReusedBlobSingle,
-            .. ReusedBlobTuple,
-            ..ReusedBlobInteger3ByteNegative,
-            ..ReusedBlobInteger3BytePositive,
-            ..ReusedBlobChar4Byte,
+            .. s_reusedBlobSingle,
+            .. s_reusedBlobTuple,
+            ..s_reusedBlobInteger3ByteNegative,
+            ..s_reusedBlobInteger3BytePositive,
+            ..s_reusedBlobChar4Byte,
             ..PopularValues.PopularStrings.Select(StringEncoding.BlobValueFromString)])
         .ToFrozenSet();
 
@@ -157,7 +157,7 @@ public abstract record PineValue : IEquatable<PineValue>
     /// </summary>
     public record ListValue : PineValue, IEquatable<ListValue>
     {
-        private readonly int slimHashCode;
+        private readonly int _slimHashCode;
 
         /// <summary>
         /// Gets a read-only memory region containing the items of the list.
@@ -191,9 +191,9 @@ public abstract record PineValue : IEquatable<PineValue>
         {
             Elements = listValueStruct.Items;
 
-            slimHashCode = listValueStruct.slimHashCode;
-            NodesCount = listValueStruct.nodesCount;
-            BlobsBytesCount = listValueStruct.blobsBytesCount;
+            _slimHashCode = listValueStruct.SlimHashCode;
+            NodesCount = listValueStruct.NodesCount;
+            BlobsBytesCount = listValueStruct.BlobsBytesCount;
         }
 
         private static void ComputeDerivations(
@@ -246,7 +246,7 @@ public abstract record PineValue : IEquatable<PineValue>
             if (other is null)
                 return false;
 
-            if (self.slimHashCode != other.slimHashCode ||
+            if (self._slimHashCode != other._slimHashCode ||
                 self.NodesCount != other.NodesCount ||
                 self.BlobsBytesCount != other.BlobsBytesCount)
             {
@@ -289,7 +289,7 @@ public abstract record PineValue : IEquatable<PineValue>
 
         /// <inheritdoc/>
         public override int GetHashCode() =>
-            slimHashCode;
+            _slimHashCode;
 
         /// <inheritdoc/>
         public override string ToString()
@@ -306,13 +306,13 @@ public abstract record PineValue : IEquatable<PineValue>
         /// </summary>
         public readonly record struct ListValueStruct
         {
-            internal readonly int slimHashCode;
+            internal readonly int SlimHashCode;
 
             internal ReadOnlyMemory<PineValue> Items { get; }
 
-            internal readonly long nodesCount;
+            internal readonly long NodesCount;
 
-            internal readonly long blobsBytesCount;
+            internal readonly long BlobsBytesCount;
 
             /// <summary>
             /// Construct a list value from a sequence of other values.
@@ -323,9 +323,9 @@ public abstract record PineValue : IEquatable<PineValue>
 
                 ComputeDerivations(
                     items.Span,
-                    out slimHashCode,
-                    out nodesCount,
-                    out blobsBytesCount);
+                    out SlimHashCode,
+                    out NodesCount,
+                    out BlobsBytesCount);
             }
 
             /// <summary>
@@ -335,15 +335,15 @@ public abstract record PineValue : IEquatable<PineValue>
             {
                 Items = instance.Elements;
 
-                slimHashCode = instance.slimHashCode;
-                nodesCount = instance.NodesCount;
-                blobsBytesCount = instance.BlobsBytesCount;
+                SlimHashCode = instance._slimHashCode;
+                NodesCount = instance.NodesCount;
+                BlobsBytesCount = instance.BlobsBytesCount;
             }
 
             /// <inheritdoc/>
             public bool Equals(ListValueStruct other)
             {
-                if (slimHashCode != other.slimHashCode)
+                if (SlimHashCode != other.SlimHashCode)
                     return false;
 
                 var selfSpan = Items.Span;
@@ -381,7 +381,7 @@ public abstract record PineValue : IEquatable<PineValue>
             }
 
             /// <inheritdoc/>
-            public override int GetHashCode() => slimHashCode;
+            public override int GetHashCode() => SlimHashCode;
 
             /// <inheritdoc/>
             public override string ToString()
@@ -389,8 +389,8 @@ public abstract record PineValue : IEquatable<PineValue>
                 return
                     ListValue.ToString(
                         itemsCount: Items.Length,
-                        nodesCount: nodesCount,
-                        blobsBytesCount: blobsBytesCount);
+                        nodesCount: NodesCount,
+                        blobsBytesCount: BlobsBytesCount);
             }
         }
 
@@ -419,7 +419,7 @@ public abstract record PineValue : IEquatable<PineValue>
     /// </summary>
     public record BlobValue : PineValue, IEquatable<BlobValue>
     {
-        private readonly int slimHashCode;
+        private readonly int _slimHashCode;
 
         /// <summary>
         /// Gets the underlying data as a read-only sequence of bytes.
@@ -440,7 +440,7 @@ public abstract record PineValue : IEquatable<PineValue>
 
             hash.AddBytes(bytes.Span);
 
-            slimHashCode = hash.ToHashCode();
+            _slimHashCode = hash.ToHashCode();
         }
 
         /// <inheritdoc/>
@@ -452,7 +452,7 @@ public abstract record PineValue : IEquatable<PineValue>
             if (ReferenceEquals(this, other))
                 return true;
 
-            if (slimHashCode != other.slimHashCode)
+            if (_slimHashCode != other._slimHashCode)
                 return false;
 
             var selfSpan = Bytes.Span;
@@ -465,7 +465,7 @@ public abstract record PineValue : IEquatable<PineValue>
         }
 
         /// <inheritdoc/>
-        public override int GetHashCode() => slimHashCode;
+        public override int GetHashCode() => _slimHashCode;
 
         /// <inheritdoc/>
         public override string ToString()
@@ -506,7 +506,7 @@ public abstract record PineValue : IEquatable<PineValue>
         return false;
     }
 
-    public static (IReadOnlySet<ListValue>, IReadOnlySet<BlobValue>) CollectAllComponentsFromRoots(
+    public static (IReadOnlySet<ListValue> lists, IReadOnlySet<BlobValue> blobs) CollectAllComponentsFromRoots(
         IEnumerable<PineValue> roots)
     {
         var collectedBlobs = new HashSet<BlobValue>(roots.OfType<BlobValue>());

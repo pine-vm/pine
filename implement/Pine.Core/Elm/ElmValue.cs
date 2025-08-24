@@ -361,7 +361,7 @@ public abstract record ElmValue
             public ElmTagStruct(string tagName, IReadOnlyList<ElmValue> arguments)
             {
                 TagName = tagName;
-                this.Arguments = arguments;
+                Arguments = arguments;
 
                 SlimHashCode = ComputeHashCode(tagName, arguments);
             }

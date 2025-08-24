@@ -1,7 +1,6 @@
 using AwesomeAssertions;
 using Pine.Core;
 using Pine.Core.Elm;
-using Pine.UnitTests;
 using Xunit;
 
 namespace Pine.IntegrationTests;
@@ -104,37 +103,6 @@ public class PineExecutableBundleTests
 
         parsedElmModuleSyntaxAsString.Should().Be(
             "{ comments = [], declarations = [Node { end = { column = 14, row = 4 }, start = { column = 1, row = 3 } } (AliasDeclaration { documentation = Nothing, generics = [], name = Node { end = { column = 20, row = 3 }, start = { column = 12, row = 3 } } \"MaybeInt\", typeAnnotation = Node { end = { column = 14, row = 4 }, start = { column = 5, row = 4 } } (Typed (Node { end = { column = 10, row = 4 }, start = { column = 5, row = 4 } } ([],\"Maybe\")) [Node { end = { column = 14, row = 4 }, start = { column = 11, row = 4 } } (Typed (Node { end = { column = 14, row = 4 }, start = { column = 11, row = 4 } } ([],\"Int\")) [])]) })], imports = [], moduleDefinition = Node { end = { column = 36, row = 1 }, start = { column = 1, row = 1 } } (NormalModule { exposingList = Node { end = { column = 36, row = 1 }, start = { column = 23, row = 1 } } (All { end = { column = 35, row = 1 }, start = { column = 33, row = 1 } }), moduleName = Node { end = { column = 22, row = 1 }, start = { column = 8, row = 1 } } [\"Namespace\",\"Beta\"] }) }");
-    }
-
-    [Fact]
-    public void Embedded_precompiled_pine_value_lists()
-    {
-        var elmCompilerValue =
-            BundledElmCompilerValue()
-            ?? throw new System.Exception("Elm compiler value not found in bundled environments");
-
-        var fromFreshBuild =
-            ReusedInstances.BuildPineListValueReusedInstances(
-                ReusedInstances.ExpressionsSource(),
-                additionalRoots: [elmCompilerValue]);
-
-        var fromFreshBuildListValues =
-            ReusedInstances.BuildListValuesFromBundledListValues(
-                fromFreshBuild.PineValueLists);
-
-        var file =
-            ReusedInstances.BuildPrecompiledDictFile(fromFreshBuild);
-
-        var parsedFile =
-            ReusedInstances.LoadFromPrebuiltJson(file);
-
-        ReusedInstancesTests.AssertPineValueListDictsAreEquivalent(
-            parsedFile.PineValueLists,
-            fromFreshBuild.PineValueLists);
-
-        ReusedInstancesTests.AssertPineValueListDictsAreEquivalent(
-            ReusedInstances.Instance.ListValues,
-            fromFreshBuildListValues);
     }
 
     [Fact]

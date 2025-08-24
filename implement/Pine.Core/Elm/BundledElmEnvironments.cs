@@ -6,27 +6,38 @@ using System.Linq;
 
 namespace Pine.Core.Elm;
 
-public class BundledElmEnvironments
+public partial class BundledElmEnvironments
 {
     public static PineValue? BundledElmEnvironmentFromFileTree(TreeNodeWithStringPath fileTree)
     {
-        CompiledEnvDict.TryGetValue(DictionaryKeyHashPartFromFileTree(fileTree), out var bundledEnv);
+        if (ReusedInstances.Instance?.BundledDeclarations?.EmbeddedDeclarations is { } embeddedDecls)
+        {
+            var expectedKey = DictionaryKeyFromFileTree(fileTree);
 
-        return bundledEnv;
+            if (embeddedDecls.TryGetValue(expectedKey, out var bundledEnv))
+                return bundledEnv;
+        }
+
+        return null;
     }
 
     public static PineValue? BundledElmCompilerCompiledEnvValue()
     {
-        var compiledEnvDict = CompiledEnvDict;
+        var compiledEnvDict = ReusedInstances.Instance?.BundledDeclarations?.EmbeddedDeclarations;
 
         return
             compiledEnvDict
+            .Where(kv => kv.Key.StartsWith(CompiledEnvDictionaryKeyPrefix))
             .Select(kv => kv.Value)
             .OrderByDescending(compiledEnv => compiledEnv is PineValue.ListValue listValue ? listValue.NodesCount : 0)
             .FirstOrDefault();
     }
 
-    public static string DictionaryKeyHashPartFromFileTree(TreeNodeWithStringPath fileTree)
+    public static string DictionaryKeyFromFileTree(TreeNodeWithStringPath fileTree) =>
+        CompiledEnvDictionaryKeyPrefix +
+        DictionaryKeyHashPartFromFileTree(fileTree);
+
+    private static string DictionaryKeyHashPartFromFileTree(TreeNodeWithStringPath fileTree)
     {
         var pineValue =
             PineValueComposition.FromTreeWithStringPath(fileTree);
@@ -36,63 +47,12 @@ public class BundledElmEnvironments
         return Convert.ToHexStringLower(hash[..16].Span);
     }
 
-    public const string EmbeddedResourceFilePath = "prebuilt-artifact/compiled-elm-environments.json.gzip";
-
-    private static readonly System.Text.RegularExpressions.Regex compiledEnvKeyRegex =
-        new("^" + CompiledEnvDictionaryKeyPrefix + "([\\d\\w]+)$");
-
     const string CompiledEnvDictionaryKeyPrefix = "compiled-env-";
 
-    private readonly static IReadOnlyDictionary<string, PineValue> CompiledEnvDict =
-        LoadBundledCompiledEnvironments(
-            embeddedResourceFilePath: EmbeddedResourceFilePath,
-            assembly: typeof(BundledElmEnvironments).Assembly)
-        .Extract(err =>
-        {
-            System.Console.WriteLine("Failed loading bundled Elm environments from embedded resource: " + err);
+    [System.Text.RegularExpressions.GeneratedRegex(@"^" + CompiledEnvDictionaryKeyPrefix + @"-([\d\w]+)$")]
+    private static partial System.Text.RegularExpressions.Regex CompiledEnvKeyRegex { get; }
 
-            return ImmutableDictionary<string, PineValue>.Empty;
-        });
-
-    public static Result<string, IReadOnlyDictionary<string, PineValue>> LoadBundledCompiledEnvironments(
-        string embeddedResourceFilePath,
-        System.Reflection.Assembly assembly)
-    {
-        /*
-        var inspect =
-            DotNetAssembly.LoadDirectoryFilesFromManifestEmbeddedFileProviderAsDictionary(
-            directoryPath: ["prebuilt-artifact"],
-            assembly: assembly);
-        */
-
-        var manifestEmbeddedProvider =
-            new Microsoft.Extensions.FileProviders.ManifestEmbeddedFileProvider(assembly);
-
-        var embeddedFileInfo = manifestEmbeddedProvider.GetFileInfo(embeddedResourceFilePath);
-
-        if (!embeddedFileInfo.Exists)
-        {
-            return "Did not find file " + embeddedResourceFilePath + " in assembly " + assembly.FullName;
-        }
-
-        if (embeddedFileInfo.Length is 0)
-        {
-            return "File " + embeddedResourceFilePath + " in assembly " + assembly.FullName + " is empty";
-        }
-
-        using var readStream = embeddedFileInfo.CreateReadStream();
-
-        try
-        {
-            return LoadBundledCompiledEnvironments(readStream, gzipDecompress: true);
-        }
-        catch (Exception e)
-        {
-            return "Failed to load bundled Elm environments from embedded resource: " + e.Message;
-        }
-    }
-
-    public static Result<string, IReadOnlyDictionary<string, PineValue>> LoadBundledCompiledEnvironments(
+    public static Result<string, IReadOnlyDictionary<string, PineValue>> LoadBundledDeclarations(
         System.IO.Stream readStream,
         bool gzipDecompress)
     {
@@ -100,92 +60,38 @@ public class BundledElmEnvironments
         {
             using var gzipStream = new GZipStream(readStream, CompressionMode.Decompress);
 
-            return LoadBundledCompiledEnvironments(gzipStream);
+            return LoadBundledDeclarations(gzipStream);
         }
 
-        return LoadBundledCompiledEnvironments(readStream);
+        return LoadBundledDeclarations(readStream);
     }
 
-    private static Result<string, IReadOnlyDictionary<string, PineValue>> LoadBundledCompiledEnvironments(
+    private static Result<string, IReadOnlyDictionary<string, PineValue>> LoadBundledDeclarations(
         System.IO.Stream readStream)
     {
-        var dictionaryEntries =
-            System.Text.Json.JsonSerializer.Deserialize<IReadOnlyList<PineValueCompactBuild.ListEntry>>(readStream);
+        var asMemory = ReadOnlyMemoryFromWholeStream(readStream);
 
-        var sharedDictionary = PineValueCompactBuild.BuildDictionaryFromEntries(dictionaryEntries);
-
-        var mutatedDictionary = new Dictionary<string, PineValue>();
-
-        foreach (var item in sharedDictionary)
+        try
         {
-            var keyMatch = compiledEnvKeyRegex.Match(item.Key);
-
-            if (!keyMatch.Success)
-            {
-                continue;
-            }
-
-            var environmentId = keyMatch.Groups[1].Value;
-
-            mutatedDictionary[environmentId] = item.Value;
+            return Result<string, IReadOnlyDictionary<string, PineValue>>.ok(
+                PopularEncodings.StringNamedPineValueBinaryEncoding.Decode(asMemory).decls);
         }
-
-        return mutatedDictionary;
+        catch (Exception e)
+        {
+            return "Failed with runtime exception: " + e.Message;
+        }
     }
 
-    public const string ResourceFilePath = "./Pine.Core/" + EmbeddedResourceFilePath;
-
-    public static void CompressAndWriteBundleFile(
-        IReadOnlyDictionary<TreeNodeWithStringPath, PineValue> compiledEnvironments)
+    private static ReadOnlyMemory<byte> ReadOnlyMemoryFromWholeStream(System.IO.Stream stream)
     {
-        var (allListEntries, uncompressed) =
-            BuildBundleResourceFileJsonUtf8(compiledEnvironments);
+        using var grow = new System.IO.MemoryStream();
 
-        System.Console.WriteLine(
-            "Built " + CommandLineInterface.FormatIntegerForDisplay(allListEntries.Count) + " list entries for " +
-            compiledEnvironments.Count + " compiled environments with an uncompressed size of " +
-            CommandLineInterface.FormatIntegerForDisplay(uncompressed.Length) + " bytes.");
+        stream.CopyTo(grow);
 
-        var fileContent = CompressResourceFile(uncompressed);
+        if (grow.TryGetBuffer(out var seg2))
+            return new ReadOnlyMemory<byte>(seg2.Array!, seg2.Offset, seg2.Count);
 
-        CompressAndWriteBundleFile(fileContent);
-    }
-
-    public static void CompressAndWriteBundleFile(
-        ReadOnlyMemory<byte> fileContent)
-    {
-        System.Console.WriteLine(
-            "Current working directory: " + System.Environment.CurrentDirectory);
-
-        var absolutePath = System.IO.Path.GetFullPath(ResourceFilePath);
-
-        System.Console.WriteLine(
-            "Resolved the destination path of " + ResourceFilePath +
-            " to " + absolutePath);
-
-        System.IO.Directory.CreateDirectory(
-            System.IO.Path.GetDirectoryName(absolutePath));
-
-        System.IO.File.WriteAllBytes(
-            absolutePath,
-            fileContent.ToArray());
-
-        System.Console.WriteLine(
-            "Saved the prebuilt dictionary to " + absolutePath);
-    }
-
-    public static ReadOnlyMemory<byte> CompressResourceFile(
-        ReadOnlyMemory<byte> beforeCompression)
-    {
-        using var memoryStream = new System.IO.MemoryStream();
-
-        using var gzipStream = new GZipStream(memoryStream, CompressionLevel.Optimal);
-
-        gzipStream.Write(beforeCompression.Span);
-
-        gzipStream.Flush();
-
-        return memoryStream.ToArray();
+        return grow.ToArray().AsMemory();
     }
 
     public static (IReadOnlyList<PineValueCompactBuild.ListEntry>, ReadOnlyMemory<byte>) BuildBundleResourceFileJsonUtf8(
@@ -212,9 +118,7 @@ public class BundledElmEnvironments
             compiledEnvironments
             .Select(compiledEnvironment =>
             {
-                var key =
-                CompiledEnvDictionaryKeyPrefix +
-                DictionaryKeyHashPartFromFileTree(compiledEnvironment.Key);
+                var key = DictionaryKeyFromFileTree(compiledEnvironment.Key);
 
                 if (compiledEnvironment.Value is not PineValue.ListValue compiledListValue)
                 {

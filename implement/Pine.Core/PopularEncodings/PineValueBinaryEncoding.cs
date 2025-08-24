@@ -14,27 +14,27 @@ public static class PineValueBinaryEncoding
     /// <summary>
     /// Size in bytes of the component ID prefix used in binary encoding.
     /// </summary>
-    public const int componentIdSize = 8;
+    public const int ComponentIdSize = 8;
 
     /// <summary>
     /// Size in bytes of the tag identifier used for differentiating PineValue types.
     /// </summary>
-    public const int tagSize = 4;
+    public const int TagSize = 4;
 
     /// <summary>
     /// Tag identifier indicating the PineValue represents a Blob.
     /// </summary>
-    public const int tagBlob = 1;
+    public const int TagBlob = 1;
 
     /// <summary>
     /// Tag identifier indicating the PineValue represents a List.
     /// </summary>
-    public const int tagList = 3;
+    public const int TagList = 3;
 
     /// <summary>
     /// Tag identifier indicating the PineValue represents a Reference to a previously encoded value.
     /// </summary>
-    public const int tagReference = 4;
+    public const int TagReference = 4;
 
     /// <summary>
     /// Encodes a <see cref="PineValue"/> to the specified stream.
@@ -45,12 +45,12 @@ public static class PineValueBinaryEncoding
         System.IO.Stream stream,
         PineValue composition)
     {
-        void write(ReadOnlySpan<byte> bytes)
+        void Write(ReadOnlySpan<byte> bytes)
         {
             stream.Write(bytes);
         }
 
-        Encode(write, composition);
+        Encode(Write, composition);
     }
 
     /// <summary>
@@ -111,7 +111,7 @@ public static class PineValueBinaryEncoding
 
         var declarationsDict = new Dictionary<PineValue, long>();
 
-        void writeDeclaration(PineValue declaration)
+        void WriteDeclaration(PineValue declaration)
         {
             Span<byte> encodedId = stackalloc byte[8];
 
@@ -128,20 +128,20 @@ public static class PineValueBinaryEncoding
             ++componentId;
         }
 
-        void writeDeclarations(IReadOnlyList<PineValue> declarations)
+        void WriteDeclarations(IReadOnlyList<PineValue> declarations)
         {
             for (var i = 0; i < declarations.Count; i++)
             {
                 var declaration = declarations[i];
-                writeDeclaration(declaration);
+                WriteDeclaration(declaration);
             }
         }
 
-        writeDeclarations(blobDeclarations);
+        WriteDeclarations(blobDeclarations);
 
-        writeDeclarations(listsDeclarations);
+        WriteDeclarations(listsDeclarations);
 
-        writeDeclaration(root);
+        WriteDeclaration(root);
     }
 
     private static void EncodeExpression(
@@ -151,7 +151,7 @@ public static class PineValueBinaryEncoding
     {
         if (declarations.TryGetValue(composition, out var refId))
         {
-            write(tagReferenceEncoded.Span);
+            write(s_tagReferenceEncoded.Span);
 
             Span<byte> encodedId = stackalloc byte[8];
             BinaryPrimitives.WriteInt64BigEndian(encodedId, refId);
@@ -162,7 +162,7 @@ public static class PineValueBinaryEncoding
 
         if (composition is PineValue.BlobValue blob)
         {
-            write(tagBlobEncoded.Span);
+            write(s_tagBlobEncoded.Span);
 
             Span<byte> encodedLength = stackalloc byte[8];
             BinaryPrimitives.WriteInt64BigEndian(encodedLength, blob.Bytes.Length);
@@ -175,15 +175,15 @@ public static class PineValueBinaryEncoding
             switch (blob.Bytes.Length % 4)
             {
                 case 1:
-                    write(paddingBytes_3.Span);
+                    write(s_paddingBytes_3.Span);
                     break;
 
                 case 2:
-                    write(paddingBytes_2.Span);
+                    write(s_paddingBytes_2.Span);
                     break;
 
                 case 3:
-                    write(paddingBytes_1.Span);
+                    write(s_paddingBytes_1.Span);
                     break;
             }
 
@@ -192,7 +192,7 @@ public static class PineValueBinaryEncoding
 
         if (composition is PineValue.ListValue list)
         {
-            write(tagListEncoded.Span);
+            write(s_tagListEncoded.Span);
 
             Span<byte> encodedLength = stackalloc byte[8];
             BinaryPrimitives.WriteInt64BigEndian(encodedLength, list.Elements.Length);
@@ -219,9 +219,18 @@ public static class PineValueBinaryEncoding
     /// <returns>The decoded PineValue instance.</returns>
     public static PineValue DecodeRoot(ReadOnlyMemory<byte> sourceBytes) =>
         DecodeSequence(sourceBytes)
-        .Last();
+        .Last().declValue;
 
-    private static IEnumerable<PineValue> DecodeSequence(ReadOnlyMemory<byte> sourceBytes)
+    /// <summary>
+    /// Decodes a sequence of <see cref="PineValue"/> declarations from their binary representation.
+    /// Each declaration is returned as a tuple containing its component ID and the decoded <see cref="PineValue"/>.
+    /// </summary>
+    /// <param name="sourceBytes">The binary-encoded data as memory.</param>
+    /// <returns>
+    /// An enumerable of tuples, each containing the component ID and the corresponding decoded <see cref="PineValue"/>.
+    /// </returns>
+    public static IEnumerable<(long declId, PineValue declValue)>
+        DecodeSequence(ReadOnlyMemory<byte> sourceBytes)
     {
         long currentOffset = 0;
 
@@ -235,7 +244,7 @@ public static class PineValueBinaryEncoding
                     sourceBytesOffset: (int)currentOffset,
                     declarations: declarationsDict);
 
-            yield return composition;
+            yield return (compositionId, composition);
 
             declarationsDict[compositionId] = composition;
 
@@ -253,10 +262,10 @@ public static class PineValueBinaryEncoding
         var (composition, exprOffset) =
             DecodeExpression(
                 sourceBytes,
-                sourceBytesOffset: sourceBytesOffset + componentIdSize,
+                sourceBytesOffset: sourceBytesOffset + ComponentIdSize,
                 declarations);
 
-        return ((id, composition), offset: componentIdSize + exprOffset);
+        return ((id, composition), offset: ComponentIdSize + exprOffset);
     }
 
     private static (PineValue composition, int offset) DecodeExpression(
@@ -266,7 +275,7 @@ public static class PineValueBinaryEncoding
     {
         var tagId = BinaryPrimitives.ReadInt32BigEndian(sourceBytes.Span[sourceBytesOffset..]);
 
-        if (tagId is tagBlob)
+        if (tagId is TagBlob)
         {
             var bytesCount =
                 BinaryPrimitives.ReadInt64BigEndian(sourceBytes.Span[(sourceBytesOffset + 4)..]);
@@ -287,7 +296,7 @@ public static class PineValueBinaryEncoding
             return (PineValue.Blob(bytes), offset: 12 + (int)bytesCount + paddingBytesCount);
         }
 
-        if (tagId is tagList)
+        if (tagId is TagList)
         {
             var itemsCount = BinaryPrimitives.ReadInt64BigEndian(sourceBytes.Span[(sourceBytesOffset + 4)..]);
 
@@ -311,13 +320,13 @@ public static class PineValueBinaryEncoding
             return (PineValue.List(items), offset: currentOffset);
         }
 
-        if (tagId is tagReference)
+        if (tagId is TagReference)
         {
             var id = BinaryPrimitives.ReadInt64BigEndian(sourceBytes.Span[(sourceBytesOffset + 4)..]);
 
             if (declarations.TryGetValue(id, out var value))
             {
-                return (value, offset: tagSize + componentIdSize);
+                return (value, offset: TagSize + ComponentIdSize);
             }
 
             throw new InvalidOperationException("Reference not found: " + id);
@@ -326,21 +335,21 @@ public static class PineValueBinaryEncoding
         throw new NotImplementedException("Unexpected tag: " + tagId);
     }
 
-    private readonly static ReadOnlyMemory<byte> tagBlobEncoded =
-        new([0, 0, 0, tagBlob]);
+    private readonly static ReadOnlyMemory<byte> s_tagBlobEncoded =
+        new([0, 0, 0, TagBlob]);
 
-    private readonly static ReadOnlyMemory<byte> tagListEncoded =
-        new([0, 0, 0, tagList]);
+    private readonly static ReadOnlyMemory<byte> s_tagListEncoded =
+        new([0, 0, 0, TagList]);
 
-    private readonly static ReadOnlyMemory<byte> tagReferenceEncoded =
-        new([0, 0, 0, tagReference]);
+    private readonly static ReadOnlyMemory<byte> s_tagReferenceEncoded =
+        new([0, 0, 0, TagReference]);
 
-    private readonly static ReadOnlyMemory<byte> paddingBytes_1 =
+    private readonly static ReadOnlyMemory<byte> s_paddingBytes_1 =
         new([0]);
 
-    private readonly static ReadOnlyMemory<byte> paddingBytes_2 =
+    private readonly static ReadOnlyMemory<byte> s_paddingBytes_2 =
         new([0, 0]);
 
-    private readonly static ReadOnlyMemory<byte> paddingBytes_3 =
+    private readonly static ReadOnlyMemory<byte> s_paddingBytes_3 =
         new([0, 0, 0]);
 }

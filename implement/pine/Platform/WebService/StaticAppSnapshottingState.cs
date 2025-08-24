@@ -59,7 +59,7 @@ public sealed record StaticAppSnapshottingState : IAsyncDisposable
         CancellationToken cancellationToken)
     {
         var webServiceCompiledModules =
-            Elm.Platform.WebServiceInterface.CompiledModulesFromSourceFilesAndEntryFileName(
+            WebServiceInterface.CompiledModulesFromSourceFilesAndEntryFileName(
                 webServiceAppSourceFiles,
                 entryFileName: entryFileName);
 
@@ -105,7 +105,7 @@ public sealed record StaticAppSnapshottingState : IAsyncDisposable
             ["v-" + _webServiceAppHash[..8], AppStateSnapshotFileName];
 
         var webServiceConfig =
-            Elm.Platform.WebServiceInterface.ConfigFromCompiledModules(
+            WebServiceInterface.ConfigFromCompiledModules(
                 webServiceCompiledModules,
                 entryModuleName: "Backend.Main",
                 entryDeclName: "webServiceMain")

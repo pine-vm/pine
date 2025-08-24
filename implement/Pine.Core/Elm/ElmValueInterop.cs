@@ -19,18 +19,6 @@ public class ElmValueInterop
     public static readonly PineValue String_Ok_Value =
         StringEncoding.ValueFromString("Ok");
 
-    public static readonly PineValue String_Nothing_Value_2024 =
-        StringEncoding.ValueFromString_2024("Nothing");
-
-    public static readonly PineValue String_Just_Value_2024 =
-        StringEncoding.ValueFromString_2024("Just");
-
-    public static readonly PineValue String_Err_Value_2024 =
-        StringEncoding.ValueFromString_2024("Err");
-
-    public static readonly PineValue String_Ok_Value_2024 =
-        StringEncoding.ValueFromString_2024("Ok");
-
     public static ElmValue PineValueEncodedAsInElmCompiler(
         PineValue pineValue) =>
         PineValueEncodedAsInElmCompiler(
@@ -576,14 +564,12 @@ public class ElmValueInterop
 
         var tagValue = listValue.Elements.Span[0];
 
-        if (tagValue == String_Nothing_Value ||
-            tagValue == String_Nothing_Value_2024)
+        if (tagValue == String_Nothing_Value)
         {
             return nothing();
         }
 
-        if (tagValue == String_Just_Value ||
-            tagValue == String_Just_Value_2024)
+        if (tagValue == String_Just_Value)
         {
             var tagArgumentsValue = listValue.Elements.Span[1];
 
@@ -621,8 +607,7 @@ public class ElmValueInterop
 
         var tagValue = listValue.Elements.Span[0];
 
-        if (tagValue == String_Err_Value ||
-            tagValue == String_Err_Value_2024)
+        if (tagValue == String_Err_Value)
         {
             var tagArgumentsValue = listValue.Elements.Span[1];
 
@@ -641,8 +626,7 @@ public class ElmValueInterop
             return err(tagArgumentsListValue.Elements.Span[0]);
         }
 
-        if (tagValue == String_Ok_Value ||
-            tagValue == String_Ok_Value_2024)
+        if (tagValue == String_Ok_Value)
         {
             var tagArgumentsValue = listValue.Elements.Span[1];
 

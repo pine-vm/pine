@@ -270,7 +270,7 @@ public class ElmCompiler
         bool skipFilteringForSourceDirs,
         ElmCompiler? overrideElmCompiler = null)
     {
-        Result<string, PineValue> continueWithBundledCompiler()
+        Result<string, PineValue> ContinueWithBundledCompiler()
         {
             var elmCompilerFromBundle =
                 BundledElmEnvironments.BundledElmCompilerCompiledEnvValue()
@@ -294,7 +294,7 @@ public class ElmCompiler
 
         if (overrideElmCompiler is null && appCodeTree.Equals(compilerSourceFilesDefault))
         {
-            return continueWithBundledCompiler();
+            return ContinueWithBundledCompiler();
         }
 
         if (!skipLowering && CheckIfAppUsesLowering(appCodeTree))
@@ -874,7 +874,7 @@ public class ElmCompiler
                 System.IO.FileAccess.Read);
 
         var envDictResult =
-            BundledElmEnvironments.LoadBundledCompiledEnvironments(
+            BundledElmEnvironmentsJson.LoadBundledCompiledEnvironments(
                 sourceFile,
                 gzipDecompress: filePath.EndsWith(".gzip", StringComparison.OrdinalIgnoreCase));
 
