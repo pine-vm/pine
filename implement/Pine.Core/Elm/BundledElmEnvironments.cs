@@ -128,7 +128,7 @@ public partial class BundledElmEnvironments
 
                 return new PineValueCompactBuild.ListEntry(
                     Key: key,
-                    Value: sharedValuesDict.entryValueFromListItems(compiledListValue.Elements));
+                    Value: sharedValuesDict.entryValueFromListItems(compiledListValue.Items));
             })
             .ToImmutableArray();
 

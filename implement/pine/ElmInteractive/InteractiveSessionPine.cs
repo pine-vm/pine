@@ -1052,22 +1052,22 @@ public class InteractiveSessionPine : IInteractiveSession
                 return "Type mismatch: Pine expression not evaluated to a list: " + evalOk;
             }
 
-            if (evalResultListComponent.Elements.Length is not 2)
+            if (evalResultListComponent.Items.Length is not 2)
             {
                 return
                     "Type mismatch: Pine expression evaluated to a list with unexpected number of elements: " +
-                    evalResultListComponent.Elements.Length +
+                    evalResultListComponent.Items.Length +
                     " instead of 2";
             }
 
             buildPineEvalContextTask = System.Threading.Tasks.Task.FromResult(
-                Result<string, PineValue>.ok(evalResultListComponent.Elements.Span[0]));
+                Result<string, PineValue>.ok(evalResultListComponent.Items.Span[0]));
 
             clock.Restart();
 
             var parseSubmissionResponseResult =
                 ElmInteractive.SubmissionResponseFromResponsePineValue(
-                    response: evalResultListComponent.Elements.Span[1]);
+                    response: evalResultListComponent.Items.Span[1]);
 
             logDuration("parse-result");
 

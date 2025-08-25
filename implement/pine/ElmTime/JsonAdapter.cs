@@ -457,12 +457,12 @@ public class ElmTimeJsonAdapter
                 return "Expected list value but got: " + dictItemValue;
             }
 
-            if (dictItem.Elements.Length is not 2)
+            if (dictItem.Items.Length is not 2)
             {
-                return "Expected 2 elements but got: " + dictItem.Elements.Length;
+                return "Expected 2 elements but got: " + dictItem.Items.Length;
             }
 
-            var dictItemSpan = dictItem.Elements.Span;
+            var dictItemSpan = dictItem.Items.Span;
 
             var exposedFunctionNameValue = dictItemSpan[0];
 
@@ -870,14 +870,14 @@ public class ElmTimeJsonAdapter
                 return "Unexpected apply result: Is not list but: " + applyResult;
             }
 
-            if (applyList.Elements.Length is not 2)
+            if (applyList.Items.Length is not 2)
             {
-                return "Unexpected apply result: Expected 2 elements but got: " + applyList.Elements.Length;
+                return "Unexpected apply result: Expected 2 elements but got: " + applyList.Items.Length;
             }
 
-            var newState = applyList.Elements.Span[0];
+            var newState = applyList.Items.Span[0];
 
-            var cmdsValue = applyList.Elements.Span[1];
+            var cmdsValue = applyList.Items.Span[1];
 
             if (cmdsValue is not PineValue.ListValue cmdsList)
             {
@@ -886,7 +886,7 @@ public class ElmTimeJsonAdapter
 
             return
                 Result<string, (PineValue newState, IReadOnlyList<PineValue> cmds)>
-                .ok((newState, cmdsList.Elements.ToArray()));
+                .ok((newState, cmdsList.Items.ToArray()));
         }
 
         public Result<string, PineValue> DecodeElmJsonValueFromString(
@@ -1178,12 +1178,12 @@ public class ElmTimeJsonAdapter
             return "Expected list value but got: " + applyResponse;
         }
 
-        if (applyResponseList.Elements.Length is not 2)
+        if (applyResponseList.Items.Length is not 2)
         {
-            return "Expected 2 elements but got: " + applyResponseList.Elements.Length;
+            return "Expected 2 elements but got: " + applyResponseList.Items.Length;
         }
 
-        var applyResponseSpan = applyResponseList.Elements.Span;
+        var applyResponseSpan = applyResponseList.Items.Span;
 
         var maybeStateIncludingShim = applyResponseSpan[0];
 

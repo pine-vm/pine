@@ -1627,7 +1627,7 @@ public class PineVM : IPineVM
                                 topmostValue switch
                                 {
                                     PineValue.ListValue listValue =>
-                                    listValue.Elements.Length,
+                                    listValue.Items.Length,
 
                                     PineValue.BlobValue blobValue =>
                                     blobValue.Bytes.Length,
@@ -1667,11 +1667,11 @@ public class PineVM : IPineVM
                                 prevValue switch
                                 {
                                     PineValue.ListValue listValue =>
-                                    listValue.Elements.Length <= indexClamped
+                                    listValue.Items.Length <= indexClamped
                                     ?
                                     PineValue.EmptyList
                                     :
-                                    listValue.Elements.Span[indexClamped],
+                                    listValue.Items.Span[indexClamped],
 
                                     _ =>
                                     PineValue.EmptyList
@@ -1701,11 +1701,11 @@ public class PineVM : IPineVM
                                     prevValue switch
                                     {
                                         PineValue.ListValue listValue =>
-                                        listValue.Elements.Length <= skipCountClamped
+                                        listValue.Items.Length <= skipCountClamped
                                         ?
                                         PineValue.EmptyList
                                         :
-                                        listValue.Elements.Span[skipCountClamped],
+                                        listValue.Items.Span[skipCountClamped],
 
                                         _ =>
                                         PineValue.EmptyList
@@ -1852,11 +1852,11 @@ public class PineVM : IPineVM
 
                             if (right is PineValue.ListValue rightList)
                             {
-                                var elements = new PineValue[rightList.Elements.Length + 1];
+                                var elements = new PineValue[rightList.Items.Length + 1];
 
                                 elements[0] = left;
 
-                                rightList.Elements.Span.CopyTo(elements.AsSpan(1));
+                                rightList.Items.Span.CopyTo(elements.AsSpan(1));
 
                                 resultValue = PineValue.List(elements);
                             }
@@ -2709,13 +2709,13 @@ public class PineVM : IPineVM
                             {
                                 if (value is PineValue.ListValue valueList)
                                 {
-                                    if (valueList.Elements.Length >= prefixList.Elements.Length)
+                                    if (valueList.Items.Length >= prefixList.Items.Length)
                                     {
                                         var allItemsMatch = true;
 
-                                        for (var i = 0; i < prefixList.Elements.Length; i++)
+                                        for (var i = 0; i < prefixList.Items.Length; i++)
                                         {
-                                            if (valueList.Elements.Span[i] != prefixList.Elements.Span[i])
+                                            if (valueList.Items.Span[i] != prefixList.Items.Span[i])
                                             {
                                                 allItemsMatch = false;
                                                 break;
@@ -2906,7 +2906,7 @@ public class PineVM : IPineVM
         if (environmentValue is PineValue.ListValue list)
         {
             FunctionApplicationMaxEnvSize =
-            FunctionApplicationMaxEnvSize < list.Elements.Length ? list.Elements.Length : FunctionApplicationMaxEnvSize;
+            FunctionApplicationMaxEnvSize < list.Items.Length ? list.Items.Length : FunctionApplicationMaxEnvSize;
         }
 
         return
@@ -2977,12 +2977,12 @@ public class PineVM : IPineVM
                         environment,
                         stackPrevValues) is PineValue.ListValue list)
                     {
-                        if (list.Elements.Length < 1 || list.Elements.Length <= skipCount)
+                        if (list.Items.Length < 1 || list.Items.Length <= skipCount)
                         {
                             return PineValue.EmptyList;
                         }
 
-                        return list.Elements.Span[skipCount < 0 ? 0 : (int)skipCount];
+                        return list.Items.Span[skipCount < 0 ? 0 : (int)skipCount];
                     }
                     else
                     {
@@ -3079,7 +3079,7 @@ public class PineVM : IPineVM
         if (argument is PineValue.ListValue argumentList)
         {
             var takeLimit =
-                argumentList.Elements.Length - skipCount;
+                argumentList.Items.Length - skipCount;
 
             takeCount =
                 takeLimit < takeCount
@@ -3091,14 +3091,14 @@ public class PineVM : IPineVM
             if (takeCount < 1)
                 return PineValue.EmptyList;
 
-            if (skipCount is 0 && takeCount == argumentList.Elements.Length)
+            if (skipCount is 0 && takeCount == argumentList.Items.Length)
                 return argument;
 
             var slicedItems = new PineValue[takeCount];
 
             for (var i = 0; i < takeCount; ++i)
             {
-                slicedItems[i] = argumentList.Elements.Span[skipCount + i];
+                slicedItems[i] = argumentList.Items.Span[skipCount + i];
             }
 
             return PineValue.List(slicedItems);
@@ -3145,10 +3145,10 @@ public class PineVM : IPineVM
 
             var skipCount = path[i];
 
-            if (skipCount >= listValue.Elements.Length)
+            if (skipCount >= listValue.Items.Length)
                 return PineValue.EmptyList;
 
-            currentNode = listValue.Elements.Span[skipCount < 0 ? 0 : skipCount];
+            currentNode = listValue.Items.Span[skipCount < 0 ? 0 : skipCount];
         }
 
         return currentNode;

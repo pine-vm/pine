@@ -224,7 +224,7 @@ public class BundledElmEnvironmentsJson
 
                 return new PineValueCompactBuild.ListEntry(
                     Key: key,
-                    Value: sharedValuesDict.entryValueFromListItems(compiledListValue.Elements));
+                    Value: sharedValuesDict.entryValueFromListItems(compiledListValue.Items));
             })
             .ToImmutableArray();
 

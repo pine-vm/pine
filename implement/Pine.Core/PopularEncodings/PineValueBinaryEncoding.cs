@@ -88,9 +88,9 @@ public static class PineValueBinaryEncoding
 
             if (value is PineValue.ListValue list)
             {
-                for (var i = 0; i < list.Elements.Length; i++)
+                for (var i = 0; i < list.Items.Length; i++)
                 {
-                    stack.Push(list.Elements.Span[i]);
+                    stack.Push(list.Items.Span[i]);
                 }
             }
         }
@@ -195,12 +195,12 @@ public static class PineValueBinaryEncoding
             write(s_tagListEncoded.Span);
 
             Span<byte> encodedLength = stackalloc byte[8];
-            BinaryPrimitives.WriteInt64BigEndian(encodedLength, list.Elements.Length);
+            BinaryPrimitives.WriteInt64BigEndian(encodedLength, list.Items.Length);
             write(encodedLength);
 
-            for (var i = 0; i < list.Elements.Length; i++)
+            for (var i = 0; i < list.Items.Length; i++)
             {
-                var item = list.Elements.Span[i];
+                var item = list.Items.Span[i];
 
                 EncodeExpression(item, write, declarations);
             }

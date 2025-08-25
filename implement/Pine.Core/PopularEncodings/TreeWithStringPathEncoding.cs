@@ -37,23 +37,23 @@ public static class FileTreeEncoding
     private static Result<IReadOnlyList<(int index, string name)>, TreeNodeWithStringPath> Parse(
         PineValue.ListValue compositionAsList)
     {
-        var parsedItems = new (string name, TreeNodeWithStringPath component)[compositionAsList.Elements.Length];
+        var parsedItems = new (string name, TreeNodeWithStringPath component)[compositionAsList.Items.Length];
 
-        for (var itemIndex = 0; itemIndex < compositionAsList.Elements.Length; itemIndex++)
+        for (var itemIndex = 0; itemIndex < compositionAsList.Items.Length; itemIndex++)
         {
-            var item = compositionAsList.Elements.Span[itemIndex];
+            var item = compositionAsList.Items.Span[itemIndex];
 
-            if (item is not PineValue.ListValue itemAsList || itemAsList.Elements.Length is not 2)
+            if (item is not PineValue.ListValue itemAsList || itemAsList.Items.Length is not 2)
             {
                 return Result<IReadOnlyList<(int index, string name)>, TreeNodeWithStringPath>.err([]);
             }
 
-            if (StringEncoding.StringFromValue(itemAsList.Elements.Span[0]).IsOkOrNull() is not { } itemName)
+            if (StringEncoding.StringFromValue(itemAsList.Items.Span[0]).IsOkOrNull() is not { } itemName)
             {
                 return Result<IReadOnlyList<(int index, string name)>, TreeNodeWithStringPath>.err([]);
             }
 
-            var itemComponent = itemAsList.Elements.Span[1];
+            var itemComponent = itemAsList.Items.Span[1];
 
             if (Parse(itemComponent).IsOkOrNull() is not { } itemComponentOk)
             {

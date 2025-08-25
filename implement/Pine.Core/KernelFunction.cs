@@ -32,7 +32,7 @@ public static class KernelFunction
             * https://github.com/dotnet/csharplang/issues/6574
             * */
 
-            var listItems = listValue.Elements.Span;
+            var listItems = listValue.Items.Span;
 
             if (listItems.Length < 1)
                 return PineKernelValues.TrueValue;
@@ -96,7 +96,7 @@ public static class KernelFunction
                 blobValue.Bytes.Length,
 
                 PineValue.ListValue listValue =>
-                listValue.Elements.Length,
+                listValue.Items.Length,
 
                 _ =>
                 throw new NotImplementedException(
@@ -113,12 +113,12 @@ public static class KernelFunction
         value switch
         {
             PineValue.ListValue listValue =>
-            listValue.Elements.Length is 2
+            listValue.Items.Length is 2
             ?
-            SignedIntegerFromValueRelaxed(listValue.Elements.Span[0]) switch
+            SignedIntegerFromValueRelaxed(listValue.Items.Span[0]) switch
             {
                 { } count =>
-                Internal.KernelFunctionSpecialized.skip(count, listValue.Elements.Span[1]),
+                Internal.KernelFunctionSpecialized.skip(count, listValue.Items.Span[1]),
 
                 _ =>
                 PineValue.EmptyList
@@ -143,11 +143,11 @@ public static class KernelFunction
         value switch
         {
             PineValue.ListValue listValue =>
-            listValue.Elements.Length is 2 ?
-            SignedIntegerFromValueRelaxed(listValue.Elements.Span[0]) switch
+            listValue.Items.Length is 2 ?
+            SignedIntegerFromValueRelaxed(listValue.Items.Span[0]) switch
             {
                 { } count =>
-                Internal.KernelFunctionSpecialized.take(count, listValue.Elements.Span[1]),
+                Internal.KernelFunctionSpecialized.take(count, listValue.Items.Span[1]),
 
                 _ =>
                 PineValue.EmptyList
@@ -172,10 +172,10 @@ public static class KernelFunction
     {
         if (value is PineValue.ListValue listValue)
         {
-            if (listValue.Elements.Length <= 1)
+            if (listValue.Items.Length <= 1)
                 return value;
 
-            var reversed = listValue.Elements.ToArray();
+            var reversed = listValue.Items.ToArray();
 
             Array.Reverse(reversed);
 
@@ -205,19 +205,19 @@ public static class KernelFunction
             return PineValue.EmptyList;
         }
 
-        return Internal.KernelFunctionSpecialized.concat(listValue.Elements.Span);
+        return Internal.KernelFunctionSpecialized.concat(listValue.Items.Span);
     }
 
     public static PineValue head(PineValue value)
     {
         if (value is PineValue.ListValue listValue)
         {
-            if (listValue.Elements.Length is 0)
+            if (listValue.Items.Length is 0)
             {
                 return PineValue.EmptyList;
             }
 
-            return listValue.Elements.Span[0];
+            return listValue.Items.Span[0];
         }
 
         if (value is PineValue.BlobValue blobValue)
@@ -273,7 +273,7 @@ public static class KernelFunction
 
         if (value is PineValue.ListValue listValue)
         {
-            var listItems = listValue.Elements.Span;
+            var listItems = listValue.Items.Span;
 
             if (listItems.Length is 0)
                 return ValueFromBool(true);
@@ -314,7 +314,7 @@ public static class KernelFunction
             return PineValue.EmptyList;
         }
 
-        var argumentsItems = argumentsList.Elements.Span;
+        var argumentsItems = argumentsList.Items.Span;
 
         if (argumentsItems.Length is 0)
         {
@@ -353,7 +353,7 @@ public static class KernelFunction
             return PineValue.EmptyList;
         }
 
-        var argumentsItems = argumentsList.Elements.Span;
+        var argumentsItems = argumentsList.Items.Span;
 
         if (argumentsItems.Length is 0)
         {
@@ -392,7 +392,7 @@ public static class KernelFunction
             return PineValue.EmptyList;
         }
 
-        var argumentsItems = argumentsList.Elements.Span;
+        var argumentsItems = argumentsList.Items.Span;
 
         if (argumentsItems.Length is 0)
         {
@@ -455,7 +455,7 @@ public static class KernelFunction
             return PineValue.EmptyList;
         }
 
-        var argumentsItems = argumentsList.Elements.Span;
+        var argumentsItems = argumentsList.Items.Span;
 
         if (argumentsItems.Length is not 2)
         {
@@ -489,7 +489,7 @@ public static class KernelFunction
             return PineValue.EmptyList;
         }
 
-        var argumentsItems = argumentsList.Elements.Span;
+        var argumentsItems = argumentsList.Items.Span;
 
         if (argumentsItems.Length is not 2)
         {
@@ -651,7 +651,7 @@ public static class KernelFunction
         value switch
         {
             PineValue.ListValue list =>
-            continueWithList(list.Elements),
+            continueWithList(list.Items),
 
             _ =>
             PineValue.EmptyList

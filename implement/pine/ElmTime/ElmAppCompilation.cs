@@ -619,11 +619,11 @@ namespace ElmTime
                     "Expected list value, got: " + pineValue);
             }
 
-            var mapped = new CompilerSerialInterface.LocatedCompilationError[list.Elements.Length];
+            var mapped = new CompilerSerialInterface.LocatedCompilationError[list.Items.Length];
 
-            for (var i = 0; i < list.Elements.Length; i++)
+            for (var i = 0; i < list.Items.Length; i++)
             {
-                var locatedCompilationErrorValue = list.Elements.Span[i];
+                var locatedCompilationErrorValue = list.Items.Span[i];
 
                 var locatedCompilationError =
                     ParseLocatedCompilationError(
@@ -663,13 +663,13 @@ namespace ElmTime
                     "Expected list value, got: " + pineValue);
             }
 
-            if (list.Elements.Length is not 2)
+            if (list.Items.Length is not 2)
             {
                 throw new Exception(
-                    "Expected list with two elements, got: " + list.Elements.Length);
+                    "Expected list with two elements, got: " + list.Items.Length);
             }
 
-            var tagNameValue = list.Elements.Span[0];
+            var tagNameValue = list.Items.Span[0];
 
             if (tagNameValue != ValueFromString_LocatedInSourceFiles &&
                 tagNameValue != ValueFromString_LocatedInSourceFiles_2024)
@@ -678,7 +678,7 @@ namespace ElmTime
                     "Expected first element to be 'LocatedInSourceFiles', got: " + tagNameValue);
             }
 
-            var arguments = list.Elements.Span[1];
+            var arguments = list.Items.Span[1];
 
             if (arguments is not PineValue.ListValue argumentsList)
             {
@@ -686,21 +686,21 @@ namespace ElmTime
                     "Expected second element to be a list, got: " + arguments);
             }
 
-            if (argumentsList.Elements.Length is not 2)
+            if (argumentsList.Items.Length is not 2)
             {
                 throw new Exception(
                     "Expected list with two elements in tag 'LocatedInSourceFiles', got: " +
-                    argumentsList.Elements.Length);
+                    argumentsList.Items.Length);
             }
 
-            var locationInSourceFilesValue = argumentsList.Elements.Span[0];
+            var locationInSourceFilesValue = argumentsList.Items.Span[0];
 
             var locationInSourceFiles =
                 ParseLocationInSourceFiles(
                     locationInSourceFilesValue,
                     elmCompilerCache);
 
-            var compilationErrorValue = argumentsList.Elements.Span[1];
+            var compilationErrorValue = argumentsList.Items.Span[1];
 
             var compilationError =
                 ParseCompilationError(compilationErrorValue, elmCompilerCache);
@@ -777,13 +777,13 @@ namespace ElmTime
                     "Expected list value, got: " + pineValue);
             }
 
-            if (list.Elements.Length is not 2)
+            if (list.Items.Length is not 2)
             {
                 throw new Exception(
-                    "Expected list with two elements, got: " + list.Elements.Length);
+                    "Expected list with two elements, got: " + list.Items.Length);
             }
 
-            var tagNameValue = list.Elements.Span[0];
+            var tagNameValue = list.Items.Span[0];
 
             var tagNameResult = StringEncoding.StringFromValue(tagNameValue);
 
@@ -802,7 +802,7 @@ namespace ElmTime
 
             if (tagName is "MissingDependencyError")
             {
-                var arguments = list.Elements.Span[1];
+                var arguments = list.Items.Span[1];
 
                 if (arguments is not PineValue.ListValue argumentsList)
                 {
@@ -810,14 +810,14 @@ namespace ElmTime
                         "Expected second element to be a list, got: " + arguments);
                 }
 
-                if (argumentsList.Elements.Length is not 1)
+                if (argumentsList.Items.Length is not 1)
                 {
                     throw new Exception(
                         "Expected list with one element in tag 'MissingDependencyError', got: " +
-                        argumentsList.Elements.Length);
+                        argumentsList.Items.Length);
                 }
 
-                var dependencyKeyValue = argumentsList.Elements.Span[0];
+                var dependencyKeyValue = argumentsList.Items.Span[0];
 
                 var dependencyKey = ParseDependencyKey(dependencyKeyValue, elmCompilerCache);
 
@@ -837,7 +837,7 @@ namespace ElmTime
 
             if (tagName is "OtherCompilationError")
             {
-                var arguments = list.Elements.Span[1];
+                var arguments = list.Items.Span[1];
 
                 var argumentAsElmValueResult =
                     elmCompilerCache.PineValueDecodedAsElmValue(arguments);
@@ -1078,13 +1078,13 @@ namespace ElmTime
                     "Expected list value, got: " + pineValue);
             }
 
-            if (list.Elements.Length is not 2)
+            if (list.Items.Length is not 2)
             {
                 throw new Exception(
-                    "Expected list with two elements, got: " + list.Elements.Length);
+                    "Expected list with two elements, got: " + list.Items.Length);
             }
 
-            var tagNameValue = list.Elements.Span[0];
+            var tagNameValue = list.Items.Span[0];
 
             if (tagNameValue != ValueFromString_CompilationIterationSuccess &&
                 tagNameValue != ValueFromString_CompilationIterationSuccess_2024)
@@ -1093,7 +1093,7 @@ namespace ElmTime
                     "Expected first element to be 'CompilationIterationSuccess', got: " + tagNameValue);
             }
 
-            var arguments = list.Elements.Span[1];
+            var arguments = list.Items.Span[1];
 
             if (arguments is not PineValue.ListValue argumentsList)
             {
@@ -1101,14 +1101,14 @@ namespace ElmTime
                     "Expected second element to be a list, got: " + arguments);
             }
 
-            if (argumentsList.Elements.Length is not 2)
+            if (argumentsList.Items.Length is not 2)
             {
                 throw new Exception(
                     "Expected list with two elements in tag 'CompilationIterationSuccess', got: " +
-                    argumentsList.Elements.Length);
+                    argumentsList.Items.Length);
             }
 
-            var compiledFilesValue = argumentsList.Elements.Span[0];
+            var compiledFilesValue = argumentsList.Items.Span[0];
 
             if (compiledFilesValue is not PineValue.ListValue compiledFilesList)
             {
@@ -1190,7 +1190,7 @@ namespace ElmTime
                     entry =>
                     entry.Value);
 
-            var rootModuleEntryPointKindValue = argumentsList.Elements.Span[1];
+            var rootModuleEntryPointKindValue = argumentsList.Items.Span[1];
 
             var rootModuleEntryPointKindResult =
                 ParseElmMakeEntryPointKindResult(

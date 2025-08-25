@@ -143,7 +143,7 @@ public class PineValueCompactBuild
                 return
                     new ListEntry(
                         Key: entryKey,
-                        Value: entryValueFromListItems(listInstance.Elements));
+                        Value: entryValueFromListItems(listInstance.Items));
             })
             .ToList();
 

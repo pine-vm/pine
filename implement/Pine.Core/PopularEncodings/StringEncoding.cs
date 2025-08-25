@@ -175,17 +175,17 @@ public static class StringEncoding
 
     public static Result<string, string> StringFromListValue(PineValue.ListValue list)
     {
-        if (list.Elements.Length is 0)
+        if (list.Items.Length is 0)
             return emptyStringOk;
 
         if (CommonStringsDecodedAsList.TryGetValue(list, out var commonString))
             return Result<string, string>.ok(commonString);
 
-        var stringBuilder = new System.Text.StringBuilder(capacity: list.Elements.Length * 2);
+        var stringBuilder = new System.Text.StringBuilder(capacity: list.Items.Length * 2);
 
-        for (var index = 0; index < list.Elements.Length; index++)
+        for (var index = 0; index < list.Items.Length; index++)
         {
-            if (list.Elements.Span[index] is not PineValue.BlobValue blobValue)
+            if (list.Items.Span[index] is not PineValue.BlobValue blobValue)
             {
                 return Result<string, string>.err(
                     "failed decoding char as integer at [" + index + "]: Not a blob");

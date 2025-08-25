@@ -73,7 +73,7 @@ public static class PineValueHashTree
 
             case PineValue.ListValue listValue:
                 {
-                    var elementsSpan = listValue.Elements.Span;
+                    var elementsSpan = listValue.Items.Span;
 
                     var elementsHashes = new ReadOnlyMemory<byte>[elementsSpan.Length];
 
@@ -92,7 +92,7 @@ public static class PineValueHashTree
 
                     return
                         (serialRepresentation: BytesConversions.Concat([(ReadOnlyMemory<byte>)prefix, .. elementsHashes]),
-                            dependencies: listValue.Elements.ToArray());
+                            dependencies: listValue.Items.ToArray());
                 }
 
             default:
@@ -255,7 +255,7 @@ public static class PineValueHashTree
         if (pineValue is not PineValue.ListValue listValue)
             return null;
 
-        var itemsSpan = listValue.Elements.Span;
+        var itemsSpan = listValue.Items.Span;
 
         for (var i = 0; i < itemsSpan.Length; i++)
         {

@@ -287,8 +287,8 @@ public partial class CompileToCSharp
                     if (pineValue is not PineValue.ListValue list)
                         return;
 
-                    for (var i = 0; i < list.Elements.Length; i++)
-                        registerValueUsagesRecursive(list.Elements.Span[i]);
+                    for (var i = 0; i < list.Items.Length; i++)
+                        registerValueUsagesRecursive(list.Items.Span[i]);
                 }
 
                 foreach (var item in aggregateValueDependencies)
@@ -1576,13 +1576,13 @@ public partial class CompileToCSharp
         if (pineValue is PineValue.ListValue list)
         {
             var asIntegers =
-                list.Elements
+                list.Items
                 .ToArray()
                 .Select(attemptMapToSignedInteger)
                 .WhereHasValue()
                 .ToImmutableArray();
 
-            if (asIntegers.Length == list.Elements.Length)
+            if (asIntegers.Length == list.Items.Length)
             {
                 return
                     (SyntaxFactory.InvocationExpression(
@@ -1683,7 +1683,7 @@ public partial class CompileToCSharp
             new ValueSyntaxKind.Other()),
 
             PineValue.ListValue listValue =>
-            (defaultRepresentationOfList(listValue.Elements),
+            (defaultRepresentationOfList(listValue.Items),
             new ValueSyntaxKind.Other()),
 
             _ =>

@@ -99,10 +99,10 @@ public class PineValueCompositionTests
                     (filePath: "b/d", fileContent: new byte[]{7,8}),
                 },
                 expectedOutput = PineValue.List(
-                    elements:
+                    items:
                     [
                         PineValue.List(
-                            elements:
+                            items:
                             [
                                 PineValue.Blob([0,0,0,97]),
                                 PineValue.Blob([0,1,2]),

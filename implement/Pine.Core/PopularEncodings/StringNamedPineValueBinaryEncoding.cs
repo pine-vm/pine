@@ -88,11 +88,11 @@ public static class StringNamedPineValueBinaryEncoding
 
         var declarations = new Dictionary<string, PineValue>();
 
-        for (var declIndex = 0; declIndex < declsList.Elements.Length; declIndex++)
+        for (var declIndex = 0; declIndex < declsList.Items.Length; declIndex++)
         {
             try
             {
-                var declValue = declsList.Elements.Span[declIndex];
+                var declValue = declsList.Items.Span[declIndex];
 
                 if (declValue is not PineValue.ListValue declList)
                 {
@@ -100,15 +100,15 @@ public static class StringNamedPineValueBinaryEncoding
                         "Expected a declaration to be a 2-element list but got: " + declValue.GetType());
                 }
 
-                if (declList.Elements.Length is not 2)
+                if (declList.Items.Length is not 2)
                 {
                     throw new InvalidDataException(
                         "Expected a declaration to be a 2-element list but got a list with " +
-                        declList.Elements.Length + " elements.");
+                        declList.Items.Length + " elements.");
                 }
 
-                var nameValue = declList.Elements.Span[0];
-                var valueValue = declList.Elements.Span[1];
+                var nameValue = declList.Items.Span[0];
+                var valueValue = declList.Items.Span[1];
 
                 var nameResult = StringEncoding.StringFromValue(nameValue);
 
@@ -138,7 +138,7 @@ public static class StringNamedPineValueBinaryEncoding
             catch (Exception ex)
             {
                 throw new InvalidDataException(
-                    "Error decoding declaration at index " + declIndex + " of " + declsList.Elements.Length + ": " + ex.Message, ex);
+                    "Error decoding declaration at index " + declIndex + " of " + declsList.Items.Length + ": " + ex.Message, ex);
             }
         }
 

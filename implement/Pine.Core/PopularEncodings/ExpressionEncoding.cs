@@ -99,10 +99,10 @@ public static class ExpressionEncoding
         if (value is not PineValue.ListValue rootList)
             return "Unexpected value type, not a list: " + value.GetType().FullName;
 
-        if (rootList.Elements.Length is not 2)
-            return "Unexpected number of items in list: Not 2 but " + rootList.Elements.Length;
+        if (rootList.Items.Length is not 2)
+            return "Unexpected number of items in list: Not 2 but " + rootList.Items.Length;
 
-        var parseTagResult = StringEncoding.StringFromValue(rootList.Elements.Span[0]);
+        var parseTagResult = StringEncoding.StringFromValue(rootList.Items.Span[0]);
 
         {
             if (parseTagResult.IsErrOrNull() is { } err)
@@ -115,7 +115,7 @@ public static class ExpressionEncoding
                 "Unexpected result type: " + parseTagResult.GetType().FullName);
         }
 
-        if (rootList.Elements.Span[1] is not PineValue.ListValue tagArguments)
+        if (rootList.Items.Span[1] is not PineValue.ListValue tagArguments)
         {
             return "Unexpected shape of tag argument value: Not a list";
         }
@@ -124,33 +124,33 @@ public static class ExpressionEncoding
             tag switch
             {
                 "Literal" =>
-                tagArguments.Elements.Length < 1
+                tagArguments.Items.Length < 1
                 ?
                 "Expected one argument for literal but got zero"
                 :
-                Expression.LiteralInstance(tagArguments.Elements.Span[0]),
+                Expression.LiteralInstance(tagArguments.Items.Span[0]),
 
                 "List" =>
-                tagArguments.Elements.Length is not 1
+                tagArguments.Items.Length is not 1
                 ?
-                "Unexpected number of arguments for list: Not 1 but " + tagArguments.Elements.Length
+                "Unexpected number of arguments for list: Not 1 but " + tagArguments.Items.Length
                 :
-                ParseExpressionList(tagArguments.Elements.Span[0]),
+                ParseExpressionList(tagArguments.Items.Span[0]),
 
                 "ParseAndEval" =>
-                ParseParseAndEval(generalParser, tagArguments.Elements),
+                ParseParseAndEval(generalParser, tagArguments.Items),
 
                 "KernelApplication" =>
-                ParseKernelApplication(generalParser, tagArguments.Elements),
+                ParseKernelApplication(generalParser, tagArguments.Items),
 
                 "Conditional" =>
-                ParseConditional(generalParser, tagArguments.Elements),
+                ParseConditional(generalParser, tagArguments.Items),
 
                 "Environment" =>
                 Expression.EnvironmentInstance,
 
                 "StringTag" =>
-                ParseStringTag(generalParser, tagArguments.Elements),
+                ParseStringTag(generalParser, tagArguments.Items),
 
                 var otherTag =>
                 "Tag name does not match any known expression variant: " + otherTag
@@ -162,11 +162,11 @@ public static class ExpressionEncoding
         if (pineValue is not PineValue.ListValue listValue)
             return "Expected list value";
 
-        var expressions = new Expression[listValue.Elements.Length];
+        var expressions = new Expression[listValue.Items.Length];
 
-        for (var i = 0; i < listValue.Elements.Length; ++i)
+        for (var i = 0; i < listValue.Items.Length; ++i)
         {
-            var itemValue = listValue.Elements.Span[i];
+            var itemValue = listValue.Items.Span[i];
 
             var parseItemResult = ParseExpressionFromValue(itemValue);
 
@@ -596,7 +596,7 @@ public static class ExpressionEncoding
             return "Not a list";
 
         return
-            Result<string, ReadOnlyMemory<PineValue>>.ok(listValue.Elements);
+            Result<string, ReadOnlyMemory<PineValue>>.ok(listValue.Items);
     }
 
     private static Result<string, (T, T)> ParseListWithExactlyTwoElements<T>(ReadOnlyMemory<T> list)

@@ -240,15 +240,15 @@ public record PineValueClass
         }
 
         var commonLength =
-            listA.Elements.Length < listB.Elements.Length ?
-            listA.Elements.Length :
-            listB.Elements.Length;
+            listA.Items.Length < listB.Items.Length ?
+            listA.Items.Length :
+            listB.Items.Length;
 
         var children = new List<(int, IntersectionNode)>();
 
         for (var i = 0; i < commonLength; ++i)
         {
-            var childNode = IntersectionTree(listA.Elements.Span[i], listB.Elements.Span[i], depthLimit - 1);
+            var childNode = IntersectionTree(listA.Items.Span[i], listB.Items.Span[i], depthLimit - 1);
 
             if (childNode is IntersectionNode.IntersectionBranch branch && branch.Children.Count is 0)
                 continue;
@@ -282,10 +282,10 @@ public record PineValueClass
                 continue;
             }
 
-            for (var i = 0; i < constraintItemList.Elements.Length && i < valueItemList.Elements.Length; ++i)
+            for (var i = 0; i < constraintItemList.Items.Length && i < valueItemList.Items.Length; ++i)
             {
-                var constraintChildItem = constraintItemList.Elements.Span[i];
-                var foundChildItem = valueItemList.Elements.Span[i];
+                var constraintChildItem = constraintItemList.Items.Span[i];
+                var foundChildItem = valueItemList.Items.Span[i];
 
                 var childConstraint = CreateEquals(constraintChildItem);
 

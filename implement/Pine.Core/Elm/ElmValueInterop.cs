@@ -65,7 +65,7 @@ public class ElmValueInterop
                 }
             case PineValue.ListValue listValue:
                 {
-                    var elementsSpan = listValue.Elements.Span;
+                    var elementsSpan = listValue.Items.Span;
 
                     var items = new ElmValue[elementsSpan.Length];
 
@@ -557,12 +557,12 @@ public class ElmValueInterop
             return invalid("Root is not a list");
         }
 
-        if (listValue.Elements.Length is not 2)
+        if (listValue.Items.Length is not 2)
         {
             return invalid("Root list does not have 2 elements");
         }
 
-        var tagValue = listValue.Elements.Span[0];
+        var tagValue = listValue.Items.Span[0];
 
         if (tagValue == String_Nothing_Value)
         {
@@ -571,19 +571,19 @@ public class ElmValueInterop
 
         if (tagValue == String_Just_Value)
         {
-            var tagArgumentsValue = listValue.Elements.Span[1];
+            var tagArgumentsValue = listValue.Items.Span[1];
 
             if (tagArgumentsValue is not PineValue.ListValue tagArgumentsListValue)
             {
                 return invalid("Just tag arguments is not a list");
             }
 
-            if (tagArgumentsListValue.Elements.Length is not 1)
+            if (tagArgumentsListValue.Items.Length is not 1)
             {
                 return invalid("Just tag arguments does not have 1 element");
             }
 
-            return just(tagArgumentsListValue.Elements.Span[0]);
+            return just(tagArgumentsListValue.Items.Span[0]);
         }
 
         return invalid("Not tagged with Nothing or Just");
@@ -600,49 +600,49 @@ public class ElmValueInterop
             return invalid("Root is not a list");
         }
 
-        if (listValue.Elements.Length is not 2)
+        if (listValue.Items.Length is not 2)
         {
             return invalid("Root list does not have 2 elements");
         }
 
-        var tagValue = listValue.Elements.Span[0];
+        var tagValue = listValue.Items.Span[0];
 
         if (tagValue == String_Err_Value)
         {
-            var tagArgumentsValue = listValue.Elements.Span[1];
+            var tagArgumentsValue = listValue.Items.Span[1];
 
             if (tagArgumentsValue is not PineValue.ListValue tagArgumentsListValue)
             {
                 return invalid("Tag 'Err' arguments is not a list");
             }
 
-            if (tagArgumentsListValue.Elements.Length is not 1)
+            if (tagArgumentsListValue.Items.Length is not 1)
             {
                 return invalid(
                     "Tag 'Err' arguments does not have 1 item, but " +
-                    tagArgumentsListValue.Elements.Length);
+                    tagArgumentsListValue.Items.Length);
             }
 
-            return err(tagArgumentsListValue.Elements.Span[0]);
+            return err(tagArgumentsListValue.Items.Span[0]);
         }
 
         if (tagValue == String_Ok_Value)
         {
-            var tagArgumentsValue = listValue.Elements.Span[1];
+            var tagArgumentsValue = listValue.Items.Span[1];
 
             if (tagArgumentsValue is not PineValue.ListValue tagArgumentsListValue)
             {
                 return invalid("Tag 'Ok' arguments is not a list");
             }
 
-            if (tagArgumentsListValue.Elements.Length is not 1)
+            if (tagArgumentsListValue.Items.Length is not 1)
             {
                 return invalid(
                     "Tag 'Ok' arguments does not have 1 item, but " +
-                    tagArgumentsListValue.Elements.Length);
+                    tagArgumentsListValue.Items.Length);
             }
 
-            return ok(tagArgumentsListValue.Elements.Span[0]);
+            return ok(tagArgumentsListValue.Items.Span[0]);
         }
 
         return invalid("Not tagged with Err or Ok");

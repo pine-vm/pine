@@ -140,13 +140,13 @@ public class JsonConverterForPineValue : JsonConverter<PineValue>
 
         if (value is PineValue.ListValue listValue)
         {
-            if (0 < listValue.Elements.Length)
+            if (0 < listValue.Items.Length)
             {
                 var containsIncompatibleItem = false;
 
-                for (var i = 0; i < listValue.Elements.Length; i++)
+                for (var i = 0; i < listValue.Items.Length; i++)
                 {
-                    if (listValue.Elements.Span[i] is not PineValue.BlobValue blobItem)
+                    if (listValue.Items.Span[i] is not PineValue.BlobValue blobItem)
                     {
                         containsIncompatibleItem = true;
                         break;
@@ -193,9 +193,9 @@ public class JsonConverterForPineValue : JsonConverter<PineValue>
         {
             writer.WriteStartArray();
 
-            for (var i = 0; i < list.Elements.Length; i++)
+            for (var i = 0; i < list.Items.Length; i++)
             {
-                Write(writer, list.Elements.Span[i], options);
+                Write(writer, list.Items.Span[i], options);
             }
 
             writer.WriteEndArray();

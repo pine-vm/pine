@@ -862,14 +862,14 @@ type alias LoadDependencyStruct =
             return "Expected list value but got: " + pineValue;
         }
 
-        if (listValue.Elements.Length is not 2)
+        if (listValue.Items.Length is not 2)
         {
-            return "Expected 2 elements but got: " + listValue.Elements.Length;
+            return "Expected 2 elements but got: " + listValue.Items.Length;
         }
 
-        var stateValue = listValue.Elements.Span[0];
+        var stateValue = listValue.Items.Span[0];
 
-        var commandsValue = listValue.Elements.Span[1];
+        var commandsValue = listValue.Items.Span[1];
 
         if (commandsValue is not PineValue.ListValue commandsListValue)
         {
@@ -877,11 +877,11 @@ type alias LoadDependencyStruct =
         }
 
         var commands =
-            new (PineValue, Command)[commandsListValue.Elements.Length];
+            new (PineValue, Command)[commandsListValue.Items.Length];
 
         for (var i = 0; i < commands.Length; i++)
         {
-            var commandValue = commandsListValue.Elements.Span[i];
+            var commandValue = commandsListValue.Items.Span[i];
 
             var parsedCommandResult =
                 ParseCommand(

@@ -553,11 +553,11 @@ public class CompileElmCompilerTests
                 compilerResponseValue switch
                 {
                     PineValue.ListValue listValue =>
-                    listValue.Elements.Length < 1
+                    listValue.Items.Length < 1
                     ?
                     null
                     :
-                    StringEncoding.StringFromValue(listValue.Elements.Span[0]),
+                    StringEncoding.StringFromValue(listValue.Items.Span[0]),
 
                     _ =>
                     null
@@ -1252,7 +1252,7 @@ public class CompileElmCompilerTests
                     compiledNewEnvValue switch
                     {
                         PineValue.ListValue listValue =>
-                        "List with " + listValue.Elements.Length + " elements",
+                        "List with " + listValue.Items.Length + " elements",
 
                         _ =>
                         "not a list"
@@ -1309,7 +1309,7 @@ public class CompileElmCompilerTests
 
         return
         Result<string, IReadOnlyList<Func<Result<string, (string moduleName, PineValue moduleValue, ElmInteractiveEnvironment.ElmModule moduleContent)>>>>.ok(
-            [..environmentList.Elements
+            [..environmentList.Items
             .ToArray()
                 .Select(envItem =>
                 new Func<Result<string, (string moduleName, PineValue moduleValue, ElmInteractiveEnvironment.ElmModule moduleContent)>>(

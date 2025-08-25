@@ -67,23 +67,23 @@ public abstract record PineValue : IEquatable<PineValue>
     /// <summary>
     /// Construct a list value from a sequence of other values.
     /// </summary>
-    public static ListValue List(ReadOnlyMemory<PineValue> elements)
+    public static ListValue List(ReadOnlyMemory<PineValue> items)
     {
-        if (elements.Length is 0)
+        if (items.Length is 0)
             return EmptyList;
 
-        if (elements.Length is 1)
+        if (items.Length is 1)
         {
             if (ReusedInstances.Instance?.SingletonListValues is { } reusedSingletonListValues)
             {
-                if (reusedSingletonListValues.TryGetValue(elements.Span[0], out var existing))
+                if (reusedSingletonListValues.TryGetValue(items.Span[0], out var existing))
                 {
                     return existing;
                 }
             }
         }
 
-        var asStruct = new ListValue.ListValueStruct(elements);
+        var asStruct = new ListValue.ListValueStruct(items);
 
         if (ReusedInstances.Instance?.ListValues is { } reusedListValues)
         {
@@ -96,11 +96,16 @@ public abstract record PineValue : IEquatable<PineValue>
         return new ListValue(asStruct);
     }
 
-    public static ListValue List(params PineValue[] elements) =>
-        List(elements.AsMemory());
+    /// <summary>
+    /// Construct a list value from a sequence of other values.
+    /// </summary>
+    /// <param name="items">The items to include in the list.</param>
+    /// <returns>A <see cref="ListValue"/> containing the specified items.</returns>
+    public static ListValue List(params PineValue[] items) =>
+        List(items.AsMemory());
 
     /// <summary>
-    /// List value containing zero elements.
+    /// List value containing zero items.
     /// </summary>
     public static readonly ListValue EmptyList = new(ReadOnlyMemory<PineValue>.Empty);
 
@@ -129,18 +134,54 @@ public abstract record PineValue : IEquatable<PineValue>
         [..Enumerable.Range(0, 0x1_00_00)
         .Select(i => new BlobValue(new byte[] { 0, (byte)(i >> 16), (byte)(i >> 8), (byte)(i & 0xff) }))];
 
+    /// <summary>
+    /// Returns a reused <see cref="BlobValue"/> instance representing a tuple of two bytes.
+    /// </summary>
+    /// <param name="first">The first byte of the tuple.</param>
+    /// <param name="second">The second byte of the tuple.</param>
+    /// <returns>
+    /// A <see cref="BlobValue"/> instance corresponding to the specified two-byte tuple.
+    /// </returns>
     public static BlobValue ReusedBlobTupleFromBytes(byte first, byte second) =>
         s_reusedBlobTuple[first * 256 + second];
 
+    /// <summary>
+    /// Returns a reused <see cref="BlobValue"/> instance representing a three-byte negative integer encoding.
+    /// </summary>
+    /// <param name="second">The second byte of the encoding.</param>
+    /// <param name="third">The third byte of the encoding.</param>
+    /// <returns>
+    /// A <see cref="BlobValue"/> instance corresponding to the specified three-byte negative integer encoding.
+    /// </returns>
     public static BlobValue ReusedBlobInteger3ByteNegativeFromBytes(byte second, byte third) =>
         s_reusedBlobInteger3ByteNegative[second * 256 + third];
 
+    /// <summary>
+    /// Returns a reused <see cref="BlobValue"/> instance representing a three-byte positive integer encoding.
+    /// </summary>
+    /// <param name="second">The second byte of the encoding.</param>
+    /// <param name="third">The third byte of the encoding.</param>
+    /// <returns>
+    /// A <see cref="BlobValue"/> instance corresponding to the specified three-byte positive integer encoding.
+    /// </returns>
     public static BlobValue ReusedBlobInteger3BytePositiveFromBytes(byte second, byte third) =>
         s_reusedBlobInteger3BytePositive[second * 256 + third];
 
+    /// <summary>
+    /// Returns a reused <see cref="BlobValue"/> instance representing a four-byte character encoding.
+    /// </summary>
+    /// <param name="third">The third byte of the encoding.</param>
+    /// <param name="fourth">The fourth byte of the encoding.</param>
+    /// <returns>
+    /// A <see cref="BlobValue"/> instance corresponding to the specified four-byte character encoding.
+    /// </returns>
     public static BlobValue ReusedBlobCharFourByte(byte third, byte fourth) =>
         s_reusedBlobChar4Byte[third * 256 + fourth];
 
+    /// <summary>
+    /// A set of commonly reused <see cref="BlobValue"/> instances, including empty, single-byte, two-byte, and other frequently used blobs.
+    /// This set is used to optimize memory usage and performance by sharing instances for popular blob values.
+    /// </summary>
     public static readonly FrozenSet<BlobValue> ReusedBlobInstances =
         new HashSet<BlobValue>(
             [EmptyBlob,
@@ -162,7 +203,7 @@ public abstract record PineValue : IEquatable<PineValue>
         /// <summary>
         /// Gets a read-only memory region containing the items of the list.
         /// </summary>
-        public ReadOnlyMemory<PineValue> Elements { get; }
+        public ReadOnlyMemory<PineValue> Items { get; }
 
         /// <summary>
         /// Aggregate number of nodes, including all nested lists.
@@ -175,21 +216,21 @@ public abstract record PineValue : IEquatable<PineValue>
         public readonly long BlobsBytesCount;
 
         /// <summary>
-        /// List value containing zero elements.
+        /// List value containing zero items.
         /// </summary>
         public static ListValue Empty => EmptyList;
 
         /// <summary>
         /// Construct a list value from a sequence of other values.
         /// </summary>
-        public ListValue(ReadOnlyMemory<PineValue> elements)
-            : this(new ListValueStruct(elements))
+        public ListValue(ReadOnlyMemory<PineValue> items)
+            : this(new ListValueStruct(items))
         {
         }
 
         internal ListValue(ListValueStruct listValueStruct)
         {
-            Elements = listValueStruct.Items;
+            Items = listValueStruct.Items;
 
             _slimHashCode = listValueStruct.SlimHashCode;
             NodesCount = listValueStruct.NodesCount;
@@ -253,8 +294,8 @@ public abstract record PineValue : IEquatable<PineValue>
                 return false;
             }
 
-            var selfSpan = self.Elements.Span;
-            var otherSpan = other.Elements.Span;
+            var selfSpan = self.Items.Span;
+            var otherSpan = other.Items.Span;
 
             if (selfSpan.Length != otherSpan.Length)
                 return false;
@@ -296,7 +337,7 @@ public abstract record PineValue : IEquatable<PineValue>
         {
             return
                 ToString(
-                    itemsCount: Elements.Length,
+                    itemsCount: Items.Length,
                     nodesCount: NodesCount,
                     blobsBytesCount: BlobsBytesCount);
         }
@@ -333,7 +374,7 @@ public abstract record PineValue : IEquatable<PineValue>
             /// </summary>
             public ListValueStruct(ListValue instance)
             {
-                Items = instance.Elements;
+                Items = instance.Items;
 
                 SlimHashCode = instance._slimHashCode;
                 NodesCount = instance.NodesCount;
@@ -482,7 +523,7 @@ public abstract record PineValue : IEquatable<PineValue>
     /// <param name="pineValue">The value to search for within the nested lists.</param>
     /// <returns>
     /// Returns true if the provided PineValue is found within the nested ListValue, including in any sublists;
-    /// returns false if the current instance is a BlobValue, as it does not contain any elements.
+    /// returns false if the current instance is a BlobValue, as it does not contain any items.
     /// </returns>
     public bool ContainsInListTransitive(PineValue pineValue)
     {
@@ -491,13 +532,13 @@ public abstract record PineValue : IEquatable<PineValue>
             return false;
         }
 
-        var elements = list.Elements.Span;
+        var items = list.Items.Span;
 
-        for (var i = 0; i < elements.Length; i++)
+        for (var i = 0; i < items.Length; i++)
         {
-            var element = elements[i];
+            var item = items[i];
 
-            if (element.Equals(pineValue) || element.ContainsInListTransitive(pineValue))
+            if (item.Equals(pineValue) || item.ContainsInListTransitive(pineValue))
             {
                 return true;
             }
@@ -506,6 +547,22 @@ public abstract record PineValue : IEquatable<PineValue>
         return false;
     }
 
+    /// <summary>
+    /// Collects all unique <see cref="ListValue"/> and <see cref="BlobValue"/> components that are reachable from the given root values.
+    /// Traverses the provided <paramref name="roots"/> and recursively collects all nested <see cref="ListValue"/> and <see cref="BlobValue"/> instances.
+    /// </summary>
+    /// <param name="roots">The root <see cref="PineValue"/> instances from which to start collecting components.</param>
+    /// <returns>
+    /// A tuple containing two sets:
+    /// <list type="bullet">
+    /// <item>
+    /// <description><c>lists</c>: All unique <see cref="ListValue"/> instances found in the transitive closure of the roots.</description>
+    /// </item>
+    /// <item>
+    /// <description><c>blobs</c>: All unique <see cref="BlobValue"/> instances found in the transitive closure of the roots.</description>
+    /// </item>
+    /// </list>
+    /// </returns>
     public static (IReadOnlySet<ListValue> lists, IReadOnlySet<BlobValue> blobs) CollectAllComponentsFromRoots(
         IEnumerable<PineValue> roots)
     {
@@ -521,14 +578,14 @@ public abstract record PineValue : IEquatable<PineValue>
 
             collectedLists.Add(listValue);
 
-            var elements = listValue.Elements.Span;
+            var items = listValue.Items.Span;
 
-            for (var i = 0; i < elements.Length; i++)
+            for (var i = 0; i < items.Length; i++)
             {
-                if (elements[i] is ListValue childList)
+                if (items[i] is ListValue childList)
                     stack.Push(childList);
 
-                if (elements[i] is BlobValue childBlob)
+                if (items[i] is BlobValue childBlob)
                     collectedBlobs.Add(childBlob);
             }
         }

@@ -642,10 +642,10 @@ public class CodeAnalysis
         if (path[0] < 0)
             return null;
 
-        if (path[0] >= listValue.Elements.Length)
+        if (path[0] >= listValue.Items.Length)
             return null;
 
-        return ValueFromPathInValue(listValue.Elements.Span[path[0]], path[1..]);
+        return ValueFromPathInValue(listValue.Items.Span[path[0]], path[1..]);
     }
 
     /// <summary>

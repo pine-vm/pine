@@ -167,7 +167,7 @@ public class ElmInteractive
         {
             if (pineValue is PineValue.ListValue listComponent)
             {
-                if (0 < listComponent.Elements.Length)
+                if (0 < listComponent.Items.Length)
                 {
                     if (StringEncoding.StringFromValue(pineValue) is Result<string, string>.Ok asString)
                         return new PineValueMappedForTransport(
@@ -180,7 +180,7 @@ public class ElmInteractive
                 return new PineValueMappedForTransport(
                     ListAsString: null,
                     BlobAsInt: null,
-                    List: [.. listComponent.Elements.ToArray().Select(item => FromPineValue(item, cache))],
+                    List: [.. listComponent.Items.ToArray().Select(item => FromPineValue(item, cache))],
                     Origin: pineValue);
             }
 
@@ -258,7 +258,7 @@ public class ElmInteractive
                         return;
 
                 if (mappedForTransport.Origin is PineValue.ListValue list)
-                    if (list.Elements.Length < 1)
+                    if (list.Items.Length < 1)
                         return;
             }
 

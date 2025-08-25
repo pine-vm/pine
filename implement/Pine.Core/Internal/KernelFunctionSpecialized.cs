@@ -26,7 +26,7 @@ public static class KernelFunctionSpecialized
 
         if (value is PineValue.ListValue listValue)
         {
-            var listItems = listValue.Elements.Span;
+            var listItems = listValue.Items.Span;
 
             var remainingCount = listItems.Length - (int)count;
 
@@ -48,7 +48,7 @@ public static class KernelFunctionSpecialized
     {
         if (value is PineValue.ListValue listValue)
         {
-            var listItems = listValue.Elements.Span;
+            var listItems = listValue.Items.Span;
 
             if (listItems.Length <= count)
                 return value;
@@ -91,7 +91,7 @@ public static class KernelFunctionSpecialized
     {
         if (value is PineValue.ListValue listValue)
         {
-            var listItems = listValue.Elements.Span;
+            var listItems = listValue.Items.Span;
 
             if (listItems.Length <= count)
                 return value;
@@ -150,7 +150,7 @@ public static class KernelFunctionSpecialized
             {
                 if (list[i] is PineValue.ListValue listValueElement)
                 {
-                    aggregateCount += listValueElement.Elements.Length;
+                    aggregateCount += listValueElement.Items.Length;
                 }
             }
 
@@ -162,9 +162,9 @@ public static class KernelFunctionSpecialized
             {
                 if (list[i] is PineValue.ListValue listValueElement)
                 {
-                    listValueElement.Elements.CopyTo(concatenated.AsMemory(start: destItemIndex));
+                    listValueElement.Items.CopyTo(concatenated.AsMemory(start: destItemIndex));
 
-                    destItemIndex += listValueElement.Elements.Length;
+                    destItemIndex += listValueElement.Items.Length;
                 }
             }
 
@@ -199,22 +199,22 @@ public static class KernelFunctionSpecialized
                 return valueA;
             }
 
-            if (listA.Elements.Length is 0)
+            if (listA.Items.Length is 0)
             {
                 return valueB;
             }
 
-            if (listB.Elements.Length is 0)
+            if (listB.Items.Length is 0)
             {
                 return valueA;
             }
 
             var concatenated =
-                new PineValue[listA.Elements.Length + listB.Elements.Length];
+                new PineValue[listA.Items.Length + listB.Items.Length];
 
-            listA.Elements.CopyTo(concatenated);
+            listA.Items.CopyTo(concatenated);
 
-            listB.Elements.CopyTo(concatenated.AsMemory(start: listA.Elements.Length));
+            listB.Items.CopyTo(concatenated.AsMemory(start: listA.Items.Length));
 
             return PineValue.List(concatenated);
         }

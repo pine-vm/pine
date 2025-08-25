@@ -279,7 +279,7 @@ public sealed class PersistentProcessLive : IAsyncDisposable
             ElmInteractive.ElmInteractiveEnvironment.ApplyFunction(
                 pineVM,
                 parseFunctionOk,
-                [.. argumentsBeforeState.Elements.ToArray(), lastAppState]);
+                [.. argumentsBeforeState.Items.ToArray(), lastAppState]);
     }
 
     public static Expression ExpressionForPath(
@@ -325,11 +325,11 @@ public sealed class PersistentProcessLive : IAsyncDisposable
 
         if (pineValue is PineValue.ListValue listValue)
         {
-            var newElements = new PineValue[listValue.Elements.Length];
+            var newElements = new PineValue[listValue.Items.Length];
 
-            for (var i = 0; i < listValue.Elements.Length; i++)
+            for (var i = 0; i < listValue.Items.Length; i++)
             {
-                newElements[i] = ReplaceInValue(listValue.Elements.Span[i], oldValue, newValue);
+                newElements[i] = ReplaceInValue(listValue.Items.Span[i], oldValue, newValue);
             }
 
             return PineValue.List(newElements);

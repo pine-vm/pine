@@ -169,9 +169,9 @@ public record ReusedInstances(
 
         var blobValuesExpectedInCompiler = new HashSet<PineValue.BlobValue>();
 
-        for (var i = 0; i < valuesExpectedInCompilerList.Elements.Length; ++i)
+        for (var i = 0; i < valuesExpectedInCompilerList.Items.Length; ++i)
         {
-            var item = valuesExpectedInCompilerList.Elements.Span[i];
+            var item = valuesExpectedInCompilerList.Items.Span[i];
 
             if (item is PineValue.ListValue listValue)
             {
@@ -297,7 +297,7 @@ public record ReusedInstances(
                  * Thus, we only need to rebuild shallowly the current list.
                  * */
 
-                var rebuiltItems = oldInstance.Elements.ToArray();
+                var rebuiltItems = oldInstance.Items.ToArray();
 
                 for (var i = 0; i < rebuiltItems.Length; i++)
                 {
@@ -320,7 +320,7 @@ public record ReusedInstances(
             PineValueLists =
                 reusedListsDictInConstruction
                 .ToFrozenDictionary(
-                    keySelector: asRef => new PineValue.ListValue.ListValueStruct(asRef.Key.Elements),
+                    keySelector: asRef => new PineValue.ListValue.ListValueStruct(asRef.Key.Items),
                     elementSelector: asRef => asRef.Value);
         }
 
@@ -345,9 +345,9 @@ public record ReusedInstances(
 
         SingletonListValues =
             ListValues
-            .Where(kvp => kvp.Value.Elements.Length is 1)
+            .Where(kvp => kvp.Value.Items.Length is 1)
             .ToFrozenDictionary(
-                keySelector: kvp => kvp.Value.Elements.Span[0],
+                keySelector: kvp => kvp.Value.Items.Span[0],
                 elementSelector: kvp => kvp.Value);
 
         var valuesExpectedInCompilerSorted =
@@ -665,7 +665,7 @@ public record ReusedInstances(
                 expressionEncoded.Key);
 
             listValues.TryGetValue(
-                new PineValue.ListValue.ListValueStruct(expressionEncoded.Value.Elements),
+                new PineValue.ListValue.ListValueStruct(expressionEncoded.Value.Items),
                 out var fromReusedListValues);
 
             AssertReferenceEqual(
@@ -684,7 +684,7 @@ public record ReusedInstances(
                 expressionDecoded.Value);
 
             listValues.TryGetValue(
-                new PineValue.ListValue.ListValueStruct(expressionDecoded.Key.Elements),
+                new PineValue.ListValue.ListValueStruct(expressionDecoded.Key.Items),
                 out var fromReusedListValues);
 
             AssertReferenceEqual(
@@ -701,7 +701,7 @@ public record ReusedInstances(
             if (elmValueDecoded.Value is PineValue.ListValue listValue)
             {
                 listValues.TryGetValue(
-                    new PineValue.ListValue.ListValueStruct(listValue.Elements),
+                    new PineValue.ListValue.ListValueStruct(listValue.Items),
                     out var fromPineValues);
 
                 AssertReferenceEqual(fromPineValues, elmValueDecoded.Value);
@@ -717,7 +717,7 @@ public record ReusedInstances(
             if (elmValueEncoded.Key is PineValue.ListValue elmList)
             {
                 listValues.TryGetValue(
-                    new PineValue.ListValue.ListValueStruct(elmList.Elements),
+                    new PineValue.ListValue.ListValueStruct(elmList.Items),
                     out var fromPineValues);
 
                 AssertReferenceEqual(fromPineValues, elmValueEncoded.Key);
@@ -740,13 +740,13 @@ public record ReusedInstances(
 
         if (pineValue is PineValue.ListValue listValue)
         {
-            if (listValue.Elements.Length is 0)
+            if (listValue.Items.Length is 0)
                 return PineValue.EmptyList;
 
             var listValues =
                 ListValues ?? throw new System.NullReferenceException();
 
-            if (listValues.TryGetValue(new PineValue.ListValue.ListValueStruct(listValue.Elements), out var reused))
+            if (listValues.TryGetValue(new PineValue.ListValue.ListValueStruct(listValue.Items), out var reused))
                 return reused;
 
             return null;

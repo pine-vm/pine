@@ -125,15 +125,15 @@ public class CSharpDeclarationOrder
                     if (xSize > ySize)
                         return 1;
 
-                    if (xList.Elements.Length < yList.Elements.Length)
+                    if (xList.Items.Length < yList.Items.Length)
                         return -1;
 
-                    if (yList.Elements.Length < xList.Elements.Length)
+                    if (yList.Items.Length < xList.Items.Length)
                         return 1;
 
-                    for (var i = 0; i < xList.Elements.Length; i++)
+                    for (var i = 0; i < xList.Items.Length; i++)
                     {
-                        var itemComparison = Compare(xList.Elements.Span[i], yList.Elements.Span[i]);
+                        var itemComparison = Compare(xList.Items.Span[i], yList.Items.Span[i]);
 
                         if (itemComparison != 0)
                             return itemComparison;
@@ -247,9 +247,9 @@ public class CSharpDeclarationOrder
 
             if (current is PineValue.ListValue listValue)
             {
-                for (var i = 0; i < listValue.Elements.Length; i++)
+                for (var i = 0; i < listValue.Items.Length; i++)
                 {
-                    var item = listValue.Elements.Span[i];
+                    var item = listValue.Items.Span[i];
 
                     if (item is PineValue.ListValue listItem)
                     {
