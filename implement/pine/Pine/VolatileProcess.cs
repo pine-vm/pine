@@ -9,7 +9,7 @@ namespace Pine;
 public class VolatileProcess
 {
     public static Result<string, ReadOnlyMemory<byte>> LoadBlob(
-        ConcurrentDictionary<string, IEnumerable<TreeNodeWithStringPath>> loadedTreesFromUrl,
+        ConcurrentDictionary<string, IEnumerable<BlobTreeWithStringPath>> loadedTreesFromUrl,
         Func<byte[], byte[]?>? getFileFromHashSHA256,
         string hashSha256Base16,
         IEnumerable<string> hintUrls)

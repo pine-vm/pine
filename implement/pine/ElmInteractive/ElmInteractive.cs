@@ -430,7 +430,7 @@ public class ElmInteractive
 
     public static IReadOnlyList<(IReadOnlyList<string> filePath, ReadOnlyMemory<byte> fileContent, string moduleText)>
         ModulesFilePathsAndTextsFromAppCodeTree(
-        TreeNodeWithStringPath appCodeTree,
+        BlobTreeWithStringPath appCodeTree,
         bool skipLowering,
         IReadOnlySet<IReadOnlyList<string>>? entryPointsFilePaths,
         bool skipFilteringForSourceDirs,
@@ -469,9 +469,9 @@ public class ElmInteractive
             ];
     }
 
-    private static TreeNodeWithStringPath CompileTree(TreeNodeWithStringPath sourceTree)
+    private static BlobTreeWithStringPath CompileTree(BlobTreeWithStringPath sourceTree)
     {
-        if (sourceTree.GetNodeAtPath(["elm.json"]) is not TreeNodeWithStringPath.BlobNode elmJsonFile)
+        if (sourceTree.GetNodeAtPath(["elm.json"]) is not BlobTreeWithStringPath.BlobNode elmJsonFile)
             return sourceTree;
 
         var elmJsonFileParsed =

@@ -337,8 +337,8 @@ public static class ElmModule
         }
     }
 
-    public static TreeNodeWithStringPath FilterAppCodeTreeForRootModulesAndDependencies(
-        TreeNodeWithStringPath appCodeTree,
+    public static BlobTreeWithStringPath FilterAppCodeTreeForRootModulesAndDependencies(
+        BlobTreeWithStringPath appCodeTree,
         Func<IReadOnlyList<string>, bool> moduleNameIsRootModule)
     {
         var originalBlobs =

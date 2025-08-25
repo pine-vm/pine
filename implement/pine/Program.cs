@@ -408,7 +408,7 @@ public class Program
             return 1;
         }
 
-        if (loadInputDirectoryResult is not Result<string, (TreeNodeWithStringPath tree, LoadCompositionOrigin origin)>.Ok loadOk)
+        if (loadInputDirectoryResult is not Result<string, (BlobTreeWithStringPath tree, LoadCompositionOrigin origin)>.Ok loadOk)
         {
             throw new Exception(
                 "Unexpected result type: " + loadInputDirectoryResult.GetType());
@@ -418,16 +418,16 @@ public class Program
     }
 
     private static Result<string, int> RunElmAppOnCommandLine(
-        TreeNodeWithStringPath sourceFiles,
+        BlobTreeWithStringPath sourceFiles,
         IReadOnlyList<string> entryPointFilePath)
     {
-        if (sourceFiles.GetNodeAtPath(entryPointFilePath) is not TreeNodeWithStringPath entryPointNode)
+        if (sourceFiles.GetNodeAtPath(entryPointFilePath) is not BlobTreeWithStringPath entryPointNode)
         {
             return Result<string, int>.err(
                 "Did not find the entry point '" + string.Join("/", entryPointFilePath) + "' in the input directory.");
         }
 
-        if (entryPointNode is not TreeNodeWithStringPath.BlobNode entryPointBlob)
+        if (entryPointNode is not BlobTreeWithStringPath.BlobNode entryPointBlob)
         {
             return
                 "The entry point module '" + string.Join("/", entryPointFilePath) +
@@ -960,7 +960,7 @@ public class Program
 
                     var fileTree = loadCompositionResult.tree;
 
-                    if (fileTree is TreeNodeWithStringPath.BlobNode sourceBlob)
+                    if (fileTree is BlobTreeWithStringPath.BlobNode sourceBlob)
                     {
                         var zipEntries = ZipArchive.EntriesFromZipArchive(sourceBlob.Bytes);
 
@@ -1023,7 +1023,7 @@ public class Program
                         overrideElmCompiler: overrideElmCompiler)
                     .Extract(err => throw new Exception("Failed compilation: " + err));
 
-                    return new KeyValuePair<TreeNodeWithStringPath, PineValue>(sourceTree, compiledEnv);
+                    return new KeyValuePair<BlobTreeWithStringPath, PineValue>(sourceTree, compiledEnv);
                 })
                 .ToImmutableDictionary();
 
@@ -1303,7 +1303,7 @@ public class Program
         IReadOnlyList<IReadOnlyList<string>>? readElmJsonSourceDirectories()
         {
             if (loadCompositionResult.tree.GetNodeAtPath(["elm.json"]) is not
-                TreeNodeWithStringPath.BlobNode elmJsonFile)
+                BlobTreeWithStringPath.BlobNode elmJsonFile)
             {
                 return null;
             }
@@ -1331,7 +1331,7 @@ public class Program
             var discardedFiles =
                 loadCompositionResult.tree
                 .EnumerateBlobsTransitive()
-                .Where(originalBlob => filteredSourceTree.GetNodeAtPath(originalBlob.path) is not TreeNodeWithStringPath.BlobNode)
+                .Where(originalBlob => filteredSourceTree.GetNodeAtPath(originalBlob.path) is not BlobTreeWithStringPath.BlobNode)
                 .ToImmutableArray();
 
             if (0 < discardedFiles.Length)
@@ -1564,16 +1564,16 @@ public class Program
                                 var asTree =
                                 scenariosComposition.Value.result.Extract(error => throw new Exception(error)).tree switch
                                 {
-                                    TreeNodeWithStringPath.TreeNode tree => tree,
+                                    BlobTreeWithStringPath.TreeNode tree => tree,
                                     _ => null
                                 };
 
                                 if (asTree is null)
-                                    return ImmutableList<(string, TreeNodeWithStringPath)>.Empty;
+                                    return ImmutableList<(string, BlobTreeWithStringPath)>.Empty;
 
                                 return
-                                asTree.Elements
-                                .Where(entry => entry.component is TreeNodeWithStringPath.TreeNode scenarioTree);
+                                asTree.Items
+                                .Where(entry => entry.component is BlobTreeWithStringPath.TreeNode scenarioTree);
                             }))
                             .Select(loadedScenario =>
                             {
@@ -1597,7 +1597,7 @@ public class Program
                         var elmEngineType = elmEngineOption.parseElmEngineTypeFromOption();
 
                         var aggregateCompositionTree =
-                            TreeNodeWithStringPath.SortedTree(
+                            BlobTreeWithStringPath.SortedTree(
                                 [.. namedDistinctScenarios.Select(scenario => (scenario.Key, scenario.Value.loadedScenario.component))]);
 
                         var parsedScenarios =
@@ -1698,7 +1698,7 @@ public class Program
                                 });
                         }
 
-                        IInteractiveSession newInteractiveSessionFromAppCode(TreeNodeWithStringPath? appCodeTree)
+                        IInteractiveSession newInteractiveSessionFromAppCode(BlobTreeWithStringPath? appCodeTree)
                         {
                             if (compileOption.HasValue() || saveCompiledCSharp is not null)
                             {
@@ -1768,7 +1768,7 @@ public class Program
 
                 var initStepsPath = initStepsOption.Value();
 
-                TreeNodeWithStringPath loadContextAppCodeTreeFromPath(string contextAppPath)
+                BlobTreeWithStringPath loadContextAppCodeTreeFromPath(string contextAppPath)
                 {
                     return
                     LoadComposition.LoadFromPathResolvingNetworkDependencies(contextAppPath)
@@ -2148,7 +2148,7 @@ public class Program
             var discardedFiles =
                 loadInputDirectoryOk.tree
                 .EnumerateBlobsTransitive()
-                .Where(originalBlob => filteredSourceTree.GetNodeAtPath(originalBlob.path) is not TreeNodeWithStringPath.BlobNode)
+                .Where(originalBlob => filteredSourceTree.GetNodeAtPath(originalBlob.path) is not BlobTreeWithStringPath.BlobNode)
                 .ToImmutableArray();
 
             if (0 < discardedFiles.Length)
@@ -2157,7 +2157,7 @@ public class Program
             }
 
             if (filteredSourceTree.GetNodeAtPath(["elm.json"]) is not
-                TreeNodeWithStringPath.BlobNode elmJsonFile)
+                BlobTreeWithStringPath.BlobNode elmJsonFile)
             {
                 return Result<string, LoadForMakeResult>.err(
                     "Did not find elm.json file in that directory.");
@@ -2272,7 +2272,7 @@ public class Program
                             outerSourceDirectories
                                 .Aggregate(
                                     seed:
-                                    TreeNodeWithStringPath.EmptyTree
+                                    BlobTreeWithStringPath.EmptyTree
                                         .SetNodeAtPathSorted(workingDirectoryRelative, filteredSourceTree),
                                     func:
                                     (aggregate, nextSourceDir) =>
@@ -2329,7 +2329,7 @@ public class Program
 
         ReadOnlyMemory<byte> computeOutputFileContent()
         {
-            if (makeOk.ProducedFiles is TreeNodeWithStringPath.BlobNode blobNode)
+            if (makeOk.ProducedFiles is BlobTreeWithStringPath.BlobNode blobNode)
             {
                 Console.WriteLine(
                     "Make command produced a single blob with " +
@@ -2338,7 +2338,7 @@ public class Program
                 return blobNode.Bytes;
             }
 
-            if (makeOk.ProducedFiles is TreeNodeWithStringPath.TreeNode treeNode)
+            if (makeOk.ProducedFiles is BlobTreeWithStringPath.TreeNode treeNode)
             {
                 var blobs =
                     treeNode.EnumerateBlobsTransitive()
@@ -2376,7 +2376,7 @@ public class Program
     }
 
     private record LoadForMakeResult(
-        TreeNodeWithStringPath SourceFiles,
+        BlobTreeWithStringPath SourceFiles,
         IReadOnlyList<string> WorkingDirectoryRelative,
         IReadOnlyList<string> PathToFileWithElmEntryPoint);
 
@@ -2585,7 +2585,7 @@ public class Program
     {
         if (elmValue is ElmValue.ElmBytes bytesValue)
         {
-            return new Elm019Binaries.ElmMakeOk(ProducedFiles: TreeNodeWithStringPath.Blob(bytesValue.Value));
+            return new Elm019Binaries.ElmMakeOk(ProducedFiles: BlobTreeWithStringPath.Blob(bytesValue.Value));
         }
 
         if (elmValue is ElmValue.ElmTag)
@@ -2608,7 +2608,7 @@ public class Program
         return "Unexpected Elm value type: " + elmValue;
     }
 
-    private static Result<string, TreeNodeWithStringPath> ParseAsFileTree(ElmValue elmValue)
+    private static Result<string, BlobTreeWithStringPath> ParseAsFileTree(ElmValue elmValue)
     {
         /*
          * Type declaration on Elm side looks like this:
@@ -2646,7 +2646,7 @@ public class Program
                 return "Expected Elm bytes value, but got: " + blob;
             }
 
-            return TreeNodeWithStringPath.Blob(bytes.Value);
+            return BlobTreeWithStringPath.Blob(bytes.Value);
         }
 
         if (elmTag.TagName.StartsWith("Tree", StringComparison.OrdinalIgnoreCase))
@@ -2661,7 +2661,7 @@ public class Program
                 return "Expected Elm list value, but got: " + elmTag.Arguments[0];
             }
 
-            var children = new (string name, TreeNodeWithStringPath item)[elmList.Items.Count];
+            var children = new (string name, BlobTreeWithStringPath item)[elmList.Items.Count];
 
             for (var i = 0; i < elmList.Items.Count; ++i)
             {
@@ -2697,7 +2697,7 @@ public class Program
                 children[i] = (name.Value, childTreeOk);
             }
 
-            var treeNode = TreeNodeWithStringPath.NonSortedTree(children);
+            var treeNode = BlobTreeWithStringPath.NonSortedTree(children);
 
             return treeNode;
         }
@@ -2706,11 +2706,11 @@ public class Program
     }
 
     public static IEnumerable<string> DescribeCompositionForHumans(
-        TreeNodeWithStringPath composition,
+        BlobTreeWithStringPath composition,
         bool listBlobs,
         string? extractBlobName)
     {
-        if (composition is TreeNodeWithStringPath.TreeNode tree)
+        if (composition is BlobTreeWithStringPath.TreeNode tree)
         {
             var blobs = composition.EnumerateBlobsTransitive().ToImmutableList();
 
@@ -2731,7 +2731,7 @@ public class Program
             yield break;
         }
 
-        if (composition is TreeNodeWithStringPath.BlobNode blob)
+        if (composition is BlobTreeWithStringPath.BlobNode blob)
         {
             yield return "a blob containing " + blob.Bytes.Length + " bytes";
 
@@ -2850,7 +2850,7 @@ public class Program
         return (elmEngineOption, parseElmEngineTypeFromOption);
     }
 
-    private static (CommandOption elmCompilerOption, Func<Pine.IConsole, TreeNodeWithStringPath> loadElmCompilerFromOption)
+    private static (CommandOption elmCompilerOption, Func<Pine.IConsole, BlobTreeWithStringPath> loadElmCompilerFromOption)
         AddElmCompilerOptionOnCommand(CommandLineApplication cmd)
     {
         var defaultCompiler = ElmCompiler.CompilerSourceFilesDefault.Value;
@@ -2862,7 +2862,7 @@ public class Program
                 optionType: CommandOptionType.SingleValue,
                 inherited: true);
 
-        TreeNodeWithStringPath parseElmCompilerFromOption(Pine.IConsole console)
+        BlobTreeWithStringPath parseElmCompilerFromOption(Pine.IConsole console)
         {
             if (elmCompilerOption?.Value() is { } compilerAsString)
             {
@@ -2934,7 +2934,7 @@ public class Program
         DotNetConsoleWriteLineUsingColor(line, ConsoleColor.Yellow);
     }
 
-    private static (string compositionId, SourceSummaryStructure summary) CompileSourceSummary(TreeNodeWithStringPath sourceTree)
+    private static (string compositionId, SourceSummaryStructure summary) CompileSourceSummary(BlobTreeWithStringPath sourceTree)
     {
         var compositionId = Convert.ToHexStringLower(PineValueHashTree.ComputeHashSorted(sourceTree).Span);
 

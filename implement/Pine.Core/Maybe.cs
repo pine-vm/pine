@@ -13,12 +13,15 @@ public abstract record Maybe<JustT>
     /// <summary>
     /// Explicit constructor for the 'Nothing' case.
     /// </summary>
+#pragma warning disable IDE1006 // Default analyzer fails to consider naming clash.
     public static Maybe<JustT> nothing() => new Nothing();
 
     /// <summary>
     /// Explicit constructor for the 'Just' case.
     /// </summary>
     public static Maybe<JustT> just(JustT just) => new Just(just);
+
+#pragma warning restore IDE1006
 
     /// <summary>
     /// Implicit constructor for the 'Just' case.

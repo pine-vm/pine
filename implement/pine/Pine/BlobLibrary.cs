@@ -279,7 +279,7 @@ public class BlobLibrary
         DownloadFromUrlAndExtractTrees(sourceUrl)
         .SelectMany(tree => tree.EnumerateBlobsTransitive().Select(blob => blob.blobContent));
 
-    public static IEnumerable<TreeNodeWithStringPath> DownloadFromUrlAndExtractTrees(string sourceUrl)
+    public static IEnumerable<BlobTreeWithStringPath> DownloadFromUrlAndExtractTrees(string sourceUrl)
     {
         var httpResponse = DownloadViaHttp(sourceUrl);
 
@@ -293,7 +293,7 @@ public class BlobLibrary
         if (responseContent == null)
             yield break;
 
-        yield return TreeNodeWithStringPath.Blob((ReadOnlyMemory<byte>)responseContent);
+        yield return BlobTreeWithStringPath.Blob((ReadOnlyMemory<byte>)responseContent);
 
         var blobName = sourceUrl.Split('/', '\\').Last();
 
@@ -301,10 +301,10 @@ public class BlobLibrary
             yield return extracted;
     }
 
-    public static IEnumerable<TreeNodeWithStringPath> ExtractTreesFromNamedBlob(string blobName, ReadOnlyMemory<byte> blobContent)
+    public static IEnumerable<BlobTreeWithStringPath> ExtractTreesFromNamedBlob(string blobName, ReadOnlyMemory<byte> blobContent)
     {
         {
-            TreeNodeWithStringPath? fromZipArchive = null;
+            BlobTreeWithStringPath? fromZipArchive = null;
 
             try
             {
@@ -320,7 +320,7 @@ public class BlobLibrary
 
         if (blobName.EndsWith(".tar.gz", StringComparison.OrdinalIgnoreCase) || blobName.EndsWith(".tgz", StringComparison.OrdinalIgnoreCase))
         {
-            TreeNodeWithStringPath? fromTarArchive = null;
+            BlobTreeWithStringPath? fromTarArchive = null;
 
             try
             {
@@ -342,7 +342,7 @@ public class BlobLibrary
             catch { }
 
             if (fromGzip is not null)
-                yield return TreeNodeWithStringPath.Blob(fromGzip.Value);
+                yield return BlobTreeWithStringPath.Blob(fromGzip.Value);
         }
     }
 

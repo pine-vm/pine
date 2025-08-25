@@ -169,7 +169,7 @@ public class ProgramCommandMakeTests
                 "MakeGuiHtml: Unexpected result type: " + makeResult.GetType());
         }
 
-        if (makeOk.ProducedFiles is not TreeNodeWithStringPath.BlobNode blobNode)
+        if (makeOk.ProducedFiles is not BlobTreeWithStringPath.BlobNode blobNode)
         {
             throw new NotImplementedException(
                 "MakeGuiHtml: Unexpected content in files produced by make: " + makeResult.GetType());

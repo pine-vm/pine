@@ -12,8 +12,8 @@ public interface IInteractiveSession : IDisposable
     static ElmEngineTypeCLI DefaultImplementation => ElmEngineTypeCLI.Pine;
 
     static IInteractiveSession Create(
-        TreeNodeWithStringPath compilerSourceFiles,
-        TreeNodeWithStringPath? appCodeTree,
+        BlobTreeWithStringPath compilerSourceFiles,
+        BlobTreeWithStringPath? appCodeTree,
         ElmEngineType engineType) =>
         engineType switch
         {

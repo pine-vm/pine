@@ -8,7 +8,7 @@ namespace Pine.Core.Elm;
 
 public class BundledElmEnvironmentsJson
 {
-    public static PineValue? BundledElmEnvironmentFromFileTree(TreeNodeWithStringPath fileTree)
+    public static PineValue? BundledElmEnvironmentFromFileTree(BlobTreeWithStringPath fileTree)
     {
         CompiledEnvDict.TryGetValue(DictionaryKeyHashPartFromFileTree(fileTree), out var bundledEnv);
 
@@ -26,7 +26,7 @@ public class BundledElmEnvironmentsJson
             .FirstOrDefault();
     }
 
-    public static string DictionaryKeyHashPartFromFileTree(TreeNodeWithStringPath fileTree)
+    public static string DictionaryKeyHashPartFromFileTree(BlobTreeWithStringPath fileTree)
     {
         var pineValue =
             PineValueComposition.FromTreeWithStringPath(fileTree);
@@ -136,7 +136,7 @@ public class BundledElmEnvironmentsJson
     public const string ResourceFilePath = "./Pine.Core/" + EmbeddedResourceFilePath;
 
     public static void CompressAndWriteBundleFile(
-        IReadOnlyDictionary<TreeNodeWithStringPath, PineValue> compiledEnvironments)
+        IReadOnlyDictionary<BlobTreeWithStringPath, PineValue> compiledEnvironments)
     {
         var (allListEntries, uncompressed) =
             BuildBundleResourceFileJsonUtf8(compiledEnvironments);
@@ -189,7 +189,7 @@ public class BundledElmEnvironmentsJson
     }
 
     public static (IReadOnlyList<PineValueCompactBuild.ListEntry>, ReadOnlyMemory<byte>) BuildBundleResourceFileJsonUtf8(
-        IReadOnlyDictionary<TreeNodeWithStringPath, PineValue> compiledEnvironments)
+        IReadOnlyDictionary<BlobTreeWithStringPath, PineValue> compiledEnvironments)
     {
         var allEntries =
             BuildBundleResourceFileListItems(compiledEnvironments);
@@ -198,7 +198,7 @@ public class BundledElmEnvironmentsJson
     }
 
     public static IReadOnlyList<PineValueCompactBuild.ListEntry> BuildBundleResourceFileListItems(
-        IReadOnlyDictionary<TreeNodeWithStringPath, PineValue> compiledEnvironments)
+        IReadOnlyDictionary<BlobTreeWithStringPath, PineValue> compiledEnvironments)
     {
         var (listValues, blobValues) =
             PineValue.CollectAllComponentsFromRoots(compiledEnvironments.Values);

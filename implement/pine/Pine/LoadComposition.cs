@@ -24,7 +24,7 @@ public abstract record LoadCompositionOrigin
 
 public static class LoadComposition
 {
-    public static ProcessWithLog<string, Result<string, (TreeNodeWithStringPath tree, LoadCompositionOrigin origin)>>
+    public static ProcessWithLog<string, Result<string, (BlobTreeWithStringPath tree, LoadCompositionOrigin origin)>>
         LoadFromPathResolvingNetworkDependencies(
         string sourcePath,
         Func<IReadOnlyList<string>, IOException, bool>? ignoreFileOnIOException = null)
@@ -59,7 +59,7 @@ public static class LoadComposition
                 .WithLogEntryAdded("Loading via HTTP...")
                 .MapResult(BlobLibrary.DownloadBlobViaHttpGetResponseBody)
                 .ResultMap(loadFromHttpGet =>
-                (TreeNodeWithStringPath.Blob(loadFromHttpGet), (LoadCompositionOrigin)new LoadCompositionOrigin.FromHttp()));
+                (BlobTreeWithStringPath.Blob(loadFromHttpGet), (LoadCompositionOrigin)new LoadCompositionOrigin.FromHttp()));
         }
 
         return
@@ -74,13 +74,13 @@ public static class LoadComposition
                         ignoreFileOnIOException: ignoreFileOnIOException);
 
                     if (treeComponentFromSource is null)
-                        return Result<string, TreeNodeWithStringPath>.err("I did not find a file or directory at '" + sourcePath + "'.");
+                        return Result<string, BlobTreeWithStringPath>.err("I did not find a file or directory at '" + sourcePath + "'.");
 
-                    return Result<string, TreeNodeWithStringPath>.ok(treeComponentFromSource);
+                    return Result<string, BlobTreeWithStringPath>.ok(treeComponentFromSource);
                 }
                 catch (Exception e)
                 {
-                    return Result<string, TreeNodeWithStringPath>.err("Failed to load from local file system: " + e);
+                    return Result<string, BlobTreeWithStringPath>.err("Failed to load from local file system: " + e);
                 }
             })
             .ResultMap(tree => (tree, (LoadCompositionOrigin)new LoadCompositionOrigin.FromLocalFileSystem()));

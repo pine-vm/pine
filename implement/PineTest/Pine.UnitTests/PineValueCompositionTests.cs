@@ -18,15 +18,15 @@ public class PineValueCompositionTests
         {
             new
             {
-                input = TreeNodeWithStringPath.Blob(new byte[]{0,1,2}),
+                input = BlobTreeWithStringPath.Blob(new byte[]{0,1,2}),
                 expectedOutput = PineValue.Blob([0,1,2])
             },
             new
             {
-                input = TreeNodeWithStringPath.SortedTree(
+                input = BlobTreeWithStringPath.SortedTree(
                     [
                         (name: "ABC ä 😀",
-                        component: TreeNodeWithStringPath.Blob(new byte[]{0,1,2,3}) ),
+                        component: BlobTreeWithStringPath.Blob(new byte[]{0,1,2,3}) ),
                     ]),
                 expectedOutput = (PineValue)PineValue.List(
                     [
@@ -56,8 +56,8 @@ public class PineValueCompositionTests
                 input =
                 PineValue.Blob([0,1,2]),
 
-                expectedOutput = Result<IReadOnlyList<(int index, string name)>, TreeNodeWithStringPath>.ok(
-                    TreeNodeWithStringPath.Blob(new byte[]{0,1,2}))
+                expectedOutput = Result<IReadOnlyList<(int index, string name)>, BlobTreeWithStringPath>.ok(
+                    BlobTreeWithStringPath.Blob(new byte[]{0,1,2}))
             },
             new
             {
@@ -66,12 +66,12 @@ public class PineValueCompositionTests
                     PineValue.List(
                         PineValue.Blob([0,0,0,68,0,0,0,69,0,0,0,70,0,0,0,32,0,1,243,50]),
                         PineValue.Blob([0,1,2,3]))),
-                expectedOutput = Result<IReadOnlyList<(int index, string name)>, TreeNodeWithStringPath>.ok(
-                    TreeNodeWithStringPath.SortedTree(
+                expectedOutput = Result<IReadOnlyList<(int index, string name)>, BlobTreeWithStringPath>.ok(
+                    BlobTreeWithStringPath.SortedTree(
                         treeContent:
                         [
                             (name: "DEF 🌲",
-                            component: TreeNodeWithStringPath.Blob(new byte[]{0,1,2,3}) ),
+                            component: BlobTreeWithStringPath.Blob(new byte[]{0,1,2,3}) ),
                         ])
                 )
             },
@@ -229,50 +229,50 @@ public class PineValueCompositionTests
         {
             new
             {
-                input = TreeNodeWithStringPath.NonSortedTree(
+                input = BlobTreeWithStringPath.NonSortedTree(
                     treeContent:
                     [
-                        ("ba-", TreeNodeWithStringPath.Blob(new byte[]{ 0 })),
-                        ("ba", TreeNodeWithStringPath.Blob(new byte[] { 1 })),
-                        ("bb", TreeNodeWithStringPath.Blob(new byte[] { 2 })),
-                        ("a", TreeNodeWithStringPath.Blob(new byte[] { 3 })),
-                        ("test😃", TreeNodeWithStringPath.Blob(new byte[] { 4 })),
-                        ("testa", TreeNodeWithStringPath.Blob(new byte[] { 5 })),
-                        ("tesz", TreeNodeWithStringPath.Blob(new byte[] { 6 })),
-                        ("", TreeNodeWithStringPath.Blob(new byte[] { 7 })),
-                        ("🌿", TreeNodeWithStringPath.Blob(new byte[] { 8 })),
-                        ("🌲", TreeNodeWithStringPath.Blob(new byte[] { 9 })),
-                        ("c", TreeNodeWithStringPath.NonSortedTree(
+                        ("ba-", BlobTreeWithStringPath.Blob(new byte[]{ 0 })),
+                        ("ba", BlobTreeWithStringPath.Blob(new byte[] { 1 })),
+                        ("bb", BlobTreeWithStringPath.Blob(new byte[] { 2 })),
+                        ("a", BlobTreeWithStringPath.Blob(new byte[] { 3 })),
+                        ("test😃", BlobTreeWithStringPath.Blob(new byte[] { 4 })),
+                        ("testa", BlobTreeWithStringPath.Blob(new byte[] { 5 })),
+                        ("tesz", BlobTreeWithStringPath.Blob(new byte[] { 6 })),
+                        ("", BlobTreeWithStringPath.Blob(new byte[] { 7 })),
+                        ("🌿", BlobTreeWithStringPath.Blob(new byte[] { 8 })),
+                        ("🌲", BlobTreeWithStringPath.Blob(new byte[] { 9 })),
+                        ("c", BlobTreeWithStringPath.NonSortedTree(
                             treeContent:
                             ImmutableList.Create(
-                                ("gamma", TreeNodeWithStringPath.Blob(new byte[] { 10 })),
-                                ("alpha", TreeNodeWithStringPath.Blob(new byte[] { 11 }))
+                                ("gamma", BlobTreeWithStringPath.Blob(new byte[] { 10 })),
+                                ("alpha", BlobTreeWithStringPath.Blob(new byte[] { 11 }))
                                 )
                         )),
-                        ("bA", TreeNodeWithStringPath.Blob(new byte[] { 12 }))
+                        ("bA", BlobTreeWithStringPath.Blob(new byte[] { 12 }))
                         ]
                 ),
-                expected = TreeNodeWithStringPath.NonSortedTree(
+                expected = BlobTreeWithStringPath.NonSortedTree(
                     treeContent:
                     [
-                        ("", TreeNodeWithStringPath.Blob(new byte[] { 7 })),
-                        ("a", TreeNodeWithStringPath.Blob(new byte[] { 3 })),
-                        ("bA", TreeNodeWithStringPath.Blob(new byte[] { 12 })),
-                        ("ba", TreeNodeWithStringPath.Blob(new byte[] { 1 })),
-                        ("ba-", TreeNodeWithStringPath.Blob(new byte[] { 0 })),
-                        ("bb", TreeNodeWithStringPath.Blob(new byte[] { 2 })),
-                        ("c", TreeNodeWithStringPath.NonSortedTree(
+                        ("", BlobTreeWithStringPath.Blob(new byte[] { 7 })),
+                        ("a", BlobTreeWithStringPath.Blob(new byte[] { 3 })),
+                        ("bA", BlobTreeWithStringPath.Blob(new byte[] { 12 })),
+                        ("ba", BlobTreeWithStringPath.Blob(new byte[] { 1 })),
+                        ("ba-", BlobTreeWithStringPath.Blob(new byte[] { 0 })),
+                        ("bb", BlobTreeWithStringPath.Blob(new byte[] { 2 })),
+                        ("c", BlobTreeWithStringPath.NonSortedTree(
                             treeContent:
                             [
-                                ("alpha", TreeNodeWithStringPath.Blob(new byte[] { 11 })),
-                                ("gamma", TreeNodeWithStringPath.Blob(new byte[] { 10 }))
+                                ("alpha", BlobTreeWithStringPath.Blob(new byte[] { 11 })),
+                                ("gamma", BlobTreeWithStringPath.Blob(new byte[] { 10 }))
                                 ]
                         )),
-                        ("testa", TreeNodeWithStringPath.Blob(new byte[] { 5 })),
-                        ("test😃", TreeNodeWithStringPath.Blob(new byte[] { 4 })),
-                        ("tesz", TreeNodeWithStringPath.Blob(new byte[] { 6 })),
-                        ("🌲", TreeNodeWithStringPath.Blob(new byte[] { 9 })),
-                        ("🌿", TreeNodeWithStringPath.Blob(new byte[] { 8 }))
+                        ("testa", BlobTreeWithStringPath.Blob(new byte[] { 5 })),
+                        ("test😃", BlobTreeWithStringPath.Blob(new byte[] { 4 })),
+                        ("tesz", BlobTreeWithStringPath.Blob(new byte[] { 6 })),
+                        ("🌲", BlobTreeWithStringPath.Blob(new byte[] { 9 })),
+                        ("🌿", BlobTreeWithStringPath.Blob(new byte[] { 8 }))
                         ]
                 ),
             }

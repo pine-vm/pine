@@ -351,7 +351,7 @@ public class CompileElmCompilerTests
         var elmModulesTexts = elmCoreLibraryModulesTexts;
 
         var compilerProgramOnlyElmJson =
-            TreeNodeWithStringPath.FilterNodesByPath(
+            BlobTreeWithStringPath.FilterNodesByPath(
                 compilerProgram,
                 nodePath => nodePath.SequenceEqual(["elm.json"]));
 
@@ -380,7 +380,7 @@ public class CompileElmCompilerTests
             .Aggregate(
                 seed: compilerProgramOnlyElmJson,
                 func: (aggregate, elmModule) =>
-                aggregate.SetNodeAtPathSorted(elmModule.path, TreeNodeWithStringPath.Blob(elmModule.blobContent)));
+                aggregate.SetNodeAtPathSorted(elmModule.path, BlobTreeWithStringPath.Blob(elmModule.blobContent)));
 
         using var compilerInteractiveSession =
             new InteractiveSessionPine(
@@ -665,7 +665,7 @@ public class CompileElmCompilerTests
                 compilerProgramOnlyElmJson
                 .SetNodeAtPathSorted(
                     ["src", .. simpleElmModuleParsed.Key.SkipLast(1), simpleElmModuleParsed.Key.Last() + ".elm"],
-                    TreeNodeWithStringPath.Blob(Encoding.UTF8.GetBytes(simpleElmModuleText)));
+                    BlobTreeWithStringPath.Blob(Encoding.UTF8.GetBytes(simpleElmModuleText)));
 
             using var newCompilerInteractiveSession =
                 new InteractiveSessionPine(

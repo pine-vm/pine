@@ -1260,8 +1260,8 @@ public class ElmTimeJsonAdapter
     /// <summary>
     /// The original lowering implementation added a 'main' declaration to account for DCE.
     /// </summary>
-    public static TreeNodeWithStringPath CleanUpFromLoweredForJavaScript(
-        TreeNodeWithStringPath loweredForJavaScript)
+    public static BlobTreeWithStringPath CleanUpFromLoweredForJavaScript(
+        BlobTreeWithStringPath loweredForJavaScript)
     {
         /*
         {-| Support function-level dead code elimination (<https://elm-lang.org/blog/small-assets-without-the-headache>) Elm code needed to inform the Elm compiler about our entry points.
@@ -1284,7 +1284,7 @@ public class ElmTimeJsonAdapter
         var rootFile =
             loweredForJavaScript.GetNodeAtPath(RootFilePath);
 
-        if (rootFile is not TreeNodeWithStringPath.BlobNode rootFileNode)
+        if (rootFile is not BlobTreeWithStringPath.BlobNode rootFileNode)
         {
             throw new System.Exception("Root file not found at " + string.Join("/", RootFilePath));
         }
@@ -1320,7 +1320,7 @@ public class ElmTimeJsonAdapter
             loweredForJavaScript
             .SetNodeAtPathSorted(
                 RootFilePath,
-                new TreeNodeWithStringPath.BlobNode(
+                new BlobTreeWithStringPath.BlobNode(
                     System.Text.Encoding.UTF8.GetBytes(newRootFileText)));
     }
 }

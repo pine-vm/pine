@@ -18,7 +18,7 @@ public class VolatileProcessNative : VolatileProcess, IDisposable
         ReadOnlyMemory<byte> StdErr,
         int? ExitCode);
 
-    private static readonly ConcurrentDictionary<string, IEnumerable<TreeNodeWithStringPath>> loadedTreesFromUrl = new();
+    private static readonly ConcurrentDictionary<string, IEnumerable<BlobTreeWithStringPath>> loadedTreesFromUrl = new();
 
     private readonly Process process;
 

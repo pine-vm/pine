@@ -487,13 +487,13 @@ public class CompilePineToDotNetTests
             try
             {
                 var appCodeTree =
-                    TreeNodeWithStringPath.EmptyTree
+                    BlobTreeWithStringPath.EmptyTree
                     .SetNodeAtPathSorted(
                         ["elm.json"],
-                        TreeNodeWithStringPath.Blob(Encoding.UTF8.GetBytes(elmJsonFile)))
+                        BlobTreeWithStringPath.Blob(Encoding.UTF8.GetBytes(elmJsonFile)))
                     .SetNodeAtPathSorted(
                         ["src", "Common.elm"],
-                        TreeNodeWithStringPath.Blob(Encoding.UTF8.GetBytes(testCase.InputModuleText)));
+                        BlobTreeWithStringPath.Blob(Encoding.UTF8.GetBytes(testCase.InputModuleText)));
 
                 var compiledEnv =
                     ElmCompiler.CompileInteractiveEnvironment(

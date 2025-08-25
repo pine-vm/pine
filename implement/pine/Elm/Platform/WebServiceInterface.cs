@@ -2196,7 +2196,7 @@ type alias LoadDependencyStruct =
     private static readonly PineVMParseCache s_parseCache = new();
 
     public static WebServiceConfig ConfigFromSourceFilesAndEntryFileName(
-        TreeNodeWithStringPath sourceFiles,
+        BlobTreeWithStringPath sourceFiles,
         IReadOnlyList<string> entryFileName)
     {
         var compiledModulesValue =
@@ -2211,7 +2211,7 @@ type alias LoadDependencyStruct =
     }
 
     public static PineValue CompiledModulesFromSourceFilesAndEntryFileName(
-        TreeNodeWithStringPath sourceFiles,
+        BlobTreeWithStringPath sourceFiles,
         IReadOnlyList<string> entryFileName)
     {
         var loweringResult =

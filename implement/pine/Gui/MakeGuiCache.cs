@@ -37,7 +37,7 @@ public class MakeGuiCache
 
         var producedFiles = makeOk.ProducedFiles;
 
-        if (producedFiles is not TreeNodeWithStringPath.BlobNode blobNode)
+        if (producedFiles is not BlobTreeWithStringPath.BlobNode blobNode)
         {
             throw new NotImplementedException(
                 "MakeGuiHtml: Unexpected content in files produced by make: " + producedFiles.GetType());

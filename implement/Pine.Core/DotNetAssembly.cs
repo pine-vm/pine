@@ -46,7 +46,7 @@ public class DotNetAssembly
         LoadTreeFromManifestEmbeddedFileProvider(directoryPath, assembly)
         .Map(PineValueComposition.TreeToFlatDictionaryWithPathComparer);
 
-    public static Result<string, TreeNodeWithStringPath> LoadTreeFromManifestEmbeddedFileProvider(
+    public static Result<string, BlobTreeWithStringPath> LoadTreeFromManifestEmbeddedFileProvider(
         IReadOnlyList<string> directoryPath,
         Assembly assembly)
     {
@@ -68,11 +68,11 @@ public class DotNetAssembly
                 LoadTreeFromManifestEmbeddedFileProvider([.. directoryPath, subdirectory], assembly));
     }
 
-    public static Result<string, TreeNodeWithStringPath> LoadTreeFromManifestEmbeddedFileProviderFileInfo(
+    public static Result<string, BlobTreeWithStringPath> LoadTreeFromManifestEmbeddedFileProviderFileInfo(
         Microsoft.Extensions.FileProviders.IDirectoryContents directoryContents,
-        Func<string, Result<string, TreeNodeWithStringPath>> loadSubdirectory)
+        Func<string, Result<string, BlobTreeWithStringPath>> loadSubdirectory)
     {
-        static TreeNodeWithStringPath fromFile(Microsoft.Extensions.FileProviders.IFileInfo file)
+        static BlobTreeWithStringPath fromFile(Microsoft.Extensions.FileProviders.IFileInfo file)
         {
             using var stream = file.CreateReadStream();
 
@@ -80,7 +80,7 @@ public class DotNetAssembly
 
             stream.CopyTo(memoryStream);
 
-            return TreeNodeWithStringPath.Blob(memoryStream.ToArray());
+            return BlobTreeWithStringPath.Blob(memoryStream.ToArray());
         }
 
         var treeElementsResults =
@@ -104,7 +104,7 @@ public class DotNetAssembly
             .MapError(err => "Failed for directory " + item.Name + ": " + err)
             .Map(success => (item.Name, success)))
             .ListCombine()
-            .Map(treeElements => TreeNodeWithStringPath.SortedTree(treeElements.ToImmutableList()));
+            .Map(treeElements => BlobTreeWithStringPath.SortedTree(treeElements.ToImmutableList()));
     }
 
     public static ReadOnlyMemory<byte>? GetManifestResourceStreamContentAsBytes(Assembly assembly, string name)

@@ -31,12 +31,12 @@ public class Program
         BuildAndSaveValueDictionary(
             elmCompilers:
             [
-                new KeyValuePair<TreeNodeWithStringPath, PineValue>(elmCompilerValue.sourceFiles, elmCompilerValue.compiled)
+                new KeyValuePair<BlobTreeWithStringPath, PineValue>(elmCompilerValue.sourceFiles, elmCompilerValue.compiled)
                 ]);
     }
 
     public static void BuildAndSaveValueDictionary(
-        IEnumerable<KeyValuePair<TreeNodeWithStringPath, PineValue>> elmCompilers)
+        IEnumerable<KeyValuePair<BlobTreeWithStringPath, PineValue>> elmCompilers)
     {
         var fromFreshBuild =
             ReusedInstances.BuildPineListValueReusedInstances(
@@ -58,7 +58,7 @@ public class Program
             .Extract(err => throw new Exception(err));
     }
 
-    public static (TreeNodeWithStringPath sourceFiles, PineValue compiled) BuildElmCompiler()
+    public static (BlobTreeWithStringPath sourceFiles, PineValue compiled) BuildElmCompiler()
     {
         var elmCompilerSource =
             ElmCompiler.CompilerSourceFilesDefault.Value;
@@ -113,7 +113,7 @@ public class Program
     }
 
     public static Result<string, PineValue> BuildElmCompilerFirstIteration(
-        TreeNodeWithStringPath elmCompilerSource)
+        BlobTreeWithStringPath elmCompilerSource)
     {
         if (true)
         {

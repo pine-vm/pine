@@ -415,9 +415,9 @@ public class LanguageServiceState(
     }
 
     public static Interface.FileTreeNode<Interface.FileTreeBlobNode>
-        Workspace(TreeNodeWithStringPath workspace)
+        Workspace(BlobTreeWithStringPath workspace)
     {
-        if (workspace is TreeNodeWithStringPath.BlobNode blobNode)
+        if (workspace is BlobTreeWithStringPath.BlobNode blobNode)
         {
             string? asText = null;
 
@@ -437,11 +437,11 @@ public class LanguageServiceState(
                         AsText: asText));
         }
 
-        if (workspace is TreeNodeWithStringPath.TreeNode treeNode)
+        if (workspace is BlobTreeWithStringPath.TreeNode treeNode)
         {
             return
                 new Interface.FileTreeNode<Interface.FileTreeBlobNode>.TreeNode(
-                    [..treeNode.Elements.Select(e =>
+                    [..treeNode.Items.Select(e =>
                         (e.name, Workspace(e.component))
                     )]);
         }

@@ -11,7 +11,7 @@ namespace Pine;
 public class DependenciesLoader
 {
     public static Result<string, ReadOnlyMemory<byte>> ResolveHashReferenceWithoutCache(
-        ConcurrentDictionary<string, IEnumerable<TreeNodeWithStringPath>> loadedTreesFromUrl,
+        ConcurrentDictionary<string, IEnumerable<BlobTreeWithStringPath>> loadedTreesFromUrl,
         string hashBase16,
         IEnumerable<string> hintUrls,
         Func<byte[], byte[]?>? getFileFromHashSHA256)
@@ -69,7 +69,7 @@ public class DependenciesLoader
     }
 
     public static Result<IReadOnlyDictionary<string, string>, ReadOnlyMemory<byte>> GetBlobFromHashAndHintUrlsCached(
-        ConcurrentDictionary<string, IEnumerable<TreeNodeWithStringPath>> loadedTreesFromUrl,
+        ConcurrentDictionary<string, IEnumerable<BlobTreeWithStringPath>> loadedTreesFromUrl,
         byte[] hash, IEnumerable<string> hintUrls)
     {
         Result<string, ReadOnlyMemory<byte>> AttemptForUrl(string url)
@@ -96,7 +96,7 @@ public class DependenciesLoader
                 treesFromUrl
                 .Aggregate(
                     seed:
-                    Result<ImmutableList<TreeNodeWithStringPath>, ReadOnlyMemory<byte>>.err([]),
+                    Result<ImmutableList<BlobTreeWithStringPath>, ReadOnlyMemory<byte>>.err([]),
                     func:
                     (aggregate, tree) =>
                     {
@@ -115,14 +115,14 @@ public class DependenciesLoader
 
                                 if (matchingBlob != null)
                                 {
-                                    return Result<ImmutableList<TreeNodeWithStringPath>, ReadOnlyMemory<byte>>.ok(matchingBlob.Value);
+                                    return Result<ImmutableList<BlobTreeWithStringPath>, ReadOnlyMemory<byte>>.ok(matchingBlob.Value);
                                 }
 
                                 return
-                                Result<ImmutableList<TreeNodeWithStringPath>, ReadOnlyMemory<byte>>.err(err.Add(tree));
+                                Result<ImmutableList<BlobTreeWithStringPath>, ReadOnlyMemory<byte>>.err(err.Add(tree));
                             },
                             fromOk:
-                            ok => Result<ImmutableList<TreeNodeWithStringPath>, ReadOnlyMemory<byte>>.ok(ok));
+                            ok => Result<ImmutableList<BlobTreeWithStringPath>, ReadOnlyMemory<byte>>.ok(ok));
                     });
 
             return
@@ -154,15 +154,15 @@ public class DependenciesLoader
             .MapError(dict => (IReadOnlyDictionary<string, string>)dict);
     }
 
-    public static string DescribeBlobOrTreeContentsForErrorMessage(TreeNodeWithStringPath tree) =>
+    public static string DescribeBlobOrTreeContentsForErrorMessage(BlobTreeWithStringPath tree) =>
     tree switch
     {
-        TreeNodeWithStringPath.BlobNode => "is a blob",
+        BlobTreeWithStringPath.BlobNode => "is a blob",
 
         _ => "is a tree:\n" + DescribeTreeContentsForErrorMessage(tree)
     };
 
-    public static string DescribeTreeContentsForErrorMessage(TreeNodeWithStringPath tree) =>
+    public static string DescribeTreeContentsForErrorMessage(BlobTreeWithStringPath tree) =>
         string.Join("\n",
             tree.EnumerateBlobsTransitive().Select(blobAtPath =>
             "Found " +

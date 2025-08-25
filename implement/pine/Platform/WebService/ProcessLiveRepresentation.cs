@@ -73,12 +73,12 @@ public sealed class ProcessLiveRepresentation : IAsyncDisposable
     public record struct ReductionWithResolvedDependencies(
         PineValue ElmAppState,
         PineValue AppConfig,
-        TreeNodeWithStringPath AppConfigAsTree);
+        BlobTreeWithStringPath AppConfigAsTree);
 
     public record struct CompositionEventWithResolvedDependencies(
         PineValue? SetElmAppState = null,
-        TreeNodeWithStringPath? DeployAppConfigAndInitElmAppState = null,
-        TreeNodeWithStringPath? DeployAppConfigAndMigrateElmAppState = null,
+        BlobTreeWithStringPath? DeployAppConfigAndInitElmAppState = null,
+        BlobTreeWithStringPath? DeployAppConfigAndMigrateElmAppState = null,
         ApplyFunctionOnLiteralsAndStateEvent? ApplyFunctionOnLiteralsAndState = null);
 
 

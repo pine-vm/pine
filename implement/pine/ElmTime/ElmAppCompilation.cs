@@ -279,7 +279,7 @@ namespace ElmTime
                                     "Unexpected result type: " + elmMakeResult.GetType());
                             }
 
-                            if (makeOk.ProducedFiles is not TreeNodeWithStringPath.BlobNode blobNode)
+                            if (makeOk.ProducedFiles is not BlobTreeWithStringPath.BlobNode blobNode)
                             {
                                 throw new Exception("Unexpected result type: " + makeOk.ProducedFiles.GetType());
                             }

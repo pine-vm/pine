@@ -109,7 +109,7 @@ namespace Pine
 
         public record LoadFromUrlSuccess(
             ParseUrlResult parsedUrl,
-            TreeNodeWithStringPath tree);
+            BlobTreeWithStringPath tree);
 
         /// <summary>
         /// Sample addresses:
@@ -160,7 +160,7 @@ namespace Pine
             if (parsedUrl is null)
                 return "Failed to parse string '" + sourceUrl + "' as Elm Editor URL.";
 
-            LoadFromUrlSuccess returnValueFromTree(TreeNodeWithStringPath tree) =>
+            LoadFromUrlSuccess returnValueFromTree(BlobTreeWithStringPath tree) =>
                 new(parsedUrl: parsedUrl, tree: tree);
 
             if (LoadFromGitHubOrGitLab.ParseUrl(parsedUrl.projectStateString) != null)
@@ -195,9 +195,9 @@ namespace Pine
             return "Project state has an unexpected shape: " + parsedUrl.projectStateString;
         }
 
-        public static Result<string, TreeNodeWithStringPath> LoadProjectState(ProjectState_2021_01.ProjectState projectState)
+        public static Result<string, BlobTreeWithStringPath> LoadProjectState(ProjectState_2021_01.ProjectState projectState)
         {
-            TreeNodeWithStringPath? baseComposition = null;
+            BlobTreeWithStringPath? baseComposition = null;
 
             if (projectState.@base != null)
             {
@@ -221,15 +221,15 @@ namespace Pine
         /// 
         /// applyProjectStateDifference_2021_01 : ProjectState_2021_01.ProjectStateDifference -> FileTree.FileTreeNode Bytes.Bytes -> Result String (FileTree.FileTreeNode Bytes.Bytes)
         /// </summary>
-        public static Result<string, TreeNodeWithStringPath> ApplyProjectStateDifference_2021_01(
+        public static Result<string, BlobTreeWithStringPath> ApplyProjectStateDifference_2021_01(
             ProjectState_2021_01.ProjectStateDifference differenceFromBase,
-            TreeNodeWithStringPath? baseComposition)
+            BlobTreeWithStringPath? baseComposition)
         {
             var compositionAfterRemovals =
                 differenceFromBase.removeNodes.Aggregate(
                     seed: baseComposition,
                     (previousComposition, nodePath) => previousComposition?.RemoveNodeAtPath(nodePath))
-                ?? TreeNodeWithStringPath.EmptyTree;
+                ?? BlobTreeWithStringPath.EmptyTree;
 
             var projectStateAfterChangeBlobs =
                 differenceFromBase.changeBlobs.Aggregate(
@@ -239,17 +239,17 @@ namespace Pine
                         var blobValueBefore =
                         compositionAfterRemovals.GetNodeAtPath(blobChange.Item1) switch
                         {
-                            TreeNodeWithStringPath.BlobNode blob => blob.Bytes,
+                            BlobTreeWithStringPath.BlobNode blob => blob.Bytes,
                             _ => null
                         };
 
                         var changedBlobValue = ProjectState_2021_01.ProjectStateDifference.ApplyBlobChanges(
                             blobChange.Item2, blobValueBefore);
 
-                        return previousComposition.SetNodeAtPathSorted(blobChange.Item1, TreeNodeWithStringPath.Blob(changedBlobValue));
+                        return previousComposition.SetNodeAtPathSorted(blobChange.Item1, BlobTreeWithStringPath.Blob(changedBlobValue));
                     });
 
-            return Result<string, TreeNodeWithStringPath>.ok(projectStateAfterChangeBlobs);
+            return Result<string, BlobTreeWithStringPath>.ok(projectStateAfterChangeBlobs);
         }
     }
 }

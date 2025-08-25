@@ -9,11 +9,11 @@ using System.Linq;
 namespace Pine.Elm;
 
 public record AppCompilationUnits(
-    TreeNodeWithStringPath AppFiles,
-    IReadOnlyList<(TreeNodeWithStringPath files, ElmJsonStructure elmJson)> Packages)
+    BlobTreeWithStringPath AppFiles,
+    IReadOnlyList<(BlobTreeWithStringPath files, ElmJsonStructure elmJson)> Packages)
 {
     public static AppCompilationUnits WithoutPackages(
-        TreeNodeWithStringPath appCode)
+        BlobTreeWithStringPath appCode)
     {
         return new AppCompilationUnits(
             appCode,
@@ -25,7 +25,7 @@ public class ElmAppDependencyResolution
 {
     public static (AppCompilationUnits files, IReadOnlyList<string> entryModuleName)
         AppCompilationUnitsForEntryPoint(
-        TreeNodeWithStringPath sourceFiles,
+        BlobTreeWithStringPath sourceFiles,
         IReadOnlyList<string> entryPointFilePath)
     {
         if (sourceFiles.GetNodeAtPath(entryPointFilePath) is not { } entryFileNode)
@@ -33,7 +33,7 @@ public class ElmAppDependencyResolution
             throw new Exception("Entry file not found: " + string.Join("/", entryPointFilePath));
         }
 
-        if (entryFileNode is not TreeNodeWithStringPath.BlobNode entryFileBlob)
+        if (entryFileNode is not BlobTreeWithStringPath.BlobNode entryFileBlob)
         {
             throw new Exception(
                 "Entry file is not a blob: " + string.Join("/", entryPointFilePath));
@@ -181,7 +181,7 @@ public class ElmAppDependencyResolution
                 moduleName);
     }
 
-    public static IReadOnlyDictionary<string, (TreeNodeWithStringPath files, ElmJsonStructure elmJson)>
+    public static IReadOnlyDictionary<string, (BlobTreeWithStringPath files, ElmJsonStructure elmJson)>
         LoadPackagesForElmApp(
         IReadOnlyDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> appSourceFiles)
     {

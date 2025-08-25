@@ -195,7 +195,7 @@ public class VolatileProcessCSharp : VolatileProcess
 
         private readonly ConcurrentDictionary<string, IEnumerable<string>> hintUrlsFromAssemblyReference = new();
 
-        private readonly ConcurrentDictionary<string, IEnumerable<TreeNodeWithStringPath>> loadedTreesFromUrl = new();
+        private readonly ConcurrentDictionary<string, IEnumerable<BlobTreeWithStringPath>> loadedTreesFromUrl = new();
 
         private static readonly ConcurrentDictionary<ResolveReferenceRequest, AssemblyReferenceResolutionReport> resolveReferenceCache =
             new(new ResolveReferenceRequestEqualityComparer());

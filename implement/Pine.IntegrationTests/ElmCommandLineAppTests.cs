@@ -11,7 +11,7 @@ public class ElmCommandLineAppTests
 {
     private static string PathToSimpleAppDirectory => @"./../../../../example-apps/cli-demo";
 
-    public static TreeNodeWithStringPath LoadFromLocalFilesystem(string path) =>
+    public static BlobTreeWithStringPath LoadFromLocalFilesystem(string path) =>
         PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(
             Filesystem.GetAllFilesFromDirectory(path));
 

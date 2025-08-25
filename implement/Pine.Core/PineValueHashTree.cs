@@ -241,10 +241,10 @@ public static class PineValueHashTree
         return "Invalid prefix: '" + asciiStringUpToFirstSpace + "'.";
     }
 
-    public static ReadOnlyMemory<byte> ComputeHashSorted(TreeNodeWithStringPath treeNode) =>
-        ComputeHashNotSorted(TreeNodeWithStringPath.Sort(treeNode));
+    public static ReadOnlyMemory<byte> ComputeHashSorted(BlobTreeWithStringPath treeNode) =>
+        ComputeHashNotSorted(BlobTreeWithStringPath.Sort(treeNode));
 
-    public static ReadOnlyMemory<byte> ComputeHashNotSorted(TreeNodeWithStringPath treeNode) =>
+    public static ReadOnlyMemory<byte> ComputeHashNotSorted(BlobTreeWithStringPath treeNode) =>
         ComputeHash(PineValueComposition.FromTreeWithStringPath(treeNode));
 
     public static PineValue? FindNodeByHash(PineValue pineValue, ReadOnlyMemory<byte> hash)

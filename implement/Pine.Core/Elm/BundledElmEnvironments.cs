@@ -8,7 +8,7 @@ namespace Pine.Core.Elm;
 
 public partial class BundledElmEnvironments
 {
-    public static PineValue? BundledElmEnvironmentFromFileTree(TreeNodeWithStringPath fileTree)
+    public static PineValue? BundledElmEnvironmentFromFileTree(BlobTreeWithStringPath fileTree)
     {
         if (ReusedInstances.Instance?.BundledDeclarations?.EmbeddedDeclarations is { } embeddedDecls)
         {
@@ -33,11 +33,11 @@ public partial class BundledElmEnvironments
             .FirstOrDefault();
     }
 
-    public static string DictionaryKeyFromFileTree(TreeNodeWithStringPath fileTree) =>
+    public static string DictionaryKeyFromFileTree(BlobTreeWithStringPath fileTree) =>
         CompiledEnvDictionaryKeyPrefix +
         DictionaryKeyHashPartFromFileTree(fileTree);
 
-    private static string DictionaryKeyHashPartFromFileTree(TreeNodeWithStringPath fileTree)
+    private static string DictionaryKeyHashPartFromFileTree(BlobTreeWithStringPath fileTree)
     {
         var pineValue =
             PineValueComposition.FromTreeWithStringPath(fileTree);
@@ -95,7 +95,7 @@ public partial class BundledElmEnvironments
     }
 
     public static (IReadOnlyList<PineValueCompactBuild.ListEntry>, ReadOnlyMemory<byte>) BuildBundleResourceFileJsonUtf8(
-        IReadOnlyDictionary<TreeNodeWithStringPath, PineValue> compiledEnvironments)
+        IReadOnlyDictionary<BlobTreeWithStringPath, PineValue> compiledEnvironments)
     {
         var allEntries =
             BuildBundleResourceFileListItems(compiledEnvironments);
@@ -104,7 +104,7 @@ public partial class BundledElmEnvironments
     }
 
     public static IReadOnlyList<PineValueCompactBuild.ListEntry> BuildBundleResourceFileListItems(
-        IReadOnlyDictionary<TreeNodeWithStringPath, PineValue> compiledEnvironments)
+        IReadOnlyDictionary<BlobTreeWithStringPath, PineValue> compiledEnvironments)
     {
         var (listValues, blobValues) =
             PineValue.CollectAllComponentsFromRoots(compiledEnvironments.Values);

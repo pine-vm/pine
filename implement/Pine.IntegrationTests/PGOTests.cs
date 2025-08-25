@@ -1841,7 +1841,7 @@ public class PGOTests
         }
     }
 
-    public static TreeNodeWithStringPath AppCodeTreeForElmModules(
+    public static BlobTreeWithStringPath AppCodeTreeForElmModules(
     IReadOnlyList<string> elmModuleTexts)
     {
         var compilerProgram = ElmCompiler.CompilerSourceFilesDefault.Value;

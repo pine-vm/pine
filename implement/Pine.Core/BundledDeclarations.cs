@@ -69,7 +69,7 @@ public record BundledDeclarations(
     }
 
     public static void CompressAndWriteBundleFile(
-        IReadOnlyDictionary<TreeNodeWithStringPath, PineValue> compiledEnvironments,
+        IReadOnlyDictionary<BlobTreeWithStringPath, PineValue> compiledEnvironments,
         IReadOnlyDictionary<string, PineValue> otherReusedValues,
         string? destinationDirectory)
     {

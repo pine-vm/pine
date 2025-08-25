@@ -265,8 +265,8 @@ public class RecordingFileStoreWriter : IFileStoreWriter
 {
     private readonly System.Threading.Lock @lock = new();
 
-    private (ImmutableList<WriteOperation> history, TreeNodeWithStringPath latestVersion) historyAndReduction =
-        ([], TreeNodeWithStringPath.EmptyTree);
+    private (ImmutableList<WriteOperation> history, BlobTreeWithStringPath latestVersion) historyAndReduction =
+        ([], BlobTreeWithStringPath.EmptyTree);
 
     public IEnumerable<WriteOperation> History =>
         historyAndReduction.history;
@@ -318,14 +318,14 @@ public class RecordingFileStoreWriter : IFileStoreWriter
             }
         }
 
-        public TreeNodeWithStringPath Apply(TreeNodeWithStringPath previousState)
+        public BlobTreeWithStringPath Apply(BlobTreeWithStringPath previousState)
         {
             if (SetFileContent is { } setFileContent)
             {
                 return
                     previousState.SetNodeAtPathSorted(
                         setFileContent.path,
-                        TreeNodeWithStringPath.Blob(setFileContent.fileContent));
+                        BlobTreeWithStringPath.Blob(setFileContent.fileContent));
             }
 
             if (AppendFileContent is { } appendFileContent)
@@ -338,10 +338,10 @@ public class RecordingFileStoreWriter : IFileStoreWriter
                     return
                         previousState.SetNodeAtPathSorted(
                             appendFileContent.path,
-                            TreeNodeWithStringPath.Blob(appendFileContent.fileContent));
+                            BlobTreeWithStringPath.Blob(appendFileContent.fileContent));
                 }
 
-                if (previousNode is not TreeNodeWithStringPath.BlobNode previousBlob)
+                if (previousNode is not BlobTreeWithStringPath.BlobNode previousBlob)
                 {
                     throw new InvalidOperationException(
                         "Invalid operation: Cannot append to non-blob node");
@@ -350,7 +350,7 @@ public class RecordingFileStoreWriter : IFileStoreWriter
                 return
                     previousState.SetNodeAtPathSorted(
                         appendFileContent.path,
-                        TreeNodeWithStringPath.Blob(
+                        BlobTreeWithStringPath.Blob(
                             BytesConversions.Concat(previousBlob.Bytes.Span, appendFileContent.fileContent.Span)));
             }
 
@@ -478,14 +478,14 @@ public class EmptyFileStoreReader : IFileStoreReader
 }
 
 public class FileStoreReaderFromTreeNodeWithStringPath(
-    TreeNodeWithStringPath root)
+    BlobTreeWithStringPath root)
     : IFileStoreReader
 {
     public ReadOnlyMemory<byte>? GetFileContent(IImmutableList<string> path)
     {
         var node = root.GetNodeAtPath(path);
 
-        if (node is TreeNodeWithStringPath.BlobNode blobNode)
+        if (node is BlobTreeWithStringPath.BlobNode blobNode)
         {
             return blobNode.Bytes;
         }
@@ -502,7 +502,7 @@ public class FileStoreReaderFromTreeNodeWithStringPath(
             return [];
         }
 
-        if (directoryNode is TreeNodeWithStringPath.TreeNode directory)
+        if (directoryNode is BlobTreeWithStringPath.TreeNode directory)
         {
             return
                 directory.EnumerateBlobsTransitive()

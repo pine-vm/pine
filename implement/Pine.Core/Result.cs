@@ -12,12 +12,15 @@ public abstract record Result<ErrT, OkT>
     /// <summary>
     /// Explicit constructor for the 'Err' case.
     /// </summary>
+#pragma warning disable IDE1006 // Default analyzer fails to consider naming clash.
     public static Result<ErrT, OkT> err(ErrT err) => new Err(err);
 
     /// <summary>
     /// Explicit constructor for the 'Ok' case.
     /// </summary>
     public static Result<ErrT, OkT> ok(OkT ok) => new Ok(ok);
+
+#pragma warning restore IDE1006
 
     /// <summary>
     /// Implicit constructor for the 'Err' case.

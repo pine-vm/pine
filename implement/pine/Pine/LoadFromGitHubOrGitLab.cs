@@ -231,11 +231,11 @@ public static class LoadFromGitHubOrGitLab
                                 var urlInFirstParentCommitWithSameValueAtThisPath =
                                     BackToUrl(parsedUrl with { inRepository = partInRepositoryWithCommit(firstParentCommitWithSameTreeRef) });
 
-                                static TreeNodeWithStringPath convertToLiteralNodeObjectRecursive(GitObject gitObject)
+                                static BlobTreeWithStringPath convertToLiteralNodeObjectRecursive(GitObject gitObject)
                                 {
                                     if (gitObject is Tree gitTree)
                                     {
-                                        return TreeNodeWithStringPath.SortedTree(
+                                        return BlobTreeWithStringPath.SortedTree(
                                             treeContent:
                                                 gitTree.Select(treeEntry =>
                                                     (treeEntry.Name,
@@ -268,7 +268,7 @@ public static class LoadFromGitHubOrGitLab
                                         if (loadedBlobSHA1Base16Lower != expectedSHA)
                                             throw new Exception("Unexpected content for git object : SHA is " + loadedBlobSHA1Base16Lower + " instead of " + expectedSHA);
 
-                                        return TreeNodeWithStringPath.Blob(memoryStream.ToArray());
+                                        return BlobTreeWithStringPath.Blob(memoryStream.ToArray());
                                     }
 
                                     throw new Exception("Unexpected kind of git object: " + gitObject.GetType() + ", " + gitObject.Id);
@@ -614,7 +614,7 @@ public static class LoadFromGitHubOrGitLab
     }
 
     public record LoadFromUrlSuccess(
-        TreeNodeWithStringPath tree,
+        BlobTreeWithStringPath tree,
         string urlInCommit,
         string urlInFirstParentCommitWithSameValueAtThisPath,
         (string hash, CommitContent content) rootCommit,
@@ -623,7 +623,7 @@ public static class LoadFromGitHubOrGitLab
         public ReadOnlyMemory<byte>? AsBlob =>
             tree switch
             {
-                TreeNodeWithStringPath.BlobNode blob => blob.Bytes,
+                BlobTreeWithStringPath.BlobNode blob => blob.Bytes,
                 _ => null
             };
     }

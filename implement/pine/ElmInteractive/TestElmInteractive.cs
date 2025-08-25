@@ -43,12 +43,12 @@ public class TestElmInteractive
     }
 
     public record ParsedScenarios(
-        TreeNodeWithStringPath ScenariosTree,
+        BlobTreeWithStringPath ScenariosTree,
         string ScenariosTreeCompositionHash,
         IReadOnlyDictionary<string, Scenario> NamedDistinctScenarios);
 
     public record Scenario(
-        TreeNodeWithStringPath? AppCodeTree,
+        BlobTreeWithStringPath? AppCodeTree,
         IReadOnlyList<(string stepName, ScenarioStep step)> Steps);
 
     public record ScenarioStep(
@@ -78,7 +78,7 @@ public class TestElmInteractive
     }
 
     public static ParsedScenarios ParseElmInteractiveScenarios(
-        TreeNodeWithStringPath scenariosTree,
+        BlobTreeWithStringPath scenariosTree,
         IConsole console)
     {
         var scenariosTreeComposition =
@@ -91,8 +91,8 @@ public class TestElmInteractive
         var namedDistinctScenarios =
             scenariosTree switch
             {
-                TreeNodeWithStringPath.TreeNode treeNode =>
-                treeNode.Elements
+                BlobTreeWithStringPath.TreeNode treeNode =>
+                treeNode.Items
                 .ToImmutableDictionary(
                     keySelector:
                     treeNode => treeNode.name,
@@ -202,7 +202,7 @@ public class TestElmInteractive
     public static ImmutableDictionary<TContainer, InteractiveScenarioTestReport> TestElmInteractiveScenarios<TContainer>(
         IReadOnlyCollection<TContainer> scenarioContainers,
         Func<TContainer, (string, Scenario)> getScenario,
-        Func<TreeNodeWithStringPath?, IInteractiveSession> interactiveSessionFromAppCode,
+        Func<BlobTreeWithStringPath?, IInteractiveSession> interactiveSessionFromAppCode,
         Action<TestInteractiveScenariosLogEntry>? asyncLogDelegate)
         where TContainer : notnull =>
         scenarioContainers
@@ -229,7 +229,7 @@ public class TestElmInteractive
 
     public static InteractiveScenarioTestReport TestElmInteractiveScenario(
         Scenario parsedScenario,
-        Func<TreeNodeWithStringPath?, IInteractiveSession> interactiveSessionFromAppCode,
+        Func<BlobTreeWithStringPath?, IInteractiveSession> interactiveSessionFromAppCode,
         Action<TestInteractiveScenarioLogEntry>? asyncLogDelegate)
     {
         var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -355,7 +355,7 @@ public class TestElmInteractive
             ElapsedTime: totalStopwatch.Elapsed);
     }
 
-    public static Result<string, Scenario> ParseScenario(TreeNodeWithStringPath scenarioTree)
+    public static Result<string, Scenario> ParseScenario(BlobTreeWithStringPath scenarioTree)
     {
         var appCodeTree =
             scenarioTree.GetNodeAtPath(["context-app"]);
@@ -400,17 +400,17 @@ public class TestElmInteractive
             .Map(steps => new Scenario(AppCodeTree: appCodeTree, Steps: steps));
     }
 
-    public static Result<string, ScenarioStep> ParseScenarioStep(TreeNodeWithStringPath sessionStep)
+    public static Result<string, ScenarioStep> ParseScenarioStep(BlobTreeWithStringPath sessionStep)
     {
         var expectedResponse =
-            sessionStep.GetNodeAtPath(["expected-value.txt"]) is TreeNodeWithStringPath.BlobNode expectedValueBlob
+            sessionStep.GetNodeAtPath(["expected-value.txt"]) is BlobTreeWithStringPath.BlobNode expectedValueBlob
             ?
             Encoding.UTF8.GetString(expectedValueBlob.Bytes.Span)
             :
             null;
 
         var expectedErrorContains =
-            sessionStep.GetNodeAtPath(["expected-error-contains.txt"]) is TreeNodeWithStringPath.BlobNode expectedErrorContainsBlob
+            sessionStep.GetNodeAtPath(["expected-error-contains.txt"]) is BlobTreeWithStringPath.BlobNode expectedErrorContainsBlob
             ?
             Encoding.UTF8.GetString(expectedErrorContainsBlob.Bytes.Span)
             :
@@ -419,7 +419,7 @@ public class TestElmInteractive
         return
             (sessionStep.GetNodeAtPath(["submission.txt"]) switch
             {
-                TreeNodeWithStringPath.BlobNode submissionBlob =>
+                BlobTreeWithStringPath.BlobNode submissionBlob =>
                 Result<string, string>.ok(Encoding.UTF8.GetString(submissionBlob.Bytes.Span)),
 
                 _ =>

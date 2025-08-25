@@ -14,14 +14,14 @@ namespace Pine.Elm;
 
 public class ElmCompiler
 {
-    private static readonly ConcurrentDictionary<TreeNodeWithStringPath, Task<Result<string, ElmCompiler>>> buildCompilerFromSource = new();
+    private static readonly ConcurrentDictionary<BlobTreeWithStringPath, Task<Result<string, ElmCompiler>>> buildCompilerFromSource = new();
 
-    static public readonly Lazy<TreeNodeWithStringPath> CompilerSourceContainerFilesDefault =
+    static public readonly Lazy<BlobTreeWithStringPath> CompilerSourceContainerFilesDefault =
         new(() => PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(
             LoadElmCompilerSourceCodeFiles()
             .Extract(error => throw new NotImplementedException(nameof(LoadElmCompilerSourceCodeFiles) + ": " + error))));
 
-    static public readonly Lazy<TreeNodeWithStringPath> ElmCoreAndKernelModuleFilesDefault =
+    static public readonly Lazy<BlobTreeWithStringPath> ElmCoreAndKernelModuleFilesDefault =
         new(() =>
         CompilerSourceContainerFilesDefault.Value.GetNodeAtPath(["elm-kernel-modules"])
         ?? throw new Exception("Did not find node elm-kernel-modules"));
@@ -42,7 +42,7 @@ public class ElmCompiler
             comparer:
             EnumerableExtension.EqualityComparer<IReadOnlyList<string>>()));
 
-    static public readonly Lazy<TreeNodeWithStringPath> CompilerSourceFilesDefault =
+    static public readonly Lazy<BlobTreeWithStringPath> CompilerSourceFilesDefault =
         new(() => ElmCompilerFileTreeFromBundledFileTree(CompilerSourceContainerFilesDefault.Value));
 
     public static Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>> LoadElmCompilerSourceCodeFiles() =>
@@ -118,7 +118,7 @@ public class ElmCompiler
     }
 
     public static Task<Result<string, ElmCompiler>> GetElmCompilerAsync(
-        TreeNodeWithStringPath compilerSourceFiles)
+        BlobTreeWithStringPath compilerSourceFiles)
     {
         return buildCompilerFromSource.GetOrAdd(
             compilerSourceFiles,
@@ -132,7 +132,7 @@ public class ElmCompiler
     /// experimenting with modifications to the emit stage.
     /// </summary>
     public static Result<string, ElmCompiler> BuildCompilerFromSourceFiles(
-        TreeNodeWithStringPath compilerSourceFiles,
+        BlobTreeWithStringPath compilerSourceFiles,
         ElmCompiler? overrideElmCompiler = null)
     {
         var compilerWithPackagesTree =
@@ -150,8 +150,8 @@ public class ElmCompiler
             });
     }
 
-    public static TreeNodeWithStringPath ElmCompilerFileTreeFromBundledFileTree(
-        TreeNodeWithStringPath bundledFileTree) =>
+    public static BlobTreeWithStringPath ElmCompilerFileTreeFromBundledFileTree(
+        BlobTreeWithStringPath bundledFileTree) =>
         ElmCompilerFileTreeFromBundledFileTree(
             bundledFileTree,
             rootModuleFileNames: DefaultCompilerTreeRootModuleFilePaths);
@@ -165,8 +165,8 @@ public class ElmCompiler
         ["src", "CompileElmAppMain.elm"],
         ];
 
-    public static TreeNodeWithStringPath ElmCompilerFileTreeFromBundledFileTree(
-        TreeNodeWithStringPath bundledFileTree,
+    public static BlobTreeWithStringPath ElmCompilerFileTreeFromBundledFileTree(
+        BlobTreeWithStringPath bundledFileTree,
         IReadOnlyList<IReadOnlyList<string>> rootModuleFileNames)
     {
         var compilerPackageSourcesTrees =
@@ -187,7 +187,7 @@ public class ElmCompiler
             .ToImmutableArray();
 
         var compilerProgramOnlyElmJson =
-            TreeNodeWithStringPath.FilterNodesByPath(
+            BlobTreeWithStringPath.FilterNodesByPath(
                 bundledFileTree,
                 nodePath => nodePath.SequenceEqual(["elm.json"]));
 
@@ -217,13 +217,13 @@ public class ElmCompiler
             .Aggregate(
                 seed: compilerProgramOnlyElmJson,
                 func: (aggregate, elmModule) =>
-                aggregate.SetNodeAtPathSorted(elmModule.path, TreeNodeWithStringPath.Blob(elmModule.blobContent)));
+                aggregate.SetNodeAtPathSorted(elmModule.path, BlobTreeWithStringPath.Blob(elmModule.blobContent)));
 
         return compilerWithPackagesTree;
     }
 
     public static Result<string, PineValue> LoadOrCompileInteractiveEnvironment(
-        TreeNodeWithStringPath appCodeTree,
+        BlobTreeWithStringPath appCodeTree,
         IReadOnlyList<IReadOnlyList<string>> rootFilePaths,
         bool skipLowering,
         ElmCompiler? overrideElmCompiler = null)
@@ -264,7 +264,7 @@ public class ElmCompiler
     }
 
     public static Result<string, PineValue> CompileInteractiveEnvironment(
-        TreeNodeWithStringPath appCodeTree,
+        BlobTreeWithStringPath appCodeTree,
         IReadOnlyList<IReadOnlyList<string>> rootFilePaths,
         bool skipLowering,
         bool skipFilteringForSourceDirs,
@@ -377,8 +377,8 @@ public class ElmCompiler
                 elmCompiler: defaultCompiler);
     }
 
-    public static TreeNodeWithStringPath FilterTreeForCompilationRoots(
-        TreeNodeWithStringPath tree,
+    public static BlobTreeWithStringPath FilterTreeForCompilationRoots(
+        BlobTreeWithStringPath tree,
         IReadOnlyList<IReadOnlyList<string>> rootFilePaths)
     {
         var allAvailableElmFiles =
@@ -405,7 +405,7 @@ public class ElmCompiler
             .ToImmutableHashSet(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
 
         return
-            TreeNodeWithStringPath.FilterNodesByPath(
+            BlobTreeWithStringPath.FilterNodesByPath(
                 tree,
                 nodePath =>
                 !filePathsExcluded.Contains(nodePath));
@@ -618,7 +618,7 @@ public class ElmCompiler
                 (err) => throw new Exception("Invalid Elm result value: " + err));
     }
 
-    public static bool CheckIfAppUsesLowering(TreeNodeWithStringPath appCode)
+    public static bool CheckIfAppUsesLowering(BlobTreeWithStringPath appCode)
     {
         var allAvailableElmFiles =
             appCode
@@ -642,8 +642,8 @@ public class ElmCompiler
         return false;
     }
 
-    public static TreeNodeWithStringPath FilterTreeForCompilationRoots(
-        TreeNodeWithStringPath tree,
+    public static BlobTreeWithStringPath FilterTreeForCompilationRoots(
+        BlobTreeWithStringPath tree,
         IReadOnlySet<IReadOnlyList<string>> rootFilePaths,
         bool skipFilteringForSourceDirs)
     {
@@ -659,12 +659,12 @@ public class ElmCompiler
         return
             trees
             .Aggregate(
-                seed: TreeNodeWithStringPath.EmptyTree,
-                TreeNodeWithStringPath.MergeBlobs);
+                seed: BlobTreeWithStringPath.EmptyTree,
+                BlobTreeWithStringPath.MergeBlobs);
     }
 
-    public static TreeNodeWithStringPath FilterTreeForCompilationRoot(
-        TreeNodeWithStringPath tree,
+    public static BlobTreeWithStringPath FilterTreeForCompilationRoot(
+        BlobTreeWithStringPath tree,
         IReadOnlyList<string> rootFilePath,
         bool skipFilteringForSourceDirs)
     {
@@ -703,14 +703,14 @@ public class ElmCompiler
             .ToImmutableHashSet(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
 
         return
-            TreeNodeWithStringPath.FilterNodesByPath(
+            BlobTreeWithStringPath.FilterNodesByPath(
                 tree,
                 nodePath =>
                 !filePathsExcluded.Contains(nodePath));
     }
 
     private static Func<IReadOnlyList<string>, bool> BuildPredicateFilePathIsInSourceDirectory(
-        TreeNodeWithStringPath tree,
+        BlobTreeWithStringPath tree,
         IReadOnlyList<string> rootFilePath)
     {
         if (FindElmJsonForEntryPoint(tree, rootFilePath) is not { } elmJsonForEntryPoint)
@@ -751,7 +751,7 @@ public class ElmCompiler
 
     public static (IReadOnlyList<string> filePath, ElmJsonStructure elmJsonParsed)?
         FindElmJsonForEntryPoint(
-        TreeNodeWithStringPath sourceFiles,
+        BlobTreeWithStringPath sourceFiles,
         IReadOnlyList<string> entryPointFilePath)
     {
         // Collect all elm.json files from the tree, storing each parsed ElmJsonStructure along with its path:

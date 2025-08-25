@@ -1453,8 +1453,8 @@ public class LanguageServer(
         return null;
     }
 
-    public static TreeNodeWithStringPath MergeIntoFileTree(
-        TreeNodeWithStringPath seed,
+    public static BlobTreeWithStringPath MergeIntoFileTree(
+        BlobTreeWithStringPath seed,
         IReadOnlyDictionary<IReadOnlyList<string>, System.ReadOnlyMemory<byte>> dictionary)
     {
         return
@@ -1467,7 +1467,7 @@ public class LanguageServer(
                     return
                         aggregate.SetNodeAtPathSorted(
                             nextFile.Key,
-                            new TreeNodeWithStringPath.BlobNode(nextFile.Value));
+                            new BlobTreeWithStringPath.BlobNode(nextFile.Value));
                 });
     }
 

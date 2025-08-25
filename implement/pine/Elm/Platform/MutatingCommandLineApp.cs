@@ -146,7 +146,7 @@ public record CommandLineAppConfig(
     private static readonly PineVM.PineVMParseCache s_parseCache = new();
 
     public static CommandLineAppConfig ConfigFromSourceFilesAndModuleName(
-        TreeNodeWithStringPath sourceFiles,
+        BlobTreeWithStringPath sourceFiles,
         IReadOnlyList<string> moduleName)
     {
         using var interactiveSession =

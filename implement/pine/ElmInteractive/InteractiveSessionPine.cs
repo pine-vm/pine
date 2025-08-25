@@ -40,8 +40,8 @@ public class InteractiveSessionPine : IInteractiveSession
     static readonly ConcurrentDictionary<string, Result<string, KeyValuePair<IReadOnlyList<string>, PineValue>>> TryParseModuleTextCache = new();
 
     public InteractiveSessionPine(
-        TreeNodeWithStringPath compilerSourceFiles,
-        TreeNodeWithStringPath? appCodeTree,
+        BlobTreeWithStringPath compilerSourceFiles,
+        BlobTreeWithStringPath? appCodeTree,
         bool? overrideSkipLowering,
         IReadOnlyList<IReadOnlyList<string>>? entryPointsFilePaths,
         bool caching,
@@ -61,7 +61,7 @@ public class InteractiveSessionPine : IInteractiveSession
     }
 
     public InteractiveSessionPine(
-        TreeNodeWithStringPath compilerSourceFiles,
+        BlobTreeWithStringPath compilerSourceFiles,
         AppCompilationUnits? appCodeTree,
         bool? overrideSkipLowering,
         IReadOnlyList<IReadOnlyList<string>>? entryPointsFilePaths,
@@ -81,8 +81,8 @@ public class InteractiveSessionPine : IInteractiveSession
     }
 
     public InteractiveSessionPine(
-        TreeNodeWithStringPath compilerSourceFiles,
-        TreeNodeWithStringPath? appCodeTree,
+        BlobTreeWithStringPath compilerSourceFiles,
+        BlobTreeWithStringPath? appCodeTree,
         bool? overrideSkipLowering,
         IReadOnlyList<IReadOnlyList<string>>? entryPointsFilePaths,
         IPineVM pineVM)
@@ -98,7 +98,7 @@ public class InteractiveSessionPine : IInteractiveSession
     }
 
     public InteractiveSessionPine(
-        TreeNodeWithStringPath compilerSourceFiles,
+        BlobTreeWithStringPath compilerSourceFiles,
         AppCompilationUnits? appCodeTree,
         bool? overrideSkipLowering,
         IReadOnlyList<IReadOnlyList<string>>? entryPointsFilePaths,
@@ -114,7 +114,7 @@ public class InteractiveSessionPine : IInteractiveSession
     }
 
     public InteractiveSessionPine(
-        TreeNodeWithStringPath compilerSourceFiles,
+        BlobTreeWithStringPath compilerSourceFiles,
         AppCompilationUnits? appCodeTree,
         bool? overrideSkipLowering,
         IReadOnlyList<IReadOnlyList<string>>? entryPointsFilePaths,
@@ -216,10 +216,10 @@ public class InteractiveSessionPine : IInteractiveSession
     {
         var skipLowering =
             overrideSkipLowering ??
-            !ElmCompiler.CheckIfAppUsesLowering(appCodeTree?.AppFiles ?? TreeNodeWithStringPath.EmptyTree);
+            !ElmCompiler.CheckIfAppUsesLowering(appCodeTree?.AppFiles ?? BlobTreeWithStringPath.EmptyTree);
 
         var appSourceFiles =
-            appCodeTree ?? AppCompilationUnits.WithoutPackages(TreeNodeWithStringPath.EmptyTree);
+            appCodeTree ?? AppCompilationUnits.WithoutPackages(BlobTreeWithStringPath.EmptyTree);
 
         var initialStateElmValue =
             ElmValueInterop.PineValueEncodedAsInElmCompiler(PineValue.EmptyList);
@@ -436,7 +436,7 @@ public class InteractiveSessionPine : IInteractiveSession
     public static Result<string, PineValue>
         CompileInteractiveEnvironmentPackageEncodedInCompiler(
         PineValue initialStateElmValueInCompiler,
-        TreeNodeWithStringPath packageFiles,
+        BlobTreeWithStringPath packageFiles,
         ElmJsonStructure elmJson,
         ElmCompiler elmCompiler,
         IPineVM pineVM)
@@ -490,7 +490,7 @@ public class InteractiveSessionPine : IInteractiveSession
     public static Result<string, PineValue>
         CompileInteractiveEnvironmentUnitEncodedInCompiler(
         PineValue initialStateElmValueInCompiler,
-        TreeNodeWithStringPath sourceFiles,
+        BlobTreeWithStringPath sourceFiles,
         IReadOnlySet<IReadOnlyList<string>>? entryPointsFilePaths,
         ElmCompiler elmCompiler,
         IPineVM pineVM)
@@ -569,15 +569,15 @@ public class InteractiveSessionPine : IInteractiveSession
         return compiledNewEnvInCompiler;
     }
 
-    public static TreeNodeWithStringPath MergeDefaultElmCoreAndKernelModules(
-        TreeNodeWithStringPath appCodeTree) =>
+    public static BlobTreeWithStringPath MergeDefaultElmCoreAndKernelModules(
+        BlobTreeWithStringPath appCodeTree) =>
         MergeDefaultElmCoreAndKernelModules(
             appCodeTree,
             ElmCompiler.ElmCoreAndKernelModuleFilesDefault.Value);
 
-    public static TreeNodeWithStringPath MergeDefaultElmCoreAndKernelModules(
-        TreeNodeWithStringPath appCodeTree,
-        TreeNodeWithStringPath elmCoreAndKernelModuleFilesDefault)
+    public static BlobTreeWithStringPath MergeDefaultElmCoreAndKernelModules(
+        BlobTreeWithStringPath appCodeTree,
+        BlobTreeWithStringPath elmCoreAndKernelModuleFilesDefault)
     {
         var appCodeTreeModuleNames =
             appCodeTree.EnumerateBlobsTransitive()
@@ -619,7 +619,7 @@ public class InteractiveSessionPine : IInteractiveSession
                     return
                     aggregate.SetNodeAtPathSorted(
                         nextBlob.path,
-                        TreeNodeWithStringPath.Blob(nextBlob.blobContent));
+                        BlobTreeWithStringPath.Blob(nextBlob.blobContent));
                 });
     }
 
@@ -644,9 +644,9 @@ public class InteractiveSessionPine : IInteractiveSession
         IReadOnlyList<string> ModuleName,
         string ModuleText);
 
-    public static IEnumerable<(TreeNodeWithStringPath tree, ParsedModule sourceModule)>
+    public static IEnumerable<(BlobTreeWithStringPath tree, ParsedModule sourceModule)>
         AppSourceFileTreesForIncrementalCompilation(
-        TreeNodeWithStringPath appSourceFiles,
+        BlobTreeWithStringPath appSourceFiles,
         bool skipLowering,
         IReadOnlySet<IReadOnlyList<string>>? entryPointsFilePaths,
         bool skipFilteringForSourceDirs)
@@ -690,7 +690,7 @@ public class InteractiveSessionPine : IInteractiveSession
                 .Extract(err => throw new Exception("Failed parsing module name: " + err));
 
             mutatedTree =
-                mutatedTree.SetNodeAtPathSorted(sourceModule.filePath, TreeNodeWithStringPath.Blob(sourceModule.fileContent));
+                mutatedTree.SetNodeAtPathSorted(sourceModule.filePath, BlobTreeWithStringPath.Blob(sourceModule.fileContent));
 
             yield return
                 (mutatedTree,
@@ -1099,7 +1099,7 @@ public class InteractiveSessionPine : IInteractiveSession
     }
 
     public static Result<string, Pine.CompilePineToDotNet.CompileCSharpClassResult> CompileForProfiledScenarios(
-        TreeNodeWithStringPath compileElmProgramCodeFiles,
+        BlobTreeWithStringPath compileElmProgramCodeFiles,
         IReadOnlyList<TestElmInteractive.Scenario> scenarios,
         Pine.CompilePineToDotNet.SyntaxContainerConfig syntaxContainerConfig,
         int limitNumber,
@@ -1130,7 +1130,7 @@ public class InteractiveSessionPine : IInteractiveSession
     }
 
     public static IReadOnlyDictionary<ExpressionUsageAnalysis, ExpressionUsageProfile> CollectExpressionsToOptimizeFromScenario(
-        TreeNodeWithStringPath compileElmProgramCodeFiles,
+        BlobTreeWithStringPath compileElmProgramCodeFiles,
         TestElmInteractive.Scenario scenario,
         bool enableEvalExprCache)
     {

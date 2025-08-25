@@ -46,7 +46,7 @@ public class ElmLanguageServiceTests
             .Extract(err => throw new Exception(err));
 
         AssertHover(
-            workspace: TreeNodeWithStringPath.EmptyTree,
+            workspace: BlobTreeWithStringPath.EmptyTree,
             filePathOpenedInEditor: ["src", "Main.elm"],
             elmModuleText,
             expectedHoverText: "    init : State");
@@ -117,10 +117,10 @@ public class ElmLanguageServiceTests
             new PineVM.PineVM(evalCache: pineVMCache.EvalCache);
 
         var workspace =
-            TreeNodeWithStringPath.EmptyTree
+            BlobTreeWithStringPath.EmptyTree
             .SetNodeAtPathSorted(
                 ["src", "Alfa.elm"],
-                new TreeNodeWithStringPath.BlobNode(Encoding.UTF8.GetBytes(elmModuleTextAlfa)));
+                new BlobTreeWithStringPath.BlobNode(Encoding.UTF8.GetBytes(elmModuleTextAlfa)));
 
         AssertCompletionItems(
             workspace: workspace,
@@ -138,7 +138,7 @@ public class ElmLanguageServiceTests
     }
 
     private static void AssertHover(
-        TreeNodeWithStringPath workspace,
+        BlobTreeWithStringPath workspace,
         IReadOnlyList<string> filePathOpenedInEditor,
         string elmModuleTextWithSplitSymbol,
         string expectedHoverText)
@@ -172,7 +172,7 @@ public class ElmLanguageServiceTests
             workspace
             .SetNodeAtPathSorted(
                 filePathOpenedInEditor,
-                new TreeNodeWithStringPath.BlobNode(Encoding.UTF8.GetBytes(elmModuleText)));
+                new BlobTreeWithStringPath.BlobNode(Encoding.UTF8.GetBytes(elmModuleText)));
 
         var languageService =
             LanguageServiceState.InitLanguageServiceState()
@@ -198,7 +198,7 @@ public class ElmLanguageServiceTests
     }
 
     private static void MutateServiceAddingFiles(
-        TreeNodeWithStringPath fileTree,
+        BlobTreeWithStringPath fileTree,
         LanguageServiceState languageServiceState)
     {
 
@@ -222,7 +222,7 @@ public class ElmLanguageServiceTests
     }
 
     private static void AssertCompletionItems(
-        TreeNodeWithStringPath workspace,
+        BlobTreeWithStringPath workspace,
         IReadOnlyList<string> filePathOpenedInEditor,
         string elmModuleTextBefore,
         string elmModuleTextWithSplitSymbol,
@@ -244,7 +244,7 @@ public class ElmLanguageServiceTests
             workspace
             .SetNodeAtPathSorted(
                 filePathOpenedInEditor,
-                new TreeNodeWithStringPath.BlobNode(Encoding.UTF8.GetBytes(elmModuleTextBefore)));
+                new BlobTreeWithStringPath.BlobNode(Encoding.UTF8.GetBytes(elmModuleTextBefore)));
 
         MutateServiceAddingFiles(mergedWorkspaceBefore, languageService);
 
@@ -270,7 +270,7 @@ public class ElmLanguageServiceTests
             workspace
             .SetNodeAtPathSorted(
                 filePathOpenedInEditor,
-                new TreeNodeWithStringPath.BlobNode(Encoding.UTF8.GetBytes(elmModuleText)));
+                new BlobTreeWithStringPath.BlobNode(Encoding.UTF8.GetBytes(elmModuleText)));
 
         var completionItemsRequest =
             new Elm.LanguageServiceInterface.ProvideCompletionItemsRequestStruct(

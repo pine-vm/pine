@@ -37,7 +37,7 @@ public sealed record StaticAppSnapshottingState : IAsyncDisposable
     private readonly IImmutableList<string> _appStateSnapshotFilePath;
 
     public static StaticAppSnapshottingState Create(
-        TreeNodeWithStringPath webServiceAppSourceFiles,
+        BlobTreeWithStringPath webServiceAppSourceFiles,
         WebServiceConfigJson? serverConfig,
         IFileStore fileStore,
         Action<string> logMessage,
@@ -51,7 +51,7 @@ public sealed record StaticAppSnapshottingState : IAsyncDisposable
             cancellationToken: cancellationToken);
 
     public static StaticAppSnapshottingState Create(
-        TreeNodeWithStringPath webServiceAppSourceFiles,
+        BlobTreeWithStringPath webServiceAppSourceFiles,
         WebServiceConfigJson? serverConfig,
         IReadOnlyList<string> entryFileName,
         IFileStore fileStore,
