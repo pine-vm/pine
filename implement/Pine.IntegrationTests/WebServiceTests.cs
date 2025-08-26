@@ -16,6 +16,7 @@ using System.Net.Http.Headers;
 using Xunit;
 using static MoreLinq.Extensions.BatchExtension;
 using static MoreLinq.Extensions.SkipLastWhileExtension;
+using Pine.Core.IO;
 
 namespace Pine.IntegrationTests;
 

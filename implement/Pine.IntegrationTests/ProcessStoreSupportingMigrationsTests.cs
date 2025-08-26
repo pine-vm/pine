@@ -2,6 +2,7 @@ using ElmTime.Platform.WebService.ProcessStoreSupportingMigrations;
 using AwesomeAssertions;
 using System.Collections.Immutable;
 using Xunit;
+using Pine.Core.IO;
 
 namespace Pine.IntegrationTests;
 

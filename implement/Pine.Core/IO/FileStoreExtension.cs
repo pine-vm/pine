@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 
-namespace Pine;
+namespace Pine.Core.IO;
 
 public static class FileStoreExtension
 {
@@ -18,11 +18,11 @@ public static class FileStoreExtension
         );
 
     public static IFileStoreReader ForSubdirectory(this IFileStoreReader originalFileStore, string directoryName) =>
-        ForSubdirectory(originalFileStore, [directoryName]);
+        originalFileStore.ForSubdirectory([directoryName]);
 
     public static IFileStoreReader ForSubdirectory(
         this IFileStoreReader originalFileStore, IEnumerable<string> directoryPath) =>
-        WithMappedPath(originalFileStore, originalPath => originalPath.InsertRange(0, directoryPath));
+        originalFileStore.WithMappedPath(originalPath => originalPath.InsertRange(0, directoryPath));
 
     public static IFileStoreWriter WithMappedPath(
         this IFileStoreWriter originalFileStore, Func<IImmutableList<string>, IImmutableList<string>> pathMap) =>
@@ -41,11 +41,11 @@ public static class FileStoreExtension
         );
 
     public static IFileStoreWriter ForSubdirectory(this IFileStoreWriter originalFileStore, string directoryName) =>
-        ForSubdirectory(originalFileStore, [directoryName]);
+        originalFileStore.ForSubdirectory([directoryName]);
 
     public static IFileStoreWriter ForSubdirectory(
         this IFileStoreWriter originalFileStore, IEnumerable<string> directoryPath) =>
-        WithMappedPath(originalFileStore, originalPath => originalPath.InsertRange(0, directoryPath));
+        originalFileStore.WithMappedPath(originalPath => originalPath.InsertRange(0, directoryPath));
 
     public static IFileStore MergeReader(
         this IFileStore primary,

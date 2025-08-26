@@ -11,6 +11,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Xunit;
 using System.Text.Json;
+using Pine.Core.IO;
 
 namespace Pine.IntegrationTests;
 
