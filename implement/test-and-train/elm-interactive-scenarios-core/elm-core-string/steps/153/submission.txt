@@ -1,0 +1,1 @@
+String.replace "foo" "X" "foobarfoo"

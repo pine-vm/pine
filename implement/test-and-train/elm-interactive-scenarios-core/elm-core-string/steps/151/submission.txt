@@ -1,0 +1,1 @@
+String.replace "ana" "X" "bananarama"

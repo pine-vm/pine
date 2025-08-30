@@ -4,4 +4,7 @@
 , String.split "," "cat,dog,cow"
 , String.split "s" "s"
 , String.split "t" "tt"
+, String.split "ana" "bananarama"
+, String.split "hello" "hello"
+, String.split "aaa" "aaaa"
 ]

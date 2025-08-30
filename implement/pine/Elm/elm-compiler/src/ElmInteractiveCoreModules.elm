@@ -1745,14 +1745,18 @@ splitHelperOnBlob offset collected lastStart sepBytes stringBytes =
 
 
 join : String -> List String -> String
-join sepList chunks =
+join (String sepCharsBytes) chunks =
     let
-        charsLists =
-            List.intersperse
-                (toList sepList)
-                (List.map toList chunks)
+        charsBytesList =
+            Pine_kernel.skip
+                [ 1
+                , List.concatMap
+                    (\\(String chars) -> [ sepCharsBytes, chars ])
+                    chunks
+                ]
     in
-    String (Pine_kernel.concat (Pine_kernel.concat charsLists))
+    String
+        (Pine_kernel.concat charsBytesList)
 
 
 slice : Int -> Int -> String -> String
@@ -2203,6 +2207,9 @@ isCharRemovedOnTrim char =
         True
 
     else if Pine_kernel.equal [ char, '\\u{000D}' ] then
+        True
+
+    else if Pine_kernel.equal [ char, '\\u{00A0}' ] then
         True
 
     else

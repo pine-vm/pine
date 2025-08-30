@@ -580,6 +580,28 @@ public class Precompiled
         }
 
         {
+            var splitHelperOnBlobExpression = popularExpressionDictionary["String.splitHelperOnBlob"];
+
+            var splitHelperOnBlobExpressionValue =
+                ExpressionEncoding.EncodeExpressionAsValue(splitHelperOnBlobExpression);
+
+            var stringToListRecursiveEnvClass =
+                PineValueClass.Create(
+                    [
+                    new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                    [0, 0],
+                    splitHelperOnBlobExpressionValue)
+                    ]);
+
+            yield return
+                new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
+                    splitHelperOnBlobExpression,
+                    [new PrecompiledEntry(
+                        stringToListRecursiveEnvClass,
+                        String_splitHelperOnBlob)]);
+        }
+
+        {
             var assocListGetExpressionEnvClass =
                 PineValueClass.Create(
                     [
@@ -4946,6 +4968,156 @@ public class Precompiled
         var finalValue =
             KernelFunctionSpecialized.concat(
                 mappedCharsValue, PineValue.List([.. charsItems]));
+
+        return () => new PrecompiledResult.FinalValue(finalValue, StackFrameCount: 0);
+    }
+
+    static Func<PrecompiledResult>? String_splitHelperOnBlob(
+        PineValue environment,
+        PineVMParseCache parseCache)
+    {
+        /*
+        splitHelperOnBlob : Int -> List String -> Int -> Int -> Int -> List String
+        splitHelperOnBlob offset collected lastStart sepBytes stringBytes =
+            let
+                sliceBytes : Int
+                sliceBytes =
+                    Pine_kernel.take
+                        [ Pine_kernel.length sepBytes
+                        , Pine_kernel.skip [ offset, stringBytes ]
+                        ]
+            in
+            if Pine_kernel.equal [ sliceBytes, sepBytes ] then
+                let
+                    separatedSliceLength : Int
+                    separatedSliceLength =
+                        Pine_kernel.int_add
+                            [ offset
+                            , Pine_kernel.int_mul [ -1, lastStart ]
+                            ]
+
+                    separatedSlice : Int
+                    separatedSlice =
+                        Pine_kernel.take
+                            [ separatedSliceLength
+                            , Pine_kernel.skip [ lastStart, stringBytes ]
+                            ]
+                in
+                splitHelperOnBlob
+                    (Pine_kernel.int_add [ offset, Pine_kernel.length sepBytes ])
+                    (Pine_kernel.concat [ collected, [ String separatedSlice ] ])
+                    (Pine_kernel.int_add [ offset, Pine_kernel.length sepBytes ])
+                    sepBytes
+                    stringBytes
+
+            else if Pine_kernel.equal [ Pine_kernel.length sliceBytes, 0 ] then
+                let
+                    separatedSlice : Int
+                    separatedSlice =
+                        Pine_kernel.skip [ lastStart, stringBytes ]
+                in
+                Pine_kernel.concat [ collected, [ String separatedSlice ] ]
+
+            else
+                splitHelperOnBlob
+                    (Pine_kernel.int_add [ offset, 4 ])
+                    collected
+                    lastStart
+                    sepBytes
+                    stringBytes
+
+         * */
+
+        var offsetValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+
+        var collectedValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
+
+        var lastStartValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 2]);
+
+        var sepBytesValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 3]);
+
+        var stringBytesValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 4]);
+
+        if (KernelFunction.SignedIntegerFromValueRelaxed(offsetValue) is not { } offset)
+        {
+            return null;
+        }
+
+        if (collectedValue is not PineValue.ListValue collectedList)
+        {
+            return null;
+        }
+
+        if (sepBytesValue is not PineValue.BlobValue sepBytesBlob)
+        {
+            return null;
+        }
+
+        if (stringBytesValue is not PineValue.BlobValue stringBytesBlob)
+        {
+            return null;
+        }
+
+        if (KernelFunction.SignedIntegerFromValueRelaxed(lastStartValue) is not { } lastStart)
+        {
+            return null;
+        }
+
+        var offsetInt = (int)offset;
+
+        var lastStartInt = (int)lastStart;
+
+        if (offsetInt < 0)
+            return null;
+
+        if (lastStartInt < 0)
+            return null;
+
+        var collected = new List<PineValue>(collectedList.Items.ToArray());
+
+        while (offsetInt + sepBytesBlob.Bytes.Length <= stringBytesBlob.Bytes.Length)
+        {
+            var stringSlice = stringBytesBlob.Bytes.Slice(start: offsetInt, length: sepBytesBlob.Bytes.Length);
+
+            if (MemoryExtensions.SequenceEqual(stringSlice.Span, sepBytesBlob.Bytes.Span))
+            {
+                var separatedSliceLength = offsetInt - lastStartInt;
+
+                var separatedSlice =
+                    stringBytesBlob.Bytes.Slice(start: lastStartInt, length: separatedSliceLength);
+
+                collected.Add(
+                    PineValue.List(
+                        [
+                        Tag_String_Value,
+                        PineValue.List([PineValue.Blob(separatedSlice)])
+                        ]));
+
+                offsetInt += sepBytesBlob.Bytes.Length;
+
+                lastStartInt = offsetInt;
+            }
+            else
+            {
+                offsetInt += 4;
+            }
+        }
+
+        var lastSlice = stringBytesBlob.Bytes[lastStartInt..];
+
+        collected.Add(
+            PineValue.List(
+                [
+                Tag_String_Value,
+                PineValue.List([PineValue.Blob(lastSlice)])
+                ]));
+
+        var finalValue = PineValue.List([.. collected]);
 
         return () => new PrecompiledResult.FinalValue(finalValue, StackFrameCount: 0);
     }
