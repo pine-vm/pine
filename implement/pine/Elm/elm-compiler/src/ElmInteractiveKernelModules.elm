@@ -2550,7 +2550,7 @@ skipWhitespace strBytes offset =
             skipWhitespace strBytes (offset + 4)
 
         '\\u{000D}' ->
-            skipWhitespace strBytes (offset + 1)
+            skipWhitespace strBytes (offset + 4)
 
         _ ->
             offset

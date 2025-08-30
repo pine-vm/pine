@@ -585,7 +585,7 @@ public class Precompiled
             var splitHelperOnBlobExpressionValue =
                 ExpressionEncoding.EncodeExpressionAsValue(splitHelperOnBlobExpression);
 
-            var stringToListRecursiveEnvClass =
+            var envClass =
                 PineValueClass.Create(
                     [
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
@@ -597,8 +597,30 @@ public class Precompiled
                 new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
                     splitHelperOnBlobExpression,
                     [new PrecompiledEntry(
-                        stringToListRecursiveEnvClass,
+                        envClass,
                         String_splitHelperOnBlob)]);
+        }
+
+        {
+            var skipWhitespaceExpression = popularExpressionDictionary["Elm.Kernel.Json.Decode.skipWhitespace"];
+
+            var skipWhitespaceExpressionValue =
+                ExpressionEncoding.EncodeExpressionAsValue(skipWhitespaceExpression);
+
+            var envClass =
+                PineValueClass.Create(
+                    [
+                    new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                    [0, 0],
+                    skipWhitespaceExpressionValue)
+                    ]);
+
+            yield return
+                new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
+                    skipWhitespaceExpression,
+                    [new PrecompiledEntry(
+                        envClass,
+                        Elm_Kernel_Json_Decode_skipWhitespace)]);
         }
 
         {
@@ -5120,6 +5142,85 @@ public class Precompiled
         var finalValue = PineValue.List([.. collected]);
 
         return () => new PrecompiledResult.FinalValue(finalValue, StackFrameCount: 0);
+    }
+
+    static Func<PrecompiledResult>? Elm_Kernel_Json_Decode_skipWhitespace(
+        PineValue environment,
+        PineVMParseCache parseCache)
+    {
+        /*
+        skipWhitespace : Int -> Int -> Int
+        skipWhitespace strBytes offset =
+            let
+                nextChar =
+                    Pine_kernel.take
+                        [ 4
+                        , Pine_kernel.skip [ offset, strBytes ]
+                        ]
+            in
+            case nextChar of
+                ' ' ->
+                    skipWhitespace strBytes (offset + 4)
+
+                '\t' ->
+                    skipWhitespace strBytes (offset + 4)
+
+                '\n' ->
+                    skipWhitespace strBytes (offset + 4)
+
+                '\u{000D}' ->
+                    skipWhitespace strBytes (offset + 4)
+
+                _ ->
+                    offset
+
+         * */
+
+        var strBytesValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+
+        var offsetValue =
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
+
+        if (strBytesValue is not PineValue.BlobValue strBytesBlob)
+        {
+            return null;
+        }
+
+        if (KernelFunction.SignedIntegerFromValueRelaxed(offsetValue) is not { } offset)
+        {
+            return null;
+        }
+
+        var offsetInt = (int)offset;
+
+        while (true)
+        {
+            var remainingBytesCount =
+                strBytesBlob.Bytes.Length - offsetInt;
+
+            if (remainingBytesCount < 4)
+            {
+                break;
+            }
+
+            var nextChar = BinaryPrimitives.ReadInt32BigEndian(strBytesBlob.Bytes.Span[offsetInt..]);
+
+            if (nextChar is 32 || nextChar is 9 || nextChar is 10 || nextChar is 13)
+            {
+                offsetInt += 4;
+                continue;
+            }
+
+            break;
+        }
+
+        var finalValue =
+            new PrecompiledResult.FinalValue(
+                IntegerEncoding.EncodeSignedInteger(offsetInt),
+                StackFrameCount: 0);
+
+        return () => finalValue;
     }
 
     static Func<PrecompiledResult>? ParserFast_skipWhileWhitespaceHelp(
