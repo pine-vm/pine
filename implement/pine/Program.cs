@@ -1,10 +1,13 @@
 using ElmTime.Elm019;
 using ElmTime.ElmInteractive;
 using McMaster.Extensions.CommandLineUtils;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.DependencyInjection;
 using Pine;
 using Pine.Core;
 using Pine.Core.Elm;
+using Pine.Core.Http;
 using Pine.Core.IO;
 using Pine.Elm;
 using Pine.Elm.Platform;
@@ -82,6 +85,7 @@ public class Program
         var describeCommand = AddDescribeCommand(app);
 
         var runCacheServerCmd = AddRunCacheServerCmd(app);
+        var runFileServerCmd = AddRunFileServerCommand(app);
 
         var compileInteractiveEnvCommand = AddCompileInteractiveEnvCommand(app);
         var lspCommand = AddLanguageServerCommand(app);
@@ -164,6 +168,7 @@ public class Program
                         listFunctionsCommand,
                         applyFunctionCommand,
                         truncateProcessHistoryCommand,
+                        runFileServerCmd,
                     }
                 },
             }
@@ -2794,6 +2799,150 @@ public class Program
                 serverTask.Wait();
             });
         });
+
+    private static CommandLineApplication AddRunFileServerCommand(CommandLineApplication app) =>
+        app.Command("run-file-server", runFileServerCommand =>
+        {
+            runFileServerCommand.Description = "Run an HTTP server that provides a REST API for file operations.";
+            runFileServerCommand.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
+
+            var storeOption = runFileServerCommand.Option(
+                "--store",
+                "Local directory path to use as the file store. If not present, an in-memory store will be used.",
+                CommandOptionType.MultipleValue);
+
+            var portOption = runFileServerCommand.Option(
+                "--port",
+                "HTTP port for the server. Defaults to 8080.",
+                CommandOptionType.SingleValue);
+
+            var authPasswordOption = runFileServerCommand.Option(
+                "--auth-password",
+                "Password for Basic authentication. If present, all HTTP requests will require authentication.",
+                CommandOptionType.SingleValue);
+
+            runFileServerCommand.OnExecute(() =>
+            {
+                // Validate store option - should be present at most once
+                if (storeOption.Values.Count > 1)
+                {
+                    Console.WriteLine("Error: --store option can only be specified once.");
+                    return 1;
+                }
+
+                // Determine file store
+                IFileStore fileStore;
+                if (storeOption.Values.Count is 0)
+                {
+                    Console.WriteLine("Warning: No --store option specified. Using in-memory store.");
+                    fileStore = new FileStoreFromConcurrentDictionary();
+                }
+                else
+                {
+                    var storeDirectoryPath = storeOption.Values[0];
+                    var absoluteDirectoryPath = Path.GetFullPath(storeDirectoryPath);
+
+                    Console.WriteLine($"Using store directory: {storeDirectoryPath}");
+                    Console.WriteLine($"Absolute directory path: {absoluteDirectoryPath}");
+
+                    // Create directory if it doesn't exist
+                    Directory.CreateDirectory(absoluteDirectoryPath);
+
+                    // Use common retry options for file operations
+                    var retryOptions = new FileStoreFromSystemIOFile.FileStoreRetryOptions(
+                        MaxRetryAttempts: 3,
+                        InitialRetryDelay: TimeSpan.FromMilliseconds(100),
+                        MaxRetryDelay: TimeSpan.FromSeconds(1));
+
+                    fileStore = new FileStoreFromSystemIOFile(absoluteDirectoryPath, retryOptions);
+                }
+
+                // Determine port
+                var port = 8080; // Default port
+                if (portOption.Value() is { } portString)
+                {
+                    if (!int.TryParse(portString, out port) || port < 1 || port > 65535)
+                    {
+                        Console.WriteLine("Error: Invalid port number. Port must be between 1 and 65535.");
+                        return 1;
+                    }
+                }
+
+                // Determine authentication
+                var authPassword = authPasswordOption.Value();
+
+                Console.WriteLine($"Starting FileStore HTTP server on port {port}...");
+                if (authPassword != null)
+                {
+                    Console.WriteLine("Basic authentication is enabled.");
+                }
+
+                try
+                {
+                    return RunFileStoreHttpServer(fileStore, port, authPassword);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Failed to start server: {ex.Message}");
+                    return 1;
+                }
+            });
+        });
+
+    private static int RunFileStoreHttpServer(IFileStore fileStore, int port, string? authPassword)
+    {
+        var hostBuilder = new WebHostBuilder()
+            .UseKestrel(options =>
+            {
+                options.ListenAnyIP(port);
+            })
+            .ConfigureServices(services =>
+            {
+                services.AddSingleton(fileStore);
+                if (authPassword != null)
+                {
+                    // Store password for BasicAuthenticationMiddleware
+                    services.AddSingleton(provider => new BasicAuthenticationConfig(authPassword, "FileStore API"));
+                }
+            })
+            .Configure(app =>
+            {
+                if (authPassword != null)
+                {
+                    app.UseMiddleware<BasicAuthenticationMiddleware>();
+                }
+                app.UseMiddleware<FileStoreHttpServerMiddleware>();
+            });
+
+        using var webHost = hostBuilder.Build();
+
+        Console.WriteLine($"Server started. Listening on http://localhost:{port}");
+        Console.WriteLine("Press Ctrl+C to stop the server.");
+
+        webHost.Start();
+
+        // Wait for shutdown signal
+        var cancellationTokenSource = new System.Threading.CancellationTokenSource();
+        Console.CancelKeyPress += (_, e) =>
+        {
+            e.Cancel = true;
+            cancellationTokenSource.Cancel();
+        };
+
+        try
+        {
+            cancellationTokenSource.Token.WaitHandle.WaitOne();
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected when Ctrl+C is pressed
+        }
+
+        Console.WriteLine("Shutting down...");
+        webHost.StopAsync().Wait();
+
+        return 0;
+    }
 
     private static Func<string?, string?> SitePasswordFromSiteFromOptionOnCommandOrFromSettings(
         CommandLineApplication cmd, string? siteName = null)

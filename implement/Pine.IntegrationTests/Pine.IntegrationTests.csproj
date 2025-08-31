@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <PackageReference Include="AwesomeAssertions" Version="9.1.0" />
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="9.0.8" />
     <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="9.0.8" />
     <PackageReference Include="Microsoft.Testing.Extensions.TrxReport" Version="1.8.2" />
     <PackageReference Include="morelinq" Version="4.4.0" />

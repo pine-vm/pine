@@ -490,7 +490,7 @@ public class FileStoreReaderFromTreeNodeWithStringPath(
 /// In-memory <see cref="IFileStore"/> implementation using a concurrent dictionary for file storage.
 /// Useful for tests or ephemeral scenarios.
 /// </summary>
-public class FileStoreFromConcurrentDictionary : IFileStoreWriter, IFileStoreReader
+public class FileStoreFromConcurrentDictionary : IFileStore
 {
     /// <summary>
     /// Underlying map from componentized path to blob content.
