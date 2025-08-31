@@ -11,13 +11,14 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
+using System.Linq;
 
 namespace Pine.IntegrationTests;
 
 public class StaticAppSnapshottingStateTests
 {
     [Fact]
-    public async Task StaticAppSnapshottingViaJson_integration_test()
+    public async Task StaticAppSnapshottingState_integration_test()
     {
         var fileStoreDict = new FileStoreFromConcurrentDictionary();
 
@@ -37,7 +38,7 @@ public class StaticAppSnapshottingStateTests
 
         // Phase 1: Create first instance and establish state
         {
-            // Create first instance of StaticAppSnapshottingViaJson
+            // Create first instance of app
             await using var appInstance =
                 StaticAppSnapshottingState.Create(
                     webServiceCompiledModules: webServiceCompiled,
@@ -46,7 +47,7 @@ public class StaticAppSnapshottingStateTests
                     logMessage: LogMessage,
                     cancellationToken: cancellationTokenSource.Token);
 
-            // Verify initial state - should indicate no snapshot file found
+            // Verify initial state - should indicate no snapshot file not found
             logMessages.Should().ContainMatch("*snapshot file not found*");
             logMessages.Should().ContainMatch("*initializing from default*");
 
@@ -67,14 +68,8 @@ public class StaticAppSnapshottingStateTests
 
             await appInstance.HandleRequestAsync(context, LogMessage);
 
-            // Verify that the async continuation completed - we should see either:
-            // 1. An app state snapshot update message, OR
-            // 2. A failure message about getting the app state
-            // The key point is that the async continuation should execute and log something
+            // Verify that the async continuation completed
             logMessages.Should().NotBeEmpty("HandleRequestAsync should have logged something from the async continuation");
-
-            // The async fix ensures that either the snapshot is saved OR we get an error message
-            var allLogs = string.Join(", ", logMessages);
 
             logMessages.Should().ContainMatch("*App state snapshot updated*");
 
@@ -83,7 +78,6 @@ public class StaticAppSnapshottingStateTests
             using var reader = new StreamReader(context.Response.Body);
             var responseBody = reader.ReadToEnd();
 
-            // The HTTP request processing should work regardless of the state serialization issue
             context.Response.StatusCode.Should().Be(200);
             responseBody.Should().Be("5", "Counter app should return the added value");
         }
@@ -131,8 +125,6 @@ public class StaticAppSnapshottingStateTests
 
         // Phase 3: Corrupt file store and test failed restoration
         {
-            // Corrupt file store content so that restore should fail
-
             foreach (var filePath in fileStoreDict.ListFiles())
             {
                 fileStoreDict.SetFileContent(filePath, "invalid-content"u8.ToArray());
@@ -140,7 +132,6 @@ public class StaticAppSnapshottingStateTests
 
             logMessages.Clear();
 
-            // Setup new instance using same store
             await using var appInstance =
                 StaticAppSnapshottingState.Create(
                     webServiceCompiledModules: webServiceCompiled,
@@ -149,7 +140,6 @@ public class StaticAppSnapshottingStateTests
                     logMessage: LogMessage,
                     cancellationToken: cancellationTokenSource.Token);
 
-            // Assert log entries indicating how restoration failed
             logMessages.Should().ContainMatch("*App state snapshot file found*");
 
             var allLogs = string.Join(", ", logMessages);
@@ -158,7 +148,6 @@ public class StaticAppSnapshottingStateTests
 
             logMessages.Clear();
 
-            // Simulate HTTP requests to verify normal operation, based on new initial app state
             var context = new DefaultHttpContext();
             context.Request.Method = "POST";
             context.Request.Path = "/";
@@ -173,7 +162,6 @@ public class StaticAppSnapshottingStateTests
 
             await appInstance.HandleRequestAsync(context, LogMessage);
 
-            // Verify HTTP response shows new initial state (should be 0 + 3 = 3)
             context.Response.Body.Seek(0, SeekOrigin.Begin);
             using var reader = new StreamReader(context.Response.Body);
             var responseBody = reader.ReadToEnd();
@@ -189,7 +177,6 @@ public class StaticAppSnapshottingStateTests
         var fileStoreDict = new FileStoreFromConcurrentDictionary();
         var fileStore = new FileStoreFromWriterAndReader(fileStoreDict, fileStoreDict);
 
-        // Configure a small HTTP request size limit for testing
         var serverConfig = new WebServiceConfigJson(httpRequestEventSizeLimit: 10_000);
 
         var webServiceCompiled =
@@ -209,8 +196,6 @@ public class StaticAppSnapshottingStateTests
                 fileStore: fileStore,
                 logMessage: LogMessage,
                 cancellationToken: cancellationTokenSource.Token);
-
-        // Test sequence: small, large, small HTTP requests
 
         // First request: Small request (should succeed)
         {
@@ -235,7 +220,6 @@ public class StaticAppSnapshottingStateTests
 
             await appInstance.HandleRequestAsync(context, LogMessage);
 
-            // Verify small request succeeds
             context.Response.StatusCode.Should().Be(200, "Small HTTP request should succeed");
 
             context.Response.Body.Seek(0, SeekOrigin.Begin);
@@ -251,8 +235,7 @@ public class StaticAppSnapshottingStateTests
             context.Request.Path = "/";
             context.Request.ContentType = "text/plain";
 
-            // Create a large JSON payload well over the limit
-            var largeContent = new string('x', 10_000); // 10000-character string
+            var largeContent = new string('x', 10_000);
 
             var requestJson =
                 System.Text.Json.JsonSerializer.Serialize(
@@ -270,7 +253,6 @@ public class StaticAppSnapshottingStateTests
 
             await appInstance.HandleRequestAsync(context, LogMessage);
 
-            // Verify large request is rejected with 413 status
             context.Response.StatusCode.Should().Be(413, "Large HTTP request should be rejected with 413 Request Entity Too Large");
 
             context.Response.Body.Seek(0, SeekOrigin.Begin);
@@ -279,7 +261,7 @@ public class StaticAppSnapshottingStateTests
             responseBody.Should().Be("Request is too large.", "Large request should return expected error message");
         }
 
-        // Third request: Small request again (should succeed, proving service still works)
+        // Third request: Small request again (should succeed)
         {
             var context = new DefaultHttpContext();
             context.Request.Method = "POST";
@@ -295,7 +277,6 @@ public class StaticAppSnapshottingStateTests
 
             await appInstance.HandleRequestAsync(context, LogMessage);
 
-            // Verify small request succeeds again
             context.Response.StatusCode.Should().Be(200, "Small HTTP request should succeed after large request rejection");
 
             context.Response.Body.Seek(0, SeekOrigin.Begin);
@@ -303,5 +284,190 @@ public class StaticAppSnapshottingStateTests
             var responseBody = reader.ReadToEnd();
             responseBody.Should().Be("4", "Counter app should return 1 + 3 = 4 (large request was rejected so counter state is preserved)");
         }
+    }
+
+    [Fact]
+    public async Task Configure_Http_headers_integration_test()
+    {
+        var fileStoreDict = new FileStoreFromConcurrentDictionary();
+        var fileStore = new FileStoreFromWriterAndReader(fileStoreDict, fileStoreDict);
+
+        var webServiceCompiled =
+            WebServiceInterface.CompiledModulesFromSourceFilesAndEntryFileName(
+                PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(TestSetup.CrossPropagateHttpHeadersToAndFromBodyElmWebApp),
+                entryFileName: ["src", "Backend", "Main.elm"]);
+
+        var logMessages = new ConcurrentQueue<string>();
+        void LogMessage(string message) => logMessages.Enqueue(message);
+
+        using var cancellationTokenSource = new CancellationTokenSource();
+
+        await using var appInstance =
+            StaticAppSnapshottingState.Create(
+                webServiceCompiledModules: webServiceCompiled,
+                serverConfig: null,
+                fileStore: fileStore,
+                logMessage: LogMessage,
+                cancellationToken: cancellationTokenSource.Token);
+
+        var context = new DefaultHttpContext();
+        context.Request.Method = "POST";
+        context.Request.Path = "/";
+        context.Request.ContentType = "text/plain";
+
+        // Start with a header we plan to remove
+        context.Request.Headers["X-Remove-Me"] = "bye";
+
+        var requestBody = Encoding.UTF8.GetBytes("hello-world");
+        context.Request.Body = new MemoryStream(requestBody);
+        context.Request.ContentLength = requestBody.Length;
+        context.Response.Body = new MemoryStream();
+
+        // Prepare incoming request headers: add one, remove one
+        WebServiceInterface.HttpRequestProperties PrepareRequest(WebServiceInterface.HttpRequestProperties req)
+        {
+            var headers = req.Headers
+                .Where(h => !h.Name.Equals("X-Remove-Me", System.StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            headers.Add(new WebServiceInterface.HttpHeader("X-Added-Request", ["added-value"]));
+
+            return req with { Headers = headers };
+        }
+
+        // Prepare outgoing response headers: add one, remove one set by the app
+        WebServiceInterface.HttpResponse FinalizeResponse(WebServiceInterface.HttpResponse resp)
+        {
+            var contentType =
+                resp.HeadersToAdd.FirstOrDefault(h => h.Name.Equals("content-type", System.StringComparison.OrdinalIgnoreCase));
+
+            var others = resp.HeadersToAdd
+                .Where(h => !h.Name.Equals("response-header-name", System.StringComparison.OrdinalIgnoreCase) && !h.Name.Equals("content-type", System.StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            // Add our custom header before content-type so it is applied
+            others.Add(new WebServiceInterface.HttpHeader("X-Added-Response", ["42"]));
+
+            if (contentType is not null)
+            {
+                others.Add(contentType);
+            }
+
+            return resp with { HeadersToAdd = others };
+        }
+
+        await appInstance.HandleRequestAsync(context, LogMessage, prepareRequest: PrepareRequest, finalizeResponse: FinalizeResponse);
+
+        // Validate status
+        context.Response.StatusCode.Should().Be(200);
+
+        // Validate response headers reflect configuration
+        context.Response.Headers.ContainsKey("response-header-name").Should().BeFalse();
+        context.Response.Headers["X-Added-Response"].ToString().Should().Be("42");
+
+        // Validate the app saw configured request headers via JSON body echo
+        context.Response.Body.Seek(0, SeekOrigin.Begin);
+
+        using var reader = new StreamReader(context.Response.Body);
+        var responseBody = reader.ReadToEnd();
+
+        using var json = System.Text.Json.JsonDocument.Parse(responseBody);
+
+        var headersArray = json.RootElement;
+        headersArray.ValueKind.Should().Be(System.Text.Json.JsonValueKind.Array);
+
+        bool HasHeader(string name) =>
+            headersArray.EnumerateArray()
+                .Any(h => h.TryGetProperty("name", out var n) && n.GetString()?.Equals(name, System.StringComparison.OrdinalIgnoreCase) == true);
+
+        string[]? GetHeaderValues(string name) =>
+            [.. headersArray
+                .EnumerateArray()
+                .Where(h => h.TryGetProperty("name", out var n) && n.GetString()?.Equals(name, System.StringComparison.OrdinalIgnoreCase) == true)
+                .SelectMany(h => h.GetProperty("values").EnumerateArray().Select(v => v.GetString() ?? string.Empty))];
+
+        HasHeader("X-Added-Request").Should().BeTrue("Request config should add header visible to app");
+
+        var addedValues = GetHeaderValues("X-Added-Request");
+
+        addedValues.Should().NotBeNull();
+        addedValues!.Should().Contain("added-value");
+
+        HasHeader("X-Remove-Me").Should().BeFalse("Request config should remove header before app");
+
+        // Content-Type from app should still be present
+        context.Response.ContentType.Should().Be("application/json");
+    }
+
+    [Fact]
+    public async Task StateChanged_indicator_integration_test()
+    {
+        var fileStoreDict = new FileStoreFromConcurrentDictionary();
+        var fileStore = new FileStoreFromWriterAndReader(fileStoreDict, fileStoreDict);
+
+        var webServiceCompiled =
+            WebServiceInterface.CompiledModulesFromSourceFilesAndEntryFileName(
+                PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(TestSetup.CounterElmWebApp),
+                entryFileName: ["src", "Backend", "Main.elm"]);
+
+        using var cancellationTokenSource = new CancellationTokenSource();
+
+        await using var appInstance =
+            StaticAppSnapshottingState.Create(
+                webServiceCompiledModules: webServiceCompiled,
+                serverConfig: null,
+                fileStore: fileStore,
+                logMessage: _ => { },
+                cancellationToken: cancellationTokenSource.Token);
+
+        async Task<(StaticAppSnapshottingState.HandleRequestReport report, string responseText, int status)> Send(int addition)
+        {
+            var ctx = new DefaultHttpContext();
+            ctx.Request.Method = "POST";
+            ctx.Request.Path = "/";
+            ctx.Request.ContentType = "text/plain";
+
+            var bodyJson = System.Text.Json.JsonSerializer.Serialize(new { addition });
+            var requestBytes = Encoding.UTF8.GetBytes(bodyJson);
+            ctx.Request.Body = new MemoryStream(requestBytes);
+            ctx.Request.ContentLength = requestBytes.Length;
+            ctx.Response.Body = new MemoryStream();
+
+            var report = await appInstance.HandleRequestAsync(ctx, logMessage: null);
+
+            ctx.Response.Body.Seek(0, SeekOrigin.Begin);
+            using var reader = new StreamReader(ctx.Response.Body);
+            var responseBody = reader.ReadToEnd();
+
+            return (report, responseBody, ctx.Response.StatusCode);
+        }
+
+        // Start with a mutation
+        var r1 = await Send(2);
+        r1.status.Should().Be(200);
+        r1.responseText.Should().Be("2");
+        r1.report.StateChanged.Should().BeTrue();
+
+        // No-op (add 0) should NOT change state
+        var r2 = await Send(0);
+        r2.status.Should().Be(200);
+        r2.responseText.Should().Be("2");
+        r2.report.StateChanged.Should().BeFalse();
+
+        // Mutation again
+        var r3 = await Send(3);
+        r3.status.Should().Be(200);
+        r3.responseText.Should().Be("5");
+        r3.report.StateChanged.Should().BeTrue();
+
+        // No-op again
+        var r4 = await Send(0);
+        r4.status.Should().Be(200);
+        r4.responseText.Should().Be("5");
+        r4.report.StateChanged.Should().BeFalse();
+
+        // Verify RequestEvent reflects the inserted request (basic checks)
+        r3.report.RequestEvent.Request.Method.Should().Be("POST");
+        r3.report.RequestEvent.Request.Body.Should().NotBeNull();
     }
 }

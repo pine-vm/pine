@@ -137,24 +137,25 @@ public class PublicAppState(
     /// </summary>
     public async Task HandleRequestAsync(HttpContext context)
     {
-        var httpRequest =
-            await Asp.AsInterfaceHttpRequestAsync(context.Request);
-
-        var httpResponse =
+        var report =
             await HandleRequestAsync(
-                httpRequest,
+                await Asp.AsInterfaceHttpRequestAsync(context.Request),
                 new WebServiceInterface.HttpRequestContext(
                     ClientAddress: context.Connection.RemoteIpAddress?.ToString()),
                 httpRequestEventSizeLimit: serverAndElmAppConfig.ServerConfig?.httpRequestEventSizeLimit,
                 ApplicationStoppingCancellationTokenSource.Token);
 
-        await Asp.SendHttpResponseAsync(context, httpResponse);
+        await Asp.SendHttpResponseAsync(context, report.Response);
     }
+
+    public record ProcessHttpRequestReport(
+        WebServiceInterface.HttpResponse Response,
+        WebServiceInterface.HttpRequestEventStruct RequestEvent);
 
     /// <summary>
     /// Handles an HTTP request.
     /// </summary>
-    public async Task<WebServiceInterface.HttpResponse> HandleRequestAsync(
+    public async Task<ProcessHttpRequestReport> HandleRequestAsync(
         WebServiceInterface.HttpRequestProperties httpRequest,
         WebServiceInterface.HttpRequestContext httpRequestContext,
         int? httpRequestEventSizeLimit,
@@ -164,10 +165,16 @@ public class PublicAppState(
             EstimateHttpRequestEventSize(httpRequest) > limit)
         {
             return
-                new WebServiceInterface.HttpResponse(
-                    StatusCode: StatusCodes.Status413RequestEntityTooLarge,
-                    Body: System.Text.Encoding.UTF8.GetBytes("Request is too large."),
-                    HeadersToAdd: []);
+                new ProcessHttpRequestReport(
+                    new WebServiceInterface.HttpResponse(
+                        StatusCode: StatusCodes.Status413RequestEntityTooLarge,
+                        Body: System.Text.Encoding.UTF8.GetBytes("Request is too large."),
+                        HeadersToAdd: []),
+                    new WebServiceInterface.HttpRequestEventStruct(
+                        HttpRequestId: "rejected-size-limit",
+                        PosixTimeMilli: getDateTimeOffset().ToUnixTimeMilliseconds(),
+                        httpRequestContext,
+                        Request: httpRequest));
         }
 
         var currentDateTime = getDateTimeOffset();
@@ -215,7 +222,7 @@ public class PublicAppState(
                 GetResponseFromAppOrTimeout(TimeSpan.FromMinutes(4));
 
             if (httpResponse is not null)
-                return httpResponse;
+                return new ProcessHttpRequestReport(httpResponse, httpRequestEvent);
 
             cancellationToken.ThrowIfCancellationRequested();
 
