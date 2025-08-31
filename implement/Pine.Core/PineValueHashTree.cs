@@ -6,15 +6,60 @@ using System.Security.Cryptography;
 
 namespace Pine.Core;
 
+/// <summary>
+/// Utilities for computing and working with content-addressed hashes of <see cref="PineValue"/> trees.
+/// </summary>
+/// <remarks>
+/// <para>
+/// This module defines a stable, canonical serialization for <see cref="PineValue.BlobValue"/> and
+/// <see cref="PineValue.ListValue"/> and computes a SHA-256 hash over that serialization.
+/// </para>
+/// <para>
+/// Serialization format (ASCII prefixes):
+/// <list type="bullet">
+///   <item><description><c>blob [byteCount]\0[bytes]</c></description></item>
+///   <item><description><c>list [elementCount]\0[32B_hash_of_item_0][32B_hash_of_item_1]…</c></description></item>
+/// </list>
+/// Hashes are computed as <see cref="SHA256"/> over the serialization bytes.
+/// </para>
+/// </remarks>
 public static class PineValueHashTree
 {
-    private static readonly ConcurrentDictionary<PineValue, ReadOnlyMemory<byte>> cachedHashes = new();
+    private static readonly ConcurrentDictionary<PineValue, ReadOnlyMemory<byte>> s_cachedHashes = new();
 
+    // Pre-encode ASCII representations for small counts to avoid per-call allocations.
+    private const uint PreencodedCountMax = 1000u;
+    private static readonly ReadOnlyMemory<byte>[] s_preencodedCounts = CreatePreencodedCounts();
+
+    private static ReadOnlyMemory<byte>[] CreatePreencodedCounts()
+    {
+        var arr = new ReadOnlyMemory<byte>[(int)PreencodedCountMax + 1];
+
+        for (var i = 0; i <= (int)PreencodedCountMax; i++)
+        {
+            arr[i] = System.Text.Encoding.ASCII.GetBytes(i.ToString());
+        }
+
+        return arr;
+    }
+
+    /// <summary>
+    /// Computes the SHA-256 hash for the given <paramref name="pineValue"/> according to the canonical hash-tree serialization.
+    /// </summary>
+    /// <param name="pineValue">The value to hash.</param>
+    /// <param name="delegateGetHashOfComponent">
+    /// Optional delegate to supply a precomputed hash for components (e.g., memoization or external cache).
+    /// If it returns a non-null hash for a component, that hash is used instead of recomputing.
+    /// </param>
+    /// <returns>The 32-byte hash as <see cref="ReadOnlyMemory{Byte}"/>.</returns>
+    /// <remarks>
+    /// Results are cached for reused instances via <see cref="ReusedInstances"/> to avoid recomputation.
+    /// </remarks>
     public static ReadOnlyMemory<byte> ComputeHash(
         PineValue pineValue,
         Func<PineValue, ReadOnlyMemory<byte>?>? delegateGetHashOfComponent = null)
     {
-        if (cachedHashes.TryGetValue(pineValue, out var fromCache))
+        if (s_cachedHashes.TryGetValue(pineValue, out var fromCache))
         {
             return fromCache;
         }
@@ -24,13 +69,27 @@ public static class PineValueHashTree
 
         if (ReusedInstances.Instance.ReusedInstance(pineValue) is { } reusedInstance)
         {
-            cachedHashes.TryAdd(reusedInstance, hash);
+            s_cachedHashes.TryAdd(reusedInstance, hash);
         }
 
         return hash;
     }
 
 
+    /// <summary>
+    /// Computes the hash for <paramref name="pineValue"/> and returns the set of direct dependencies.
+    /// </summary>
+    /// <param name="pineValue">The value to hash.</param>
+    /// <param name="delegateGetHashOfComponent">
+    /// Optional delegate to supply a precomputed hash for components.
+    /// </param>
+    /// <returns>
+    /// A tuple containing:
+    /// <list type="bullet">
+    ///   <item><description><c>hash</c>: the 32-byte SHA-256 hash.</description></item>
+    ///   <item><description><c>dependencies</c>: the direct child values referenced by this node (for lists: the items; for blobs: empty).</description></item>
+    /// </list>
+    /// </returns>
     public static (ReadOnlyMemory<byte> hash, IReadOnlyCollection<PineValue> dependencies)
         ComputeHashAndDependencies(
         PineValue pineValue,
@@ -42,6 +101,21 @@ public static class PineValueHashTree
         return (hash: SHA256.HashData(serialRepresentation.Span), dependencies);
     }
 
+    /// <summary>
+    /// Builds the canonical serialization for the given <paramref name="pineValue"/> and reports its direct dependencies.
+    /// </summary>
+    /// <param name="pineValue">The value to serialize.</param>
+    /// <param name="delegateGetHashOfComponent">
+    /// Optional delegate to supply a precomputed hash for components.
+    /// </param>
+    /// <returns>
+    /// A tuple containing:
+    /// <list type="bullet">
+    ///   <item><description><c>serialRepresentation</c>: the canonical bytes used for hashing.</description></item>
+    ///   <item><description><c>dependencies</c>: the direct child values referenced by this node.</description></item>
+    /// </list>
+    /// </returns>
+    /// <exception cref="NotImplementedException">Thrown if an unknown <see cref="PineValue"/> variant is encountered.</exception>
     public static (ReadOnlyMemory<byte> serialRepresentation, IReadOnlyCollection<PineValue> dependencies)
         ComputeHashTreeNodeSerialRepresentation(
         PineValue pineValue,
@@ -101,8 +175,20 @@ public static class PineValueHashTree
     }
 
     private static ReadOnlyMemory<byte> CountEncoding(uint count) =>
-        System.Text.Encoding.ASCII.GetBytes(count.ToString());
+        count < s_preencodedCounts.Length
+            ? s_preencodedCounts[(int)count]
+            : System.Text.Encoding.ASCII.GetBytes(count.ToString());
 
+    /// <summary>
+    /// Deserializes a value from its canonical hash-tree serialization, using the provided lookup to load list elements by hash.
+    /// </summary>
+    /// <param name="serializedValue">The serialized bytes for a single node (blob or list) following the canonical format.</param>
+    /// <param name="loadSerializedValueByHash">Callback to load a serialized node by its lowercase hex SHA-256 hash.</param>
+    /// <param name="valueFromCache">Optional callback to resolve a previously materialized value from a lowercase hex hash.</param>
+    /// <param name="valueLoadedForHash">Optional callback invoked after successfully materializing a value for a hash.</param>
+    /// <returns>
+    /// A <see cref="Result{TError, TOk}"/> with an error message on failure, or the reconstructed <see cref="PineValue"/> on success.
+    /// </returns>
     public static Result<string, PineValue> DeserializeFromHashTree(
         ReadOnlyMemory<byte> serializedValue,
         Func<string, ReadOnlyMemory<byte>?> loadSerializedValueByHash,
@@ -241,12 +327,31 @@ public static class PineValueHashTree
         return "Invalid prefix: '" + asciiStringUpToFirstSpace + "'.";
     }
 
+    /// <summary>
+    /// Computes a content hash for a <see cref="BlobTreeWithStringPath"/>, after recursively sorting all siblings to obtain a canonical order.
+    /// </summary>
+    /// <param name="treeNode">The tree to hash.</param>
+    /// <returns>The 32-byte SHA-256 hash as <see cref="ReadOnlyMemory{Byte}"/>.</returns>
     public static ReadOnlyMemory<byte> ComputeHashSorted(BlobTreeWithStringPath treeNode) =>
         ComputeHashNotSorted(BlobTreeWithStringPath.Sort(treeNode));
 
+    /// <summary>
+    /// Computes a content hash for a <see cref="BlobTreeWithStringPath"/> without changing sibling order.
+    /// </summary>
+    /// <param name="treeNode">The tree to hash.</param>
+    /// <returns>The 32-byte SHA-256 hash as <see cref="ReadOnlyMemory{Byte}"/>.</returns>
+    /// <remarks>
+    /// Use <see cref="ComputeHashSorted(BlobTreeWithStringPath)"/> to obtain order-insensitive hashing.
+    /// </remarks>
     public static ReadOnlyMemory<byte> ComputeHashNotSorted(BlobTreeWithStringPath treeNode) =>
         ComputeHash(PineValueComposition.FromTreeWithStringPath(treeNode));
 
+    /// <summary>
+    /// Finds the first node in <paramref name="pineValue"/> whose hash equals <paramref name="hash"/>.
+    /// </summary>
+    /// <param name="pineValue">The root value to search.</param>
+    /// <param name="hash">The 32-byte hash of the node to find.</param>
+    /// <returns>The matching node if found; otherwise, <c>null</c>.</returns>
     public static PineValue? FindNodeByHash(PineValue pineValue, ReadOnlyMemory<byte> hash)
     {
         if (ComputeHash(pineValue).Span.SequenceEqual(hash.Span))
