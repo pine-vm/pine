@@ -27,7 +27,7 @@ namespace ElmTime;
 
 public class Program
 {
-    public static string AppVersionId => "0.4.14";
+    public static string AppVersionId => "0.4.15";
 
     private static int AdminInterfaceDefaultPort => 4000;
 

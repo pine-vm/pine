@@ -5,8 +5,8 @@
     <TargetFramework>net9.0</TargetFramework>
     <AssemblyName>pine</AssemblyName>
     <RootNamespace>Pine</RootNamespace>
-    <AssemblyVersion>0.4.14</AssemblyVersion>
-    <FileVersion>0.4.14</FileVersion>
+    <AssemblyVersion>0.4.15</AssemblyVersion>
+    <FileVersion>0.4.15</FileVersion>
     <Nullable>enable</Nullable>
     <GenerateEmbeddedFilesManifest>true</GenerateEmbeddedFilesManifest>
   </PropertyGroup>
