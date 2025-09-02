@@ -52,7 +52,7 @@ public class ElmLanguageServerTests
 
             Console.WriteLine(
                 "initParams:\n" +
-                System.Text.Json.JsonSerializer.Serialize(initParams));
+                JsonSerializer.Serialize(initParams));
 
             var initResponse =
                 await jsonRpc.InvokeWithParameterObjectAsync<object>(
@@ -61,7 +61,7 @@ public class ElmLanguageServerTests
 
             Console.WriteLine(
                 "initResponse:\n" +
-                System.Text.Json.JsonSerializer.Serialize(initResponse));
+                JsonSerializer.Serialize(initResponse));
 
             /*
              * Example from deno lsp:

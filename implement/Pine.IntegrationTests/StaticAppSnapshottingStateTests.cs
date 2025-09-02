@@ -341,8 +341,11 @@ public class StaticAppSnapshottingStateTests
             var contentType =
                 resp.HeadersToAdd.FirstOrDefault(h => h.Name.Equals("content-type", System.StringComparison.OrdinalIgnoreCase));
 
-            var others = resp.HeadersToAdd
-                .Where(h => !h.Name.Equals("response-header-name", System.StringComparison.OrdinalIgnoreCase) && !h.Name.Equals("content-type", System.StringComparison.OrdinalIgnoreCase))
+            var others =
+                resp.HeadersToAdd
+                .Where(h =>
+                !h.Name.Equals("response-header-name", System.StringComparison.OrdinalIgnoreCase) &&
+                !h.Name.Equals("content-type", System.StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
             // Add our custom header before content-type so it is applied
@@ -361,9 +364,9 @@ public class StaticAppSnapshottingStateTests
         // Validate status
         context.Response.StatusCode.Should().Be(200);
 
-        // Validate response headers reflect configuration
-        context.Response.Headers.ContainsKey("response-header-name").Should().BeFalse();
-        context.Response.Headers["X-Added-Response"].ToString().Should().Be("42");
+        // Validate response headers reflect finalizeResponse configuration
+        context.Response.Headers.ContainsKey("response-header-name").Should().BeFalse("finalizeResponse should remove this header");
+        context.Response.Headers["X-Added-Response"].ToString().Should().Be("42", "finalizeResponse should add this header");
 
         // Validate the app saw configured request headers via JSON body echo
         context.Response.Body.Seek(0, SeekOrigin.Begin);
@@ -386,14 +389,14 @@ public class StaticAppSnapshottingStateTests
                 .Where(h => h.TryGetProperty("name", out var n) && n.GetString()?.Equals(name, System.StringComparison.OrdinalIgnoreCase) == true)
                 .SelectMany(h => h.GetProperty("values").EnumerateArray().Select(v => v.GetString() ?? string.Empty))];
 
-        HasHeader("X-Added-Request").Should().BeTrue("Request config should add header visible to app");
+        HasHeader("X-Added-Request").Should().BeTrue("prepareRequest should add header visible to app");
 
         var addedValues = GetHeaderValues("X-Added-Request");
 
         addedValues.Should().NotBeNull();
         addedValues!.Should().Contain("added-value");
 
-        HasHeader("X-Remove-Me").Should().BeFalse("Request config should remove header before app");
+        HasHeader("X-Remove-Me").Should().BeFalse("prepareRequest should remove header before app");
 
         // Content-Type from app should still be present
         context.Response.ContentType.Should().Be("application/json");

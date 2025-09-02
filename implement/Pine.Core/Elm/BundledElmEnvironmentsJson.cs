@@ -49,7 +49,7 @@ public class BundledElmEnvironmentsJson
             assembly: typeof(BundledElmEnvironments).Assembly)
         .Extract(err =>
         {
-            System.Console.WriteLine("Failed loading bundled Elm environments from embedded resource: " + err);
+            Console.WriteLine("Failed loading bundled Elm environments from embedded resource: " + err);
 
             return ImmutableDictionary<string, PineValue>.Empty;
         });
@@ -141,7 +141,7 @@ public class BundledElmEnvironmentsJson
         var (allListEntries, uncompressed) =
             BuildBundleResourceFileJsonUtf8(compiledEnvironments);
 
-        System.Console.WriteLine(
+        Console.WriteLine(
             "Built " + CommandLineInterface.FormatIntegerForDisplay(allListEntries.Count) + " list entries for " +
             compiledEnvironments.Count + " compiled environments with an uncompressed size of " +
             CommandLineInterface.FormatIntegerForDisplay(uncompressed.Length) + " bytes.");
@@ -154,12 +154,12 @@ public class BundledElmEnvironmentsJson
     public static void CompressAndWriteBundleFile(
         ReadOnlyMemory<byte> fileContent)
     {
-        System.Console.WriteLine(
-            "Current working directory: " + System.Environment.CurrentDirectory);
+        Console.WriteLine(
+            "Current working directory: " + Environment.CurrentDirectory);
 
         var absolutePath = System.IO.Path.GetFullPath(ResourceFilePath);
 
-        System.Console.WriteLine(
+        Console.WriteLine(
             "Resolved the destination path of " + ResourceFilePath +
             " to " + absolutePath);
 
@@ -170,7 +170,7 @@ public class BundledElmEnvironmentsJson
             absolutePath,
             fileContent.ToArray());
 
-        System.Console.WriteLine(
+        Console.WriteLine(
             "Saved the prebuilt dictionary to " + absolutePath);
     }
 
