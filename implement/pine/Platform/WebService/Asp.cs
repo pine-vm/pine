@@ -131,12 +131,12 @@ public static class Asp
                     {
                         headerContentType = headerToAdd.Values[0];
                     }
-
-                    break;
                 }
-
-                httpContext.Response.Headers[headerToAdd.Name] =
-                    new Microsoft.Extensions.Primitives.StringValues([.. headerToAdd.Values]);
+                else
+                {
+                    httpContext.Response.Headers[headerToAdd.Name] =
+                        new Microsoft.Extensions.Primitives.StringValues([.. headerToAdd.Values]);
+                }
             }
         }
 
