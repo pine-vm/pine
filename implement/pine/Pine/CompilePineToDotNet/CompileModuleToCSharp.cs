@@ -2,6 +2,8 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.CSharp;
 using Pine.CompilePineToDotNet;
 using Pine.Core;
+using Pine.Core.PopularEncodings;
+using Pine.Core.CodeAnalysis;
 using Pine.PineVM;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -10,7 +12,6 @@ using System;
 using ElmTime.ElmInteractive;
 using Microsoft.CodeAnalysis;
 using System.Text;
-using Pine.Core.PopularEncodings;
 
 namespace Pine.Pine.CompilePineToDotNet;
 
@@ -587,7 +588,7 @@ public static class CompileModuleToCSharp
 
             alreadySeen.Add(expression);
 
-            if (CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(expression) is ExprMappedToParentEnv.PathInParentEnv path)
+            if (Core.CodeAnalysis.CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(expression) is ExprMappedToParentEnv.PathInParentEnv path)
             {
                 yield return new ReadOnlyMemory<int>([.. path.Path]);
 

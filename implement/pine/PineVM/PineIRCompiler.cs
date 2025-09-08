@@ -1,4 +1,5 @@
 using Pine.Core;
+using Pine.Core.CodeAnalysis;
 using Pine.Core.PineVM;
 using Pine.Core.PopularEncodings;
 using System;
@@ -148,7 +149,7 @@ public class PineIRCompiler
         ImmutableHashSet<Expression> rootExprForms,
         PineVMParseCache parseCache)
     {
-        if (CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(parseAndEval.Encoded) is not
+        if (Core.CodeAnalysis.CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(parseAndEval.Encoded) is not
             ExprMappedToParentEnv.PathInParentEnv encodedPath)
         {
             return false;

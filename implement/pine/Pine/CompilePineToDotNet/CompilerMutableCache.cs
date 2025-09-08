@@ -2,6 +2,8 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using Pine.Core;
+using Pine.Core.Addressing;
+using Pine.Core.CodeAnalysis;
 using Pine.Core.PopularEncodings;
 
 namespace Pine.CompilePineToDotNet;
@@ -11,23 +13,23 @@ using CompileExpressionFunctionBlockResult =
 
 public class CompilerMutableCache
 {
-    readonly ConcurrentDictionary<PineValue, Result<string, Expression>> parseExpressionFromValueCache = new();
+    readonly ConcurrentDictionary<PineValue, Result<string, Expression>> _parseExpressionFromValueCache = new();
 
-    readonly ConcurrentDictionary<PineValue, ReadOnlyMemory<byte>> valueHashCache = new();
+    readonly ConcurrentPineValueHashCache _valueHashCache = new();
 
     readonly ConcurrentDictionary<CompileExpressionFunctionParameters, CompileExpressionFunctionBlockResult>
         compileExpressionCache = new();
 
     public record CompileExpressionFunctionParameters(
         Expression Expression,
-        PineVM.PineValueClass? ConstrainedEnvId,
-        IReadOnlyList<PineVM.PineValueClass> BranchesConstrainedEnvIds,
+        PineValueClass? ConstrainedEnvId,
+        IReadOnlyList<PineValueClass> BranchesConstrainedEnvIds,
         FunctionCompilationEnv CompilationEnv);
 
     public CompileExpressionFunctionBlockResult
         CompileToCSharpFunctionBlockSyntax(
         PineVM.ExpressionUsageAnalysis expressionUsage,
-        IReadOnlyList<PineVM.PineValueClass> branchesConstrainedEnvIds,
+        IReadOnlyList<PineValueClass> branchesConstrainedEnvIds,
         FunctionCompilationEnv compilationEnv) =>
         CompileToCSharpFunctionBlockSyntax(
             new CompileExpressionFunctionParameters(
@@ -48,13 +50,11 @@ public class CompilerMutableCache
                 compilationEnv: parameters.CompilationEnv));
 
     public Result<string, Expression> ParseExpressionFromValue(PineValue pineValue) =>
-        parseExpressionFromValueCache.GetOrAdd(
+        _parseExpressionFromValueCache.GetOrAdd(
             pineValue,
             valueFactory: ExpressionEncoding.ParseExpressionFromValue);
 
     public ReadOnlyMemory<byte> ComputeHash(PineValue pineValue) =>
-        valueHashCache
-        .GetOrAdd(
-            pineValue,
-            valueFactory: v => PineValueHashTree.ComputeHash(v, other => ComputeHash(other)));
+        _valueHashCache
+        .GetHash(pineValue);
 }

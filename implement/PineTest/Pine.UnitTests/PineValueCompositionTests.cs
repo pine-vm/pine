@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Pine.Core;
+using Pine.Core.Addressing;
 using Pine.Core.PopularEncodings;
 using System;
 using System.Collections.Generic;

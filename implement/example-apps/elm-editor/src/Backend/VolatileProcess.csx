@@ -13,6 +13,7 @@
 #r "pine"
 
 using Pine.Core;
+using Pine.Core.Addressing;
 using Pine;
 using System;
 using System.Collections.Generic;

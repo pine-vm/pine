@@ -2,6 +2,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Pine.Core;
+using Pine.Core.CodeAnalysis;
 using Pine.Core.PopularEncodings;
 using Pine.PineVM;
 using System;
@@ -567,8 +568,7 @@ public partial class CompileToCSharp
                 with
                 {
                     Values =
-                    branchesEnvIds.SelectMany(envId => envId.ParsedItems.Select(item => item.Value))
-                    .ToImmutableHashSet()
+                    [.. branchesEnvIds.SelectMany(envId => envId.ParsedItems.Select(item => item.Value))]
                 };
 
                 var combinedDependencies =
@@ -1045,7 +1045,8 @@ public partial class CompileToCSharp
         var parseAndEvalExprHash =
             Convert.ToHexStringLower(compilerCache.ComputeHash(parseAndEvalExprValue).Span);
 
-        var childPathEnvMap = CodeAnalysis.BuildPathMapFromChildToParentEnv(parseAndEvalExpr.Environment);
+        var childPathEnvMap =
+            PineVM.CodeAnalysis.BuildPathMapFromChildToParentEnv(parseAndEvalExpr.Environment);
 
         /*
          * 

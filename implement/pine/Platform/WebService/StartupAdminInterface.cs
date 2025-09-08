@@ -8,6 +8,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Pine;
 using Pine.Core;
+using Pine.Core.Addressing;
 using Pine.Core.IO;
 using System;
 using System.Collections.Generic;
@@ -273,7 +274,6 @@ public class StartupAdminInterface
                         logger.LogInformation("Completed building the process live representation.");
 
                         var cyclicReductionStoreLock = new object();
-                        DateTimeOffset? cyclicReductionStoreLastTime = null;
                         var cyclicReductionStoreDistanceSeconds = (int)TimeSpan.FromMinutes(10).TotalSeconds;
 
                         WebApplication buildWebApplication(

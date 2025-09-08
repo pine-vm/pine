@@ -1,4 +1,5 @@
 using Pine.Core;
+using Pine.Core.CodeAnalysis;
 using Pine.Core.PineVM;
 using Pine.Core.PopularEncodings;
 using Pine.PineVM;
@@ -200,7 +201,7 @@ public class ReducePineExpression
         if (expression is Expression.Literal)
             return null;
 
-        if (CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(expression) is { } parsedAsPath)
+        if (Core.CodeAnalysis.CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(expression) is { } parsedAsPath)
         {
             if (parsedAsPath is ExprMappedToParentEnv.LiteralInParentEnv asLiteral)
             {
@@ -638,7 +639,7 @@ public class ReducePineExpression
             yield return listExpr.items.Count;
         }
 
-        var asParsedPath = CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(expression);
+        var asParsedPath = Core.CodeAnalysis.CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(expression);
 
         if (asParsedPath is ExprMappedToParentEnv.PathInParentEnv itemPath)
         {

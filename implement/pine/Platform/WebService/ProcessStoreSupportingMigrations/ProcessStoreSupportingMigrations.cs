@@ -1,4 +1,5 @@
 using Pine.Core;
+using Pine.Core.Addressing;
 using Pine.Core.IO;
 using Pine.Core.PopularEncodings;
 using System;
@@ -264,9 +265,9 @@ public class ProcessStoreReaderInFileStore(
     IFileStoreReader fileStore)
     : ProcessStoreInFileStore, IProcessStoreReader
 {
-    private readonly Pine.CompilePineToDotNet.CompilerMutableCache hashCache = new();
+    private readonly ConcurrentPineValueHashCache _hashCache = new();
 
-    private readonly ConcurrentDictionary<string, ReadOnlyMemory<byte>> componentSerialRepresentationCache = new();
+    private readonly ConcurrentDictionary<string, ReadOnlyMemory<byte>> _componentSerialRepresentationCache = new();
 
     private readonly ConcurrentDictionary<string, PineValue> componentFromHashCache = new();
 
@@ -300,7 +301,7 @@ public class ProcessStoreReaderInFileStore(
 
     private ReadOnlyMemory<byte>? LoadComponentSerialRepresentationForHash(string componentHashBase16)
     {
-        if (componentSerialRepresentationCache.TryGetValue(componentHashBase16, out var fromCache))
+        if (_componentSerialRepresentationCache.TryGetValue(componentHashBase16, out var fromCache))
             return fromCache;
 
         var loaded =
@@ -308,7 +309,7 @@ public class ProcessStoreReaderInFileStore(
 
         if (loaded is not null)
         {
-            componentSerialRepresentationCache[componentHashBase16] = loaded.Value;
+            _componentSerialRepresentationCache[componentHashBase16] = loaded.Value;
         }
 
         return loaded;
@@ -380,7 +381,7 @@ public class ProcessStoreReaderInFileStore(
                 fromErr: error => throw new Exception("Failed to load component " + componentHashBase16 + ": " + error),
                 fromOk: loadComponentResult =>
                 {
-                    if (Convert.ToHexStringLower(hashCache.ComputeHash(loadComponentResult).Span) != componentHashBase16)
+                    if (Convert.ToHexStringLower(_hashCache.GetHash(loadComponentResult).Span) != componentHashBase16)
                         throw new Exception("Unexpected content in file " + componentHashBase16 + ": Content hash does not match.");
 
                     return loadComponentResult;
@@ -545,29 +546,29 @@ public class ProcessStoreReaderInFileStore(
 
 public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessStoreWriter
 {
-    private readonly Pine.CompilePineToDotNet.CompilerMutableCache hashCache = new();
+    private readonly ConcurrentPineValueHashCache _hashCache = new();
 
     private static int TryDeflateSizeThreshold => 10_000;
 
-    protected IFileStoreWriter fileStore;
+    protected IFileStoreWriter _fileStore;
 
     protected IFileStoreWriter LiteralElementFileStore =>
-        fileStore.ForSubdirectory(LiteralElementSubdirectory);
+        _fileStore.ForSubdirectory(LiteralElementSubdirectory);
 
     protected IFileStoreWriter DeflatedLiteralElementFileStore =>
-        fileStore.ForSubdirectory(DeflatedLiteralElementSubdirectory);
+        _fileStore.ForSubdirectory(DeflatedLiteralElementSubdirectory);
 
     protected IFileStoreWriter ValueJsonDeflatedFileStore =>
-        fileStore.ForSubdirectory(ValueJsonDeflatedSubdirectory);
+        _fileStore.ForSubdirectory(ValueJsonDeflatedSubdirectory);
 
     protected IFileStoreWriter ValueBinaryDeflatedFileStore =>
-        fileStore.ForSubdirectory(ValueBinaryDeflatedSubdirectory);
+        _fileStore.ForSubdirectory(ValueBinaryDeflatedSubdirectory);
 
     protected IFileStoreWriter ProvisionalReductionFileStore =>
-        fileStore.ForSubdirectory(ProvisionalReductionSubdirectory);
+        _fileStore.ForSubdirectory(ProvisionalReductionSubdirectory);
 
     protected IFileStoreWriter CompositionLogLiteralFileStore =>
-        fileStore.ForSubdirectory(CompositionLogLiteralPath);
+        _fileStore.ForSubdirectory(CompositionLogLiteralPath);
 
     private readonly Func<DateTimeOffset> getTimeForCompositionLogBatch;
 
@@ -588,7 +589,7 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
         bool skipWritingComponentSecondTime)
     {
         this.getTimeForCompositionLogBatch = getTimeForCompositionLogBatch;
-        this.fileStore = fileStore;
+        this._fileStore = fileStore;
         this.skipWritingComponentSecondTime = skipWritingComponentSecondTime;
 
         var originalProcessStoreReader = new ProcessStoreReaderInFileStore(fileStoreReader);
@@ -726,7 +727,7 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
     }
 
     private ReadOnlyMemory<byte>? DelegateGetHashOfComponent(PineValue pineValue) =>
-        hashCache.ComputeHash(pineValue);
+        _hashCache.GetHash(pineValue);
 
     private (ReadOnlyMemory<byte> hash, string hashBase16) StoreComponentAndGetHashRecursive(
         PineValue component)
@@ -814,7 +815,7 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
             if (blobValue.Bytes.Length < 3 ||
                 (blobValue.Bytes.Span[0] is 4 && blobValue.Bytes.Length < 4))
             {
-                return hashCache.ComputeHash(pineValue);
+                return _hashCache.GetHash(pineValue);
             }
         }
 
@@ -822,7 +823,7 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
         {
             if (listValue.NodesCount is 0 && listValue.BlobsBytesCount < 3)
             {
-                return hashCache.ComputeHash(pineValue);
+                return _hashCache.GetHash(pineValue);
             }
         }
 

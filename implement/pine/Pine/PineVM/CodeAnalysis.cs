@@ -1,5 +1,5 @@
 using Pine.Core;
-using Pine.Core.Internal;
+using Pine.Core.CodeAnalysis;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -9,98 +9,6 @@ using System.Linq;
 namespace Pine.PineVM;
 
 
-public abstract record ExprMappedToParentEnv
-{
-    public record PathInParentEnv(IReadOnlyList<int> Path)
-        : ExprMappedToParentEnv
-    {
-        public virtual bool Equals(PathInParentEnv? other)
-        {
-            if (ReferenceEquals(this, other))
-                return true;
-
-            if (other is null)
-                return false;
-
-            return Path.SequenceEqual(other.Path);
-        }
-
-        public override int GetHashCode()
-        {
-            return base.GetHashCode();
-        }
-    }
-
-    public record LiteralInParentEnv(PineValue Value)
-        : ExprMappedToParentEnv;
-}
-
-public class IntPathEqualityComparer : IEqualityComparer<IReadOnlyList<int>?>
-{
-    public static readonly IntPathEqualityComparer Instance = new();
-
-    public bool Equals(IReadOnlyList<int>? x, IReadOnlyList<int>? y) =>
-        ReferenceEquals(x, y) ||
-        (x is not null && y is not null && x.SequenceEqual(y));
-
-    public int GetHashCode(IReadOnlyList<int> obj) =>
-        obj.Aggregate(0, (acc, next) => acc ^ next.GetHashCode());
-}
-
-public class IntPathComparer : IComparer<IReadOnlyList<int>>
-{
-    public static readonly IntPathComparer Instance = new();
-
-    public int Compare(IReadOnlyList<int>? x, IReadOnlyList<int>? y)
-    {
-        if (ReferenceEquals(x, y))
-            return 0;
-
-        if (x is null)
-            return -1;
-
-        if (y is null)
-            return 1;
-
-        if (x.Count != y.Count)
-            return x.Count.CompareTo(y.Count);
-
-        for (var i = 0; i < x.Count; i++)
-        {
-            var comparison = x[i].CompareTo(y[i]);
-
-            if (comparison != 0)
-                return comparison;
-        }
-
-        return 0;
-    }
-}
-
-
-public class IntPathMemoryComparer : IComparer<ReadOnlyMemory<int>>
-{
-    public static readonly IntPathMemoryComparer Instance = new();
-
-    public int Compare(ReadOnlyMemory<int> x, ReadOnlyMemory<int> y)
-    {
-        if (x.Equals(y))
-            return 0;
-
-        if (x.Length != y.Length)
-            return x.Length.CompareTo(y.Length);
-
-        for (var i = 0; i < x.Length; i++)
-        {
-            var comparison = x.Span[i].CompareTo(y.Span[i]);
-
-            if (comparison != 0)
-                return comparison;
-        }
-
-        return 0;
-    }
-}
 
 public record RecursiveAnalysisResult(
     ExpressionEnvClass RootEnvClass,
@@ -113,82 +21,18 @@ public record ExprOnRecursionPathEntry(
     PineValueClass Constraint,
     Expression Expr);
 
-public abstract record ExpressionEnvClass
-{
-    public record UnconstrainedEnv
-        : ExpressionEnvClass;
-
-    public record ConstrainedEnv
-        : ExpressionEnvClass
-    {
-        public ImmutableHashSet<IReadOnlyList<int>> ParsedEnvItems { get; }
-
-        public ConstrainedEnv(
-            IEnumerable<IReadOnlyList<int>> parsedEnvItems)
-        {
-            ParsedEnvItems =
-                parsedEnvItems.ToImmutableHashSet(equalityComparer: IntPathEqualityComparer.Instance);
-        }
-
-        public override int GetHashCode() =>
-            ParsedEnvItems.Aggregate(0, (acc, next) => acc ^ next.GetHashCode());
-
-        public virtual bool Equals(ConstrainedEnv? other) =>
-            other is not null &&
-            other.ParsedEnvItems.SetEquals(ParsedEnvItems);
-    }
-
-    public static bool Equal(ExpressionEnvClass? env1, ExpressionEnvClass? env2)
-    {
-        if (ReferenceEquals(env1, env2))
-            return true;
-
-        if (env1 is null || env2 is null)
-            return false;
-
-        if (env1 is UnconstrainedEnv || env2 is UnconstrainedEnv)
-            return true;
-
-        if (env1 is ConstrainedEnv constrainedEnv1 && env2 is ConstrainedEnv constrainedEnv2)
-            return constrainedEnv1.Equals(constrainedEnv2);
-
-        throw new NotImplementedException();
-    }
-
-    public static ExprMappedToParentEnv? TryMapPathToParentEnvironment(
-        Expression envExpr,
-        IReadOnlyList<int> path)
-    {
-        if (path.Count == 0)
-            return CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(envExpr);
-
-        var currentIndex = path[0];
-
-        if (envExpr is not Expression.List listExpr)
-            return null;
-
-        if (currentIndex < 0)
-            return null;
-
-        if (currentIndex >= listExpr.items.Count)
-            return null;
-
-        return TryMapPathToParentEnvironment(listExpr.items[currentIndex], [.. path.Skip(1)]);
-    }
-}
-
 public class DelegatingEqualityComparer<T>(
     Func<T?, T?, bool> equals,
     Func<T, int> getHashCode)
     : IEqualityComparer<T>
 {
-    private readonly Func<T?, T?, bool> equals = equals;
-    private readonly Func<T, int> getHashCode = getHashCode;
+    private readonly Func<T?, T?, bool> _equals = equals;
+    private readonly Func<T, int> _getHashCode = getHashCode;
 
     public bool Equals(T? x, T? y) =>
-        equals(x, y);
+        _equals(x, y);
 
-    public int GetHashCode(T obj) => getHashCode(obj);
+    public int GetHashCode(T obj) => _getHashCode(obj);
 }
 
 public class CodeAnalysis
@@ -225,7 +69,8 @@ public class CodeAnalysis
             .OfType<Expression.ParseAndEval>()
             .Select(parseAndEvalExpr =>
             {
-                var encodedMapped = TryParseExpressionAsIndexPathFromEnv(parseAndEvalExpr.Encoded);
+                var encodedMapped =
+                Core.CodeAnalysis.CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(parseAndEvalExpr.Encoded);
 
                 var expressionValue =
                 encodedMapped switch
@@ -234,7 +79,7 @@ public class CodeAnalysis
                     literalInParentEnv.Value,
 
                     ExprMappedToParentEnv.PathInParentEnv pathInParentEnv =>
-                    ValueFromPathInValue(environment, [.. pathInParentEnv.Path]),
+                    Core.CodeAnalysis.CodeAnalysis.ValueFromPathInValue(environment, [.. pathInParentEnv.Path]),
 
                     null =>
                     /*
@@ -315,7 +160,7 @@ public class CodeAnalysis
             }
         }
 
-        RecursiveAnalysisResult insertInCache(RecursiveAnalysisResult recursiveAnalysisResult)
+        RecursiveAnalysisResult InsertInCache(RecursiveAnalysisResult recursiveAnalysisResult)
         {
             mutatedCache.AddOrUpdate(
                 expression,
@@ -360,7 +205,7 @@ public class CodeAnalysis
 
         var nextStack = stack.Append(currentStackFrame).ToImmutableArray();
 
-        RecursiveAnalysisResult computeChildClass(ParseSubExpression parseSubExpr)
+        RecursiveAnalysisResult ComputeChildClass(ParseSubExpression parseSubExpr)
         {
             if (parseSubExpr.ExpressionValue is not { } parsedExprValue)
             {
@@ -479,7 +324,7 @@ public class CodeAnalysis
 
         var descendantsEnvUsages =
             parseSubexpressionsToIntegrate
-            .Select(parseSubExpr => (parseSubExpr, childAnalysis: computeChildClass(parseSubExpr)))
+            .Select(parseSubExpr => (parseSubExpr, childAnalysis: ComputeChildClass(parseSubExpr)))
             .ToImmutableArray();
 
         var descendantsConstrainedEnv =
@@ -524,7 +369,7 @@ public class CodeAnalysis
             new ExpressionEnvClass.ConstrainedEnv(mergedParsedEnvItems);
 
         return
-            insertInCache(
+            InsertInCache(
                 new RecursiveAnalysisResult(
                     mergedEnvClass,
                     ExprOnRecursionPath: mergedExprOnRecursionPath,
@@ -581,7 +426,7 @@ public class CodeAnalysis
             return [new KeyValuePair<IReadOnlyList<int>, IReadOnlyList<int>>([], [])];
         */
 
-        if (TryParseExpressionAsIndexPathFromEnv(envExpression) is { } path)
+        if (Core.CodeAnalysis.CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(envExpression) is { } path)
         {
             return [new KeyValuePair<IReadOnlyList<int>, ExprMappedToParentEnv>([], path)];
         }
@@ -621,93 +466,6 @@ public class CodeAnalysis
         return [];
     }
 
-    public static PineValue? ValueFromPathInValue(
-        PineValue environment,
-        ReadOnlySpan<int> path)
-    {
-        if (path.Length is 0)
-            return environment;
-
-        if (environment is PineValue.BlobValue blobValue)
-        {
-            if (1 < path.Length)
-                return null;
-
-            return KernelFunctionSpecialized.skip(path[0], blobValue);
-        }
-
-        if (environment is not PineValue.ListValue listValue)
-            return null;
-
-        if (path[0] < 0)
-            return null;
-
-        if (path[0] >= listValue.Items.Length)
-            return null;
-
-        return ValueFromPathInValue(listValue.Items.Span[path[0]], path[1..]);
-    }
-
-    /// <summary>
-    /// Returns the path of list items starting from the environment to the expression given as the argument.
-    /// </summary>
-    public static ExprMappedToParentEnv? TryParseExpressionAsIndexPathFromEnv(Expression expression)
-    {
-        return
-            TryParseExpressionAsIndexPath(
-                pathExpression: expression,
-                rootExpression: Expression.EnvironmentInstance);
-    }
-
-    public static ExprMappedToParentEnv? TryParseExpressionAsIndexPath(
-        Expression pathExpression,
-        Expression rootExpression)
-    {
-        if (pathExpression == rootExpression)
-            return new ExprMappedToParentEnv.PathInParentEnv([]);
-
-        if (pathExpression is Expression.Literal literal)
-            return new ExprMappedToParentEnv.LiteralInParentEnv(literal.Value);
-
-        if (pathExpression is Expression.StringTag stringTagExpr)
-            return TryParseExpressionAsIndexPath(stringTagExpr.Tagged, rootExpression);
-
-        if (pathExpression is not Expression.KernelApplication kernelApplication)
-            return null;
-
-        if (kernelApplication.Function is not nameof(KernelFunction.head))
-            return null;
-
-        if (kernelApplication.Input is Expression.KernelApplication inputKernelApplication &&
-            inputKernelApplication.Function is nameof(KernelFunction.skip))
-        {
-            if (inputKernelApplication.Input is not Expression.List skipInputList)
-                return null;
-
-            if (skipInputList.items.Count is not 2)
-                return null;
-
-            if (skipInputList.items[0] is not Expression.Literal skipCountLiteral)
-                return null;
-
-            if (TryParseExpressionAsIndexPath(skipInputList.items[1], rootExpression) is not ExprMappedToParentEnv.PathInParentEnv pathPrefix)
-                return null;
-
-            return
-                KernelFunction.SignedIntegerFromValueRelaxed(skipCountLiteral.Value) is { } skipValue
-                ?
-                new ExprMappedToParentEnv.PathInParentEnv([.. pathPrefix.Path, (int)skipValue])
-                :
-                null;
-        }
-
-        {
-            if (TryParseExpressionAsIndexPath(kernelApplication.Input, rootExpression) is not ExprMappedToParentEnv.PathInParentEnv pathPrefix)
-                return null;
-
-            return new ExprMappedToParentEnv.PathInParentEnv([.. pathPrefix.Path, 0]);
-        }
-    }
 
     public static IReadOnlyDictionary<Expression, IReadOnlyList<PineValueClass>> EnvironmentClassesFromInvocationReports(
         IReadOnlyList<PineVM.EvaluationReport> invocationReports,
@@ -842,14 +600,14 @@ public class CodeAnalysis
             Expression.EnumerateSelfAndDescendants(expression)
             .SelectWhereNotNull(
                 expr =>
-                TryParseExpressionAsIndexPathFromEnv(expr) is ExprMappedToParentEnv.PathInParentEnv path
+                Core.CodeAnalysis.CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(expr) is ExprMappedToParentEnv.PathInParentEnv path
                 ?
                 path.Path
                 :
                 null)
             .ToHashSet(IntPathEqualityComparer.Instance);
 
-        bool keepClassItemPath(IReadOnlyList<int> classItemPath)
+        bool KeepClassItemPath(IReadOnlyList<int> classItemPath)
         {
             foreach (var observedPath in shallowObservedPaths)
             {
@@ -878,7 +636,7 @@ public class CodeAnalysis
 
         var itemsToKeep =
             envClass.ParsedItems
-            .Where(classItem => keepClassItemPath(classItem.Key))
+            .Where(classItem => KeepClassItemPath(classItem.Key))
             .ToList();
 
         if (itemsToKeep.Count == envClass.ParsedItems.Count)
@@ -900,18 +658,18 @@ public class CodeAnalysis
         ++SimplifyEnvClassCount;
 
 
-        static ImmutableHashSet<IReadOnlyList<int>> observedPathsFromExpression(Expression expression) =>
+        static ImmutableHashSet<IReadOnlyList<int>> ObservedPathsFromExpression(Expression expression) =>
             Expression.EnumerateSelfAndDescendants(expression)
             .SelectWhereNotNull(
                 expr =>
-                TryParseExpressionAsIndexPathFromEnv(expr) is ExprMappedToParentEnv.PathInParentEnv path
+                Core.CodeAnalysis.CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(expr) is ExprMappedToParentEnv.PathInParentEnv path
                 ?
                 path.Path
                 :
                 null)
             .ToImmutableHashSet(IntPathEqualityComparer.Instance);
 
-        var rootObservedPaths = observedPathsFromExpression(rootExpression);
+        var rootObservedPaths = ObservedPathsFromExpression(rootExpression);
 
         var levelsObservedPaths = new List<ImmutableHashSet<IReadOnlyList<int>>>();
 
@@ -936,7 +694,7 @@ public class CodeAnalysis
             if (currentExpression == lastExpression)
                 break;
 
-            levelsObservedPaths.Add(observedPathsFromExpression(currentExpression));
+            levelsObservedPaths.Add(ObservedPathsFromExpression(currentExpression));
         }
 
         var aggregateObservedPaths =
@@ -944,7 +702,7 @@ public class CodeAnalysis
                 func: (a, b) => a.Union(b),
                 seed: rootObservedPaths);
 
-        bool keepClassItemPath(IReadOnlyList<int> classItemPath)
+        bool KeepClassItemPath(IReadOnlyList<int> classItemPath)
         {
             foreach (var observedPath in aggregateObservedPaths)
             {
@@ -973,7 +731,7 @@ public class CodeAnalysis
 
         var itemsToKeep =
             envClass.ParsedItems
-            .Where(classItem => keepClassItemPath(classItem.Key))
+            .Where(classItem => KeepClassItemPath(classItem.Key))
             .ToList();
 
         if (itemsToKeep.Count == envClass.ParsedItems.Count)
@@ -1009,7 +767,7 @@ public class CodeAnalysis
             var envClassSimplified =
                 PineValueClass.Create([.. envClassSimplifiedItems]);
 
-            Expression projectCompilation(PineValueClass envClass) =>
+            Expression ProjectCompilation(PineValueClass envClass) =>
                 PineVM.ReduceExpressionAndInlineRecursive(
                     rootExpression: expression,
                     rootExprAlternativeForms: [],
@@ -1021,10 +779,10 @@ public class CodeAnalysis
                     skipInlining: (_, _) => false);
 
             var origReducedExpr =
-                projectCompilation(envClass);
+                ProjectCompilation(envClass);
 
             var simplifiedReducedExprBeforeSubstitute =
-                projectCompilation(envClassSimplified);
+                ProjectCompilation(envClassSimplified);
 
             var simplifiedReducedExpr =
                 PineVM.SubstituteSubexpressionsForEnvironmentConstraint(

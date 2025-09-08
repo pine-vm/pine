@@ -1,13 +1,14 @@
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis;
+using Pine.Core;
+using Pine.Core.PopularEncodings;
+using Pine.Core.CodeAnalysis;
 using System.Globalization;
 using System;
 using System.Linq;
 using System.Collections.Immutable;
 using System.Collections.Generic;
-using Pine.Core;
-using Pine.Core.PopularEncodings;
 
 namespace Pine.CompilePineToDotNet;
 
@@ -31,7 +32,7 @@ public static class PineCSharpSyntaxFactory
 
     public static StatementSyntax BranchForEnvId(
         Expression expr,
-        PineVM.PineValueClass envConstraint,
+        PineValueClass envConstraint,
         FunctionCompilationEnv compilationEnv,
         StatementSyntax[]? prependStatments)
     {
@@ -61,7 +62,7 @@ public static class PineCSharpSyntaxFactory
 
         var envListItemsConditionsExprs =
             envConstraint.ParsedItems
-            .OrderBy(envListItem => envListItem.Key, PineVM.IntPathComparer.Instance)
+            .OrderBy(envListItem => envListItem.Key, IntPathComparer.Instance)
             .Select(envListItem =>
             {
                 var valueDeclName = CompileToCSharp.DeclarationNameForValue(envListItem.Value);

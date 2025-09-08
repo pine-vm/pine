@@ -1,11 +1,10 @@
-using Pine.Core;
 using Pine.Core.PopularEncodings;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 
-namespace Pine.PineVM;
+namespace Pine.Core.CodeAnalysis;
 
 /// <summary>
 /// A set of constraints relative to the generic value model.
@@ -13,13 +12,26 @@ namespace Pine.PineVM;
 /// </summary>
 public record PineValueClass
 {
-    readonly static CompilePineToDotNet.CompilerMutableCache s_compilerCache = new();
+    /// <summary>
+    /// Cache used to compute stable, fast hashes for the canonical representation of this class.
+    /// </summary>
+    readonly static Addressing.ConcurrentPineValueHashCache s_valueHashCache = new();
 
+    /// <summary>
+    /// The set of constraints captured by this class.
+    /// Each entry maps an integer path into a value to the expected <see cref="PineValue"/> found at that path.
+    /// </summary>
     public IReadOnlyDictionary<IReadOnlyList<int>, PineValue> ParsedItems { get; }
 
-    readonly public string HashBase16;
+    /// <summary>
+    /// Hash of the canonical representation of this class, encoded in lowercase hexadecimal.
+    /// </summary>
+    public readonly string HashBase16;
 
-    readonly private FastRepresentation _fastRepresentation;
+    /// <summary>
+    /// Internal representation optimized for fast membership checks.
+    /// </summary>
+    private readonly FastRepresentation _fastRepresentation;
 
     /// <summary>
     /// Representation optimized for fast check at runtime.
@@ -29,6 +41,11 @@ public record PineValueClass
     private record FastRepresentation(
         ReadOnlyMemory<(ReadOnlyMemory<int>, PineValue)> Constraints)
     {
+        /// <summary>
+        /// Tests whether the given concrete value is a member of the class.
+        /// </summary>
+        /// <param name="concreteValue">The value to test.</param>
+        /// <returns>True if all constraints are satisfied; otherwise false.</returns>
         public bool SatisfiedByValue(PineValue concreteValue)
         {
             for (var i = 0; i < Constraints.Length; ++i)
@@ -46,6 +63,11 @@ public record PineValueClass
         }
     }
 
+    /// <summary>
+    /// Initializes a new instance of <see cref="PineValueClass"/> from the given parsed items and hash.
+    /// </summary>
+    /// <param name="parsedItems">The constraints mapping paths to expected values.</param>
+    /// <param name="hashBase16">Canonical hash of the class, in base16.</param>
     private PineValueClass(
         IReadOnlyDictionary<IReadOnlyList<int>, PineValue> parsedItems,
         string hashBase16)
@@ -68,6 +90,12 @@ public record PineValueClass
         _fastRepresentation = new FastRepresentation(constraintsMemory);
     }
 
+    /// <summary>
+    /// Returns the concrete value specified for the given path,
+    /// if this class specifies a value for that path at all.
+    /// </summary>
+    /// <param name="path">The integer path to look up.</param>
+    /// <returns>The expected <see cref="PineValue"/> for the path, or null if not specified.</returns>
     public PineValue? TryGetValue(IReadOnlyList<int> path)
     {
         if (ParsedItems.TryGetValue(path, out var value))
@@ -82,11 +110,20 @@ public record PineValueClass
         return CodeAnalysis.ValueFromPathInValue(parentValue, [.. path.TakeLast(1)]);
     }
 
+    /// <summary>
+    /// <inheritdoc />
+    /// </summary>
     public override int GetHashCode()
     {
         return HashBase16.GetHashCode();
     }
 
+    /// <summary>
+    /// Tests two <see cref="PineValueClass"/> instances for equality by identity of their canonical hash.
+    /// </summary>
+    /// <param name="id0">First instance.</param>
+    /// <param name="id1">Second instance.</param>
+    /// <returns>True if both are the same reference or have equal <see cref="HashBase16"/>; otherwise false.</returns>
     public static bool Equal(PineValueClass? id0, PineValueClass? id1)
     {
         if (ReferenceEquals(id0, id1))
@@ -98,9 +135,19 @@ public record PineValueClass
         return id0.HashBase16 == id1.HashBase16;
     }
 
+    /// <summary>
+    /// Creates a class that only contains the given concrete value at the root path.
+    /// </summary>
     public static PineValueClass CreateEquals(PineValue pineValue) =>
         Create([new KeyValuePair<IReadOnlyList<int>, PineValue>([], pineValue)]);
 
+    /// <summary>
+    /// Creates a <see cref="PineValueClass"/> from the observed environment items and a concrete environment value.
+    /// </summary>
+    /// <param name="observedPart">Observed paths in the environment for the current expression.</param>
+    /// <param name="concreteValue">Concrete environment value to read the items from.</param>
+    /// <param name="skipUnavailableItems">If true, ignores paths not present in the concrete value; otherwise throws.</param>
+    /// <returns>A new <see cref="PineValueClass"/> representing constraints for the observed items.</returns>
     public static PineValueClass Create(
         ExpressionEnvClass.ConstrainedEnv observedPart,
         PineValue concreteValue,
@@ -128,6 +175,11 @@ public record PineValueClass
         return Create(parsedItems);
     }
 
+    /// <summary>
+    /// Creates a <see cref="PineValueClass"/> from an explicit list of path-to-value constraints.
+    /// </summary>
+    /// <param name="parsedItems">Constraints mapping paths to expected values.</param>
+    /// <returns>A new <see cref="PineValueClass"/> with a canonical hash computed from the constraints.</returns>
     public static PineValueClass Create(
         IReadOnlyList<KeyValuePair<IReadOnlyList<int>, PineValue>> parsedItems)
     {
@@ -141,21 +193,38 @@ public record PineValueClass
             item.Value]))];
 
         var hashBase16 =
-            Convert.ToHexStringLower(s_compilerCache.ComputeHash(PineValue.List(parsedItemsPineValues)).Span);
+            Convert.ToHexStringLower(s_valueHashCache.GetHash(PineValue.List(parsedItemsPineValues)).Span);
 
         return new PineValueClass(
             parsedItems.ToImmutableSortedDictionary(keyComparer: IntPathComparer.Instance),
             hashBase16: hashBase16);
     }
 
+    /// <summary>
+    /// Determines whether the specified object is equal to the current object, using <see cref="Equal(PineValueClass?, PineValueClass?)"/>.
+    /// </summary>
+    /// <param name="other">The object to compare with the current object.</param>
+    /// <returns>True if the instances are equal; otherwise false.</returns>
     public virtual bool Equals(PineValueClass? other) =>
         Equal(this, other);
 
+    /// <summary>
+    /// Tests whether the provided concrete value satisfies all constraints in this class.
+    /// </summary>
+    /// <param name="concreteValue">The value to test.</param>
+    /// <returns>True if the value satisfies all constraints; otherwise false.</returns>
     public bool SatisfiedByValue(PineValue concreteValue)
     {
         return _fastRepresentation.SatisfiedByValue(concreteValue);
     }
 
+    /// <summary>
+    /// Tests whether all constraints in this class are implied by (are satisfied by) another class.
+    /// </summary>
+    /// <param name="otherClass">The other class to test implication against.</param>
+    /// <returns>
+    /// True if for every path in this class, <paramref name="otherClass"/> specifies the same value; otherwise false.
+    /// </returns>
     public bool SatisfiedByConstraint(PineValueClass otherClass)
     {
         foreach (var item in ParsedItems)
@@ -173,6 +242,13 @@ public record PineValueClass
         return true;
     }
 
+    /// <summary>
+    /// Builds a class that captures the structural intersection of two values up to a depth limit.
+    /// </summary>
+    /// <param name="valueA">First value.</param>
+    /// <param name="valueB">Second value.</param>
+    /// <param name="depthLimit">Maximum list nesting depth to inspect for intersection.</param>
+    /// <returns>A new <see cref="PineValueClass"/> that matches the common structure and values.</returns>
     public static PineValueClass CreateIntersection(
         PineValue valueA,
         PineValue valueB,
@@ -180,6 +256,13 @@ public record PineValueClass
         Create(Intersection(valueA, valueB, depthLimit));
 
 
+    /// <summary>
+    /// Computes a collection of path-to-value pairs representing the intersection between two values.
+    /// </summary>
+    /// <param name="valueA">First value.</param>
+    /// <param name="valueB">Second value.</param>
+    /// <param name="depthLimit">Maximum list nesting depth to inspect.</param>
+    /// <returns>A list of constraints representing the intersection.</returns>
     public static IReadOnlyList<KeyValuePair<IReadOnlyList<int>, PineValue>> Intersection(
         PineValue valueA,
         PineValue valueB,
@@ -210,15 +293,33 @@ public record PineValueClass
         return mutatedCollection;
     }
 
+    /// <summary>
+    /// Internal node type for building an intersection tree between two values.
+    /// </summary>
     private abstract record IntersectionNode
     {
+        /// <summary>
+        /// Leaf node representing a concrete value shared by both inputs at a given path.
+        /// </summary>
+        /// <param name="Value">The common value.</param>
         public sealed record IntersectionLeaf(PineValue Value)
             : IntersectionNode;
 
+        /// <summary>
+        /// Branch node carrying children indexed by list offsets.
+        /// </summary>
+        /// <param name="Children">Child nodes keyed by element offset.</param>
         public sealed record IntersectionBranch(IReadOnlyList<(int offset, IntersectionNode childNode)> Children)
             : IntersectionNode;
     }
 
+    /// <summary>
+    /// Builds the intersection tree of two values up to a depth limit.
+    /// </summary>
+    /// <param name="valueA">First value.</param>
+    /// <param name="valueB">Second value.</param>
+    /// <param name="depthLimit">Maximum list depth to traverse.</param>
+    /// <returns>The root of the intersection tree.</returns>
     private static IntersectionNode IntersectionTree(
         PineValue valueA,
         PineValue valueB,
@@ -259,6 +360,12 @@ public record PineValueClass
         return new IntersectionNode.IntersectionBranch(children);
     }
 
+    /// <summary>
+    /// Intersects an existing constraint with a concrete value, returning a refined constraint.
+    /// </summary>
+    /// <param name="constraint">The starting constraint.</param>
+    /// <param name="value">The concrete value to intersect with.</param>
+    /// <returns>A new <see cref="PineValueClass"/> capturing only items that match in both.</returns>
     public static PineValueClass CreateIntersection(PineValueClass constraint, PineValue value)
     {
         if (constraint.SatisfiedByValue(value))
@@ -301,56 +408,25 @@ public record PineValueClass
         return Create([.. intersectionItems]);
     }
 
+    /// <summary>
+    /// Projects this constraint down to the given subpath, removing the path prefix from each item retained.
+    /// </summary>
+    /// <param name="path">The path that must be a prefix of items to retain.</param>
+    /// <returns>A new <see cref="PineValueClass"/> containing only items under the given path.</returns>
     public PineValueClass PartUnderPath(IReadOnlyList<int> path)
     {
         return Create(
             [..
-        ParsedItems
-        .SelectMany(item =>
-        {
-            if (!item.Key.Take(path.Count).SequenceEqual(path))
+            ParsedItems
+            .SelectMany(item =>
             {
-                return (IReadOnlyList<KeyValuePair<IReadOnlyList<int>, PineValue>>)[];
-            }
+                if (!item.Key.Take(path.Count).SequenceEqual(path))
+                {
+                    return (IReadOnlyList<KeyValuePair<IReadOnlyList<int>, PineValue>>)[];
+                }
 
-            return [new KeyValuePair<IReadOnlyList<int>, PineValue>([.. item.Key.Skip(path.Count)], item.Value)];
-        })]);
-    }
-}
-
-
-public class PineValueClassSpecificityComparer : IComparer<PineValueClass>
-{
-    public readonly static PineValueClassSpecificityComparer Instance = new();
-
-    public int Compare(PineValueClass? x, PineValueClass? y)
-    {
-        if (x is null && y is null)
-            return 0;
-
-        if (x is null)
-            return -1;
-
-        if (y is null)
-            return 1;
-
-        if (x.SatisfiedByConstraint(y))
-        {
-            if (!y.SatisfiedByConstraint(x))
-            {
-                return -1;
-            }
-        }
-
-        if (y.SatisfiedByConstraint(x))
-        {
-            if (!x.SatisfiedByConstraint(y))
-            {
-                return 1;
-            }
-        }
-
-        return x.ParsedItems.Count - y.ParsedItems.Count;
+                return [new KeyValuePair<IReadOnlyList<int>, PineValue>([.. item.Key.Skip(path.Count)], item.Value)];
+            })]);
     }
 }
 

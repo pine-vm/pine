@@ -2,6 +2,7 @@ using ElmTime.ElmInteractive;
 using ElmTime.ElmSyntax;
 using AwesomeAssertions;
 using Pine.Core;
+using Pine.Core.Addressing;
 using Pine.Core.Elm;
 using Pine.Core.PopularEncodings;
 using Pine.Elm;

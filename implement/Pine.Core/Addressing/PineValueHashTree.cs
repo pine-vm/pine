@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
 
-namespace Pine.Core;
+namespace Pine.Core.Addressing;
 
 /// <summary>
 /// Utilities for computing and working with content-addressed hashes of <see cref="PineValue"/> trees.

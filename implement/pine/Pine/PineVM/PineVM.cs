@@ -1,4 +1,5 @@
 using Pine.Core;
+using Pine.Core.CodeAnalysis;
 using Pine.Core.PineVM;
 using Pine.Core.PopularEncodings;
 using Pine.Pine.PineVM;
@@ -363,7 +364,7 @@ public class PineVM : IPineVM
                 {
                     var constraintItem = specialization.constraint[specializationIndex];
 
-                    if (CodeAnalysis.ValueFromPathInValue(environment, constraintItem.Path.Span) is not { } pathValue)
+                    if (Core.CodeAnalysis.CodeAnalysis.ValueFromPathInValue(environment, constraintItem.Path.Span) is not { } pathValue)
                     {
                         foundMismatch = true;
                         break;
@@ -390,9 +391,9 @@ public class PineVM : IPineVM
         ReadOnlyMemory<int> Path,
         PineValue Value);
 
-    readonly Dictionary<Expression, ExpressionCompilation> expressionCompilationDict = [];
+    readonly Dictionary<Expression, ExpressionCompilation> _expressionCompilationDict = [];
 
-    readonly static CompilePineToDotNet.CompilerMutableCache mutableCache = new();
+    readonly static Core.Addressing.ConcurrentPineValueHashCache s_mutableCacheValueHash = new();
 
     StackFrame StackFrameFromExpression(
         PineValue? expressionValue,
@@ -418,14 +419,14 @@ public class PineVM : IPineVM
     public ExpressionCompilation GetExpressionCompilation(
         Expression rootExpression)
     {
-        if (expressionCompilationDict.TryGetValue(rootExpression, out var cachedCompilation))
+        if (_expressionCompilationDict.TryGetValue(rootExpression, out var cachedCompilation))
         {
             return cachedCompilation;
         }
 
         var compilation = ExpressionCompilationLessCache(rootExpression);
 
-        expressionCompilationDict[rootExpression] = compilation;
+        _expressionCompilationDict[rootExpression] = compilation;
 
         return compilation;
     }
@@ -1101,7 +1102,7 @@ public class PineVM : IPineVM
                 findReplacement:
                 descendant =>
                 {
-                    if (CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(descendant) is { } indexPath)
+                    if (Core.CodeAnalysis.CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(descendant) is { } indexPath)
                     {
                         if (indexPath is ExprMappedToParentEnv.LiteralInParentEnv asLiteral)
                         {
@@ -2305,7 +2306,7 @@ public class PineVM : IPineVM
                                 {
                                     var stackTraceHashes =
                                         CompileStackTrace(100)
-                                        .Select(expr => mutableCache.ComputeHash(ExpressionEncoding.EncodeExpressionAsValue(expr)))
+                                        .Select(expr => s_mutableCacheValueHash.GetHash(ExpressionEncoding.EncodeExpressionAsValue(expr)))
                                         .ToArray();
 
                                     return
@@ -2758,12 +2759,12 @@ public class PineVM : IPineVM
             ExpressionEncoding.EncodeExpressionAsValue(errorReport.FrameExpression);
 
         var exprHash =
-            mutableCache.ComputeHash(expressionValue);
+            s_mutableCacheValueHash.GetHash(expressionValue);
 
         var exprHashBase16 = Convert.ToHexStringLower(exprHash.Span);
 
         var envHash =
-            mutableCache.ComputeHash(errorReport.EnvironmentValue);
+            s_mutableCacheValueHash.GetHash(errorReport.EnvironmentValue);
 
         var envHashBase16 = Convert.ToHexStringLower(envHash.Span);
 

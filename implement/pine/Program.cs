@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Pine;
 using Pine.Core;
+using Pine.Core.Addressing;
 using Pine.Core.Elm;
 using Pine.Core.Http;
 using Pine.Core.IO;
@@ -1010,8 +1011,8 @@ public class Program
                     .Extract(err => throw new Exception("Failed to load Elm compiler from " + overrideCompilerPath + ": " + err));
 
                     var elmCompilerHash =
-                    new Pine.CompilePineToDotNet.CompilerMutableCache()
-                    .ComputeHash(overrideElmCompiler.CompilerEnvironment);
+                    new Pine.Core.Addressing.ConcurrentPineValueHashCache()
+                    .GetHash(overrideElmCompiler.CompilerEnvironment);
 
                     Console.WriteLine(
                         "Loaded Elm compiler with hash " + Convert.ToHexStringLower(elmCompilerHash.Span)[..8]);

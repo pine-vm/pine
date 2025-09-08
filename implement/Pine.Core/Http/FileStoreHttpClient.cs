@@ -68,7 +68,7 @@ public class FileStoreHttpClient(HttpClient httpClient) : IFileStore
             response.EnsureSuccessStatusCode();
 
             var responseContent = await response.Content.ReadAsStringAsync();
-            var result = JsonSerializer.Deserialize<DirectoryListingResponse>(responseContent, _jsonOptions);
+            var result = JsonSerializer.Deserialize<DirectoryListingResponse>(responseContent, s_jsonOptions);
 
             if (result?.Entries == null)
             {
@@ -76,8 +76,8 @@ public class FileStoreHttpClient(HttpClient httpClient) : IFileStore
             }
 
             return result.Entries
-                .Where(entry => entry.Type == "file")
-                .Select(entry => (IImmutableList<string>)entry.Name.Split('/', StringSplitOptions.RemoveEmptyEntries).ToImmutableList());
+                .Where(entry => entry.Type is "file")
+                .Select(entry => (IImmutableList<string>)[.. entry.Name.Split('/', StringSplitOptions.RemoveEmptyEntries)]);
         }
         catch (HttpRequestException)
         {
@@ -171,7 +171,7 @@ public class FileStoreHttpClient(HttpClient httpClient) : IFileStore
     private record DirectoryListingResponse(DirectoryEntry[] Entries);
     private record DirectoryEntry(string Name, string Type);
 
-    private static readonly JsonSerializerOptions _jsonOptions = BuildJsonSerializerOptions();
+    private static readonly JsonSerializerOptions s_jsonOptions = BuildJsonSerializerOptions();
 
     /// <summary>
     /// Builds and returns the <see cref="JsonSerializerOptions"/> used for serializing and deserializing HTTP responses.

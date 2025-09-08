@@ -31,7 +31,7 @@ public sealed class PersistentProcessLive : IAsyncDisposable
 {
     private static readonly TimeSpan s_storeReductionIntervalDefault = TimeSpan.FromMinutes(10);
 
-    private readonly Pine.CompilePineToDotNet.CompilerMutableCache _hashCache = new();
+    private readonly Pine.Core.Addressing.ConcurrentPineValueHashCache _hashCache = new();
 
     private readonly System.Threading.Lock _processLock = new();
 
@@ -148,7 +148,7 @@ public sealed class PersistentProcessLive : IAsyncDisposable
                 _storeWriter.StoreComponent(asApplyFunction.Function);
 
                 var functionHash =
-                    Convert.ToHexStringLower(_hashCache.ComputeHash(asApplyFunction.Function).Span);
+                    Convert.ToHexStringLower(_hashCache.GetHash(asApplyFunction.Function).Span);
 
                 var argumentsJsonString =
                     ProcessStoreWriterInFileStore.SerializeValueToJsonString(
