@@ -114,7 +114,7 @@ public static class ElmValueEncoding
             }
         }
 
-        return new ElmValue.ElmInternal("___error_skipped_large_blob___");
+        return "skipped larger blob of length " + blobValue.Bytes.Length;
     }
 
     public static Result<string, ElmValue> PineListValueAsElmValue(

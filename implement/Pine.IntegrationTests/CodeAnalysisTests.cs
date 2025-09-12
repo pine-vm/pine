@@ -308,7 +308,11 @@ public class CodeAnalysisTests
 
         return
             headerText + " =\n" +
-            StaticExpressionDisplay.RenderToString(functionBody, indentString: "    ", indentLevel: 1);
+            StaticExpressionDisplay.RenderToString(
+                functionBody,
+                blobValueRenderer: StaticExpressionDisplay.DefaultBlobRenderer,
+                indentString: "    ",
+                indentLevel: 1);
     }
 
     [Fact]
@@ -480,6 +484,58 @@ public class CodeAnalysisTests
                         , param_1_0
                         ]
                 """
+            },
+
+            new
+            {
+                Name = "Literal_Blob",
+                Expr = StaticExpression.LiteralInstance(PineValue.Blob([0x12, 0x34, 1, 3])),
+                Expected = """
+                Blob 0x12340103
+                """
+            },
+
+            new
+            {
+                Name = "List_With_Blob_Item",
+                Expr = StaticExpression.ListInstance(
+                    [
+                        StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1))),
+                        StaticExpression.LiteralInstance(PineValue.Blob([0x12, 0x34, 1, 3])),
+                        StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(2)))
+                    ]),
+                Expected = """
+                [ 1
+                , Blob 0x12340103
+                , 2
+                ]
+                """
+            },
+
+            new
+            {
+                Name = "Literal_ListValue_With_Blob_Item",
+                Expr = StaticExpression.LiteralInstance(
+                    PineValue.List(
+                        PineValue.Blob([0x01, 1, 3, 7]),
+                        PineValue.Blob([0xAB, 1, 3, 7])
+                    )),
+                Expected = """
+                [Blob 0x01010307, Blob 0xab010307]
+                """
+            },
+            new
+            {
+                Name = "FunctionApplication_With_Blob_Arg",
+                Expr = StaticExpression.FunctionApplicationInstance(
+                    functionName: "myFunc",
+                    arguments: [
+                        StaticExpression.LiteralInstance(PineValue.Blob([0x12, 0x34, 1, 7]))
+                    ]),
+                Expected = """
+                myFunc
+                    (Blob 0x12340107)
+                """
             }
         };
 
@@ -487,7 +543,11 @@ public class CodeAnalysisTests
         {
             var sc = scenarios[i];
 
-            var actual = StaticExpressionDisplay.RenderToString(sc.Expr, indentString: "    ");
+            var actual =
+                StaticExpressionDisplay.RenderToString(
+                    sc.Expr,
+                    blobValueRenderer: StaticExpressionDisplay.DefaultBlobRenderer,
+                    indentString: "    ");
 
             try
             {
