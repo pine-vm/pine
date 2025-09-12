@@ -287,6 +287,154 @@ public class CodeAnalysisTests
             """".Trim());
     }
 
+    [Fact]
+    public void Parse_Test_dictToList()
+    {
+        var elmJsonFile =
+            """
+            {
+                "type": "application",
+                "source-directories": [
+                    "src"
+                ],
+                "elm-version": "0.19.1",
+                "dependencies": {
+                    "direct": {
+                        "elm/core": "1.0.5"
+                    },
+                    "indirect": {
+                    }
+                },
+                "test-dependencies": {
+                    "direct": {
+                        "elm-explorations/test": "2.2.0"
+                    },
+                    "indirect": {
+                    }
+                }
+            }
+            """;
+
+        /*
+         * Use a form that us unlikely to occur also in the standard libraries,
+         * to avoid code analysis picking up the name of the same function in the standard library.
+         * */
+
+        var elmModuleText =
+            """
+            module Test exposing (..)
+
+            dictToShuffledList : Dict k v -> List ( k, v )
+            dictToShuffledList dict =
+                case dict of
+                    RBEmpty_elm_builtin ->
+                        []
+
+                    RBNode_elm_builtin _ key value left right ->
+                        Pine_kernel.concat [ dictToShuffledList left, dictToShuffledList right, [ ( key, value ) ] ]
+            """;
+
+        var appCodeTree =
+            BlobTreeWithStringPath.EmptyTree
+            .SetNodeAtPathSorted(
+                ["elm.json"],
+                BlobTreeWithStringPath.Blob(Encoding.UTF8.GetBytes(elmJsonFile)))
+            .SetNodeAtPathSorted(
+                ["src", "Test.elm"],
+                BlobTreeWithStringPath.Blob(Encoding.UTF8.GetBytes(elmModuleText)));
+
+        var compiledEnv =
+            ElmCompiler.CompileInteractiveEnvironment(
+                appCodeTree,
+                rootFilePaths: [["src", "Test.elm"]],
+                skipLowering: true,
+                skipFilteringForSourceDirs: false)
+            .Extract(err => throw new System.Exception(err));
+
+        var parseCache = new PineVMParseCache();
+
+        var compiledDecl =
+            ElmInteractiveEnvironment.ParseFunctionFromElmModule(
+                compiledEnv,
+                moduleName: "Test",
+                declarationName: "dictToShuffledList",
+                parseCache: parseCache)
+            .Extract(err => throw new System.Exception(err));
+
+        compiledDecl.Should().NotBeNull();
+
+        var stubTextualRepr =
+            EncodePineExpressionAsJson.ToJsonString(compiledDecl.functionRecord.InnerFunction);
+
+        var dictValue =
+            ElmValueEncoding.ElmValueAsPineValue(
+                ElmValue.TagInstance(
+                    "RBEmpty_elm_builtin",
+                    []));
+
+        var functionApplicationRecord =
+            ElmInteractiveEnvironment.ApplyFunctionArgumentsForEvalExpr(
+                compiledDecl.functionRecord,
+                [dictValue])
+            .Extract(err => throw new System.Exception("Failed applying function arguments: " + err));
+
+        var namesFromCompiledEnv =
+            new NamesFromCompiledEnv(compiledEnv, parseCache);
+
+        var staticProgram =
+            PineVM.CodeAnalysis.ParseAsStaticMonomorphicProgram(
+                rootExpression: functionApplicationRecord.expression,
+                rootEnvironment: functionApplicationRecord.environment,
+                namesFromCompiledEnv.NameFromDecl,
+                parseCache)
+            .Extract(err => throw new System.Exception("Failed parsing as static program: " + err));
+
+        staticProgram.Should().NotBeNull();
+
+        IReadOnlyList<string> namedFunctionsTexts =
+            [..staticProgram.staticProgram.NamedFunctions
+            .OrderBy(kvp => kvp.Key)
+            .Select(kvp => RenderNamedFunction(kvp.Key, kvp.Value.body))];
+
+        var wholeProgramText =
+            string.Join(
+                "\n\n",
+                namedFunctionsTexts);
+
+        wholeProgramText.Trim().Should().Be(
+            """"
+            Test.dictToShuffledList param_1_0_0 param_1_0_1_1 param_1_0_1_2 param_1_0_1_3 param_1_0_1_4 =
+                if
+                    Pine_kernel.equal
+                        [ RBEmpty_elm_builtin
+                        , param_1_0_0
+                        ]
+                then
+                    []
+
+                else if
+                    Pine_kernel.equal
+                        [ RBNode_elm_builtin
+                        , param_1_0_0
+                        ]
+                then
+                    Pine_kernel.concat
+                        [ Test.dictToShuffledList
+                            param_1_0_1_3
+                        , Test.dictToShuffledList
+                            param_1_0_1_4
+                        , [ [ param_1_0_1_1
+                            , param_1_0_1_2
+                            ]
+                          ]
+                        ]
+
+                else
+                    <always_crash>
+            """"
+            .Trim());
+    }
+
     static string RenderParamRef(StaticExpression.ParameterReferenceExpression paramRef)
     {
         return "param_" + string.Join('_', paramRef.Path);
@@ -300,7 +448,7 @@ public class CodeAnalysisTests
             StaticExpression.EnumerateAllDescendants(functionBody)
             .OfType<StaticExpression.ParameterReferenceExpression>()
             .Distinct()
-            .OrderBy(paramRef => paramRef.Path.Count)
+            .OrderBy(paramRef => paramRef.Path, IntPathComparer.Instance)
             .ToArray();
 
         var headerText =

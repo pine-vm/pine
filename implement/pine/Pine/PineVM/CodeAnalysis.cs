@@ -1,3 +1,4 @@
+using Pine.CompilePineToDotNet;
 using Pine.Core;
 using Pine.Core.Addressing;
 using Pine.Core.CodeAnalysis;
@@ -870,7 +871,7 @@ public class CodeAnalysis
     {
         var hashCache = new ConcurrentPineValueHashCache();
 
-        string declNameCombined(PineValue declValue, PineValueClass declValueClass)
+        string DeclNameCombined(PineValue declValue, PineValueClass declValueClass)
         {
             return
                 nameForDecl(
@@ -916,6 +917,16 @@ public class CodeAnalysis
 
             foreach (var parseAndEvalExpr in allParseAndEvalExpressions)
             {
+                if (ParseAndEvalCrashingAlways(parseAndEvalExpr, parseCache) is not null)
+                {
+                    /*
+                     * Some compilers create crashing branches like these; it's an allowed pattern.
+                     * For static analysis, this means we can ignore the parse and eval expression.
+                     * */
+
+                    continue;
+                }
+
                 /*
                  * Limited support for scenarios:
                  * As a constraint for the current implementation, we only forward parts that do not depend on
@@ -1013,7 +1024,8 @@ public class CodeAnalysis
                 ParseAsStaticExpression(
                     observedCombo.origExpr,
                     observedCombo.constraint,
-                    declNameCombined,
+                    DeclNameCombined,
+                    parseCache,
                     hashCache);
 
             if (parseExprResult.IsErrOrNull() is { } err)
@@ -1032,7 +1044,7 @@ public class CodeAnalysis
                 ExpressionEncoding.EncodeExpressionAsValue(observedCombo.origExpr);
 
             var functionName =
-                declNameCombined(
+                DeclNameCombined(
                     exprValue,
                     observedCombo.constraint);
 
@@ -1095,6 +1107,7 @@ public class CodeAnalysis
         Expression expression,
         PineValueClass envValueClass,
         Func<PineValue, PineValueClass, string> nameForDecl,
+        PineVMParseCache parseCache,
         ConcurrentPineValueHashCache hashCache)
     {
         if (Core.CodeAnalysis.CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(expression) is
@@ -1115,6 +1128,11 @@ public class CodeAnalysis
 
         if (expression is Expression.ParseAndEval parseAndEval)
         {
+            if (ParseAndEvalCrashingAlways(parseAndEval, parseCache) is not null)
+            {
+                return new StaticExpression.AlwaysCrash();
+            }
+
             // Try get function value from the environment class:
 
             if (Core.CodeAnalysis.CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(parseAndEval.Encoded) is not
@@ -1150,7 +1168,7 @@ public class CodeAnalysis
                 {
                     var argExpr = argList.items[argIndex];
 
-                    var parseArgResult = ParseAsStaticExpression(argExpr, envValueClass, nameForDecl, hashCache);
+                    var parseArgResult = ParseAsStaticExpression(argExpr, envValueClass, nameForDecl, parseCache, hashCache);
 
                     if (parseArgResult.IsErrOrNull() is { } err)
                     {
@@ -1184,7 +1202,7 @@ public class CodeAnalysis
             {
                 var item = listExpr.items[itemIndex];
 
-                var parseItemResult = ParseAsStaticExpression(item, envValueClass, nameForDecl, hashCache);
+                var parseItemResult = ParseAsStaticExpression(item, envValueClass, nameForDecl, parseCache, hashCache);
 
                 if (parseItemResult.IsErrOrNull() is { } err)
                 {
@@ -1207,7 +1225,7 @@ public class CodeAnalysis
         if (expression is Expression.KernelApplication kernelApp)
         {
             var parseInputResult =
-                ParseAsStaticExpression(kernelApp.Input, envValueClass, nameForDecl, hashCache);
+                ParseAsStaticExpression(kernelApp.Input, envValueClass, nameForDecl, parseCache, hashCache);
 
             if (parseInputResult.IsErrOrNull() is { } err)
             {
@@ -1230,7 +1248,7 @@ public class CodeAnalysis
         if (expression is Expression.Conditional conditional)
         {
             var parseConditionResult =
-                ParseAsStaticExpression(conditional.Condition, envValueClass, nameForDecl, hashCache);
+                ParseAsStaticExpression(conditional.Condition, envValueClass, nameForDecl, parseCache, hashCache);
 
             {
                 if (parseConditionResult.IsErrOrNull() is { } err)
@@ -1247,7 +1265,12 @@ public class CodeAnalysis
             }
 
             var falseBranchResult =
-                ParseAsStaticExpression(conditional.FalseBranch, envValueClass, nameForDecl, hashCache);
+                ParseAsStaticExpression(
+                    conditional.FalseBranch,
+                    envValueClass,
+                    nameForDecl,
+                    parseCache,
+                    hashCache);
 
             {
                 if (falseBranchResult.IsErrOrNull() is { } err)
@@ -1264,7 +1287,12 @@ public class CodeAnalysis
             }
 
             var trueBranchResult =
-                ParseAsStaticExpression(conditional.TrueBranch, envValueClass, nameForDecl, hashCache);
+                ParseAsStaticExpression(
+                    conditional.TrueBranch,
+                    envValueClass,
+                    nameForDecl,
+                    parseCache,
+                    hashCache);
 
             {
                 if (trueBranchResult.IsErrOrNull() is { } err)
@@ -1290,6 +1318,46 @@ public class CodeAnalysis
         throw new NotImplementedException(
             "Unexpected expression type: " +
             expression.GetType().Name);
+    }
+
+    private static Expression? ParseAndEvalCrashingAlways(
+        Expression.ParseAndEval parseAndEval,
+        PineVMParseCache parseCache)
+    {
+        if (!parseAndEval.Encoded.ReferencesEnvironment)
+        {
+            var evalIndependentResult =
+                ReducePineExpression.TryEvaluateExpressionIndependent(parseAndEval.Encoded);
+
+            {
+                if (evalIndependentResult.IsErrOrNull() is { } err)
+                {
+                    throw new Exception("Failed to evaluate parseAndEval.Encoded independently: " + err);
+                }
+            }
+
+            if (evalIndependentResult.IsOkOrNull() is not { } evalIndependentValue)
+            {
+                throw new Exception(
+                    "Unexpected return type: " +
+                    evalIndependentResult.GetType().Name);
+            }
+
+            var parseExprResult = parseCache.ParseExpression(evalIndependentValue);
+
+            {
+                if (parseExprResult.IsErrOrNull() is { })
+                {
+                    /*
+                     * If parsing of a literal fails, it means the program will crash at runtime if the containing branch is taken.
+                     * */
+
+                    return parseAndEval.Environment;
+                }
+            }
+        }
+
+        return null;
     }
 
     private static string AnonymousFunctionName(

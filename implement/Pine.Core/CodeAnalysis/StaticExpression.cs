@@ -521,6 +521,20 @@ public abstract record StaticExpression
     }
 
     /// <summary>
+    /// If a parse-and-eval expression uses a literal as the encoded expression,
+    /// we can statically check whether it will crash at runtime.
+    /// Compilers sometimes emit crashing branches, and we explicitly mark these in code analysis.
+    /// </summary>
+    public sealed record AlwaysCrash
+        : StaticExpression
+    {
+        /// <summary>
+        /// Always zero; this node has no children.
+        /// </summary>
+        public override int SubexpressionCount => 0;
+    }
+
+    /// <summary>
     /// Enumerate the expression and all of its descendants in depth-first order.
     /// The sequence starts with <paramref name="expression"/> itself.
     /// </summary>
@@ -571,6 +585,9 @@ public abstract record StaticExpression
                     {
                         stack.Push(namedFunctionApp.Arguments[i]);
                     }
+                    break;
+
+                case AlwaysCrash:
                     break;
 
                 default:

@@ -1,11 +1,22 @@
 using Pine.Core.Elm;
+using Pine.Core.PopularEncodings;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 
 namespace Pine.Core.CodeAnalysis;
 
-
+/// <summary>
+/// Helpers to render <see cref="StaticExpression"/> instances (and contained <see cref="PineValue"/>s)
+/// into a stable, human-readable multi-line string form. The rendering aims to:
+/// <list type="bullet">
+/// <item><description>Be deterministic across platforms (always uses LF line endings).</description></item>
+/// <item><description>Preserve enough structure to be useful in tests and diagnostics.</description></item>
+/// <item><description>Avoid allocating intermediate large strings when possible by streaming lines.</description></item>
+/// </list>
+/// The public API offers both a convenience <c>string</c> renderer and an iterator that yields
+/// line/indent pairs for callers that need custom composition.
+/// </summary>
 public static class StaticExpressionDisplay
 {
     /// <summary>
@@ -13,10 +24,10 @@ public static class StaticExpressionDisplay
     /// Line endings are always <c>LF</c> to ensure consistent rendering across platforms.
     /// </summary>
     /// <param name="expression">Expression to render.</param>
-    /// <param name="blobValueRenderer">Function to render blob values.</param>
+    /// <param name="blobValueRenderer">Function to render blob values (receives a <see cref="PineValue.BlobValue"/> and returns the textual form plus a flag indicating if parentheses are needed when embedded).</param>
     /// <param name="indentString">String used for one indentation step (e.g., two spaces).</param>
     /// <param name="indentLevel">Initial indentation level to apply to the root expression.</param>
-    /// <returns>Formatted string representation.</returns>
+    /// <returns>Formatted string representation using only <c>\n</c> as line terminators.</returns>
     public static string RenderToString(
         this StaticExpression expression,
         Func<PineValue.BlobValue, (string exprText, bool needsParens)> blobValueRenderer,
@@ -294,15 +305,29 @@ public static class StaticExpressionDisplay
                     yield break;
                 }
 
+            case StaticExpression.AlwaysCrash:
+                yield return (indentLevel, "<always_crash>");
+                yield break;
+
             default:
                 throw new NotImplementedException(
                     $"Rendering of static expression type {expression.GetType()} is not implemented yet.");
         }
     }
 
+    /// <summary>
+    /// Render a <see cref="PineValue"/> into an Elm-like expression string.
+    /// This attempts to reuse existing Elm value encodings; if the value decodes to a known Elm value
+    /// it uses <see cref="ElmValue.RenderAsElmExpression"/>. Otherwise, list values are rendered recursively
+    /// and blobs are delegated to <paramref name="blobRenderer"/>.
+    /// </summary>
+    /// <param name="value">The value to render.</param>
+    /// <param name="blobRenderer">Optional renderer for blob values.</param>
+    /// <returns>A tuple where <c>exprText</c> is the textual representation and <c>needsParens</c> indicates if parentheses are required when embedding.</returns>
+    /// <exception cref="NotImplementedException">Thrown if a Pine value type is not supported.</exception>
     public static (string exprText, bool needsParens) RenderValueAsExpression(
         PineValue value,
-        Func<PineValue.BlobValue, (string exprText, bool needsParens)> blobRenderer = null)
+        Func<PineValue.BlobValue, (string exprText, bool needsParens)> blobRenderer)
     {
         if (ElmValueEncoding.PineValueAsElmValue(
             value,
@@ -341,8 +366,26 @@ public static class StaticExpressionDisplay
             "Rendering of Pine value type " + value.GetType() + " is not implemented yet: " + value);
     }
 
+    /// <summary>
+    /// Default renderer for blob values producing a short hex form prefixed with <c>Blob 0x</c>.
+    /// Parentheses are marked as required to avoid accidental concatenation when embedded.
+    /// </summary>
+    /// <param name="blobValue">The blob value instance.</param>
+    /// <returns>A tuple containing the expression text and a flag indicating parentheses should be used when embedded.</returns>
     public static (string exprText, bool needsParens) DefaultBlobRenderer(PineValue.BlobValue blobValue)
     {
+        if (3 < blobValue.Bytes.Length)
+        {
+            var asStringResult = StringEncoding.StringFromBlobValue(blobValue.Bytes);
+
+            if (asStringResult.IsOkOrNull() is { } asString && ElmValueEncoding.StringIsValidTagName(asString))
+            {
+                // Render as tag name, as in Elm syntax
+
+                return (asString, false);
+            }
+        }
+
         return ("Blob 0x" + Convert.ToHexStringLower(blobValue.Bytes.Span), true);
     }
 }
