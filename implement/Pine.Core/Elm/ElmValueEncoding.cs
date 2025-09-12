@@ -223,59 +223,42 @@ public static class ElmValueEncoding
                     }
 
                     {
-                        if ((tagCandidateValue is PineValue.BlobValue tagBlobValue &&
-                            tagBlobValue.Bytes.Length is not 0) ||
-                            (tagCandidateValue is PineValue.ListValue tagListValue &&
-                            tagListValue.Items.Length is not 0 &&
-                            tagListValue.Items.Span[0] is not PineValue.ListValue))
+                        if (tagCandidateValue is PineValue.BlobValue tagBlobValue &&
+                            tagBlobValue.Bytes.Length is not 0)
                         {
                             // Optimize, especially for the case of an Elm Tag.
 
-                            if (StringEncoding.StringFromValue(tagCandidateValue).IsOkOrNull() is { } tagName)
+                            if (StringEncoding.StringFromBlobValue(tagBlobValue.Bytes).IsOkOrNull() is { } tagName)
                             {
-                                if (tagName.Length is not 0 && char.IsAsciiLetterUpper(tagName[0]))
+                                if (StringIsValidTagName(tagName))
                                 {
-                                    var tagNameContainsInvalidChar = false;
+                                    var tagArgumentsListResults = new ElmValue[tagArgumentsList.Items.Length];
 
-                                    for (var charIndex = 1; charIndex < tagName.Length; charIndex++)
+                                    var failedTagArguments = false;
+
+                                    for (var argIndex = 0; argIndex < tagArgumentsList.Items.Length; argIndex++)
                                     {
-                                        if (!char.IsLetterOrDigit(tagName[charIndex]) && tagName[charIndex] is not '_')
+                                        var tagArgument = tagArgumentsList.Items.Span[argIndex];
+
+                                        var tagArgumentAsElmValueResult =
+                                            PineValueAsElmValue(
+                                                tagArgument,
+                                                additionalReusableDecodings,
+                                                reportNewDecoding);
+
+                                        if (tagArgumentAsElmValueResult is Result<string, ElmValue>.Ok argOk)
                                         {
-                                            tagNameContainsInvalidChar = true;
-                                            break;
+                                            tagArgumentsListResults[argIndex] = argOk.Value;
+                                            continue;
                                         }
+
+                                        failedTagArguments = true;
+                                        break;
                                     }
 
-                                    if (!tagNameContainsInvalidChar)
+                                    if (!failedTagArguments)
                                     {
-                                        var tagArgumentsListResults = new ElmValue[tagArgumentsList.Items.Length];
-
-                                        var failedTagArguments = false;
-
-                                        for (var argIndex = 0; argIndex < tagArgumentsList.Items.Length; argIndex++)
-                                        {
-                                            var tagArgument = tagArgumentsList.Items.Span[argIndex];
-
-                                            var tagArgumentAsElmValueResult =
-                                                PineValueAsElmValue(
-                                                    tagArgument,
-                                                    additionalReusableDecodings,
-                                                    reportNewDecoding);
-
-                                            if (tagArgumentAsElmValueResult is Result<string, ElmValue>.Ok argOk)
-                                            {
-                                                tagArgumentsListResults[argIndex] = argOk.Value;
-                                                continue;
-                                            }
-
-                                            failedTagArguments = true;
-                                            break;
-                                        }
-
-                                        if (!failedTagArguments)
-                                        {
-                                            return ElmValue.TagInstance(tagName, tagArgumentsListResults);
-                                        }
+                                        return ElmValue.TagInstance(tagName, tagArgumentsListResults);
                                     }
                                 }
                             }
@@ -323,6 +306,29 @@ public static class ElmValueEncoding
         }
 
         return decodeResult;
+    }
+
+    /// <summary>
+    /// Determines whether the specified string is a valid tag name according to naming rules.
+    /// </summary>
+    /// <remarks>A valid tag name must begin with an uppercase ASCII letter (A–Z). Subsequent characters may
+    /// be letters, digits, or underscores. The method returns false for empty strings or if the first character is not
+    /// an uppercase ASCII letter.</remarks>
+    /// <param name="tagName">The string to validate as a tag name. The tag name must start with an uppercase ASCII letter and may contain
+    /// only letters, digits, or underscores.</param>
+    /// <returns>true if the specified string is a valid tag name; otherwise, false.</returns>
+    public static bool StringIsValidTagName(string tagName)
+    {
+        if (tagName.Length is 0 || !char.IsAsciiLetterUpper(tagName[0]))
+            return false;
+
+        for (var charIndex = 1; charIndex < tagName.Length; charIndex++)
+        {
+            if (!char.IsLetterOrDigit(tagName[charIndex]) && tagName[charIndex] is not '_')
+                return false;
+        }
+
+        return true;
     }
 
     public static Result<string, (string tagName, ReadOnlyMemory<PineValue> tagArguments)> ParseAsTag(

@@ -141,12 +141,21 @@ public static class StringEncoding
             Result<string, string>.err("PineValue is not a blob: " + pineValue.GetType().FullName);
     }
 
-    private static readonly Result<string, string> emptyStringOk = Result<string, string>.ok("");
+    private static readonly Result<string, string> s_emptyStringOk = Result<string, string>.ok("");
 
-    private static Result<string, string> StringFromBlobValue(ReadOnlyMemory<byte> blobBytes)
+    /// <summary>
+    /// Converts a binary blob containing UTF-32 encoded Unicode code points (in big-endian order) to a string.
+    /// </summary>
+    /// <remarks>If the input is empty, the method returns a successful result containing an empty string. The
+    /// method validates that each 4-byte segment represents a valid Unicode scalar value.</remarks>
+    /// <param name="blobBytes">A read-only memory region containing the UTF-32 encoded Unicode code points, with each code point represented as
+    /// a 4-byte big-endian integer.</param>
+    /// <returns>A result containing the decoded string if the conversion succeeds; otherwise, a result containing an error
+    /// message if the blob length is not a multiple of 4 or if any code point is invalid.</returns>
+    public static Result<string, string> StringFromBlobValue(ReadOnlyMemory<byte> blobBytes)
     {
         if (blobBytes.Length is 0)
-            return emptyStringOk;
+            return s_emptyStringOk;
 
         if (blobBytes.Length % 4 is not 0)
         {
@@ -176,7 +185,7 @@ public static class StringEncoding
     public static Result<string, string> StringFromListValue(PineValue.ListValue list)
     {
         if (list.Items.Length is 0)
-            return emptyStringOk;
+            return s_emptyStringOk;
 
         if (CommonStringsDecodedAsList.TryGetValue(list, out var commonString))
             return Result<string, string>.ok(commonString);
