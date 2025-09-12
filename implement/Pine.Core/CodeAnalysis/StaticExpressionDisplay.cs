@@ -99,6 +99,8 @@ public static class StaticExpressionDisplay
                                     containerDelimits: true)
                                 .ToList();
 
+                            var isChildAList = item is StaticExpression.List;
+
                             for (var itemLineIndex = 0; itemLineIndex < itemLines.Count; ++itemLineIndex)
                             {
                                 var (itemIndent, itemText) = itemLines[itemLineIndex];
@@ -110,8 +112,21 @@ public static class StaticExpressionDisplay
                                 }
                                 else
                                 {
-                                    // Subsequent lines retain the indentation produced by the child renderer.
-                                    yield return (itemIndent, itemText);
+                                    // For nested lists, use a hanging indent of two spaces for continuation lines
+                                    // so that
+                                    // , [ 71
+                                    //   , 73
+                                    //   ]
+                                    // aligns as expected by tests.
+                                    if (isChildAList && itemText.Length > 0)
+                                    {
+                                        yield return (itemIndent, "  " + itemText);
+                                    }
+                                    else
+                                    {
+                                        // Subsequent lines retain the indentation produced by the child renderer.
+                                        yield return (itemIndent, itemText);
+                                    }
                                 }
                             }
                         }

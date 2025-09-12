@@ -354,6 +354,7 @@ public class CodeAnalysisTests
                 ]
                 """
             },
+
             new
             {
                 Name = "List_containing_function_application",
@@ -375,6 +376,60 @@ public class CodeAnalysisTests
                 ]
                 """
             },
+
+            new
+            {
+                Name = "Nested_list",
+                Expr = StaticExpression.ListInstance(
+                    [
+                        StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(41))),
+
+                        StaticExpression.ListInstance(
+                            [
+                                StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(71))),
+
+                                StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(73))),
+                            ])
+                    ]),
+                Expected = """
+                [ 41
+                , [ 71
+                  , 73
+                  ]
+                ]
+                """
+            },
+
+            new
+            {
+                Name = "Nested_list_twice",
+                Expr = StaticExpression.ListInstance(
+                    [
+                        StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(41))),
+
+                        StaticExpression.ListInstance(
+                            [
+                                StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(71))),
+
+                                StaticExpression.ListInstance(
+                                    [
+                                        StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(73))),
+
+                                        StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(79))),
+                                    ])
+                            ])
+                    ]),
+                Expected = """
+                [ 41
+                , [ 71
+                  , [ 73
+                    , 79
+                    ]
+                  ]
+                ]
+                """
+            },
+
             new
             {
                 Name = "KernelApplication_With_List",
