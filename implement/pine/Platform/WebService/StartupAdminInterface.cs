@@ -1036,7 +1036,7 @@ public class StartupAdminInterface
 
                 report = report with
                 {
-                    storeReductionTimeSpentMilli = (int)0,
+                    storeReductionTimeSpentMilli = 0,
                 };
 
                 startPublicApp();

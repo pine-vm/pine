@@ -1011,7 +1011,7 @@ public class Program
                     .Extract(err => throw new Exception("Failed to load Elm compiler from " + overrideCompilerPath + ": " + err));
 
                     var elmCompilerHash =
-                    new Pine.Core.Addressing.ConcurrentPineValueHashCache()
+                    new ConcurrentPineValueHashCache()
                     .GetHash(overrideElmCompiler.CompilerEnvironment);
 
                     Console.WriteLine(
@@ -2475,7 +2475,7 @@ public class Program
             var pineVM =
                 new PineVM(evalCache: pineVMCache.EvalCache);
 
-            var parseCache = new PineVMParseCache();
+            var parseCache = new Pine.Core.CodeAnalysis.PineVMParseCache();
 
             var elmCompilerCache = new ElmCompilerCache();
 
@@ -2499,7 +2499,7 @@ public class Program
             }
 
             var parseFromEnvResult =
-                ElmInteractiveEnvironment.ParseFunctionFromElmModule(
+                Pine.Core.CodeAnalysis.ElmInteractiveEnvironment.ParseFunctionFromElmModule(
                     interactiveEnvironment: compileOk,
                     moduleName: string.Join(".", entryPointModuleNameOk.ToArray()),
                     "blobMain",
@@ -2528,7 +2528,7 @@ public class Program
                  * */
 
                 var applyMainResult =
-                    ElmInteractiveEnvironment.ApplyFunction(
+                    Pine.Core.CodeAnalysis.ElmInteractiveEnvironment.ApplyFunction(
                         pineVM,
                         functionRecord: parseFromEnvOk.functionRecord,
                         arguments: [PineValue.EmptyList]);

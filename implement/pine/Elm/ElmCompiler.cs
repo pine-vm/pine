@@ -1,4 +1,3 @@
-using ElmTime.ElmInteractive;
 using Pine.Core;
 using Pine.Core.Elm;
 using Pine.Elm019;
@@ -9,6 +8,8 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+
+using ElmInteractiveEnvironment = Pine.Core.CodeAnalysis.ElmInteractiveEnvironment;
 
 namespace Pine.Elm;
 
@@ -99,7 +100,7 @@ public class ElmCompiler
         ElmInteractiveEnvironment.FunctionRecord InitState,
         ElmInteractiveEnvironment.FunctionRecord HandleRequestInCurrentWorkspace);
 
-    private static readonly PineVM.PineVMParseCache parseCache = new();
+    private static readonly Core.CodeAnalysis.PineVMParseCache s_parseCache = new();
 
     private ElmCompiler(
         PineValue compilerEnvironment,
@@ -364,7 +365,7 @@ public class ElmCompiler
                 rootFilePaths);
 
         return
-            InteractiveSessionPine.CompileInteractiveEnvironment(
+            ElmTime.ElmInteractive.InteractiveSessionPine.CompileInteractiveEnvironment(
                 appCodeTree:
                 appCodeFilteredForRoots is null
                 ?
@@ -418,7 +419,7 @@ public class ElmCompiler
                 interactiveEnvironment: compiledEnv,
                 moduleName: "ElmCompiler",
                 declarationName: "compileParsedInteractiveSubmission",
-                parseCache);
+                s_parseCache);
 
         {
             if (parseCompileSubmissionResult.IsErrOrNull() is { } err)
@@ -438,7 +439,7 @@ public class ElmCompiler
                 interactiveEnvironment: compiledEnv,
                 moduleName: "ElmCompiler",
                 declarationName: "expandElmInteractiveEnvironmentWithModules",
-                parseCache);
+                s_parseCache);
 
         {
             if (parseExpandEnvWithModulesResult.IsErrOrNull() is { } err)
@@ -458,7 +459,7 @@ public class ElmCompiler
                 interactiveEnvironment: compiledEnv,
                 moduleName: "Elm.Parser",
                 declarationName: "parseToFile",
-                parseCache);
+                s_parseCache);
 
         {
             if (parseParseToFileResult.IsErrOrNull() is { } err)
@@ -478,7 +479,7 @@ public class ElmCompiler
                 interactiveEnvironment: compiledEnv,
                 moduleName: "ElmInteractiveSubmissionParser",
                 declarationName: "parseInteractiveSubmissionFromString",
-                parseCache);
+                s_parseCache);
 
         /*
         Currently not required because module ElmInteractiveSubmissionParser is not shipped with older versions we sometimes load here.
@@ -511,14 +512,14 @@ public class ElmCompiler
                     interactiveEnvironment: compiledEnv,
                     moduleName: "LanguageService",
                     declarationName: "initLanguageServiceState",
-                    parseCache);
+                    s_parseCache);
 
             var parseHandleRequest =
                 ElmInteractiveEnvironment.ParseFunctionFromElmModule(
                     interactiveEnvironment: compiledEnv,
                     moduleName: "LanguageService",
                     declarationName: "handleRequestInCurrentWorkspace",
-                    parseCache);
+                    s_parseCache);
 
             if (parseInitStateResult.IsOkOrNullable() is { } parseInitOk &&
                 parseHandleRequest.IsOkOrNullable() is { } parseHandleRequestOk)

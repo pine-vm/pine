@@ -1,10 +1,11 @@
 using Interface = Pine.Elm.LanguageServiceInterface;
 using Pine.Core;
+using Pine.Core.Elm;
+using Pine.Core.CodeAnalysis;
 using Pine.Core.PineVM;
+using Pine.Core.PopularEncodings;
 using System.Collections.Generic;
 using System.Linq;
-using Pine.Core.Elm;
-using Pine.Core.PopularEncodings;
 
 namespace Pine.Elm;
 
@@ -65,7 +66,7 @@ public class LanguageServiceState(
             PineValue.EmptyList;
 
         var initResult =
-            ElmTime.ElmInteractive.ElmInteractiveEnvironment.ApplyFunction(
+            ElmInteractiveEnvironment.ApplyFunction(
                 pineVM,
                 languageServiceInterface.InitState,
                 [elmCoreModulesSourceList]);
@@ -259,7 +260,7 @@ public class LanguageServiceState(
         lock (pineVM)
         {
             var handleRequestResult =
-                ElmTime.ElmInteractive.ElmInteractiveEnvironment.ApplyFunction(
+                ElmInteractiveEnvironment.ApplyFunction(
                     pineVM,
                     languageServiceInterface.HandleRequestInCurrentWorkspace,
                     [

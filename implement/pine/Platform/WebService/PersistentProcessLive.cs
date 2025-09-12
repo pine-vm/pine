@@ -1,5 +1,6 @@
 using ElmTime.Platform.WebService.ProcessStoreSupportingMigrations;
 using Pine.Core;
+using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.IO;
 using Pine.Core.PineVM;
@@ -217,7 +218,7 @@ public sealed class PersistentProcessLive : IAsyncDisposable
             pathToStateInReturnValue: new ReadOnlyMemory<int>([0]));
 
     public static PineValue BuildDatabaseFunctionLogEntry(
-        ElmInteractive.ElmInteractiveEnvironment.FunctionRecord appliedFunction,
+        ElmInteractiveEnvironment.FunctionRecord appliedFunction,
         ReadOnlyMemory<int> pathToStateInReturnValue)
     {
         var parametersRemaining =
@@ -236,7 +237,7 @@ public sealed class PersistentProcessLive : IAsyncDisposable
                 appliedFunction.InnerFunction);
 
         return
-            ElmInteractive.ElmInteractiveEnvironment.EncodeFunctionRecordInValueTagged(
+            ElmInteractiveEnvironment.EncodeFunctionRecordInValueTagged(
                 functionRecord:
                 appliedFunction
                 with
@@ -252,7 +253,7 @@ public sealed class PersistentProcessLive : IAsyncDisposable
         PineVMParseCache pineVMParseCache)
     {
         var parseAsFunctionRecord =
-            ElmInteractive.ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(
+            ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(
                 applyFunctionOnLiteralAndState.Function,
                 parseCache: pineVMParseCache);
 
@@ -276,7 +277,7 @@ public sealed class PersistentProcessLive : IAsyncDisposable
         }
 
         return
-            ElmInteractive.ElmInteractiveEnvironment.ApplyFunction(
+            ElmInteractiveEnvironment.ApplyFunction(
                 pineVM,
                 parseFunctionOk,
                 [.. argumentsBeforeState.Items.ToArray(), lastAppState]);

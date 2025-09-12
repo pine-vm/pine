@@ -1,6 +1,6 @@
-using ElmTime.ElmInteractive;
 using AwesomeAssertions;
 using Pine.Core;
+using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.PineVM;
 using Pine.Core.PopularEncodings;
@@ -12,6 +12,8 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using Xunit;
+
+using InteractiveSessionPine = ElmTime.ElmInteractive.InteractiveSessionPine;
 
 namespace Pine.IntegrationTests;
 

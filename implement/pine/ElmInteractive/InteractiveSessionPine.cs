@@ -783,7 +783,7 @@ public class InteractiveSessionPine : IInteractiveSession
         IPineVM pineVM)
     {
         var applyFunctionResult =
-            ElmInteractiveEnvironment.ApplyFunction(
+            Pine.Core.CodeAnalysis.ElmInteractiveEnvironment.ApplyFunction(
                 pineVM,
                 elmCompiler.ExpandElmInteractiveEnvironmentWithModules,
                 arguments:
@@ -961,7 +961,7 @@ public class InteractiveSessionPine : IInteractiveSession
             clock.Restart();
 
             var compileParsedResult =
-                ElmInteractiveEnvironment.ApplyFunction(
+                Pine.Core.CodeAnalysis.ElmInteractiveEnvironment.ApplyFunction(
                     pineVM,
                     elmCompiler.CompileParsedInteractiveSubmission,
                     arguments:

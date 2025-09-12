@@ -6,6 +6,8 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 
+using ElmInteractiveEnvironment = Pine.Core.CodeAnalysis.ElmInteractiveEnvironment;
+
 namespace Pine.Elm.Platform;
 
 /// <summary>
@@ -140,10 +142,10 @@ type Command state
 /// Configuration of an Elm command-line interface (CLI) app.
 /// </summary>
 public record CommandLineAppConfig(
-    ElmTime.ElmInteractive.ElmInteractiveEnvironment.FunctionRecord InitFromEnvironment,
-    ElmTime.ElmInteractive.ElmInteractiveEnvironment.FunctionRecord SubscriptionsFromState)
+    ElmInteractiveEnvironment.FunctionRecord InitFromEnvironment,
+    ElmInteractiveEnvironment.FunctionRecord SubscriptionsFromState)
 {
-    private static readonly PineVM.PineVMParseCache s_parseCache = new();
+    private static readonly Core.CodeAnalysis.PineVMParseCache s_parseCache = new();
 
     public static CommandLineAppConfig ConfigFromSourceFilesAndModuleName(
         BlobTreeWithStringPath sourceFiles,
@@ -164,7 +166,7 @@ public record CommandLineAppConfig(
             interactiveSession.CurrentEnvironmentValue();
 
         var (declValue, functionRecord) =
-            ElmTime.ElmInteractive.ElmInteractiveEnvironment.ParseFunctionFromElmModule(
+            ElmInteractiveEnvironment.ParseFunctionFromElmModule(
                 compiledModulesValue,
                 moduleName: string.Join(".", moduleName),
                 declarationName: "runRoot",
@@ -204,13 +206,13 @@ public record CommandLineAppConfig(
             .First(field => field.fieldName is "subscriptions").fieldValue;
 
         var initFunctionRecord =
-            ElmTime.ElmInteractive.ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(
+            ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(
                 runRootInitFunctionValue,
                 s_parseCache)
             .Extract(err => throw new Exception("Failed parsing init function: " + err));
 
         var subscriptionsFunctionRecord =
-            ElmTime.ElmInteractive.ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(
+            ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(
                 runRootSubscriptionsFunctionValue,
                 s_parseCache)
             .Extract(err => throw new Exception("Failed parsing subscriptions function: " + err));
@@ -242,7 +244,7 @@ public record CommandLineAppConfig(
             ElmValueEncoding.ElmValueAsPineValue(initRecord);
 
         var initFunctionReturnValue =
-            ElmTime.ElmInteractive.ElmInteractiveEnvironment.ApplyFunction(
+            ElmInteractiveEnvironment.ApplyFunction(
                 pineVM,
                 config.InitFromEnvironment,
                 [initRecordValue])
@@ -274,7 +276,7 @@ public record CommandLineAppConfig(
         Core.PineVM.IPineVM pineVM)
     {
         var subscriptionsValue =
-            ElmTime.ElmInteractive.ElmInteractiveEnvironment.ApplyFunction(
+            ElmInteractiveEnvironment.ApplyFunction(
                 pineVM,
                 config.SubscriptionsFromState,
                 [stateBefore])
@@ -301,7 +303,7 @@ public record CommandLineAppConfig(
         }
 
         var functionRecord =
-            ElmTime.ElmInteractive.ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(
+            ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(
                 functionRecordValue,
                 s_parseCache)
             .Extract(err => throw new Exception("Failed parsing stdIn function record: " + err));
@@ -315,7 +317,7 @@ public record CommandLineAppConfig(
             ElmValueEncoding.ElmValueAsPineValue(new ElmValue.ElmBytes(input));
 
         var responseValue =
-            ElmTime.ElmInteractive.ElmInteractiveEnvironment.ApplyFunction(
+            ElmInteractiveEnvironment.ApplyFunction(
                 pineVM,
                 functionRecord,
                 [inputEncoded, stateBefore])

@@ -1,12 +1,10 @@
 using AwesomeAssertions;
-using ElmTime.ElmInteractive;
 using Pine.Core;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.Json;
 using Pine.Core.PopularEncodings;
 using Pine.Elm;
-using Pine.PineVM;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -552,7 +550,7 @@ public class CodeAnalysisTests
             try
             {
                 var envClassResult =
-                    Core.CodeAnalysis.CodeAnalysis.MinimalValueClassForStaticProgram(
+                    CodeAnalysis.MinimalValueClassForStaticProgram(
                         expression: testCase.expression,
                         availableEnvironment: PineValueClass.CreateEquals(testCase.environment));
 

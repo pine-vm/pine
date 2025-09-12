@@ -1,10 +1,9 @@
 using ElmTime;
-using ElmTime.ElmInteractive;
 using Pine.Core;
+using Pine.Core.CodeAnalysis;
 using Pine.Core.PopularEncodings;
 using Pine.Core.Elm;
 using Pine.Core.PineVM;
-using Pine.PineVM;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -2248,7 +2247,7 @@ type alias LoadDependencyStruct =
                 ["src", "Backend", "InterfaceToHost_Root.elm"]);
 
         var pineVMAndCache =
-            InteractiveSessionPine.BuildPineVM(
+            ElmTime.ElmInteractive.InteractiveSessionPine.BuildPineVM(
                 caching: true,
                 autoPGO: null);
 
@@ -2262,7 +2261,7 @@ type alias LoadDependencyStruct =
             .Extract(err => throw new Exception("Failed to load Elm compiler: " + err));
 
         return
-            InteractiveSessionPine.CompileInteractiveEnvironment(
+            ElmTime.ElmInteractive.InteractiveSessionPine.CompileInteractiveEnvironment(
                 appCodeTree: compilationUnitsPrepared.files,
                 overrideSkipLowering: true,
                 entryPointsFilePaths: null,

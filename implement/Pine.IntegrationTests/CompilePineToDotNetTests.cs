@@ -1,4 +1,3 @@
-using ElmTime.ElmInteractive;
 using AwesomeAssertions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
