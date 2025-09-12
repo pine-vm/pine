@@ -203,40 +203,72 @@ public static class StaticExpressionDisplay
 
             case StaticExpression.Conditional cond:
                 {
-                    // if
+                    // First: render the head if/then
                     yield return (indentLevel, "if");
 
-                    foreach (var line in
-                        RenderToLines(
-                            cond.Condition,
-                            blobValueRenderer,
-                            indentLevel + 1,
-                            containerDelimits: true))
+                    foreach (var line in RenderToLines(
+                        cond.Condition,
+                        blobValueRenderer,
+                        indentLevel + 1,
+                        containerDelimits: true))
                     {
                         yield return line;
                     }
 
-                    // then
                     yield return (indentLevel, "then");
 
-                    foreach (var line in
-                        RenderToLines(
-                            cond.TrueBranch,
-                            blobValueRenderer,
-                            indentLevel + 1,
-                            containerDelimits: true))
+                    foreach (var line in RenderToLines(
+                        cond.TrueBranch,
+                        blobValueRenderer,
+                        indentLevel + 1,
+                        containerDelimits: true))
                     {
                         yield return line;
                     }
 
-                    // empty line between then and else for readability (matches existing tests)
-                    yield return (0, string.Empty);
+                    // Render an if/else-if/else chain where nested conditionals in the false branch are folded into
+                    // "else if" at the same line to improve readability.
 
-                    // else
+                    // Handle zero or more else-if branches
+                    var falseBranch = cond.FalseBranch;
+
+                    while (falseBranch is StaticExpression.Conditional nested)
+                    {
+                        // empty line between then and else-if
+                        yield return (0, string.Empty);
+
+                        // else if
+                        yield return (indentLevel, "else if");
+
+                        foreach (var line in RenderToLines(
+                            nested.Condition,
+                            blobValueRenderer,
+                            indentLevel + 1,
+                            containerDelimits: true))
+                        {
+                            yield return line;
+                        }
+
+                        yield return (indentLevel, "then");
+
+                        foreach (var line in RenderToLines(
+                            nested.TrueBranch,
+                            blobValueRenderer,
+                            indentLevel + 1,
+                            containerDelimits: true))
+                        {
+                            yield return line;
+                        }
+
+                        falseBranch = nested.FalseBranch;
+                    }
+
+                    // Final else
+                    yield return (0, string.Empty);
                     yield return (indentLevel, "else");
 
                     foreach (var line in RenderToLines(
-                        cond.FalseBranch,
+                        falseBranch,
                         blobValueRenderer,
                         indentLevel + 1,
                         containerDelimits: true))

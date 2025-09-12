@@ -536,6 +536,50 @@ public class CodeAnalysisTests
                 myFunc
                     (Blob 0x12340107)
                 """
+            },
+            new
+            {
+                Name = "Conditional_Nested_ElseIf",
+                Expr = StaticExpression.ConditionalInstance(
+                    condition: StaticExpression.KernelApplicationInstance(
+                        function: "int_is_sorted_asc",
+                        input: StaticExpression.ListInstance(
+                        [
+                            Param_1_0(),
+                            StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(0)))
+                        ])),
+                    falseBranch: StaticExpression.ConditionalInstance(
+                        condition: StaticExpression.KernelApplicationInstance(
+                            function: "int_is_sorted_asc",
+                            input: StaticExpression.ListInstance(
+                            [
+                                Param_1_0(),
+                                StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1)))
+                            ])),
+                        falseBranch: StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(2))),
+                        trueBranch: StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1)))) ,
+                    trueBranch: StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(0))))
+                ,
+                Expected = """
+                if
+                    Pine_kernel.int_is_sorted_asc
+                        [ param_1_0
+                        , 0
+                        ]
+                then
+                    0
+
+                else if
+                    Pine_kernel.int_is_sorted_asc
+                        [ param_1_0
+                        , 1
+                        ]
+                then
+                    1
+
+                else
+                    2
+                """
             }
         };
 
