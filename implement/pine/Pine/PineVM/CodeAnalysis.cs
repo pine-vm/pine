@@ -1,5 +1,7 @@
 using Pine.Core;
+using Pine.Core.Addressing;
 using Pine.Core.CodeAnalysis;
+using Pine.Core.PopularEncodings;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -857,5 +859,501 @@ public class CodeAnalysis
             return true;
 
         return false;
+    }
+
+    public static Result<string, (StaticProgram staticProgram, StaticExpression.FunctionApplication entryPoint)>
+        ParseAsStaticMonomorphicProgram(
+        Expression rootExpression,
+        PineValue rootEnvironment,
+        PineVMParseCache parseCache)
+    {
+        var observedSet = new List<(Expression origExpr, PineValueClass constraint)>();
+
+        var queue = new Queue<(Expression expr, PineValueClass envValueClass)>();
+
+        var rootEnvValueClass =
+            PineValueClass.CreateEquals(rootEnvironment);
+
+        queue.Enqueue((rootExpression, rootEnvValueClass));
+
+        while (queue.Count > 0)
+        {
+            var current = queue.Dequeue();
+
+            if (observedSet.Any(entry => entry.origExpr == current.expr && entry.constraint.Equals(current.envValueClass)))
+                continue;
+
+            /*
+             * Do not record root in observed set, as we will use it as the entry point anyway.
+             * */
+
+            if (!(current.expr == rootExpression &&
+                current.envValueClass == rootEnvValueClass))
+            {
+                observedSet.Add((current.expr, current.envValueClass));
+            }
+
+            var allParseAndEvalExpressions =
+                Expression.EnumerateSelfAndDescendants(current.expr)
+                .OfType<Expression.ParseAndEval>()
+                .ToImmutableArray();
+
+            foreach (var parseAndEvalExpr in allParseAndEvalExpressions)
+            {
+                /*
+                 * Limited support for scenarios:
+                 * As a constraint for the current implementation, we only forward parts that do not depend on
+                 * any parse&eval expressions themselves.
+                 * */
+
+
+                /*
+                 * For now, try an even simpler subset:
+                 * Only forward items modeled in the popular environment composition style:
+                 * */
+
+                var childEnvClass = MapValueClass(current.envValueClass, parseAndEvalExpr.Environment);
+
+                if (childEnvClass is null)
+                {
+                    return "Could not map environment value class through parseAndEval.Environment";
+                }
+
+                /*
+                 * Special case also for the encoded part of parse&eval:
+                 * */
+
+                if (Core.CodeAnalysis.CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(parseAndEvalExpr.Encoded) is not ExprMappedToParentEnv.PathInParentEnv pathInParentEnv)
+                {
+                    // Cannot interpret the encoded part as a path from the environment.
+                    // This means we cannot statically determine what part of the environment
+                    // is parsed by this parse&eval expression.
+                    // Therefore, we have to give up on static analysis of this program.
+
+                    return "Could not interpret parseAndEval.Encoded as path from environment";
+                }
+
+                if (current.envValueClass.TryGetValue(pathInParentEnv.Path) is not { } parsedValue)
+                {
+                    return "Could not find value for parseAndEval.Encoded in the given environment";
+                }
+
+                var childParseResult = parseCache.ParseExpression(parsedValue);
+
+                {
+                    if (childParseResult.IsErrOrNull() is { } err)
+                    {
+                        return "Failed to parse parseAndEval.Encoded value: " + err;
+                    }
+                }
+
+                if (childParseResult.IsOkOrNull() is not { } childExpr)
+                {
+                    throw new Exception(
+                        "Unexpected return type: " +
+                        childParseResult.GetType().Name);
+                }
+
+                queue.Enqueue((childExpr, childEnvClass));
+            }
+        }
+
+        /*
+         * Filter observed set, to remove redundant entries which are already covered by smaller environments.
+         * 
+         * Here, we assume that every entry in the 'observed' set is completely static, as we would have exited
+         * already if we had encountered something dynamic in the exploration above.
+         * */
+
+        bool ObservedIsRedundant(
+            (Expression origExpr, PineValueClass constraint) observedCombo)
+        {
+            foreach (var other in observedSet)
+            {
+                if (observedCombo == other)
+                    continue;
+
+                if (other.origExpr == observedCombo.origExpr &&
+                    other.constraint.SatisfiedByConstraint(observedCombo.constraint))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        var filteredObservedSet =
+            observedSet
+            .Where(observedCombo => !ObservedIsRedundant(observedCombo))
+            .ToImmutableArray();
+
+        var hashCache = new ConcurrentPineValueHashCache();
+
+        var namedFunctions =
+            new Dictionary<string, (Expression origExpr, StaticExpression body, PineValueClass constraint)>();
+
+        foreach (var observedCombo in filteredObservedSet)
+        {
+            var parseExprResult =
+                ParseAsStaticExpression(
+                    observedCombo.origExpr,
+                    observedCombo.constraint,
+                    hashCache);
+
+            if (parseExprResult.IsErrOrNull() is { } err)
+            {
+                return "Failed to parse expression as static expression: " + err;
+            }
+
+            if (parseExprResult.IsOkOrNull() is not { } staticExpr)
+            {
+                throw new Exception(
+                    "Unexpected return type: " +
+                    parseExprResult.GetType().Name);
+            }
+
+            var functionName =
+                AnonymousFunctionName(
+                    exprValue: ExpressionEncoding.EncodeExpressionAsValue(observedCombo.origExpr),
+                    pineValueClass: observedCombo.constraint,
+                    hashCache: hashCache);
+
+            if (namedFunctions.ContainsKey(functionName))
+            {
+                return "Hash collision detected for function name: " + functionName;
+            }
+
+            namedFunctions[functionName] = (observedCombo.origExpr, staticExpr, observedCombo.constraint);
+        }
+
+        /*
+         * For now, specialize in cases where root is a simple invocation.
+         * */
+
+        if (rootExpression is not Expression.ParseAndEval rootParseAndEval)
+        {
+            throw new NotImplementedException();
+        }
+
+        if (Core.CodeAnalysis.CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(rootParseAndEval.Encoded) is not
+            ExprMappedToParentEnv.PathInParentEnv rootInvocationEncodedPath)
+        {
+            throw new NotImplementedException();
+        }
+
+        if (rootEnvValueClass.TryGetValue(rootInvocationEncodedPath.Path) is not { } rootInvocationExprValue)
+        {
+            throw new NotImplementedException();
+        }
+
+        if (ExpressionEncoding.ParseExpressionFromValue(rootInvocationExprValue).IsOkOrNull() is not { } rootInvocationExpr)
+        {
+            throw new NotImplementedException();
+        }
+
+        if (rootParseAndEval.Environment is not Expression.Environment)
+        {
+            throw new NotImplementedException();
+        }
+
+        var entryFunctionMatchingExprs =
+            namedFunctions
+            .Where(c => c.Value.origExpr == rootInvocationExpr)
+            .ToImmutableArray();
+
+        var entryFunction =
+            entryFunctionMatchingExprs
+            .Single(c => c.Value.constraint.SatisfiedByValue(rootEnvironment));
+
+        return
+            (
+            new StaticProgram(namedFunctions),
+            new StaticExpression.FunctionApplication(
+                functionName: entryFunction.Key,
+                arguments: []));
+    }
+
+    static Result<string, StaticExpression> ParseAsStaticExpression(
+        Expression expression,
+        PineValueClass envValueClass,
+        ConcurrentPineValueHashCache hashCache)
+    {
+        if (Core.CodeAnalysis.CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(expression) is
+            ExprMappedToParentEnv.PathInParentEnv asPath)
+        {
+            return StaticExpression.ParameterReferenceInstance(asPath.Path);
+        }
+
+        if (expression is Expression.Literal literal)
+        {
+            return StaticExpression.LiteralInstance(literal.Value);
+        }
+
+        if (expression is Expression.Environment)
+        {
+            return "Found an unresolved environment expression, which indicates a dynamic program.";
+        }
+
+        if (expression is Expression.ParseAndEval parseAndEval)
+        {
+            // Try get function value from the environment class:
+
+            if (Core.CodeAnalysis.CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(parseAndEval.Encoded) is not
+                ExprMappedToParentEnv.PathInParentEnv pathInParentEnv)
+            {
+                return "Could not interpret parseAndEval.Encoded as path from environment";
+            }
+
+            if (envValueClass.TryGetValue(pathInParentEnv.Path) is not { } parsedValue)
+            {
+                return "Could not find value for parseAndEval.Encoded in the given environment";
+            }
+
+            var childEnvClass = MapValueClass(envValueClass, parseAndEval.Environment);
+
+            if (childEnvClass is null)
+            {
+                return "Could not map environment value class through parseAndEval.Environment";
+            }
+
+            /*
+             * TODO: Support arbitrary shapes of forwarding arguments.
+             * 
+             * At the moment, we only support the subset where all arguments are at [1] in the environment.
+             * */
+
+            var arguments = new List<StaticExpression>();
+
+            if (parseAndEval.Environment is Expression.List envList &&
+                envList.items.Count > 1 && envList.items[1] is Expression.List argList)
+            {
+                for (var argIndex = 0; argIndex < argList.items.Count; ++argIndex)
+                {
+                    var argExpr = argList.items[argIndex];
+
+                    var parseArgResult = ParseAsStaticExpression(argExpr, envValueClass, hashCache);
+
+                    if (parseArgResult.IsErrOrNull() is { } err)
+                    {
+                        return "Failed to parse parseAndEval argument: " + err;
+                    }
+
+                    if (parseArgResult.IsOkOrNull() is not { } parsedArg)
+                    {
+                        throw new Exception(
+                            "Unexpected return type: " +
+                            parseArgResult.GetType().Name);
+                    }
+
+                    arguments.Add(parsedArg);
+                }
+            }
+
+            var childFunctionName =
+                AnonymousFunctionName(
+                    exprValue: parsedValue,
+                    pineValueClass: childEnvClass,
+                    hashCache: hashCache);
+
+            return
+                StaticExpression.FunctionApplicationInstance(
+                    functionName: childFunctionName,
+                    arguments: arguments);
+        }
+
+        if (expression is Expression.List listExpr)
+        {
+            var parsedItems = new StaticExpression[listExpr.items.Count];
+
+            for (var itemIndex = 0; itemIndex < parsedItems.Length; ++itemIndex)
+            {
+                var item = listExpr.items[itemIndex];
+
+                var parseItemResult = ParseAsStaticExpression(item, envValueClass, hashCache);
+
+                if (parseItemResult.IsErrOrNull() is { } err)
+                {
+                    return "Failed to parse list item: " + err;
+                }
+
+                if (parseItemResult.IsOkOrNull() is not { } parsedItem)
+                {
+                    throw new Exception(
+                        "Unexpected return type: " +
+                        parseItemResult.GetType().Name);
+                }
+
+                parsedItems[itemIndex] = parsedItem;
+            }
+
+            return StaticExpression.ListInstance(parsedItems);
+        }
+
+        if (expression is Expression.KernelApplication kernelApp)
+        {
+            var parseInputResult =
+                ParseAsStaticExpression(kernelApp.Input, envValueClass, hashCache);
+
+            if (parseInputResult.IsErrOrNull() is { } err)
+            {
+                return "Failed to parse input of kernel application: " + err;
+            }
+
+            if (parseInputResult.IsOkOrNull() is not { } inputExpr)
+            {
+                throw new Exception(
+                    "Unexpected return type: " +
+                    parseInputResult.GetType().Name);
+            }
+
+            return
+                StaticExpression.KernelApplicationInstance(
+                    function: kernelApp.Function,
+                    input: inputExpr);
+        }
+
+        if (expression is Expression.Conditional conditional)
+        {
+            var parseConditionResult =
+                ParseAsStaticExpression(conditional.Condition, envValueClass, hashCache);
+
+            {
+                if (parseConditionResult.IsErrOrNull() is { } err)
+                {
+                    return "Failed to parse condition of conditional: " + err;
+                }
+            }
+
+            if (parseConditionResult.IsOkOrNull() is not { } conditionExpr)
+            {
+                throw new Exception(
+                    "Unexpected return type: " +
+                    parseConditionResult.GetType().Name);
+            }
+
+            var falseBranchResult =
+                ParseAsStaticExpression(conditional.FalseBranch, envValueClass, hashCache);
+
+            {
+                if (falseBranchResult.IsErrOrNull() is { } err)
+                {
+                    return "Failed to parse false branch of conditional: " + err;
+                }
+            }
+
+            if (falseBranchResult.IsOkOrNull() is not { } falseBranchExpr)
+            {
+                throw new Exception(
+                    "Unexpected return type: " +
+                    falseBranchResult.GetType().Name);
+            }
+
+            var trueBranchResult =
+                ParseAsStaticExpression(conditional.TrueBranch, envValueClass, hashCache);
+
+            {
+                if (trueBranchResult.IsErrOrNull() is { } err)
+                {
+                    return "Failed to parse true branch of conditional: " + err;
+                }
+            }
+
+            if (trueBranchResult.IsOkOrNull() is not { } trueBranchExpr)
+            {
+                throw new Exception(
+                    "Unexpected return type: " +
+                    trueBranchResult.GetType().Name);
+            }
+
+            return
+                StaticExpression.ConditionalInstance(
+                    condition: conditionExpr,
+                    trueBranch: trueBranchExpr,
+                    falseBranch: falseBranchExpr);
+        }
+
+        throw new NotImplementedException(
+            "Unexpected expression type: " +
+            expression.GetType().Name);
+    }
+
+    private static string AnonymousFunctionName(
+        PineValue exprValue,
+        PineValueClass pineValueClass,
+        ConcurrentPineValueHashCache hashCache)
+    {
+        var exprHash = hashCache.GetHash(exprValue);
+
+        var exprHashBase16 = Convert.ToHexStringLower(exprHash.Span);
+
+
+        return $"anon_{exprHashBase16[..8]}_{pineValueClass.HashBase16[..8]}";
+    }
+
+    private static PineValueClass? MapValueClass(
+        PineValueClass envClass,
+        Expression expression)
+    {
+        if (expression is Expression.Environment)
+        {
+            return envClass;
+        }
+
+        if (expression is Expression.Literal literal)
+        {
+            return PineValueClass.CreateEquals(literal.Value);
+        }
+
+        if (Core.CodeAnalysis.CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(expression) is
+            ExprMappedToParentEnv.PathInParentEnv pathInParentEnv)
+        {
+            if (envClass.TryGetValue(pathInParentEnv.Path) is not { } valueAtPath)
+            {
+                return null;
+            }
+
+            return PineValueClass.CreateEquals(valueAtPath);
+        }
+
+        if (expression is Expression.List listExpr)
+        {
+            var itemClasses = new PineValueClass?[listExpr.items.Count];
+
+            for (var itemIndex = 0; itemIndex < listExpr.items.Count; ++itemIndex)
+            {
+                var item = listExpr.items[itemIndex];
+
+                var itemClass = MapValueClass(envClass, item);
+
+                itemClasses[itemIndex] = itemClass;
+            }
+
+            var itemsFlattened = new List<KeyValuePair<IReadOnlyList<int>, PineValue>>();
+
+            for (var itemIndex = 0; itemIndex < itemClasses.Length; ++itemIndex)
+            {
+                if (itemClasses[itemIndex] is not { } itemClass)
+                {
+                    continue;
+                }
+
+                foreach (var classItem in itemClass.ParsedItems)
+                {
+                    itemsFlattened.Add(
+                        new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                            [itemIndex, .. classItem.Key],
+                            classItem.Value));
+                }
+            }
+
+            if (itemsFlattened.Count is 0)
+                return null;
+
+            return
+                PineValueClass.Create(itemsFlattened);
+        }
+
+        return null;
     }
 }
