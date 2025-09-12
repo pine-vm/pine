@@ -865,8 +865,24 @@ public class CodeAnalysis
         ParseAsStaticMonomorphicProgram(
         Expression rootExpression,
         PineValue rootEnvironment,
+        Func<PineValue, PineValueClass, string?> nameForDecl,
         PineVMParseCache parseCache)
     {
+        var hashCache = new ConcurrentPineValueHashCache();
+
+        string declNameCombined(PineValue declValue, PineValueClass declValueClass)
+        {
+            return
+                nameForDecl(
+                    declValue,
+                    declValueClass)
+                ??
+                AnonymousFunctionName(
+                    declValue,
+                    declValueClass,
+                    hashCache);
+        }
+
         var observedSet = new List<(Expression origExpr, PineValueClass constraint)>();
 
         var queue = new Queue<(Expression expr, PineValueClass envValueClass)>();
@@ -988,8 +1004,6 @@ public class CodeAnalysis
             .Where(observedCombo => !ObservedIsRedundant(observedCombo))
             .ToImmutableArray();
 
-        var hashCache = new ConcurrentPineValueHashCache();
-
         var namedFunctions =
             new Dictionary<string, (Expression origExpr, StaticExpression body, PineValueClass constraint)>();
 
@@ -999,6 +1013,7 @@ public class CodeAnalysis
                 ParseAsStaticExpression(
                     observedCombo.origExpr,
                     observedCombo.constraint,
+                    declNameCombined,
                     hashCache);
 
             if (parseExprResult.IsErrOrNull() is { } err)
@@ -1013,11 +1028,13 @@ public class CodeAnalysis
                     parseExprResult.GetType().Name);
             }
 
+            var exprValue =
+                ExpressionEncoding.EncodeExpressionAsValue(observedCombo.origExpr);
+
             var functionName =
-                AnonymousFunctionName(
-                    exprValue: ExpressionEncoding.EncodeExpressionAsValue(observedCombo.origExpr),
-                    pineValueClass: observedCombo.constraint,
-                    hashCache: hashCache);
+                declNameCombined(
+                    exprValue,
+                    observedCombo.constraint);
 
             if (namedFunctions.ContainsKey(functionName))
             {
@@ -1077,6 +1094,7 @@ public class CodeAnalysis
     static Result<string, StaticExpression> ParseAsStaticExpression(
         Expression expression,
         PineValueClass envValueClass,
+        Func<PineValue, PineValueClass, string> nameForDecl,
         ConcurrentPineValueHashCache hashCache)
     {
         if (Core.CodeAnalysis.CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(expression) is
@@ -1132,7 +1150,7 @@ public class CodeAnalysis
                 {
                     var argExpr = argList.items[argIndex];
 
-                    var parseArgResult = ParseAsStaticExpression(argExpr, envValueClass, hashCache);
+                    var parseArgResult = ParseAsStaticExpression(argExpr, envValueClass, nameForDecl, hashCache);
 
                     if (parseArgResult.IsErrOrNull() is { } err)
                     {
@@ -1150,11 +1168,7 @@ public class CodeAnalysis
                 }
             }
 
-            var childFunctionName =
-                AnonymousFunctionName(
-                    exprValue: parsedValue,
-                    pineValueClass: childEnvClass,
-                    hashCache: hashCache);
+            var childFunctionName = nameForDecl(parsedValue, childEnvClass);
 
             return
                 StaticExpression.FunctionApplicationInstance(
@@ -1170,7 +1184,7 @@ public class CodeAnalysis
             {
                 var item = listExpr.items[itemIndex];
 
-                var parseItemResult = ParseAsStaticExpression(item, envValueClass, hashCache);
+                var parseItemResult = ParseAsStaticExpression(item, envValueClass, nameForDecl, hashCache);
 
                 if (parseItemResult.IsErrOrNull() is { } err)
                 {
@@ -1193,7 +1207,7 @@ public class CodeAnalysis
         if (expression is Expression.KernelApplication kernelApp)
         {
             var parseInputResult =
-                ParseAsStaticExpression(kernelApp.Input, envValueClass, hashCache);
+                ParseAsStaticExpression(kernelApp.Input, envValueClass, nameForDecl, hashCache);
 
             if (parseInputResult.IsErrOrNull() is { } err)
             {
@@ -1216,7 +1230,7 @@ public class CodeAnalysis
         if (expression is Expression.Conditional conditional)
         {
             var parseConditionResult =
-                ParseAsStaticExpression(conditional.Condition, envValueClass, hashCache);
+                ParseAsStaticExpression(conditional.Condition, envValueClass, nameForDecl, hashCache);
 
             {
                 if (parseConditionResult.IsErrOrNull() is { } err)
@@ -1233,7 +1247,7 @@ public class CodeAnalysis
             }
 
             var falseBranchResult =
-                ParseAsStaticExpression(conditional.FalseBranch, envValueClass, hashCache);
+                ParseAsStaticExpression(conditional.FalseBranch, envValueClass, nameForDecl, hashCache);
 
             {
                 if (falseBranchResult.IsErrOrNull() is { } err)
@@ -1250,7 +1264,7 @@ public class CodeAnalysis
             }
 
             var trueBranchResult =
-                ParseAsStaticExpression(conditional.TrueBranch, envValueClass, hashCache);
+                ParseAsStaticExpression(conditional.TrueBranch, envValueClass, nameForDecl, hashCache);
 
             {
                 if (trueBranchResult.IsErrOrNull() is { } err)

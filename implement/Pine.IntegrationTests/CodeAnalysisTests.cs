@@ -100,10 +100,14 @@ public class CodeAnalysisTests
                 [applicationArgumentValue])
             .Extract(err => throw new System.Exception("Failed applying function arguments: " + err));
 
+        var namesFromCompiledEnv =
+            new NamesFromCompiledEnv(compiledEnv, parseCache);
+
         var staticProgram =
             PineVM.CodeAnalysis.ParseAsStaticMonomorphicProgram(
                 rootExpression: functionApplicationRecord.expression,
                 rootEnvironment: functionApplicationRecord.environment,
+                nameForDecl: namesFromCompiledEnv.NameFromDecl,
                 parseCache)
             .Extract(err => throw new System.Exception("Failed parsing as static program: " + err));
 
@@ -122,7 +126,7 @@ public class CodeAnalysisTests
 
         wholeProgramText.Trim().Should().Be(
             """"
-            anon_ed732567_60e31b9e param_1_0 =
+            Test.fibonacci param_1_0 =
                 if
                     Pine_kernel.int_is_sorted_asc
                         [ param_1_0
@@ -133,13 +137,13 @@ public class CodeAnalysisTests
 
                 else
                     Pine_kernel.int_add
-                        [ anon_ed732567_60e31b9e
+                        [ Test.fibonacci
                             (Pine_kernel.int_add
                                 [ param_1_0
                                 , -2
                                 ]
                             )
-                        , anon_ed732567_60e31b9e
+                        , Test.fibonacci
                             (Pine_kernel.int_add
                                 [ param_1_0
                                 , -1
@@ -236,10 +240,14 @@ public class CodeAnalysisTests
                 [applicationArgumentValue])
             .Extract(err => throw new System.Exception("Failed applying function arguments: " + err));
 
+        var namesFromCompiledEnv =
+            new NamesFromCompiledEnv(compiledEnv, parseCache);
+
         var staticProgram =
             PineVM.CodeAnalysis.ParseAsStaticMonomorphicProgram(
                 rootExpression: functionApplicationRecord.expression,
                 rootEnvironment: functionApplicationRecord.environment,
+                nameForDecl: namesFromCompiledEnv.NameFromDecl,
                 parseCache)
             .Extract(err => throw new System.Exception("Failed parsing as static program: " + err));
 
@@ -257,7 +265,7 @@ public class CodeAnalysisTests
 
         wholeProgramText.Trim().Should().Be(
             """"
-            anon_92e7ce17_92a8c7c6 param_1_0 =
+            Test.factorial param_1_0 =
                 if
                     Pine_kernel.int_is_sorted_asc
                         [ param_1_0
@@ -268,7 +276,7 @@ public class CodeAnalysisTests
 
                 else
                     Pine_kernel.int_mul
-                        [ anon_92e7ce17_92a8c7c6
+                        [ Test.factorial
                             (Pine_kernel.int_add
                                 [ param_1_0
                                 , -1
@@ -550,7 +558,7 @@ public class CodeAnalysisTests
             try
             {
                 var envClassResult =
-                    CodeAnalysis.MinimalValueClassForStaticProgram(
+                    Core.CodeAnalysis.CodeAnalysis.MinimalValueClassForStaticProgram(
                         expression: testCase.expression,
                         availableEnvironment: PineValueClass.CreateEquals(testCase.environment));
 
