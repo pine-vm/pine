@@ -862,7 +862,7 @@ public class CodeAnalysis
         return false;
     }
 
-    public static Result<string, (StaticProgram staticProgram, StaticExpression.FunctionApplication entryPoint)>
+    public static Result<string, (StaticProgram<string> staticProgram, StaticExpression<string>.FunctionApplication entryPoint)>
         ParseAsStaticMonomorphicProgram(
         Expression rootExpression,
         PineValue rootEnvironment,
@@ -1016,7 +1016,7 @@ public class CodeAnalysis
             .ToImmutableArray();
 
         var namedFunctions =
-            new Dictionary<string, (Expression origExpr, StaticExpression body, PineValueClass constraint)>();
+            new Dictionary<string, (Expression origExpr, StaticExpression<string> body, PineValueClass constraint)>();
 
         foreach (var observedCombo in filteredObservedSet)
         {
@@ -1098,19 +1098,19 @@ public class CodeAnalysis
 
         return
             (
-            new StaticProgram(namedFunctions),
-            new StaticExpression.FunctionApplication(
+            new StaticProgram<string>(namedFunctions),
+            new StaticExpression<string>.FunctionApplication(
                 functionName: entryFunction.Key,
                 arguments: []));
     }
 
-    static Result<string, StaticExpression> ParseAsStaticExpression(
+    static Result<string, StaticExpression<string>> ParseAsStaticExpression(
         Expression expression,
         PineValueClass envValueClass,
         Func<PineValue, PineValueClass, string> nameForDecl,
         PineVMParseCache parseCache,
         ConcurrentPineValueHashCache hashCache,
-        Func<StaticExpression, StaticExpression, StaticExpression>? replaceParseAndEval)
+        Func<StaticExpression<string>, StaticExpression<string>, StaticExpression<string>>? replaceParseAndEval)
     {
         if (Core.CodeAnalysis.CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(expression) is
             ExprMappedToParentEnv.PathInParentEnv asPath)
@@ -1118,7 +1118,7 @@ public class CodeAnalysis
             if (envValueClass.TryGetValue(asPath.Path) is { } valueFromEnvClass)
             {
                 return
-                    StaticExpression.LiteralInstance(valueFromEnvClass);
+                    StaticExpression<string>.LiteralInstance(valueFromEnvClass);
             }
 
             if (asPath.Path.Count < 3)
@@ -1129,13 +1129,13 @@ public class CodeAnalysis
                  * Perhaps we will switch to a separate stage for determining the specialized function interfaces.
                  * (We might want to look at all the call sites to determine the optimal shape of the parameter list)
                  * */
-                return StaticExpression.ParameterReferenceInstance(asPath.Path);
+                return StaticExpression<string>.ParameterReferenceInstance(asPath.Path);
             }
         }
 
         if (expression is Expression.Literal literal)
         {
-            return StaticExpression.LiteralInstance(literal.Value);
+            return StaticExpression<string>.LiteralInstance(literal.Value);
         }
 
         if (expression is Expression.Environment)
@@ -1147,7 +1147,7 @@ public class CodeAnalysis
         {
             if (ParseAndEvalCrashingAlways(parseAndEval, parseCache) is not null)
             {
-                return new StaticExpression.AlwaysCrash();
+                return new StaticExpression<string>.AlwaysCrash();
             }
 
             // Try get function value from the environment class:
@@ -1254,10 +1254,10 @@ public class CodeAnalysis
                     replaceParseAndEval:
                     (encodedExpr, envExpr)
                     =>
-                    StaticExpression.ListInstance(
+                    StaticExpression<string>.ListInstance(
                         [
-                        StaticExpression.LiteralInstance(StringEncoding.ValueFromString("replaced-parse-and-eval")),
-                            StaticExpression.ListInstance(
+                        StaticExpression < string >.LiteralInstance(StringEncoding.ValueFromString("replaced-parse-and-eval")),
+                            StaticExpression < string >.ListInstance(
                                 [
                                 encodedExpr,
                                 envExpr
@@ -1279,9 +1279,9 @@ public class CodeAnalysis
             }
 
             var childParams =
-                StaticExpression.ImplicitFunctionParameterList(partiallyParsedChild);
+                StaticExpression<string>.ImplicitFunctionParameterList(partiallyParsedChild);
 
-            var specializedArguments = new List<StaticExpression>();
+            var specializedArguments = new List<StaticExpression<string>>();
 
             for (var paramIndex = 0; paramIndex < childParams.Count; ++paramIndex)
             {
@@ -1321,14 +1321,14 @@ public class CodeAnalysis
             var childFunctionName = nameForDecl(parsedValue, childEnvClass);
 
             return
-                StaticExpression.FunctionApplicationInstance(
+                StaticExpression<string>.FunctionApplicationInstance(
                     functionName: childFunctionName,
                     arguments: specializedArguments);
         }
 
         if (expression is Expression.List listExpr)
         {
-            var parsedItems = new StaticExpression[listExpr.items.Count];
+            var parsedItems = new StaticExpression<string>[listExpr.items.Count];
 
             for (var itemIndex = 0; itemIndex < parsedItems.Length; ++itemIndex)
             {
@@ -1358,7 +1358,7 @@ public class CodeAnalysis
                 parsedItems[itemIndex] = parsedItem;
             }
 
-            return StaticExpression.ListInstance(parsedItems);
+            return StaticExpression<string>.ListInstance(parsedItems);
         }
 
         if (expression is Expression.KernelApplication kernelApp)
@@ -1385,7 +1385,7 @@ public class CodeAnalysis
             }
 
             return
-                StaticExpression.KernelApplicationInstance(
+                StaticExpression<string>.KernelApplicationInstance(
                     function: kernelApp.Function,
                     input: inputExpr);
         }
@@ -1462,7 +1462,7 @@ public class CodeAnalysis
             }
 
             return
-                StaticExpression.ConditionalInstance(
+                StaticExpression<string>.ConditionalInstance(
                     condition: conditionExpr,
                     trueBranch: trueBranchExpr,
                     falseBranch: falseBranchExpr);

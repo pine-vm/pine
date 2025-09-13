@@ -10,6 +10,8 @@ using System.Linq;
 using System.Text;
 using Xunit;
 
+using StaticExpression = Pine.Core.CodeAnalysis.StaticExpression<string>;
+
 namespace Pine.IntegrationTests;
 
 public class CodeAnalysisTests
@@ -491,6 +493,7 @@ public class CodeAnalysisTests
             StaticExpressionDisplay.RenderToString(
                 functionBody,
                 blobValueRenderer: StaticExpressionDisplay.DefaultBlobRenderer,
+                functionNameRenderer: fn => fn,
                 indentString: "    ",
                 indentLevel: 1);
     }
@@ -855,6 +858,7 @@ public class CodeAnalysisTests
                 StaticExpressionDisplay.RenderToString(
                     sc.Expr,
                     blobValueRenderer: StaticExpressionDisplay.DefaultBlobRenderer,
+                    functionNameRenderer: fn => fn,
                     indentString: "    ");
 
             try

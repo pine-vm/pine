@@ -7,7 +7,7 @@ using System.Linq;
 namespace Pine.Core.CodeAnalysis;
 
 /// <summary>
-/// Helpers to render <see cref="StaticExpression"/> instances (and contained <see cref="PineValue"/>s)
+/// Helpers to render <see cref="StaticExpression{TFunctionIdentifier}"/> instances (and contained <see cref="PineValue"/>s)
 /// into a stable, human-readable multi-line string form. The rendering aims to:
 /// <list type="bullet">
 /// <item><description>Be deterministic across platforms (always uses LF line endings).</description></item>
@@ -25,18 +25,20 @@ public static class StaticExpressionDisplay
     /// </summary>
     /// <param name="expression">Expression to render.</param>
     /// <param name="blobValueRenderer">Function to render blob values (receives a <see cref="PineValue.BlobValue"/> and returns the textual form plus a flag indicating if parentheses are needed when embedded).</param>
+    /// <param name="functionNameRenderer">Function to render function names.</param>
     /// <param name="indentString">String used for one indentation step (e.g., two spaces).</param>
     /// <param name="indentLevel">Initial indentation level to apply to the root expression.</param>
     /// <returns>Formatted string representation using only <c>\n</c> as line terminators.</returns>
-    public static string RenderToString(
-        this StaticExpression expression,
+    public static string RenderToString<TFunctionName>(
+        this StaticExpression<TFunctionName> expression,
         Func<PineValue.BlobValue, (string exprText, bool needsParens)> blobValueRenderer,
+        Func<TFunctionName, string> functionNameRenderer,
         string indentString,
         int indentLevel = 0)
     {
         var result = new System.Text.StringBuilder();
 
-        foreach (var (indent, text) in RenderToLines(expression, blobValueRenderer, indentLevel, containerDelimits: true))
+        foreach (var (indent, text) in RenderToLines(expression, blobValueRenderer, functionNameRenderer, indentLevel, containerDelimits: true))
         {
             for (var i = 0; i < indent; ++i)
             {
@@ -47,7 +49,6 @@ public static class StaticExpressionDisplay
             result.Append(text);
             result.Append('\n');
         }
-
         return result.ToString();
     }
 
@@ -57,21 +58,23 @@ public static class StaticExpressionDisplay
     /// </summary>
     /// <param name="expression">Expression to render.</param>
     /// <param name="blobValueRenderer">Function to render blob values.</param>
+    /// <param name="functionNameRenderer">Function to render function names.</param>
     /// <param name="indentLevel">Indentation level for the first rendered line of the <paramref name="expression"/>.</param>
     /// <param name="containerDelimits">
     /// If <c>true</c>, the renderer assumes the container (caller) handles delimiters for grouped constructs.
     /// If <c>false</c>, the renderer wraps grouped constructs in parentheses where applicable.
     /// </param>
     /// <returns>Sequence of pairs (indent, text) that together form the full rendering.</returns>
-    public static IEnumerable<(int indent, string text)> RenderToLines(
-        StaticExpression expression,
+    public static IEnumerable<(int indent, string text)> RenderToLines<TFunctionName>(
+        StaticExpression<TFunctionName> expression,
         Func<PineValue.BlobValue, (string exprText, bool needsParens)> blobValueRenderer,
+        Func<TFunctionName, string> functionNameRenderer,
         int indentLevel,
         bool containerDelimits)
     {
         switch (expression)
         {
-            case StaticExpression.Literal literal:
+            case StaticExpression<TFunctionName>.Literal literal:
                 {
                     var (valueText, needsParens) = RenderValueAsExpression(literal.Value, blobValueRenderer);
 
@@ -87,7 +90,7 @@ public static class StaticExpressionDisplay
                     yield break;
                 }
 
-            case StaticExpression.List list:
+            case StaticExpression<TFunctionName>.List list:
                 {
                     if (list.Items.Count is 0)
                     {
@@ -106,11 +109,12 @@ public static class StaticExpressionDisplay
                                 RenderToLines(
                                     item,
                                     blobValueRenderer,
+                                    functionNameRenderer,
                                     indentLevel,
                                     containerDelimits: true)
                                 .ToList();
 
-                            var isChildAList = item is StaticExpression.List;
+                            var isChildAList = item is StaticExpression<TFunctionName>.List;
 
                             for (var itemLineIndex = 0; itemLineIndex < itemLines.Count; ++itemLineIndex)
                             {
@@ -148,7 +152,7 @@ public static class StaticExpressionDisplay
                     yield break;
                 }
 
-            case StaticExpression.KernelApplication kernel:
+            case StaticExpression<TFunctionName>.KernelApplication kernel:
                 {
                     var prefix = containerDelimits ? string.Empty : "(";
 
@@ -158,6 +162,7 @@ public static class StaticExpressionDisplay
                     foreach (var line in RenderToLines(
                         kernel.Input,
                         blobValueRenderer,
+                        functionNameRenderer,
                         indentLevel + 1,
                         containerDelimits: true))
                     {
@@ -173,13 +178,13 @@ public static class StaticExpressionDisplay
                     yield break;
                 }
 
-            case StaticExpression.ParameterReferenceExpression paramRef:
+            case StaticExpression<TFunctionName>.ParameterReferenceExpression paramRef:
                 {
                     yield return (indentLevel, paramRef.ToString());
                     yield break;
                 }
 
-            case StaticExpression.FunctionApplication fnApp:
+            case StaticExpression<TFunctionName>.FunctionApplication fnApp:
                 {
                     var argumentsLines =
                         fnApp.Arguments
@@ -187,14 +192,18 @@ public static class StaticExpressionDisplay
                         RenderToLines(
                             arg,
                             blobValueRenderer,
+                            functionNameRenderer,
                             indentLevel + 1,
                             containerDelimits: false))
                         .ToList();
 
+                    var functionNameString =
+                        functionNameRenderer(fnApp.FunctionName);
+
                     if (argumentsLines.Count is 0)
                     {
                         // No arguments: render on a single line
-                        yield return (indentLevel, fnApp.FunctionName);
+                        yield return (indentLevel, functionNameString);
                         yield break;
                     }
 
@@ -227,7 +236,7 @@ public static class StaticExpressionDisplay
                     yield break;
                 }
 
-            case StaticExpression.Conditional cond:
+            case StaticExpression<TFunctionName>.Conditional cond:
                 {
                     // First: render the head if/then
                     yield return (indentLevel, "if");
@@ -235,6 +244,7 @@ public static class StaticExpressionDisplay
                     foreach (var line in RenderToLines(
                         cond.Condition,
                         blobValueRenderer,
+                        functionNameRenderer,
                         indentLevel + 1,
                         containerDelimits: true))
                     {
@@ -246,6 +256,7 @@ public static class StaticExpressionDisplay
                     foreach (var line in RenderToLines(
                         cond.TrueBranch,
                         blobValueRenderer,
+                        functionNameRenderer,
                         indentLevel + 1,
                         containerDelimits: true))
                     {
@@ -258,7 +269,7 @@ public static class StaticExpressionDisplay
                     // Handle zero or more else-if branches
                     var falseBranch = cond.FalseBranch;
 
-                    while (falseBranch is StaticExpression.Conditional nested)
+                    while (falseBranch is StaticExpression<TFunctionName>.Conditional nested)
                     {
                         // empty line between then and else-if
                         yield return (0, string.Empty);
@@ -269,6 +280,7 @@ public static class StaticExpressionDisplay
                         foreach (var line in RenderToLines(
                             nested.Condition,
                             blobValueRenderer,
+                            functionNameRenderer,
                             indentLevel + 1,
                             containerDelimits: true))
                         {
@@ -280,6 +292,7 @@ public static class StaticExpressionDisplay
                         foreach (var line in RenderToLines(
                             nested.TrueBranch,
                             blobValueRenderer,
+                            functionNameRenderer,
                             indentLevel + 1,
                             containerDelimits: true))
                         {
@@ -296,6 +309,7 @@ public static class StaticExpressionDisplay
                     foreach (var line in RenderToLines(
                         falseBranch,
                         blobValueRenderer,
+                        functionNameRenderer,
                         indentLevel + 1,
                         containerDelimits: true))
                     {
@@ -305,7 +319,7 @@ public static class StaticExpressionDisplay
                     yield break;
                 }
 
-            case StaticExpression.AlwaysCrash:
+            case StaticExpression<TFunctionName>.AlwaysCrash:
                 yield return (indentLevel, "<always_crash>");
                 yield break;
 

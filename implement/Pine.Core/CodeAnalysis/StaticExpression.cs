@@ -8,8 +8,9 @@ namespace Pine.Core.CodeAnalysis;
 /// <summary>
 /// Analog to the <see cref="Expression"/>, but without ability to parse-and-eval arbitrary code.
 /// This means its expressiveness is limited to not allow for the dynamic/metaprogramming as is possible in the general Pine expression.
+/// Generic parameter <typeparamref name="TFunctionName"/> allows callers to use richer representations for user-defined function identifiers.
 /// </summary>
-public abstract record StaticExpression
+public abstract record StaticExpression<TFunctionName>
 {
     /// <summary>
     /// Number of subexpressions contained in this expression.
@@ -23,7 +24,7 @@ public abstract record StaticExpression
     /// </summary>
     /// <param name="items">The items contained in the list.</param>
     /// <returns>A <see cref="List"/> instance containing <paramref name="items"/>.</returns>
-    public static StaticExpression ListInstance(IReadOnlyList<StaticExpression> items) =>
+    public static StaticExpression<TFunctionName> ListInstance(IReadOnlyList<StaticExpression<TFunctionName>> items) =>
         new List(items);
 
     /// <summary>
@@ -31,7 +32,7 @@ public abstract record StaticExpression
     /// Analog to <see cref="Expression.Literal"/>.
     /// </summary>
     /// <param name="value">The value to wrap in a literal expression.</param>
-    public static StaticExpression LiteralInstance(PineValue value) =>
+    public static StaticExpression<TFunctionName> LiteralInstance(PineValue value) =>
         new Literal(value);
 
     /// <summary>
@@ -41,10 +42,10 @@ public abstract record StaticExpression
     /// <param name="condition">Expression evaluated to determine which branch to take.</param>
     /// <param name="falseBranch">Expression evaluated if the <paramref name="condition"/> does not evaluate to true.</param>
     /// <param name="trueBranch">Expression evaluated if the <paramref name="condition"/> evaluates to true.</param>
-    public static StaticExpression ConditionalInstance(
-        StaticExpression condition,
-        StaticExpression falseBranch,
-        StaticExpression trueBranch) =>
+    public static StaticExpression<TFunctionName> ConditionalInstance(
+        StaticExpression<TFunctionName> condition,
+        StaticExpression<TFunctionName> falseBranch,
+        StaticExpression<TFunctionName> trueBranch) =>
         new Conditional(condition, falseBranch, trueBranch);
 
     /// <summary>
@@ -53,16 +54,16 @@ public abstract record StaticExpression
     /// </summary>
     /// <param name="function">Name of the kernel function to apply.</param>
     /// <param name="input">Input expression for the kernel function.</param>
-    public static StaticExpression KernelApplicationInstance(
+    public static StaticExpression<TFunctionName> KernelApplicationInstance(
         string function,
-        StaticExpression input) =>
+        StaticExpression<TFunctionName> input) =>
         new KernelApplication(function, input);
 
     /// <summary>
     /// Create a parameter reference expression identified by a path inside the original evaluation environment.
     /// </summary>
     /// <param name="path">Path of indices identifying the parameter in the environment.</param>
-    public static StaticExpression ParameterReferenceInstance(IReadOnlyList<int> path) =>
+    public static StaticExpression<TFunctionName> ParameterReferenceInstance(IReadOnlyList<int> path) =>
         new ParameterReferenceExpression(path);
 
     /// <summary>
@@ -70,9 +71,9 @@ public abstract record StaticExpression
     /// </summary>
     /// <param name="functionName">The function name.</param>
     /// <param name="arguments">Argument expressions in evaluation order.</param>
-    public static StaticExpression FunctionApplicationInstance(
-        string functionName,
-        IReadOnlyList<StaticExpression> arguments) =>
+    public static StaticExpression<TFunctionName> FunctionApplicationInstance(
+        TFunctionName functionName,
+        IReadOnlyList<StaticExpression<TFunctionName>> arguments) =>
         new FunctionApplication(functionName, arguments);
 
     /// <summary>
@@ -80,7 +81,7 @@ public abstract record StaticExpression
     /// A list expression contains a list of subexpressions.
     /// </summary>
     public record List
-        : StaticExpression
+        : StaticExpression<TFunctionName>
     {
         private readonly int _slimHashCode;
 
@@ -90,9 +91,9 @@ public abstract record StaticExpression
         /// <summary>
         /// The list of subexpressions.
         /// </summary>
-        public IReadOnlyList<StaticExpression> Items { get; }
+        public IReadOnlyList<StaticExpression<TFunctionName>> Items { get; }
 
-        internal List(IReadOnlyList<StaticExpression> items)
+        internal List(IReadOnlyList<StaticExpression<TFunctionName>> items)
             :
             this(new ListStruct(items))
         {
@@ -148,11 +149,11 @@ public abstract record StaticExpression
             /// <summary>
             /// Items in the list.
             /// </summary>
-            public IReadOnlyList<StaticExpression> Items { get; }
+            public IReadOnlyList<StaticExpression<TFunctionName>> Items { get; }
 
             internal readonly int SlimHashCode;
 
-            public ListStruct(IReadOnlyList<StaticExpression> items)
+            public ListStruct(IReadOnlyList<StaticExpression<TFunctionName>> items)
             {
                 Items = items;
 
@@ -164,7 +165,7 @@ public abstract record StaticExpression
                 return SlimHashCode;
             }
 
-            public static int ComputeHashCode(IReadOnlyList<StaticExpression> items)
+            public static int ComputeHashCode(IReadOnlyList<StaticExpression<TFunctionName>> items)
             {
                 var hashCode = new HashCode();
 
@@ -184,7 +185,7 @@ public abstract record StaticExpression
     /// </summary>
     public record Literal(
         PineValue Value)
-        : StaticExpression
+        : StaticExpression<TFunctionName>
     {
         /// <summary>
         /// Always returns zero, as a <see cref="Literal"/> expression does not contain any subexpressions.
@@ -197,32 +198,32 @@ public abstract record StaticExpression
     /// A conditional expression contains a condition and two branches.
     /// </summary>
     public record Conditional
-        : StaticExpression
+        : StaticExpression<TFunctionName>
     {
         private readonly int _slimHashCode;
 
         /// <summary>
         /// The expression evaluated to determine which branch to take.
         /// </summary>
-        public StaticExpression Condition { get; }
+        public StaticExpression<TFunctionName> Condition { get; }
 
         /// <summary>
         /// The expression evaluated if the condition does not evaluate to true.
         /// </summary>
-        public StaticExpression FalseBranch { get; }
+        public StaticExpression<TFunctionName> FalseBranch { get; }
 
         /// <summary>
         /// The expression evaluated if the condition evaluates to true.
         /// </summary>
-        public StaticExpression TrueBranch { get; }
+        public StaticExpression<TFunctionName> TrueBranch { get; }
 
         /// <inheritdoc/>
         public override int SubexpressionCount { get; }
 
         internal Conditional(
-            StaticExpression condition,
-            StaticExpression falseBranch,
-            StaticExpression trueBranch)
+            StaticExpression<TFunctionName> condition,
+            StaticExpression<TFunctionName> falseBranch,
+            StaticExpression<TFunctionName> trueBranch)
             :
             this(new ConditionalStruct(condition, falseBranch, trueBranch))
         {
@@ -255,9 +256,9 @@ public abstract record StaticExpression
 
             return
                 _slimHashCode == notNull._slimHashCode &&
-                Condition.Equals(notNull.Condition) &&
-                FalseBranch.Equals(notNull.FalseBranch) &&
-                TrueBranch.Equals(notNull.TrueBranch);
+                   Condition.Equals(notNull.Condition) &&
+                   FalseBranch.Equals(notNull.FalseBranch) &&
+                   TrueBranch.Equals(notNull.TrueBranch);
         }
 
         /// <inheritdoc/>
@@ -269,18 +270,18 @@ public abstract record StaticExpression
         /// </summary>
         internal readonly record struct ConditionalStruct
         {
-            public StaticExpression Condition { get; }
+            public StaticExpression<TFunctionName> Condition { get; }
 
-            public StaticExpression FalseBranch { get; }
+            public StaticExpression<TFunctionName> FalseBranch { get; }
 
-            public StaticExpression TrueBranch { get; }
+            public StaticExpression<TFunctionName> TrueBranch { get; }
 
             internal readonly int SlimHashCode;
 
             public ConditionalStruct(
-                StaticExpression condition,
-                StaticExpression falseBranch,
-                StaticExpression trueBranch)
+                StaticExpression<TFunctionName> condition,
+                StaticExpression<TFunctionName> falseBranch,
+                StaticExpression<TFunctionName> trueBranch)
             {
                 Condition = condition;
                 FalseBranch = falseBranch;
@@ -297,16 +298,16 @@ public abstract record StaticExpression
             public readonly bool Equals(ConditionalStruct other)
             {
                 return
-                    other.SlimHashCode == SlimHashCode &&
-                    other.Condition.Equals(Condition) &&
-                    other.FalseBranch.Equals(FalseBranch) &&
-                    other.TrueBranch.Equals(TrueBranch);
+                other.SlimHashCode == SlimHashCode &&
+                other.Condition.Equals(Condition) &&
+                other.FalseBranch.Equals(FalseBranch) &&
+                other.TrueBranch.Equals(TrueBranch);
             }
 
             public static int ComputeHashCode(
-                StaticExpression condition,
-                StaticExpression falseBranch,
-                StaticExpression trueBranch)
+                StaticExpression<TFunctionName> condition,
+                StaticExpression<TFunctionName> falseBranch,
+                StaticExpression<TFunctionName> trueBranch)
             {
                 return HashCode.Combine(condition, falseBranch, trueBranch);
             }
@@ -323,7 +324,7 @@ public abstract record StaticExpression
     /// Therefore it remains the responsibility of the caller to add branches for error messages as needed.
     /// </summary>
     public record KernelApplication
-        : StaticExpression
+        : StaticExpression<TFunctionName>
     {
         /// <summary>
         /// The name of the kernel function to be applied.
@@ -333,7 +334,7 @@ public abstract record StaticExpression
         /// <summary>
         /// Input for the kernel function.
         /// </summary>
-        public StaticExpression Input { get; }
+        public StaticExpression<TFunctionName> Input { get; }
 
         /// <inheritdoc/>
         public override int SubexpressionCount { get; }
@@ -345,7 +346,7 @@ public abstract record StaticExpression
         /// <param name="input">Input expression.</param>
         internal KernelApplication(
             string function,
-            StaticExpression input)
+            StaticExpression<TFunctionName> input)
         {
             Function = function;
             Input = input;
@@ -379,7 +380,8 @@ public abstract record StaticExpression
     /// <summary>
     /// Parameters are identified by the path inside the environment of the original Pine expression.
     /// </summary>
-    public record ParameterReferenceExpression : StaticExpression
+    public record ParameterReferenceExpression :
+        StaticExpression<TFunctionName>
     {
         /// <summary>
         /// Create a parameter reference identified by <paramref name="path"/> within the original environment.
@@ -438,19 +440,19 @@ public abstract record StaticExpression
     /// Application of a user-defined function to a list of argument expressions.
     /// </summary>
     public record FunctionApplication
-        : StaticExpression
+        : StaticExpression<TFunctionName>
     {
         private readonly int _slimHashCode;
 
         /// <summary>
         /// The function name.
         /// </summary>
-        public string FunctionName { get; }
+        public TFunctionName FunctionName { get; }
 
         /// <summary>
         /// Argument expressions passed to the function in evaluation order.
         /// </summary>
-        public IReadOnlyList<StaticExpression> Arguments { get; }
+        public IReadOnlyList<StaticExpression<TFunctionName>> Arguments { get; }
 
         /// <inheritdoc/>
         public override int SubexpressionCount { get; } = 0;
@@ -461,8 +463,8 @@ public abstract record StaticExpression
         /// <param name="functionName">The function name.</param>
         /// <param name="arguments">Argument expressions.</param>
         public FunctionApplication(
-            string functionName,
-            IReadOnlyList<StaticExpression> arguments)
+            TFunctionName functionName,
+            IReadOnlyList<StaticExpression<TFunctionName>> arguments)
         {
             FunctionName = functionName;
             Arguments = arguments;
@@ -498,8 +500,16 @@ public abstract record StaticExpression
             if (_slimHashCode != notNull._slimHashCode)
                 return false;
 
-            if (FunctionName != notNull.FunctionName)
-                return false;
+            if (FunctionName is null)
+            {
+                if (notNull.FunctionName is not null)
+                    return false;
+            }
+            else
+            {
+                if (!FunctionName.Equals(notNull.FunctionName))
+                    return false;
+            }
 
             if (Arguments.Count != notNull.Arguments.Count)
                 return false;
@@ -526,7 +536,7 @@ public abstract record StaticExpression
     /// Compilers sometimes emit crashing branches, and we explicitly mark these in code analysis.
     /// </summary>
     public sealed record AlwaysCrash
-        : StaticExpression
+        : StaticExpression<TFunctionName>
     {
         /// <summary>
         /// Always zero; this node has no children.
@@ -550,7 +560,7 @@ public abstract record StaticExpression
     /// ensuring deterministic naming and ordering across builds and platforms.
     /// </remarks>
     public static IReadOnlyList<ParameterReferenceExpression> ImplicitFunctionParameterList(
-        StaticExpression functionBody)
+        StaticExpression<TFunctionName> functionBody)
     {
         return
             [..EnumerateAllDescendants(functionBody)
@@ -566,10 +576,10 @@ public abstract record StaticExpression
     /// </summary>
     /// <param name="expression">Root expression to traverse.</param>
     /// <returns>A depth-first traversal sequence over the expression tree.</returns>
-    public static IEnumerable<StaticExpression> EnumerateAllDescendants(
-        StaticExpression expression)
+    public static IEnumerable<StaticExpression<TFunctionName>> EnumerateAllDescendants(
+        StaticExpression<TFunctionName> expression)
     {
-        var stack = new Stack<StaticExpression>();
+        var stack = new Stack<StaticExpression<TFunctionName>>();
 
         stack.Push(expression);
 
