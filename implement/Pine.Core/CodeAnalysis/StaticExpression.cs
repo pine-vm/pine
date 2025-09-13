@@ -631,4 +631,58 @@ public abstract record StaticExpression<TFunctionName>
             }
         }
     }
+
+    /// <summary>
+    /// Recursively maps each user-defined function identifier (<see cref="FunctionApplication"/>) from
+    /// <typeparamref name="TFunctionName"/> to <typeparamref name="TOut"/> while preserving the
+    /// structure of the expression tree and leaving all other node kinds unchanged.
+    /// </summary>
+    /// <typeparam name="TOut">The target type of the mapped function identifiers.</typeparam>
+    /// <param name="expression">Root static expression to transform.</param>
+    /// <param name="mapIdentifier">Mapping function applied to every function identifier encountered.</param>
+    /// <returns>A new <see cref="StaticExpression{TOut}"/> tree with mapped identifiers.</returns>
+    /// <remarks>
+    /// Traversal is depth-first. Kernel function applications, literals, parameter references, conditionals,
+    /// list nodes, and <see cref="AlwaysCrash"/> nodes are recreated only as needed. Argument subtrees are
+    /// transformed recursively. This operation is pure and does not mutate the original tree.
+    /// </remarks>
+    public static StaticExpression<TOut> MapFunctionIdentifier<TOut>(
+        StaticExpression<TFunctionName> expression,
+        Func<TFunctionName, TOut> mapIdentifier)
+    {
+        return expression switch
+        {
+            List list =>
+                StaticExpression<TOut>.ListInstance(
+                    [.. list.Items.Select(item => MapFunctionIdentifier(item, mapIdentifier))]),
+
+            Literal literal =>
+                StaticExpression<TOut>.LiteralInstance(literal.Value),
+
+            Conditional conditional =>
+                StaticExpression<TOut>.ConditionalInstance(
+                    MapFunctionIdentifier(conditional.Condition, mapIdentifier),
+                    MapFunctionIdentifier(conditional.FalseBranch, mapIdentifier),
+                    MapFunctionIdentifier(conditional.TrueBranch, mapIdentifier)),
+
+            KernelApplication kernel =>
+                StaticExpression<TOut>.KernelApplicationInstance(
+                    kernel.Function,
+                    MapFunctionIdentifier(kernel.Input, mapIdentifier)),
+
+            ParameterReferenceExpression paramRef =>
+                StaticExpression<TOut>.ParameterReferenceInstance(paramRef.Path),
+
+            FunctionApplication funApp =>
+                StaticExpression<TOut>.FunctionApplicationInstance(
+                    mapIdentifier(funApp.FunctionName),
+                    [.. funApp.Arguments.Select(arg => MapFunctionIdentifier(arg, mapIdentifier))]),
+
+            AlwaysCrash =>
+            new StaticExpression<TOut>.AlwaysCrash(),
+
+            _ =>
+            throw new NotSupportedException($"Unknown static expression type: {expression.GetType()}")
+        };
+    }
 }
