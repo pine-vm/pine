@@ -480,6 +480,7 @@ public class CodeAnalysisTests
                 1
                 """
             },
+
             new
             {
                 Name = "Parameter_Ref",
@@ -488,6 +489,17 @@ public class CodeAnalysisTests
                 param_1_0
                 """
             },
+
+            new
+            {
+                Name = "Literal_Char",
+                Expr = StaticExpression.LiteralInstance(
+                    ElmValueEncoding.ElmValueAsPineValue(ElmValue.CharInstance((int)'a'))),
+                Expected = """
+                'a'
+                """
+            },
+
             new
             {
                 Name = "List_Param_And_Int",
@@ -499,6 +511,20 @@ public class CodeAnalysisTests
                 Expected = """
                 [ param_1_0
                 , 1
+                ]
+                """
+            },
+
+            new
+            {
+                Name = "List_Param_And_Char",
+                Expr = StaticExpression.ListInstance([
+                    Param_1_0(),
+                    StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.CharInstance((int)'b')))
+                ]),
+                Expected = """
+                [ param_1_0
+                , 'b'
                 ]
                 """
             },
@@ -595,6 +621,7 @@ public class CodeAnalysisTests
                     ]
                 """
             },
+
             new
             {
                 Name = "Function_Application",
@@ -612,6 +639,7 @@ public class CodeAnalysisTests
                     123
                 """"
             },
+
             new
             {
                 Name = "FunctionApplication_With_Kernel_Arg",
@@ -636,6 +664,7 @@ public class CodeAnalysisTests
                     )
                 """
             },
+
             new
             {
                 Name = "Conditional_Complex",
