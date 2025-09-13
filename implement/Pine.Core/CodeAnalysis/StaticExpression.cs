@@ -535,6 +535,32 @@ public abstract record StaticExpression
     }
 
     /// <summary>
+    /// Derives the implicit parameter list for a function from its body.
+    /// </summary>
+    /// <param name="functionBody">The static expression representing the function body.</param>
+    /// <returns>
+    /// A list of distinct <see cref="ParameterReferenceExpression"/> instances referenced anywhere in
+    /// <paramref name="functionBody"/>, sorted in ascending lexicographical order by their <see cref="ParameterReferenceExpression.Path"/>.
+    /// </returns>
+    /// <remarks>
+    /// This helper walks the expression tree, collects all parameter reference nodes, removes duplicates while preserving
+    /// structural equality, and produces a stable ordering by comparing the integer path components.
+    /// The resulting sequence is suitable for generating a canonical function header such as
+    ///   f param_1_0 param_1_2 = ...
+    /// ensuring deterministic naming and ordering across builds and platforms.
+    /// </remarks>
+    public static IReadOnlyList<ParameterReferenceExpression> ImplicitFunctionParameterList(
+        StaticExpression functionBody)
+    {
+        return
+            [..EnumerateAllDescendants(functionBody)
+            .OfType<ParameterReferenceExpression>()
+            .Distinct()
+            .OrderBy(paramRef => paramRef.Path, IntPathComparer.Instance)
+            ];
+    }
+
+    /// <summary>
     /// Enumerate the expression and all of its descendants in depth-first order.
     /// The sequence starts with <paramref name="expression"/> itself.
     /// </summary>

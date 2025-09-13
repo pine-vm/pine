@@ -288,7 +288,7 @@ public class CodeAnalysisTests
     }
 
     [Fact]
-    public void Parse_Test_dictToList()
+    public void Parse_Test_dictToShuffledList()
     {
         var elmJsonFile =
             """
@@ -403,11 +403,12 @@ public class CodeAnalysisTests
 
         wholeProgramText.Trim().Should().Be(
             """"
-            Test.dictToShuffledList param_1_0_0 param_1_0_1_1 param_1_0_1_2 param_1_0_1_3 param_1_0_1_4 =
+            Test.dictToShuffledList param_1_0 =
                 if
                     Pine_kernel.equal
                         [ RBEmpty_elm_builtin
-                        , param_1_0_0
+                        , Pine_kernel.head
+                            param_1_0
                         ]
                 then
                     []
@@ -415,16 +416,51 @@ public class CodeAnalysisTests
                 else if
                     Pine_kernel.equal
                         [ RBNode_elm_builtin
-                        , param_1_0_0
+                        , Pine_kernel.head
+                            param_1_0
                         ]
                 then
                     Pine_kernel.concat
                         [ Test.dictToShuffledList
-                            param_1_0_1_3
+                            (Pine_kernel.head
+                                Pine_kernel.skip
+                                    [ 3
+                                    , Pine_kernel.head
+                                        Pine_kernel.skip
+                                            [ 1
+                                            , param_1_0
+                                            ]
+                                    ]
+                            )
                         , Test.dictToShuffledList
-                            param_1_0_1_4
-                        , [ [ param_1_0_1_1
-                            , param_1_0_1_2
+                            (Pine_kernel.head
+                                Pine_kernel.skip
+                                    [ 4
+                                    , Pine_kernel.head
+                                        Pine_kernel.skip
+                                            [ 1
+                                            , param_1_0
+                                            ]
+                                    ]
+                            )
+                        , [ [ Pine_kernel.head
+                                Pine_kernel.skip
+                                    [ 1
+                                    , Pine_kernel.head
+                                        Pine_kernel.skip
+                                            [ 1
+                                            , param_1_0
+                                            ]
+                                    ]
+                            , Pine_kernel.head
+                                Pine_kernel.skip
+                                    [ 2
+                                    , Pine_kernel.head
+                                        Pine_kernel.skip
+                                            [ 1
+                                            , param_1_0
+                                            ]
+                                    ]
                             ]
                           ]
                         ]
@@ -445,11 +481,7 @@ public class CodeAnalysisTests
         StaticExpression functionBody)
     {
         var allParameters =
-            StaticExpression.EnumerateAllDescendants(functionBody)
-            .OfType<StaticExpression.ParameterReferenceExpression>()
-            .Distinct()
-            .OrderBy(paramRef => paramRef.Path, IntPathComparer.Instance)
-            .ToArray();
+            StaticExpression.ImplicitFunctionParameterList(functionBody);
 
         var headerText =
             functionName + " " + string.Join(" ", allParameters.Select(RenderParamRef));

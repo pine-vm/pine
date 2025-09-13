@@ -1026,7 +1026,8 @@ public class CodeAnalysis
                     observedCombo.constraint,
                     DeclNameCombined,
                     parseCache,
-                    hashCache);
+                    hashCache,
+                    replaceParseAndEval: null);
 
             if (parseExprResult.IsErrOrNull() is { } err)
             {
@@ -1108,12 +1109,28 @@ public class CodeAnalysis
         PineValueClass envValueClass,
         Func<PineValue, PineValueClass, string> nameForDecl,
         PineVMParseCache parseCache,
-        ConcurrentPineValueHashCache hashCache)
+        ConcurrentPineValueHashCache hashCache,
+        Func<StaticExpression, StaticExpression, StaticExpression>? replaceParseAndEval)
     {
         if (Core.CodeAnalysis.CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(expression) is
             ExprMappedToParentEnv.PathInParentEnv asPath)
         {
-            return StaticExpression.ParameterReferenceInstance(asPath.Path);
+            if (envValueClass.TryGetValue(asPath.Path) is { } valueFromEnvClass)
+            {
+                return
+                    StaticExpression.LiteralInstance(valueFromEnvClass);
+            }
+
+            if (asPath.Path.Count < 3)
+            {
+                /*
+                 * TODO: Replace stupid heuristic with an adaptive approach:
+                 * Goal is to reduce the need for callers to compose list instances to hand over arguments.
+                 * Perhaps we will switch to a separate stage for determining the specialized function interfaces.
+                 * (We might want to look at all the call sites to determine the optimal shape of the parameter list)
+                 * */
+                return StaticExpression.ParameterReferenceInstance(asPath.Path);
+            }
         }
 
         if (expression is Expression.Literal literal)
@@ -1153,37 +1170,152 @@ public class CodeAnalysis
                 return "Could not map environment value class through parseAndEval.Environment";
             }
 
-            /*
-             * TODO: Support arbitrary shapes of forwarding arguments.
-             * 
-             * At the moment, we only support the subset where all arguments are at [1] in the environment.
-             * */
+            var parseExprResult = parseCache.ParseExpression(parsedValue);
 
-            var arguments = new List<StaticExpression>();
-
-            if (parseAndEval.Environment is Expression.List envList &&
-                envList.items.Count > 1 && envList.items[1] is Expression.List argList)
             {
-                for (var argIndex = 0; argIndex < argList.items.Count; ++argIndex)
+                if (parseExprResult.IsErrOrNull() is { } err)
                 {
-                    var argExpr = argList.items[argIndex];
+                    return "Failed to parse parseAndEval.Encoded value: " + err;
+                }
+            }
 
-                    var parseArgResult = ParseAsStaticExpression(argExpr, envValueClass, nameForDecl, parseCache, hashCache);
+            if (parseExprResult.IsOkOrNull() is not { } childExpr)
+            {
+                throw new Exception(
+                    "Unexpected return type: " +
+                    parseExprResult.GetType().Name);
+            }
 
-                    if (parseArgResult.IsErrOrNull() is { } err)
+            if (replaceParseAndEval is not null)
+            {
+                /*
+                 * Terminate to avoid infinite recursion.
+                 * */
+
+                var parseEncodedResult =
+                    ParseAsStaticExpression(
+                        parseAndEval.Encoded,
+                        envValueClass,
+                        nameForDecl,
+                        parseCache,
+                        hashCache,
+                        replaceParseAndEval);
+
+                {
+                    if (parseEncodedResult.IsErrOrNull() is { } err)
+                    {
+                        return "Failed to parse parseAndEval.Encoded as static expression: " + err;
+                    }
+                }
+
+                if (parseEncodedResult.IsOkOrNull() is not { } encodedExpr)
+                {
+                    throw new Exception(
+                        "Unexpected return type: " +
+                        parseEncodedResult.GetType().Name);
+                }
+
+                var parseEnvResult =
+                    ParseAsStaticExpression(
+                        parseAndEval.Environment,
+                        envValueClass,
+                        nameForDecl,
+                        parseCache,
+                        hashCache,
+                        replaceParseAndEval);
+
+                {
+                    if (parseEnvResult.IsErrOrNull() is { } err)
+                    {
+                        return "Failed to parse parseAndEval.Environment as static expression: " + err;
+                    }
+                }
+
+                if (parseEnvResult.IsOkOrNull() is not { } envExpr)
+                {
+                    throw new Exception(
+                        "Unexpected return type: " +
+                        parseEnvResult.GetType().Name);
+                }
+
+                return
+                    replaceParseAndEval(
+                        encodedExpr,
+                        envExpr);
+            }
+
+            var partiallyParsedChildResult =
+                ParseAsStaticExpression(
+                    childExpr,
+                    childEnvClass,
+                    nameForDecl,
+                    parseCache,
+                    hashCache,
+                    replaceParseAndEval:
+                    (encodedExpr, envExpr)
+                    =>
+                    StaticExpression.ListInstance(
+                        [
+                        StaticExpression.LiteralInstance(StringEncoding.ValueFromString("replaced-parse-and-eval")),
+                            StaticExpression.ListInstance(
+                                [
+                                encodedExpr,
+                                envExpr
+                                ])
+                        ]));
+
+            {
+                if (partiallyParsedChildResult.IsErrOrNull() is { } err)
+                {
+                    return "Failed to parse parseAndEval child expression: " + err;
+                }
+            }
+
+            if (partiallyParsedChildResult.IsOkOrNull() is not { } partiallyParsedChild)
+            {
+                throw new Exception(
+                    "Unexpected return type: " +
+                    partiallyParsedChildResult.GetType().Name);
+            }
+
+            var childParams =
+                StaticExpression.ImplicitFunctionParameterList(partiallyParsedChild);
+
+            var specializedArguments = new List<StaticExpression>();
+
+            for (var paramIndex = 0; paramIndex < childParams.Count; ++paramIndex)
+            {
+                var childParam = childParams[paramIndex];
+
+                if (Core.CodeAnalysis.CodeAnalysis.ExpressionForPathInExpression(parseAndEval.Environment, childParam.Path) is not { } paramExpr)
+                {
+                    return "Could not find subexpression for parameter at path: " + string.Join(",", childParam.Path);
+                }
+
+                var parseParamResult =
+                    ParseAsStaticExpression(
+                        paramExpr,
+                        envValueClass,
+                        nameForDecl,
+                        parseCache,
+                        hashCache,
+                        replaceParseAndEval);
+
+                {
+                    if (parseParamResult.IsErrOrNull() is { } err)
                     {
                         return "Failed to parse parseAndEval argument: " + err;
                     }
-
-                    if (parseArgResult.IsOkOrNull() is not { } parsedArg)
-                    {
-                        throw new Exception(
-                            "Unexpected return type: " +
-                            parseArgResult.GetType().Name);
-                    }
-
-                    arguments.Add(parsedArg);
                 }
+
+                if (parseParamResult.IsOkOrNull() is not { } parsedParam)
+                {
+                    throw new Exception(
+                        "Unexpected return type: " +
+                        parseParamResult.GetType().Name);
+                }
+
+                specializedArguments.Add(parsedParam);
             }
 
             var childFunctionName = nameForDecl(parsedValue, childEnvClass);
@@ -1191,7 +1323,7 @@ public class CodeAnalysis
             return
                 StaticExpression.FunctionApplicationInstance(
                     functionName: childFunctionName,
-                    arguments: arguments);
+                    arguments: specializedArguments);
         }
 
         if (expression is Expression.List listExpr)
@@ -1202,7 +1334,14 @@ public class CodeAnalysis
             {
                 var item = listExpr.items[itemIndex];
 
-                var parseItemResult = ParseAsStaticExpression(item, envValueClass, nameForDecl, parseCache, hashCache);
+                var parseItemResult =
+                    ParseAsStaticExpression(
+                        item,
+                        envValueClass,
+                        nameForDecl,
+                        parseCache,
+                        hashCache,
+                        replaceParseAndEval);
 
                 if (parseItemResult.IsErrOrNull() is { } err)
                 {
@@ -1225,7 +1364,13 @@ public class CodeAnalysis
         if (expression is Expression.KernelApplication kernelApp)
         {
             var parseInputResult =
-                ParseAsStaticExpression(kernelApp.Input, envValueClass, nameForDecl, parseCache, hashCache);
+                ParseAsStaticExpression(
+                    kernelApp.Input,
+                    envValueClass,
+                    nameForDecl,
+                    parseCache,
+                    hashCache,
+                    replaceParseAndEval);
 
             if (parseInputResult.IsErrOrNull() is { } err)
             {
@@ -1248,7 +1393,13 @@ public class CodeAnalysis
         if (expression is Expression.Conditional conditional)
         {
             var parseConditionResult =
-                ParseAsStaticExpression(conditional.Condition, envValueClass, nameForDecl, parseCache, hashCache);
+                ParseAsStaticExpression(
+                    conditional.Condition,
+                    envValueClass,
+                    nameForDecl,
+                    parseCache,
+                    hashCache,
+                    replaceParseAndEval);
 
             {
                 if (parseConditionResult.IsErrOrNull() is { } err)
@@ -1270,7 +1421,8 @@ public class CodeAnalysis
                     envValueClass,
                     nameForDecl,
                     parseCache,
-                    hashCache);
+                    hashCache,
+                    replaceParseAndEval);
 
             {
                 if (falseBranchResult.IsErrOrNull() is { } err)
@@ -1292,7 +1444,8 @@ public class CodeAnalysis
                     envValueClass,
                     nameForDecl,
                     parseCache,
-                    hashCache);
+                    hashCache,
+                    replaceParseAndEval);
 
             {
                 if (trueBranchResult.IsErrOrNull() is { } err)
