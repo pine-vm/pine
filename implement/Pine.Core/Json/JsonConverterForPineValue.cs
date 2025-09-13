@@ -138,52 +138,6 @@ public class JsonConverterForPineValue : JsonConverter<PineValue>
             }
         }
 
-        if (value is PineValue.ListValue listValue)
-        {
-            if (0 < listValue.Items.Length)
-            {
-                var containsIncompatibleItem = false;
-
-                for (var i = 0; i < listValue.Items.Length; i++)
-                {
-                    if (listValue.Items.Span[i] is not PineValue.BlobValue blobItem)
-                    {
-                        containsIncompatibleItem = true;
-                        break;
-                    }
-
-                    if (blobItem.Bytes.Length is 0 or > 3)
-                    {
-                        containsIncompatibleItem = true;
-                        break;
-                    }
-
-                    if (blobItem.Bytes.Span[0] is 0)
-                    {
-                        containsIncompatibleItem = true;
-                        break;
-                    }
-                }
-
-                if (!containsIncompatibleItem)
-                {
-                    if (StringEncoding.StringFromListValue(listValue).IsOkOrNull() is { } asString && 0 < asString.Length)
-                    {
-                        if (!asString.All(asChar => (asChar & 0xff00) is 0x400 || (asChar & 0xff00) is 0x200))
-                        {
-                            writer.WriteStartObject();
-
-                            writer.WriteString("ListAsString_2024", asString);
-
-                            writer.WriteEndObject();
-
-                            return;
-                        }
-                    }
-                }
-            }
-        }
-
         WriteDefaultRepresentation(writer, value, options);
     }
 

@@ -139,24 +139,4 @@ public class JsonConverterForPineValueTests
         serializePineValue(PineValue.EmptyList)
             .Should().Be("[]");
     }
-
-    [Fact]
-    public void JSON_serialize_pine_value_to_native_string_2024()
-    {
-        var jsonSerializerOptions = new JsonSerializerOptions { };
-
-        jsonSerializerOptions.Converters.Add(new JsonConverterForPineValue());
-
-        string serializePineValue(PineValue pineValue) =>
-            JsonSerializer.Serialize(
-                pineValue,
-                options: jsonSerializerOptions);
-
-        serializePineValue(
-            StringEncoding.ValueFromString_2024("stringValue 789"))
-            .Should().Be($$"""{"ListAsString_2024":"stringValue 789"}""");
-
-        serializePineValue(PineValue.EmptyList)
-            .Should().Be("[]");
-    }
 }
