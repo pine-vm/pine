@@ -360,7 +360,7 @@ public static class StaticExpressionDisplay
                     yield break;
                 }
 
-            case StaticExpression<TFunctionName>.AlwaysCrash:
+            case StaticExpression<TFunctionName>.CrashingParseAndEval:
                 yield return (indentLevel, "<always_crash>");
                 yield break;
 

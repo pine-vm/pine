@@ -470,13 +470,15 @@ public abstract record StaticExpression<TFunctionName>
     /// we can statically check whether it will crash at runtime.
     /// Compilers sometimes emit crashing branches, and we explicitly mark these in code analysis.
     /// </summary>
-    public sealed record AlwaysCrash
+    public sealed record CrashingParseAndEval(
+        StaticExpression<TFunctionName> Encoded,
+        StaticExpression<TFunctionName> EnvironmentExpr)
         : StaticExpression<TFunctionName>
     {
-        /// <summary>
-        /// Always zero; this node has no children.
-        /// </summary>
-        public override int SubexpressionCount => 0;
+        /// <inheritdoc/>
+        public override int SubexpressionCount =>
+            Encoded.SubexpressionCount +
+            EnvironmentExpr.SubexpressionCount;
     }
 
     /// <summary>
@@ -579,7 +581,7 @@ public abstract record StaticExpression<TFunctionName>
                     stack.Push(functionApp.Arguments);
                     break;
 
-                case AlwaysCrash:
+                case CrashingParseAndEval:
                     break;
 
                 default:
@@ -599,7 +601,7 @@ public abstract record StaticExpression<TFunctionName>
     /// <returns>A new <see cref="StaticExpression{TOut}"/> tree with mapped identifiers.</returns>
     /// <remarks>
     /// Traversal is depth-first. Kernel function applications, literals, parameter references, conditionals,
-    /// list nodes, and <see cref="AlwaysCrash"/> nodes are recreated only as needed. Argument subtrees are
+    /// list nodes, and <see cref="CrashingParseAndEval"/> nodes are recreated only as needed. Argument subtrees are
     /// transformed recursively. This operation is pure and does not mutate the original tree.
     /// </remarks>
     public static StaticExpression<TOut> MapFunctionIdentifier<TOut>(
@@ -634,8 +636,10 @@ public abstract record StaticExpression<TFunctionName>
                     mapIdentifier(funApp.FunctionName),
                     MapFunctionIdentifier(funApp.Arguments, mapIdentifier)),
 
-            AlwaysCrash =>
-            new StaticExpression<TOut>.AlwaysCrash(),
+            CrashingParseAndEval crashing =>
+            new StaticExpression<TOut>.CrashingParseAndEval(
+                MapFunctionIdentifier(crashing.Encoded, mapIdentifier),
+                MapFunctionIdentifier(crashing.EnvironmentExpr, mapIdentifier)),
 
             _ =>
             throw new NotSupportedException($"Unknown static expression type: {expression.GetType()}")

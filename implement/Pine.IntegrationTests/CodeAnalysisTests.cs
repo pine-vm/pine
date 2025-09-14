@@ -450,6 +450,233 @@ public class CodeAnalysisTests
     }
 
     [Fact]
+    public void Parse_Test_convert0OrMore_base3()
+    {
+        var elmJsonFile =
+            """
+            {
+                "type": "application",
+                "source-directories": [
+                    "src"
+                ],
+                "elm-version": "0.19.1",
+                "dependencies": {
+                    "direct": {
+                        "elm/core": "1.0.5"
+                    },
+                    "indirect": {
+                    }
+                },
+                "test-dependencies": {
+                    "direct": {
+                        "elm-explorations/test": "2.2.0"
+                    },
+                    "indirect": {
+                    }
+                }
+            }
+            """;
+
+        /*
+         * Use a form that us unlikely to occur also in the standard libraries,
+         * to avoid code analysis picking up the name of the same function in the standard library.
+         * */
+
+        var elmModuleText =
+            """
+            module Test exposing (..)
+
+            
+            convert0OrMore_base3 : Int -> Int -> Int -> ( Int, Int )
+            convert0OrMore_base3 soFar offset srcBytes =
+                let
+                    nextChar =
+                        Pine_kernel.take [ 4, Pine_kernel.skip [ offset, srcBytes ] ]
+                in
+                if Pine_kernel.equal [ Pine_kernel.length nextChar, 0 ] then
+                    -- We ran out of characters, return what we have so far
+                    ( soFar, offset )
+
+                else
+                    case nextChar of
+                        '0' ->
+                            convert0OrMore_base3 (soFar * 3) (offset + 4) srcBytes
+
+                        '1' ->
+                            convert0OrMore_base3 (soFar * 3 + 1) (offset + 4) srcBytes
+
+                        '2' ->
+                            convert0OrMore_base3 (soFar * 3 + 2) (offset + 4) srcBytes
+
+                        _ ->
+                            ( 0, -1 )
+            """;
+
+        var appCodeTree =
+            BlobTreeWithStringPath.EmptyTree
+            .SetNodeAtPathSorted(
+                ["elm.json"],
+                BlobTreeWithStringPath.Blob(Encoding.UTF8.GetBytes(elmJsonFile)))
+            .SetNodeAtPathSorted(
+                ["src", "Test.elm"],
+                BlobTreeWithStringPath.Blob(Encoding.UTF8.GetBytes(elmModuleText)));
+
+        var compiledEnv =
+            ElmCompiler.CompileInteractiveEnvironment(
+                appCodeTree,
+                rootFilePaths: [["src", "Test.elm"]],
+                skipLowering: true,
+                skipFilteringForSourceDirs: false)
+            .Extract(err => throw new System.Exception(err));
+
+        var parseCache = new PineVMParseCache();
+
+        var compiledDecl =
+            ElmInteractiveEnvironment.ParseFunctionFromElmModule(
+                compiledEnv,
+                moduleName: "Test",
+                declarationName: "convert0OrMore_base3",
+                parseCache: parseCache)
+            .Extract(err => throw new System.Exception(err));
+
+        compiledDecl.Should().NotBeNull();
+
+        var stubTextualRepr =
+            EncodePineExpressionAsJson.ToJsonString(compiledDecl.functionRecord.InnerFunction);
+
+        var functionApplicationRecord =
+            ElmInteractiveEnvironment.ApplyFunctionArgumentsForEvalExpr(
+                compiledDecl.functionRecord,
+                [
+                    IntegerEncoding.EncodeSignedInteger(0),
+                    IntegerEncoding.EncodeSignedInteger(0),
+                    PineValue.EmptyBlob,
+                ])
+            .Extract(err => throw new System.Exception("Failed applying function arguments: " + err));
+
+        var namesFromCompiledEnv =
+            new NamesFromCompiledEnv(compiledEnv, parseCache);
+
+        var staticProgram =
+            PineVM.CodeAnalysis.ParseAsStaticMonomorphicProgramAssigningNames(
+                rootExpression: functionApplicationRecord.expression,
+                rootEnvironment: functionApplicationRecord.environment,
+                namesFromCompiledEnv.NameFromDecl,
+                parseCache)
+            .Extract(err => throw new System.Exception("Failed parsing as static program: " + err));
+
+        staticProgram.Should().NotBeNull();
+
+        var wholeProgramText = RenderStaticProgram(staticProgram.staticProgram);
+
+        wholeProgramText.Trim().Should().Be(
+            """"
+            Test.convert0OrMore_base3 param_1_0 param_1_1 param_1_2 =
+                if
+                    Pine_kernel.equal
+                        [ Pine_kernel.length
+                            Pine_kernel.take
+                                [ 4
+                                , Pine_kernel.skip
+                                    [ param_1_1
+                                    , param_1_2
+                                    ]
+                                ]
+                        , 0
+                        ]
+                then
+                    [ param_1_0
+                    , param_1_1
+                    ]
+
+                else if
+                    Pine_kernel.equal
+                        [ Pine_kernel.take
+                            [ 4
+                            , Pine_kernel.skip
+                                [ param_1_1
+                                , param_1_2
+                                ]
+                            ]
+                        , '0'
+                        ]
+                then
+                    Test.convert0OrMore_base3
+                        (Pine_kernel.int_mul
+                            [ param_1_0
+                            , 3
+                            ]
+                        )
+                        (Pine_kernel.int_add
+                            [ param_1_1
+                            , 4
+                            ]
+                        )
+                        param_1_2
+
+                else if
+                    Pine_kernel.equal
+                        [ Pine_kernel.take
+                            [ 4
+                            , Pine_kernel.skip
+                                [ param_1_1
+                                , param_1_2
+                                ]
+                            ]
+                        , '1'
+                        ]
+                then
+                    Test.convert0OrMore_base3
+                        (Pine_kernel.int_add
+                            [ Pine_kernel.int_mul
+                                [ param_1_0
+                                , 3
+                                ]
+                            , 1
+                            ]
+                        )
+                        (Pine_kernel.int_add
+                            [ param_1_1
+                            , 4
+                            ]
+                        )
+                        param_1_2
+
+                else if
+                    Pine_kernel.equal
+                        [ Pine_kernel.take
+                            [ 4
+                            , Pine_kernel.skip
+                                [ param_1_1
+                                , param_1_2
+                                ]
+                            ]
+                        , '2'
+                        ]
+                then
+                    Test.convert0OrMore_base3
+                        (Pine_kernel.int_add
+                            [ Pine_kernel.int_mul
+                                [ param_1_0
+                                , 3
+                                ]
+                            , 2
+                            ]
+                        )
+                        (Pine_kernel.int_add
+                            [ param_1_1
+                            , 4
+                            ]
+                        )
+                        param_1_2
+
+                else
+                    [0,-1]
+            """"
+            .Trim());
+    }
+
+    [Fact]
     public void Render_StaticExpression_RenderToString_Scenarios()
     {
         static StaticExpression Param_1_0() =>
