@@ -6,6 +6,7 @@ using Pine.Core.Json;
 using Pine.Core.PopularEncodings;
 using Pine.Elm;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using Xunit;
@@ -106,7 +107,7 @@ public class CodeAnalysisTests
             new NamesFromCompiledEnv(compiledEnv, parseCache);
 
         var staticProgram =
-            PineVM.CodeAnalysis.ParseAsStaticMonomorphicProgram(
+            PineVM.CodeAnalysis.ParseAsStaticMonomorphicProgramAssigningNames(
                 rootExpression: functionApplicationRecord.expression,
                 rootEnvironment: functionApplicationRecord.environment,
                 nameForDecl: namesFromCompiledEnv.NameFromDecl,
@@ -115,16 +116,7 @@ public class CodeAnalysisTests
 
         staticProgram.Should().NotBeNull();
 
-
-        IReadOnlyList<string> namedFunctionsTexts =
-            [..staticProgram.staticProgram.NamedFunctions
-            .OrderBy(kvp => kvp.Key)
-            .Select(kvp => RenderNamedFunction(kvp.Key, kvp.Value.body))];
-
-        var wholeProgramText =
-            string.Join(
-                "\n\n",
-                namedFunctionsTexts);
+        var wholeProgramText = RenderStaticProgram(staticProgram.staticProgram);
 
         wholeProgramText.Trim().Should().Be(
             """"
@@ -246,7 +238,7 @@ public class CodeAnalysisTests
             new NamesFromCompiledEnv(compiledEnv, parseCache);
 
         var staticProgram =
-            PineVM.CodeAnalysis.ParseAsStaticMonomorphicProgram(
+            PineVM.CodeAnalysis.ParseAsStaticMonomorphicProgramAssigningNames(
                 rootExpression: functionApplicationRecord.expression,
                 rootEnvironment: functionApplicationRecord.environment,
                 nameForDecl: namesFromCompiledEnv.NameFromDecl,
@@ -255,15 +247,7 @@ public class CodeAnalysisTests
 
         staticProgram.Should().NotBeNull();
 
-        IReadOnlyList<string> namedFunctionsTexts =
-            [..staticProgram.staticProgram.NamedFunctions
-            .OrderBy(kvp => kvp.Key)
-            .Select(kvp => RenderNamedFunction(kvp.Key, kvp.Value.body))];
-
-        var wholeProgramText =
-            string.Join(
-                "\n\n",
-                namedFunctionsTexts);
+        var wholeProgramText = RenderStaticProgram(staticProgram.staticProgram);
 
         wholeProgramText.Trim().Should().Be(
             """"
@@ -384,7 +368,7 @@ public class CodeAnalysisTests
             new NamesFromCompiledEnv(compiledEnv, parseCache);
 
         var staticProgram =
-            PineVM.CodeAnalysis.ParseAsStaticMonomorphicProgram(
+            PineVM.CodeAnalysis.ParseAsStaticMonomorphicProgramAssigningNames(
                 rootExpression: functionApplicationRecord.expression,
                 rootEnvironment: functionApplicationRecord.environment,
                 namesFromCompiledEnv.NameFromDecl,
@@ -393,15 +377,7 @@ public class CodeAnalysisTests
 
         staticProgram.Should().NotBeNull();
 
-        IReadOnlyList<string> namedFunctionsTexts =
-            [..staticProgram.staticProgram.NamedFunctions
-            .OrderBy(kvp => kvp.Key)
-            .Select(kvp => RenderNamedFunction(kvp.Key, kvp.Value.body))];
-
-        var wholeProgramText =
-            string.Join(
-                "\n\n",
-                namedFunctionsTexts);
+        var wholeProgramText = RenderStaticProgram(staticProgram.staticProgram);
 
         wholeProgramText.Trim().Should().Be(
             """"
@@ -473,184 +449,125 @@ public class CodeAnalysisTests
             .Trim());
     }
 
-    static string RenderParamRef(StaticExpression.ParameterReferenceExpression paramRef)
-    {
-        return "param_" + string.Join('_', paramRef.Path);
-    }
-
-    static string RenderNamedFunction(
-        string functionName,
-        StaticExpression functionBody)
-    {
-        var allParameters =
-            StaticExpression.ImplicitFunctionParameterList(functionBody);
-
-        var headerText =
-            functionName + " " + string.Join(" ", allParameters.Select(RenderParamRef));
-
-        return
-            headerText + " =\n" +
-            StaticExpressionDisplay.RenderToString(
-                functionBody,
-                blobValueRenderer: StaticExpressionDisplay.DefaultBlobRenderer,
-                functionNameRenderer: fn => fn,
-                indentString: "    ",
-                indentLevel: 1);
-    }
-
     [Fact]
     public void Render_StaticExpression_RenderToString_Scenarios()
     {
         static StaticExpression Param_1_0() =>
-            StaticExpression.ParameterReferenceInstance([1, 0]);
+            StaticExpression.BuildPathToExpression([1, 0], StaticExpression.EnvironmentInstance);
+
+        static StaticFunctionInterface InterfaceFromParamCount(int paramCount) =>
+            new(
+                [
+                    .. Enumerable.Range(0, paramCount)
+                    .Select(i => (IReadOnlyList<int>)[1, i])
+                ]);
+
+        static StaticExpression FunctionApplicationInstance(string functionName, IReadOnlyList<StaticExpression> arguments) =>
+            StaticExpression.FunctionApplicationInstance(
+                functionName,
+                StaticExpression.ListInstance(
+                    [
+                    StaticExpression.ListInstance([]),
+                    StaticExpression.ListInstance(arguments)
+                    ]));
 
         var scenarios = new[]
         {
             new
             {
                 Name = "Literal_Integer",
-                Expr = StaticExpression.LiteralInstance(
-                    ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1))),
+                Program =
+                new StaticProgram(
+                    ImmutableDictionary<string, (Expression, StaticFunctionInterface, StaticExpression<string>, PineValueClass)>.Empty
+                    .SetItem(
+                        "decl_a",
+                        (Expression.ListInstance([]),
+                        InterfaceFromParamCount(0),
+                        StaticExpression.LiteralInstance(
+                            ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1))),
+                        PineValueClass.Create([])))),
                 Expected = """
-                1
+                decl_a =
+                    1
+                """
+            },
+
+            new
+            {
+                Name = "Literal_Boolean_True",
+                Program =
+                new StaticProgram(
+                    ImmutableDictionary<string, (Expression, StaticFunctionInterface, StaticExpression<string>, PineValueClass)>.Empty
+                    .SetItem(
+                        "decl_a",
+                        (Expression.ListInstance([]),
+                        InterfaceFromParamCount(0),
+                        StaticExpression.LiteralInstance(
+                            ElmValueEncoding.ElmValueAsPineValue(ElmValue.TrueValue)),
+                        PineValueClass.Create([])))),
+
+                Expected = """
+                decl_a =
+                    True
                 """
             },
 
             new
             {
                 Name = "Parameter_Ref",
-                Expr = Param_1_0(),
+                Program =
+                new StaticProgram(
+                    ImmutableDictionary<string, (Expression, StaticFunctionInterface, StaticExpression<string>, PineValueClass)>.Empty
+                    .SetItem(
+                        "decl_a",
+                        (Expression.ListInstance([]),
+                        InterfaceFromParamCount(1),
+                        Param_1_0(),
+                        PineValueClass.Create([])))),
+
                 Expected = """
-                param_1_0
+                decl_a param_1_0 =
+                    param_1_0
                 """
             },
 
             new
             {
                 Name = "Literal_Char",
-                Expr = StaticExpression.LiteralInstance(
-                    ElmValueEncoding.ElmValueAsPineValue(ElmValue.CharInstance((int)'a'))),
+                Program =
+                new StaticProgram(
+                    ImmutableDictionary<string, (Expression, StaticFunctionInterface, StaticExpression<string>, PineValueClass)>.Empty
+                    .SetItem(
+                        "decl_a",
+                        (Expression.ListInstance([]),
+                        InterfaceFromParamCount(0),
+                        StaticExpression.LiteralInstance(
+                            ElmValueEncoding.ElmValueAsPineValue(ElmValue.CharInstance((int)'4'))),
+                        PineValueClass.Create([])))),
                 Expected = """
-                'a'
+                decl_a =
+                    '4'
                 """
             },
 
             new
             {
                 Name = "List_Param_And_Int",
-                Expr = StaticExpression.ListInstance(
-                    [
-                        Param_1_0(),
-                        StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1)))
-                    ]),
-                Expected = """
-                [ param_1_0
-                , 1
-                ]
-                """
-            },
-
-            new
-            {
-                Name = "List_Param_And_Char",
-                Expr = StaticExpression.ListInstance([
-                    Param_1_0(),
-                    StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.CharInstance((int)'b')))
-                ]),
-                Expected = """
-                [ param_1_0
-                , 'b'
-                ]
-                """
-            },
-
-            new
-            {
-                Name = "List_containing_function_application",
-                Expr = StaticExpression.ListInstance(
-                    [
-                        StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(41))),
-
-                        StaticExpression.FunctionApplicationInstance(
-                            functionName: "test",
-                            arguments:
-                            [
-                                StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(123))),
-                            ])
-                    ]),
-                Expected = """
-                [ 41
-                , test
-                    123
-                ]
-                """
-            },
-
-            new
-            {
-                Name = "Nested_list",
-                Expr = StaticExpression.ListInstance(
-                    [
-                        StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(41))),
-
+                Program =
+                new StaticProgram(
+                    ImmutableDictionary<string, (Expression, StaticFunctionInterface, StaticExpression<string>, PineValueClass)>.Empty
+                    .SetItem(
+                        "decl_a",
+                        (Expression.ListInstance([]),
+                        InterfaceFromParamCount(1),
                         StaticExpression.ListInstance(
                             [
-                                StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(71))),
-
-                                StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(73))),
-                            ])
-                    ]),
+                                Param_1_0(),
+                                StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1)))
+                            ]),
+                        PineValueClass.Create([])))),
                 Expected = """
-                [ 41
-                , [ 71
-                  , 73
-                  ]
-                ]
-                """
-            },
-
-            new
-            {
-                Name = "Nested_list_twice",
-                Expr = StaticExpression.ListInstance(
-                    [
-                        StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(41))),
-
-                        StaticExpression.ListInstance(
-                            [
-                                StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(71))),
-
-                                StaticExpression.ListInstance(
-                                    [
-                                        StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(73))),
-
-                                        StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(79))),
-                                    ])
-                            ])
-                    ]),
-                Expected = """
-                [ 41
-                , [ 71
-                  , [ 73
-                    , 79
-                    ]
-                  ]
-                ]
-                """
-            },
-
-            new
-            {
-                Name = "KernelApplication_With_List",
-                Expr = StaticExpression.KernelApplicationInstance(
-                    function: "int_is_sorted_asc",
-                    input: StaticExpression.ListInstance(
-                        [
-                            Param_1_0(),
-                            StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1)))
-                        ])),
-                Expected = """
-                Pine_kernel.int_is_sorted_asc
+                decl_a param_1_0 =
                     [ param_1_0
                     , 1
                     ]
@@ -659,207 +576,481 @@ public class CodeAnalysisTests
 
             new
             {
+                Name = "List_Param_And_Char",
+                Program =
+                new StaticProgram(
+                    ImmutableDictionary<string, (Expression, StaticFunctionInterface, StaticExpression<string>, PineValueClass)>.Empty
+                    .SetItem(
+                        "decl_a",
+                        (Expression.ListInstance([]),
+                        InterfaceFromParamCount(1),
+                        StaticExpression.ListInstance([
+                            Param_1_0(),
+                            StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.CharInstance((int)'b')))
+                        ]),
+                        PineValueClass.Create([])))),
+                Expected = """
+                decl_a param_1_0 =
+                    [ param_1_0
+                    , 'b'
+                    ]
+                """
+            },
+
+            new
+            {
+                Name = "List_containing_function_application",
+                Program =
+                new StaticProgram(
+                    ImmutableDictionary<string, (Expression, StaticFunctionInterface, StaticExpression<string>, PineValueClass)>.Empty
+                    .SetItem(
+                        "decl_a",
+                        (Expression.ListInstance([]),
+                        InterfaceFromParamCount(0),
+                        StaticExpression.ListInstance(
+                            [
+                                StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(41))),
+                                FunctionApplicationInstance(
+                                    functionName: "test",
+                                    arguments:
+                                    [
+                                        StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(123))),
+                                    ])
+                            ]),
+                        PineValueClass.Create([])))
+                    .SetItem(
+                        "test",
+                        (Expression.ListInstance([]),
+                        InterfaceFromParamCount(1),
+                        Param_1_0(),
+                        PineValueClass.Create([])))),
+                Expected = """
+                decl_a =
+                    [ 41
+                    , test
+                        123
+                    ]
+
+
+                test param_1_0 =
+                    param_1_0
+                """
+            },
+
+            new
+            {
+                Name = "Nested_list",
+                Program =
+                new StaticProgram(
+                    ImmutableDictionary<string, (Expression, StaticFunctionInterface, StaticExpression<string>, PineValueClass)>.Empty
+                    .SetItem(
+                        "decl_a",
+                        (Expression.ListInstance([]),
+                        InterfaceFromParamCount(0),
+                        StaticExpression.ListInstance(
+                            [
+                                StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(41))),
+                                StaticExpression.ListInstance(
+                                    [
+                                        StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(71))),
+                                        StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(73))),
+                                    ])
+                            ]),
+                        PineValueClass.Create([])))),
+                Expected = """
+                decl_a =
+                    [ 41
+                    , [ 71
+                      , 73
+                      ]
+                    ]
+                """
+            },
+
+            new
+            {
+                Name = "Nested_list_twice",
+                Program =
+                new StaticProgram(
+                    ImmutableDictionary<string, (Expression, StaticFunctionInterface, StaticExpression<string>, PineValueClass)>.Empty
+                    .SetItem(
+                        "decl_a",
+                        (Expression.ListInstance([]),
+                        InterfaceFromParamCount(0),
+                        StaticExpression.ListInstance(
+                            [
+                                StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(41))),
+                                StaticExpression.ListInstance(
+                                    [
+                                        StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(71))),
+                                        StaticExpression.ListInstance(
+                                            [
+                                                StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(73))),
+                                                StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(79))),
+                                            ])
+                                    ])
+                            ]),
+                        PineValueClass.Create([])))),
+                Expected = """
+                decl_a =
+                    [ 41
+                    , [ 71
+                      , [ 73
+                        , 79
+                        ]
+                      ]
+                    ]
+                """
+            },
+
+            new
+            {
+                Name = "KernelApplication_With_List",
+                Program =
+                new StaticProgram(
+                    ImmutableDictionary<string, (Expression, StaticFunctionInterface, StaticExpression<string>, PineValueClass)>.Empty
+                    .SetItem(
+                        "decl_a",
+                        (Expression.ListInstance([]),
+                        InterfaceFromParamCount(1),
+                        StaticExpression.KernelApplicationInstance(
+                            function: "int_is_sorted_asc",
+                            input: StaticExpression.ListInstance(
+                                [
+                                    Param_1_0(),
+                                    StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1)))
+                                ])),
+                        PineValueClass.Create([])))),
+                Expected = """
+                decl_a param_1_0 =
+                    Pine_kernel.int_is_sorted_asc
+                        [ param_1_0
+                        , 1
+                        ]
+                """
+            },
+
+            new
+            {
                 Name = "Function_Application",
-                Expr =
-                StaticExpression.FunctionApplicationInstance(
-                    functionName: "anon_92e7ce17",
-                    arguments:
-                    [
-                        StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(123))),
-                    ])
-                ,
-                Expected =
-                """"
-                anon_92e7ce17
-                    123
-                """"
+                Program =
+                new StaticProgram(
+                    ImmutableDictionary<string, (Expression, StaticFunctionInterface, StaticExpression<string>, PineValueClass)>.Empty
+                    .SetItem(
+                        "decl_a",
+                        (Expression.ListInstance([]),
+                        InterfaceFromParamCount(0),
+                        FunctionApplicationInstance(
+                            functionName: "decl_b",
+                            arguments:
+                            [
+                                StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(123))),
+                            ]),
+                        PineValueClass.Create([])))
+                    .SetItem(
+                        "decl_b",
+                        (Expression.ListInstance([]),
+                        InterfaceFromParamCount(1),
+                        Param_1_0(),
+                        PineValueClass.Create([])))),
+
+                Expected = """
+                decl_a =
+                    decl_b
+                        123
+
+
+                decl_b param_1_0 =
+                    param_1_0
+                """
             },
 
             new
             {
                 Name = "FunctionApplication_With_Kernel_Arg",
-                Expr = StaticExpression.FunctionApplicationInstance(
-                    functionName: "myFunc",
-                    arguments:
-                    [
-                        StaticExpression.KernelApplicationInstance(
-                            function: "int_add",
-                            input: StaticExpression.ListInstance(
-                                [
-                                    Param_1_0(),
-                                    StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(-1)))
-                                ]))
-                    ]),
-                Expected = """
-                myFunc
-                    (Pine_kernel.int_add
-                        [ param_1_0
-                        , -1
-                        ]
-                    )
-                """
-            },
-
-            new
-            {
-                Name = "Conditional_Complex",
-                Expr = StaticExpression.ConditionalInstance(
-                    condition: StaticExpression.KernelApplicationInstance(
-                        function: "int_is_sorted_asc",
-                        input: StaticExpression.ListInstance(
-                        [
-                            Param_1_0(),
-                            StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1)))
-                        ])),
-                    falseBranch: StaticExpression.KernelApplicationInstance(
-                        function: "int_mul",
-                        input: StaticExpression.ListInstance(
-                        [
-                            StaticExpression.FunctionApplicationInstance(
-                                functionName: "anon_92e7ce17_92a8c7c6",
-                                arguments:
-                                [
-                                    StaticExpression.KernelApplicationInstance(
-                                        function: "int_add",
-                                        input: StaticExpression.ListInstance(
+                Program =
+                new StaticProgram(
+                    ImmutableDictionary<string, (Expression, StaticFunctionInterface, StaticExpression<string>, PineValueClass)>.Empty
+                    .SetItem(
+                        "decl_a",
+                        (Expression.ListInstance([]),
+                        InterfaceFromParamCount(1),
+                        FunctionApplicationInstance(
+                            functionName: "myFunc",
+                            arguments:
+                            [
+                                StaticExpression.KernelApplicationInstance(
+                                    function: "int_add",
+                                    input: StaticExpression.ListInstance(
                                         [
                                             Param_1_0(),
                                             StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(-1)))
                                         ]))
-                                ]),
-                            Param_1_0()
-                        ])),
-                    trueBranch: StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1))))
-                ,
-                Expected = """
-                if
-                    Pine_kernel.int_is_sorted_asc
-                        [ param_1_0
-                        , 1
-                        ]
-                then
-                    1
+                            ]),
+                        PineValueClass.Create([])))
+                    .SetItem(
+                        "myFunc",
+                        (Expression.ListInstance([]),
+                        InterfaceFromParamCount(1),
+                        Param_1_0(),
+                        PineValueClass.Create([])))),
 
-                else
-                    Pine_kernel.int_mul
-                        [ anon_92e7ce17_92a8c7c6
-                            (Pine_kernel.int_add
-                                [ param_1_0
-                                , -1
-                                ]
-                            )
-                        , param_1_0
-                        ]
+                Expected =
                 """
-            },
+                decl_a param_1_0 =
+                    myFunc
+                        (Pine_kernel.int_add
+                            [ param_1_0
+                            , -1
+                            ]
+                        )
+
+
+                myFunc param_1_0 =
+                    param_1_0
+                
+                """
+                },
+
+            new
+            {
+                Name = "Conditional_Complex",
+                Program =
+                new StaticProgram(
+                    ImmutableDictionary<string, (Expression, StaticFunctionInterface, StaticExpression<string>, PineValueClass)>.Empty
+                    .SetItem(
+                        "decl_a",
+                        (Expression.ListInstance([]),
+                        InterfaceFromParamCount(1),
+                        StaticExpression.ConditionalInstance(
+                            condition: StaticExpression.KernelApplicationInstance(
+                                function: "int_is_sorted_asc",
+                                input: StaticExpression.ListInstance(
+                                [
+                                    Param_1_0(),
+                                    StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1)))
+                                ])),
+                            falseBranch: StaticExpression.KernelApplicationInstance(
+                                function: "int_mul",
+                                input: StaticExpression.ListInstance(
+                                [
+                                    FunctionApplicationInstance(
+                                        functionName: "decl_b",
+                                        arguments:
+                                        [
+                                            StaticExpression.KernelApplicationInstance(
+                                                function: "int_add",
+                                                input: StaticExpression.ListInstance(
+                                                [
+                                                    Param_1_0(),
+                                                    StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(-1)))
+                                                ]))
+                                        ]),
+                                    Param_1_0()
+                                ])),
+                            trueBranch: StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1)))),
+                        PineValueClass.Create([])))
+                    .SetItem(
+                        "decl_b",
+                        (Expression.ListInstance([]),
+                        InterfaceFromParamCount(1),
+                        Param_1_0(),
+                        PineValueClass.Create([])))),
+
+                Expected =
+                """
+                decl_a param_1_0 =
+                    if
+                        Pine_kernel.int_is_sorted_asc
+                            [ param_1_0
+                            , 1
+                            ]
+                    then
+                        1
+
+                    else
+                        Pine_kernel.int_mul
+                            [ decl_b
+                                (Pine_kernel.int_add
+                                    [ param_1_0
+                                    , -1
+                                    ]
+                                )
+                            , param_1_0
+                            ]
+
+
+                decl_b param_1_0 =
+                    param_1_0
+                
+                """
+                },
 
             new
             {
                 Name = "Literal_Blob",
-                Expr = StaticExpression.LiteralInstance(PineValue.Blob([0x12, 0x34, 1, 3])),
+                Program =
+                new StaticProgram(
+                    ImmutableDictionary<string, (Expression, StaticFunctionInterface, StaticExpression<string>, PineValueClass)>.Empty
+                    .SetItem(
+                        "decl_a",
+                        (Expression.ListInstance([]),
+                        InterfaceFromParamCount(0),
+                        StaticExpression.LiteralInstance(PineValue.Blob([0x12, 0x34, 1, 3])),
+                        PineValueClass.Create([])))),
                 Expected = """
-                Blob 0x12340103
+                decl_a =
+                    Blob 0x12340103
                 """
             },
 
             new
             {
                 Name = "List_With_Blob_Item",
-                Expr = StaticExpression.ListInstance(
-                    [
-                        StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1))),
-                        StaticExpression.LiteralInstance(PineValue.Blob([0x12, 0x34, 1, 3])),
-                        StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(2)))
-                    ]),
-                Expected = """
-                [ 1
-                , Blob 0x12340103
-                , 2
-                ]
+                Program =
+                new StaticProgram(
+                    ImmutableDictionary<string, (Expression, StaticFunctionInterface, StaticExpression<string>, PineValueClass)>.Empty
+                    .SetItem(
+                        "decl_a",
+                        (Expression.ListInstance([]),
+                        InterfaceFromParamCount(0),
+                        StaticExpression.ListInstance(
+                            [
+                                StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1))),
+                                StaticExpression.LiteralInstance(PineValue.Blob([0x12, 0x34, 1, 3])),
+                                StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(2)))
+                            ]),
+                        PineValueClass.Create([])))),
+
+                Expected =
+                """
+                decl_a =
+                    [ 1
+                    , Blob 0x12340103
+                    , 2
+                    ]
                 """
             },
 
             new
             {
                 Name = "Literal_ListValue_With_Blob_Item",
-                Expr = StaticExpression.LiteralInstance(
-                    PineValue.List(
-                        PineValue.Blob([0x01, 1, 3, 7]),
-                        PineValue.Blob([0xAB, 1, 3, 7])
-                    )),
+                Program =
+                new StaticProgram(
+                    ImmutableDictionary<string, (Expression, StaticFunctionInterface, StaticExpression<string>, PineValueClass)>.Empty
+                    .SetItem(
+                        "decl_a",
+                        (Expression.ListInstance([]),
+                        InterfaceFromParamCount(0),
+                        StaticExpression.LiteralInstance(
+                            PineValue.List(
+                                PineValue.Blob([0x01, 1, 3, 7]),
+                                PineValue.Blob([0xAB, 1, 3, 7])
+                            )),
+                        PineValueClass.Create([])))),
                 Expected = """
-                [Blob 0x01010307, Blob 0xab010307]
+                decl_a =
+                    [Blob 0x01010307, Blob 0xab010307]
                 """
             },
+
             new
             {
                 Name = "FunctionApplication_With_Blob_Arg",
-                Expr = StaticExpression.FunctionApplicationInstance(
-                    functionName: "myFunc",
-                    arguments: [
-                        StaticExpression.LiteralInstance(PineValue.Blob([0x12, 0x34, 1, 7]))
-                    ]),
-                Expected = """
-                myFunc
-                    (Blob 0x12340107)
+                Program =
+                new StaticProgram(
+                    ImmutableDictionary<string, (Expression, StaticFunctionInterface, StaticExpression<string>, PineValueClass)>.Empty
+                    .SetItem(
+                        "decl_a",
+                        (Expression.ListInstance([]),
+                        InterfaceFromParamCount(0),
+                        FunctionApplicationInstance(
+                            functionName: "myFunc",
+                            arguments: [
+                                StaticExpression.LiteralInstance(PineValue.Blob([0x12, 0x34, 1, 7]))
+                            ]),
+                        PineValueClass.Create([])))
+                    .SetItem(
+                        "myFunc",
+                        (Expression.ListInstance([]),
+                        InterfaceFromParamCount(1),
+                        Param_1_0(),
+                        PineValueClass.Create([])))),
+
+                Expected =
                 """
-            },
+                decl_a =
+                    myFunc
+                        (Blob 0x12340107)
+
+
+                myFunc param_1_0 =
+                    param_1_0
+                
+                """
+                },
+
             new
             {
                 Name = "Conditional_Nested_ElseIf",
-                Expr = StaticExpression.ConditionalInstance(
-                    condition: StaticExpression.KernelApplicationInstance(
-                        function: "int_is_sorted_asc",
-                        input: StaticExpression.ListInstance(
-                        [
-                            Param_1_0(),
-                            StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(0)))
-                        ])),
-                    falseBranch: StaticExpression.ConditionalInstance(
-                        condition: StaticExpression.KernelApplicationInstance(
-                            function: "int_is_sorted_asc",
-                            input: StaticExpression.ListInstance(
-                            [
-                                Param_1_0(),
-                                StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1)))
-                            ])),
-                        falseBranch: StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(2))),
-                        trueBranch: StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1)))) ,
-                    trueBranch: StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(0))))
-                ,
-                Expected = """
-                if
-                    Pine_kernel.int_is_sorted_asc
-                        [ param_1_0
-                        , 0
-                        ]
-                then
-                    0
+                Program =
+                new StaticProgram(
+                    ImmutableDictionary<string, (Expression, StaticFunctionInterface, StaticExpression<string>, PineValueClass)>.Empty
+                    .SetItem(
+                        "decl_a",
+                        (Expression.ListInstance([]),
+                        InterfaceFromParamCount(1),
+                        StaticExpression.ConditionalInstance(
+                            condition: StaticExpression.KernelApplicationInstance(
+                                function: "int_is_sorted_asc",
+                                input: StaticExpression.ListInstance(
+                                [
+                                    Param_1_0(),
+                                    StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(0)))
+                                ])),
+                            falseBranch: StaticExpression.ConditionalInstance(
+                                condition: StaticExpression.KernelApplicationInstance(
+                                    function: "int_is_sorted_asc",
+                                    input: StaticExpression.ListInstance(
+                                    [
+                                        Param_1_0(),
+                                        StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1)))
+                                    ])),
+                                falseBranch: StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(2))),
+                                trueBranch: StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1)))) ,
+                            trueBranch: StaticExpression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(0)))),
+                        PineValueClass.Create([])))),
 
-                else if
-                    Pine_kernel.int_is_sorted_asc
-                        [ param_1_0
-                        , 1
-                        ]
-                then
-                    1
-
-                else
-                    2
+                Expected =
                 """
-            }
+                decl_a param_1_0 =
+                    if
+                        Pine_kernel.int_is_sorted_asc
+                            [ param_1_0
+                            , 0
+                            ]
+                    then
+                        0
+
+                    else if
+                        Pine_kernel.int_is_sorted_asc
+                            [ param_1_0
+                            , 1
+                            ]
+                    then
+                        1
+
+                    else
+                        2
+                """
+            },
         };
 
         for (var i = 0; i < scenarios.Length; i++)
         {
             var sc = scenarios[i];
 
-            var actual =
-                StaticExpressionDisplay.RenderToString(
-                    sc.Expr,
-                    blobValueRenderer: StaticExpressionDisplay.DefaultBlobRenderer,
-                    functionNameRenderer: fn => fn,
-                    indentString: "    ");
+            var actual = RenderStaticProgram(sc.Program);
 
             try
             {
@@ -873,6 +1064,63 @@ public class CodeAnalysisTests
                 throw new System.Exception($"Failure in scenario '{sc.Name}' at index {i}. Actual was:\n{actual}", e);
             }
         }
+    }
+
+    static string RenderStaticProgram(StaticProgram staticProgram)
+    {
+        IReadOnlyList<string> namedFunctionsTexts =
+            [..staticProgram.NamedFunctions
+            .OrderBy(kvp => kvp.Key)
+            .Select(kvp => RenderNamedFunction(staticProgram, kvp.Key, kvp.Value.body))];
+
+        var wholeProgramText =
+            string.Join(
+                "\n\n",
+                namedFunctionsTexts);
+
+        return wholeProgramText;
+    }
+
+    static string RenderNamedFunction(
+        StaticProgram staticProgram,
+        string functionName,
+        StaticExpression functionBody)
+    {
+        var functionInterface = staticProgram.GetFunctionApplicationRendering(functionName).FunctionInterface;
+
+        var functionParameters = functionInterface.ParamsPaths;
+
+        var headerText =
+            (functionName + " " + string.Join(" ", functionParameters.Select(RenderParamRef))).Trim() + " =";
+
+        return
+            headerText +
+            "\n" +
+            StaticExpressionDisplay.RenderToString(
+                functionBody,
+                blobValueRenderer: StaticExpressionDisplay.DefaultBlobRenderer,
+                functionApplicationRenderer: staticProgram.GetFunctionApplicationRendering,
+                environmentPathReferenceRenderer: RenderParamRef(functionInterface),
+                indentString: "    ",
+                indentLevel: 1);
+    }
+
+    private static System.Func<IReadOnlyList<int>, string?> RenderParamRef(StaticFunctionInterface functionInterface)
+    {
+        return path =>
+        {
+            if (functionInterface.ParamsPaths.Contains(path, IntPathEqualityComparer.Instance))
+            {
+                return RenderParamRef(path);
+            }
+
+            return null;
+        };
+    }
+
+    private static string RenderParamRef(IReadOnlyList<int> path)
+    {
+        return "param_" + string.Join('_', path);
     }
 
     [Fact]

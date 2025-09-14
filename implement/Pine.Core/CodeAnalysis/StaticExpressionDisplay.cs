@@ -20,25 +20,45 @@ namespace Pine.Core.CodeAnalysis;
 public static class StaticExpressionDisplay
 {
     /// <summary>
+    /// Describes how to render an application of a user-defined function.
+    /// Produced by the host program (e.g. via <see cref="StaticProgram.GetFunctionApplicationRendering"/>)
+    /// so the display layer can obtain canonical ordering and mapping of arguments.
+    /// </summary>
+    /// <param name="FunctionName">The canonical name to show for the function in the rendered output.</param>
+    /// <param name="FunctionInterface">The static interface containing the ordered parameter reference paths used to reconstruct argument expressions.</param>
+    public record FunctionApplicationRendering(
+        string FunctionName,
+        StaticFunctionInterface FunctionInterface);
+
+    /// <summary>
     /// Render an expression to a multi-line string with the given indentation string.
     /// Line endings are always <c>LF</c> to ensure consistent rendering across platforms.
     /// </summary>
     /// <param name="expression">Expression to render.</param>
     /// <param name="blobValueRenderer">Function to render blob values (receives a <see cref="PineValue.BlobValue"/> and returns the textual form plus a flag indicating if parentheses are needed when embedded).</param>
-    /// <param name="functionNameRenderer">Function to render function names.</param>
+    /// <param name="functionApplicationRenderer">Function to render function application.</param>
+    /// <param name="environmentPathReferenceRenderer">Function to render environment path references.</param>
     /// <param name="indentString">String used for one indentation step (e.g., two spaces).</param>
     /// <param name="indentLevel">Initial indentation level to apply to the root expression.</param>
     /// <returns>Formatted string representation using only <c>\n</c> as line terminators.</returns>
     public static string RenderToString<TFunctionName>(
         this StaticExpression<TFunctionName> expression,
         Func<PineValue.BlobValue, (string exprText, bool needsParens)> blobValueRenderer,
-        Func<TFunctionName, string> functionNameRenderer,
+        Func<TFunctionName, FunctionApplicationRendering> functionApplicationRenderer,
+        Func<IReadOnlyList<int>, string?> environmentPathReferenceRenderer,
         string indentString,
         int indentLevel = 0)
     {
         var result = new System.Text.StringBuilder();
 
-        foreach (var (indent, text) in RenderToLines(expression, blobValueRenderer, functionNameRenderer, indentLevel, containerDelimits: true))
+        foreach (var (indent, text) in
+            RenderToLines(
+                expression,
+                blobValueRenderer,
+                functionApplicationRenderer,
+                environmentPathReferenceRenderer,
+                indentLevel,
+                containerDelimits: true))
         {
             for (var i = 0; i < indent; ++i)
             {
@@ -58,7 +78,8 @@ public static class StaticExpressionDisplay
     /// </summary>
     /// <param name="expression">Expression to render.</param>
     /// <param name="blobValueRenderer">Function to render blob values.</param>
-    /// <param name="functionNameRenderer">Function to render function names.</param>
+    /// <param name="functionApplicationRenderer">Function to render function application.</param>
+    /// <param name="environmentPathReferenceRenderer">Function to render environment path references.</param>
     /// <param name="indentLevel">Indentation level for the first rendered line of the <paramref name="expression"/>.</param>
     /// <param name="containerDelimits">
     /// If <c>true</c>, the renderer assumes the container (caller) handles delimiters for grouped constructs.
@@ -68,10 +89,22 @@ public static class StaticExpressionDisplay
     public static IEnumerable<(int indent, string text)> RenderToLines<TFunctionName>(
         StaticExpression<TFunctionName> expression,
         Func<PineValue.BlobValue, (string exprText, bool needsParens)> blobValueRenderer,
-        Func<TFunctionName, string> functionNameRenderer,
+        Func<TFunctionName, FunctionApplicationRendering> functionApplicationRenderer,
+        Func<IReadOnlyList<int>, string?> environmentPathReferenceRenderer,
         int indentLevel,
         bool containerDelimits)
     {
+        if (StaticExpression<TFunctionName>.TryParseAsPathToExpression(expression, StaticExpression<TFunctionName>.EnvironmentInstance) is { } path)
+        {
+            var pathText = environmentPathReferenceRenderer(path);
+
+            if (pathText is not null)
+            {
+                yield return (indentLevel, pathText);
+                yield break;
+            }
+        }
+
         switch (expression)
         {
             case StaticExpression<TFunctionName>.Literal literal:
@@ -109,7 +142,8 @@ public static class StaticExpressionDisplay
                                 RenderToLines(
                                     item,
                                     blobValueRenderer,
-                                    functionNameRenderer,
+                                    functionApplicationRenderer,
+                                    environmentPathReferenceRenderer,
                                     indentLevel,
                                     containerDelimits: true)
                                 .ToList();
@@ -162,7 +196,8 @@ public static class StaticExpressionDisplay
                     foreach (var line in RenderToLines(
                         kernel.Input,
                         blobValueRenderer,
-                        functionNameRenderer,
+                        functionApplicationRenderer,
+                        environmentPathReferenceRenderer,
                         indentLevel + 1,
                         containerDelimits: true))
                     {
@@ -178,27 +213,28 @@ public static class StaticExpressionDisplay
                     yield break;
                 }
 
-            case StaticExpression<TFunctionName>.ParameterReferenceExpression paramRef:
-                {
-                    yield return (indentLevel, paramRef.ToString());
-                    yield break;
-                }
-
             case StaticExpression<TFunctionName>.FunctionApplication fnApp:
                 {
+                    var applicationInfo = functionApplicationRenderer(fnApp.FunctionName);
+
+                    var functionNameString = applicationInfo.FunctionName;
+
+                    var argumentsExprs =
+                        applicationInfo.FunctionInterface.ParamsPaths
+                        .Select(paramPath => StaticExpression<TFunctionName>.BuildReducedPathToExpression(paramPath, fnApp.Arguments))
+                        .ToList();
+
                     var argumentsLines =
-                        fnApp.Arguments
+                        argumentsExprs
                         .SelectMany(arg =>
                         RenderToLines(
                             arg,
                             blobValueRenderer,
-                            functionNameRenderer,
+                            functionApplicationRenderer,
+                            environmentPathReferenceRenderer,
                             indentLevel + 1,
                             containerDelimits: false))
                         .ToList();
-
-                    var functionNameString =
-                        functionNameRenderer(fnApp.FunctionName);
 
                     if (argumentsLines.Count is 0)
                     {
@@ -244,7 +280,8 @@ public static class StaticExpressionDisplay
                     foreach (var line in RenderToLines(
                         cond.Condition,
                         blobValueRenderer,
-                        functionNameRenderer,
+                        functionApplicationRenderer,
+                        environmentPathReferenceRenderer,
                         indentLevel + 1,
                         containerDelimits: true))
                     {
@@ -256,7 +293,8 @@ public static class StaticExpressionDisplay
                     foreach (var line in RenderToLines(
                         cond.TrueBranch,
                         blobValueRenderer,
-                        functionNameRenderer,
+                        functionApplicationRenderer,
+                        environmentPathReferenceRenderer,
                         indentLevel + 1,
                         containerDelimits: true))
                     {
@@ -280,7 +318,8 @@ public static class StaticExpressionDisplay
                         foreach (var line in RenderToLines(
                             nested.Condition,
                             blobValueRenderer,
-                            functionNameRenderer,
+                            functionApplicationRenderer,
+                            environmentPathReferenceRenderer,
                             indentLevel + 1,
                             containerDelimits: true))
                         {
@@ -292,7 +331,8 @@ public static class StaticExpressionDisplay
                         foreach (var line in RenderToLines(
                             nested.TrueBranch,
                             blobValueRenderer,
-                            functionNameRenderer,
+                            functionApplicationRenderer,
+                            environmentPathReferenceRenderer,
                             indentLevel + 1,
                             containerDelimits: true))
                         {
@@ -309,7 +349,8 @@ public static class StaticExpressionDisplay
                     foreach (var line in RenderToLines(
                         falseBranch,
                         blobValueRenderer,
-                        functionNameRenderer,
+                        functionApplicationRenderer,
+                        environmentPathReferenceRenderer,
                         indentLevel + 1,
                         containerDelimits: true))
                     {

@@ -1,3 +1,4 @@
+using Pine.Core.PopularEncodings;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -16,6 +17,12 @@ public abstract record StaticExpression<TFunctionName>
     /// Number of subexpressions contained in this expression.
     /// </summary>
     public abstract int SubexpressionCount { get; }
+
+    /// <summary>
+    /// Represents the <see cref="Expression.Environment"/>.
+    /// </summary>
+    public static readonly StaticExpression<TFunctionName> EnvironmentInstance =
+        new Environment();
 
     /// <summary>
     /// Create a list expression from the given items.
@@ -60,21 +67,14 @@ public abstract record StaticExpression<TFunctionName>
         new KernelApplication(function, input);
 
     /// <summary>
-    /// Create a parameter reference expression identified by a path inside the original evaluation environment.
-    /// </summary>
-    /// <param name="path">Path of indices identifying the parameter in the environment.</param>
-    public static StaticExpression<TFunctionName> ParameterReferenceInstance(IReadOnlyList<int> path) =>
-        new ParameterReferenceExpression(path);
-
-    /// <summary>
     /// Create an application of a user-defined (named) function to a list of argument expressions.
     /// </summary>
     /// <param name="functionName">The function name.</param>
-    /// <param name="arguments">Argument expressions in evaluation order.</param>
-    public static StaticExpression<TFunctionName> FunctionApplicationInstance(
+    /// <param name="arguments">Arguments passed to the function.</param>
+    public static FunctionApplication FunctionApplicationInstance(
         TFunctionName functionName,
-        IReadOnlyList<StaticExpression<TFunctionName>> arguments) =>
-        new FunctionApplication(functionName, arguments);
+        StaticExpression<TFunctionName> arguments) =>
+        new(functionName, arguments);
 
     /// <summary>
     /// Analog to <see cref="Expression.List"/>.
@@ -378,62 +378,15 @@ public abstract record StaticExpression<TFunctionName>
     }
 
     /// <summary>
-    /// Parameters are identified by the path inside the environment of the original Pine expression.
+    /// Corresponds to the <see cref="Expression.Environment"/>.
     /// </summary>
-    public record ParameterReferenceExpression :
+    public sealed record Environment :
         StaticExpression<TFunctionName>
     {
         /// <summary>
-        /// Create a parameter reference identified by <paramref name="path"/> within the original environment.
+        /// Always returns zero, as an <see cref="Environment"/> expression does not contain any subexpressions.
         /// </summary>
-        /// <param name="path">Path of indices that identify the parameter.</param>
-        public ParameterReferenceExpression(IReadOnlyList<int> path)
-        {
-            Path = path;
-        }
-
-        /// <summary>
-        /// Gets the path inside the environment of the original Pine expression that identifies the parameter.
-        /// </summary>
-        public IReadOnlyList<int> Path { get; } = [];
-
-        /// <inheritdoc/>
         public override int SubexpressionCount { get; } = 0;
-
-        /// <inheritdoc/>
-        public override string ToString()
-        {
-            return $"param_{string.Join("_", Path)}";
-        }
-
-        /// <inheritdoc/>
-        public virtual bool Equals(ParameterReferenceExpression? other)
-        {
-            if (other is not { } notNull)
-                return false;
-
-            if (notNull.Path.Count != Path.Count)
-                return false;
-
-            for (var i = 0; i < Path.Count; i++)
-            {
-                if (other.Path[i] != Path[i])
-                    return false;
-            }
-
-            return true;
-        }
-
-        /// <inheritdoc/>
-        public override int GetHashCode()
-        {
-            var hashCode = new HashCode();
-
-            for (var i = 0; i != Path.Count; i++)
-                hashCode.Add(Path[i].GetHashCode());
-
-            return hashCode.ToHashCode();
-        }
     }
 
     /// <summary>
@@ -450,9 +403,9 @@ public abstract record StaticExpression<TFunctionName>
         public TFunctionName FunctionName { get; }
 
         /// <summary>
-        /// Argument expressions passed to the function in evaluation order.
+        /// Arguments passed to the function.
         /// </summary>
-        public IReadOnlyList<StaticExpression<TFunctionName>> Arguments { get; }
+        public StaticExpression<TFunctionName> Arguments { get; }
 
         /// <inheritdoc/>
         public override int SubexpressionCount { get; } = 0;
@@ -464,28 +417,16 @@ public abstract record StaticExpression<TFunctionName>
         /// <param name="arguments">Argument expressions.</param>
         public FunctionApplication(
             TFunctionName functionName,
-            IReadOnlyList<StaticExpression<TFunctionName>> arguments)
+            StaticExpression<TFunctionName> arguments)
         {
             FunctionName = functionName;
             Arguments = arguments;
 
             _slimHashCode = HashCode.Combine(functionName, arguments);
 
-            foreach (var arg in arguments)
-            {
-                SubexpressionCount += arg.SubexpressionCount;
+            SubexpressionCount += arguments.SubexpressionCount;
 
-                _slimHashCode = HashCode.Combine(_slimHashCode, arg);
-            }
-        }
-
-        /// <inheritdoc/>
-        public override string ToString()
-        {
-            return
-                $"({FunctionName} "
-                + string.Join(" ", Arguments.Select(arg => arg.ToString()))
-                + ")";
+            _slimHashCode = HashCode.Combine(_slimHashCode, arguments);
         }
 
         /// <inheritdoc/>
@@ -511,14 +452,8 @@ public abstract record StaticExpression<TFunctionName>
                     return false;
             }
 
-            if (Arguments.Count != notNull.Arguments.Count)
+            if (!Arguments.Equals(notNull.Arguments))
                 return false;
-
-            for (var i = 0; i < Arguments.Count; ++i)
-            {
-                if (!Arguments[i].Equals(notNull.Arguments[i]))
-                    return false;
-            }
 
             return true;
         }
@@ -549,8 +484,7 @@ public abstract record StaticExpression<TFunctionName>
     /// </summary>
     /// <param name="functionBody">The static expression representing the function body.</param>
     /// <returns>
-    /// A list of distinct <see cref="ParameterReferenceExpression"/> instances referenced anywhere in
-    /// <paramref name="functionBody"/>, sorted in ascending lexicographical order by their <see cref="ParameterReferenceExpression.Path"/>.
+    /// A list of distinct paths to the environment expression used anywhere in <paramref name="functionBody"/>.
     /// </returns>
     /// <remarks>
     /// This helper walks the expression tree, collects all parameter reference nodes, removes duplicates while preserving
@@ -559,15 +493,30 @@ public abstract record StaticExpression<TFunctionName>
     ///   f param_1_0 param_1_2 = ...
     /// ensuring deterministic naming and ordering across builds and platforms.
     /// </remarks>
-    public static IReadOnlyList<ParameterReferenceExpression> ImplicitFunctionParameterList(
+    public static IReadOnlyList<IReadOnlyList<int>> ImplicitFunctionParameterList(
         StaticExpression<TFunctionName> functionBody)
     {
+        var collectedPaths = new HashSet<IReadOnlyList<int>>(IntPathEqualityComparer.Instance);
+
+        bool ShouldSkipDescendants(StaticExpression<TFunctionName> expr)
+        {
+            if (StaticExpression<TFunctionName>.TryParseAsPathToExpression(expr, pathEndExpression: EnvironmentInstance) is { } path)
+            {
+                collectedPaths.Add(path);
+
+                return true;
+            }
+
+            return false;
+        }
+
+        foreach (var _ in EnumerateAllDescendants(functionBody, skipDescendants: ShouldSkipDescendants))
+        {
+            // Intentionally empty loop body; we only care about the side effect of collecting paths.
+        }
+
         return
-            [..EnumerateAllDescendants(functionBody)
-            .OfType<ParameterReferenceExpression>()
-            .Distinct()
-            .OrderBy(paramRef => paramRef.Path, IntPathComparer.Instance)
-            ];
+            [.. collectedPaths.Order(IntPathComparer.Instance)];
     }
 
     /// <summary>
@@ -575,9 +524,14 @@ public abstract record StaticExpression<TFunctionName>
     /// The sequence starts with <paramref name="expression"/> itself.
     /// </summary>
     /// <param name="expression">Root expression to traverse.</param>
+    /// <param name="skipDescendants">
+    /// Optional predicate to determine whether to skip traversing the descendants of a given node.
+    /// If the function returns true for a node, its descendants are not enumerated.
+    /// </param>
     /// <returns>A depth-first traversal sequence over the expression tree.</returns>
     public static IEnumerable<StaticExpression<TFunctionName>> EnumerateAllDescendants(
-        StaticExpression<TFunctionName> expression)
+        StaticExpression<TFunctionName> expression,
+        Func<StaticExpression<TFunctionName>, bool>? skipDescendants)
     {
         var stack = new Stack<StaticExpression<TFunctionName>>();
 
@@ -589,8 +543,19 @@ public abstract record StaticExpression<TFunctionName>
 
             yield return current;
 
+            if (skipDescendants?.Invoke(current) is true)
+            {
+                continue;
+            }
+
             switch (current)
             {
+                case Literal:
+                    break;
+
+                case Environment:
+                    break;
+
                 case List list:
 
                     for (var i = 0; i < list.Items.Count; i++)
@@ -610,17 +575,8 @@ public abstract record StaticExpression<TFunctionName>
                     stack.Push(kernelApp.Input);
                     break;
 
-                case ParameterReferenceExpression:
-                    break;
-
-                case Literal:
-                    break;
-
-                case FunctionApplication namedFunctionApp:
-                    for (var i = 0; i < namedFunctionApp.Arguments.Count; i++)
-                    {
-                        stack.Push(namedFunctionApp.Arguments[i]);
-                    }
+                case FunctionApplication functionApp:
+                    stack.Push(functionApp.Arguments);
                     break;
 
                 case AlwaysCrash:
@@ -659,6 +615,9 @@ public abstract record StaticExpression<TFunctionName>
             Literal literal =>
                 StaticExpression<TOut>.LiteralInstance(literal.Value),
 
+            Environment =>
+            StaticExpression<TOut>.EnvironmentInstance,
+
             Conditional conditional =>
                 StaticExpression<TOut>.ConditionalInstance(
                     MapFunctionIdentifier(conditional.Condition, mapIdentifier),
@@ -670,13 +629,10 @@ public abstract record StaticExpression<TFunctionName>
                     kernel.Function,
                     MapFunctionIdentifier(kernel.Input, mapIdentifier)),
 
-            ParameterReferenceExpression paramRef =>
-                StaticExpression<TOut>.ParameterReferenceInstance(paramRef.Path),
-
             FunctionApplication funApp =>
                 StaticExpression<TOut>.FunctionApplicationInstance(
                     mapIdentifier(funApp.FunctionName),
-                    [.. funApp.Arguments.Select(arg => MapFunctionIdentifier(arg, mapIdentifier))]),
+                    MapFunctionIdentifier(funApp.Arguments, mapIdentifier)),
 
             AlwaysCrash =>
             new StaticExpression<TOut>.AlwaysCrash(),
@@ -684,5 +640,158 @@ public abstract record StaticExpression<TFunctionName>
             _ =>
             throw new NotSupportedException($"Unknown static expression type: {expression.GetType()}")
         };
+    }
+
+    /// <summary>
+    /// Attempts to parse a chain of nested <c>head</c> (and optional <c>skip</c>) kernel applications
+    /// representing a path from an arbitrary starting expression back to a designated <paramref name="pathEndExpression"/>.
+    /// </summary>
+    /// <param name="expression">The root expression that potentially encodes a path.</param>
+    /// <param name="pathEndExpression">The terminal expression that marks the end (origin) of the path (typically <see cref="EnvironmentInstance"/>).</param>
+    /// <returns>
+    /// A list of integer offsets describing the path if <paramref name="expression"/> is a valid encoding; otherwise <c>null</c>.
+    /// Offsets are ordered from the outermost application (closest to <paramref name="expression"/>) to the innermost
+    /// (closest to <paramref name="pathEndExpression"/>). Zero denotes a direct <c>head</c> without an intervening <c>skip</c>.
+    /// </returns>
+    /// <remarks>
+    /// The recognized shape is a (possibly empty) sequence of kernel applications with the outermost node being
+    /// a <c>head</c>. A non-zero offset step is represented as <c>head (skip N NEXT)</c>, while a zero offset is
+    /// simply <c>head NEXT</c>. Parsing stops successfully when <paramref name="pathEndExpression"/> is reached.
+    /// Any deviation from this pattern causes the method to return <c>null</c>.
+    /// </remarks>
+    public static IReadOnlyList<int>? TryParseAsPathToExpression(
+        StaticExpression<TFunctionName> expression,
+        StaticExpression<TFunctionName> pathEndExpression)
+    {
+        var path = new List<int>();
+
+        var current = expression;
+
+        while (true)
+        {
+            if (current == pathEndExpression)
+            {
+                path.Reverse();
+
+                return path;
+            }
+
+            if (current is not KernelApplication outerKernelApp ||
+                outerKernelApp.Function is not nameof(KernelFunction.head))
+            {
+                return null;
+            }
+
+            var next = outerKernelApp.Input;
+            var offset = 0;
+
+            if (next is KernelApplication innerKernelApp &&
+                innerKernelApp.Function is nameof(KernelFunction.skip) &&
+                innerKernelApp.Input is List skipList &&
+                skipList.Items.Count is 2 &&
+                skipList.Items[0] is Literal skipLiteral &&
+                KernelFunction.SignedIntegerFromValueRelaxed(skipLiteral.Value) is { } skipInteger)
+            {
+                offset = (int)skipInteger;
+                next = skipList.Items[1];
+            }
+
+            path.Add(offset);
+            current = next;
+        }
+    }
+
+    /// <summary>
+    /// Attempts to partially resolve a path (as used by <see cref="BuildPathToExpression"/>) against an already materialized
+    /// static expression tree. Leading offsets that index directly into existing <see cref="List"/> nodes are consumed and
+    /// the traversal advances into the corresponding child. Once the traversal can no longer continue (because the current
+    /// node is not a <see cref="List"/> or an offset is out of range), the remaining suffix of the path is re-encoded as
+    /// kernel applications (using <c>head</c> / <c>skip</c>) starting from the last resolved expression.
+    /// </summary>
+    /// <param name="path">Full sequence of integer offsets describing a path toward <paramref name="pathEndExpression"/>.</param>
+    /// <param name="pathEndExpression">The starting (deepest) expression the path ultimately points to; usually the function environment.</param>
+    /// <returns>
+    /// A static expression equivalent to one built from <paramref name="path"/> by <see cref="BuildPathToExpression"/>, but
+    /// with an initial segment already resolved into existing list nodes where possible. This shortens the resulting encoded path
+    /// and avoids redundant kernel applications.
+    /// </returns>
+    /// <remarks>
+    /// Example: If <paramref name="pathEndExpression"/> is already a list <c>[A, B, C]</c> and <paramref name="path"/> is <c>[2, 0, 1]</c>,
+    /// the function first advances to item index 2 (<c>C</c>) and then encodes the remaining <c>[0,1]</c> relative to <c>C</c>.
+    /// </remarks>
+    public static StaticExpression<TFunctionName> BuildReducedPathToExpression(
+        IReadOnlyList<int> path,
+        StaticExpression<TFunctionName> pathEndExpression)
+    {
+        var current = pathEndExpression;
+
+        var reducedPathIndex = 0;
+
+        while (reducedPathIndex < path.Count)
+        {
+            var nextOffset = path[reducedPathIndex];
+
+            if (current is not List listExpr)
+            {
+                break;
+            }
+
+            if (nextOffset < 0 || nextOffset >= listExpr.Items.Count)
+            {
+                break;
+            }
+
+            current = listExpr.Items[nextOffset];
+            ++reducedPathIndex;
+        }
+
+        return
+            BuildPathToExpression([.. path.Skip(reducedPathIndex)], current);
+    }
+
+    /// <summary>
+    /// Builds an expression that encodes a path as a chain of <c>head</c> (and optional <c>skip</c>) kernel applications
+    /// terminating at <paramref name="pathEndExpression"/>.
+    /// </summary>
+    /// <param name="path">Sequence of integer offsets describing steps from the start toward the end expression. Order must match that returned by <see cref="TryParseAsPathToExpression"/>.</param>
+    /// <param name="pathEndExpression">The terminal expression that the constructed path should reference (typically <see cref="EnvironmentInstance"/>).</param>
+    /// <returns>An expression representing the encoded path.</returns>
+    /// <remarks>
+    /// Each offset <c>n</c> produces either <c>head CURRENT</c> (when <c>n == 0</c>) or
+    /// <c>head (skip n CURRENT)</c> (when <c>n != 0</c>). Offsets are applied sequentially in the order they appear
+    /// in <paramref name="path"/>. Passing the resulting expression to <see cref="TryParseAsPathToExpression"/>
+    /// with the same <paramref name="pathEndExpression"/> will yield the original <paramref name="path"/>.
+    /// </remarks>
+    public static StaticExpression<TFunctionName> BuildPathToExpression(
+        IReadOnlyList<int> path,
+        StaticExpression<TFunctionName> pathEndExpression)
+    {
+        var current = pathEndExpression;
+
+        for (var i = 0; i < path.Count; ++i)
+        {
+            var offset = path[i];
+
+            if (offset is 0)
+            {
+                current =
+                    StaticExpression<TFunctionName>.KernelApplicationInstance(
+                        nameof(KernelFunction.head),
+                        current);
+            }
+            else
+            {
+                current =
+                    StaticExpression<TFunctionName>.KernelApplicationInstance(
+                        nameof(KernelFunction.head),
+                        StaticExpression<TFunctionName>.KernelApplicationInstance(
+                            nameof(KernelFunction.skip),
+                            StaticExpression<TFunctionName>.ListInstance(
+                                [StaticExpression<TFunctionName>.LiteralInstance(IntegerEncoding.EncodeSignedInteger(offset)),
+                                 current])));
+            }
+        }
+
+        return current;
     }
 }
