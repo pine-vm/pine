@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using Pine.Core;
 using Pine.Core.Addressing;
 using Pine.Core.CodeAnalysis;
-using Pine.Core.PopularEncodings;
 
 namespace Pine.CompilePineToDotNet;
 
@@ -13,12 +12,10 @@ using CompileExpressionFunctionBlockResult =
 
 public class CompilerMutableCache
 {
-    readonly ConcurrentDictionary<PineValue, Result<string, Expression>> _parseExpressionFromValueCache = new();
-
     readonly ConcurrentPineValueHashCache _valueHashCache = new();
 
     readonly ConcurrentDictionary<CompileExpressionFunctionParameters, CompileExpressionFunctionBlockResult>
-        compileExpressionCache = new();
+        _compileExpressionCache = new();
 
     public record CompileExpressionFunctionParameters(
         Expression Expression,
@@ -41,18 +38,13 @@ public class CompilerMutableCache
     public CompileExpressionFunctionBlockResult
         CompileToCSharpFunctionBlockSyntax(
         CompileExpressionFunctionParameters parameters) =>
-        compileExpressionCache.GetOrAdd(
+        _compileExpressionCache.GetOrAdd(
             parameters,
             valueFactory: _ => CompileToCSharp.CompileToCSharpFunctionBlockSyntax(
                 parameters.Expression,
                 constrainedEnvId: parameters.ConstrainedEnvId,
                 branchesEnvIds: parameters.BranchesConstrainedEnvIds,
                 compilationEnv: parameters.CompilationEnv));
-
-    public Result<string, Expression> ParseExpressionFromValue(PineValue pineValue) =>
-        _parseExpressionFromValueCache.GetOrAdd(
-            pineValue,
-            valueFactory: ExpressionEncoding.ParseExpressionFromValue);
 
     public ReadOnlyMemory<byte> ComputeHash(PineValue pineValue) =>
         _valueHashCache

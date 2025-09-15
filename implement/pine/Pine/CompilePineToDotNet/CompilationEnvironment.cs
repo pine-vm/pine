@@ -205,7 +205,8 @@ public record ExprFunctionCompilationInterface(
         [.. paths.Select(path => (path, string.Join('_', [commonPrefix, .. path.Select(index => index.ToString())])))];
 
     public IReadOnlyList<Expression> ComposeArgumentsExpressionsForInvocation(
-        Expression parentEnvExpr) =>
+        Expression parentEnvExpr,
+        PineVMParseCache parseCache) =>
         [..EnvItemsParamNames
             .Select(pathAndParamName =>
             /*
@@ -216,7 +217,8 @@ public record ExprFunctionCompilationInterface(
                 maxDepth: 5,
                 PineCSharpSyntaxFactory.BuildPineExpressionToGetItemFromPath(
                     compositionExpr: parentEnvExpr,
-                    path: pathAndParamName.path)))
+                    path: pathAndParamName.path),
+                parseCache))
             ];
 
     public static ExprResolvedInFunction? TryResolveExpressionInFunction(

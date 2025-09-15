@@ -637,7 +637,8 @@ public class PineVM : IPineVM
     {
         var expressionReduced =
             CompilePineToDotNet.ReducePineExpression.ReduceExpressionBottomUp(
-                currentExpression);
+                currentExpression,
+                parseCache);
 
         if (maxDepth <= 0)
         {
@@ -658,7 +659,7 @@ public class PineVM : IPineVM
             }
 
             if (CompilePineToDotNet.ReducePineExpression.TryEvaluateExpressionIndependent(
-                parseAndEvalExpr.Encoded).IsOkOrNull() is not { } exprValue)
+                parseAndEvalExpr.Encoded, parseCache).IsOkOrNull() is not { } exprValue)
             {
                 return null;
             }
@@ -703,7 +704,8 @@ public class PineVM : IPineVM
 
             var inlinedExprReduced =
                 CompilePineToDotNet.ReducePineExpression.ReduceExpressionBottomUp(
-                    inlinedExpr);
+                    inlinedExpr,
+                    parseCache);
 
             var inlinedFinal =
                 InlineStaticInvocationsAndReduceRecursive(
@@ -784,7 +786,7 @@ public class PineVM : IPineVM
                 underConditional: false);
 
         var expressionInlinedReduced =
-            CompilePineToDotNet.ReducePineExpression.ReduceExpressionBottomUp(expressionInlined);
+            CompilePineToDotNet.ReducePineExpression.ReduceExpressionBottomUp(expressionInlined, parseCache);
 
         return expressionInlinedReduced;
     }
@@ -830,7 +832,7 @@ public class PineVM : IPineVM
                 envConstraintId);
 
         var expressionReduced =
-            CompilePineToDotNet.ReducePineExpression.ReduceExpressionBottomUp(expressionSubstituted);
+            CompilePineToDotNet.ReducePineExpression.ReduceExpressionBottomUp(expressionSubstituted, parseCache);
 
         if (maxDepth <= 0)
         {
@@ -917,7 +919,7 @@ public class PineVM : IPineVM
                     SubstituteSubexpressionsForEnvironmentConstraint(inlinedExpr, envConstraintId);
 
                 var inlinedExprReduced =
-                    CompilePineToDotNet.ReducePineExpression.ReduceExpressionBottomUp(inlinedExprSubstituted);
+                    CompilePineToDotNet.ReducePineExpression.ReduceExpressionBottomUp(inlinedExprSubstituted, parseCache);
 
                 {
                     if (500 < inlinedExprReduced.SubexpressionCount)
@@ -1012,7 +1014,7 @@ public class PineVM : IPineVM
             if (!parseAndEvalExpr.Encoded.ReferencesEnvironment)
             {
                 if (CompilePineToDotNet.ReducePineExpression.TryEvaluateExpressionIndependent(
-                    parseAndEvalExpr.Encoded).IsOkOrNull() is
+                    parseAndEvalExpr.Encoded, parseCache).IsOkOrNull() is
                     { } evalExprOk)
                 {
                     return ContinueReduceForKnownExprValue(evalExprOk);
@@ -1088,7 +1090,7 @@ public class PineVM : IPineVM
                 underConditional: false);
 
         var expressionInlinedReduced =
-            CompilePineToDotNet.ReducePineExpression.ReduceExpressionBottomUp(expressionInlined);
+            CompilePineToDotNet.ReducePineExpression.ReduceExpressionBottomUp(expressionInlined, parseCache);
 
         return expressionInlinedReduced;
     }

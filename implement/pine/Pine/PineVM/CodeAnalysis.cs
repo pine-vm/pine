@@ -1288,7 +1288,7 @@ public class CodeAnalysis
                         staticExpr).expr;
 
                 var inlinedExprReduced =
-                    CompilePineToDotNet.ReducePineExpression.ReduceExpressionBottomUp(inlinedExpr);
+                    CompilePineToDotNet.ReducePineExpression.ReduceExpressionBottomUp(inlinedExpr, parseCache);
 
                 return inlinedExprReduced;
             },
@@ -1580,7 +1580,7 @@ public class CodeAnalysis
         }
 
         var evalIndependentResult =
-            CompilePineToDotNet.ReducePineExpression.TryEvaluateExpressionIndependent(parseAndEval.Encoded);
+            CompilePineToDotNet.ReducePineExpression.TryEvaluateExpressionIndependent(parseAndEval.Encoded, parseCache);
 
         {
             if (evalIndependentResult.IsErrOrNull() is { } err)

@@ -31,7 +31,9 @@ public record GenerateCSharpFileResult(
 
 public partial class CompileToCSharp
 {
-    static private readonly CompilerMutableCache compilerCache = new();
+    static private readonly CompilerMutableCache s_compilerCache = new();
+
+    static private readonly PineVMParseCache s_parseCache = new();
 
     public static GenerateCSharpFileResult GenerateCSharpFile(
         CompileCSharpClassResult compileCSharpClassResult,
@@ -222,7 +224,7 @@ public partial class CompileToCSharp
                             CompilationUnit: compilationUnitEnv);
 
                     var result =
-                        compilerCache.CompileToCSharpFunctionBlockSyntax(
+                        s_compilerCache.CompileToCSharpFunctionBlockSyntax(
                             expressionUsage,
                             branchesConstrainedEnvIds: supportedConstrainedEnvironments,
                             functionEnv)
@@ -524,7 +526,8 @@ public partial class CompileToCSharp
         CompileToCSharpExpression(
             ReducePineExpression.SearchForExpressionReductionRecursive(
                 maxDepth: 5,
-                expression),
+                expression,
+                s_parseCache),
             new ExpressionCompilationEnvironment(
                 FunctionEnvironment: compilationEnv,
                 LetBindings: ImmutableDictionary<Expression, LetBinding>.Empty,
@@ -691,7 +694,7 @@ public partial class CompileToCSharp
                             var subexpressionValue =
                             ExpressionEncoding.EncodeExpressionAsValue(subexpression);
 
-                            var expressionHash = Convert.ToHexStringLower(compilerCache.ComputeHash(subexpressionValue).Span);
+                            var expressionHash = Convert.ToHexStringLower(s_compilerCache.ComputeHash(subexpressionValue).Span);
 
                             var declarationName = "bind_" + expressionHash[..10];
 
@@ -1043,7 +1046,7 @@ public partial class CompileToCSharp
             ExpressionEncoding.EncodeExpressionAsValue(parseAndEvalExpr);
 
         var parseAndEvalExprHash =
-            Convert.ToHexStringLower(compilerCache.ComputeHash(parseAndEvalExprValue).Span);
+            Convert.ToHexStringLower(s_compilerCache.ComputeHash(parseAndEvalExprValue).Span);
 
         var childPathEnvMap =
             PineVM.CodeAnalysis.BuildPathMapFromChildToParentEnv(parseAndEvalExpr.Environment);
@@ -1158,12 +1161,12 @@ public partial class CompileToCSharp
                 }));
         }
 
-        Result<string, CompiledExpression> continueForKnownExprValue(PineValue innerExpressionValue)
+        Result<string, CompiledExpression> ContinueForKnownExprValue(PineValue innerExpressionValue)
         {
             var innerExprValueId = CompiledExpressionId(innerExpressionValue);
 
             return
-                compilerCache.ParseExpressionFromValue(innerExpressionValue)
+                s_parseCache.ParseExpression(innerExpressionValue)
                 .Unpack(
                     fromErr: err =>
                     {
@@ -1257,9 +1260,9 @@ public partial class CompileToCSharp
         if (!parseAndEvalExpr.Encoded.ReferencesEnvironment)
         {
             return
-                ReducePineExpression.TryEvaluateExpressionIndependent(parseAndEvalExpr.Encoded)
+                ReducePineExpression.TryEvaluateExpressionIndependent(parseAndEvalExpr.Encoded, s_parseCache)
                 .MapError(err => "Failed evaluate inner as independent expression: " + err)
-                .AndThen(continueForKnownExprValue);
+                .AndThen(ContinueForKnownExprValue);
         }
 
         var exprMappedToParent =
@@ -1270,7 +1273,7 @@ public partial class CompileToCSharp
 
         if (exprMappedToParent is ExprResolvedInFunction.ExprResolvedToLiteral literal)
         {
-            return continueForKnownExprValue(literal.Value);
+            return ContinueForKnownExprValue(literal.Value);
         }
 
         return continueWithGenericCase();
@@ -1338,7 +1341,7 @@ public partial class CompileToCSharp
         ExprFunctionCompilationInterface invokedExprInterface)
     {
         var envItemsArgExprs =
-            invokedExprInterface.ComposeArgumentsExpressionsForInvocation(invocationEnvExpr);
+            invokedExprInterface.ComposeArgumentsExpressionsForInvocation(invocationEnvExpr, parseCache: s_parseCache);
 
         var compiledItemsArgs =
             envItemsArgExprs
@@ -1402,7 +1405,7 @@ public partial class CompileToCSharp
 
     public static CompiledExpressionId CompiledExpressionId(PineValue expressionValue)
     {
-        var expressionHash = Convert.ToHexStringLower(compilerCache.ComputeHash(expressionValue).Span);
+        var expressionHash = Convert.ToHexStringLower(s_compilerCache.ComputeHash(expressionValue).Span);
 
         return
             new CompiledExpressionId(
@@ -1497,7 +1500,7 @@ public partial class CompileToCSharp
     }
 
     public static string DeclarationNameForValue(PineValue pineValue) =>
-        "value_" + Convert.ToHexStringLower(compilerCache.ComputeHash(pineValue).Span)[..10];
+        "value_" + Convert.ToHexStringLower(s_compilerCache.ComputeHash(pineValue).Span)[..10];
 
     public static Result<string, CompiledExpression> CompileToCSharpExpression(
         Expression.StringTag stringTagExpression,

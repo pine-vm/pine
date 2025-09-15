@@ -8,7 +8,7 @@ namespace Pine.Core.CodeAnalysis;
 /// </summary>
 public class PineVMParseCache
 {
-    private readonly ConcurrentDictionary<PineValue, Result<string, Expression>> parseExprCache = [];
+    private readonly ConcurrentDictionary<PineValue, Result<string, Expression>> _parseExprCache = [];
 
     /// <summary>
     /// Parses the given <paramref name="expressionValue"/> into an <see cref="Expression"/> using
@@ -23,7 +23,7 @@ public class PineVMParseCache
     public Result<string, Expression> ParseExpression(PineValue expressionValue)
     {
         return
-            parseExprCache
+            _parseExprCache
             .GetOrAdd(
                 expressionValue,
                 valueFactory:

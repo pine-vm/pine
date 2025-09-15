@@ -18,13 +18,15 @@ public class PineIRCompiler
     {
         public NodeCompilationResult ContinueWithExpression(
             Expression expression,
-            CompilationContext context)
+            CompilationContext context,
+            PineVMParseCache parseCache)
         {
             var exprResult =
                 CompileExpressionTransitive(
                     expression,
                     context,
-                    LocalsSet);
+                    LocalsSet,
+                    parseCache);
 
             return new NodeCompilationResult(
                 Instructions.AddRange(exprResult.Instructions),
@@ -140,7 +142,8 @@ public class PineIRCompiler
                 rootExpression,
                 context:
                 CompilationContext.Init(tailCallEliminationDict),
-                prior: prior);
+                prior: prior,
+                parseCache);
     }
 
     public static bool IsRecursiveCall(
@@ -210,7 +213,8 @@ public class PineIRCompiler
     public static NodeCompilationResult CompileExpressionTransitive(
         Expression expression,
         CompilationContext context,
-        ImmutableDictionary<Expression, int> localIndexFromExpr)
+        ImmutableDictionary<Expression, int> localIndexFromExpr,
+        PineVMParseCache parseCache)
     {
         return
             CompileExpressionTransitive(
@@ -218,7 +222,8 @@ public class PineIRCompiler
                 context: context,
                 new NodeCompilationResult(
                     Instructions: [],
-                    localIndexFromExpr));
+                    localIndexFromExpr),
+                parseCache);
     }
 
     /// <summary>
@@ -227,7 +232,8 @@ public class PineIRCompiler
     public static NodeCompilationResult CompileExpressionTransitive(
         Expression expression,
         CompilationContext context,
-        NodeCompilationResult prior)
+        NodeCompilationResult prior,
+        PineVMParseCache parseCache)
     {
         var subexprAppearingMultipleTimesIncludingConditional = new HashSet<Expression>();
 
@@ -328,7 +334,8 @@ public class PineIRCompiler
                 {
                     CopyToLocal = copyToLocalNew
                 },
-                prior);
+                prior,
+                parseCache);
 
         if (!prior.LocalsSet.ContainsKey(expression) && context.CopyToLocal.Contains(expression))
         {
@@ -355,7 +362,8 @@ public class PineIRCompiler
     public static NodeCompilationResult CompileExpressionTransitiveLessCSE(
         Expression expr,
         CompilationContext context,
-        NodeCompilationResult prior)
+        NodeCompilationResult prior,
+        PineVMParseCache parseCache)
     {
         if (prior.LocalsSet.TryGetValue(expr, out var localIndex))
         {
@@ -406,7 +414,8 @@ public class PineIRCompiler
                             CompileExpressionTransitive(
                                 itemExpr,
                                 context,
-                                lastItemResult);
+                                lastItemResult,
+                                parseCache);
                     }
 
                     return
@@ -420,21 +429,24 @@ public class PineIRCompiler
                     CompileConditional(
                         conditional,
                         context,
-                        prior);
+                        prior,
+                        parseCache);
 
             case Expression.ParseAndEval pae:
                 return
                     CompileParseAndEval(
                         pae,
                         context,
-                        prior);
+                        prior,
+                        parseCache);
 
             case Expression.KernelApplication kernelApp:
                 return
                     CompileKernelApplication(
                         kernelApp,
                         context,
-                        prior);
+                        prior,
+                        parseCache);
 
             default:
                 throw new NotImplementedException(
@@ -445,13 +457,15 @@ public class PineIRCompiler
     public static NodeCompilationResult CompileConditional(
         Expression.Conditional conditional,
         CompilationContext context,
-        NodeCompilationResult prior)
+        NodeCompilationResult prior,
+        PineVMParseCache parseCache)
     {
         var afterCondition =
             CompileExpressionTransitive(
                 conditional.Condition,
                 context,
-                prior);
+                prior,
+                parseCache);
 
         var falseBranchInstructions =
             CompileExpressionTransitive(
@@ -460,7 +474,8 @@ public class PineIRCompiler
                 .AddInstructionOffset(afterCondition.Instructions.Count + 1),
                 new NodeCompilationResult(
                     Instructions: [],
-                    LocalsSet: afterCondition.LocalsSet))
+                    LocalsSet: afterCondition.LocalsSet),
+                parseCache)
             .Instructions;
 
         var trueBranchInstructions =
@@ -471,7 +486,8 @@ public class PineIRCompiler
                 .AddInstructionOffset(falseBranchInstructions.Count + 1),
                 new NodeCompilationResult(
                     Instructions: [],
-                    LocalsSet: afterCondition.LocalsSet))
+                    LocalsSet: afterCondition.LocalsSet),
+                parseCache)
             .Instructions;
 
         IReadOnlyList<StackInstruction> falseBranchInstructionsAndJump =
@@ -496,14 +512,16 @@ public class PineIRCompiler
     public static NodeCompilationResult CompileParseAndEval(
         Expression.ParseAndEval parseAndEvalExpr,
         CompilationContext context,
-        NodeCompilationResult prior)
+        NodeCompilationResult prior,
+        PineVMParseCache parseCache)
     {
         if (context.TailCallElimination.TryGetValue(parseAndEvalExpr, out var jumpToLoop))
         {
             var afterEnvironment =
                 prior.ContinueWithExpression(
                     parseAndEvalExpr.Environment,
-                    context);
+                    context,
+                    parseCache);
 
             var jumpOffset =
                 jumpToLoop.DestinationInstructionIndex - afterEnvironment.Instructions.Count -
@@ -525,12 +543,14 @@ public class PineIRCompiler
             var afterEnvironment =
                 prior.ContinueWithExpression(
                     parseAndEvalExpr.Environment,
-                    context);
+                    context,
+                    parseCache);
 
             var afterExpr =
                 afterEnvironment.ContinueWithExpression(
                     parseAndEvalExpr.Encoded,
-                    context);
+                    context,
+                    parseCache);
 
             return
                 afterExpr
@@ -542,7 +562,8 @@ public class PineIRCompiler
     public static NodeCompilationResult CompileKernelApplication(
         Expression.KernelApplication kernelApplication,
         CompilationContext context,
-        NodeCompilationResult prior)
+        NodeCompilationResult prior,
+        PineVMParseCache parseCache)
     {
         return
             kernelApplication.Function switch
@@ -551,104 +572,121 @@ public class PineIRCompiler
                 CompileExpressionTransitive(
                     kernelApplication.Input,
                     context,
-                    prior)
+                    prior,
+                    parseCache)
                 .AppendInstruction(StackInstruction.Length),
 
                 nameof(KernelFunction.negate) =>
                 CompileKernelApplication_Negate(
                     kernelApplication.Input,
                     context,
-                    prior),
+                    prior,
+                    parseCache),
 
                 nameof(KernelFunction.equal) =>
                 CompileKernelApplication_Equal(
                     kernelApplication.Input,
                     context,
-                    prior),
+                    prior,
+                    parseCache),
 
                 nameof(KernelFunction.head) =>
                 CompileKernelApplication_Head(
                     kernelApplication.Input,
                     context,
-                    prior),
+                    prior,
+                    parseCache),
 
                 nameof(KernelFunction.skip) =>
                 CompileKernelApplication_Skip(
                     kernelApplication.Input,
                     context,
-                    prior),
+                    prior,
+                    parseCache),
 
                 nameof(KernelFunction.take) =>
                 CompileKernelApplication_Take(
                     kernelApplication.Input,
                     context,
-                    prior),
+                    prior,
+                    parseCache),
 
                 nameof(KernelFunction.concat) =>
                 CompileKernelApplication_Concat(
                     kernelApplication.Input,
                     context,
-                    prior),
+                    prior,
+                    parseCache),
 
                 nameof(KernelFunction.reverse) =>
                 CompileKernelApplication_Reverse(
                     kernelApplication.Input,
                     context,
-                    prior),
+                    prior,
+                    parseCache),
 
                 nameof(KernelFunction.int_add) =>
                 CompileKernelApplication_Int_Add(
                     kernelApplication.Input,
                     context,
-                    prior),
+                    prior,
+                    parseCache),
 
                 nameof(KernelFunction.int_mul) =>
                 CompileKernelApplication_Int_Mul(
                     kernelApplication.Input,
                     context,
-                    prior),
+                    prior,
+                    parseCache),
 
                 nameof(KernelFunction.int_is_sorted_asc) =>
                 CompileKernelApplication_Int_Is_Sorted_Asc(
                     kernelApplication.Input,
                     context,
-                    prior),
+                    prior,
+                    parseCache),
 
                 nameof(KernelFunction.bit_and) =>
                 CompileKernelApplication_Bit_And(
                     kernelApplication.Input,
                     context,
-                    prior),
+                    prior,
+                    parseCache),
 
                 nameof(KernelFunction.bit_or) =>
                 CompileKernelApplication_Bit_Or(
                     kernelApplication.Input,
                     context,
-                    prior),
+                    prior,
+                    parseCache),
 
                 nameof(KernelFunction.bit_xor) =>
                 CompileKernelApplication_Bit_Xor(
                     kernelApplication.Input,
                     context,
-                    prior),
+                    prior,
+                    parseCache),
 
                 nameof(KernelFunction.bit_not) =>
                 CompileKernelApplication_Bit_Not(
                     kernelApplication.Input,
                     context,
-                    prior),
+                    prior,
+                    parseCache),
 
                 nameof(KernelFunction.bit_shift_left) =>
                 CompileKernelApplication_Bit_Shift_Left(
                     kernelApplication.Input,
                     context,
-                    prior),
+                    prior,
+                    parseCache),
 
                 nameof(KernelFunction.bit_shift_right) =>
                 CompileKernelApplication_Bit_Shift_Right(
                     kernelApplication.Input,
                     context,
-                    prior),
+                    prior,
+                    parseCache),
 
                 _ =>
                 throw new NotImplementedException(
@@ -659,15 +697,17 @@ public class PineIRCompiler
     public static NodeCompilationResult CompileKernelApplication_Equal(
         Expression input,
         CompilationContext context,
-        NodeCompilationResult prior)
+        NodeCompilationResult prior,
+        PineVMParseCache parseCache)
     {
-        if (KernelApplication_Equal_TryParse_Starting_With(input) is { } startingWith)
+        if (KernelApplication_Equal_TryParse_Starting_With(input, parseCache) is { } startingWith)
         {
             var afterExpr =
                 CompileExpressionTransitive(
                     startingWith.expr,
                     context,
-                    prior);
+                    prior,
+                    parseCache);
 
             return
                 afterExpr
@@ -679,7 +719,7 @@ public class PineIRCompiler
         {
             if (listExpr.items.Count is 2)
             {
-                if (TryEvalIndependent(listExpr.items[0]) is { } leftLiteralValue)
+                if (TryEvalIndependent(listExpr.items[0], parseCache) is { } leftLiteralValue)
                 {
                     if (IntegerEncoding.ParseSignedIntegerRelaxed(leftLiteralValue).IsOkOrNullable() is { } leftInteger &&
                         listExpr.items[1] is Expression.KernelApplication rightKernelApp &&
@@ -689,7 +729,8 @@ public class PineIRCompiler
                             CompileExpressionTransitive(
                                 rightKernelApp.Input,
                                 context,
-                                prior);
+                                prior,
+                                parseCache);
 
                         return
                             afterRight
@@ -702,7 +743,8 @@ public class PineIRCompiler
                             CompileExpressionTransitive(
                                 listExpr.items[1],
                                 context,
-                                prior);
+                                prior,
+                                parseCache);
 
                         return
                             afterRight
@@ -711,7 +753,7 @@ public class PineIRCompiler
                     }
                 }
 
-                if (TryEvalIndependent(listExpr.items[1]) is { } rightLiteralValue)
+                if (TryEvalIndependent(listExpr.items[1], parseCache) is { } rightLiteralValue)
                 {
                     if (IntegerEncoding.ParseSignedIntegerRelaxed(rightLiteralValue).IsOkOrNullable() is { } rightInteger &&
                         listExpr.items[0] is Expression.KernelApplication leftKernelApp &&
@@ -721,7 +763,9 @@ public class PineIRCompiler
                             CompileExpressionTransitive(
                                 leftKernelApp.Input,
                                 context,
-                                prior);
+                                prior,
+                                parseCache);
+
                         return
                             afterLeft
                             .AppendInstruction(
@@ -733,7 +777,8 @@ public class PineIRCompiler
                             CompileExpressionTransitive(
                                 listExpr.items[0],
                                 context,
-                                prior);
+                                prior,
+                                parseCache);
 
                         return
                             afterLeft
@@ -747,13 +792,15 @@ public class PineIRCompiler
                         CompileExpressionTransitive(
                             listExpr.items[0],
                             context,
-                            prior);
+                            prior,
+                            parseCache);
 
                     var afterRight =
                         CompileExpressionTransitive(
                             listExpr.items[1],
                             context,
-                            afterLeft);
+                            afterLeft,
+                            parseCache);
 
                     return
                         afterRight
@@ -766,11 +813,14 @@ public class PineIRCompiler
             CompileExpressionTransitive(
                 input,
                 context,
-                prior)
+                prior,
+                parseCache)
             .AppendInstruction(StackInstruction.Equal_Generic);
     }
 
-    private static (Expression expr, PineValue start)? KernelApplication_Equal_TryParse_Starting_With(Expression equalInput)
+    private static (Expression expr, PineValue start)? KernelApplication_Equal_TryParse_Starting_With(
+        Expression equalInput,
+        PineVMParseCache parseCache)
     {
         if (equalInput is not Expression.List inputList)
         {
@@ -783,8 +833,8 @@ public class PineIRCompiler
         }
 
         {
-            if (TryEvalIndependent(inputList.items[0]) is { } leftValue &&
-                TryParse_KernelTake_Const(inputList.items[1]) is { } rightTake)
+            if (TryEvalIndependent(inputList.items[0], parseCache) is { } leftValue &&
+                TryParse_KernelTake_Const(inputList.items[1], parseCache) is { } rightTake)
             {
                 if (leftValue is PineValue.BlobValue leftBlob &&
                     leftBlob.Bytes.Length == rightTake.takeCount)
@@ -795,8 +845,8 @@ public class PineIRCompiler
         }
 
         {
-            if (TryEvalIndependent(inputList.items[1]) is { } rightValue &&
-                TryParse_KernelTake_Const(inputList.items[0]) is { } leftTake)
+            if (TryEvalIndependent(inputList.items[1], parseCache) is { } rightValue &&
+                TryParse_KernelTake_Const(inputList.items[0], parseCache) is { } leftTake)
             {
                 if (rightValue is PineValue.BlobValue rightBlob &&
                     rightBlob.Bytes.Length == leftTake.takeCount)
@@ -812,7 +862,8 @@ public class PineIRCompiler
     public static NodeCompilationResult CompileKernelApplication_Head(
         Expression input,
         CompilationContext context,
-        NodeCompilationResult prior)
+        NodeCompilationResult prior,
+        PineVMParseCache parseCache)
     {
         if (TryParse_KernelSkip(input) is { } skip)
         {
@@ -820,9 +871,10 @@ public class PineIRCompiler
                 CompileExpressionTransitive(
                     skip.sourceExpr,
                     context,
-                    prior);
+                    prior,
+                    parseCache);
 
-            if (TryParse_IndependentSignedIntegerRelaxed(skip.skipCountExpr) is { } skipCountConst)
+            if (TryParse_IndependentSignedIntegerRelaxed(skip.skipCountExpr, parseCache) is { } skipCountConst)
             {
                 return
                     afterSource
@@ -834,7 +886,8 @@ public class PineIRCompiler
                 CompileExpressionTransitive(
                     skip.skipCountExpr,
                     context,
-                    afterSource);
+                    afterSource,
+                    parseCache);
 
             return
                 afterSkipCount
@@ -845,14 +898,16 @@ public class PineIRCompiler
             CompileExpressionTransitive(
                 input,
                 context,
-                prior)
+                prior,
+                parseCache)
             .AppendInstruction(StackInstruction.Head_Generic);
     }
 
     public static NodeCompilationResult CompileKernelApplication_Skip(
         Expression input,
         CompilationContext context,
-        NodeCompilationResult prior)
+        NodeCompilationResult prior,
+        PineVMParseCache parseCache)
     {
         if (input is Expression.List listExpr && listExpr.items.Count is 2)
         {
@@ -864,9 +919,10 @@ public class PineIRCompiler
                 CompileExpressionTransitive(
                     skipSourceExpr,
                     context,
-                    prior);
+                    prior,
+                    parseCache);
 
-            if (TryParse_IndependentSignedIntegerRelaxed(skipCountExpr) is { } skipCount)
+            if (TryParse_IndependentSignedIntegerRelaxed(skipCountExpr, parseCache) is { } skipCount)
             {
                 if (skipCount.IsOne &&
                     skipSourceExpr is Expression.KernelApplication skipSourceKernelApp &&
@@ -880,7 +936,7 @@ public class PineIRCompiler
                             addOperandKernelApp.Function is nameof(KernelFunction.concat) &&
                             addOperandKernelApp.Input is Expression.List concatList &&
                             concatList.items.Count is 2 &&
-                            TryEvalIndependent(concatList.items[0]) is { } prependValue &&
+                            TryEvalIndependent(concatList.items[0], parseCache) is { } prependValue &&
                             prependValue is PineValue.BlobValue prependBlob &&
                             prependBlob.Bytes.Length is 1 &&
                             prependBlob.Bytes.Span[0] is 2 or 4)
@@ -889,7 +945,8 @@ public class PineIRCompiler
                                 CompileExpressionTransitive(
                                     concatList.items[1],
                                     context,
-                                    prior);
+                                    prior,
+                                    parseCache);
 
                             return
                                 afterSource
@@ -901,7 +958,7 @@ public class PineIRCompiler
                     }
 
                     {
-                        if (TryParse_IndependentSignedIntegerRelaxed(skipSourceAddInputList.items[0]) is { } skipSourceAddValue &&
+                        if (TryParse_IndependentSignedIntegerRelaxed(skipSourceAddInputList.items[0], parseCache) is { } skipSourceAddValue &&
                             skipSourceAddValue.IsZero &&
                             ContinueForAddZeroOperand(skipSourceAddInputList.items[1]) is { } specialized)
                         {
@@ -910,7 +967,7 @@ public class PineIRCompiler
                     }
 
                     {
-                        if (TryParse_IndependentSignedIntegerRelaxed(skipSourceAddInputList.items[1]) is { } skipSourceAddValue &&
+                        if (TryParse_IndependentSignedIntegerRelaxed(skipSourceAddInputList.items[1], parseCache) is { } skipSourceAddValue &&
                             skipSourceAddValue.IsZero &&
                             ContinueForAddZeroOperand(skipSourceAddInputList.items[0]) is { } specialized)
                         {
@@ -930,7 +987,8 @@ public class PineIRCompiler
                     CompileExpressionTransitive(
                         skipCountExpr,
                         context,
-                        afterSource);
+                        afterSource,
+                        parseCache);
 
                 return
                     afterSkipCount
@@ -942,14 +1000,16 @@ public class PineIRCompiler
             CompileExpressionTransitive(
                 input,
                 context,
-                prior)
+                prior,
+                parseCache)
             .AppendInstruction(StackInstruction.Skip_Generic);
     }
 
     public static NodeCompilationResult CompileKernelApplication_Take(
         Expression input,
         CompilationContext context,
-        NodeCompilationResult prior)
+        NodeCompilationResult prior,
+        PineVMParseCache parseCache)
     {
         if (input is Expression.List listExpr && listExpr.items.Count is 2)
         {
@@ -961,15 +1021,17 @@ public class PineIRCompiler
                     CompileExpressionTransitive(
                         sourceSkip.sourceExpr,
                         context,
-                        prior);
+                        prior,
+                        parseCache);
 
                 var afterSkipCount =
                     CompileExpressionTransitive(
                         sourceSkip.skipCountExpr,
                         context,
-                        afterSource);
+                        afterSource,
+                        parseCache);
 
-                if (TryParse_IndependentSignedIntegerRelaxed(takeCountValueExpr) is { } takeCount)
+                if (TryParse_IndependentSignedIntegerRelaxed(takeCountValueExpr, parseCache) is { } takeCount)
                 {
                     return
                         afterSkipCount
@@ -982,7 +1044,8 @@ public class PineIRCompiler
                         CompileExpressionTransitive(
                             takeCountValueExpr,
                             context,
-                            afterSkipCount);
+                            afterSkipCount,
+                            parseCache);
 
                     return
                         afterTakeCount
@@ -996,7 +1059,8 @@ public class PineIRCompiler
                     CompileExpressionTransitive(
                         listExpr.items[1],
                         context,
-                        prior);
+                        prior,
+                        parseCache);
 
                 if (takeCountValueExpr is Expression.Literal takeCountLiteralExpr)
                 {
@@ -1013,7 +1077,8 @@ public class PineIRCompiler
                     CompileExpressionTransitive(
                         takeCountValueExpr,
                         context,
-                        afterSource);
+                        afterSource,
+                        parseCache);
 
                 return
                     afterTakeCount
@@ -1025,14 +1090,16 @@ public class PineIRCompiler
             CompileExpressionTransitive(
                 input,
                 context,
-                prior)
+                prior,
+                parseCache)
             .AppendInstruction(StackInstruction.Take_Generic);
     }
 
     public static NodeCompilationResult CompileKernelApplication_Concat(
         Expression input,
         CompilationContext context,
-        NodeCompilationResult prior)
+        NodeCompilationResult prior,
+        PineVMParseCache parseCache)
     {
         if (input is Expression.List listExpr)
         {
@@ -1044,13 +1111,15 @@ public class PineIRCompiler
                         CompileExpressionTransitive(
                             leftListExpr.items[0],
                             context,
-                            prior);
+                            prior,
+                            parseCache);
 
                     var afterRight =
                         CompileExpressionTransitive(
                             listExpr.items[1],
                             context,
-                            afterLeft);
+                            afterLeft,
+                            parseCache);
 
                     return
                         afterRight
@@ -1068,7 +1137,8 @@ public class PineIRCompiler
                     CompileExpressionTransitive(
                         item,
                         context,
-                        concatOps);
+                        concatOps,
+                        parseCache);
 
                 concatOps = itemOps;
 
@@ -1088,7 +1158,8 @@ public class PineIRCompiler
                 CompileExpressionTransitive(
                     input,
                     context,
-                    prior)
+                    prior,
+                    parseCache)
                 .AppendInstruction(StackInstruction.Concat_Generic);
         }
     }
@@ -1096,9 +1167,10 @@ public class PineIRCompiler
     public static NodeCompilationResult CompileKernelApplication_Reverse(
         Expression input,
         CompilationContext context,
-        NodeCompilationResult prior)
+        NodeCompilationResult prior,
+        PineVMParseCache parseCache)
     {
-        if (TryParse_KernelTake_Const(input) is { } takeConst &&
+        if (TryParse_KernelTake_Const(input, parseCache) is { } takeConst &&
             takeConst.sourceExpr is Expression.KernelApplication takeSourceKernelApp &&
             takeSourceKernelApp.Function is nameof(KernelFunction.reverse))
         {
@@ -1106,7 +1178,8 @@ public class PineIRCompiler
                 CompileExpressionTransitive(
                     takeSourceKernelApp.Input,
                     context,
-                    prior);
+                    prior,
+                    parseCache);
 
             return
                 afterSource
@@ -1117,14 +1190,16 @@ public class PineIRCompiler
             CompileExpressionTransitive(
                 input,
                 context,
-                prior)
+                prior,
+                parseCache)
             .AppendInstruction(StackInstruction.Reverse);
     }
 
     public static NodeCompilationResult CompileKernelApplication_Negate(
         Expression input,
         CompilationContext context,
-        NodeCompilationResult prior)
+        NodeCompilationResult prior,
+        PineVMParseCache parseCache)
     {
         if (input is Expression.KernelApplication innerKernelApp)
         {
@@ -1137,7 +1212,9 @@ public class PineIRCompiler
                         CompileExpressionTransitive(
                             equalList.items[1],
                             context,
-                            prior);
+                            prior,
+                            parseCache);
+
                     return
                         afterRight
                         .AppendInstruction(
@@ -1150,7 +1227,9 @@ public class PineIRCompiler
                         CompileExpressionTransitive(
                             equalList.items[0],
                             context,
-                            prior);
+                            prior,
+                            parseCache);
+
                     return
                         afterLeft
                         .AppendInstruction(
@@ -1162,13 +1241,15 @@ public class PineIRCompiler
                         CompileExpressionTransitive(
                             equalList.items[0],
                             context,
-                            prior);
+                            prior,
+                            parseCache);
 
                     var afterRight =
                         CompileExpressionTransitive(
                             equalList.items[1],
                             context,
-                            afterLeft);
+                            afterLeft,
+                            parseCache);
 
                     return
                         afterRight
@@ -1187,13 +1268,15 @@ public class PineIRCompiler
                     CompileExpressionTransitive(
                         isSortedAscList.items[1],
                         context,
-                        prior);
+                        prior,
+                        parseCache);
 
                 var afterRight =
                     CompileExpressionTransitive(
                         isSortedAscList.items[0],
                         context,
-                        afterLeft);
+                        afterLeft,
+                        parseCache);
 
                 return
                     afterRight
@@ -1205,14 +1288,16 @@ public class PineIRCompiler
             CompileExpressionTransitive(
                 input,
                 context,
-                prior)
+                prior,
+                parseCache)
             .AppendInstruction(StackInstruction.Negate);
     }
 
     public static NodeCompilationResult CompileKernelApplication_Int_Add(
         Expression input,
         CompilationContext context,
-        NodeCompilationResult prior)
+        NodeCompilationResult prior,
+        PineVMParseCache parseCache)
     {
         if (input is Expression.List listExpr)
         {
@@ -1274,7 +1359,8 @@ public class PineIRCompiler
                         CompileExpressionTransitive(
                             itemExpr,
                             context,
-                            addOps);
+                            addOps,
+                            parseCache);
 
                     addOps = itemOps;
 
@@ -1289,13 +1375,14 @@ public class PineIRCompiler
 
                 if (varItemsAdd.Count is 1 && varItemsSubtract.Count is 0)
                 {
-                    if (IsIntUnsigned(firstVarItemAdd) is { } unsignedExpr)
+                    if (IsIntUnsigned(firstVarItemAdd, parseCache) is { } unsignedExpr)
                     {
                         var addOps =
                             CompileExpressionTransitive(
                                 unsignedExpr,
                                 context,
-                                prior);
+                                prior,
+                                parseCache);
 
                         return
                             addOps
@@ -1309,7 +1396,8 @@ public class PineIRCompiler
                         CompileExpressionTransitive(
                             firstVarItemAdd,
                             context,
-                            prior);
+                            prior,
+                            parseCache);
 
                     for (var i = 1; i < varItemsAdd.Count; ++i)
                     {
@@ -1319,7 +1407,8 @@ public class PineIRCompiler
                             CompileExpressionTransitive(
                                 itemExpr,
                                 context,
-                                addOps);
+                                addOps,
+                                parseCache);
 
                         addOps = itemOps;
 
@@ -1336,7 +1425,8 @@ public class PineIRCompiler
                             CompileExpressionTransitive(
                                 itemExpr,
                                 context,
-                                addOps);
+                                addOps,
+                                parseCache);
 
                         addOps = itemOps;
 
@@ -1368,12 +1458,15 @@ public class PineIRCompiler
                 CompileExpressionTransitive(
                     input,
                     context,
-                    prior)
+                    prior,
+                    parseCache)
                 .AppendInstruction(StackInstruction.Int_Add_Generic);
         }
     }
 
-    private static Expression? IsIntUnsigned(Expression expr)
+    private static Expression? IsIntUnsigned(
+        Expression expr,
+        PineVMParseCache parseCache)
     {
         if (expr is Expression.KernelApplication kernelApp &&
             kernelApp.Function is nameof(KernelFunction.concat) &&
@@ -1385,7 +1478,7 @@ public class PineIRCompiler
             if (!prependedExpr.ReferencesEnvironment)
             {
                 if (CompilePineToDotNet.ReducePineExpression.TryEvaluateExpressionIndependent(
-                    prependedExpr).IsOkOrNull() is not
+                    prependedExpr, parseCache).IsOkOrNull() is not
                     { } prependedValue)
                 {
                     return null;
@@ -1403,7 +1496,9 @@ public class PineIRCompiler
         return null;
     }
 
-    private static Expression? IsIntUnsignedNegated(Expression expr)
+    private static Expression? IsIntUnsignedNegated(
+        Expression expr,
+        PineVMParseCache parseCache)
     {
         if (expr is Expression.KernelApplication kernelApp &&
             kernelApp.Function is nameof(KernelFunction.concat) &&
@@ -1415,7 +1510,7 @@ public class PineIRCompiler
             if (!prependedExpr.ReferencesEnvironment)
             {
                 if (CompilePineToDotNet.ReducePineExpression.TryEvaluateExpressionIndependent(
-                    prependedExpr).IsOkOrNull() is not
+                    prependedExpr, parseCache).IsOkOrNull() is not
                     { } prependedValue)
                 {
                     return null;
@@ -1472,7 +1567,8 @@ public class PineIRCompiler
     public static NodeCompilationResult CompileKernelApplication_Int_Mul(
         Expression input,
         CompilationContext context,
-        NodeCompilationResult prior)
+        NodeCompilationResult prior,
+        PineVMParseCache parseCache)
     {
         if (input is Expression.List listExpr)
         {
@@ -1525,7 +1621,8 @@ public class PineIRCompiler
                 CompileExpressionTransitive(
                     firstVarItem,
                     context,
-                    prior);
+                    prior,
+                    parseCache);
 
             for (var i = 1; i < varItems.Count; ++i)
             {
@@ -1535,7 +1632,8 @@ public class PineIRCompiler
                     CompileExpressionTransitive(
                         itemExpr,
                         context,
-                        mulOps);
+                        mulOps,
+                        parseCache);
 
                 mulOps = itemOps;
 
@@ -1560,7 +1658,8 @@ public class PineIRCompiler
                 CompileExpressionTransitive(
                     input,
                     context,
-                    prior)
+                    prior,
+                    parseCache)
                 .AppendInstruction(StackInstruction.Int_Mul_Generic);
         }
     }
@@ -1568,15 +1667,17 @@ public class PineIRCompiler
     public static NodeCompilationResult CompileKernelApplication_Int_Is_Sorted_Asc(
         Expression input,
         CompilationContext context,
-        NodeCompilationResult prior)
+        NodeCompilationResult prior,
+        PineVMParseCache parseCache)
     {
-        if (Int_Is_Sorted_Asc_TryParseIsIntegerSign(input) is { } isIntegerWithSign)
+        if (Int_Is_Sorted_Asc_TryParseIsIntegerSign(input, parseCache) is { } isIntegerWithSign)
         {
             return
                 CompileExpressionTransitive(
                     isIntegerWithSign.expr,
                     context,
-                    prior)
+                    prior,
+                    parseCache)
                 .AppendInstruction(
                     StackInstruction.Starts_With_Const(PineValue.BlobSingleByte(isIntegerWithSign.sign)));
         }
@@ -1598,13 +1699,14 @@ public class PineIRCompiler
                 {
                     var rightExpr = listExpr.items[1];
 
-                    if (IsIntUnsigned(rightExpr) is { } rightUnsigned)
+                    if (IsIntUnsigned(rightExpr, parseCache) is { } rightUnsigned)
                     {
                         var afterRight =
                             CompileExpressionTransitive(
                                 rightUnsigned,
                                 context,
-                                prior);
+                                prior,
+                                parseCache);
 
                         return
                             afterRight
@@ -1617,7 +1719,8 @@ public class PineIRCompiler
                             CompileExpressionTransitive(
                                 rightExpr,
                                 context,
-                                prior);
+                                prior,
+                                parseCache);
 
                         return
                             afterRight
@@ -1631,13 +1734,14 @@ public class PineIRCompiler
                 {
                     var leftExpr = listExpr.items[0];
 
-                    if (IsIntUnsigned(leftExpr) is { } leftUnsigned)
+                    if (IsIntUnsigned(leftExpr, parseCache) is { } leftUnsigned)
                     {
                         var afterLeft =
                             CompileExpressionTransitive(
                                 leftUnsigned,
                                 context,
-                                prior);
+                                prior,
+                                parseCache);
 
                         return
                             afterLeft
@@ -1650,7 +1754,8 @@ public class PineIRCompiler
                             CompileExpressionTransitive(
                                 leftExpr,
                                 context,
-                                prior);
+                                prior,
+                                parseCache);
 
                         return
                             afterLeft
@@ -1664,13 +1769,15 @@ public class PineIRCompiler
                         CompileExpressionTransitive(
                             listExpr.items[0],
                             context,
-                            prior);
+                            prior,
+                            parseCache);
 
                     var afterRight =
                         CompileExpressionTransitive(
                             listExpr.items[1],
                             context,
-                            afterLeft);
+                            afterLeft,
+                            parseCache);
 
                     return
                         afterRight
@@ -1688,7 +1795,7 @@ public class PineIRCompiler
                     {
                         var middleExpr = listExpr.items[1];
 
-                        if (IsIntUnsigned(middleExpr) is { } middleUnsigned)
+                        if (IsIntUnsigned(middleExpr, parseCache) is { } middleUnsigned)
                         {
                             var contextSettingLocal =
                                 context
@@ -1702,7 +1809,8 @@ public class PineIRCompiler
                                 CompileExpressionTransitive(
                                     middleUnsigned,
                                     contextSettingLocal,
-                                    prior);
+                                    prior,
+                                    parseCache);
 
                             return
                                 afterMiddle
@@ -1729,7 +1837,8 @@ public class PineIRCompiler
                                 CompileExpressionTransitive(
                                     middleExpr,
                                     contextSettingLocal,
-                                    prior);
+                                    prior,
+                                    parseCache);
 
                             return
                                 afterMiddle
@@ -1751,11 +1860,14 @@ public class PineIRCompiler
             CompileExpressionTransitive(
                 input,
                 context,
-                prior)
+                prior,
+                parseCache)
             .AppendInstruction(StackInstruction.Int_Is_Sorted_Asc_Generic);
     }
 
-    private static (Expression expr, byte sign)? Int_Is_Sorted_Asc_TryParseIsIntegerSign(Expression input)
+    private static (Expression expr, byte sign)? Int_Is_Sorted_Asc_TryParseIsIntegerSign(
+        Expression input,
+        PineVMParseCache parseCache)
     {
         if (input is not Expression.List inputList)
         {
@@ -1767,12 +1879,12 @@ public class PineIRCompiler
             return null;
         }
 
-        if (TryParse_IndependentSignedIntegerRelaxed(inputList.items[0]) == 0)
+        if (TryParse_IndependentSignedIntegerRelaxed(inputList.items[0], parseCache) == 0)
         {
             return (inputList.items[1], 4);
         }
 
-        if (TryParse_IndependentSignedIntegerRelaxed(inputList.items[1]) == -1)
+        if (TryParse_IndependentSignedIntegerRelaxed(inputList.items[1], parseCache) == -1)
         {
             return (inputList.items[0], 2);
         }
@@ -1783,7 +1895,8 @@ public class PineIRCompiler
     public static NodeCompilationResult CompileKernelApplication_Bit_And(
         Expression input,
         CompilationContext context,
-        NodeCompilationResult prior)
+        NodeCompilationResult prior,
+        PineVMParseCache parseCache)
     {
         if (input is Expression.List listExpr)
         {
@@ -1822,7 +1935,8 @@ public class PineIRCompiler
                     CompileExpressionTransitive(
                         itemExpr,
                         context,
-                        andOps);
+                        andOps,
+                        parseCache);
 
                 andOps = itemOps;
 
@@ -1851,7 +1965,8 @@ public class PineIRCompiler
                 CompileExpressionTransitive(
                     input,
                     context,
-                    prior)
+                    prior,
+                    parseCache)
                 .AppendInstruction(StackInstruction.Bit_And_Generic);
         }
     }
@@ -1859,7 +1974,8 @@ public class PineIRCompiler
     public static NodeCompilationResult CompileKernelApplication_Bit_Or(
         Expression input,
         CompilationContext context,
-        NodeCompilationResult prior)
+        NodeCompilationResult prior,
+        PineVMParseCache parseCache)
     {
         if (input is Expression.List listExpr)
         {
@@ -1898,7 +2014,8 @@ public class PineIRCompiler
                     CompileExpressionTransitive(
                         itemExpr,
                         context,
-                        orOps);
+                        orOps,
+                        parseCache);
 
                 orOps = itemOps;
 
@@ -1927,7 +2044,8 @@ public class PineIRCompiler
                 CompileExpressionTransitive(
                     input,
                     context,
-                    prior)
+                    prior,
+                    parseCache)
                 .AppendInstruction(StackInstruction.Bit_Or_Generic);
         }
     }
@@ -1935,7 +2053,8 @@ public class PineIRCompiler
     public static NodeCompilationResult CompileKernelApplication_Bit_Xor(
         Expression input,
         CompilationContext context,
-        NodeCompilationResult prior)
+        NodeCompilationResult prior,
+        PineVMParseCache parseCache)
     {
         if (input is Expression.List listExpr)
         {
@@ -1957,7 +2076,8 @@ public class PineIRCompiler
                     CompileExpressionTransitive(
                         itemExpr,
                         context,
-                        xorOps);
+                        xorOps,
+                        parseCache);
 
                 xorOps = itemOps;
 
@@ -1977,7 +2097,8 @@ public class PineIRCompiler
                 CompileExpressionTransitive(
                     input,
                     context,
-                    prior)
+                    prior,
+                    parseCache)
                 .AppendInstruction(StackInstruction.Bit_Xor_Generic);
         }
     }
@@ -1985,20 +2106,23 @@ public class PineIRCompiler
     public static NodeCompilationResult CompileKernelApplication_Bit_Not(
         Expression input,
         CompilationContext context,
-        NodeCompilationResult prior)
+        NodeCompilationResult prior,
+        PineVMParseCache parseCache)
     {
         return
             CompileExpressionTransitive(
                 input,
                 context,
-                prior)
+                prior,
+                parseCache)
             .AppendInstruction(StackInstruction.Bit_Not);
     }
 
     public static NodeCompilationResult CompileKernelApplication_Bit_Shift_Left(
         Expression input,
         CompilationContext context,
-        NodeCompilationResult prior)
+        NodeCompilationResult prior,
+        PineVMParseCache parseCache)
     {
         if (input is Expression.List listExpr && listExpr.items.Count is 2)
         {
@@ -2015,7 +2139,8 @@ public class PineIRCompiler
                     CompileExpressionTransitive(
                         sourceExpr,
                         context,
-                        prior)
+                        prior,
+                        parseCache)
                     .AppendInstruction(
                         StackInstruction.Bit_Shift_Left_Const((int)shiftCount));
             }
@@ -2024,13 +2149,15 @@ public class PineIRCompiler
                 CompileExpressionTransitive(
                     sourceExpr,
                     context,
-                    prior);
+                    prior,
+                    parseCache);
 
             var shiftCountOps =
                 CompileExpressionTransitive(
                     shiftCountExpr,
                     context,
-                    sourceOps);
+                    sourceOps,
+                    parseCache);
 
             return
                 shiftCountOps
@@ -2041,14 +2168,16 @@ public class PineIRCompiler
             CompileExpressionTransitive(
                 input,
                 context,
-                prior)
+                prior,
+                parseCache)
             .AppendInstruction(StackInstruction.Bit_Shift_Left_Generic);
     }
 
     public static NodeCompilationResult CompileKernelApplication_Bit_Shift_Right(
         Expression input,
         CompilationContext context,
-        NodeCompilationResult prior)
+        NodeCompilationResult prior,
+        PineVMParseCache parseCache)
     {
         if (input is Expression.List listExpr && listExpr.items.Count is 2)
         {
@@ -2065,7 +2194,8 @@ public class PineIRCompiler
                     CompileExpressionTransitive(
                         sourceExpr,
                         context,
-                        prior)
+                        prior,
+                        parseCache)
                     .AppendInstruction(
                         StackInstruction.Bit_Shift_Right_Const((int)shiftCount));
             }
@@ -2074,13 +2204,15 @@ public class PineIRCompiler
                 CompileExpressionTransitive(
                     sourceExpr,
                     context,
-                    prior);
+                    prior,
+                    parseCache);
 
             var shiftCountOps =
                 CompileExpressionTransitive(
                     shiftCountExpr,
                     context,
-                    sourceOps);
+                    sourceOps,
+                    parseCache);
 
             return
                 shiftCountOps
@@ -2091,7 +2223,8 @@ public class PineIRCompiler
             CompileExpressionTransitive(
                 input,
                 context,
-                prior)
+                prior,
+                parseCache)
             .AppendInstruction(StackInstruction.Bit_Shift_Right_Generic);
     }
 
@@ -2128,14 +2261,16 @@ public class PineIRCompiler
         return null;
     }
 
-    private static (BigInteger skipCount, Expression sourceExpr)? TryParse_KernelSkip_Const(Expression expression)
+    private static (BigInteger skipCount, Expression sourceExpr)? TryParse_KernelSkip_Const(
+        Expression expression,
+        PineVMParseCache parseCache)
     {
         if (TryParse_KernelSkip(expression) is not { } parsed)
         {
             return null;
         }
 
-        if (TryParse_IndependentSignedIntegerRelaxed(parsed.skipCountExpr) is not { } skipCount)
+        if (TryParse_IndependentSignedIntegerRelaxed(parsed.skipCountExpr, parseCache) is not { } skipCount)
         {
             return null;
         }
@@ -2159,14 +2294,16 @@ public class PineIRCompiler
         return (skipCountExpr, sourceExpr);
     }
 
-    private static (BigInteger takeCount, Expression sourceExpr)? TryParse_KernelTake_Const(Expression expression)
+    private static (BigInteger takeCount, Expression sourceExpr)? TryParse_KernelTake_Const(
+        Expression expression,
+        PineVMParseCache parseCache)
     {
         if (TryParse_KernelTake(expression) is not { } parsed)
         {
             return null;
         }
 
-        if (TryParse_IndependentSignedIntegerRelaxed(parsed.takeCountExpr) is not { } takeCount)
+        if (TryParse_IndependentSignedIntegerRelaxed(parsed.takeCountExpr, parseCache) is not { } takeCount)
         {
             return null;
         }
@@ -2174,7 +2311,8 @@ public class PineIRCompiler
         return (takeCount, parsed.sourceExpr);
     }
 
-    private static (Expression takeCountExpr, Expression sourceExpr)? TryParse_KernelTake(Expression expression)
+    private static (Expression takeCountExpr, Expression sourceExpr)? TryParse_KernelTake(
+        Expression expression)
     {
         if (expression is not Expression.KernelApplication kernelApp ||
             kernelApp.Function is not nameof(KernelFunction.take) ||
@@ -2191,9 +2329,11 @@ public class PineIRCompiler
         return (takeCountExpr, sourceExpr);
     }
 
-    private static BigInteger? TryParse_IndependentSignedIntegerRelaxed(Expression expression)
+    private static BigInteger? TryParse_IndependentSignedIntegerRelaxed(
+        Expression expression,
+        PineVMParseCache parseCache)
     {
-        if (TryEvalIndependent(expression) is not { } value)
+        if (TryEvalIndependent(expression, parseCache) is not { } value)
         {
             return null;
         }
@@ -2201,7 +2341,9 @@ public class PineIRCompiler
         return KernelFunction.SignedIntegerFromValueRelaxed(value);
     }
 
-    private static PineValue? TryEvalIndependent(Expression expression)
+    private static PineValue? TryEvalIndependent(
+        Expression expression,
+        PineVMParseCache parseCache)
     {
         if (expression.ReferencesEnvironment)
         {
@@ -2209,7 +2351,7 @@ public class PineIRCompiler
         }
 
         return
-            CompilePineToDotNet.ReducePineExpression.TryEvaluateExpressionIndependent(expression)
+            CompilePineToDotNet.ReducePineExpression.TryEvaluateExpressionIndependent(expression, parseCache)
             .IsOkOrNull();
     }
 
