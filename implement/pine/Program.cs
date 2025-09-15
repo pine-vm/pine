@@ -1063,13 +1063,15 @@ public class Program
                         CommandLineInterface.FormatIntegerForDisplay(environmentNodesCount) + " nodes.");
                 }
 
-                var (allListEntries, bundleResourceFile) =
-                BundledElmEnvironments.BuildBundleResourceFileJsonUtf8(compiledEnvironments);
+                var (allComponents, bundleResourceFile) =
+                    BundledDeclarations.BuildBundleFile(
+                        compiledEnvironments: compiledEnvironments,
+                        otherReusedValues: ImmutableDictionary<string, PineValue>.Empty);
 
                 Console.WriteLine(
                     "Built bundle containing " +
-                    CommandLineInterface.FormatIntegerForDisplay(allListEntries.Count) +
-                    " list entries in " +
+                    CommandLineInterface.FormatIntegerForDisplay(allComponents.Count) +
+                    " component entries in " +
                     CommandLineInterface.FormatIntegerForDisplay(bundleResourceFile.Length) + " bytes.");
 
                 var fileContent = bundleResourceFile;
@@ -1100,8 +1102,8 @@ public class Program
 
                     Console.WriteLine(
                         "Saved compact build with " +
-                        CommandLineInterface.FormatIntegerForDisplay(allListEntries.Count) +
-                        " list entries in " +
+                        CommandLineInterface.FormatIntegerForDisplay(allComponents.Count) +
+                        " component entries in " +
                         CommandLineInterface.FormatIntegerForDisplay(fileContent.Length) +
                         " bytes to " + destFilePath);
                 }

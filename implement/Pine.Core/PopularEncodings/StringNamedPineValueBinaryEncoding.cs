@@ -15,21 +15,24 @@ public static class StringNamedPineValueBinaryEncoding
     /// </summary>
     /// <param name="stream">The stream to write the encoded data to.</param>
     /// <param name="declarations">A dictionary containing string names and their associated <see cref="PineValue"/> objects.</param>
+    /// <param name="componentDeclWritten">An optional callback invoked after each component declaration is written, with the <see cref="PineValue"/> and its position.</param>
     public static void Encode(
         Stream stream,
-        IReadOnlyDictionary<string, PineValue> declarations)
+        IReadOnlyDictionary<string, PineValue> declarations,
+        Action<PineValue, long>? componentDeclWritten = null)
     {
         void Write(ReadOnlySpan<byte> bytes)
         {
             stream.Write(bytes);
         }
 
-        Encode(declarations, Write);
+        Encode(declarations, Write, componentDeclWritten);
     }
 
     private static void Encode(
         IReadOnlyDictionary<string, PineValue> declarations,
-        Action<ReadOnlySpan<byte>> write)
+        Action<ReadOnlySpan<byte>> write,
+        Action<PineValue, long>? componentDeclWritten = null)
     {
         static PineValue DeclToValue(string name, PineValue value)
         {
@@ -55,7 +58,7 @@ public static class StringNamedPineValueBinaryEncoding
         PineValue declarationComposition =
             PineValue.List([.. declsValues]);
 
-        PineValueBinaryEncoding.Encode(write, declarationComposition);
+        PineValueBinaryEncoding.Encode(write, declarationComposition, onDeclarationWritten: componentDeclWritten);
     }
 
     /// <summary>

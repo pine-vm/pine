@@ -1,5 +1,6 @@
 using Pine.Core;
 using Pine.Core.Elm;
+using Pine.Core.PopularEncodings;
 using Pine.Elm019;
 using System;
 using System.Collections.Concurrent;
@@ -874,29 +875,21 @@ public class ElmCompiler
                 System.IO.FileMode.Open,
                 System.IO.FileAccess.Read);
 
-        var envDictResult =
-            BundledElmEnvironmentsJson.LoadBundledCompiledEnvironments(
-                sourceFile,
-                gzipDecompress: filePath.EndsWith(".gzip", StringComparison.OrdinalIgnoreCase));
+        System.IO.Stream decompressedStream = sourceFile;
 
+        if (filePath.EndsWith(".gzip", StringComparison.OrdinalIgnoreCase))
         {
-            if (envDictResult.IsErrOrNull() is { } err)
-            {
-                return "Failed loading Elm compiler from bundle: " + err;
-            }
+            decompressedStream = new System.IO.Compression.GZipStream(sourceFile, System.IO.Compression.CompressionMode.Decompress);
         }
 
-        if (envDictResult.IsOkOrNull() is not { } envDict)
-        {
-            throw new NotImplementedException(
-                "Unexpected result type: " + envDictResult.GetType());
-        }
+        using var stream = new System.IO.MemoryStream();
 
-        var compiledEnv =
-            envDict.Values
-            .OfType<PineValue.ListValue>()
-            .OrderByDescending(list => list.NodesCount)
-            .First();
+        decompressedStream.CopyTo(stream);
+        stream.Seek(0, System.IO.SeekOrigin.Begin);
+
+        var fileContent = stream.ToArray();
+
+        var compiledEnv = PineValueBinaryEncoding.DecodeRoot(fileContent);
 
         return ElmCompilerFromEnvValue(compiledEnv);
     }

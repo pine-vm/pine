@@ -16,7 +16,7 @@ public class Program
     public const string DestinationDirectory = "./Pine.Core/";
 
     public const string PreviousCompilerFilePath =
-        "./history/2025-07-06-compiler-bundle/elm-syntax-parser-and-compiler.json.gzip";
+        "./history/2025-09-15-compiler-bundle/elm-syntax-parser-and-compiler.bin.gzip";
 
     public static void Main()
     {

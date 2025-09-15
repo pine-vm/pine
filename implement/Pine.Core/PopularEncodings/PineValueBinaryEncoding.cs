@@ -58,15 +58,22 @@ public static class PineValueBinaryEncoding
     /// </summary>
     /// <param name="write">An action that writes the encoded bytes.</param>
     /// <param name="composition">The PineValue instance to encode.</param>
+    /// <param name="onDeclarationWritten">An optional callback invoked after each declaration is written, with the declaration and its component ID.</param>
     public static void Encode(
         Action<ReadOnlySpan<byte>> write,
-        PineValue composition) =>
-        Encode(composition, write, componentIdOffset: 0);
+        PineValue composition,
+        Action<PineValue, long>? onDeclarationWritten = null) =>
+        Encode(
+            composition,
+            write,
+            componentIdOffset: 0,
+            onDeclarationWritten);
 
     private static void Encode(
         PineValue root,
         Action<ReadOnlySpan<byte>> write,
-        long componentIdOffset)
+        long componentIdOffset,
+        Action<PineValue, long>? onDeclarationWritten = null)
     {
         var seenOnce = new HashSet<PineValue>();
 
@@ -124,6 +131,8 @@ public static class PineValueBinaryEncoding
                 declarations: declarationsDict);
 
             declarationsDict[declaration] = componentId;
+
+            onDeclarationWritten?.Invoke(declaration, componentId);
 
             ++componentId;
         }

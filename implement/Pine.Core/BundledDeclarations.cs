@@ -107,7 +107,7 @@ public record BundledDeclarations(
         IReadOnlyDictionary<string, PineValue> otherReusedValues,
         string? destinationDirectory)
     {
-        var uncompressed =
+        var (_, uncompressed) =
             BuildBundleFile(
                 compiledEnvironments,
                 otherReusedValues);
@@ -132,7 +132,7 @@ public record BundledDeclarations(
     /// <param name="otherReusedValues">Additional named <see cref="PineValue"/>s to include in the bundle.</param>
     /// <returns>The uncompressed binary payload to embed or compress.</returns>
     /// <exception cref="InvalidOperationException">Thrown if a key collision occurs when building the dictionary.</exception>
-    public static ReadOnlyMemory<byte> BuildBundleFile(
+    public static (IReadOnlyList<PineValue> componentsWritten, ReadOnlyMemory<byte> fileContent) BuildBundleFile(
         IReadOnlyDictionary<BlobTreeWithStringPath, PineValue> compiledEnvironments,
         IReadOnlyDictionary<string, PineValue> otherReusedValues)
     {
@@ -153,7 +153,12 @@ public record BundledDeclarations(
 
         using var memoryStream = new System.IO.MemoryStream();
 
-        StringNamedPineValueBinaryEncoding.Encode(memoryStream, declarations);
+        var declarationsWritten = new List<PineValue>();
+
+        StringNamedPineValueBinaryEncoding.Encode(
+            memoryStream,
+            declarations,
+            componentDeclWritten: (declValue, _) => declarationsWritten.Add(declValue));
 
         var uncompressed = memoryStream.ToArray();
 
@@ -162,7 +167,8 @@ public record BundledDeclarations(
             compiledEnvironments.Count + " compiled environments with an uncompressed size of " +
             CommandLineInterface.FormatIntegerForDisplay(uncompressed.Length) + " bytes.");
 
-        return uncompressed;
+        return
+            (declarationsWritten, uncompressed);
     }
 
     private static void WriteBundleFile(
