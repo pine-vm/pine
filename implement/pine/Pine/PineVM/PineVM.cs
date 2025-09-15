@@ -636,7 +636,7 @@ public class PineVM : IPineVM
         Func<Expression, bool> skipInlining)
     {
         var expressionReduced =
-            CompilePineToDotNet.ReducePineExpression.ReduceExpressionBottomUp(
+            ReducePineExpression.ReduceExpressionBottomUp(
                 currentExpression,
                 parseCache);
 
@@ -658,7 +658,7 @@ public class PineVM : IPineVM
                 return null;
             }
 
-            if (CompilePineToDotNet.ReducePineExpression.TryEvaluateExpressionIndependent(
+            if (ReducePineExpression.TryEvaluateExpressionIndependent(
                 parseAndEvalExpr.Encoded, parseCache).IsOkOrNull() is not { } exprValue)
             {
                 return null;
@@ -684,7 +684,7 @@ public class PineVM : IPineVM
              * */
 
             var inlinedExpr =
-                CompilePineToDotNet.ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
+                ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
                     findReplacement:
                     descendant =>
                     {
@@ -703,7 +703,7 @@ public class PineVM : IPineVM
             }
 
             var inlinedExprReduced =
-                CompilePineToDotNet.ReducePineExpression.ReduceExpressionBottomUp(
+                ReducePineExpression.ReduceExpressionBottomUp(
                     inlinedExpr,
                     parseCache);
 
@@ -725,59 +725,59 @@ public class PineVM : IPineVM
             bool underConditional)
         {
             return
-    CompilePineToDotNet.ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
-    findReplacement: expr =>
-    {
-        /*
-         * Do not inline invocations that are still conditional after substituting for the environment constraint.
-         * Inlining these cases can lead to suboptimal overall performance for various reasons.
-         * One reason is that inlining in a generic wrapper causes us to miss an opportunity to select
-         * a more specialized implementation because this selection only happens on invocation.
-         * */
-
-        /*
-         * 2024-07-20 Adaptation, for cases like specializations of `List.map`:
-         * When optimizing `List.map` (or its recursive helper function) (or `List.foldx` for example),
-         * better also inline the application of the generic partial application used with the function parameter.
-         * That application is conditional (list empty?), but we want to inline that to eliminate the generic wrapper for
-         * the function application and inline the parameter function directly.
-         * Thus, the new rule also enables inlining under conditional expressions unless it is recursive.
-         * */
-
-        if (expr is Expression.Conditional conditional)
-        {
-            var conditionInlined =
-            InlineParseAndEvalRecursive(
-                conditional.Condition,
-                underConditional: underConditional);
-
-            var falseBranchInlined =
-            InlineParseAndEvalRecursive(
-                conditional.FalseBranch,
-                underConditional: true);
-
-            var trueBranchInlined =
-            InlineParseAndEvalRecursive(
-                conditional.TrueBranch,
-                underConditional: true);
-
-            return Expression.ConditionalInstance(
-                condition: conditionInlined,
-                falseBranch: falseBranchInlined,
-                trueBranch: trueBranchInlined);
-        }
-
-        if (expr is Expression.ParseAndEval parseAndEval)
-        {
-            if (TryInlineParseAndEval(parseAndEval) is { } inlined)
+            ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
+            findReplacement: expr =>
             {
-                return inlined;
-            }
-        }
+                /*
+                 * Do not inline invocations that are still conditional after substituting for the environment constraint.
+                 * Inlining these cases can lead to suboptimal overall performance for various reasons.
+                 * One reason is that inlining in a generic wrapper causes us to miss an opportunity to select
+                 * a more specialized implementation because this selection only happens on invocation.
+                 * */
 
-        return null;
-    },
-    expression).expr;
+                /*
+                 * 2024-07-20 Adaptation, for cases like specializations of `List.map`:
+                 * When optimizing `List.map` (or its recursive helper function) (or `List.foldx` for example),
+                 * better also inline the application of the generic partial application used with the function parameter.
+                 * That application is conditional (list empty?), but we want to inline that to eliminate the generic wrapper for
+                 * the function application and inline the parameter function directly.
+                 * Thus, the new rule also enables inlining under conditional expressions unless it is recursive.
+                 * */
+
+                if (expr is Expression.Conditional conditional)
+                {
+                    var conditionInlined =
+                    InlineParseAndEvalRecursive(
+                        conditional.Condition,
+                        underConditional: underConditional);
+
+                    var falseBranchInlined =
+                    InlineParseAndEvalRecursive(
+                        conditional.FalseBranch,
+                        underConditional: true);
+
+                    var trueBranchInlined =
+                    InlineParseAndEvalRecursive(
+                        conditional.TrueBranch,
+                        underConditional: true);
+
+                    return Expression.ConditionalInstance(
+                        condition: conditionInlined,
+                        falseBranch: falseBranchInlined,
+                        trueBranch: trueBranchInlined);
+                }
+
+                if (expr is Expression.ParseAndEval parseAndEval)
+                {
+                    if (TryInlineParseAndEval(parseAndEval) is { } inlined)
+                    {
+                        return inlined;
+                    }
+                }
+
+                return null;
+            },
+            expression).expr;
         }
 
         var expressionInlined =
@@ -786,7 +786,7 @@ public class PineVM : IPineVM
                 underConditional: false);
 
         var expressionInlinedReduced =
-            CompilePineToDotNet.ReducePineExpression.ReduceExpressionBottomUp(expressionInlined, parseCache);
+            ReducePineExpression.ReduceExpressionBottomUp(expressionInlined, parseCache);
 
         return expressionInlinedReduced;
     }
@@ -832,7 +832,7 @@ public class PineVM : IPineVM
                 envConstraintId);
 
         var expressionReduced =
-            CompilePineToDotNet.ReducePineExpression.ReduceExpressionBottomUp(expressionSubstituted, parseCache);
+            ReducePineExpression.ReduceExpressionBottomUp(expressionSubstituted, parseCache);
 
         if (maxDepth <= 0)
         {
@@ -893,7 +893,7 @@ public class PineVM : IPineVM
                  * */
 
                 var inlinedExpr =
-                    CompilePineToDotNet.ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
+                    ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
                         findReplacement:
                         descendant =>
                         {
@@ -919,7 +919,7 @@ public class PineVM : IPineVM
                     SubstituteSubexpressionsForEnvironmentConstraint(inlinedExpr, envConstraintId);
 
                 var inlinedExprReduced =
-                    CompilePineToDotNet.ReducePineExpression.ReduceExpressionBottomUp(inlinedExprSubstituted, parseCache);
+                    ReducePineExpression.ReduceExpressionBottomUp(inlinedExprSubstituted, parseCache);
 
                 {
                     if (500 < inlinedExprReduced.SubexpressionCount)
@@ -1013,7 +1013,7 @@ public class PineVM : IPineVM
 
             if (!parseAndEvalExpr.Encoded.ReferencesEnvironment)
             {
-                if (CompilePineToDotNet.ReducePineExpression.TryEvaluateExpressionIndependent(
+                if (ReducePineExpression.TryEvaluateExpressionIndependent(
                     parseAndEvalExpr.Encoded, parseCache).IsOkOrNull() is
                     { } evalExprOk)
                 {
@@ -1029,7 +1029,7 @@ public class PineVM : IPineVM
             bool underConditional)
         {
             return
-                CompilePineToDotNet.ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
+                ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
                 findReplacement: expr =>
                 {
                     /*
@@ -1090,7 +1090,7 @@ public class PineVM : IPineVM
                 underConditional: false);
 
         var expressionInlinedReduced =
-            CompilePineToDotNet.ReducePineExpression.ReduceExpressionBottomUp(expressionInlined, parseCache);
+            ReducePineExpression.ReduceExpressionBottomUp(expressionInlined, parseCache);
 
         return expressionInlinedReduced;
     }
@@ -1100,7 +1100,7 @@ public class PineVM : IPineVM
         PineValueClass envConstraintId)
     {
         return
-            CompilePineToDotNet.ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
+            ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
                 findReplacement:
                 descendant =>
                 {
@@ -1159,9 +1159,9 @@ public class PineVM : IPineVM
 
             if (expression is Expression.List list)
             {
-                for (var i = 0; i < list.items.Count; ++i)
+                for (var i = 0; i < list.Items.Count; ++i)
                 {
-                    stack.Push(list.items[i]);
+                    stack.Push(list.Items[i]);
                 }
             }
 
@@ -2846,11 +2846,11 @@ public class PineVM : IPineVM
         PineValue environment,
         ReadOnlyMemory<PineValue> stackPrevValues)
     {
-        var listItems = new PineValue[listExpression.items.Count];
+        var listItems = new PineValue[listExpression.Items.Count];
 
-        for (var i = 0; i < listExpression.items.Count; i++)
+        for (var i = 0; i < listExpression.Items.Count; i++)
         {
-            var item = listExpression.items[i];
+            var item = listExpression.Items[i];
 
             var itemResult =
                 EvaluateExpressionDefaultLessStack(
@@ -2965,18 +2965,18 @@ public class PineVM : IPineVM
         {
             if (innerKernelApplication.Function is nameof(KernelFunction.skip) &&
                 innerKernelApplication.Input is Expression.List skipListExpr &&
-                skipListExpr.items.Count is 2)
+                skipListExpr.Items.Count is 2)
             {
                 var skipValue =
                     EvaluateExpressionDefaultLessStack(
-                        skipListExpr.items[0],
+                        skipListExpr.Items[0],
                         environment,
                         stackPrevValues);
 
                 if (KernelFunction.SignedIntegerFromValueRelaxed(skipValue) is { } skipCount)
                 {
                     if (EvaluateExpressionDefaultLessStack(
-                        skipListExpr.items[1],
+                        skipListExpr.Items[1],
                         environment,
                         stackPrevValues) is PineValue.ListValue list)
                     {
@@ -3006,72 +3006,9 @@ public class PineVM : IPineVM
         var inputValue = EvaluateExpressionDefaultLessStack(application.Input, environment, stackPrevValues);
 
         return
-            EvaluateKernelApplicationGeneric(
+            KernelFunction.ApplyKernelFunctionGeneric(
                 function: application.Function,
                 inputValue: inputValue);
-    }
-
-    public static PineValue EvaluateKernelApplicationGeneric(
-        string function,
-        PineValue inputValue)
-    {
-        return function switch
-        {
-            nameof(KernelFunction.equal) =>
-            KernelFunction.equal(inputValue),
-
-            nameof(KernelFunction.length) =>
-            KernelFunction.length(inputValue),
-
-            nameof(KernelFunction.head) =>
-            KernelFunction.head(inputValue),
-
-            nameof(KernelFunction.skip) =>
-            KernelFunction.skip(inputValue),
-
-            nameof(KernelFunction.take) =>
-            KernelFunction.take(inputValue),
-
-            nameof(KernelFunction.concat) =>
-            KernelFunction.concat(inputValue),
-
-            nameof(KernelFunction.reverse) =>
-            KernelFunction.reverse(inputValue),
-
-            nameof(KernelFunction.negate) =>
-            KernelFunction.negate(inputValue),
-
-            nameof(KernelFunction.int_add) =>
-            KernelFunction.int_add(inputValue),
-
-            nameof(KernelFunction.int_mul) =>
-            KernelFunction.int_mul(inputValue),
-
-            nameof(KernelFunction.int_is_sorted_asc) =>
-            KernelFunction.int_is_sorted_asc(inputValue),
-
-            nameof(KernelFunction.bit_and) =>
-            KernelFunction.bit_and(inputValue),
-
-            nameof(KernelFunction.bit_or) =>
-            KernelFunction.bit_or(inputValue),
-
-            nameof(KernelFunction.bit_xor) =>
-            KernelFunction.bit_xor(inputValue),
-
-            nameof(KernelFunction.bit_not) =>
-            KernelFunction.bit_not(inputValue),
-
-            nameof(KernelFunction.bit_shift_left) =>
-            KernelFunction.bit_shift_left(inputValue),
-
-            nameof(KernelFunction.bit_shift_right) =>
-            KernelFunction.bit_shift_right(inputValue),
-
-            _ =>
-            throw new ParseExpressionException(
-                "Did not find kernel function '" + function + "'")
-        };
     }
 
     public static PineValue FusedSkipAndTake(PineValue argument, int skipCount, int takeCount)

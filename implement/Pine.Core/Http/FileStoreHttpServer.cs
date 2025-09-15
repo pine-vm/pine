@@ -366,7 +366,7 @@ public class FileStoreHttpServer(IFileStore fileStore)
 public class FileStoreHttpServerMiddleware(RequestDelegate next, IFileStore fileStore)
 {
     private readonly RequestDelegate _next = next;
-    private readonly FileStoreHttpServer _server = new FileStoreHttpServer(fileStore);
+    private readonly FileStoreHttpServer _server = new(fileStore);
 
     public async Task InvokeAsync(HttpContext context)
     {

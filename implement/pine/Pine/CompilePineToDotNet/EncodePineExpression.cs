@@ -30,7 +30,7 @@ public partial class CompileToCSharp
                     nameof(Expression.Environment))),
 
             Expression.List list =>
-            list.items.Select(continueEncode)
+            list.Items.Select(continueEncode)
             .ListCombine()
             .MapError(err => "Failed to encode list expression element: " + err)
             .Map(elementsSyntaxes =>

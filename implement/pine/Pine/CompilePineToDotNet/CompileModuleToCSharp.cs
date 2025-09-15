@@ -604,9 +604,9 @@ public static class CompileModuleToCSharp
                     break;
 
                 case Expression.List list:
-                    for (var i = 0; i < list.items.Count; i++)
+                    for (var i = 0; i < list.Items.Count; i++)
                     {
-                        stack.Push(list.items[i]);
+                        stack.Push(list.Items[i]);
                     }
                     break;
 

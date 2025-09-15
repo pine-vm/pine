@@ -389,7 +389,7 @@ public class PineIRCompiler
 
             case Expression.List listExpr:
                 {
-                    if (listExpr.items.Count is 0)
+                    if (listExpr.Items.Count is 0)
                     {
                         return
                             prior
@@ -406,9 +406,9 @@ public class PineIRCompiler
 
                     var lastItemResult = prior;
 
-                    for (var i = 0; i < listExpr.items.Count; ++i)
+                    for (var i = 0; i < listExpr.Items.Count; ++i)
                     {
-                        var itemExpr = listExpr.items[i];
+                        var itemExpr = listExpr.Items[i];
 
                         lastItemResult =
                             CompileExpressionTransitive(
@@ -421,7 +421,7 @@ public class PineIRCompiler
                     return
                         lastItemResult
                         .AppendInstruction(
-                            StackInstruction.Build_List(listExpr.items.Count));
+                            StackInstruction.Build_List(listExpr.Items.Count));
                 }
 
             case Expression.Conditional conditional:
@@ -717,12 +717,12 @@ public class PineIRCompiler
 
         if (input is Expression.List listExpr)
         {
-            if (listExpr.items.Count is 2)
+            if (listExpr.Items.Count is 2)
             {
-                if (TryEvalIndependent(listExpr.items[0], parseCache) is { } leftLiteralValue)
+                if (TryEvalIndependent(listExpr.Items[0], parseCache) is { } leftLiteralValue)
                 {
                     if (IntegerEncoding.ParseSignedIntegerRelaxed(leftLiteralValue).IsOkOrNullable() is { } leftInteger &&
-                        listExpr.items[1] is Expression.KernelApplication rightKernelApp &&
+                        listExpr.Items[1] is Expression.KernelApplication rightKernelApp &&
                         rightKernelApp.Function is nameof(KernelFunction.length))
                     {
                         var afterRight =
@@ -741,7 +741,7 @@ public class PineIRCompiler
                     {
                         var afterRight =
                             CompileExpressionTransitive(
-                                listExpr.items[1],
+                                listExpr.Items[1],
                                 context,
                                 prior,
                                 parseCache);
@@ -753,10 +753,10 @@ public class PineIRCompiler
                     }
                 }
 
-                if (TryEvalIndependent(listExpr.items[1], parseCache) is { } rightLiteralValue)
+                if (TryEvalIndependent(listExpr.Items[1], parseCache) is { } rightLiteralValue)
                 {
                     if (IntegerEncoding.ParseSignedIntegerRelaxed(rightLiteralValue).IsOkOrNullable() is { } rightInteger &&
-                        listExpr.items[0] is Expression.KernelApplication leftKernelApp &&
+                        listExpr.Items[0] is Expression.KernelApplication leftKernelApp &&
                         leftKernelApp.Function is nameof(KernelFunction.length))
                     {
                         var afterLeft =
@@ -775,7 +775,7 @@ public class PineIRCompiler
                     {
                         var afterLeft =
                             CompileExpressionTransitive(
-                                listExpr.items[0],
+                                listExpr.Items[0],
                                 context,
                                 prior,
                                 parseCache);
@@ -790,14 +790,14 @@ public class PineIRCompiler
                 {
                     var afterLeft =
                         CompileExpressionTransitive(
-                            listExpr.items[0],
+                            listExpr.Items[0],
                             context,
                             prior,
                             parseCache);
 
                     var afterRight =
                         CompileExpressionTransitive(
-                            listExpr.items[1],
+                            listExpr.Items[1],
                             context,
                             afterLeft,
                             parseCache);
@@ -827,14 +827,14 @@ public class PineIRCompiler
             return null;
         }
 
-        if (inputList.items.Count is not 2)
+        if (inputList.Items.Count is not 2)
         {
             return null;
         }
 
         {
-            if (TryEvalIndependent(inputList.items[0], parseCache) is { } leftValue &&
-                TryParse_KernelTake_Const(inputList.items[1], parseCache) is { } rightTake)
+            if (TryEvalIndependent(inputList.Items[0], parseCache) is { } leftValue &&
+                TryParse_KernelTake_Const(inputList.Items[1], parseCache) is { } rightTake)
             {
                 if (leftValue is PineValue.BlobValue leftBlob &&
                     leftBlob.Bytes.Length == rightTake.takeCount)
@@ -845,8 +845,8 @@ public class PineIRCompiler
         }
 
         {
-            if (TryEvalIndependent(inputList.items[1], parseCache) is { } rightValue &&
-                TryParse_KernelTake_Const(inputList.items[0], parseCache) is { } leftTake)
+            if (TryEvalIndependent(inputList.Items[1], parseCache) is { } rightValue &&
+                TryParse_KernelTake_Const(inputList.Items[0], parseCache) is { } leftTake)
             {
                 if (rightValue is PineValue.BlobValue rightBlob &&
                     rightBlob.Bytes.Length == leftTake.takeCount)
@@ -909,11 +909,11 @@ public class PineIRCompiler
         NodeCompilationResult prior,
         PineVMParseCache parseCache)
     {
-        if (input is Expression.List listExpr && listExpr.items.Count is 2)
+        if (input is Expression.List listExpr && listExpr.Items.Count is 2)
         {
-            var skipCountExpr = listExpr.items[0];
+            var skipCountExpr = listExpr.Items[0];
 
-            var skipSourceExpr = listExpr.items[1];
+            var skipSourceExpr = listExpr.Items[1];
 
             var afterSource =
                 CompileExpressionTransitive(
@@ -928,22 +928,22 @@ public class PineIRCompiler
                     skipSourceExpr is Expression.KernelApplication skipSourceKernelApp &&
                     skipSourceKernelApp.Function is nameof(KernelFunction.int_add) &&
                     skipSourceKernelApp.Input is Expression.List skipSourceAddInputList &&
-                    skipSourceAddInputList.items.Count is 2)
+                    skipSourceAddInputList.Items.Count is 2)
                 {
                     NodeCompilationResult? ContinueForAddZeroOperand(Expression addZeroOperand)
                     {
                         if (addZeroOperand is Expression.KernelApplication addOperandKernelApp &&
                             addOperandKernelApp.Function is nameof(KernelFunction.concat) &&
                             addOperandKernelApp.Input is Expression.List concatList &&
-                            concatList.items.Count is 2 &&
-                            TryEvalIndependent(concatList.items[0], parseCache) is { } prependValue &&
+                            concatList.Items.Count is 2 &&
+                            TryEvalIndependent(concatList.Items[0], parseCache) is { } prependValue &&
                             prependValue is PineValue.BlobValue prependBlob &&
                             prependBlob.Bytes.Length is 1 &&
                             prependBlob.Bytes.Span[0] is 2 or 4)
                         {
                             var afterSource =
                                 CompileExpressionTransitive(
-                                    concatList.items[1],
+                                    concatList.Items[1],
                                     context,
                                     prior,
                                     parseCache);
@@ -958,18 +958,18 @@ public class PineIRCompiler
                     }
 
                     {
-                        if (TryParse_IndependentSignedIntegerRelaxed(skipSourceAddInputList.items[0], parseCache) is { } skipSourceAddValue &&
+                        if (TryParse_IndependentSignedIntegerRelaxed(skipSourceAddInputList.Items[0], parseCache) is { } skipSourceAddValue &&
                             skipSourceAddValue.IsZero &&
-                            ContinueForAddZeroOperand(skipSourceAddInputList.items[1]) is { } specialized)
+                            ContinueForAddZeroOperand(skipSourceAddInputList.Items[1]) is { } specialized)
                         {
                             return specialized;
                         }
                     }
 
                     {
-                        if (TryParse_IndependentSignedIntegerRelaxed(skipSourceAddInputList.items[1], parseCache) is { } skipSourceAddValue &&
+                        if (TryParse_IndependentSignedIntegerRelaxed(skipSourceAddInputList.Items[1], parseCache) is { } skipSourceAddValue &&
                             skipSourceAddValue.IsZero &&
-                            ContinueForAddZeroOperand(skipSourceAddInputList.items[0]) is { } specialized)
+                            ContinueForAddZeroOperand(skipSourceAddInputList.Items[0]) is { } specialized)
                         {
                             return specialized;
                         }
@@ -1011,11 +1011,11 @@ public class PineIRCompiler
         NodeCompilationResult prior,
         PineVMParseCache parseCache)
     {
-        if (input is Expression.List listExpr && listExpr.items.Count is 2)
+        if (input is Expression.List listExpr && listExpr.Items.Count is 2)
         {
-            var takeCountValueExpr = listExpr.items[0];
+            var takeCountValueExpr = listExpr.Items[0];
 
-            if (TryParse_KernelSkip(listExpr.items[1]) is { } sourceSkip)
+            if (TryParse_KernelSkip(listExpr.Items[1]) is { } sourceSkip)
             {
                 var afterSource =
                     CompileExpressionTransitive(
@@ -1057,7 +1057,7 @@ public class PineIRCompiler
             {
                 var afterSource =
                     CompileExpressionTransitive(
-                        listExpr.items[1],
+                        listExpr.Items[1],
                         context,
                         prior,
                         parseCache);
@@ -1103,20 +1103,20 @@ public class PineIRCompiler
     {
         if (input is Expression.List listExpr)
         {
-            if (listExpr.items.Count is 2)
+            if (listExpr.Items.Count is 2)
             {
-                if (listExpr.items[0] is Expression.List leftListExpr && leftListExpr.items.Count is 1)
+                if (listExpr.Items[0] is Expression.List leftListExpr && leftListExpr.Items.Count is 1)
                 {
                     var afterLeft =
                         CompileExpressionTransitive(
-                            leftListExpr.items[0],
+                            leftListExpr.Items[0],
                             context,
                             prior,
                             parseCache);
 
                     var afterRight =
                         CompileExpressionTransitive(
-                            listExpr.items[1],
+                            listExpr.Items[1],
                             context,
                             afterLeft,
                             parseCache);
@@ -1129,9 +1129,9 @@ public class PineIRCompiler
 
             var concatOps = prior;
 
-            for (var i = 0; i < listExpr.items.Count; ++i)
+            for (var i = 0; i < listExpr.Items.Count; ++i)
             {
-                var item = listExpr.items[i];
+                var item = listExpr.Items[i];
 
                 var itemOps =
                     CompileExpressionTransitive(
@@ -1204,13 +1204,13 @@ public class PineIRCompiler
         if (input is Expression.KernelApplication innerKernelApp)
         {
             if (innerKernelApp.Function is nameof(KernelFunction.equal) &&
-                innerKernelApp.Input is Expression.List equalList && equalList.items.Count is 2)
+                innerKernelApp.Input is Expression.List equalList && equalList.Items.Count is 2)
             {
-                if (equalList.items[0] is Expression.Literal leftLiteralExpr)
+                if (equalList.Items[0] is Expression.Literal leftLiteralExpr)
                 {
                     var afterRight =
                         CompileExpressionTransitive(
-                            equalList.items[1],
+                            equalList.Items[1],
                             context,
                             prior,
                             parseCache);
@@ -1221,11 +1221,11 @@ public class PineIRCompiler
                             StackInstruction.Not_Equal_Binary_Const(leftLiteralExpr.Value));
                 }
 
-                if (equalList.items[1] is Expression.Literal rightLiteralExpr)
+                if (equalList.Items[1] is Expression.Literal rightLiteralExpr)
                 {
                     var afterLeft =
                         CompileExpressionTransitive(
-                            equalList.items[0],
+                            equalList.Items[0],
                             context,
                             prior,
                             parseCache);
@@ -1239,14 +1239,14 @@ public class PineIRCompiler
                 {
                     var afterLeft =
                         CompileExpressionTransitive(
-                            equalList.items[0],
+                            equalList.Items[0],
                             context,
                             prior,
                             parseCache);
 
                     var afterRight =
                         CompileExpressionTransitive(
-                            equalList.items[1],
+                            equalList.Items[1],
                             context,
                             afterLeft,
                             parseCache);
@@ -1258,7 +1258,7 @@ public class PineIRCompiler
             }
 
             if (innerKernelApp.Function is nameof(KernelFunction.int_is_sorted_asc) &&
-                innerKernelApp.Input is Expression.List isSortedAscList && isSortedAscList.items.Count is 2)
+                innerKernelApp.Input is Expression.List isSortedAscList && isSortedAscList.Items.Count is 2)
             {
                 /*
                  * not (int_is_sorted_asc [a, b]) = b <= a
@@ -1266,14 +1266,14 @@ public class PineIRCompiler
 
                 var afterLeft =
                     CompileExpressionTransitive(
-                        isSortedAscList.items[1],
+                        isSortedAscList.Items[1],
                         context,
                         prior,
                         parseCache);
 
                 var afterRight =
                     CompileExpressionTransitive(
-                        isSortedAscList.items[0],
+                        isSortedAscList.Items[0],
                         context,
                         afterLeft,
                         parseCache);
@@ -1301,7 +1301,7 @@ public class PineIRCompiler
     {
         if (input is Expression.List listExpr)
         {
-            if (listExpr.items.Count is 0)
+            if (listExpr.Items.Count is 0)
             {
                 return
                     prior
@@ -1314,9 +1314,9 @@ public class PineIRCompiler
             var varItemsAdd = new List<Expression>();
             var varItemsSubtract = new List<Expression>();
 
-            for (var i = 0; i < listExpr.items.Count; ++i)
+            for (var i = 0; i < listExpr.Items.Count; ++i)
             {
-                var itemExpr = listExpr.items[i];
+                var itemExpr = listExpr.Items[i];
 
                 if (itemExpr is Expression.Literal literalExpr)
                 {
@@ -1471,13 +1471,13 @@ public class PineIRCompiler
         if (expr is Expression.KernelApplication kernelApp &&
             kernelApp.Function is nameof(KernelFunction.concat) &&
             kernelApp.Input is Expression.List inputList &&
-            inputList.items.Count is 2)
+            inputList.Items.Count is 2)
         {
-            var prependedExpr = inputList.items[0];
+            var prependedExpr = inputList.Items[0];
 
             if (!prependedExpr.ReferencesEnvironment)
             {
-                if (CompilePineToDotNet.ReducePineExpression.TryEvaluateExpressionIndependent(
+                if (ReducePineExpression.TryEvaluateExpressionIndependent(
                     prependedExpr, parseCache).IsOkOrNull() is not
                     { } prependedValue)
                 {
@@ -1488,7 +1488,7 @@ public class PineIRCompiler
                     prependedBlob.Bytes.Length is 1 &&
                     prependedBlob.Bytes.Span[0] is 4)
                 {
-                    return inputList.items[1];
+                    return inputList.Items[1];
                 }
             }
         }
@@ -1503,13 +1503,13 @@ public class PineIRCompiler
         if (expr is Expression.KernelApplication kernelApp &&
             kernelApp.Function is nameof(KernelFunction.concat) &&
             kernelApp.Input is Expression.List inputList &&
-            inputList.items.Count is 2)
+            inputList.Items.Count is 2)
         {
-            var prependedExpr = inputList.items[0];
+            var prependedExpr = inputList.Items[0];
 
             if (!prependedExpr.ReferencesEnvironment)
             {
-                if (CompilePineToDotNet.ReducePineExpression.TryEvaluateExpressionIndependent(
+                if (ReducePineExpression.TryEvaluateExpressionIndependent(
                     prependedExpr, parseCache).IsOkOrNull() is not
                     { } prependedValue)
                 {
@@ -1520,7 +1520,7 @@ public class PineIRCompiler
                     prependedBlob.Bytes.Length is 1 &&
                     prependedBlob.Bytes.Span[0] is 2)
                 {
-                    return inputList.items[1];
+                    return inputList.Items[1];
                 }
             }
         }
@@ -1539,23 +1539,23 @@ public class PineIRCompiler
 
 
             if (kernelApp.Function is nameof(KernelFunction.int_mul) &&
-               kernelApp.Input is Expression.List mulListExpr && mulListExpr.items.Count is 2)
+               kernelApp.Input is Expression.List mulListExpr && mulListExpr.Items.Count is 2)
             {
                 {
-                    if (mulListExpr.items[0] is Expression.Literal literalExpr &&
+                    if (mulListExpr.Items[0] is Expression.Literal literalExpr &&
                         KernelFunction.SignedIntegerFromValueRelaxed(literalExpr.Value) is { } leftInt &&
                         leftInt == -1)
                     {
-                        return mulListExpr.items[1];
+                        return mulListExpr.Items[1];
                     }
                 }
 
                 {
-                    if (mulListExpr.items[1] is Expression.Literal literalExpr &&
+                    if (mulListExpr.Items[1] is Expression.Literal literalExpr &&
                         KernelFunction.SignedIntegerFromValueRelaxed(literalExpr.Value) is { } rightInt &&
                         rightInt == -1)
                     {
-                        return mulListExpr.items[0];
+                        return mulListExpr.Items[0];
                     }
                 }
             }
@@ -1572,7 +1572,7 @@ public class PineIRCompiler
     {
         if (input is Expression.List listExpr)
         {
-            if (listExpr.items.Count is 0)
+            if (listExpr.Items.Count is 0)
             {
                 return
                     prior
@@ -1584,9 +1584,9 @@ public class PineIRCompiler
             BigInteger constItemsProduct = 1;
             var varItems = new List<Expression>();
 
-            for (var i = 0; i < listExpr.items.Count; ++i)
+            for (var i = 0; i < listExpr.Items.Count; ++i)
             {
-                var itemExpr = listExpr.items[i];
+                var itemExpr = listExpr.Items[i];
 
                 if (itemExpr is Expression.Literal literalExpr)
                 {
@@ -1684,7 +1684,7 @@ public class PineIRCompiler
 
         if (input is Expression.List listExpr)
         {
-            if (listExpr.items.Count is 0 || listExpr.items.Count is 1)
+            if (listExpr.Items.Count is 0 || listExpr.Items.Count is 1)
             {
                 return
                     prior
@@ -1692,12 +1692,12 @@ public class PineIRCompiler
                         StackInstruction.Push_Literal(PineKernelValues.TrueValue));
             }
 
-            if (listExpr.items.Count is 2)
+            if (listExpr.Items.Count is 2)
             {
-                if (listExpr.items[0] is Expression.Literal leftLiteralExpr &&
+                if (listExpr.Items[0] is Expression.Literal leftLiteralExpr &&
                     KernelFunction.SignedIntegerFromValueRelaxed(leftLiteralExpr.Value) is { } leftInt)
                 {
-                    var rightExpr = listExpr.items[1];
+                    var rightExpr = listExpr.Items[1];
 
                     if (IsIntUnsigned(rightExpr, parseCache) is { } rightUnsigned)
                     {
@@ -1729,10 +1729,10 @@ public class PineIRCompiler
                     }
                 }
 
-                if (listExpr.items[1] is Expression.Literal rightLiteralExpr &&
+                if (listExpr.Items[1] is Expression.Literal rightLiteralExpr &&
                     KernelFunction.SignedIntegerFromValueRelaxed(rightLiteralExpr.Value) is { } rightInt)
                 {
-                    var leftExpr = listExpr.items[0];
+                    var leftExpr = listExpr.Items[0];
 
                     if (IsIntUnsigned(leftExpr, parseCache) is { } leftUnsigned)
                     {
@@ -1767,14 +1767,14 @@ public class PineIRCompiler
                 {
                     var afterLeft =
                         CompileExpressionTransitive(
-                            listExpr.items[0],
+                            listExpr.Items[0],
                             context,
                             prior,
                             parseCache);
 
                     var afterRight =
                         CompileExpressionTransitive(
-                            listExpr.items[1],
+                            listExpr.Items[1],
                             context,
                             afterLeft,
                             parseCache);
@@ -1785,15 +1785,15 @@ public class PineIRCompiler
                 }
             }
 
-            if (listExpr.items.Count is 3)
+            if (listExpr.Items.Count is 3)
             {
-                if (listExpr.items[0] is Expression.Literal leftLiteralExpr &&
+                if (listExpr.Items[0] is Expression.Literal leftLiteralExpr &&
                     KernelFunction.SignedIntegerFromValueRelaxed(leftLiteralExpr.Value) is { } leftInt)
                 {
-                    if (listExpr.items[2] is Expression.Literal rightLiteralExpr &&
+                    if (listExpr.Items[2] is Expression.Literal rightLiteralExpr &&
                         KernelFunction.SignedIntegerFromValueRelaxed(rightLiteralExpr.Value) is { } rightInt)
                     {
-                        var middleExpr = listExpr.items[1];
+                        var middleExpr = listExpr.Items[1];
 
                         if (IsIntUnsigned(middleExpr, parseCache) is { } middleUnsigned)
                         {
@@ -1874,19 +1874,19 @@ public class PineIRCompiler
             return null;
         }
 
-        if (inputList.items.Count is not 2)
+        if (inputList.Items.Count is not 2)
         {
             return null;
         }
 
-        if (TryParse_IndependentSignedIntegerRelaxed(inputList.items[0], parseCache) == 0)
+        if (TryParse_IndependentSignedIntegerRelaxed(inputList.Items[0], parseCache) == 0)
         {
-            return (inputList.items[1], 4);
+            return (inputList.Items[1], 4);
         }
 
-        if (TryParse_IndependentSignedIntegerRelaxed(inputList.items[1], parseCache) == -1)
+        if (TryParse_IndependentSignedIntegerRelaxed(inputList.Items[1], parseCache) == -1)
         {
-            return (inputList.items[0], 2);
+            return (inputList.Items[0], 2);
         }
 
         return null;
@@ -1900,7 +1900,7 @@ public class PineIRCompiler
     {
         if (input is Expression.List listExpr)
         {
-            if (listExpr.items.Count is 0)
+            if (listExpr.Items.Count is 0)
             {
                 return
                     prior
@@ -1911,9 +1911,9 @@ public class PineIRCompiler
             var constItems = new List<PineValue>();
             var varItems = new List<Expression>();
 
-            for (var i = 0; i < listExpr.items.Count; ++i)
+            for (var i = 0; i < listExpr.Items.Count; ++i)
             {
-                var itemExpr = listExpr.items[i];
+                var itemExpr = listExpr.Items[i];
 
                 if (itemExpr is Expression.Literal literalExpr)
                 {
@@ -1979,7 +1979,7 @@ public class PineIRCompiler
     {
         if (input is Expression.List listExpr)
         {
-            if (listExpr.items.Count is 0)
+            if (listExpr.Items.Count is 0)
             {
                 return
                     prior
@@ -1990,9 +1990,9 @@ public class PineIRCompiler
             var constItems = new List<PineValue>();
             var varItems = new List<Expression>();
 
-            for (var i = 0; i < listExpr.items.Count; ++i)
+            for (var i = 0; i < listExpr.Items.Count; ++i)
             {
-                var itemExpr = listExpr.items[i];
+                var itemExpr = listExpr.Items[i];
 
                 if (itemExpr is Expression.Literal literalExpr)
                 {
@@ -2058,7 +2058,7 @@ public class PineIRCompiler
     {
         if (input is Expression.List listExpr)
         {
-            if (listExpr.items.Count is 0)
+            if (listExpr.Items.Count is 0)
             {
                 return
                     prior
@@ -2068,9 +2068,9 @@ public class PineIRCompiler
 
             var xorOps = prior;
 
-            for (var i = 0; i < listExpr.items.Count; ++i)
+            for (var i = 0; i < listExpr.Items.Count; ++i)
             {
-                var itemExpr = listExpr.items[i];
+                var itemExpr = listExpr.Items[i];
 
                 var itemOps =
                     CompileExpressionTransitive(
@@ -2124,13 +2124,13 @@ public class PineIRCompiler
         NodeCompilationResult prior,
         PineVMParseCache parseCache)
     {
-        if (input is Expression.List listExpr && listExpr.items.Count is 2)
+        if (input is Expression.List listExpr && listExpr.Items.Count is 2)
         {
             var shiftCountExpr =
-                listExpr.items[0];
+                listExpr.Items[0];
 
             var sourceExpr =
-                listExpr.items[1];
+                listExpr.Items[1];
 
             if (shiftCountExpr is Expression.Literal shiftCountLiteralExpr &&
                 KernelFunction.SignedIntegerFromValueRelaxed(shiftCountLiteralExpr.Value) is { } shiftCount)
@@ -2179,13 +2179,13 @@ public class PineIRCompiler
         NodeCompilationResult prior,
         PineVMParseCache parseCache)
     {
-        if (input is Expression.List listExpr && listExpr.items.Count is 2)
+        if (input is Expression.List listExpr && listExpr.Items.Count is 2)
         {
             var shiftCountExpr =
-                listExpr.items[0];
+                listExpr.Items[0];
 
             var sourceExpr =
-                listExpr.items[1];
+                listExpr.Items[1];
 
             if (shiftCountExpr is Expression.Literal shiftCountLiteralExpr &&
                 KernelFunction.SignedIntegerFromValueRelaxed(shiftCountLiteralExpr.Value) is { } shiftCount)
@@ -2241,20 +2241,20 @@ public class PineIRCompiler
         }
 
         if (kernelApp.Function is nameof(KernelFunction.int_mul) &&
-            kernelApp.Input is Expression.List mulList && mulList.items.Count is 2)
+            kernelApp.Input is Expression.List mulList && mulList.Items.Count is 2)
         {
-            if (mulList.items[0] is Expression.Literal literalExpr &&
+            if (mulList.Items[0] is Expression.Literal literalExpr &&
                 KernelFunction.SignedIntegerFromValueRelaxed(literalExpr.Value) is { } literalValue &&
                 literalValue == -1)
             {
-                return mulList.items[1];
+                return mulList.Items[1];
             }
 
-            if (mulList.items[1] is Expression.Literal literalExpr2 &&
+            if (mulList.Items[1] is Expression.Literal literalExpr2 &&
                 KernelFunction.SignedIntegerFromValueRelaxed(literalExpr2.Value) is { } literalValue2 &&
                 literalValue2 == -1)
             {
-                return mulList.items[0];
+                return mulList.Items[0];
             }
         }
 
@@ -2283,13 +2283,13 @@ public class PineIRCompiler
         if (expression is not Expression.KernelApplication kernelApp ||
             kernelApp.Function is not nameof(KernelFunction.skip) ||
             kernelApp.Input is not Expression.List skipList ||
-            skipList.items.Count is not 2)
+            skipList.Items.Count is not 2)
         {
             return null;
         }
 
-        var skipCountExpr = skipList.items[0];
-        var sourceExpr = skipList.items[1];
+        var skipCountExpr = skipList.Items[0];
+        var sourceExpr = skipList.Items[1];
 
         return (skipCountExpr, sourceExpr);
     }
@@ -2317,14 +2317,14 @@ public class PineIRCompiler
         if (expression is not Expression.KernelApplication kernelApp ||
             kernelApp.Function is not nameof(KernelFunction.take) ||
             kernelApp.Input is not Expression.List takeList ||
-            takeList.items.Count is not 2)
+            takeList.Items.Count is not 2)
         {
             return null;
         }
 
-        var takeCountExpr = takeList.items[0];
+        var takeCountExpr = takeList.Items[0];
 
-        var sourceExpr = takeList.items[1];
+        var sourceExpr = takeList.Items[1];
 
         return (takeCountExpr, sourceExpr);
     }
@@ -2351,7 +2351,7 @@ public class PineIRCompiler
         }
 
         return
-            CompilePineToDotNet.ReducePineExpression.TryEvaluateExpressionIndependent(expression, parseCache)
+            ReducePineExpression.TryEvaluateExpressionIndependent(expression, parseCache)
             .IsOkOrNull();
     }
 
@@ -2368,9 +2368,9 @@ public class PineIRCompiler
 
         if (expression is Expression.List list)
         {
-            for (var i = 0; i < list.items.Count; ++i)
+            for (var i = 0; i < list.Items.Count; ++i)
             {
-                if (ExpressionLargeEnoughForCSE(list.items[i]))
+                if (ExpressionLargeEnoughForCSE(list.Items[i]))
                     return true;
             }
         }

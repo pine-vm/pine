@@ -102,13 +102,13 @@ public class CodeAnalysis
             if (inputKernelApplication.Input is not Expression.List skipInputList)
                 return null;
 
-            if (skipInputList.items.Count is not 2)
+            if (skipInputList.Items.Count is not 2)
                 return null;
 
-            if (skipInputList.items[0] is not Expression.Literal skipCountLiteral)
+            if (skipInputList.Items[0] is not Expression.Literal skipCountLiteral)
                 return null;
 
-            if (TryParseExpressionAsIndexPath(skipInputList.items[1], rootExpression) is not ExprMappedToParentEnv.PathInParentEnv pathPrefix)
+            if (TryParseExpressionAsIndexPath(skipInputList.Items[1], rootExpression) is not ExprMappedToParentEnv.PathInParentEnv pathPrefix)
                 return null;
 
             return
@@ -169,10 +169,10 @@ public class CodeAnalysis
         {
             if (current is Expression.List listExpr)
             {
-                if (path[itemIndexAfterReduction] < 0 || path[itemIndexAfterReduction] >= listExpr.items.Count)
+                if (path[itemIndexAfterReduction] < 0 || path[itemIndexAfterReduction] >= listExpr.Items.Count)
                     return null;
 
-                current = listExpr.items[path[itemIndexAfterReduction]];
+                current = listExpr.Items[path[itemIndexAfterReduction]];
             }
             else
             {

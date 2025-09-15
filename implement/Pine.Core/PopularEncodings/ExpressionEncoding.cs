@@ -27,7 +27,7 @@ public static class ExpressionEncoding
                 PineValue.List([literal.Value])),
 
             Expression.Environment =>
-            EnvironmentExpressionValue,
+            s_environmentExpressionValue,
 
             Expression.List list =>
             EncodeListExpressionAsValue(list),
@@ -54,16 +54,16 @@ public static class ExpressionEncoding
                 "Unsupported expression type: " + expression.GetType().FullName)
         };
 
-    private static readonly PineValue.ListValue EnvironmentExpressionValue =
+    private static readonly PineValue.ListValue s_environmentExpressionValue =
         EncodeChoiceTypeVariantAsPineValue("Environment", PineValue.EmptyList);
 
     private static PineValue.ListValue EncodeListExpressionAsValue(Expression.List list)
     {
-        var encodedItems = new PineValue[list.items.Count];
+        var encodedItems = new PineValue[list.Items.Count];
 
-        for (var i = 0; i < list.items.Count; ++i)
+        for (var i = 0; i < list.Items.Count; ++i)
         {
-            encodedItems[i] = EncodeExpressionAsValue(list.items[i]);
+            encodedItems[i] = EncodeExpressionAsValue(list.Items[i]);
         }
 
         return

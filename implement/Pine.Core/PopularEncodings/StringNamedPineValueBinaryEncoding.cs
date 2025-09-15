@@ -73,11 +73,17 @@ public static class StringNamedPineValueBinaryEncoding
 
         PineValue? rootValue = null;
 
-        foreach (var decl in PineValueBinaryEncoding.DecodeSequence(bytes))
+        foreach (var (declId, declValue) in PineValueBinaryEncoding.DecodeSequence(bytes))
         {
-            rootValue = decl.declValue;
+            rootValue = declValue;
 
-            sequence.Add(decl.declValue);
+            sequence.Add(declValue);
+        }
+
+        if (rootValue is null)
+        {
+            throw new InvalidDataException(
+                "Expected at least one declaration but got none.");
         }
 
         if (rootValue is not PineValue.ListValue declsList)

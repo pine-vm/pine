@@ -56,7 +56,7 @@ public record NamesFromCompiledEnv
                     // Which env function is the entry pointing to?
                     if (functionRecord.InnerFunction is Expression.ParseAndEval innerParseAndEval)
                     {
-                        if (Core.CodeAnalysis.CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(innerParseAndEval.Encoded) is
+                        if (CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(innerParseAndEval.Encoded) is
                             ExprMappedToParentEnv.PathInParentEnv bodyExprPath)
                         {
                             if (bodyExprPath.Path.Count is 2 &&

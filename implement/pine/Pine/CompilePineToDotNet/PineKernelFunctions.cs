@@ -50,7 +50,7 @@ public partial class CompileToCSharp
             kernelAppInputExpr switch
             {
                 Expression.List listExpressionArgument =>
-                    continueWithList(listExpressionArgument.items),
+                    continueWithList(listExpressionArgument.Items),
 
                 Expression.Literal literalExpressionArgument =>
                     literalExpressionArgument.Value switch

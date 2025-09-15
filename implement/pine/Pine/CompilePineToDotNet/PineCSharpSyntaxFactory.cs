@@ -382,7 +382,7 @@ public static class PineCSharpSyntaxFactory
         return
             SyntaxFactory.ThrowExpression(
                 SyntaxFactory.ObjectCreationExpression(
-                    SyntaxFactory.IdentifierName(nameof(PineVM.ParseExpressionException)))
+                    SyntaxFactory.IdentifierName(nameof(ParseExpressionException)))
                 .WithArgumentList(
                     SyntaxFactory.ArgumentList(
                         SyntaxFactory.SingletonSeparatedList(

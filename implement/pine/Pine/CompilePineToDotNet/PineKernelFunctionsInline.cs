@@ -18,7 +18,7 @@ public class PineKernelFunctionsInline
             argumentExpression switch
             {
                 Expression.List argumentList =>
-                argumentList.items switch
+                argumentList.Items switch
                 {
                     [var firstArgument, var secondArgument] =>
                     TryInlineKernelFunction_Equal_two_args(firstArgument, secondArgument, compilationEnv),
@@ -110,13 +110,13 @@ public class PineKernelFunctionsInline
         if (kernelApp.Input is not Expression.List takeArgumentList)
             return null;
 
-        if (takeArgumentList.items.Count is not 2)
+        if (takeArgumentList.Items.Count is not 2)
             return null;
 
-        if (takeArgumentList.items[0] != Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(0)))
+        if (takeArgumentList.Items[0] != Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(0)))
             return null;
 
-        return takeArgumentList.items[1];
+        return takeArgumentList.Items[1];
     }
 
     public static Result<string, CompiledExpression>? TryInlineKernelFunction_Length(

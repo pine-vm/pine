@@ -19,6 +19,77 @@ namespace Pine.Core;
 public static class KernelFunction
 {
     /// <summary>
+    /// Evaluates a Pine kernel function by name with the given input value.
+    /// Dispatches to the corresponding primitive operation based on the function name.
+    /// </summary>
+    /// <param name="function">The name of the kernel function to evaluate.</param>
+    /// <param name="inputValue">The input value to the kernel function.</param>
+    /// <returns>The result of evaluating the kernel function with the provided input value.</returns>
+    /// <exception cref="InvalidOperationException">Thrown if the function name is unknown.</exception>
+    public static PineValue ApplyKernelFunctionGeneric(
+        string function,
+        PineValue inputValue)
+    {
+        return function switch
+        {
+            nameof(equal) =>
+            equal(inputValue),
+
+            nameof(length) =>
+            length(inputValue),
+
+            nameof(head) =>
+            head(inputValue),
+
+            nameof(skip) =>
+            skip(inputValue),
+
+            nameof(take) =>
+            take(inputValue),
+
+            nameof(concat) =>
+            concat(inputValue),
+
+            nameof(reverse) =>
+            reverse(inputValue),
+
+            nameof(negate) =>
+            negate(inputValue),
+
+            nameof(int_add) =>
+            int_add(inputValue),
+
+            nameof(int_mul) =>
+            int_mul(inputValue),
+
+            nameof(int_is_sorted_asc) =>
+            int_is_sorted_asc(inputValue),
+
+            nameof(bit_and) =>
+            bit_and(inputValue),
+
+            nameof(bit_or) =>
+            bit_or(inputValue),
+
+            nameof(bit_xor) =>
+            bit_xor(inputValue),
+
+            nameof(bit_not) =>
+            bit_not(inputValue),
+
+            nameof(bit_shift_left) =>
+            bit_shift_left(inputValue),
+
+            nameof(bit_shift_right) =>
+            bit_shift_right(inputValue),
+
+            _ =>
+            throw new InvalidOperationException(
+                "Unknown kernel function '" + function + "'")
+        };
+    }
+
+    /// <summary>
     /// For a list, reports if all elements are equal. For a blob, reports if all bytes are equal.
     /// </summary>
     /// <param name="value">The input value, which can be a list or a blob.</param>

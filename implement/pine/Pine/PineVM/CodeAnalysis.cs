@@ -440,7 +440,7 @@ public class CodeAnalysis
         {
             return
                 [
-                ..envListExpr.items
+                ..envListExpr.Items
                 .SelectMany((childExpr, childIndex) =>
                 EnvItemsMappingsFromChildToParent(childExpr)
                 .Select(childMapping => new KeyValuePair<IReadOnlyList<int>, ExprMappedToParentEnv>(
@@ -1251,7 +1251,7 @@ public class CodeAnalysis
         PineVMParseCache parseCache)
     {
         return
-            CompilePineToDotNet.ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
+            ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
             findReplacement: expr =>
             {
                 if (expr is not Expression.ParseAndEval parseAndEval)
@@ -1274,7 +1274,7 @@ public class CodeAnalysis
                 }
 
                 var inlinedExpr =
-                    CompilePineToDotNet.ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
+                    ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
                         findReplacement:
                         descendant =>
                         {
@@ -1288,7 +1288,7 @@ public class CodeAnalysis
                         staticExpr).expr;
 
                 var inlinedExprReduced =
-                    CompilePineToDotNet.ReducePineExpression.ReduceExpressionBottomUp(inlinedExpr, parseCache);
+                    ReducePineExpression.ReduceExpressionBottomUp(inlinedExpr, parseCache);
 
                 return inlinedExprReduced;
             },
@@ -1418,11 +1418,11 @@ public class CodeAnalysis
 
         if (expression is Expression.List listExpr)
         {
-            var parsedItems = new StaticExpressionGen[listExpr.items.Count];
+            var parsedItems = new StaticExpressionGen[listExpr.Items.Count];
 
             for (var itemIndex = 0; itemIndex < parsedItems.Length; ++itemIndex)
             {
-                var item = listExpr.items[itemIndex];
+                var item = listExpr.Items[itemIndex];
 
                 var parseItemResult =
                     ParseAsStaticExpression(
@@ -1580,7 +1580,7 @@ public class CodeAnalysis
         }
 
         var evalIndependentResult =
-            CompilePineToDotNet.ReducePineExpression.TryEvaluateExpressionIndependent(parseAndEval.Encoded, parseCache);
+            ReducePineExpression.TryEvaluateExpressionIndependent(parseAndEval.Encoded, parseCache);
 
         {
             if (evalIndependentResult.IsErrOrNull() is { } err)
@@ -1650,11 +1650,11 @@ public class CodeAnalysis
 
         if (expression is Expression.List listExpr)
         {
-            var itemClasses = new PineValueClass?[listExpr.items.Count];
+            var itemClasses = new PineValueClass?[listExpr.Items.Count];
 
-            for (var itemIndex = 0; itemIndex < listExpr.items.Count; ++itemIndex)
+            for (var itemIndex = 0; itemIndex < listExpr.Items.Count; ++itemIndex)
             {
-                var item = listExpr.items[itemIndex];
+                var item = listExpr.Items[itemIndex];
 
                 var itemClass = MapValueClass(envClass, item);
 

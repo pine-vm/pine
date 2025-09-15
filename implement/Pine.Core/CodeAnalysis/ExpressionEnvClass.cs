@@ -105,9 +105,9 @@ public abstract record ExpressionEnvClass
         if (currentIndex < 0)
             return null;
 
-        if (currentIndex >= listExpr.items.Count)
+        if (currentIndex >= listExpr.Items.Count)
             return null;
 
-        return TryMapPathToParentEnvironment(listExpr.items[currentIndex], [.. path.Skip(1)]);
+        return TryMapPathToParentEnvironment(listExpr.Items[currentIndex], [.. path.Skip(1)]);
     }
 }

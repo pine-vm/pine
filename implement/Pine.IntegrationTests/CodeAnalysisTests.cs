@@ -1405,7 +1405,7 @@ public class CodeAnalysisTests
             try
             {
                 var envClassResult =
-                    Core.CodeAnalysis.CodeAnalysis.MinimalValueClassForStaticProgram(
+                    CodeAnalysis.MinimalValueClassForStaticProgram(
                         expression: testCase.expression,
                         availableEnvironment: PineValueClass.CreateEquals(testCase.environment));
 

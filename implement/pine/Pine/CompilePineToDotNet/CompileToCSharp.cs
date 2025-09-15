@@ -817,12 +817,12 @@ public partial class CompileToCSharp
         Expression.List listExpression,
         ExpressionCompilationEnvironment environment)
     {
-        if (!listExpression.items.Any())
+        if (!listExpression.Items.Any())
             return Result<string, CompiledExpression>.ok(
                 CompiledExpression.WithTypeGenericValue(PineCSharpSyntaxFactory.PineValueEmptyListSyntax));
 
         return
-            listExpression.items.Select((itemExpression, itemIndex) =>
+            listExpression.Items.Select((itemExpression, itemIndex) =>
             CompileToCSharpExpression(
                 itemExpression,
                 environment,
@@ -1446,7 +1446,7 @@ public partial class CompileToCSharp
                     Result<string, Expression>.ok(expression),
 
                     Expression.List list =>
-                    list.items.Select(e => TransformPineExpressionWithOptionalReplacement(findReplacement, e))
+                    list.Items.Select(e => TransformPineExpressionWithOptionalReplacement(findReplacement, e))
                     .ListCombine()
                     .Map(elements => (Expression)Expression.ListInstance([.. elements])),
 
@@ -1705,7 +1705,7 @@ public partial class CompileToCSharp
             [],
 
             Expression.List list =>
-            list.items.SelectMany(EnumerateAllLiterals),
+            list.Items.SelectMany(EnumerateAllLiterals),
 
             Expression.KernelApplication kernelApplicationExpression =>
             EnumerateAllLiterals(kernelApplicationExpression.Input),
@@ -1772,7 +1772,7 @@ public partial class CompileToCSharp
                     // Leaf node, no further traversal needed
                     break;
                 case Expression.List listExpr:
-                    foreach (var subExpr in listExpr.items)
+                    foreach (var subExpr in listExpr.Items)
                         Traverse(subExpr, isConditional);
                     break;
                 case Expression.ParseAndEval parseAndEvalExpr:

@@ -361,6 +361,7 @@ public class CompilePineToDotNetTests
                 ExpectedText:
                 """
                 using Pine.Core;
+                using Pine.Core.CodeAnalysis;
                 using Pine.PineVM;
                 using System;
                 using System.Collections.Generic;
@@ -426,6 +427,7 @@ public class CompilePineToDotNetTests
                 ExpectedText:
                 """
                 using Pine.Core;
+                using Pine.Core.CodeAnalysis;
                 using Pine.PineVM;
                 using System;
                 using System.Collections.Generic;

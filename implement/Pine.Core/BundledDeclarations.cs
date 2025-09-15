@@ -10,12 +10,29 @@ namespace Pine.Core;
 /// <summary>
 /// Named declarations of <see cref="PineValue"/> which are bundled with the assembly.
 /// </summary>
+/// <param name="DecodedSequence">
+/// The sequence of decoded <see cref="PineValue"/> instances contained in the bundle. This is typically used
+/// to preserve ordering information alongside the named declarations.
+/// </param>
+/// <param name="EmbeddedDeclarations">
+/// A dictionary mapping stable names to <see cref="PineValue"/> declarations contained in the bundle.
+/// This includes compiled Elm environments and other reused values.
+/// </param>
 public record BundledDeclarations(
     IReadOnlyList<PineValue> DecodedSequence,
     IReadOnlyDictionary<string, PineValue> EmbeddedDeclarations)
 {
+    /// <summary>
+    /// Default relative path of the embedded resource file that contains bundled declarations.
+    /// </summary>
     public const string ResourceFilePath = "prebuilt-artifact/reused-pine-values-and-builds.gzip";
 
+    /// <summary>
+    /// Loads <see cref="BundledDeclarations"/> from an assembly's embedded resource using <see cref="ResourceFilePath"/>.
+    /// Returns <c>null</c> on failure and logs a message to <see cref="Console"/>.
+    /// </summary>
+    /// <param name="assembly">The assembly containing the embedded resource.</param>
+    /// <returns>The loaded <see cref="BundledDeclarations"/>, or <c>null</c> if loading failed.</returns>
     public static BundledDeclarations? LoadFromEmbedded(
         System.Reflection.Assembly assembly) =>
          LoadEmbedded(assembly)
@@ -27,6 +44,16 @@ public record BundledDeclarations(
                  return null;
              });
 
+    /// <summary>
+    /// Loads <see cref="BundledDeclarations"/> from an assembly's embedded resource at the specified path.
+    /// The resource is expected to be a GZip-compressed binary produced by <see cref="CompressResourceFile(ReadOnlyMemory{byte})"/>
+    /// and encoded via <see cref="StringNamedPineValueBinaryEncoding"/>.
+    /// </summary>
+    /// <param name="assembly">The assembly containing the embedded resource.</param>
+    /// <param name="embeddedResourceFilePath">The relative resource path inside the assembly. Defaults to <see cref="ResourceFilePath"/>.</param>
+    /// <returns>
+    /// A <see cref="Result{TError, TOk}"/> containing either an error message or the decoded <see cref="BundledDeclarations"/>.
+    /// </returns>
     public static Result<string, BundledDeclarations> LoadEmbedded(
         System.Reflection.Assembly assembly,
         string embeddedResourceFilePath = ResourceFilePath)
@@ -68,10 +95,46 @@ public record BundledDeclarations(
         return new BundledDeclarations(decoded.decodedSequence, decoded.decls);
     }
 
+    /// <summary>
+    /// Compresses and writes a bundle file containing compiled environments and other reused values.
+    /// The result is written to <see cref="ResourceFilePath"/> under <paramref name="destinationDirectory"/>.
+    /// </summary>
+    /// <param name="compiledEnvironments">A mapping of source trees to their compiled environment values.</param>
+    /// <param name="otherReusedValues">Additional named <see cref="PineValue"/>s to include in the bundle.</param>
+    /// <param name="destinationDirectory">The destination directory. If null or empty, uses the current working directory.</param>
     public static void CompressAndWriteBundleFile(
         IReadOnlyDictionary<BlobTreeWithStringPath, PineValue> compiledEnvironments,
         IReadOnlyDictionary<string, PineValue> otherReusedValues,
         string? destinationDirectory)
+    {
+        var uncompressed =
+            BuildBundleFile(
+                compiledEnvironments,
+                otherReusedValues);
+
+        var compressed = CompressResourceFile(uncompressed);
+
+        Console.WriteLine(
+            "Compressed from " +
+            CommandLineInterface.FormatIntegerForDisplay(uncompressed.Length) + " bytes to " +
+            CommandLineInterface.FormatIntegerForDisplay(compressed.Length) + " bytes.");
+
+        WriteBundleFile(
+            compressed,
+            destinationDirectory);
+    }
+
+    /// <summary>
+    /// Builds the uncompressed bundle payload for the given compiled environments and other reused values.
+    /// Keys for compiled environments are computed via <see cref="BundledElmEnvironments.DictionaryKeyFromFileTree(BlobTreeWithStringPath)"/>.
+    /// </summary>
+    /// <param name="compiledEnvironments">A mapping of source trees to their compiled environment values.</param>
+    /// <param name="otherReusedValues">Additional named <see cref="PineValue"/>s to include in the bundle.</param>
+    /// <returns>The uncompressed binary payload to embed or compress.</returns>
+    /// <exception cref="InvalidOperationException">Thrown if a key collision occurs when building the dictionary.</exception>
+    public static ReadOnlyMemory<byte> BuildBundleFile(
+        IReadOnlyDictionary<BlobTreeWithStringPath, PineValue> compiledEnvironments,
+        IReadOnlyDictionary<string, PineValue> otherReusedValues)
     {
         var declarations = otherReusedValues.ToDictionary();
 
@@ -99,16 +162,7 @@ public record BundledDeclarations(
             compiledEnvironments.Count + " compiled environments with an uncompressed size of " +
             CommandLineInterface.FormatIntegerForDisplay(uncompressed.Length) + " bytes.");
 
-        var compressed = CompressResourceFile(uncompressed);
-
-        Console.WriteLine(
-            "Compressed from " +
-            CommandLineInterface.FormatIntegerForDisplay(uncompressed.Length) + " bytes to " +
-            CommandLineInterface.FormatIntegerForDisplay(compressed.Length) + " bytes.");
-
-        WriteBundleFile(
-            compressed,
-            destinationDirectory);
+        return uncompressed;
     }
 
     private static void WriteBundleFile(
@@ -146,6 +200,11 @@ public record BundledDeclarations(
             "Saved the prebuilt dictionary to " + absolutePath);
     }
 
+    /// <summary>
+    /// Compresses the provided bundle payload using GZip.
+    /// </summary>
+    /// <param name="beforeCompression">The uncompressed payload to compress.</param>
+    /// <returns>The compressed payload bytes.</returns>
     public static ReadOnlyMemory<byte> CompressResourceFile(
         ReadOnlyMemory<byte> beforeCompression)
     {

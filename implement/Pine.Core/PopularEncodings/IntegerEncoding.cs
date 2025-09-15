@@ -138,12 +138,41 @@ public static class IntegerEncoding
         return memory;
     }
 
+    /// <summary>
+    /// Parse a signed integer from a Pine blob using strict validation rules.
+    /// <para>
+    /// Strict parsing rejects ambiguous encodings (leading zero after the sign byte and negative zero).
+    /// </para>
+    /// </summary>
+    /// <param name="value">The <see cref="PineValue"/> expected to be a <see cref="PineValue.BlobValue"/> holding the integer bytes.</param>
+    /// <returns>
+    /// An <see cref="Result{T1, T2}"/> with the parsed <see cref="System.Numerics.BigInteger"/> on success, or an error message on failure.
+    /// </returns>
     public static Result<string, System.Numerics.BigInteger> ParseSignedIntegerStrict(PineValue value) =>
         ParseSignedInteger(value, rejectLeadingZero: true, rejectNegativeZero: true);
 
+    /// <summary>
+    /// Parse a signed integer from a Pine blob using relaxed validation rules.
+    /// <para>
+    /// Relaxed parsing accepts non-canonical encodings (such as a leading zero after the sign byte or negative zero).
+    /// </para>
+    /// </summary>
+    /// <param name="value">The <see cref="PineValue"/> expected to be a <see cref="PineValue.BlobValue"/> holding the integer bytes.</param>
+    /// <returns>
+    /// An <see cref="Result{T1, T2}"/> with the parsed <see cref="System.Numerics.BigInteger"/> on success, or an error message on failure.
+    /// </returns>
     public static Result<string, System.Numerics.BigInteger> ParseSignedIntegerRelaxed(PineValue value) =>
         ParseSignedInteger(value, rejectLeadingZero: false, rejectNegativeZero: false);
 
+    /// <summary>
+    /// Try to parse the given <see cref="PineValue"/> as a signed integer with configurable validation.
+    /// </summary>
+    /// <param name="value">The value to parse; must be a <see cref="PineValue.BlobValue"/>.</param>
+    /// <param name="rejectLeadingZero">If true, reject encodings where the first magnitude byte is zero (when length &gt; 2).</param>
+    /// <param name="rejectNegativeZero">If true, reject encodings of negative zero (sign byte 2 with all following bytes zero).</param>
+    /// <returns>
+    /// An <see cref="Result{T1, T2}"/> with the parsed <see cref="System.Numerics.BigInteger"/> on success, or an error message on failure.
+    /// </returns>
     public static Result<string, System.Numerics.BigInteger> ParseSignedInteger(
         PineValue value,
         bool rejectLeadingZero,
@@ -158,9 +187,29 @@ public static class IntegerEncoding
             rejectNegativeZero: rejectNegativeZero);
     }
 
+    /// <summary>
+    /// Parse a signed integer from a byte sequence using strict validation rules.
+    /// <para>
+    /// Strict parsing rejects ambiguous encodings (leading zero after the sign byte and negative zero).
+    /// </para>
+    /// </summary>
+    /// <param name="blobValue">Sequence of bytes representing the signed integer.</param>
+    /// <returns>
+    /// An <see cref="Result{T1, T2}"/> with the parsed <see cref="System.Numerics.BigInteger"/> on success, or an error message on failure.
+    /// </returns>
     public static Result<string, System.Numerics.BigInteger> ParseSignedIntegerStrict(ReadOnlySpan<byte> blobValue) =>
         ParseSignedInteger(blobValue, rejectLeadingZero: true, rejectNegativeZero: true);
 
+    /// <summary>
+    /// Parse a signed integer from a byte sequence using relaxed validation rules.
+    /// <para>
+    /// Relaxed parsing accepts non-canonical encodings (such as a leading zero after the sign byte or negative zero).
+    /// </para>
+    /// </summary>
+    /// <param name="blobValue">Sequence of bytes representing the signed integer.</param>
+    /// <returns>
+    /// An <see cref="Result{T1, T2}"/> with the parsed <see cref="System.Numerics.BigInteger"/> on success, or an error message on failure.
+    /// </returns>
     public static Result<string, System.Numerics.BigInteger> ParseSignedIntegerRelaxed(ReadOnlySpan<byte> blobValue) =>
         ParseSignedInteger(blobValue, rejectLeadingZero: false, rejectNegativeZero: false);
 

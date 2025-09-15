@@ -385,7 +385,7 @@ public record ReusedInstances(
                     descendant switch
                     {
                         Expression.List listExpression =>
-                        Expression.ListInstance([.. listExpression.items.Select(ReuseInstance)]),
+                        Expression.ListInstance([.. listExpression.Items.Select(ReuseInstance)]),
 
                         Expression.Conditional conditionalExpression =>
                         Expression.ConditionalInstance(
@@ -416,7 +416,7 @@ public record ReusedInstances(
                 Expressions
                 .OfType<Expression.List>()
                 .ToFrozenDictionary(
-                    keySelector: list => new Expression.List.ListStruct(list.items),
+                    keySelector: list => new Expression.List.ListStruct(list.Items),
                     elementSelector: list => list);
 
             ConditionalExpressions =

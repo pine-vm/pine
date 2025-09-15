@@ -13,7 +13,8 @@ public delegate Result<string, Expression> ParseExprDelegate(PineValue value);
 /// <summary>
 /// An expression in the Pine language.
 /// 
-/// For a listing of expression types in the Pine language, see the <see href="https://github.com/pine-vm/pine/blob/cc29e742801ef0d5121682dd8cadeaa4af447757/implement/pine/Elm/elm-compiler/src/Pine.elm#L46-L63"/>>
+/// For a listing of expression types in the Pine language,
+/// see <see href="https://github.com/pine-vm/pine/blob/1f6e378ff376d809e7029a376b3a562d990fde7f/implement/pine/Elm/elm-compiler/src/Pine.elm#L53-L70"/>>
 /// </summary>
 [JsonConverter(typeof(JsonConverterForChoiceType))]
 public abstract record Expression
@@ -69,9 +70,9 @@ public abstract record Expression
     {
         var listKey = new List.ListStruct(items);
 
-        if (ReusedInstances.Instance.ListExpressions is { } ReusedListExpressions)
+        if (ReusedInstances.Instance.ListExpressions is { } reusedListExpressions)
         {
-            if (ReusedListExpressions.TryGetValue(listKey, out var list))
+            if (reusedListExpressions.TryGetValue(listKey, out var list))
                 return list;
         }
 
@@ -91,9 +92,9 @@ public abstract record Expression
         var conditionalStruct =
             new Conditional.ConditionalStruct(condition, falseBranch, trueBranch);
 
-        if (ReusedInstances.Instance.ConditionalExpressions is { } ReusedConditionalExpressions)
+        if (ReusedInstances.Instance.ConditionalExpressions is { } reusedConditionalExpressions)
         {
-            if (ReusedConditionalExpressions.TryGetValue(conditionalStruct, out var conditional))
+            if (reusedConditionalExpressions.TryGetValue(conditionalStruct, out var conditional))
                 return conditional;
         }
 
@@ -124,7 +125,7 @@ public abstract record Expression
     public record List
         : Expression
     {
-        private readonly int slimHashCode;
+        private readonly int _slimHashCode;
 
         /// <ihneritdoc/>
         public override int SubexpressionCount { get; }
@@ -135,7 +136,7 @@ public abstract record Expression
         /// <summary>
         /// The list of subexpressions.
         /// </summary>
-        public IReadOnlyList<Expression> items { get; }
+        public IReadOnlyList<Expression> Items { get; }
 
         internal List(IReadOnlyList<Expression> items)
             :
@@ -145,17 +146,17 @@ public abstract record Expression
 
         internal List(ListStruct listKey)
         {
-            items = listKey.Items;
+            Items = listKey.Items;
 
-            slimHashCode = listKey.slimHashCode;
+            _slimHashCode = listKey.SlimHashCode;
 
-            SubexpressionCount = items.Count;
+            SubexpressionCount = Items.Count;
 
-            for (var i = 0; i < items.Count; ++i)
+            for (var i = 0; i < Items.Count; ++i)
             {
-                SubexpressionCount += items[i].SubexpressionCount;
+                SubexpressionCount += Items[i].SubexpressionCount;
 
-                if (items[i].ReferencesEnvironment)
+                if (Items[i].ReferencesEnvironment)
                     ReferencesEnvironment = true;
             }
         }
@@ -169,15 +170,15 @@ public abstract record Expression
             if (ReferenceEquals(this, notNull))
                 return true;
 
-            if (!(slimHashCode == notNull.slimHashCode))
+            if (!(_slimHashCode == notNull._slimHashCode))
                 return false;
 
-            if (items.Count != notNull.items.Count)
+            if (Items.Count != notNull.Items.Count)
                 return false;
 
-            for (var i = 0; i < items.Count; ++i)
+            for (var i = 0; i < Items.Count; ++i)
             {
-                if (!items[i].Equals(notNull.items[i]))
+                if (!Items[i].Equals(notNull.Items[i]))
                     return false;
             }
 
@@ -186,24 +187,24 @@ public abstract record Expression
 
         /// <inheritdoc/>
         public override int GetHashCode() =>
-            slimHashCode;
+            _slimHashCode;
 
         internal readonly record struct ListStruct
         {
             public IReadOnlyList<Expression> Items { get; }
 
-            internal readonly int slimHashCode;
+            internal readonly int SlimHashCode;
 
             public ListStruct(IReadOnlyList<Expression> items)
             {
                 Items = items;
 
-                slimHashCode = ComputeHashCode(items);
+                SlimHashCode = ComputeHashCode(items);
             }
 
             public override int GetHashCode()
             {
-                return slimHashCode;
+                return SlimHashCode;
             }
 
             public static int ComputeHashCode(IReadOnlyList<Expression> items)
@@ -335,7 +336,7 @@ public abstract record Expression
     public record Conditional
         : Expression
     {
-        private readonly int slimHashCode;
+        private readonly int _slimHashCode;
 
         /// <summary>
         /// The expression evaluated to determine which branch to take.
@@ -374,7 +375,7 @@ public abstract record Expression
             FalseBranch = conditionalStruct.FalseBranch;
             TrueBranch = conditionalStruct.TrueBranch;
 
-            slimHashCode = conditionalStruct.slimHashCode;
+            _slimHashCode = conditionalStruct.SlimHashCode;
 
             SubexpressionCount =
                 Condition.SubexpressionCount +
@@ -398,7 +399,7 @@ public abstract record Expression
                 return false;
 
             return
-                slimHashCode == notNull.slimHashCode &&
+                _slimHashCode == notNull._slimHashCode &&
                 Condition.Equals(notNull.Condition) &&
                 FalseBranch.Equals(notNull.FalseBranch) &&
                 TrueBranch.Equals(notNull.TrueBranch);
@@ -406,7 +407,7 @@ public abstract record Expression
 
         /// <inheritdoc/>
         public override int GetHashCode() =>
-            slimHashCode;
+            _slimHashCode;
 
         internal readonly record struct ConditionalStruct
         {
@@ -416,7 +417,7 @@ public abstract record Expression
 
             public Expression TrueBranch { get; }
 
-            internal readonly int slimHashCode;
+            internal readonly int SlimHashCode;
 
             public ConditionalStruct(
                 Expression condition,
@@ -427,18 +428,18 @@ public abstract record Expression
                 FalseBranch = falseBranch;
                 TrueBranch = trueBranch;
 
-                slimHashCode = ComputeHashCode(condition, falseBranch, trueBranch);
+                SlimHashCode = ComputeHashCode(condition, falseBranch, trueBranch);
             }
 
             /// <inheritdoc/>
             public override readonly int GetHashCode() =>
-                slimHashCode;
+                SlimHashCode;
 
             /// <inheritdoc/>
             public readonly bool Equals(ConditionalStruct other)
             {
                 return
-                    other.slimHashCode == slimHashCode &&
+                    other.SlimHashCode == SlimHashCode &&
                     other.Condition.Equals(Condition) &&
                     other.FalseBranch.Equals(FalseBranch) &&
                     other.TrueBranch.Equals(TrueBranch);
@@ -493,7 +494,7 @@ public abstract record Expression
         /// <inheritdoc/>
         public override bool ReferencesEnvironment { get; }
 
-        internal readonly int slimHashCode;
+        internal readonly int SlimHashCode;
 
         /// <summary>
         /// Creates a new instance of a string tag expression.
@@ -508,12 +509,12 @@ public abstract record Expression
             SubexpressionCount = tagged.SubexpressionCount + 1;
             ReferencesEnvironment = tagged.ReferencesEnvironment;
 
-            slimHashCode = HashCode.Combine(tag, tagged);
+            SlimHashCode = HashCode.Combine(tag, tagged);
         }
 
         /// <inheritdoc/>
         public override int GetHashCode() =>
-            slimHashCode;
+            SlimHashCode;
 
         /// <inheritdoc/>
         public virtual bool Equals(StringTag? other)
@@ -525,7 +526,7 @@ public abstract record Expression
                 return false;
 
             return
-                other.slimHashCode == slimHashCode &&
+                other.SlimHashCode == SlimHashCode &&
                 other.Tag == Tag &&
                 other.Tagged == Tagged;
         }
@@ -552,7 +553,7 @@ public abstract record Expression
                 expression switch
                 {
                     List listExpression =>
-                    listExpression.items,
+                    listExpression.Items,
 
                     Conditional conditionalExpression =>
                     [
@@ -624,9 +625,9 @@ public abstract record Expression
                     break;
 
                 case List list:
-                    for (var i = 0; i < list.items.Count; i++)
+                    for (var i = 0; i < list.Items.Count; i++)
                     {
-                        stack.Push(list.items[i]);
+                        stack.Push(list.Items[i]);
                     }
                     break;
 
