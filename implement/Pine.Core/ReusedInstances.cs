@@ -73,27 +73,10 @@ public record ReusedInstances(
             PineValue.CollectAllComponentsFromRoots(
                 [.. source.PineValueLists.Values
                 ,..source.ValuesExpectedInCompilerLists
-                ,..source.ValuesExpectedInCompilerBlobs]);
+                ,..source.ValuesExpectedInCompilerBlobs
+                ]);
 
         var mutatedBlobsDict = new Dictionary<PineValue.BlobValue, string>();
-
-        var blobEntriesList =
-            allBlobs
-            .OrderBy(blob => blob.Bytes.Length)
-            .Select((blobValue, blobIndex) =>
-            {
-                var entryKey = "blob-" + blobIndex.ToString();
-
-                mutatedBlobsDict[blobValue] = entryKey;
-
-                return
-                new PineValueCompactBuild.ListEntry(
-                    Key: entryKey,
-                    new PineValueCompactBuild.ListEntryValue(
-                        BlobBytesBase64: System.Convert.ToBase64String(blobValue.Bytes.Span),
-                        ListItemsKeys: null));
-            })
-            .ToList();
 
         var listsOrdered =
             source.PineValueLists.Values
@@ -101,11 +84,6 @@ public record ReusedInstances(
             .Distinct()
             .OrderBy(l => l.NodesCount)
             .ToList();
-
-        var (basicItems, entryValueFromListItems) =
-            PineValueCompactBuild.PrebuildListEntries(
-                blobValues: allBlobs,
-                source.PineValueLists.Values.Concat(source.ValuesExpectedInCompilerLists).ToHashSet());
 
         var mutatedDict = new Dictionary<string, PineValue>
         {

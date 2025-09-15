@@ -1,7 +1,6 @@
 using Pine.Core.Addressing;
 using System;
 using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.IO.Compression;
 using System.Linq;
 
@@ -127,63 +126,5 @@ public partial class BundledElmEnvironments
             return new ReadOnlyMemory<byte>(seg2.Array!, seg2.Offset, seg2.Count);
 
         return grow.ToArray().AsMemory();
-    }
-
-    /// <summary>
-    /// Builds the bundle resource entries for the provided compiled environments and returns the entries
-    /// along with a JSON (UTF-8) representation suitable for embedding as a resource.
-    /// </summary>
-    /// <param name="compiledEnvironments">A mapping from source trees to their compiled environment values.</param>
-    /// <returns>
-    /// A tuple containing the list entries and the serialized JSON as UTF-8 bytes.
-    /// </returns>
-    public static (IReadOnlyList<PineValueCompactBuild.ListEntry>, ReadOnlyMemory<byte>) BuildBundleResourceFileJsonUtf8(
-        IReadOnlyDictionary<BlobTreeWithStringPath, PineValue> compiledEnvironments)
-    {
-        var allEntries =
-            BuildBundleResourceFileListItems(compiledEnvironments);
-
-        return (allEntries, System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(allEntries));
-    }
-
-    /// <summary>
-    /// Builds a compact list of bundle resource entries for the given compiled environments.
-    /// Shared <see cref="PineValue"/> components are factored out using <see cref="PineValueCompactBuild.PrebuildListEntries"/>.
-    /// </summary>
-    /// <param name="compiledEnvironments">A mapping from source trees to their compiled environment values.</param>
-    /// <returns>A list of entries encoding shared values followed by environment entries.</returns>
-    public static IReadOnlyList<PineValueCompactBuild.ListEntry> BuildBundleResourceFileListItems(
-        IReadOnlyDictionary<BlobTreeWithStringPath, PineValue> compiledEnvironments)
-    {
-        var (listValues, blobValues) =
-            PineValue.CollectAllComponentsFromRoots(compiledEnvironments.Values);
-
-        var sharedValuesDict =
-            PineValueCompactBuild.PrebuildListEntries(
-                blobValues: blobValues,
-                listValues: listValues);
-
-        var environmentEntries =
-            compiledEnvironments
-            .Select(compiledEnvironment =>
-            {
-                var key = DictionaryKeyFromFileTree(compiledEnvironment.Key);
-
-                if (compiledEnvironment.Value is not PineValue.ListValue compiledListValue)
-                {
-                    throw new NotImplementedException(
-                        "Unexpected value type for compiled Elm environment: " + compiledEnvironment.GetType());
-                }
-
-                return new PineValueCompactBuild.ListEntry(
-                    Key: key,
-                    Value: sharedValuesDict.entryValueFromListItems(compiledListValue.Items));
-            })
-            .ToImmutableArray();
-
-        return
-            [..sharedValuesDict.listEntries
-            , ..environmentEntries
-            ];
     }
 }
