@@ -11,7 +11,7 @@ steps:
 - task: UseDotNet@2
   inputs:
     packageType: 'sdk' # Options: runtime, sdk
-    version: '9.0.302'
+    version: '9.0.305'
     includePreviewVersions: true
 
 - script: dotnet --version
