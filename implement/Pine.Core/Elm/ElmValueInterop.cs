@@ -1,24 +1,47 @@
 using Pine.Core.PopularEncodings;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace Pine.Core.Elm;
 
+/// <summary>
+/// Helpers to convert between <see cref="PineValue"/>, <see cref="ElmValue"/>, and compiler-facing encodings.
+/// </summary>
+/// <remarks>
+/// This type provides utilities to encode/decode values as produced or consumed by the Elm compiler
+/// and to parse common Elm ADTs (Maybe, Result) from Pine/Elm representations.
+/// </remarks>
 public class ElmValueInterop
 {
+    /// <summary>
+    /// Pine-encoded string value for the Elm constructor name "Nothing".
+    /// </summary>
     public static readonly PineValue String_Nothing_Value =
         StringEncoding.ValueFromString("Nothing");
 
+    /// <summary>
+    /// Pine-encoded string value for the Elm constructor name "Just".
+    /// </summary>
     public static readonly PineValue String_Just_Value =
         StringEncoding.ValueFromString("Just");
 
+    /// <summary>
+    /// Pine-encoded string value for the Elm constructor name "Err".
+    /// </summary>
     public static readonly PineValue String_Err_Value =
         StringEncoding.ValueFromString("Err");
 
+    /// <summary>
+    /// Pine-encoded string value for the Elm constructor name "Ok".
+    /// </summary>
     public static readonly PineValue String_Ok_Value =
         StringEncoding.ValueFromString("Ok");
 
+    /// <summary>
+    /// Encodes a <see cref="PineValue"/> to an <see cref="ElmValue"/> using the same scheme as the Elm compiler.
+    /// </summary>
+    /// <param name="pineValue">The value to encode.</param>
+    /// <returns>The encoded <see cref="ElmValue"/>.</returns>
     public static ElmValue PineValueEncodedAsInElmCompiler(
         PineValue pineValue) =>
         PineValueEncodedAsInElmCompiler(
@@ -29,6 +52,10 @@ public class ElmValueInterop
     /// <summary>
     /// Encode as in https://github.com/pine-vm/pine/blob/ef26bed9aa54397e476545d9e30821565139d821/implement/pine/ElmTime/compile-elm-program/src/Pine.elm#L75-L77
     /// </summary>
+    /// <param name="pineValue">The value to encode.</param>
+    /// <param name="additionalReusableEncodings">Optional cache of precomputed encodings to reuse.</param>
+    /// <param name="reportNewEncoding">Optional callback invoked when a new encoding is produced.</param>
+    /// <returns>The encoded <see cref="ElmValue"/>.</returns>
     public static ElmValue PineValueEncodedAsInElmCompiler(
         PineValue pineValue,
         IReadOnlyDictionary<PineValue, ElmValue>? additionalReusableEncodings,
@@ -52,12 +79,17 @@ public class ElmValueInterop
         {
             case PineValue.BlobValue blobValue:
                 {
-                    var byteItems =
-                        new ElmValue.ElmList(
-                            [.. blobValue.Bytes.ToArray().Select(byteInt => ElmValue.Integer(byteInt))]);
+                    var byteItems = new ElmValue[blobValue.Bytes.Length];
+
+                    for (var byteIndex = 0; byteIndex < byteItems.Length; byteIndex++)
+                    {
+                        var byteValue = blobValue.Bytes.Span[byteIndex];
+
+                        byteItems[byteIndex] = ElmValue.Integer(byteValue);
+                    }
 
                     var encoded =
-                        ElmValue.TagInstance("BlobValue", [byteItems]);
+                        ElmValue.TagInstance("BlobValue", [ElmValue.ListInstance(byteItems)]);
 
                     reportNewEncoding?.Invoke(pineValue, encoded);
 
@@ -96,6 +128,13 @@ public class ElmValueInterop
         }
     }
 
+    /// <summary>
+    /// Decodes an <see cref="ElmValue"/> that was encoded using <see cref="PineValueEncodedAsInElmCompiler(PineValue, IReadOnlyDictionary{PineValue, ElmValue}?, Action{PineValue, ElmValue}?)"/> back into <see cref="PineValue"/>.
+    /// </summary>
+    /// <param name="elmValue">The encoded value.</param>
+    /// <param name="additionalReusableDecodings">Optional cache of precomputed decodings to reuse.</param>
+    /// <param name="reportNewDecoding">Optional callback invoked when a new decoding is produced.</param>
+    /// <returns>A <see cref="Result{ErrT, OkT}"/> with the decoded <see cref="PineValue"/> or an error message.</returns>
     public static Result<string, PineValue> ElmValueDecodedAsInElmCompiler(
         ElmValue elmValue,
         IReadOnlyDictionary<ElmValue, PineValue>? additionalReusableDecodings,
@@ -156,6 +195,11 @@ public class ElmValueInterop
         return decodeResult;
     }
 
+    /// <summary>
+    /// Decodes an Elm tag "BlobValue" with a list of integers (0..255) into a Pine blob.
+    /// </summary>
+    /// <param name="byteItems">The list of byte values as <see cref="ElmValue"/> integers.</param>
+    /// <returns>A <see cref="Result{ErrT, OkT}"/> with the decoded <see cref="PineValue"/> or an error message.</returns>
     public static Result<string, PineValue> ElmValueBlobValueDecodedAsInElmCompiler(
         IReadOnlyList<ElmValue> byteItems)
     {
@@ -190,6 +234,13 @@ public class ElmValueInterop
         return PineValue.Blob(bytes);
     }
 
+    /// <summary>
+    /// Decodes an Elm tag "ListValue" with an item list into a Pine list value, recursively decoding nested items.
+    /// </summary>
+    /// <param name="listItems">The list of Elm items to decode.</param>
+    /// <param name="additionalReusableEncodings">Optional cache of precomputed decodings to reuse.</param>
+    /// <param name="reportNewEncoding">Optional callback invoked when a new decoding is produced.</param>
+    /// <returns>A <see cref="Result{ErrT, OkT}"/> with the decoded <see cref="PineValue"/> or an error message.</returns>
     public static Result<string, PineValue> ElmValueListValueDecodedAsInElmCompiler(
         IReadOnlyList<ElmValue> listItems,
         IReadOnlyDictionary<ElmValue, PineValue>? additionalReusableEncodings,
@@ -236,6 +287,15 @@ public class ElmValueInterop
         return PineValue.List(items);
     }
 
+    /// <summary>
+    /// Decodes an Elm compiler representation of an expression into the internal <see cref="Expression"/> model.
+    /// </summary>
+    /// <param name="elmValue">The Elm value representing the expression.</param>
+    /// <param name="additionalReusableDecodings">Optional cache for expression decodings.</param>
+    /// <param name="reportNewDecoding">Optional callback invoked when a new expression decoding is produced.</param>
+    /// <param name="literalAdditionalReusableDecodings">Optional cache for literal value decodings.</param>
+    /// <param name="literalReportNewDecoding">Optional callback invoked when a new literal value decoding is produced.</param>
+    /// <returns>A <see cref="Result{ErrT, OkT}"/> with the decoded <see cref="Expression"/> or an error message.</returns>
     public static Result<string, Expression> ElmValueFromCompilerDecodedAsExpression(
         ElmValue elmValue,
         IReadOnlyDictionary<ElmValue, Expression>? additionalReusableDecodings,
@@ -403,18 +463,18 @@ public class ElmValueInterop
                         literalAdditionalReusableDecodings,
                         literalReportNewDecoding);
 
-                if (environmentResult is Result<string, Expression>.Err environmentErr)
+                if (environmentResult.IsErrOrNull() is { } environmentErr)
                 {
-                    return "Failed for kernel application environment: " + environmentErr.Value;
+                    return "Failed for kernel application environment: " + environmentErr;
                 }
 
-                if (environmentResult is not Result<string, Expression>.Ok environmentOk)
+                if (environmentResult.IsOkOrNull() is not { } environmentOk)
                 {
                     throw new NotImplementedException(
                         "Unexpected result type for environment: " + environmentResult.GetType().FullName);
                 }
 
-                return new Expression.KernelApplication(functionString.Value, environmentOk.Value);
+                return new Expression.KernelApplication(functionString.Value, environmentOk);
             }
 
             if (tag.TagName is "ConditionalExpression")
@@ -436,12 +496,12 @@ public class ElmValueInterop
                         literalAdditionalReusableDecodings,
                         literalReportNewDecoding);
 
-                if (conditionResult is Result<string, Expression>.Err conditionErr)
+                if (conditionResult.IsErrOrNull() is { } conditionErr)
                 {
-                    return "Failed for conditional condition: " + conditionErr.Value;
+                    return "Failed for conditional condition: " + conditionErr;
                 }
 
-                if (conditionResult is not Result<string, Expression>.Ok conditionOk)
+                if (conditionResult.IsOkOrNull() is not { } conditionOk)
                 {
                     throw new NotImplementedException(
                         "Unexpected result type for condition: " + conditionResult.GetType().FullName);
@@ -455,12 +515,12 @@ public class ElmValueInterop
                         literalAdditionalReusableDecodings,
                         literalReportNewDecoding);
 
-                if (falseBranchResult is Result<string, Expression>.Err falseBranchErr)
+                if (falseBranchResult.IsErrOrNull() is { } falseBranchErr)
                 {
-                    return "Failed for conditional false branch: " + falseBranchErr.Value;
+                    return "Failed for conditional false branch: " + falseBranchErr;
                 }
 
-                if (falseBranchResult is not Result<string, Expression>.Ok falseBranchOk)
+                if (falseBranchResult.IsOkOrNull() is not { } falseBranchOk)
                 {
                     throw new NotImplementedException(
                         "Unexpected result type for false branch: " + falseBranchResult.GetType().FullName);
@@ -474,21 +534,21 @@ public class ElmValueInterop
                         literalAdditionalReusableDecodings,
                         literalReportNewDecoding);
 
-                if (trueBranchResult is Result<string, Expression>.Err trueBranchErr)
+                if (trueBranchResult.IsErrOrNull() is { } trueBranchErr)
                 {
-                    return "Failed for conditional true branch: " + trueBranchErr.Value;
+                    return "Failed for conditional true branch: " + trueBranchErr;
                 }
 
-                if (trueBranchResult is not Result<string, Expression>.Ok trueBranchOk)
+                if (trueBranchResult.IsOkOrNull() is not { } trueBranchOk)
                 {
                     throw new NotImplementedException(
                         "Unexpected result type for true branch: " + trueBranchResult.GetType().FullName);
                 }
 
                 return Expression.ConditionalInstance(
-                    condition: conditionOk.Value,
-                    falseBranch: falseBranchOk.Value,
-                    trueBranch: trueBranchOk.Value);
+                    condition: conditionOk,
+                    falseBranch: falseBranchOk,
+                    trueBranch: trueBranchOk);
             }
 
             if (tag.TagName is "EnvironmentExpression")
@@ -519,18 +579,18 @@ public class ElmValueInterop
                         literalAdditionalReusableDecodings,
                         literalReportNewDecoding);
 
-                if (stringTaggedResult is Result<string, Expression>.Err stringTaggedErr)
+                if (stringTaggedResult.IsErrOrNull() is { } stringTaggedErr)
                 {
-                    return "Failed for string tag stringTagged: " + stringTaggedErr.Value;
+                    return "Failed for string tag stringTagged: " + stringTaggedErr;
                 }
 
-                if (stringTaggedResult is not Result<string, Expression>.Ok stringTaggedOk)
+                if (stringTaggedResult.IsOkOrNull() is not { } stringTaggedOk)
                 {
                     throw new NotImplementedException(
                         "Unexpected result type for stringTagged: " + stringTaggedResult.GetType().FullName);
                 }
 
-                return new Expression.StringTag(stringtagString.Value, stringTaggedOk.Value);
+                return new Expression.StringTag(stringtagString.Value, stringTaggedOk);
             }
 
             return "Unexpected tag name: " + tag.TagName;
@@ -546,6 +606,15 @@ public class ElmValueInterop
         return decodeResult;
     }
 
+    /// <summary>
+    /// Parses a Pine value representing an Elm <c>Maybe a</c>.
+    /// </summary>
+    /// <typeparam name="T">The result type returned by the caller-provided handlers.</typeparam>
+    /// <param name="pineValue">The Pine value to parse.</param>
+    /// <param name="nothing">Handler invoked when the value is <c>Nothing</c>.</param>
+    /// <param name="just">Handler invoked with the contained value when the value is <c>Just x</c>.</param>
+    /// <param name="invalid">Handler invoked with an error message when the structure is invalid.</param>
+    /// <returns>The value returned by one of the provided handlers.</returns>
     public static T ParseElmMaybeValue<T>(
         PineValue pineValue,
         Func<T> nothing,
@@ -589,6 +658,15 @@ public class ElmValueInterop
         return invalid("Not tagged with Nothing or Just");
     }
 
+    /// <summary>
+    /// Parses a Pine value representing an Elm <c>Result e a</c>.
+    /// </summary>
+    /// <typeparam name="T">The result type returned by the caller-provided handlers.</typeparam>
+    /// <param name="pineValue">The Pine value to parse.</param>
+    /// <param name="err">Handler invoked with the contained error value when the value is <c>Err e</c>.</param>
+    /// <param name="ok">Handler invoked with the contained value when the value is <c>Ok a</c>.</param>
+    /// <param name="invalid">Handler invoked with an error message when the structure is invalid.</param>
+    /// <returns>The value returned by one of the provided handlers.</returns>
     public static T ParseElmResultValue<T>(
         PineValue pineValue,
         Func<PineValue, T> err,
@@ -649,6 +727,15 @@ public class ElmValueInterop
     }
 
 
+    /// <summary>
+    /// Parses an <see cref="ElmValue"/> representing an Elm <c>Result e a</c> into one of the caller-provided handlers.
+    /// </summary>
+    /// <typeparam name="T">The result type returned by the caller-provided handlers.</typeparam>
+    /// <param name="elmValue">The Elm value to parse.</param>
+    /// <param name="err">Handler invoked when encountering <c>Err e</c>.</param>
+    /// <param name="ok">Handler invoked when encountering <c>Ok a</c>.</param>
+    /// <param name="invalid">Handler invoked with an error message when the structure is invalid.</param>
+    /// <returns>The value returned by one of the provided handlers.</returns>
     public static T ParseElmValueAsCommonResult<T>(
         ElmValue elmValue,
         Func<ElmValue, T> err,
