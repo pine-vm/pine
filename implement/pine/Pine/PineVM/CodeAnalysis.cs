@@ -864,17 +864,15 @@ public class CodeAnalysis
         return false;
     }
 
-    public static Result<string, (StaticProgram staticProgram, StaticExpression<string>.FunctionApplication entryPoint)>
+    public static Result<string, StaticProgram>
         ParseAsStaticMonomorphicProgramAssigningNames(
-        Expression rootExpression,
-        PineValue rootEnvironment,
+        ElmInteractiveEnvironment.FunctionRecord functionRecord,
         Func<PineValue, PineValueClass, string?> nameForDecl,
         PineVMParseCache parseCache)
     {
         var lessSpecializedInterfacesResult =
             ParseAsStaticMonomorphicProgram(
-                rootExpression,
-                rootEnvironment,
+                functionRecord,
                 parseCache);
 
         {
@@ -889,46 +887,6 @@ public class CodeAnalysis
             throw new Exception(
                 "Unexpected return type: " +
                 lessSpecializedInterfacesResult.GetType().Name);
-        }
-
-        StaticFunctionInterface InterfaceForFunction<T>(
-            StaticExpression<T> functionBody)
-        {
-            var allImplicitParam = StaticExpression<T>.ImplicitFunctionParameterList(functionBody);
-
-            /*
-             * TODO: Replace stupid heuristic with an adaptive approach:
-             * Goal is to reduce the need for callers to compose list instances to hand over arguments.
-             * Perhaps we will switch to a separate stage for determining the specialized function interfaces.
-             * (We might want to look at all the call sites to determine the optimal shape of the parameter list)
-             * */
-
-            var shortenedParams =
-                allImplicitParam
-                .Select(p => (IReadOnlyList<int>)[.. p.Take(2)]) // Take at most 2 elements from each implicit param path
-                .Distinct(IntPathEqualityComparer.Instance)
-                .ToArray();
-
-            bool PathIsPrefixOfOtherPath(IReadOnlyList<int> path, IReadOnlyList<int> otherPath)
-            {
-                if (path.Count >= otherPath.Count)
-                    return false;
-
-                for (var i = 0; i < path.Count; ++i)
-                {
-                    if (path[i] != otherPath[i])
-                        return false;
-                }
-
-                return true;
-            }
-
-            var inludedParams =
-                shortenedParams
-                .Where(p => !shortenedParams.Any(other => PathIsPrefixOfOtherPath(p, other)))
-                .ToArray();
-
-            return StaticFunctionInterface.FromPathsSorted(inludedParams);
         }
 
         var hashCache = new ConcurrentPineValueHashCache();
@@ -961,50 +919,79 @@ public class CodeAnalysis
                 });
 
 
+        return new StaticProgram(namedFunctions);
+    }
+
+    private static StaticFunctionInterface InterfaceForFunction<T>(
+        StaticExpression<T> functionBody)
+    {
+        var allImplicitParam = StaticExpression<T>.ImplicitFunctionParameterList(functionBody);
+
         /*
-         * For now, specialize in cases where root is a simple invocation.
+         * TODO: Replace stupid heuristic with an adaptive approach:
+         * Goal is to reduce the need for callers to compose list instances to hand over arguments.
+         * Perhaps we will switch to a separate stage for determining the specialized function interfaces.
+         * (We might want to look at all the call sites to determine the optimal shape of the parameter list)
          * */
 
-        if (rootExpression is not Expression.ParseAndEval rootParseAndEval)
+        var shortenedParams =
+            allImplicitParam
+            .Select(p => (IReadOnlyList<int>)[.. p.Take(2)]) // Take at most 2 elements from each implicit param path
+            .Distinct(IntPathEqualityComparer.Instance)
+            .ToArray();
+
+        bool PathIsPrefixOfOtherPath(IReadOnlyList<int> path, IReadOnlyList<int> otherPath)
         {
-            throw new NotImplementedException();
+            if (path.Count >= otherPath.Count)
+                return false;
+
+            for (var i = 0; i < path.Count; ++i)
+            {
+                if (path[i] != otherPath[i])
+                    return false;
+            }
+
+            return true;
         }
 
-        if (Core.CodeAnalysis.CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(rootParseAndEval.Encoded) is not
-            ExprMappedToParentEnv.PathInParentEnv rootInvocationEncodedPath)
+        var inludedParams =
+            shortenedParams
+            .Where(p => !shortenedParams.Any(other => PathIsPrefixOfOtherPath(p, other)))
+            .ToArray();
+
+        return StaticFunctionInterface.FromPathsSorted(inludedParams);
+    }
+
+
+    public static Result<string, IReadOnlyDictionary<StaticFunctionIdentifier, (Expression origExpr, StaticExpressionGen body)>>
+        ParseAsStaticMonomorphicProgram(
+        ElmInteractiveEnvironment.FunctionRecord functionRecord,
+        PineVMParseCache parseCache)
+    {
+        IReadOnlyList<PineValue> mockArguments =
+            [.. Enumerable.Repeat(PineValue.EmptyList, functionRecord.ParameterCount)];
+
+        var buildAppResult =
+            ElmInteractiveEnvironment.ApplyFunctionArgumentsForEvalExpr(functionRecord, mockArguments);
+
+        if (buildAppResult.IsErrOrNull() is { } err)
         {
-            throw new NotImplementedException();
+            return
+                "Failed to build application of function record with mock arguments: " + err;
         }
 
-        if (Core.CodeAnalysis.CodeAnalysis.ValueFromPathInValue(rootEnvironment, rootInvocationEncodedPath.Path.ToArray()) is not { } rootInvocationExprValue)
+        if (buildAppResult.IsOkOrNullable() is not { } appExprAndEnv)
         {
-            throw new NotImplementedException();
+            throw new Exception(
+                "Unexpected return type: " +
+                buildAppResult.GetType().Name);
         }
-
-        if (ExpressionEncoding.ParseExpressionFromValue(rootInvocationExprValue).IsOkOrNull() is not { } rootInvocationExpr)
-        {
-            throw new NotImplementedException();
-        }
-
-        if (rootParseAndEval.Environment is not Expression.Environment)
-        {
-            throw new NotImplementedException();
-        }
-
-        var entryFunctionMatchingExprs =
-            namedFunctions
-            .Where(c => c.Value.origExpr == rootInvocationExpr)
-            .ToImmutableArray();
-
-        var entryFunction =
-            entryFunctionMatchingExprs
-            .Single(c => c.Value.EnvClass.SatisfiedByValue(rootEnvironment));
 
         return
-            (new StaticProgram(namedFunctions),
-            StaticExpression<string>.FunctionApplicationInstance(
-                functionName: entryFunction.Key,
-                arguments: StaticExpression<string>.ListInstance([])));
+            ParseAsStaticMonomorphicProgram(
+                rootExpression: appExprAndEnv.expression,
+                rootEnvironment: appExprAndEnv.environment,
+                parseCache: parseCache);
     }
 
     public static Result<string, IReadOnlyDictionary<StaticFunctionIdentifier, (Expression origExpr, StaticExpressionGen body)>>
@@ -1138,7 +1125,7 @@ public class CodeAnalysis
                 return
                 (entry.origExpr, entry.inlinedExpr, constraint);
             })
-            .DistinctBy(entry => (entry.inlinedExpr, entry.constraint))
+            .DistinctBy(entry => (entry.origExpr, entry.constraint))
             .ToArray();
 
         /*

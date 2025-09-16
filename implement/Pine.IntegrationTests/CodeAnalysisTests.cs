@@ -94,29 +94,19 @@ public class CodeAnalysisTests
         var stubTextualRepr =
             EncodePineExpressionAsJson.ToJsonString(compiledDecl.functionRecord.InnerFunction);
 
-        var applicationArgumentValue =
-            ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(5));
-
-        var functionApplicationRecord =
-            ElmInteractiveEnvironment.ApplyFunctionArgumentsForEvalExpr(
-                compiledDecl.functionRecord,
-                [applicationArgumentValue])
-            .Extract(err => throw new System.Exception("Failed applying function arguments: " + err));
-
         var namesFromCompiledEnv =
             new NamesFromCompiledEnv(compiledEnv, parseCache);
 
         var staticProgram =
             PineVM.CodeAnalysis.ParseAsStaticMonomorphicProgramAssigningNames(
-                rootExpression: functionApplicationRecord.expression,
-                rootEnvironment: functionApplicationRecord.environment,
+                compiledDecl.functionRecord,
                 nameForDecl: namesFromCompiledEnv.NameFromDecl,
                 parseCache)
             .Extract(err => throw new System.Exception("Failed parsing as static program: " + err));
 
         staticProgram.Should().NotBeNull();
 
-        var wholeProgramText = RenderStaticProgram(staticProgram.staticProgram);
+        var wholeProgramText = RenderStaticProgram(staticProgram);
 
         wholeProgramText.Trim().Should().Be(
             """"
@@ -225,29 +215,19 @@ public class CodeAnalysisTests
         var stubTextualRepr =
             EncodePineExpressionAsJson.ToJsonString(compiledDecl.functionRecord.InnerFunction);
 
-        var applicationArgumentValue =
-            ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(5));
-
-        var functionApplicationRecord =
-            ElmInteractiveEnvironment.ApplyFunctionArgumentsForEvalExpr(
-                compiledDecl.functionRecord,
-                [applicationArgumentValue])
-            .Extract(err => throw new System.Exception("Failed applying function arguments: " + err));
-
         var namesFromCompiledEnv =
             new NamesFromCompiledEnv(compiledEnv, parseCache);
 
         var staticProgram =
             PineVM.CodeAnalysis.ParseAsStaticMonomorphicProgramAssigningNames(
-                rootExpression: functionApplicationRecord.expression,
-                rootEnvironment: functionApplicationRecord.environment,
+                compiledDecl.functionRecord,
                 nameForDecl: namesFromCompiledEnv.NameFromDecl,
                 parseCache)
             .Extract(err => throw new System.Exception("Failed parsing as static program: " + err));
 
         staticProgram.Should().NotBeNull();
 
-        var wholeProgramText = RenderStaticProgram(staticProgram.staticProgram);
+        var wholeProgramText = RenderStaticProgram(staticProgram);
 
         wholeProgramText.Trim().Should().Be(
             """"
@@ -349,35 +329,19 @@ public class CodeAnalysisTests
 
         compiledDecl.Should().NotBeNull();
 
-        var stubTextualRepr =
-            EncodePineExpressionAsJson.ToJsonString(compiledDecl.functionRecord.InnerFunction);
-
-        var dictValue =
-            ElmValueEncoding.ElmValueAsPineValue(
-                ElmValue.TagInstance(
-                    "RBEmpty_elm_builtin",
-                    []));
-
-        var functionApplicationRecord =
-            ElmInteractiveEnvironment.ApplyFunctionArgumentsForEvalExpr(
-                compiledDecl.functionRecord,
-                [dictValue])
-            .Extract(err => throw new System.Exception("Failed applying function arguments: " + err));
-
         var namesFromCompiledEnv =
             new NamesFromCompiledEnv(compiledEnv, parseCache);
 
         var staticProgram =
             PineVM.CodeAnalysis.ParseAsStaticMonomorphicProgramAssigningNames(
-                rootExpression: functionApplicationRecord.expression,
-                rootEnvironment: functionApplicationRecord.environment,
+                compiledDecl.functionRecord,
                 namesFromCompiledEnv.NameFromDecl,
                 parseCache)
             .Extract(err => throw new System.Exception("Failed parsing as static program: " + err));
 
         staticProgram.Should().NotBeNull();
 
-        var wholeProgramText = RenderStaticProgram(staticProgram.staticProgram);
+        var wholeProgramText = RenderStaticProgram(staticProgram);
 
         wholeProgramText.Trim().Should().Be(
             """"
@@ -541,33 +505,19 @@ public class CodeAnalysisTests
 
         compiledDecl.Should().NotBeNull();
 
-        var stubTextualRepr =
-            EncodePineExpressionAsJson.ToJsonString(compiledDecl.functionRecord.InnerFunction);
-
-        var functionApplicationRecord =
-            ElmInteractiveEnvironment.ApplyFunctionArgumentsForEvalExpr(
-                compiledDecl.functionRecord,
-                [
-                    IntegerEncoding.EncodeSignedInteger(0),
-                    IntegerEncoding.EncodeSignedInteger(0),
-                    PineValue.EmptyBlob,
-                ])
-            .Extract(err => throw new System.Exception("Failed applying function arguments: " + err));
-
         var namesFromCompiledEnv =
             new NamesFromCompiledEnv(compiledEnv, parseCache);
 
         var staticProgram =
             PineVM.CodeAnalysis.ParseAsStaticMonomorphicProgramAssigningNames(
-                rootExpression: functionApplicationRecord.expression,
-                rootEnvironment: functionApplicationRecord.environment,
+                compiledDecl.functionRecord,
                 namesFromCompiledEnv.NameFromDecl,
                 parseCache)
             .Extract(err => throw new System.Exception("Failed parsing as static program: " + err));
 
         staticProgram.Should().NotBeNull();
 
-        var wholeProgramText = RenderStaticProgram(staticProgram.staticProgram);
+        var wholeProgramText = RenderStaticProgram(staticProgram);
 
         wholeProgramText.Trim().Should().Be(
             """"
