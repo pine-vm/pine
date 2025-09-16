@@ -162,7 +162,17 @@ type PStep value
 
 
 type State
-    = PState (List Char) Int Int Int Int
+    = PState
+        -- source
+        (List Char)
+        -- offset
+        Int
+        -- indent
+        Int
+        -- row
+        Int
+        -- column
+        Int
 
 
 {-| Try a parser. Here are some examples using the [`keyword`](#keyword)

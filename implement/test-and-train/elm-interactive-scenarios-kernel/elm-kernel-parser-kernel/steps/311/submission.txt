@@ -1,1 +1,1 @@
-Elm.Kernel.Parser.isSubString  "test"  6  0  6  (String.toList "other test")
+Elm.Kernel.Parser.isSubString  "test"  24  0  6  (Pine_kernel.concat (String.toList "other test"))

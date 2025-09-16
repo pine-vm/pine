@@ -31,14 +31,14 @@ import Bytes
 
 
 type Encoder
-  = I8 Int
-  | I16 Endianness Int
-  | I32 Endianness Int
-  | U8 Int
-  | U16 Endianness Int
-  | U32 Endianness Int
-  | SequenceEncoder (List Encoder)
-  | BytesEncoder Bytes.Bytes
+    = I8 Int
+    | I16 Endianness Int
+    | I32 Endianness Int
+    | U8 Int
+    | U16 Endianness Int
+    | U32 Endianness Int
+    | SequenceEncoder (List Encoder)
+    | BytesEncoder Bytes.Bytes
 
 
 encode : Encoder -> Bytes.Bytes
@@ -119,6 +119,255 @@ encodeBlob builder =
                                 , Pine_kernel.skip [ 1, 0x00FFFFFF ]
                                 ]
                             ]
+            in
+            if Pine_kernel.equal [ e, Bytes.LE ] then
+                littleEndian
+
+            else
+                Pine_kernel.reverse littleEndian
+
+        U8 n ->
+            Pine_kernel.take [ 1, Pine_kernel.reverse n ]
+
+        U16 e n ->
+            let
+                littleEndian =
+                    Pine_kernel.take
+                        [ 2
+                        , Pine_kernel.concat
+                            [ Pine_kernel.reverse
+                                (Pine_kernel.skip [ 1, n ])
+                            , Pine_kernel.skip [ 1, 0 ]
+                            ]
+                        ]
+            in
+            if Pine_kernel.equal [ e, Bytes.LE ] then
+                littleEndian
+
+            else
+                Pine_kernel.reverse littleEndian
+
+        U32 e n ->
+            let
+                littleEndian =
+                    Pine_kernel.take
+                        [ 4
+                        , Pine_kernel.concat
+                            [ Pine_kernel.reverse
+                                (Pine_kernel.skip [ 1, n ])
+                            , Pine_kernel.skip [ 2, 0x01000000 ]
+                            ]
+                        ]
+            in
+            if Pine_kernel.equal [ e, Bytes.LE ] then
+                littleEndian
+
+            else
+                Pine_kernel.reverse littleEndian
+
+        SequenceEncoder bs ->
+            if Pine_kernel.equal [ bs, [] ] then
+                Pine_kernel.take [ 0, 0 ]
+
+            else
+                Pine_kernel.concat (List.map encodeBlob bs)
+
+        BytesEncoder (Bytes.Elm_Bytes blob) ->
+            blob
+
+
+-- INTEGERS
+
+
+{-| Encode integers from `0` to `255` in one byte.
+-}
+unsignedInt8 : Int -> Encoder
+unsignedInt8 int =
+    U8 int
+
+
+signedInt8 : Int -> Encoder
+signedInt8 int =
+    I8 int
+
+
+{-| Encode integers from `0` to `65535` in two bytes.
+-}
+unsignedInt16 : Endianness -> Int -> Encoder
+unsignedInt16 int =
+    U16 int
+
+
+signedInt16 : Endianness -> Int -> Encoder
+signedInt16 int =
+    I16 int
+
+
+{-| Encode integers from `0` to `4294967295` in four bytes.
+-}
+unsignedInt32 : Endianness -> Int -> Encoder
+unsignedInt32 int =
+    U32 int
+
+
+signedInt32 : Endianness -> Int -> Encoder
+signedInt32 int =
+    I32 int
+
+
+bytes : Bytes.Bytes -> Encoder
+bytes bytes =
+    BytesEncoder bytes
+
+
+sequence : List Encoder -> Encoder
+sequence builders =
+    SequenceEncoder builders
+
+
+string : String -> Encoder
+string (String charsBytes) =
+    BytesEncoder
+        (Bytes.Elm_Bytes (encodeCharsAsBlob charsBytes))
+
+
+encodeCharsAsBlob : Int -> Int
+encodeCharsAsBlob charsBytes =
+    encodeCharsAsBlobHelp emptyBlob 0 charsBytes
+
+
+encodeCharsAsBlobHelp : Int -> Int -> Int -> Int
+encodeCharsAsBlobHelp acc offset charsBytes =
+    let
+        nextChar =
+            Pine_kernel.take [ 4, Pine_kernel.skip [ offset, charsBytes ] ]
+    in
+    if Pine_kernel.equal [ Pine_kernel.length nextChar, 0 ] then
+        acc
+
+    else
+        encodeCharsAsBlobHelp
+            (Pine_kernel.concat [ acc, encodeCharAsBlob nextChar ])
+            (Pine_kernel.int_add [ offset, 4 ])
+            charsBytes
+
+
+encodeCharAsBlob : Char -> Int
+encodeCharAsBlob char =
+    let
+        code =
+            Char.toCode char
+    in
+    if Pine_kernel.int_is_sorted_asc [ code, 0x7F ] then
+        -- 1-byte encoding
+        Pine_kernel.skip
+            [ 1
+            , code
+            ]
+
+    else if Pine_kernel.int_is_sorted_asc [ code, 0x07FF ] then
+        -- 2-byte encoding
+        let
+            byte1 =
+                Pine_kernel.bit_or
+                    [ 0xC0
+                    , code // 64
+                    ]
+
+            byte2 =
+                Pine_kernel.bit_or
+                    [ maskSingleByteMSB
+                    , Pine_kernel.bit_and [ 63, code ]
+                    ]
+        in
+        Pine_kernel.concat
+            [ Pine_kernel.bit_and [ byte1, maskSingleByte ]
+            , Pine_kernel.bit_and [ byte2, maskSingleByte ]
+            ]
+
+    else if Pine_kernel.int_is_sorted_asc [ code, 0xFFFF ] then
+        -- 3-byte encoding
+        let
+            byte1 =
+                Pine_kernel.bit_or
+                    [ 0xE0
+                    , code // 4096
+                    ]
+
+            byte2 =
+                Pine_kernel.bit_or
+                    [ maskSingleByteMSB
+                    , Pine_kernel.bit_and [ 63, code // 64 ]
+                    ]
+
+            byte3 =
+                Pine_kernel.bit_or
+                    [ maskSingleByteMSB
+                    , Pine_kernel.bit_and [ 63, code ]
+                    ]
+        in
+        Pine_kernel.concat
+            [ Pine_kernel.bit_and [ byte1, maskSingleByte ]
+            , Pine_kernel.bit_and [ byte2, maskSingleByte ]
+            , Pine_kernel.bit_and [ byte3, maskSingleByte ]
+            ]
+
+    else
+        -- 4-byte encoding for code points >= 0x10000
+        let
+            byte1 =
+                Pine_kernel.bit_or
+                    [ Pine_kernel.bit_and [ 0xF0, maskSingleByte ]
+                    , code // 262144
+                    ]
+
+            byte2 =
+                Pine_kernel.bit_or
+                    [ maskSingleByteMSB
+                    , Pine_kernel.bit_and [ 63, code // 4096 ]
+                    ]
+
+            byte3 =
+                Pine_kernel.bit_or
+                    [ maskSingleByteMSB
+                    , Pine_kernel.bit_and [ 63, code // 64 ]
+                    ]
+
+            byte4 =
+                Pine_kernel.bit_or
+                    [ maskSingleByteMSB
+                    , Pine_kernel.bit_and [ 63, code ]
+                    ]
+        in
+        Pine_kernel.concat
+            [ Pine_kernel.bit_and [ byte1, maskSingleByte ]
+            , Pine_kernel.bit_and [ byte2, maskSingleByte ]
+            , Pine_kernel.bit_and [ byte3, maskSingleByte ]
+            , Pine_kernel.bit_and [ byte4, maskSingleByte ]
+            ]
+
+
+getStringWidth : String -> Int
+getStringWidth (String charsBytes) =
+    Pine_kernel.length
+        (encodeCharsAsBlob charsBytes)
+
+
+maskSingleByte : Int
+maskSingleByte =
+    Pine_kernel.skip [ 1, 0xFF ]
+
+
+maskSingleByteMSB : Int
+maskSingleByteMSB =
+    Pine_kernel.skip [ 1, 0x80 ]
+
+
+emptyBlob : Int
+emptyBlob =
+    Pine_kernel.take [ 0, 0 ]
+
+
             in
             if Pine_kernel.equal [ e, Bytes.LE ] then
                 littleEndian
@@ -2560,52 +2809,59 @@ skipWhitespace strBytes offset =
 module Elm.Kernel.Parser exposing (..)
 
 import Char
+import String
 
 
-consumeBase : Int -> Int -> List Char -> ( Int, Int )
-consumeBase base offset chars =
-    consumeBaseHelper base offset chars 0
+consumeBase : Int -> Int -> Int -> ( Int, Int )
+consumeBase base offset charsBytes =
+    consumeBaseHelper base offset charsBytes 0
 
 
-consumeBaseHelper : Int -> Int -> List Char -> Int -> ( Int, Int )
-consumeBaseHelper base offset chars total =
-    case Pine_kernel.skip [ offset, chars ] of
-        [] ->
+consumeBaseHelper : Int -> Int -> Int -> Int -> ( Int, Int )
+consumeBaseHelper base offset charsBytes total =
+    let
+        nextChar =
+            Pine_kernel.take [ 4, Pine_kernel.skip [ offset, charsBytes ] ]
+    in
+    if Pine_kernel.equal [ Pine_kernel.length nextChar, 0 ] then
+        ( offset, total )
+
+    else
+        let
+            code =
+                Char.toCode nextChar
+
+            digit : Int
+            digit =
+                Pine_kernel.int_add [ code, -48 ]
+
+            lastDigit : Int
+            lastDigit =
+                Pine_kernel.int_add [ base, -1 ]
+        in
+        if Pine_kernel.int_is_sorted_asc [ 0, digit, lastDigit ] then
+            consumeBaseHelper
+                base
+                (Pine_kernel.int_add [ offset, 4 ])
+                charsBytes
+                (Pine_kernel.int_add [ Pine_kernel.int_mul [ base, total ], digit ])
+
+        else
             ( offset, total )
 
-        nextChar :: _ ->
-            let
-                digit : Int
-                digit =
-                    Pine_kernel.int_add [ Char.toCode nextChar, -48 ]
 
-                lastDigit : Int
-                lastDigit =
-                    Pine_kernel.int_add [ base, -1 ]
-            in
-            if Pine_kernel.int_is_sorted_asc [ 0, digit, lastDigit ] then
-                consumeBaseHelper
-                    base
-                    (Pine_kernel.int_add [ offset, 1 ])
-                    chars
-                    (Pine_kernel.int_add [ Pine_kernel.int_mul [ base, total ], digit ])
-
-            else
-                ( offset, total )
+consumeBase16 : Int -> Int -> ( Int, Int )
+consumeBase16 offset charsBytes =
+    consumeBase16Helper offset charsBytes 0
 
 
-consumeBase16 : Int -> List Char -> ( Int, Int )
-consumeBase16 offset chars =
-    consumeBase16Helper offset chars 0
-
-
-consumeBase16Helper : Int -> List Char -> Int -> ( Int, Int )
-consumeBase16Helper offset chars total =
+consumeBase16Helper : Int -> Int -> Int -> ( Int, Int )
+consumeBase16Helper offset charsBytes total =
     let
         char =
-            Pine_kernel.head (Pine_kernel.skip [ offset, chars ])
+            Pine_kernel.take [ 4, Pine_kernel.skip [ offset, charsBytes ] ]
     in
-    if Pine_kernel.equal [ char, [] ] then
+    if Pine_kernel.equal [ Pine_kernel.length char, 0 ] then
         ( offset, total )
 
     else
@@ -2615,15 +2871,12 @@ consumeBase16Helper offset chars total =
 
             digit =
                 if Pine_kernel.int_is_sorted_asc [ 48, code, 57 ] then
-                    -- '0' to '9'
                     Just (Pine_kernel.int_add [ code, -48 ])
 
                 else if Pine_kernel.int_is_sorted_asc [ 65, code, 70 ] then
-                    -- 'A' to 'F'
                     Just (Pine_kernel.int_add [ code, -55 ])
 
                 else if Pine_kernel.int_is_sorted_asc [ 97, code, 102 ] then
-                    -- 'a' to 'f'
                     Just (Pine_kernel.int_add [ code, -87 ])
 
                 else
@@ -2632,26 +2885,26 @@ consumeBase16Helper offset chars total =
         case digit of
             Just d ->
                 consumeBase16Helper
-                    (Pine_kernel.int_add [ offset, 1 ])
-                    chars
+                    (Pine_kernel.int_add [ offset, 4 ])
+                    charsBytes
                     (Pine_kernel.int_add [ Pine_kernel.int_mul [ 16, total ], d ])
 
             Nothing ->
                 ( offset, total )
 
 
-chompBase10 : Int -> List Char -> Int
-chompBase10 offset chars =
-    chompBase10Helper offset chars
+chompBase10 : Int -> Int -> Int
+chompBase10 offset charsBytes =
+    chompBase10Helper offset charsBytes
 
 
-chompBase10Helper : Int -> List Char -> Int
-chompBase10Helper offset chars =
+chompBase10Helper : Int -> Int -> Int
+chompBase10Helper offset charsBytes =
     let
         char =
-            Pine_kernel.head (Pine_kernel.skip [ offset, chars ])
+            Pine_kernel.take [ 4, Pine_kernel.skip [ offset, charsBytes ] ]
     in
-    if Pine_kernel.equal [ char, [] ] then
+    if Pine_kernel.equal [ Pine_kernel.length char, 0 ] then
         offset
 
     else
@@ -2661,39 +2914,31 @@ chompBase10Helper offset chars =
         in
         if Pine_kernel.int_is_sorted_asc [ 48, code, 57 ] then
             chompBase10Helper
-                (Pine_kernel.int_add [ offset, 1 ])
-                chars
+                (Pine_kernel.int_add [ offset, 4 ])
+                charsBytes
 
         else
             offset
 
 
-isSubString : String -> Int -> Int -> Int -> List Char -> ( Int, Int, Int )
-isSubString smallString offset row col bigChars =
+isSubString : String -> Int -> Int -> Int -> Int -> ( Int, Int, Int )
+isSubString (String smallBytes) offset row col bigBytes =
     let
-        smallChars : List Char
-        smallChars =
-            String.toList smallString
-
-        expectedLength : Int
-        expectedLength =
-            Pine_kernel.length smallChars
-
-        sliceFromSourceChars : List Char
-        sliceFromSourceChars =
+        sliceFromSource : Int
+        sliceFromSource =
             Pine_kernel.take
-                [ expectedLength
-                , Pine_kernel.skip [ offset, bigChars ]
+                [ Pine_kernel.length smallBytes
+                , Pine_kernel.skip [ offset, bigBytes ]
                 ]
     in
-    if Pine_kernel.equal [ sliceFromSourceChars, smallChars ] then
+    if Pine_kernel.equal [ sliceFromSource, smallBytes ] then
         let
             ( newlineCount, colShift ) =
-                countOffsetsInString ( 0, 0, 0 ) ( smallChars, expectedLength )
+                countOffsetsInString ( 0, 0, 0 ) ( smallBytes, Pine_kernel.length smallBytes )
 
             newOffset : Int
             newOffset =
-                Pine_kernel.int_add [ offset, expectedLength ]
+                Pine_kernel.int_add [ offset, Pine_kernel.length smallBytes ]
 
             newRow : Int
             newRow =
@@ -2713,47 +2958,35 @@ isSubString smallString offset row col bigChars =
         ( -1, row, col )
 
 
-isSubChar : (Char -> Bool) -> Int -> List Char -> Int
-isSubChar predicate offset chars =
+isSubChar : (Char -> Bool) -> Int -> Int -> Int
+isSubChar predicate offset charsBytes =
     let
         nextChar =
-            Pine_kernel.head (Pine_kernel.skip [ offset, chars ])
+            Pine_kernel.take [ 4, Pine_kernel.skip [ offset, charsBytes ] ]
     in
-    if Pine_kernel.equal [ nextChar, [] ] then
+    if Pine_kernel.equal [ Pine_kernel.length nextChar, 0 ] then
         -1
 
     else if predicate nextChar then
         if Pine_kernel.equal [ nextChar, newlineChar ] then
-            -- Special code for newline
             -2
 
         else
-            Pine_kernel.int_add [ offset, 1 ]
+            Pine_kernel.int_add [ offset, 4 ]
 
     else
         -1
 
 
-findSubString : String -> Int -> Int -> Int -> List Char -> ( Int, Int, Int )
-findSubString smallString offset row col bigChars =
+findSubString : String -> Int -> Int -> Int -> Int -> ( Int, Int, Int )
+findSubString (String smallBytes) offset row col bigBytes =
     let
-        smallChars : List Char
-        smallChars =
-            String.toList smallString
-
         newOffset : Int
         newOffset =
-            indexOf smallChars bigChars offset
-
-        consumedLength : Int
-        consumedLength =
-            Pine_kernel.int_add
-                [ newOffset
-                , Pine_kernel.negate offset
-                ]
+            indexOf smallBytes bigBytes offset
 
         ( newlineCount, colShift ) =
-            countOffsetsInString ( offset, 0, 0 ) ( bigChars, newOffset )
+            countOffsetsInString ( offset, 0, 0 ) ( bigBytes, newOffset )
 
         newRow : Int
         newRow =
@@ -2770,105 +3003,107 @@ findSubString smallString offset row col bigChars =
     ( newOffset, newRow, newCol )
 
 
-indexOf : List Char -> List Char -> Int -> Int
-indexOf smallChars bigChars offset =
+indexOf : Int -> Int -> Int -> Int
+indexOf smallBytes bigBytes offset =
     let
         expectedLength : Int
         expectedLength =
-            Pine_kernel.length smallChars
+            Pine_kernel.length smallBytes
 
-        sliceFromSourceChars : List Char
-        sliceFromSourceChars =
+        sliceFromSource : Int
+        sliceFromSource =
             Pine_kernel.take
                 [ expectedLength
-                , Pine_kernel.skip [ offset, bigChars ]
+                , Pine_kernel.skip [ offset, bigBytes ]
                 ]
     in
-    if Pine_kernel.equal [ Pine_kernel.length sliceFromSourceChars, expectedLength ] then
-        if Pine_kernel.equal [ sliceFromSourceChars, smallChars ] then
+    if Pine_kernel.equal [ Pine_kernel.length sliceFromSource, expectedLength ] then
+        if Pine_kernel.equal [ sliceFromSource, smallBytes ] then
             offset
 
         else
-            indexOf smallChars bigChars (Pine_kernel.int_add [ offset, 1 ])
+            indexOf smallBytes bigBytes (Pine_kernel.int_add [ offset, 4 ])
 
     else
         -1
 
 
-chompWhileHelp : (Char -> Bool) -> ( Int, Int, Int ) -> List Char -> ( Int, Int, Int )
-chompWhileHelp isGood ( offset, row, col ) srcChars =
+chompWhileHelp : (Char -> Bool) -> ( Int, Int, Int ) -> Int -> ( Int, Int, Int )
+chompWhileHelp isGood ( offset, row, col ) srcBytes =
     let
         nextChar =
-            Pine_kernel.head (Pine_kernel.skip [ offset, srcChars ])
+            Pine_kernel.take [ 4, Pine_kernel.skip [ offset, srcBytes ] ]
     in
     if isGood nextChar then
         if Pine_kernel.equal [ nextChar, '\\n' ] then
-            -- matched a newline
             chompWhileHelp
                 isGood
-                ( Pine_kernel.int_add [ offset, 1 ]
+                ( Pine_kernel.int_add [ offset, 4 ]
                 , Pine_kernel.int_add [ row, 1 ]
                 , 1
                 )
-                srcChars
+                srcBytes
 
         else
-            -- normal match
             chompWhileHelp
                 isGood
-                ( Pine_kernel.int_add [ offset, 1 ]
+                ( Pine_kernel.int_add [ offset, 4 ]
                 , row
                 , Pine_kernel.int_add [ col, 1 ]
                 )
-                srcChars
+                srcBytes
 
     else
-        -- no match
         ( offset
         , row
         , col
         )
 
 
-countOffsetsInString : ( Int, Int, Int ) -> ( List Char, Int ) -> ( Int, Int )
-countOffsetsInString ( offset, newlines, col ) ( chars, end ) =
+countOffsetsInString : ( Int, Int, Int ) -> ( Int, Int ) -> ( Int, Int )
+countOffsetsInString ( offset, newlines, col ) ( charsBytes, end ) =
     let
         currentChar =
-            Pine_kernel.head
-                (Pine_kernel.skip [ offset, chars ])
+            Pine_kernel.take
+                [ 4
+                , Pine_kernel.skip [ offset, charsBytes ]
+                ]
 
         nextOffset =
-            Pine_kernel.int_add [ offset, 1 ]
+            Pine_kernel.int_add [ offset, 4 ]
     in
-    if Pine_kernel.equal [ currentChar, [] ] then
+    if Pine_kernel.equal [ Pine_kernel.length currentChar, 0 ] then
         ( newlines, col )
 
     else if Pine_kernel.int_is_sorted_asc [ end, offset ] then
         ( newlines, col )
 
-    else if Pine_kernel.equal [ currentChar, '\\n' ] then
+    else if Pine_kernel.equal [ currentChar, '
+' ] then
         countOffsetsInString
             ( nextOffset, Pine_kernel.int_add [ newlines, 1 ], 0 )
-            ( chars, end )
+            ( charsBytes, end )
 
     else
         countOffsetsInString
             ( nextOffset, newlines, Pine_kernel.int_add [ col, 1 ] )
-            ( chars, end )
+            ( charsBytes, end )
 
 
 newlineChar : Char
 newlineChar =
-    -- ASCII code for '\\n'
-    '\\n'
+    '
+'
 
 
-isAsciiCode : Int -> Int -> List Char -> Bool
-isAsciiCode code offset chars =
+isAsciiCode : Int -> Int -> Int -> Bool
+isAsciiCode code offset charsBytes =
     let
         nextChar =
-            Pine_kernel.head
-                (Pine_kernel.skip [ offset, chars ])
+            Pine_kernel.take
+                [ 4
+                , Pine_kernel.skip [ offset, charsBytes ]
+                ]
     in
     Pine_kernel.equal [ nextChar, Char.fromCode code ]
 
@@ -3013,7 +3248,9 @@ type Parser context problem value
 
 
 type String
-    = String (List Char.Char)
+    = String Int
+      -- We need another tag to prevent the compiler from assuming that the condition for tag 'String' is always true.
+    | AnyOtherKind_String
 
 
 type PStep context problem value
@@ -3022,7 +3259,7 @@ type PStep context problem value
 
 
 type State context
-    = PState (List Char) Int Int (List (Located context)) Int Int
+    = PState Int Int Int (List (Located context)) Int Int
 
 
 type alias Located context =
@@ -3041,16 +3278,11 @@ The only difference is that when it fails, it has much more precise information
 for each dead end.
 -}
 run : Parser c x a -> String -> Result (List (DeadEnd c x)) a
-run (Parser parse) string =
-    let
-        srcChars : List Char
-        srcChars =
-            String.toList string
-    in
+run (Parser parse) (String srcBytes) =
     case
         parse
             (PState
-                srcChars
+                srcBytes
                 0
                 1
                 []
@@ -3117,7 +3349,7 @@ type Bag c x
 
 
 fromState : State c -> x -> Bag c x
-fromState (PState srcChars offset indent context row col) x =
+fromState (PState srcBytes offset indent context row col) x =
     AddRight Empty (DeadEnd row col x context)
 
 
@@ -3399,11 +3631,11 @@ keyword (Token kwd expecting) =
     Parser
         (\\s ->
             let
-                (PState srcChars sOffset sIndent sContext sRow sCol) =
+                (PState srcBytes sOffset sIndent sContext sRow sCol) =
                     s
 
                 ( newOffset, newRow, newCol ) =
-                    Elm.Kernel.Parser.isSubString kwd sOffset sRow sCol srcChars
+                    Elm.Kernel.Parser.isSubString kwd sOffset sRow sCol srcBytes
             in
             if Pine_kernel.equal [ newOffset, -1 ] then
                 Bad False (fromState s expecting)
@@ -3416,7 +3648,7 @@ keyword (Token kwd expecting) =
                             Char.isAlphaNum c || Pine_kernel.equal [ c, '_' ]
                         )
                         newOffset
-                        srcChars
+                        srcBytes
                     ]
             then
                 Bad False (fromState s expecting)
@@ -3425,7 +3657,7 @@ keyword (Token kwd expecting) =
                 Good progress
                     ()
                     (PState
-                        srcChars
+                        srcBytes
                         newOffset
                         sIndent
                         sContext
@@ -3478,11 +3710,11 @@ token (Token str expecting) =
     Parser
         (\\s ->
             let
-                (PState srcChars sOffset sIndent sContext sRow sCol) =
+                (PState srcBytes sOffset sIndent sContext sRow sCol) =
                     s
 
                 ( newOffset, newRow, newCol ) =
-                    Elm.Kernel.Parser.isSubString str sOffset sRow sCol srcChars
+                    Elm.Kernel.Parser.isSubString str sOffset sRow sCol srcBytes
             in
             if Pine_kernel.equal [ newOffset, -1 ] then
                 Bad False (fromState s expecting)
@@ -3491,7 +3723,7 @@ token (Token str expecting) =
                 Good progress
                     ()
                     (PState
-                        srcChars
+                        srcBytes
                         newOffset
                         sIndent
                         sContext
@@ -3593,48 +3825,48 @@ number c =
     Parser
         (\\s ->
             let
-                (PState srcChars sOffset sIndent sContext sRow sCol) =
+                (PState srcBytes sOffset sIndent sContext sRow sCol) =
                     s
 
                 firstChar =
-                    Pine_kernel.head (Pine_kernel.skip [ sOffset, srcChars ])
+                    Pine_kernel.take [ 4, Pine_kernel.skip [ sOffset, srcBytes ] ]
             in
             if Pine_kernel.equal [ firstChar, '0' ] then
                 let
                     zeroOffset =
-                        Pine_kernel.int_add [ sOffset, 1 ]
+                        Pine_kernel.int_add [ sOffset, 4 ]
 
                     secondChar =
-                        Pine_kernel.head (Pine_kernel.skip [ zeroOffset, srcChars ])
+                        Pine_kernel.take [ 4, Pine_kernel.skip [ zeroOffset, srcBytes ] ]
 
                     baseOffset =
-                        Pine_kernel.int_add [ zeroOffset, 1 ]
+                        Pine_kernel.int_add [ zeroOffset, 4 ]
                 in
                 if Pine_kernel.equal [ secondChar, 'x' ] then
-                    finalizeInt c.invalid c.hex baseOffset (consumeBase16 baseOffset srcChars) s
+                    finalizeInt c.invalid c.hex baseOffset (consumeBase16 baseOffset srcBytes) s
 
                 else if Pine_kernel.equal [ secondChar, 'o' ] then
-                    finalizeInt c.invalid c.octal baseOffset (consumeBase 8 baseOffset srcChars) s
+                    finalizeInt c.invalid c.octal baseOffset (consumeBase 8 baseOffset srcBytes) s
 
                 else if Pine_kernel.equal [ secondChar, 'b' ] then
-                    finalizeInt c.invalid c.binary baseOffset (consumeBase 2 baseOffset srcChars) s
+                    finalizeInt c.invalid c.binary baseOffset (consumeBase 2 baseOffset srcBytes) s
 
                 else
                     finalizeFloat c.invalid c.expecting c.int c.float ( zeroOffset, 0 ) s
 
             else
-                finalizeFloat c.invalid c.expecting c.int c.float (consumeBase 10 sOffset srcChars) s
+                finalizeFloat c.invalid c.expecting c.int c.float (consumeBase 10 sOffset srcBytes) s
         )
 
 
-consumeBase : Int -> Int -> List Char -> ( Int, Int )
-consumeBase base offset string =
-    Elm.Kernel.Parser.consumeBase base offset string
+consumeBase : Int -> Int -> Int -> ( Int, Int )
+consumeBase base offset stringBytes =
+    Elm.Kernel.Parser.consumeBase base offset stringBytes
 
 
-consumeBase16 : Int -> List Char -> ( Int, Int )
-consumeBase16 offset string =
-    Elm.Kernel.Parser.consumeBase16 offset string
+consumeBase16 : Int -> Int -> ( Int, Int )
+consumeBase16 offset stringBytes =
+    Elm.Kernel.Parser.consumeBase16 offset stringBytes
 
 
 finalizeInt : x -> Result x (Int -> a) -> Int -> ( Int, Int ) -> State c -> PStep c x a
@@ -3645,7 +3877,7 @@ finalizeInt invalid handler startOffset ( endOffset, n ) s =
 
         Ok toValue ->
             let
-                (PState srcChars sOffset sIndent sContext sRow sCol) =
+                (PState srcBytes sOffset sIndent sContext sRow sCol) =
                     s
             in
             if Pine_kernel.equal [ startOffset, endOffset ] then
@@ -3660,27 +3892,42 @@ finalizeInt invalid handler startOffset ( endOffset, n ) s =
 
 
 bumpOffset : Int -> State c -> State c
-bumpOffset newOffset (PState srcChars offset indent context row col) =
+bumpOffset newOffset (PState srcBytes offset indent context row col) =
+    let
+        bytesDelta : Int
+        bytesDelta =
+            Pine_kernel.int_add [ newOffset, Pine_kernel.negate offset ]
+
+        charsDelta : Int
+        charsDelta =
+            Pine_kernel.concat
+                [ Pine_kernel.take [ 1, 0 ]
+                , Pine_kernel.bit_shift_right
+                    [ 2
+                    , Pine_kernel.skip [ 1, bytesDelta ]
+                    ]
+                ]
+    in
     PState
-        srcChars
+        srcBytes
         newOffset
         indent
         context
         row
-        (Pine_kernel.int_add [ col, newOffset, Pine_kernel.negate offset ])
+        (Pine_kernel.int_add [ col, charsDelta ])
 
 
 finalizeFloat : x -> x -> Result x (Int -> a) -> Result x (Float -> a) -> ( Int, Int ) -> State c -> PStep c x a
 finalizeFloat invalid expecting intSettings floatSettings intPair s =
     let
-        (PState srcChars sOffset sIndent sContext sRow sCol) =
+        (PState srcBytes sOffset sIndent sContext sRow sCol) =
             s
 
         ( intOffset, _ ) =
             intPair
 
         floatOffset =
-            consumeDotAndExp intOffset srcChars
+            consumeDotAndExp intOffset srcBytes
     in
     if Pine_kernel.int_is_sorted_asc [ 0, floatOffset ] then
         if Pine_kernel.equal [ sOffset, floatOffset ] then
@@ -3700,17 +3947,14 @@ finalizeFloat invalid expecting intSettings floatSettings intPair s =
                         sliceLength =
                             Pine_kernel.int_add [ floatOffset, Pine_kernel.negate sOffset ]
 
-                        sliceChars : List Char
-                        sliceChars =
+                        sliceBytes : Int
+                        sliceBytes =
                             Pine_kernel.take
                                 [ sliceLength
-                                , Pine_kernel.skip
-                                    [ sOffset
-                                    , srcChars
-                                    ]
+                                , Pine_kernel.skip [ sOffset, srcBytes ]
                                 ]
                     in
-                    case String.toFloat (String.fromList sliceChars) of
+                    case String.toFloat (String.String sliceBytes) of
                         Nothing ->
                             Bad True (fromState s invalid)
 
@@ -3721,7 +3965,18 @@ finalizeFloat invalid expecting intSettings floatSettings intPair s =
         Bad True
             (fromInfo
                 sRow
-                (Pine_kernel.int_add [ sCol, Pine_kernel.negate (Pine_kernel.int_add [ floatOffset, sOffset ]) ])
+                (let
+                    tempBytes =
+                        Pine_kernel.int_add [ floatOffset, sOffset ]
+
+                    tempChars =
+                        Pine_kernel.concat
+                            [ Pine_kernel.take [ 1, 0 ]
+                            , Pine_kernel.bit_shift_right [ 2, Pine_kernel.skip [ 1, tempBytes ] ]
+                            ]
+                 in
+                 Pine_kernel.int_add [ sCol, Pine_kernel.negate tempChars ]
+                )
                 invalid
                 sContext
             )
@@ -3733,18 +3988,18 @@ finalizeFloat invalid expecting intSettings floatSettings intPair s =
 --
 
 
-consumeDotAndExp : Int -> List Char -> Int
-consumeDotAndExp offset chars =
-    if Pine_kernel.equal [ Pine_kernel.head (Pine_kernel.skip [ offset, chars ]), '.' ] then
+consumeDotAndExp : Int -> Int -> Int
+consumeDotAndExp offset charsBytes =
+    if Pine_kernel.equal [ Pine_kernel.take [ 4, Pine_kernel.skip [ offset, charsBytes ] ], '.' ] then
         consumeExp
             (Elm.Kernel.Parser.chompBase10
-                (Pine_kernel.int_add [ offset, 1 ])
-                chars
+                (Pine_kernel.int_add [ offset, 4 ])
+                charsBytes
             )
-            chars
+            charsBytes
 
     else
-        consumeExp offset chars
+        consumeExp offset charsBytes
 
 
 
@@ -3753,34 +4008,32 @@ consumeDotAndExp offset chars =
 --
 
 
-consumeExp : Int -> List Char -> Int
-consumeExp offset chars =
+consumeExp : Int -> Int -> Int
+consumeExp offset charsBytes =
     let
         nextChar =
-            Pine_kernel.head
-                (Pine_kernel.skip [ offset, chars ])
+            Pine_kernel.take [ 4, Pine_kernel.skip [ offset, charsBytes ] ]
     in
     if Pine_kernel.equal [ nextChar, 'e' ] || Pine_kernel.equal [ nextChar, 'E' ] then
         let
             eOffset : Int
             eOffset =
-                Pine_kernel.int_add [ offset, 1 ]
+                Pine_kernel.int_add [ offset, 4 ]
 
             charAfterE =
-                Pine_kernel.head
-                    (Pine_kernel.skip [ eOffset, chars ])
+                Pine_kernel.take [ 4, Pine_kernel.skip [ eOffset, charsBytes ] ]
 
             expOffset : Int
             expOffset =
                 if Pine_kernel.equal [ charAfterE, '+' ] || Pine_kernel.equal [ charAfterE, '-' ] then
-                    Pine_kernel.int_add [ eOffset, 1 ]
+                    Pine_kernel.int_add [ eOffset, 4 ]
 
                 else
                     eOffset
 
             newOffset : Int
             newOffset =
-                Elm.Kernel.Parser.chompBase10 expOffset chars
+                Elm.Kernel.Parser.chompBase10 expOffset charsBytes
         in
         if Pine_kernel.equal [ expOffset, newOffset ] then
             Pine_kernel.negate newOffset
@@ -3804,10 +4057,10 @@ end x =
     Parser
         (\\s ->
             let
-                (PState srcChars sOffset sIndent sContext sRow sCol) =
+                (PState srcBytes sOffset sIndent sContext sRow sCol) =
                     s
             in
-            if Pine_kernel.equal [ Pine_kernel.length srcChars, sOffset ] then
+            if Pine_kernel.equal [ Pine_kernel.length srcBytes, sOffset ] then
                 Good False () s
 
             else
@@ -3838,7 +4091,7 @@ mapChompedString func (Parser parse) =
 
                 Good p a s1 ->
                     let
-                        (PState srcChars sOffset sIndent sContext sRow sCol) =
+                        (PState srcBytes sOffset sIndent sContext sRow sCol) =
                             s0
 
                         (PState _ s1Offset _ _ _ _) =
@@ -3846,22 +4099,16 @@ mapChompedString func (Parser parse) =
 
                         sliceLength : Int
                         sliceLength =
-                            Pine_kernel.int_add
-                                [ s1Offset
-                                , Pine_kernel.negate sOffset
-                                ]
+                            Pine_kernel.int_add [ s1Offset, Pine_kernel.negate sOffset ]
 
-                        sliceChars : List Char
-                        sliceChars =
+                        sliceBytes : Int
+                        sliceBytes =
                             Pine_kernel.take
                                 [ sliceLength
-                                , Pine_kernel.skip
-                                    [ sOffset
-                                    , srcChars
-                                    ]
+                                , Pine_kernel.skip [ sOffset, srcBytes ]
                                 ]
                     in
-                    Good p (func (String.fromList sliceChars) a) s1
+                    Good p (func (String sliceBytes) a) s1
         )
 
 
@@ -3877,11 +4124,11 @@ chompIf isGood expecting =
     Parser
         (\\s ->
             let
-                (PState srcChars sOffset sIndent sContext sRow sCol) =
+                (PState srcBytes sOffset sIndent sContext sRow sCol) =
                     s
 
                 newOffset =
-                    isSubChar isGood sOffset srcChars
+                    isSubChar isGood sOffset srcBytes
             in
             -- not found
             if Pine_kernel.equal [ newOffset, -1 ] then
@@ -3891,27 +4138,13 @@ chompIf isGood expecting =
             else if Pine_kernel.equal [ newOffset, -2 ] then
                 Good True
                     ()
-                    (PState
-                        srcChars
-                        (Pine_kernel.int_add [ sOffset, 1 ])
-                        sIndent
-                        sContext
-                        (Pine_kernel.int_add [ sRow, 1 ])
-                        1
-                    )
+                    (PState srcBytes (Pine_kernel.int_add [ sOffset, 4 ]) sIndent sContext (Pine_kernel.int_add [ sRow, 1 ]) 1)
                 -- found
 
             else
                 Good True
                     ()
-                    (PState
-                        srcChars
-                        newOffset
-                        sIndent
-                        sContext
-                        sRow
-                        (Pine_kernel.int_add [ sCol, 1 ])
-                    )
+                    (PState srcBytes newOffset sIndent sContext sRow (Pine_kernel.int_add [ sCol, 1 ]))
         )
 
 
@@ -3926,28 +4159,21 @@ chompWhile isGood =
     Parser
         (\\s ->
             let
-                (PState srcChars sOffset sIndent sContext sRow sCol) =
+                (PState srcBytes sOffset sIndent sContext sRow sCol) =
                     s
 
                 ( newOffset, newRow, newCol ) =
                     Elm.Kernel.Parser.chompWhileHelp
                         isGood
                         ( sOffset, sRow, sCol )
-                        srcChars
+                        srcBytes
             in
             Good
                 (Pine_kernel.negate
                     (Pine_kernel.int_is_sorted_asc [ newOffset, sOffset ])
                 )
                 ()
-                (PState
-                    srcChars
-                    newOffset
-                    sIndent
-                    sContext
-                    newRow
-                    newCol
-                )
+                (PState srcBytes newOffset sIndent sContext newRow newCol)
         )
 
 
@@ -3963,11 +4189,11 @@ chompUntil (Token str expecting) =
     Parser
         (\\s ->
             let
-                (PState srcChars sOffset sIndent sContext sRow sCol) =
+                (PState srcBytes sOffset sIndent sContext sRow sCol) =
                     s
 
                 ( newOffset, newRow, newCol ) =
-                    Elm.Kernel.Parser.findSubString str sOffset sRow sCol srcChars
+                    Elm.Kernel.Parser.findSubString str sOffset sRow sCol srcBytes
             in
             if Pine_kernel.equal [ newOffset, -1 ] then
                 Bad False (fromInfo newRow newCol expecting sContext)
@@ -3978,14 +4204,7 @@ chompUntil (Token str expecting) =
                         (Pine_kernel.int_is_sorted_asc [ newOffset, sOffset ])
                     )
                     ()
-                    (PState
-                        srcChars
-                        newOffset
-                        sIndent
-                        sContext
-                        newRow
-                        newCol
-                    )
+                    (PState srcBytes newOffset sIndent sContext newRow newCol)
         )
 
 
@@ -3996,11 +4215,11 @@ chompUntilEndOr str =
     Parser
         (\\s ->
             let
-                (PState srcChars sOffset sIndent sContext sRow sCol) =
+                (PState srcBytes sOffset sIndent sContext sRow sCol) =
                     s
 
                 ( newOffset, newRow, newCol ) =
-                    Elm.Kernel.Parser.findSubString str sOffset sRow sCol srcChars
+                    Elm.Kernel.Parser.findSubString str sOffset sRow sCol srcBytes
 
                 adjustedOffset : Int
                 adjustedOffset =
@@ -4008,18 +4227,11 @@ chompUntilEndOr str =
                         newOffset
 
                     else
-                        Pine_kernel.length srcChars
+                        Pine_kernel.length srcBytes
             in
             Good (Pine_kernel.negate (Pine_kernel.int_is_sorted_asc [ adjustedOffset, sOffset ]))
                 ()
-                (PState
-                    srcChars
-                    adjustedOffset
-                    sIndent
-                    sContext
-                    newRow
-                    newCol
-                )
+                (PState srcBytes adjustedOffset sIndent sContext newRow newCol)
         )
 
 
@@ -4072,7 +4284,7 @@ inContext context (Parser parse) =
     Parser
         (\\s0 ->
             let
-                (PState srcChars offset indent sContext row col) =
+                (PState srcBytes offset indent sContext row col) =
                     s0
             in
             case parse (changeContext (Located row col context :: sContext) s0) of
@@ -4085,8 +4297,8 @@ inContext context (Parser parse) =
 
 
 changeContext : List (Located c) -> State c -> State c
-changeContext newContext (PState srcChars offset indent context row col) =
-    PState srcChars offset indent newContext row col
+changeContext newContext (PState srcBytes offset indent context row col) =
+    PState srcBytes offset indent newContext row col
 
 
 
@@ -4097,7 +4309,14 @@ changeContext newContext (PState srcChars offset indent context row col) =
 -}
 getIndent : Parser c x Int
 getIndent =
-    Parser (\\s -> Good False s.indent s)
+    Parser
+        (\\s ->
+            let
+                (PState _ _ indent _ _ _) =
+                    s
+            in
+            Good False indent s
+        )
 
 
 {-| Just like [`Parser.withIndent`](Parser#withIndent)
@@ -4107,7 +4326,7 @@ withIndent newIndent (Parser parse) =
     Parser
         (\\s0 ->
             let
-                (PState srcChars offset s0Indent context row col) =
+                (PState srcBytes offset s0Indent context row col) =
                     s0
             in
             case parse (changeIndent newIndent s0) of
@@ -4120,8 +4339,8 @@ withIndent newIndent (Parser parse) =
 
 
 changeIndent : Int -> State c -> State c
-changeIndent newIndent (PState srcChars offset indent context row col) =
-    PState srcChars offset newIndent context row col
+changeIndent newIndent (PState srcBytes offset indent context row col) =
+    PState srcBytes offset newIndent context row col
 
 
 
@@ -4135,7 +4354,7 @@ getPosition =
     Parser
         (\\s ->
             let
-                (PState srcChars offset indent context row col) =
+                (PState srcBytes offset indent context row col) =
                     s
             in
             Good False ( row, col ) s
@@ -4149,7 +4368,7 @@ getRow =
     Parser
         (\\s ->
             let
-                (PState srcChars offset indent context row col) =
+                (PState srcBytes offset indent context row col) =
                     s
             in
             Good False row s
@@ -4163,7 +4382,7 @@ getCol =
     Parser
         (\\s ->
             let
-                (PState srcChars offset indent context row col) =
+                (PState srcBytes offset indent context row col) =
                     s
             in
             Good False col s
@@ -4177,7 +4396,7 @@ getOffset =
     Parser
         (\\s ->
             let
-                (PState srcChars offset indent context row col) =
+                (PState srcBytes offset indent context row col) =
                     s
             in
             Good False offset s
@@ -4191,10 +4410,10 @@ getSource =
     Parser
         (\\s ->
             let
-                (PState srcChars offset indent context row col) =
+                (PState srcBytes offset indent context row col) =
                     s
             in
-            Good False (String.fromList srcChars) s
+            Good False (String srcBytes) s
         )
 
 
@@ -4214,7 +4433,7 @@ The `newOffset` value can be a few different things:
     words wide.
 
 -}
-isSubChar : (Char -> Bool) -> Int -> List Char -> Int
+isSubChar : (Char -> Bool) -> Int -> Int -> Int
 isSubChar =
     Elm.Kernel.Parser.isSubChar
 
@@ -4237,18 +4456,20 @@ variable i =
     Parser
         (\\s ->
             let
-                (PState srcChars sOffset indent context row col) =
+                (PState srcBytes sOffset indent context row col) =
                     s
 
                 firstChar =
-                    Pine_kernel.head
-                        (Pine_kernel.skip [ sOffset, srcChars ])
+                    Pine_kernel.take
+                        [ 4
+                        , Pine_kernel.skip [ sOffset, srcBytes ]
+                        ]
             in
             {-
                First check if we have reached the end of the source string, to account for the possibility of
                a predicate for i.start crashing when given an empty list.
             -}
-            if Pine_kernel.equal [ firstChar, [] ] then
+            if Pine_kernel.equal [ Pine_kernel.length firstChar, 0 ] then
                 Bad False (fromState s i.expecting)
 
             else if i.start firstChar then
@@ -4257,20 +4478,20 @@ variable i =
                         if Pine_kernel.equal [ firstChar, '\\n' ] then
                             varHelp
                                 i.inner
-                                (Pine_kernel.int_add [ sOffset, 1 ])
+                                (Pine_kernel.int_add [ sOffset, 4 ])
                                 (Pine_kernel.int_add [ row, 1 ])
                                 1
-                                srcChars
+                                srcBytes
                                 indent
                                 context
 
                         else
                             varHelp
                                 i.inner
-                                (Pine_kernel.int_add [ sOffset, 1 ])
+                                (Pine_kernel.int_add [ sOffset, 4 ])
                                 row
                                 (Pine_kernel.int_add [ col, 1 ])
-                                srcChars
+                                srcBytes
                                 indent
                                 context
 
@@ -4284,16 +4505,16 @@ variable i =
                             , Pine_kernel.negate sOffset
                             ]
 
-                    nameChars : List Char
-                    nameChars =
+                    nameBytes : Int
+                    nameBytes =
                         Pine_kernel.take
                             [ sliceLength
-                            , Pine_kernel.skip [ sOffset, srcChars ]
+                            , Pine_kernel.skip [ sOffset, srcBytes ]
                             ]
 
                     name : String
                     name =
-                        String.fromList nameChars
+                        String nameBytes
                 in
                 if Set.member name i.reserved then
                     Bad False (fromState s i.expecting)
@@ -4306,40 +4527,13 @@ variable i =
         )
 
 
-varHelp : (Char -> Bool) -> Int -> Int -> Int -> List Char -> Int -> List (Located c) -> State c
-varHelp isGood offset row col srcChars indent context =
+varHelp : (Char -> Bool) -> Int -> Int -> Int -> Int -> Int -> List (Located c) -> State c
+varHelp isGood offset row col srcBytes indent context =
     let
-        newOffset =
-            isSubChar isGood offset srcChars
+        ( newOffset, newRow, newCol ) =
+            Elm.Kernel.Parser.chompWhileHelp isGood ( offset, row, col ) srcBytes
     in
-    if Pine_kernel.equal [ newOffset, -1 ] then
-        PState
-            srcChars
-            offset
-            indent
-            context
-            row
-            col
-
-    else if Pine_kernel.equal [ newOffset, -2 ] then
-        varHelp
-            isGood
-            (Pine_kernel.int_add [ offset, 1 ])
-            (Pine_kernel.int_add [ row, 1 ])
-            1
-            srcChars
-            indent
-            context
-
-    else
-        varHelp
-            isGood
-            newOffset
-            row
-            (Pine_kernel.int_add [ col, 1 ])
-            srcChars
-            indent
-            context
+    PState srcBytes newOffset indent context newRow newCol
 
 
 
@@ -4538,15 +4732,15 @@ nestableComment : Token x -> Token x -> Parser c x ()
 nestableComment ((Token (String openChars) oX) as open) ((Token (String closeChars) cX) as close) =
     let
         openChar =
-            Pine_kernel.head openChars
+            Pine_kernel.take [ 4, openChars ]
 
         closeChar =
-            Pine_kernel.head closeChars
+            Pine_kernel.take [ 4, closeChars ]
     in
-    if Pine_kernel.equal [ openChar, [] ] then
+    if Pine_kernel.equal [ Pine_kernel.length openChars, 0 ] then
         problem oX
 
-    else if Pine_kernel.equal [ closeChar, [] ] then
+    else if Pine_kernel.equal [ Pine_kernel.length closeChars, 0 ] then
         problem cX
 
     else
@@ -4906,8 +5100,8 @@ chompUntilEndOr =
 
 
 withIndent : Int -> Parser a -> Parser a
-withIndent newIndent (A.Parser parse) =
-    A.withIndent
+withIndent newIndent parser =
+    A.withIndent newIndent parser
 
 
 getIndent : Parser Int

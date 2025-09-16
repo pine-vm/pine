@@ -1,1 +1,1 @@
-Elm.Kernel.Parser.isSubChar  Char.isLower  9  (String.toList "Test alfa")
+Elm.Kernel.Parser.isSubChar  Char.isLower  9  (Pine_kernel.concat (String.toList "Test alfa"))

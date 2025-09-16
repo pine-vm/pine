@@ -1,52 +1,59 @@
 module Elm.Kernel.Parser exposing (..)
 
 import Char
+import String
 
 
-consumeBase : Int -> Int -> List Char -> ( Int, Int )
-consumeBase base offset chars =
-    consumeBaseHelper base offset chars 0
+consumeBase : Int -> Int -> Int -> ( Int, Int )
+consumeBase base offset charsBytes =
+    consumeBaseHelper base offset charsBytes 0
 
 
-consumeBaseHelper : Int -> Int -> List Char -> Int -> ( Int, Int )
-consumeBaseHelper base offset chars total =
-    case Pine_kernel.skip [ offset, chars ] of
-        [] ->
+consumeBaseHelper : Int -> Int -> Int -> Int -> ( Int, Int )
+consumeBaseHelper base offset charsBytes total =
+    let
+        nextChar =
+            Pine_kernel.take [ 4, Pine_kernel.skip [ offset, charsBytes ] ]
+    in
+    if Pine_kernel.equal [ Pine_kernel.length nextChar, 0 ] then
+        ( offset, total )
+
+    else
+        let
+            code =
+                Char.toCode nextChar
+
+            digit : Int
+            digit =
+                Pine_kernel.int_add [ code, -48 ]
+
+            lastDigit : Int
+            lastDigit =
+                Pine_kernel.int_add [ base, -1 ]
+        in
+        if Pine_kernel.int_is_sorted_asc [ 0, digit, lastDigit ] then
+            consumeBaseHelper
+                base
+                (Pine_kernel.int_add [ offset, 4 ])
+                charsBytes
+                (Pine_kernel.int_add [ Pine_kernel.int_mul [ base, total ], digit ])
+
+        else
             ( offset, total )
 
-        nextChar :: _ ->
-            let
-                digit : Int
-                digit =
-                    Pine_kernel.int_add [ Char.toCode nextChar, -48 ]
 
-                lastDigit : Int
-                lastDigit =
-                    Pine_kernel.int_add [ base, -1 ]
-            in
-            if Pine_kernel.int_is_sorted_asc [ 0, digit, lastDigit ] then
-                consumeBaseHelper
-                    base
-                    (Pine_kernel.int_add [ offset, 1 ])
-                    chars
-                    (Pine_kernel.int_add [ Pine_kernel.int_mul [ base, total ], digit ])
-
-            else
-                ( offset, total )
+consumeBase16 : Int -> Int -> ( Int, Int )
+consumeBase16 offset charsBytes =
+    consumeBase16Helper offset charsBytes 0
 
 
-consumeBase16 : Int -> List Char -> ( Int, Int )
-consumeBase16 offset chars =
-    consumeBase16Helper offset chars 0
-
-
-consumeBase16Helper : Int -> List Char -> Int -> ( Int, Int )
-consumeBase16Helper offset chars total =
+consumeBase16Helper : Int -> Int -> Int -> ( Int, Int )
+consumeBase16Helper offset charsBytes total =
     let
         char =
-            Pine_kernel.head (Pine_kernel.skip [ offset, chars ])
+            Pine_kernel.take [ 4, Pine_kernel.skip [ offset, charsBytes ] ]
     in
-    if Pine_kernel.equal [ char, [] ] then
+    if Pine_kernel.equal [ Pine_kernel.length char, 0 ] then
         ( offset, total )
 
     else
@@ -56,15 +63,12 @@ consumeBase16Helper offset chars total =
 
             digit =
                 if Pine_kernel.int_is_sorted_asc [ 48, code, 57 ] then
-                    -- '0' to '9'
                     Just (Pine_kernel.int_add [ code, -48 ])
 
                 else if Pine_kernel.int_is_sorted_asc [ 65, code, 70 ] then
-                    -- 'A' to 'F'
                     Just (Pine_kernel.int_add [ code, -55 ])
 
                 else if Pine_kernel.int_is_sorted_asc [ 97, code, 102 ] then
-                    -- 'a' to 'f'
                     Just (Pine_kernel.int_add [ code, -87 ])
 
                 else
@@ -73,26 +77,26 @@ consumeBase16Helper offset chars total =
         case digit of
             Just d ->
                 consumeBase16Helper
-                    (Pine_kernel.int_add [ offset, 1 ])
-                    chars
+                    (Pine_kernel.int_add [ offset, 4 ])
+                    charsBytes
                     (Pine_kernel.int_add [ Pine_kernel.int_mul [ 16, total ], d ])
 
             Nothing ->
                 ( offset, total )
 
 
-chompBase10 : Int -> List Char -> Int
-chompBase10 offset chars =
-    chompBase10Helper offset chars
+chompBase10 : Int -> Int -> Int
+chompBase10 offset charsBytes =
+    chompBase10Helper offset charsBytes
 
 
-chompBase10Helper : Int -> List Char -> Int
-chompBase10Helper offset chars =
+chompBase10Helper : Int -> Int -> Int
+chompBase10Helper offset charsBytes =
     let
         char =
-            Pine_kernel.head (Pine_kernel.skip [ offset, chars ])
+            Pine_kernel.take [ 4, Pine_kernel.skip [ offset, charsBytes ] ]
     in
-    if Pine_kernel.equal [ char, [] ] then
+    if Pine_kernel.equal [ Pine_kernel.length char, 0 ] then
         offset
 
     else
@@ -102,39 +106,31 @@ chompBase10Helper offset chars =
         in
         if Pine_kernel.int_is_sorted_asc [ 48, code, 57 ] then
             chompBase10Helper
-                (Pine_kernel.int_add [ offset, 1 ])
-                chars
+                (Pine_kernel.int_add [ offset, 4 ])
+                charsBytes
 
         else
             offset
 
 
-isSubString : String -> Int -> Int -> Int -> List Char -> ( Int, Int, Int )
-isSubString smallString offset row col bigChars =
+isSubString : String -> Int -> Int -> Int -> Int -> ( Int, Int, Int )
+isSubString (String smallBytes) offset row col bigBytes =
     let
-        smallChars : List Char
-        smallChars =
-            String.toList smallString
-
-        expectedLength : Int
-        expectedLength =
-            Pine_kernel.length smallChars
-
-        sliceFromSourceChars : List Char
-        sliceFromSourceChars =
+        sliceFromSource : Int
+        sliceFromSource =
             Pine_kernel.take
-                [ expectedLength
-                , Pine_kernel.skip [ offset, bigChars ]
+                [ Pine_kernel.length smallBytes
+                , Pine_kernel.skip [ offset, bigBytes ]
                 ]
     in
-    if Pine_kernel.equal [ sliceFromSourceChars, smallChars ] then
+    if Pine_kernel.equal [ sliceFromSource, smallBytes ] then
         let
             ( newlineCount, colShift ) =
-                countOffsetsInString ( 0, 0, 0 ) ( smallChars, expectedLength )
+                countOffsetsInString ( 0, 0, 0 ) ( smallBytes, Pine_kernel.length smallBytes )
 
             newOffset : Int
             newOffset =
-                Pine_kernel.int_add [ offset, expectedLength ]
+                Pine_kernel.int_add [ offset, Pine_kernel.length smallBytes ]
 
             newRow : Int
             newRow =
@@ -154,13 +150,13 @@ isSubString smallString offset row col bigChars =
         ( -1, row, col )
 
 
-isSubChar : (Char -> Bool) -> Int -> List Char -> Int
-isSubChar predicate offset chars =
+isSubChar : (Char -> Bool) -> Int -> Int -> Int
+isSubChar predicate offset charsBytes =
     let
         nextChar =
-            Pine_kernel.head (Pine_kernel.skip [ offset, chars ])
+            Pine_kernel.take [ 4, Pine_kernel.skip [ offset, charsBytes ] ]
     in
-    if Pine_kernel.equal [ nextChar, [] ] then
+    if Pine_kernel.equal [ Pine_kernel.length nextChar, 0 ] then
         -1
 
     else if predicate nextChar then
@@ -169,32 +165,21 @@ isSubChar predicate offset chars =
             -2
 
         else
-            Pine_kernel.int_add [ offset, 1 ]
+            Pine_kernel.int_add [ offset, 4 ]
 
     else
         -1
 
 
-findSubString : String -> Int -> Int -> Int -> List Char -> ( Int, Int, Int )
-findSubString smallString offset row col bigChars =
+findSubString : String -> Int -> Int -> Int -> Int -> ( Int, Int, Int )
+findSubString (String smallBytes) offset row col bigBytes =
     let
-        smallChars : List Char
-        smallChars =
-            String.toList smallString
-
         newOffset : Int
         newOffset =
-            indexOf smallChars bigChars offset
-
-        consumedLength : Int
-        consumedLength =
-            Pine_kernel.int_add
-                [ newOffset
-                , Pine_kernel.negate offset
-                ]
+            indexOf smallBytes bigBytes offset
 
         ( newlineCount, colShift ) =
-            countOffsetsInString ( offset, 0, 0 ) ( bigChars, newOffset )
+            countOffsetsInString ( offset, 0, 0 ) ( bigBytes, newOffset )
 
         newRow : Int
         newRow =
@@ -211,57 +196,57 @@ findSubString smallString offset row col bigChars =
     ( newOffset, newRow, newCol )
 
 
-indexOf : List Char -> List Char -> Int -> Int
-indexOf smallChars bigChars offset =
+indexOf : Int -> Int -> Int -> Int
+indexOf smallBytes bigBytes offset =
     let
         expectedLength : Int
         expectedLength =
-            Pine_kernel.length smallChars
+            Pine_kernel.length smallBytes
 
-        sliceFromSourceChars : List Char
-        sliceFromSourceChars =
+        sliceFromSource : Int
+        sliceFromSource =
             Pine_kernel.take
                 [ expectedLength
-                , Pine_kernel.skip [ offset, bigChars ]
+                , Pine_kernel.skip [ offset, bigBytes ]
                 ]
     in
-    if Pine_kernel.equal [ Pine_kernel.length sliceFromSourceChars, expectedLength ] then
-        if Pine_kernel.equal [ sliceFromSourceChars, smallChars ] then
+    if Pine_kernel.equal [ Pine_kernel.length sliceFromSource, expectedLength ] then
+        if Pine_kernel.equal [ sliceFromSource, smallBytes ] then
             offset
 
         else
-            indexOf smallChars bigChars (Pine_kernel.int_add [ offset, 1 ])
+            indexOf smallBytes bigBytes (Pine_kernel.int_add [ offset, 4 ])
 
     else
         -1
 
 
-chompWhileHelp : (Char -> Bool) -> ( Int, Int, Int ) -> List Char -> ( Int, Int, Int )
-chompWhileHelp isGood ( offset, row, col ) srcChars =
+chompWhileHelp : (Char -> Bool) -> ( Int, Int, Int ) -> Int -> ( Int, Int, Int )
+chompWhileHelp isGood ( offset, row, col ) srcBytes =
     let
         nextChar =
-            Pine_kernel.head (Pine_kernel.skip [ offset, srcChars ])
+            Pine_kernel.take [ 4, Pine_kernel.skip [ offset, srcBytes ] ]
     in
     if isGood nextChar then
         if Pine_kernel.equal [ nextChar, '\n' ] then
             -- matched a newline
             chompWhileHelp
                 isGood
-                ( Pine_kernel.int_add [ offset, 1 ]
+                ( Pine_kernel.int_add [ offset, 4 ]
                 , Pine_kernel.int_add [ row, 1 ]
                 , 1
                 )
-                srcChars
+                srcBytes
 
         else
             -- normal match
             chompWhileHelp
                 isGood
-                ( Pine_kernel.int_add [ offset, 1 ]
+                ( Pine_kernel.int_add [ offset, 4 ]
                 , row
                 , Pine_kernel.int_add [ col, 1 ]
                 )
-                srcChars
+                srcBytes
 
     else
         -- no match
@@ -271,17 +256,19 @@ chompWhileHelp isGood ( offset, row, col ) srcChars =
         )
 
 
-countOffsetsInString : ( Int, Int, Int ) -> ( List Char, Int ) -> ( Int, Int )
-countOffsetsInString ( offset, newlines, col ) ( chars, end ) =
+countOffsetsInString : ( Int, Int, Int ) -> ( Int, Int ) -> ( Int, Int )
+countOffsetsInString ( offset, newlines, col ) ( charsBytes, end ) =
     let
         currentChar =
-            Pine_kernel.head
-                (Pine_kernel.skip [ offset, chars ])
+            Pine_kernel.take
+                [ 4
+                , Pine_kernel.skip [ offset, charsBytes ]
+                ]
 
         nextOffset =
-            Pine_kernel.int_add [ offset, 1 ]
+            Pine_kernel.int_add [ offset, 4 ]
     in
-    if Pine_kernel.equal [ currentChar, [] ] then
+    if Pine_kernel.equal [ Pine_kernel.length currentChar, 0 ] then
         ( newlines, col )
 
     else if Pine_kernel.int_is_sorted_asc [ end, offset ] then
@@ -290,12 +277,12 @@ countOffsetsInString ( offset, newlines, col ) ( chars, end ) =
     else if Pine_kernel.equal [ currentChar, '\n' ] then
         countOffsetsInString
             ( nextOffset, Pine_kernel.int_add [ newlines, 1 ], 0 )
-            ( chars, end )
+            ( charsBytes, end )
 
     else
         countOffsetsInString
             ( nextOffset, newlines, Pine_kernel.int_add [ col, 1 ] )
-            ( chars, end )
+            ( charsBytes, end )
 
 
 newlineChar : Char
@@ -304,11 +291,13 @@ newlineChar =
     '\n'
 
 
-isAsciiCode : Int -> Int -> List Char -> Bool
-isAsciiCode code offset chars =
+isAsciiCode : Int -> Int -> Int -> Bool
+isAsciiCode code offset charsBytes =
     let
         nextChar =
-            Pine_kernel.head
-                (Pine_kernel.skip [ offset, chars ])
+            Pine_kernel.take
+                [ 4
+                , Pine_kernel.skip [ offset, charsBytes ]
+                ]
     in
     Pine_kernel.equal [ nextChar, Char.fromCode code ]

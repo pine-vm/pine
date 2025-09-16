@@ -1,1 +1,1 @@
-Elm.Kernel.Parser.isSubChar  (\c -> True)  0  (String.toList "T")
+Elm.Kernel.Parser.isSubChar  (\c -> True)  0  (Pine_kernel.concat (String.toList "T"))
