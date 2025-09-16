@@ -164,6 +164,16 @@ public class ReducePineExpression
                 "Unexpected result type from parsing encoded expression: " + parseResult);
         }
 
+        if (!parseOk.ReferencesEnvironment)
+        {
+            return
+                TryEvaluateExpressionIndependent(parseOk, parseCache);
+        }
+
+        /*
+         * 2025-09-16: Disabled after observing Stack overflow here.
+         * 
+
         Expression? Replacement(Expression expr)
         {
             if (expr is Expression.Environment)
@@ -195,6 +205,9 @@ public class ReducePineExpression
         }
 
         return innerOk;
+        */
+
+        return "Not following parse&eval";
     }
 
     /// <summary>
