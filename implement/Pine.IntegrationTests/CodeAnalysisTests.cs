@@ -2,7 +2,6 @@ using AwesomeAssertions;
 using Pine.Core;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
-using Pine.Core.Json;
 using Pine.Core.PopularEncodings;
 using Pine.Elm;
 using System.Collections.Generic;
@@ -81,26 +80,17 @@ public class CodeAnalysisTests
 
         var parseCache = new PineVMParseCache();
 
-        var compiledDecl =
-            ElmInteractiveEnvironment.ParseFunctionFromElmModule(
-                compiledEnv,
-                moduleName: "Test",
-                declarationName: "fibonacci",
-                parseCache: parseCache)
-            .Extract(err => throw new System.Exception(err));
-
-        compiledDecl.Should().NotBeNull();
-
-        var stubTextualRepr =
-            EncodePineExpressionAsJson.ToJsonString(compiledDecl.functionRecord.InnerFunction);
+        var parsedEnv =
+            ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnv)
+            .Extract(err => throw new System.Exception("Failed parsing interactive environment: " + err));
 
         var namesFromCompiledEnv =
-            new NamesFromCompiledEnv(compiledEnv, parseCache);
+            NamesFromCompiledEnv.FromCompiledEnvironment(parsedEnv, parseCache);
 
         var staticProgram =
-            PineVM.CodeAnalysis.ParseAsStaticMonomorphicProgramAssigningNames(
-                compiledDecl.functionRecord,
-                nameForDecl: namesFromCompiledEnv.NameFromDecl,
+            PineVM.CodeAnalysis.ParseAsStaticMonomorphicProgram(
+                parsedEnv,
+                includeDeclaration: declName => declName == new DeclQualifiedName(["Test"], "fibonacci"),
                 parseCache)
             .Extract(err => throw new System.Exception("Failed parsing as static program: " + err));
 
@@ -212,16 +202,21 @@ public class CodeAnalysisTests
 
         compiledDecl.Should().NotBeNull();
 
-        var stubTextualRepr =
-            EncodePineExpressionAsJson.ToJsonString(compiledDecl.functionRecord.InnerFunction);
+        var parsedEnv =
+            ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnv)
+            .Extract(err => throw new System.Exception("Failed parsing interactive environment: " + err));
 
         var namesFromCompiledEnv =
-            new NamesFromCompiledEnv(compiledEnv, parseCache);
+            NamesFromCompiledEnv.FromCompiledEnvironment(parsedEnv, parseCache);
 
         var staticProgram =
-            PineVM.CodeAnalysis.ParseAsStaticMonomorphicProgramAssigningNames(
-                compiledDecl.functionRecord,
-                nameForDecl: namesFromCompiledEnv.NameFromDecl,
+            PineVM.CodeAnalysis.ParseAsStaticMonomorphicProgram(
+                parsedEnv,
+                includeDeclaration:
+                declName =>
+                {
+                    return declName == new DeclQualifiedName(["Test"], "factorial");
+                },
                 parseCache)
             .Extract(err => throw new System.Exception("Failed parsing as static program: " + err));
 
@@ -319,23 +314,17 @@ public class CodeAnalysisTests
 
         var parseCache = new PineVMParseCache();
 
-        var compiledDecl =
-            ElmInteractiveEnvironment.ParseFunctionFromElmModule(
-                compiledEnv,
-                moduleName: "Test",
-                declarationName: "dictToShuffledList",
-                parseCache: parseCache)
-            .Extract(err => throw new System.Exception(err));
-
-        compiledDecl.Should().NotBeNull();
+        var parsedEnv =
+            ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnv)
+            .Extract(err => throw new System.Exception("Failed parsing interactive environment: " + err));
 
         var namesFromCompiledEnv =
-            new NamesFromCompiledEnv(compiledEnv, parseCache);
+            NamesFromCompiledEnv.FromCompiledEnvironment(parsedEnv, parseCache);
 
         var staticProgram =
-            PineVM.CodeAnalysis.ParseAsStaticMonomorphicProgramAssigningNames(
-                compiledDecl.functionRecord,
-                namesFromCompiledEnv.NameFromDecl,
+            PineVM.CodeAnalysis.ParseAsStaticMonomorphicProgram(
+                parsedEnv,
+                includeDeclaration: declName => declName == new DeclQualifiedName(["Test"], "dictToShuffledList"),
                 parseCache)
             .Extract(err => throw new System.Exception("Failed parsing as static program: " + err));
 
@@ -495,23 +484,14 @@ public class CodeAnalysisTests
 
         var parseCache = new PineVMParseCache();
 
-        var compiledDecl =
-            ElmInteractiveEnvironment.ParseFunctionFromElmModule(
-                compiledEnv,
-                moduleName: "Test",
-                declarationName: "convert0OrMore_base3",
-                parseCache: parseCache)
-            .Extract(err => throw new System.Exception(err));
-
-        compiledDecl.Should().NotBeNull();
-
-        var namesFromCompiledEnv =
-            new NamesFromCompiledEnv(compiledEnv, parseCache);
+        var parsedEnv =
+            ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnv)
+            .Extract(err => throw new System.Exception("Failed parsing interactive environment: " + err));
 
         var staticProgram =
-            PineVM.CodeAnalysis.ParseAsStaticMonomorphicProgramAssigningNames(
-                compiledDecl.functionRecord,
-                namesFromCompiledEnv.NameFromDecl,
+            PineVM.CodeAnalysis.ParseAsStaticMonomorphicProgram(
+                parsedEnv,
+                includeDeclaration: declName => declName == new DeclQualifiedName(["Test"], "convert0OrMore_base3"),
                 parseCache)
             .Extract(err => throw new System.Exception("Failed parsing as static program: " + err));
 

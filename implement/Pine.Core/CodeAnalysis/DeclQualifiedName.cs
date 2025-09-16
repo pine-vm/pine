@@ -29,6 +29,43 @@ public record DeclQualifiedName(
         return FullName;
     }
 
+    /// <inheritdoc/>
+    public virtual bool Equals(DeclQualifiedName? other)
+    {
+        if (other is null)
+            return false;
+
+        if (ReferenceEquals(this, other))
+            return true;
+
+        if (DeclName != other.DeclName)
+            return false;
+
+        if (Namespaces.Count != other.Namespaces.Count)
+            return false;
+
+        for (var i = 0; i < Namespaces.Count; i++)
+        {
+            if (Namespaces[i] != other.Namespaces[i])
+                return false;
+        }
+
+        return true;
+    }
+
+    /// <inheritdoc/>
+    public override int GetHashCode()
+    {
+        var hash = new System.HashCode();
+
+        hash.Add(DeclName);
+
+        foreach (var ns in Namespaces)
+            hash.Add(ns);
+
+        return hash.ToHashCode();
+    }
+
     /// <summary>
     /// Parses a string representation of a fully qualified declaration name.
     /// </summary>

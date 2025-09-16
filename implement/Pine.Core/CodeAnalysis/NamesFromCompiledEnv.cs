@@ -1,4 +1,3 @@
-using Pine.Core.PopularEncodings;
 using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -22,21 +21,42 @@ namespace Pine.Core.CodeAnalysis;
 public record NamesFromCompiledEnv
 {
     /// <summary>
-    /// Creates a new index for the given compiled environment value.
+    /// Creates a <see cref="NamesFromCompiledEnv"/> index from the encoded compiled environment value.
     /// </summary>
-    /// <param name="compiledEnvValue">The encoded interactive environment value (list of tagged modules) produced by the compiler/runtime.</param>
-    /// <param name="parseCache">Cache used to parse function bodies in order to extract inner function and environment function references.</param>
-    public NamesFromCompiledEnv(
+    /// <param name="compiledEnvValue">The compiled environment value to parse and index.</param>
+    /// <param name="parseCache">Cache used to avoid repeated parsing of embedded expressions/functions.</param>
+    /// <returns>A new <see cref="NamesFromCompiledEnv"/> instance for querying declaration names.</returns>
+    public static NamesFromCompiledEnv FromCompiledEnvironment(
         PineValue compiledEnvValue,
         PineVMParseCache parseCache)
     {
-        CompiledEnvValue = compiledEnvValue;
-
-        var mutatedDict = new Dictionary<PineValue, ImmutableList<(DeclQualifiedName, PineValueClass envClass)>>();
-
         var parsedEnv =
             ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnvValue)
             .Extract(err => throw new System.Exception("Failed parsing interactive environment: " + err));
+
+        return FromCompiledEnvironment(parsedEnv, parseCache);
+    }
+
+    /// <summary>
+    /// Creates a <see cref="NamesFromCompiledEnv"/> index from a previously parsed interactive environment.
+    /// </summary>
+    /// <param name="parsedEnv">The parsed interactive environment produced by the Elm interactive compiler.</param>
+    /// <param name="parseCache">Cache used to avoid repeated parsing of embedded expressions/functions.</param>
+    /// <returns>A new <see cref="NamesFromCompiledEnv"/> instance for querying declaration names.</returns>
+    public static NamesFromCompiledEnv FromCompiledEnvironment(
+        ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedEnv,
+        PineVMParseCache parseCache)
+    {
+        return new NamesFromCompiledEnv(parsedEnv, parseCache);
+    }
+
+    private NamesFromCompiledEnv(
+        ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedEnv,
+        PineVMParseCache parseCache)
+    {
+        ParsedEnv = parsedEnv;
+
+        var mutatedDict = new Dictionary<PineValue, ImmutableList<(DeclQualifiedName, PineValueClass envClass)>>();
 
         foreach (var parsedModule in parsedEnv.Modules)
         {
@@ -114,53 +134,9 @@ public record NamesFromCompiledEnv
     }
 
     /// <summary>
-    /// Helper enumerator (currently unused) that yields additional synthetic names (body, env-func-N) for each declaration.
+    /// The parsed interactive environment used to build this index.
     /// </summary>
-    private static IEnumerable<KeyValuePair<PineValue, IReadOnlyList<string>>> EnumerateNamesFromCompiledEnv(
-        PineValue compiledEnvValue,
-        PineVMParseCache parseCache)
-    {
-        var parsedEnv =
-            ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnvValue)
-            .Extract(err => throw new System.Exception("Failed parsing interactive environment: " + err));
-
-        foreach (var parsedModule in parsedEnv.Modules)
-        {
-            foreach (var decl in parsedModule.moduleContent.FunctionDeclarations)
-            {
-                yield return
-                    new KeyValuePair<PineValue, IReadOnlyList<string>>(
-                        decl.Value,
-                        [parsedModule.moduleName, decl.Key]);
-
-                if (ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(decl.Value, parseCache).IsOkOrNull() is { } functionRecord)
-                {
-                    var innerFunctionValue =
-                        ExpressionEncoding.EncodeExpressionAsValue(functionRecord.InnerFunction);
-
-                    yield return
-                        new KeyValuePair<PineValue, IReadOnlyList<string>>(
-                            innerFunctionValue,
-                            [parsedModule.moduleName, decl.Key, "body"]);
-
-                    for (var i = 0; i < functionRecord.EnvFunctions.Length; i++)
-                    {
-                        var envFunc = functionRecord.EnvFunctions.Span[i];
-
-                        yield return
-                            new KeyValuePair<PineValue, IReadOnlyList<string>>(
-                                envFunc,
-                                [parsedModule.moduleName, decl.Key, "env-func-" + i]);
-                    }
-                }
-            }
-        }
-    }
-
-    /// <summary>
-    /// The original compiled environment value used to build this index.
-    /// </summary>
-    public PineValue CompiledEnvValue { get; }
+    public ElmInteractiveEnvironment.ParsedInteractiveEnvironment ParsedEnv { get; }
 
     private readonly FrozenDictionary<PineValue, ImmutableList<(DeclQualifiedName declName, PineValueClass envClass)>> _namesFromCompiledEnv;
 

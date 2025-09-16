@@ -865,28 +865,94 @@ public class CodeAnalysis
     }
 
     public static Result<string, StaticProgram>
-        ParseAsStaticMonomorphicProgramAssigningNames(
-        ElmInteractiveEnvironment.FunctionRecord functionRecord,
-        Func<PineValue, PineValueClass, string?> nameForDecl,
+        ParseAsStaticMonomorphicProgram(
+        ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedEnvironment,
+        Func<DeclQualifiedName, bool> includeDeclaration,
         PineVMParseCache parseCache)
     {
-        var lessSpecializedInterfacesResult =
-            ParseAsStaticMonomorphicProgram(
-                functionRecord,
-                parseCache);
+        var namesFromCompiledEnv =
+            NamesFromCompiledEnv.FromCompiledEnvironment(parsedEnvironment, parseCache);
 
+        var includedFunctionRecords = new List<ElmInteractiveEnvironment.FunctionRecord>();
+
+        foreach (var parsedModule in parsedEnvironment.Modules)
         {
-            if (lessSpecializedInterfacesResult.IsErrOrNull() is { } err)
+            var moduleName = parsedModule.moduleName.Split('.');
+
+            foreach (var decl in parsedModule.moduleContent.FunctionDeclarations)
             {
-                return "Failed to parse as static monomorphic program: " + err;
+                if (!includeDeclaration(new DeclQualifiedName(moduleName, decl.Key)))
+                    continue;
+
+                var functionRecordResult =
+                    ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(decl.Value, parseCache);
+
+                if (functionRecordResult.IsErrOrNull() is { } err)
+                {
+                    return "Failed parsing declaration from module as function record: " + err;
+                }
+
+                if (functionRecordResult.IsOkOrNull() is not { } functionRecord)
+                {
+                    throw new Exception(
+                        "Unexpected return type: " +
+                        functionRecordResult.GetType().Name);
+                }
+
+                includedFunctionRecords.Add(functionRecord);
             }
         }
 
-        if (lessSpecializedInterfacesResult.IsOkOrNull() is not { } lessSpecializedInterfaces)
+        return
+            ParseAsStaticMonomorphicProgramAssigningNames(
+                includedFunctionRecords,
+                namesFromCompiledEnv.NameFromDecl,
+                parseCache);
+    }
+
+    public static Result<string, StaticProgram>
+        ParseAsStaticMonomorphicProgramAssigningNames(
+        IEnumerable<ElmInteractiveEnvironment.FunctionRecord> functionRecords,
+        Func<PineValue, PineValueClass, string?> nameForDecl,
+        PineVMParseCache parseCache)
+    {
+        Dictionary<StaticFunctionIdentifier, (Expression origExpr, StaticExpressionGen body)> lessSpecializedInterfaces = [];
+
+        foreach (var functionRecord in functionRecords)
         {
-            throw new Exception(
-                "Unexpected return type: " +
-                lessSpecializedInterfacesResult.GetType().Name);
+            var parseResult =
+                ParseAsStaticMonomorphicProgram(
+                    functionRecord,
+                    parseCache);
+
+            if (parseResult.IsErrOrNull() is { } err)
+            {
+                return "Failed to parse as static monomorphic program: " + err;
+            }
+
+            if (parseResult.IsOkOrNull() is not { } parsedFunctions)
+            {
+                throw new Exception(
+                    "Unexpected return type: " +
+                    parseResult.GetType().Name);
+            }
+
+            foreach (var entry in parsedFunctions)
+            {
+                if (lessSpecializedInterfaces.TryGetValue(entry.Key, out var existing))
+                {
+                    if (!existing.body.Equals(entry.Value.body))
+                    {
+                        return
+                            "Conflict: Two different function bodies for the same function identifier: " +
+                            entry.Key + "\nExisting body:\n" + existing.body + "\nNew body:\n" + entry.Value.body;
+                    }
+                }
+                else
+                {
+                    lessSpecializedInterfaces[entry.Key] = entry.Value;
+                }
+            }
         }
 
         var hashCache = new ConcurrentPineValueHashCache();
@@ -940,7 +1006,7 @@ public class CodeAnalysis
             .Distinct(IntPathEqualityComparer.Instance)
             .ToArray();
 
-        bool PathIsPrefixOfOtherPath(IReadOnlyList<int> path, IReadOnlyList<int> otherPath)
+        static bool PathIsPrefixOfOtherPath(IReadOnlyList<int> path, IReadOnlyList<int> otherPath)
         {
             if (path.Count >= otherPath.Count)
                 return false;
