@@ -90,7 +90,11 @@ public class CodeAnalysisTests
         var staticProgram =
             PineVM.CodeAnalysis.ParseAsStaticMonomorphicProgram(
                 parsedEnv,
-                includeDeclaration: declName => declName == new DeclQualifiedName(["Test"], "fibonacci"),
+                includeDeclaration:
+                declName =>
+                {
+                    return declName.Namespaces.SequenceEqual(["Test"]);
+                },
                 parseCache)
             .Extract(err => throw new System.Exception("Failed parsing as static program: " + err));
 
@@ -215,7 +219,7 @@ public class CodeAnalysisTests
                 includeDeclaration:
                 declName =>
                 {
-                    return declName == new DeclQualifiedName(["Test"], "factorial");
+                    return declName.Namespaces.SequenceEqual(["Test"]);
                 },
                 parseCache)
             .Extract(err => throw new System.Exception("Failed parsing as static program: " + err));
@@ -324,7 +328,11 @@ public class CodeAnalysisTests
         var staticProgram =
             PineVM.CodeAnalysis.ParseAsStaticMonomorphicProgram(
                 parsedEnv,
-                includeDeclaration: declName => declName == new DeclQualifiedName(["Test"], "dictToShuffledList"),
+                includeDeclaration:
+                declName =>
+                {
+                    return declName.Namespaces.SequenceEqual(["Test"]);
+                },
                 parseCache)
             .Extract(err => throw new System.Exception("Failed parsing as static program: " + err));
 
@@ -491,7 +499,11 @@ public class CodeAnalysisTests
         var staticProgram =
             PineVM.CodeAnalysis.ParseAsStaticMonomorphicProgram(
                 parsedEnv,
-                includeDeclaration: declName => declName == new DeclQualifiedName(["Test"], "convert0OrMore_base3"),
+                includeDeclaration:
+                declName =>
+                {
+                    return declName.Namespaces.SequenceEqual(["Test"]);
+                },
                 parseCache)
             .Extract(err => throw new System.Exception("Failed parsing as static program: " + err));
 
