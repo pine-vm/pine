@@ -619,10 +619,519 @@ public class CodeAnalysisTests
     }
 
     [Fact]
+    public void Parse_Basics_compare()
+    {
+        var compiledEnv =
+            BundledElmEnvironments.BundledElmCompilerCompiledEnvValue()
+            ??
+            throw new System.Exception("Failed to load Elm compiler from bundle.");
+
+        var parseCache = new PineVMParseCache();
+
+        var parsedEnv =
+            ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnv)
+            .Extract(err => throw new System.Exception("Failed parsing interactive environment: " + err));
+
+        var staticProgram =
+            PineVM.CodeAnalysis.ParseAsStaticMonomorphicProgram(
+                parsedEnv,
+                includeDeclaration:
+                declName =>
+                {
+                    return declName == new DeclQualifiedName(["Basics"], "compare");
+                },
+                parseCache)
+            .Extract(err => throw new System.Exception("Failed parsing as static program: " + err));
+
+        staticProgram.Should().NotBeNull();
+
+        var wholeProgramText = RenderStaticProgram(staticProgram);
+
+        wholeProgramText.Trim().Should().Be(
+            """"
+            Basics.compare param_1_0 param_1_1 =
+                if
+                    Pine_kernel.equal
+                        [ param_1_0
+                        , param_1_1
+                        ]
+                then
+                    EQ
+
+                else if
+                    if
+                        Pine_kernel.equal
+                            [ String
+                            , Pine_kernel.head
+                                param_1_1
+                            ]
+                    then
+                        Pine_kernel.equal
+                            [ String
+                            , Pine_kernel.head
+                                param_1_0
+                            ]
+
+                    else
+                        False
+                then
+                    Basics.compareStrings
+                        0
+                        (Pine_kernel.head
+                            Pine_kernel.head
+                                Pine_kernel.skip
+                                    [ 1
+                                    , param_1_0
+                                    ]
+                        )
+                        (Pine_kernel.head
+                            Pine_kernel.head
+                                Pine_kernel.skip
+                                    [ 1
+                                    , param_1_1
+                                    ]
+                        )
+
+                else if
+                    if
+                        Pine_kernel.equal
+                            [ Elm_Float
+                            , Pine_kernel.head
+                                param_1_1
+                            ]
+                    then
+                        Pine_kernel.equal
+                            [ Elm_Float
+                            , Pine_kernel.head
+                                param_1_0
+                            ]
+
+                    else
+                        False
+                then
+                    if
+                        Pine_kernel.equal
+                            [ Pine_kernel.int_mul
+                                [ Pine_kernel.head
+                                    Pine_kernel.head
+                                        Pine_kernel.skip
+                                            [ 1
+                                            , param_1_0
+                                            ]
+                                , Pine_kernel.head
+                                    Pine_kernel.skip
+                                        [ 1
+                                        , Pine_kernel.head
+                                            Pine_kernel.skip
+                                                [ 1
+                                                , param_1_1
+                                                ]
+                                        ]
+                                ]
+                            , Pine_kernel.int_mul
+                                [ Pine_kernel.head
+                                    Pine_kernel.head
+                                        Pine_kernel.skip
+                                            [ 1
+                                            , param_1_1
+                                            ]
+                                , Pine_kernel.head
+                                    Pine_kernel.skip
+                                        [ 1
+                                        , Pine_kernel.head
+                                            Pine_kernel.skip
+                                                [ 1
+                                                , param_1_0
+                                                ]
+                                        ]
+                                ]
+                            ]
+                    then
+                        EQ
+
+                    else if
+                        Pine_kernel.int_is_sorted_asc
+                            [ Pine_kernel.int_mul
+                                [ Pine_kernel.head
+                                    Pine_kernel.head
+                                        Pine_kernel.skip
+                                            [ 1
+                                            , param_1_0
+                                            ]
+                                , Pine_kernel.head
+                                    Pine_kernel.skip
+                                        [ 1
+                                        , Pine_kernel.head
+                                            Pine_kernel.skip
+                                                [ 1
+                                                , param_1_1
+                                                ]
+                                        ]
+                                ]
+                            , Pine_kernel.int_mul
+                                [ Pine_kernel.head
+                                    Pine_kernel.head
+                                        Pine_kernel.skip
+                                            [ 1
+                                            , param_1_1
+                                            ]
+                                , Pine_kernel.head
+                                    Pine_kernel.skip
+                                        [ 1
+                                        , Pine_kernel.head
+                                            Pine_kernel.skip
+                                                [ 1
+                                                , param_1_0
+                                                ]
+                                        ]
+                                ]
+                            ]
+                    then
+                        LT
+
+                    else
+                        GT
+
+                else if
+                    Pine_kernel.equal
+                        [ Elm_Float
+                        , Pine_kernel.head
+                            param_1_0
+                        ]
+                then
+                    if
+                        Pine_kernel.equal
+                            [ Pine_kernel.head
+                                Pine_kernel.head
+                                    Pine_kernel.skip
+                                        [ 1
+                                        , param_1_0
+                                        ]
+                            , Pine_kernel.int_mul
+                                [ Pine_kernel.head
+                                    Pine_kernel.skip
+                                        [ 1
+                                        , Pine_kernel.head
+                                            Pine_kernel.skip
+                                                [ 1
+                                                , param_1_0
+                                                ]
+                                        ]
+                                , param_1_1
+                                ]
+                            ]
+                    then
+                        EQ
+
+                    else if
+                        Pine_kernel.int_is_sorted_asc
+                            [ Pine_kernel.head
+                                Pine_kernel.head
+                                    Pine_kernel.skip
+                                        [ 1
+                                        , param_1_0
+                                        ]
+                            , Pine_kernel.int_mul
+                                [ Pine_kernel.head
+                                    Pine_kernel.skip
+                                        [ 1
+                                        , Pine_kernel.head
+                                            Pine_kernel.skip
+                                                [ 1
+                                                , param_1_0
+                                                ]
+                                        ]
+                                , param_1_1
+                                ]
+                            ]
+                    then
+                        LT
+
+                    else
+                        GT
+
+                else if
+                    Pine_kernel.equal
+                        [ Elm_Float
+                        , Pine_kernel.head
+                            param_1_1
+                        ]
+                then
+                    if
+                        Pine_kernel.equal
+                            [ Pine_kernel.int_mul
+                                [ param_1_0
+                                , Pine_kernel.head
+                                    Pine_kernel.skip
+                                        [ 1
+                                        , Pine_kernel.head
+                                            Pine_kernel.skip
+                                                [ 1
+                                                , param_1_1
+                                                ]
+                                        ]
+                                ]
+                            , Pine_kernel.head
+                                Pine_kernel.head
+                                    Pine_kernel.skip
+                                        [ 1
+                                        , param_1_1
+                                        ]
+                            ]
+                    then
+                        EQ
+
+                    else if
+                        Pine_kernel.int_is_sorted_asc
+                            [ Pine_kernel.int_mul
+                                [ param_1_0
+                                , Pine_kernel.head
+                                    Pine_kernel.skip
+                                        [ 1
+                                        , Pine_kernel.head
+                                            Pine_kernel.skip
+                                                [ 1
+                                                , param_1_1
+                                                ]
+                                        ]
+                                ]
+                            , Pine_kernel.head
+                                Pine_kernel.head
+                                    Pine_kernel.skip
+                                        [ 1
+                                        , param_1_1
+                                        ]
+                            ]
+                    then
+                        LT
+
+                    else
+                        GT
+
+                else if
+                    zzz_anon_c78b4c00_dda26649
+                        param_1_0
+                then
+                    Basics.compareList
+                        param_1_0
+                        param_1_1
+
+                else if
+                    Pine_kernel.int_is_sorted_asc
+                        [ param_1_0
+                        , param_1_1
+                        ]
+                then
+                    LT
+
+                else
+                    GT
+
+
+            Basics.compareList param_1_0 param_1_1 =
+                if
+                    Pine_kernel.equal
+                        [ param_1_0
+                        , []
+                        ]
+                then
+                    if
+                        Pine_kernel.equal
+                            [ param_1_1
+                            , []
+                            ]
+                    then
+                        EQ
+
+                    else
+                        LT
+
+                else if
+                    Pine_kernel.negate
+                        Pine_kernel.equal
+                            [ Pine_kernel.length
+                                param_1_0
+                            , 0
+                            ]
+                then
+                    if
+                        Pine_kernel.equal
+                            [ param_1_1
+                            , []
+                            ]
+                    then
+                        GT
+
+                    else if
+                        Pine_kernel.negate
+                            Pine_kernel.equal
+                                [ Pine_kernel.length
+                                    param_1_1
+                                , 0
+                                ]
+                    then
+                        if
+                            Pine_kernel.equal
+                                [ Basics.compare
+                                    (Pine_kernel.head
+                                        param_1_0
+                                    )
+                                    (Pine_kernel.head
+                                        param_1_1
+                                    )
+                                , EQ
+                                ]
+                        then
+                            Basics.compareList
+                                (Pine_kernel.skip
+                                    [ 1
+                                    , param_1_0
+                                    ]
+                                )
+                                (Pine_kernel.skip
+                                    [ 1
+                                    , param_1_1
+                                    ]
+                                )
+
+                        else
+                            Basics.compare
+                                (Pine_kernel.head
+                                    param_1_0
+                                )
+                                (Pine_kernel.head
+                                    param_1_1
+                                )
+
+                    else
+                        <always_crash>
+
+                else
+                    <always_crash>
+
+
+            Basics.compareStrings param_1_0 param_1_1 param_1_2 =
+                if
+                    Pine_kernel.equal
+                        [ Pine_kernel.length
+                            Pine_kernel.take
+                                [ 4
+                                , Pine_kernel.skip
+                                    [ param_1_0
+                                    , param_1_1
+                                    ]
+                                ]
+                        , 0
+                        ]
+                then
+                    if
+                        Pine_kernel.equal
+                            [ Pine_kernel.length
+                                Pine_kernel.take
+                                    [ 4
+                                    , Pine_kernel.skip
+                                        [ param_1_0
+                                        , param_1_2
+                                        ]
+                                    ]
+                            , 0
+                            ]
+                    then
+                        EQ
+
+                    else
+                        LT
+
+                else if
+                    Pine_kernel.equal
+                        [ Pine_kernel.length
+                            Pine_kernel.take
+                                [ 4
+                                , Pine_kernel.skip
+                                    [ param_1_0
+                                    , param_1_2
+                                    ]
+                                ]
+                        , 0
+                        ]
+                then
+                    GT
+
+                else if
+                    Pine_kernel.equal
+                        [ Pine_kernel.take
+                            [ 4
+                            , Pine_kernel.skip
+                                [ param_1_0
+                                , param_1_1
+                                ]
+                            ]
+                        , Pine_kernel.take
+                            [ 4
+                            , Pine_kernel.skip
+                                [ param_1_0
+                                , param_1_2
+                                ]
+                            ]
+                        ]
+                then
+                    Basics.compareStrings
+                        (Pine_kernel.int_add
+                            [ param_1_0
+                            , 4
+                            ]
+                        )
+                        param_1_1
+                        param_1_2
+
+                else if
+                    Pine_kernel.int_is_sorted_asc
+                        [ Pine_kernel.concat
+                            [ 0
+                            , Pine_kernel.take
+                                [ 4
+                                , Pine_kernel.skip
+                                    [ param_1_0
+                                    , param_1_1
+                                    ]
+                                ]
+                            ]
+                        , Pine_kernel.concat
+                            [ 0
+                            , Pine_kernel.take
+                                [ 4
+                                , Pine_kernel.skip
+                                    [ param_1_0
+                                    , param_1_2
+                                    ]
+                                ]
+                            ]
+                        ]
+                then
+                    LT
+
+                else
+                    GT
+
+
+            zzz_anon_c78b4c00_dda26649 param_1_0 =
+                Pine_kernel.equal
+                    [ Pine_kernel.take
+                        [ 0
+                        , param_1_0
+                        ]
+                    , []
+                    ]
+            
+            """"
+            .Trim());
+    }
+
+    [Fact]
     public void Render_StaticExpression_RenderToString_Scenarios()
     {
         static StaticExpression Param_1_0() =>
-            StaticExpression.BuildPathToExpression([1, 0], StaticExpression.EnvironmentInstance);
+            StaticExpressionExtension.BuildPathToExpression([1, 0], StaticExpression.EnvironmentInstance);
 
         static StaticFunctionInterface InterfaceFromParamCount(int paramCount) =>
             new(

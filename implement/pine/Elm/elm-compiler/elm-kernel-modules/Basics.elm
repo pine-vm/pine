@@ -32,6 +32,8 @@ module Basics exposing
     , ceiling
     , clamp
     , compare
+    , compareList
+    , compareStrings
     , cos
     , degrees
     , e

@@ -957,8 +957,41 @@ public class CodeAnalysis
 
         var hashCache = new ConcurrentPineValueHashCache();
 
-        string DeclNameCombined(StaticFunctionIdentifier functionIdentifier)
+        StaticFunctionIdentifier ReduceFunctionIdentifier(StaticFunctionIdentifier functionIdentifier)
         {
+            /*
+             * The (mapped) environment classes built in call sites in the parsed expressions can
+             * contain superfluous items. Therefore, we map the environment value class to a sufficient
+             * superclass before using it to look up the name assigned to the combination of
+             * expression and environment class.
+             * */
+
+            // First, find all matches, then take the most specific one.
+
+            var candidateNames =
+                lessSpecializedInterfaces
+                .Where(entry => entry.Key.EncodedExpr == functionIdentifier.EncodedExpr)
+                .Where(entry => entry.Key.EnvClass.SatisfiedByConstraint(functionIdentifier.EnvClass))
+                .Select(entry => entry.Key.EnvClass)
+                .ToImmutableArray();
+
+            if (candidateNames.Length is 0)
+            {
+                return functionIdentifier;
+            }
+
+            var mostSpecificName =
+                candidateNames
+                .OrderDescending(PineValueClassSpecificityComparer.Instance)
+                .First();
+
+            return new StaticFunctionIdentifier(functionIdentifier.EncodedExpr, mostSpecificName);
+        }
+
+        string DeclNameCombined(StaticFunctionIdentifier functionIdentifierOrig)
+        {
+            var functionIdentifier = ReduceFunctionIdentifier(functionIdentifierOrig);
+
             return
                 nameForDecl(
                     functionIdentifier.EncodedExpr,
@@ -984,14 +1017,17 @@ public class CodeAnalysis
                         (entry.Value.origExpr, interf: InterfaceForFunction(entry.Value.body), bodyMapped, entry.Key.EnvClass);
                 });
 
+        // Build program and prune unused env references
+        var program = new StaticProgram(namedFunctions);
+        var pruned = PruneUnusedEnvironmentReferences(program);
 
-        return new StaticProgram(namedFunctions);
+        return pruned;
     }
 
     private static StaticFunctionInterface InterfaceForFunction<T>(
         StaticExpression<T> functionBody)
     {
-        var allImplicitParam = StaticExpression<T>.ImplicitFunctionParameterList(functionBody);
+        var allImplicitParam = functionBody.ImplicitFunctionParameterList();
 
         /*
          * TODO: Replace stupid heuristic with an adaptive approach:
@@ -1101,7 +1137,12 @@ public class CodeAnalysis
                 .OfType<Expression.ParseAndEval>()
                 .ToImmutableArray();
 
-            foreach (var parseAndEvalExpr in allParseAndEvalExpressions)
+            var allParseAndEvalExpressionsDistinct =
+                allParseAndEvalExpressions
+                .Distinct()
+                .ToImmutableArray();
+
+            foreach (var parseAndEvalExpr in allParseAndEvalExpressionsDistinct)
             {
                 if (ParseAndEvalCrashingAlways(parseAndEvalExpr, parseCache))
                 {
@@ -1451,7 +1492,7 @@ public class CodeAnalysis
                 }
             }
 
-            if (parseExprResult.IsOkOrNull() is not { } childExpr)
+            if (parseExprResult.IsOkOrNull() is not { })
             {
                 throw new Exception(
                     "Unexpected return type: " +
@@ -1672,8 +1713,9 @@ public class CodeAnalysis
 
         var exprHashBase16 = Convert.ToHexStringLower(exprHash.Span);
 
+        // Name so that anonymous one appear at the end when sorting alphabetically:
 
-        return $"anon_{exprHashBase16[..8]}_{pineValueClass.HashBase16[..8]}";
+        return $"zzz_anon_{exprHashBase16[..8]}_{pineValueClass.HashBase16[..8]}";
     }
 
     private static PineValueClass? MapValueClass(
@@ -1693,12 +1735,12 @@ public class CodeAnalysis
         if (Core.CodeAnalysis.CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(expression) is
             ExprMappedToParentEnv.PathInParentEnv pathInParentEnv)
         {
-            if (envClass.TryGetValue(pathInParentEnv.Path) is not { } valueAtPath)
+            if (envClass.TryGetValue(pathInParentEnv.Path) is { } valueAtPath)
             {
-                return null;
+                return PineValueClass.CreateEquals(valueAtPath);
             }
 
-            return PineValueClass.CreateEquals(valueAtPath);
+            return envClass.PartUnderPath(pathInParentEnv.Path);
         }
 
         if (expression is Expression.List listExpr)
@@ -1740,5 +1782,255 @@ public class CodeAnalysis
         }
 
         return null;
+    }
+
+    // =====================
+    // Pruning pass to remove superfluous env references in static program
+    // =====================
+
+    /// <summary>
+    /// Removes superfluous parameter references from a static program.
+    /// For each function, computes the set of environment paths actually used across the call graph,
+    /// and replaces subexpressions encoding unused parameter references with an empty list literal.
+    /// Also recomputes function interfaces for the pruned bodies.
+    /// </summary>
+    public static StaticProgram PruneUnusedEnvironmentReferences(StaticProgram program)
+    {
+        var directEnvPathsByFunc =
+            program.NamedFunctions
+            .ToFrozenDictionary(
+                kvp =>
+                kvp.Key,
+                kvp =>
+                StaticExpressionExtension.CollectEnvPathsOutsideFunctionApplications(kvp.Value.body)
+                .ToFrozenSet(IntPathEqualityComparer.Instance),
+                StringComparer.Ordinal);
+
+        var callSitesByFunc =
+            program.NamedFunctions
+            .ToFrozenDictionary(
+                kvp => kvp.Key,
+                kvp => CollectCallSites(kvp.Value.body).ToImmutableArray(),
+                StringComparer.Ordinal);
+
+        IReadOnlySet<IReadOnlyList<int>> CollectAllUsedPathsTransitive(
+            StaticProgram program,
+            string functionName,
+            ImmutableStack<string> stack)
+        {
+            var collected =
+                directEnvPathsByFunc[functionName].ToHashSet(IntPathEqualityComparer.Instance);
+
+            if (!program.NamedFunctions.TryGetValue(functionName, out var func))
+            {
+                throw new Exception("Function not found in program: " + functionName);
+            }
+
+            var (origExpr, interf, body, constraint) = func;
+
+            foreach (var path in StaticExpressionExtension.CollectEnvPathsOutsideFunctionApplications(body))
+            {
+                if (collected.Add(path))
+                {
+                    // New path found
+                }
+            }
+
+            if (stack.Contains(functionName))
+            {
+                return collected;
+            }
+
+            foreach (var app in CollectCallSites(body))
+            {
+                var calleeName = app.FunctionName;
+
+                var calleeUsedPaths =
+                    CollectAllUsedPathsTransitive(program, calleeName, stack.Push(functionName));
+
+                // Map paths from callee back to caller via argument expression
+
+                foreach (var calleePath in calleeUsedPaths)
+                {
+                    foreach (var callerPath in MapCalleePathToCallerPaths(app.Arguments, calleePath))
+                    {
+                        collected.Add(callerPath);
+                    }
+                }
+            }
+
+            /*
+             * TODO: Replace stupid heuristic with an adaptive approach:
+             * Goal is to reduce the need for callers to compose list instances to hand over arguments.
+             * Perhaps we will switch to a separate stage for determining the specialized function interfaces.
+             * (We might want to look at all the call sites to determine the optimal shape of the parameter list)
+             * */
+
+            var shortenedParams =
+                collected
+                .Select(p => (IReadOnlyList<int>)[.. p.Take(2)]) // Take at most 2 elements from each implicit param path
+                .Distinct(IntPathEqualityComparer.Instance)
+                .ToArray();
+
+            static bool PathIsPrefixOfOtherPath(IReadOnlyList<int> path, IReadOnlyList<int> otherPath)
+            {
+                if (path.Count >= otherPath.Count)
+                    return false;
+
+                for (var i = 0; i < path.Count; ++i)
+                {
+                    if (path[i] != otherPath[i])
+                        return false;
+                }
+
+                return true;
+            }
+
+            var inludedParams =
+                shortenedParams
+                .Where(p => !shortenedParams.Any(other => PathIsPrefixOfOtherPath(p, other)))
+                .ToArray();
+
+            return inludedParams.ToFrozenSet(IntPathEqualityComparer.Instance);
+        }
+
+        var allUsedPathsByFunc =
+            program.NamedFunctions
+            .ToFrozenDictionary(kvp => kvp.Key, kvp => CollectAllUsedPathsTransitive(program, kvp.Key, stack: []));
+
+        bool IsPathOrPrefixUsed(
+            string functionName,
+            IReadOnlyList<int> path,
+            ImmutableStack<(string functionName, IReadOnlyList<int> path)> stack)
+        {
+            if (!allUsedPathsByFunc.TryGetValue(functionName, out var allUsedPaths))
+            {
+                throw new Exception("Function not found in program: " + functionName);
+            }
+
+            foreach (var usedPath in allUsedPaths)
+            {
+                if (PathIsPrefixOfOtherPath(usedPath, path))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        static bool PathIsPrefixOfOtherPath(
+            IReadOnlyList<int> prefix,
+            IReadOnlyList<int> otherPath)
+        {
+            if (prefix.Count > otherPath.Count)
+                return false;
+
+            for (var i = 0; i < prefix.Count; ++i)
+            {
+                if (prefix[i] != otherPath[i])
+                    return false;
+            }
+
+            return true;
+        }
+
+        StaticExpression<string> RemoveUnusedFromFunctionBody(
+            string currentFunctionName,
+            StaticExpression<string> functionBody)
+        {
+            return
+                ReplaceEnvPathsInBody(functionBody, path =>
+                {
+                    if (IsPathOrPrefixUsed(currentFunctionName, path, stack: []))
+                    {
+                        return null;
+                    }
+
+                    return StaticExpression<string>.LiteralInstance(PineValue.EmptyList);
+                });
+        }
+
+        var rebuilt = new Dictionary<string, (Expression origExpr, StaticFunctionInterface interf, StaticExpression<string> body, PineValueClass constraint)>();
+
+        foreach (var (funcName, (origExpr, interf, body, constraint)) in program.NamedFunctions)
+        {
+            var prunedBody = RemoveUnusedFromFunctionBody(funcName, body);
+            var prunedInterface = InterfaceForFunction(prunedBody);
+
+            rebuilt[funcName] = (origExpr, prunedInterface, prunedBody, constraint);
+        }
+
+        return new StaticProgram(rebuilt);
+    }
+
+    private static IEnumerable<StaticExpression<TFunctionId>.FunctionApplication> CollectCallSites<TFunctionId>(
+        StaticExpression<TFunctionId> expr)
+    {
+        foreach (var node in StaticExpressionExtension.EnumerateAllDescendants(expr, skipDescendants: null))
+        {
+            if (node is StaticExpression<TFunctionId>.FunctionApplication app)
+            {
+                yield return app;
+            }
+        }
+    }
+
+    private static IEnumerable<IReadOnlyList<int>> MapCalleePathToCallerPaths<TFuncId>(
+        StaticExpression<TFuncId> applicationArgument,
+        IReadOnlyList<int> calleePath)
+    {
+        var (subexpr, pathSuffix) = applicationArgument.GetSubexpressionAtPath(calleePath);
+
+        var queue = new Queue<StaticExpression<TFuncId>>([subexpr]);
+
+        while (queue.Count > 0)
+        {
+            var current = queue.Dequeue();
+
+            if (StaticExpressionExtension.TryParseAsPathToExpression(
+                current,
+                StaticExpression<TFuncId>.EnvironmentInstance) is { } path)
+            {
+                yield return [.. path, .. pathSuffix];
+                continue;
+            }
+
+            foreach (var child in StaticExpressionExtension.EnumerateDirectChildren(current))
+            {
+                queue.Enqueue(child);
+            }
+        }
+    }
+
+    private static StaticExpression<TFuncId> ReplaceEnvPathsInBody<TFuncId>(
+        StaticExpression<TFuncId> body,
+        Func<IReadOnlyList<int>, StaticExpression<TFuncId>?> replacePath)
+    {
+        var (mapped, _) =
+            StaticExpressionExtension.TransformStaticExpressionWithOptionalReplacement(
+                findReplacement: node =>
+                {
+                    var path =
+                    StaticExpressionExtension.TryParseAsPathToExpression(
+                        node,
+                        StaticExpression<TFuncId>.EnvironmentInstance);
+
+                    if (path is null)
+                        return null;
+
+                    if (path.Count is 0)
+                        return null;
+
+                    if (replacePath(path) is { } replacement)
+                    {
+                        return replacement;
+                    }
+
+                    return node;
+                },
+                expression: body);
+
+        return mapped;
     }
 }

@@ -94,7 +94,7 @@ public static class StaticExpressionDisplay
         int indentLevel,
         bool containerDelimits)
     {
-        if (StaticExpression<TFunctionName>.TryParseAsPathToExpression(expression, StaticExpression<TFunctionName>.EnvironmentInstance) is { } path)
+        if (StaticExpressionExtension.TryParseAsPathToExpression(expression, StaticExpression<TFunctionName>.EnvironmentInstance) is { } path)
         {
             var pathText = environmentPathReferenceRenderer(path);
 
@@ -221,7 +221,7 @@ public static class StaticExpressionDisplay
 
                     var argumentsExprs =
                         applicationInfo.FunctionInterface.ParamsPaths
-                        .Select(paramPath => StaticExpression<TFunctionName>.BuildReducedPathToExpression(paramPath, fnApp.Arguments))
+                        .Select(paramPath => StaticExpressionExtension.BuildReducedPathToExpression(paramPath, fnApp.Arguments))
                         .ToList();
 
                     var argumentsLines =
