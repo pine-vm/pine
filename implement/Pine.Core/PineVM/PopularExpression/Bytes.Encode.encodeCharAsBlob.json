@@ -101,7 +101,7 @@
                           ],
                           [
                             { "BlobAsString": "Literal" },
-                            { "ListAsString_2024": "\uD8C1\uDFFF" }
+                            [ 2047 ]
                           ]
                         ]
                       ]
@@ -154,7 +154,7 @@
                               ],
                               [
                                 { "BlobAsString": "Literal" },
-                                { "ListAsString_2024": "\uD8FF\uDFFF" }
+                                [ 65535 ]
                               ]
                             ]
                           ]
@@ -187,7 +187,7 @@
                                                 [
                                                   [
                                                     { "BlobAsString": "Literal" },
-                                                    { "ListAsString_2024": "\u00F0" }
+                                                    [ { "AsBase64": "8A==" } ]
                                                   ],
                                                   [
                                                     { "BlobAsString": "ParseAndEval" },
@@ -359,7 +359,7 @@
                                         ],
                                         [
                                           { "BlobAsString": "Literal" },
-                                          { "ListAsString_2024": "\u00FF" }
+                                          [ { "AsBase64": "/w==" } ]
                                         ]
                                       ]
                                     ]
@@ -384,7 +384,7 @@
                                                 [
                                                   [
                                                     { "BlobAsString": "Literal" },
-                                                    { "ListAsString_2024": "\u0080" }
+                                                    [ { "AsBase64": "gA==" } ]
                                                   ],
                                                   [
                                                     { "BlobAsString": "KernelApplication" },
@@ -551,7 +551,7 @@
                                                                             ],
                                                                             [
                                                                               { "BlobAsString": "Literal" },
-                                                                              { "ListAsString_2024": "\uD8C4\uDC00" }
+                                                                              [ 4096 ]
                                                                             ]
                                                                           ]
                                                                         ]
@@ -573,7 +573,7 @@
                                         ],
                                         [
                                           { "BlobAsString": "Literal" },
-                                          { "ListAsString_2024": "\u00FF" }
+                                          [ { "AsBase64": "/w==" } ]
                                         ]
                                       ]
                                     ]
@@ -598,7 +598,7 @@
                                                 [
                                                   [
                                                     { "BlobAsString": "Literal" },
-                                                    { "ListAsString_2024": "\u0080" }
+                                                    [ { "AsBase64": "gA==" } ]
                                                   ],
                                                   [
                                                     { "BlobAsString": "KernelApplication" },
@@ -787,7 +787,7 @@
                                         ],
                                         [
                                           { "BlobAsString": "Literal" },
-                                          { "ListAsString_2024": "\u00FF" }
+                                          [ { "AsBase64": "/w==" } ]
                                         ]
                                       ]
                                     ]
@@ -812,7 +812,7 @@
                                                 [
                                                   [
                                                     { "BlobAsString": "Literal" },
-                                                    { "ListAsString_2024": "\u0080" }
+                                                    [ { "AsBase64": "gA==" } ]
                                                   ],
                                                   [
                                                     { "BlobAsString": "KernelApplication" },
@@ -871,7 +871,7 @@
                                         ],
                                         [
                                           { "BlobAsString": "Literal" },
-                                          { "ListAsString_2024": "\u00FF" }
+                                          [ { "AsBase64": "/w==" } ]
                                         ]
                                       ]
                                     ]
@@ -1064,7 +1064,7 @@
                                                                   ],
                                                                   [
                                                                     { "BlobAsString": "Literal" },
-                                                                    { "ListAsString_2024": "\uD8C4\uDC00" }
+                                                                    [ 4096 ]
                                                                   ]
                                                                 ]
                                                               ]
@@ -1081,7 +1081,7 @@
                                         ],
                                         [
                                           { "BlobAsString": "Literal" },
-                                          { "ListAsString_2024": "\u00FF" }
+                                          [ { "AsBase64": "/w==" } ]
                                         ]
                                       ]
                                     ]
@@ -1106,7 +1106,7 @@
                                                 [
                                                   [
                                                     { "BlobAsString": "Literal" },
-                                                    { "ListAsString_2024": "\u0080" }
+                                                    [ { "AsBase64": "gA==" } ]
                                                   ],
                                                   [
                                                     { "BlobAsString": "KernelApplication" },
@@ -1295,7 +1295,7 @@
                                         ],
                                         [
                                           { "BlobAsString": "Literal" },
-                                          { "ListAsString_2024": "\u00FF" }
+                                          [ { "AsBase64": "/w==" } ]
                                         ]
                                       ]
                                     ]
@@ -1320,7 +1320,7 @@
                                                 [
                                                   [
                                                     { "BlobAsString": "Literal" },
-                                                    { "ListAsString_2024": "\u0080" }
+                                                    [ { "AsBase64": "gA==" } ]
                                                   ],
                                                   [
                                                     { "BlobAsString": "KernelApplication" },
@@ -1379,7 +1379,7 @@
                                         ],
                                         [
                                           { "BlobAsString": "Literal" },
-                                          { "ListAsString_2024": "\u00FF" }
+                                          [ { "AsBase64": "/w==" } ]
                                         ]
                                       ]
                                     ]
@@ -1591,7 +1591,7 @@
                                     ],
                                     [
                                       { "BlobAsString": "Literal" },
-                                      { "ListAsString_2024": "\u00FF" }
+                                      [ { "AsBase64": "/w==" } ]
                                     ]
                                   ]
                                 ]
@@ -1616,7 +1616,7 @@
                                             [
                                               [
                                                 { "BlobAsString": "Literal" },
-                                                { "ListAsString_2024": "\u0080" }
+                                                [ { "AsBase64": "gA==" } ]
                                               ],
                                               [
                                                 { "BlobAsString": "KernelApplication" },
@@ -1675,7 +1675,7 @@
                                     ],
                                     [
                                       { "BlobAsString": "Literal" },
-                                      { "ListAsString_2024": "\u00FF" }
+                                      [ { "AsBase64": "/w==" } ]
                                     ]
                                   ]
                                 ]

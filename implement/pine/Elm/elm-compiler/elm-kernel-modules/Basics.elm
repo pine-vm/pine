@@ -246,18 +246,27 @@ idiv dividend divisor =
         let
             ( dividendNegative, absDividend ) =
                 if Pine_kernel.int_is_sorted_asc [ 0, dividend ] then
-                    ( False, dividend )
+                    ( False
+                    , dividend
+                    )
 
                 else
-                    ( True, -dividend )
+                    ( True
+                    , Pine_kernel.int_mul [ dividend, -1 ]
+                    )
 
             ( divisorNegative, absDivisor ) =
                 if Pine_kernel.int_is_sorted_asc [ 0, divisor ] then
-                    ( False, divisor )
+                    ( False
+                    , divisor
+                    )
 
                 else
-                    ( True, -divisor )
+                    ( True
+                    , Pine_kernel.int_mul [ divisor, -1 ]
+                    )
 
+            absQuotient : Int
             absQuotient =
                 idivHelper absDividend absDivisor 0
         in
@@ -265,14 +274,14 @@ idiv dividend divisor =
             absQuotient
 
         else
-            -absQuotient
+            Pine_kernel.int_mul [ absQuotient, -1 ]
 
 
 idivHelper : Int -> Int -> Int -> Int
 idivHelper dividend divisor quotient =
     let
         scaledDivisor =
-            mul divisor 16
+            Pine_kernel.int_mul [ divisor, 16 ]
     in
     if Pine_kernel.int_is_sorted_asc [ scaledDivisor, dividend ] then
         let
@@ -283,21 +292,28 @@ idivHelper dividend divisor quotient =
                     0
 
             scaledQuotientSum =
-                mul scaledQuotient 16
+                Pine_kernel.int_mul [ scaledQuotient, 16 ]
 
             remainder =
-                sub dividend (mul scaledQuotient scaledDivisor)
+                Pine_kernel.int_add
+                    [ dividend
+                    , Pine_kernel.int_mul [ scaledQuotient, scaledDivisor, -1 ]
+                    ]
 
             remainderQuotient =
                 idivHelper remainder divisor 0
         in
-        add scaledQuotientSum remainderQuotient
+        Pine_kernel.int_add [ scaledQuotientSum, remainderQuotient ]
 
     else if Pine_kernel.int_is_sorted_asc [ divisor, dividend ] then
         idivHelper
-            (sub dividend divisor)
+            (Pine_kernel.int_add
+                [ dividend
+                , Pine_kernel.int_mul [ divisor, -1 ]
+                ]
+            )
             divisor
-            (add quotient 1)
+            (Pine_kernel.int_add [ quotient, 1 ])
 
     else
         quotient

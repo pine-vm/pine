@@ -203,17 +203,25 @@ idiv dividend divisor =
         let
             ( dividendNegative, absDividend ) =
                 if Pine_kernel.int_is_sorted_asc [ 0, dividend ] then
-                    ( False, dividend )
+                    ( False
+                    , dividend
+                    )
 
                 else
-                    ( True, -dividend )
+                    ( True
+                    , Pine_kernel.int_mul [ dividend, -1 ]
+                    )
 
             ( divisorNegative, absDivisor ) =
                 if Pine_kernel.int_is_sorted_asc [ 0, divisor ] then
-                    ( False, divisor )
+                    ( False
+                    , divisor
+                    )
 
                 else
-                    ( True, -divisor )
+                    ( True
+                    , Pine_kernel.int_mul [ divisor, -1 ]
+                    )
 
             absQuotient : Int
             absQuotient =
@@ -223,37 +231,32 @@ idiv dividend divisor =
             absQuotient
 
         else
-            Pine_kernel.negate absQuotient
+            Pine_kernel.int_mul [ absQuotient, -1 ]
 
 
 idivHelper : Int -> Int -> Int -> Int
 idivHelper dividend divisor quotient =
     let
-        scaledDivisor : Int
         scaledDivisor =
             Pine_kernel.int_mul [ divisor, 16 ]
     in
     if Pine_kernel.int_is_sorted_asc [ scaledDivisor, dividend ] then
         let
-            scaledQuotient : Int
             scaledQuotient =
                 idivHelper
                     dividend
                     scaledDivisor
                     0
 
-            scaledQuotientSum : Int
             scaledQuotientSum =
                 Pine_kernel.int_mul [ scaledQuotient, 16 ]
 
-            remainder : Int
             remainder =
                 Pine_kernel.int_add
                     [ dividend
-                    , Pine_kernel.negate (Pine_kernel.int_mul [ scaledQuotient, scaledDivisor ])
+                    , Pine_kernel.int_mul [ scaledQuotient, scaledDivisor, -1 ]
                     ]
 
-            remainderQuotient : Int
             remainderQuotient =
                 idivHelper remainder divisor 0
         in
@@ -261,7 +264,11 @@ idivHelper dividend divisor quotient =
 
     else if Pine_kernel.int_is_sorted_asc [ divisor, dividend ] then
         idivHelper
-            (Pine_kernel.int_add [ dividend, Pine_kernel.negate divisor ])
+            (Pine_kernel.int_add
+                [ dividend
+                , Pine_kernel.int_mul [ divisor, -1 ]
+                ]
+            )
             divisor
             (Pine_kernel.int_add [ quotient, 1 ])
 

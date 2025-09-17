@@ -303,7 +303,7 @@
                         ],
                         [
                           { "BlobAsString": "Literal" },
-                          [ { "ListAsString_2024": "\uD8FF\uDFFD\u0401" } ]
+                          [ [ 65533, 1 ] ]
                         ],
                         [
                           { "BlobAsString": "List" },
@@ -419,7 +419,7 @@
                                                                     [
                                                                       [
                                                                         { "BlobAsString": "Literal" },
-                                                                        { "ListAsString_2024": "\u0004" }
+                                                                        [ { "AsBase64": "BA==" } ]
                                                                       ],
                                                                       [
                                                                         { "BlobAsString": "KernelApplication" },
@@ -550,7 +550,7 @@
                                                   ],
                                                   [
                                                     { "BlobAsString": "Literal" },
-                                                    { "ListAsString_2024": "\uD8C4\uDC00" }
+                                                    [ 4096 ]
                                                   ]
                                                 ]
                                               ]
@@ -583,7 +583,7 @@
                                                                     [
                                                                       [
                                                                         { "BlobAsString": "Literal" },
-                                                                        { "ListAsString_2024": "\u0004" }
+                                                                        [ { "AsBase64": "BA==" } ]
                                                                       ],
                                                                       [
                                                                         { "BlobAsString": "KernelApplication" },
@@ -739,7 +739,7 @@
                                                           [
                                                             [
                                                               { "BlobAsString": "Literal" },
-                                                              { "ListAsString_2024": "\u0004" }
+                                                              [ { "AsBase64": "BA==" } ]
                                                             ],
                                                             [
                                                               { "BlobAsString": "KernelApplication" },
@@ -963,7 +963,7 @@
                                               ],
                                               [
                                                 { "BlobAsString": "Literal" },
-                                                { "ListAsString_2024": "\uD8C4\uDC00" }
+                                                [ 4096 ]
                                               ]
                                             ]
                                           ]
@@ -996,7 +996,7 @@
                                                                 [
                                                                   [
                                                                     { "BlobAsString": "Literal" },
-                                                                    { "ListAsString_2024": "\u0004" }
+                                                                    [ { "AsBase64": "BA==" } ]
                                                                   ],
                                                                   [
                                                                     { "BlobAsString": "KernelApplication" },
@@ -1152,7 +1152,7 @@
                                                       [
                                                         [
                                                           { "BlobAsString": "Literal" },
-                                                          { "ListAsString_2024": "\u0004" }
+                                                          [ { "AsBase64": "BA==" } ]
                                                         ],
                                                         [
                                                           { "BlobAsString": "KernelApplication" },
@@ -1401,7 +1401,7 @@
                                                   [
                                                     [
                                                       { "BlobAsString": "Literal" },
-                                                      { "ListAsString_2024": "\u0004" }
+                                                      [ { "AsBase64": "BA==" } ]
                                                     ],
                                                     [
                                                       { "BlobAsString": "KernelApplication" },
@@ -1636,7 +1636,7 @@
                             [
                               [
                                 { "BlobAsString": "Literal" },
-                                { "ListAsString_2024": "\u0004" }
+                                [ { "AsBase64": "BA==" } ]
                               ],
                               [
                                 { "BlobAsString": "KernelApplication" },
@@ -1690,7 +1690,7 @@
                             [
                               [
                                 { "BlobAsString": "Literal" },
-                                { "ListAsString_2024": "\u0004" }
+                                [ { "AsBase64": "BA==" } ]
                               ],
                               [
                                 { "BlobAsString": "KernelApplication" },
