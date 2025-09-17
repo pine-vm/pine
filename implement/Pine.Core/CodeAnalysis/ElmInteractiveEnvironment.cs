@@ -173,24 +173,23 @@ public static class ElmInteractiveEnvironment
         PineValue pineValue,
         PineVMParseCache parseCache)
     {
-        return
-            ParseTagged(pineValue)
-            .AndThen(taggedFunctionDeclaration =>
-            taggedFunctionDeclaration.name is "Function"
-            ?
-            ParseFunctionRecordFromValue(taggedFunctionDeclaration.value, parseCache)
-            :
-            /*
-            (Result<string, FunctionRecord>)"Unexpected tag: " + taggedFunctionDeclaration.name
+        if (ParseTagged(pineValue).IsOkOrNullable() is { } taggedFunctionDeclaration &&
+            taggedFunctionDeclaration.name is "Function")
+        {
+            return
+                ParseFunctionRecordFromValue(taggedFunctionDeclaration.value, parseCache);
+        }
 
-            If the declaration has zero parameters, it could be encoded as plain PineValue without wrapping in a 'Function' record.
-            */
+        /*
+         * If the declaration has zero parameters, it could be encoded as plain value without wrapping in a 'Function' record.
+         * */
+
+        return
             new FunctionRecord(
                 InnerFunction: Expression.LiteralInstance(pineValue),
                 ParameterCount: 0,
                 EnvFunctions: ReadOnlyMemory<PineValue>.Empty,
-                ArgumentsAlreadyCollected: ReadOnlyMemory<PineValue>.Empty)
-            );
+                ArgumentsAlreadyCollected: ReadOnlyMemory<PineValue>.Empty);
     }
 
     /// <summary>
