@@ -873,7 +873,7 @@ public class CodeAnalysis
         var namesFromCompiledEnv =
             NamesFromCompiledEnv.FromCompiledEnvironment(parsedEnvironment, parseCache);
 
-        var includedFunctionRecords = new List<ElmInteractiveEnvironment.FunctionRecord>();
+        var includedFunctionRecords = new Dictionary<DeclQualifiedName, ElmInteractiveEnvironment.FunctionRecord>();
 
         foreach (var parsedModule in parsedEnvironment.Modules)
         {
@@ -881,7 +881,9 @@ public class CodeAnalysis
 
             foreach (var decl in parsedModule.moduleContent.FunctionDeclarations)
             {
-                if (!includeDeclaration(new DeclQualifiedName(moduleName, decl.Key)))
+                var declQualifiedName = new DeclQualifiedName(moduleName, decl.Key);
+
+                if (!includeDeclaration(declQualifiedName))
                     continue;
 
                 var functionRecordResult =
@@ -889,7 +891,7 @@ public class CodeAnalysis
 
                 if (functionRecordResult.IsErrOrNull() is { } err)
                 {
-                    return "Failed parsing declaration from module as function record: " + err;
+                    return "Failed parsing declaration '" + declQualifiedName.FullName + "' as function record: " + err;
                 }
 
                 if (functionRecordResult.IsOkOrNull() is not { } functionRecord)
@@ -899,7 +901,7 @@ public class CodeAnalysis
                         functionRecordResult.GetType().Name);
                 }
 
-                includedFunctionRecords.Add(functionRecord);
+                includedFunctionRecords[declQualifiedName] = functionRecord;
             }
         }
 
@@ -912,22 +914,24 @@ public class CodeAnalysis
 
     public static Result<string, StaticProgram>
         ParseAsStaticMonomorphicProgramAssigningNames(
-        IEnumerable<ElmInteractiveEnvironment.FunctionRecord> functionRecords,
+        IReadOnlyDictionary<DeclQualifiedName, ElmInteractiveEnvironment.FunctionRecord> rootDecls,
         Func<PineValue, PineValueClass, string?> nameForDecl,
         PineVMParseCache parseCache)
     {
         Dictionary<StaticFunctionIdentifier, (Expression origExpr, StaticExpressionGen body)> lessSpecializedInterfaces = [];
 
-        foreach (var functionRecord in functionRecords)
+        foreach (var functionRecord in rootDecls)
         {
             var parseResult =
                 ParseAsStaticMonomorphicProgram(
-                    functionRecord,
+                    functionRecord.Value,
                     parseCache);
 
             if (parseResult.IsErrOrNull() is { } err)
             {
-                return "Failed to parse as static monomorphic program: " + err;
+                return
+                    "Failed to parse as static monomorphic program from root '" +
+                    functionRecord.Key.FullName + "': " + err;
             }
 
             if (parseResult.IsOkOrNull() is not { } parsedFunctions)
