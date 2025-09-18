@@ -44,7 +44,7 @@ public partial class CompileToCSharp
                 .WithUsings(new SyntaxList<UsingDirectiveSyntax>(compileCSharpClassResult.UsingDirectives))
                 .WithMembers(
                     SyntaxFactory.List(
-                        [.. (additionalMembers ?? []), compileCSharpClassResult.ClassDeclarationSyntax]));
+                        [.. additionalMembers ?? [], compileCSharpClassResult.ClassDeclarationSyntax]));
 
         var formattedNode =
             FormatCSharpSyntaxRewriter.FormatSyntaxTree(compilationUnitSyntax.NormalizeWhitespace(eol: "\n"));
@@ -584,9 +584,9 @@ public partial class CompileToCSharp
                 return
                 (SyntaxFactory.Block(
                     (StatementSyntax[])
-                    ([..branchesForSpecializedRepr
+                    [..branchesForSpecializedRepr
                     , ..variableDeclarations.Select(b => b.declarationSyntax),
-                        SyntaxFactory.ReturnStatement(returnExpression)])),
+                        SyntaxFactory.ReturnStatement(returnExpression)]),
                         combinedDependencies);
             });
 

@@ -675,7 +675,7 @@ public static class ElmValueEncoding
 
         var byte2 = (byte)(elmChar.Value >> 8);
 
-        var byte3 = (byte)(elmChar.Value);
+        var byte3 = (byte)elmChar.Value;
 
         if (byte0 is 0 && byte1 is 0)
         {

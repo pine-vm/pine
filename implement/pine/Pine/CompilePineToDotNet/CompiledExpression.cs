@@ -116,8 +116,8 @@ public record CompiledExpression(
             (CSharpSyntaxNode)
             SyntaxFactory.Block(
                 (StatementSyntax[])
-                ([.. variableDeclarations.Select(b => b.declarationSyntax),
-                    SyntaxFactory.ReturnStatement(compiledExpression.Syntax)])
+                [.. variableDeclarations.Select(b => b.declarationSyntax),
+                    SyntaxFactory.ReturnStatement(compiledExpression.Syntax)]
                 );
 
         return (blockSyntax, aggregateDependencies);

@@ -287,8 +287,8 @@ public static class CompileModuleToCSharp
                 ssaInstructions
                 .SelectMany(otherInstruction =>
                 otherInstruction.Dependencies.Where(dep =>
-                (dep.source is SSAInstructionSource.Local localDep &&
-                localDep.Index == instruction.AssignmentIndex)));
+                dep.source is SSAInstructionSource.Local localDep &&
+                localDep.Index == instruction.AssignmentIndex));
 
             var usagesTypes =
                 usages

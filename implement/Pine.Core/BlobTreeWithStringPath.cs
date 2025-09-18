@@ -735,7 +735,7 @@ public abstract record BlobTreeWithStringPath : IEquatable<BlobTreeWithStringPat
             TreeNode tree =>
             new TreeNode(
                 tree.Items
-                .Where(treeNode => pathFilter([.. (currentPrefix ?? []), treeNode.name]))
+                .Where(treeNode => pathFilter([.. currentPrefix ?? [], treeNode.name]))
                 .Select(treeNode => (treeNode.name,
                 FilterNodesByPath(
                     treeNode.component,
