@@ -1128,6 +1128,238 @@ public class CodeAnalysisTests
     }
 
     [Fact]
+    public void Parse_Test_idiv()
+    {
+        var elmJsonFile =
+            """
+            {
+                "type": "application",
+                "source-directories": [
+                    "src"
+                ],
+                "elm-version": "0.19.1",
+                "dependencies": {
+                    "direct": {
+                        "elm/core": "1.0.5"
+                    },
+                    "indirect": {
+                    }
+                },
+                "test-dependencies": {
+                    "direct": {
+                        "elm-explorations/test": "2.2.0"
+                    },
+                    "indirect": {
+                    }
+                }
+            }
+            """;
+
+        /*
+         * Using a modified form of idiv to avoid matching compiled value from Elm core library.
+         * */
+
+        var elmModuleText =
+            """
+            module Test exposing (..)
+
+            idiv : Int -> Int -> Int
+            idiv dividend divisor =
+                if Pine_kernel.equal [ divisor, 0 ] then
+                    0
+
+                else
+                    let
+                        ( dividendNegative, absDividend ) =
+                            if Pine_kernel.int_is_sorted_asc [ 0, dividend ] then
+                                ( False
+                                , dividend
+                                )
+
+                            else
+                                ( True
+                                , Pine_kernel.int_mul [ dividend, -1 ]
+                                )
+
+                        ( divisorNegative, absDivisor ) =
+                            if Pine_kernel.int_is_sorted_asc [ 0, divisor ] then
+                                ( False
+                                , divisor
+                                )
+
+                            else
+                                ( True
+                                , Pine_kernel.int_mul [ divisor, -1 ]
+                                )
+
+                        absQuotient : Int
+                        absQuotient =
+                            idivHelper absDividend absDivisor 0
+                    in
+                    if Pine_kernel.equal [ dividendNegative, divisorNegative ] then
+                        absQuotient
+
+                    else
+                        Pine_kernel.int_mul [ absQuotient, -1 ]
+
+
+            idivHelper : Int -> Int -> Int -> Int
+            idivHelper dividend divisor quotient =
+                let
+                    scaledDivisor =
+                        Pine_kernel.int_mul [ divisor, 17 ]
+                in
+                if Pine_kernel.int_is_sorted_asc [ scaledDivisor, dividend ] then
+                    let
+                        scaledQuotient =
+                            idivHelper
+                                dividend
+                                scaledDivisor
+                                0
+
+                        scaledQuotientSum =
+                            Pine_kernel.int_mul [ scaledQuotient, 17 ]
+
+                        remainder =
+                            Pine_kernel.int_add
+                                [ dividend
+                                , Pine_kernel.int_mul [ scaledQuotient, scaledDivisor, -1 ]
+                                ]
+
+                        remainderQuotient =
+                            idivHelper remainder divisor 0
+                    in
+                    Pine_kernel.int_add [ scaledQuotientSum, remainderQuotient ]
+
+                else if Pine_kernel.int_is_sorted_asc [ divisor, dividend ] then
+                    idivHelper
+                        (Pine_kernel.int_add
+                            [ dividend
+                            , Pine_kernel.int_mul [ divisor, -1 ]
+                            ]
+                        )
+                        divisor
+                        (Pine_kernel.int_add [ quotient, 1 ])
+
+                else
+                    quotient
+            """;
+
+        var appCodeTree =
+            BlobTreeWithStringPath.EmptyTree
+            .SetNodeAtPathSorted(
+                ["elm.json"],
+                BlobTreeWithStringPath.Blob(Encoding.UTF8.GetBytes(elmJsonFile)))
+            .SetNodeAtPathSorted(
+                ["src", "Test.elm"],
+                BlobTreeWithStringPath.Blob(Encoding.UTF8.GetBytes(elmModuleText)));
+
+        var compiledEnv =
+            ElmCompiler.CompileInteractiveEnvironment(
+                appCodeTree,
+                rootFilePaths: [["src", "Test.elm"]],
+                skipLowering: true,
+                skipFilteringForSourceDirs: false)
+            .Extract(err => throw new System.Exception(err));
+
+        var parseCache = new PineVMParseCache();
+
+        var parsedEnv =
+            ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnv)
+            .Extract(err => throw new System.Exception("Failed parsing interactive environment: " + err));
+
+        var staticProgram =
+            PineVM.CodeAnalysis.ParseAsStaticMonomorphicProgram(
+                parsedEnv,
+                includeDeclaration:
+                declName =>
+                {
+                    return declName == new DeclQualifiedName(["Test"], "idiv");
+                },
+                parseCache)
+            .Extract(err => throw new System.Exception("Failed parsing as static program: " + err));
+
+        staticProgram.Should().NotBeNull();
+
+        var wholeProgramText = RenderStaticProgram(staticProgram);
+
+        wholeProgramText.Trim().Should().Be(
+            """"
+            Test.idivHelper param_1_0 param_1_1 param_1_2 =
+                if
+                    Pine_kernel.int_is_sorted_asc
+                        [ Pine_kernel.int_mul
+                            [ param_1_1
+                            , 17
+                            ]
+                        , param_1_0
+                        ]
+                then
+                    Pine_kernel.int_add
+                        [ Pine_kernel.int_mul
+                            [ Test.idivHelper
+                                param_1_0
+                                (Pine_kernel.int_mul
+                                    [ param_1_1
+                                    , 17
+                                    ]
+                                )
+                                0
+                            , 17
+                            ]
+                        , Test.idivHelper
+                            (Pine_kernel.int_add
+                                [ param_1_0
+                                , Pine_kernel.int_mul
+                                    [ Test.idivHelper
+                                        param_1_0
+                                        (Pine_kernel.int_mul
+                                            [ param_1_1
+                                            , 17
+                                            ]
+                                        )
+                                        0
+                                    , Pine_kernel.int_mul
+                                        [ param_1_1
+                                        , 17
+                                        ]
+                                    , -1
+                                    ]
+                                ]
+                            )
+                            param_1_1
+                            0
+                        ]
+
+                else if
+                    Pine_kernel.int_is_sorted_asc
+                        [ param_1_1
+                        , param_1_0
+                        ]
+                then
+                    Test.idivHelper
+                        (Pine_kernel.int_add
+                            [ param_1_0
+                            , Pine_kernel.int_mul
+                                [ param_1_1
+                                , -1
+                                ]
+                            ]
+                        )
+                        param_1_1
+                        (Pine_kernel.int_add
+                            [ param_1_2
+                            , 1
+                            ]
+                        )
+
+                else
+                    param_1_2
+            """"
+            .Trim());
+    }
+
+    [Fact]
     public void Render_StaticExpression_RenderToString_Scenarios()
     {
         static StaticExpression Param_1_0() =>

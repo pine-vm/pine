@@ -1124,7 +1124,7 @@ public class CodeAnalysis
                 continue;
 
             var currentExprInlined =
-                InlineParseAndEvalUsingLiteralFunction(current.expr, parseCache);
+                InlineParseAndEvalUsingLiteralFunctionRecursive(current.expr, parseCache);
 
             /*
              * Do not record root in observed set, as we will use it as the entry point anyway.
@@ -1141,12 +1141,12 @@ public class CodeAnalysis
                 .OfType<Expression.ParseAndEval>()
                 .ToImmutableArray();
 
-            var allParseAndEvalExpressionsDistinct =
+            var distinctParseAndEvalExpressions =
                 allParseAndEvalExpressions
                 .Distinct()
                 .ToImmutableArray();
 
-            foreach (var parseAndEvalExpr in allParseAndEvalExpressionsDistinct)
+            foreach (var parseAndEvalExpr in distinctParseAndEvalExpressions)
             {
                 if (ParseAndEvalCrashingAlways(parseAndEvalExpr, parseCache))
                 {
@@ -1342,6 +1342,26 @@ public class CodeAnalysis
             .ToArray();
 
         return PineValueClass.Create(entriesRemaining);
+    }
+
+    static Expression InlineParseAndEvalUsingLiteralFunctionRecursive(
+        Expression expression,
+        PineVMParseCache parseCache)
+    {
+        var currentExpression = expression;
+
+        while (true)
+        {
+            var inlinedExpr =
+                InlineParseAndEvalUsingLiteralFunction(currentExpression, parseCache);
+
+            if (inlinedExpr.Equals(currentExpression))
+                break;
+
+            currentExpression = inlinedExpr;
+        }
+
+        return currentExpression;
     }
 
     static Expression InlineParseAndEvalUsingLiteralFunction(
