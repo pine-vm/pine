@@ -161,13 +161,11 @@ public static class StaticExpressionDisplay
                                 }
                                 else
                                 {
-                                    // For nested lists, use a hanging indent of two spaces for continuation lines
-                                    // so that
-                                    // , [ 71
-                                    //   , 73
-                                    //   ]
-                                    // aligns as expected by tests.
-                                    if (isChildAList && itemText.Length > 0)
+                                    // For multi-line items in lists, indent continuation lines by two spaces so
+                                    // they hang under the "[ " or ", " prefix. We already did this for nested
+                                    // lists; extend to any continuation line that would otherwise align with
+                                    // the list's indent (e.g., 'then'/'else' in conditionals).
+                                    if (itemText.Length > 0 && (isChildAList || itemIndent == indentLevel))
                                     {
                                         yield return (itemIndent, "  " + itemText);
                                     }
@@ -442,5 +440,82 @@ public static class StaticExpressionDisplay
         }
 
         return ("Blob 0x" + Convert.ToHexStringLower(blobValue.Bytes.Span), true);
+    }
+
+    /// <summary>
+    /// Render a whole <see cref="StaticProgram"/> by rendering each named function in lexicographical order
+    /// and joining them with a blank line between definitions.
+    /// </summary>
+    /// <param name="staticProgram">The static program to render.</param>
+    /// <returns>A textual representation of the program using LF line endings.</returns>
+    public static string RenderStaticProgram(StaticProgram staticProgram)
+    {
+        IReadOnlyList<string> namedFunctionsTexts =
+            [..staticProgram.NamedFunctions
+            .OrderBy(kvp => kvp.Key)
+            .Select(kvp => RenderNamedFunction(staticProgram, kvp.Key, kvp.Value.body))];
+
+        var wholeProgramText =
+            string.Join(
+                "\n\n",
+                namedFunctionsTexts);
+
+        return wholeProgramText;
+    }
+
+    /// <summary>
+    /// Render a single named function, including its header with parameter placeholders and its body.
+    /// The parameter names are inferred from the function interface returned by the program.
+    /// </summary>
+    /// <param name="staticProgram">The program that provides function application rendering and interfaces.</param>
+    /// <param name="functionName">The name of the function to render.</param>
+    /// <param name="functionBody">The static expression representing the function body.</param>
+    /// <returns>The full function definition text.</returns>
+    public static string RenderNamedFunction(
+        StaticProgram staticProgram,
+        string functionName,
+        StaticExpression<string> functionBody)
+    {
+        var functionInterface = staticProgram.GetFunctionApplicationRendering(functionName).FunctionInterface;
+
+        var functionParameters = functionInterface.ParamsPaths;
+
+        var headerText =
+            (functionName + " " + string.Join(" ", functionParameters.Select(RenderParamRef))).Trim() + " =";
+
+        return
+            headerText +
+            "\n" +
+            StaticExpressionDisplay.RenderToString(
+                functionBody,
+                blobValueRenderer: StaticExpressionDisplay.DefaultBlobRenderer,
+                functionApplicationRenderer: staticProgram.GetFunctionApplicationRendering,
+                environmentPathReferenceRenderer: RenderParamRef(functionInterface),
+                indentString: "    ",
+                indentLevel: 1);
+    }
+
+    /// <summary>
+    /// Create a renderer that turns environment path references into parameter identifiers for a given function interface.
+    /// Returns <c>null</c> for paths that are not parameters in the provided interface.
+    /// </summary>
+    /// <param name="functionInterface">The static function interface containing the parameter paths.</param>
+    /// <returns>A function mapping int-paths to parameter identifier strings, or <c>null</c> when the path is not a parameter.</returns>
+    public static Func<IReadOnlyList<int>, string?> RenderParamRef(StaticFunctionInterface functionInterface)
+    {
+        return path =>
+        {
+            if (functionInterface.ParamsPaths.Contains(path, IntPathEqualityComparer.Instance))
+            {
+                return RenderParamRef(path);
+            }
+
+            return null;
+        };
+    }
+
+    private static string RenderParamRef(IReadOnlyList<int> path)
+    {
+        return "param_" + string.Join('_', path);
     }
 }
