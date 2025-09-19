@@ -1926,7 +1926,8 @@ public class CodeAnalysis
             ImmutableStack<string> stack)
         {
             var collected =
-                directEnvPathsByFunc[functionName].ToHashSet(IntPathEqualityComparer.Instance);
+                directEnvPathsByFunc[functionName]
+                .ToHashSet(IntPathEqualityComparer.Instance);
 
             if (!program.NamedFunctions.TryGetValue(functionName, out var func))
             {
@@ -1935,20 +1936,12 @@ public class CodeAnalysis
 
             var (origExpr, interf, body, constraint) = func;
 
-            foreach (var path in StaticExpressionExtension.CollectEnvPathsOutsideFunctionApplications(body))
-            {
-                if (collected.Add(path))
-                {
-                    // New path found
-                }
-            }
-
             if (stack.Contains(functionName))
             {
                 return collected;
             }
 
-            foreach (var app in CollectCallSites(body))
+            foreach (var app in callSitesByFunc[functionName])
             {
                 var calleeName = app.FunctionName;
 
