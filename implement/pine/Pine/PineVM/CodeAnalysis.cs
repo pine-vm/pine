@@ -1913,11 +1913,11 @@ public class CodeAnalysis
                 .ToFrozenSet(IntPathEqualityComparer.Instance),
                 StringComparer.Ordinal);
 
-        var callSitesByFunc =
+        var distinctCallSitesByFunc =
             program.NamedFunctions
             .ToFrozenDictionary(
                 kvp => kvp.Key,
-                kvp => CollectCallSites(kvp.Value.body).ToImmutableArray(),
+                kvp => CollectCallSites(kvp.Value.body).Distinct().ToImmutableArray(),
                 StringComparer.Ordinal);
 
         IReadOnlySet<IReadOnlyList<int>> CollectAllUsedPathsTransitive(
@@ -1941,7 +1941,7 @@ public class CodeAnalysis
                 return collected;
             }
 
-            foreach (var app in callSitesByFunc[functionName])
+            foreach (var app in distinctCallSitesByFunc[functionName])
             {
                 var calleeName = app.FunctionName;
 
