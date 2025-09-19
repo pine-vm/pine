@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Pine.Core.CodeAnalysis;
 
@@ -30,7 +31,7 @@ namespace Pine.Core.CodeAnalysis;
 /// number of <see cref="PineValueClass.ParsedItems"/>), so it does not define a strict total order. Be careful when using it
 /// with data structures that assume a strict-weak ordering (like <see cref="SortedSet{T}"/>).
 /// </remarks>
-public class PineValueClassSpecificityComparer : IComparer<PineValueClass>
+public class PineValueClassSpecificityComparer : IComparer<PineValueClass>, IEqualityComparer<PineValueClass>
 {
     /// <summary>
     /// A reusable singleton instance of the comparer.
@@ -80,5 +81,23 @@ public class PineValueClassSpecificityComparer : IComparer<PineValueClass>
         }
 
         return x.ParsedItems.Count - y.ParsedItems.Count;
+    }
+
+    /// <inheritdoc/>
+    public bool Equals(PineValueClass? x, PineValueClass? y)
+    {
+        if (ReferenceEquals(x, y))
+            return true;
+
+        if (x is null || y is null)
+            return false;
+
+        return Compare(x, y) is 0;
+    }
+
+    /// <inheritdoc/>
+    public int GetHashCode([DisallowNull] PineValueClass obj)
+    {
+        return obj.HashBase16.GetHashCode();
     }
 }

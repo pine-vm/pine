@@ -1,3 +1,4 @@
+using Pine.Core.PopularEncodings;
 using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -56,7 +57,8 @@ public record NamesFromCompiledEnv
     {
         ParsedEnv = parsedEnv;
 
-        var mutatedDict = new Dictionary<PineValue, ImmutableList<(DeclQualifiedName, PineValueClass envClass)>>();
+        var beforeFilter =
+            new List<(DeclQualifiedName declName, PineValue origValue, (PineValue encodedExpr, PineValueClass envValueClass) application)>();
 
         foreach (var parsedModule in parsedEnv.Modules)
         {
@@ -73,64 +75,86 @@ public record NamesFromCompiledEnv
                 // Attempt to see if the declaration encodes (or references) a function whose body is directly an environment function.
                 if (ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(decl.Value, parseCache).IsOkOrNull() is { } functionRecord)
                 {
-                    // Which env function is the entry pointing to?
-                    if (functionRecord.InnerFunction is Expression.ParseAndEval innerParseAndEval)
+                    if (BuildApplicationFromFunctionRecord(functionRecord, parseCache) is { } found)
                     {
-                        if (CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(innerParseAndEval.Encoded) is
-                            ExprMappedToParentEnv.PathInParentEnv bodyExprPath)
-                        {
-                            if (bodyExprPath.Path.Count is 2 &&
-                                bodyExprPath.Path[0] is 0 && bodyExprPath.Path[1] < functionRecord.EnvFunctions.Length)
-                            {
-                                namedValue = functionRecord.EnvFunctions.Span[bodyExprPath.Path[1]];
-
-                                envClass = PineValueClass.Create(
-                                    [
-                                    ..functionRecord.EnvFunctions.ToArray()
-                                    .Select((envFuncValue, index) =>
-                                        new KeyValuePair<IReadOnlyList<int>, PineValue>(
-                                            [0, index],
-                                            envFuncValue))
-                                    ]);
-                            }
-                        }
+                        (namedValue, _, envClass) = found;
                     }
                 }
 
-                var existingEntries =
-                    mutatedDict.GetValueOrDefault(namedValue)
-                    ??
-                    [];
-
-                mutatedDict[namedValue] = existingEntries.Add((qualifiedName, envClass));
+                beforeFilter.Add((qualifiedName, decl.Value, (namedValue, envClass)));
             }
         }
 
-        /*
-        Legacy name enumeration logic kept for reference. It also indexed bodies and environment functions explicitly.
-        Currently disabled because the primary consumer only needs the declaration itself and its class.
-        foreach (var kvp in EnumerateNamesFromCompiledEnv(compiledEnvValue, parseCache))
-        {
-            var compositeName =
-                string.Join(
-                    ".",
-                    kvp.Value);
-
-            if (mutatedDict.TryGetValue(kvp.Key, out var existingName))
-            {
-                if (kvp.Value.Count < existingName.Count)
+        _namesFromCompiledEnv =
+            beforeFilter
+            .GroupBy(item => item.application.encodedExpr)
+            .ToFrozenDictionary(
+                keySelector: g => g.Key,
+                elementSelector:
+                encodedExprGroup =>
                 {
-                    mutatedDict[kvp.Key] = kvp.Value;
+                    var filteredList =
+                        encodedExprGroup
+                        .OrderBy(item => item.origValue is PineValue.ListValue origList ? origList.NodesCount : 0)
+                        .DistinctBy(item => item.application.envValueClass)
+                        .Select(item => (item.declName, item.application.envValueClass))
+                        .ToImmutableList();
+
+                    return filteredList;
+                });
+    }
+
+    /// <summary>
+    /// Build a function application from a function record.
+    /// </summary>
+    public static (PineValue encodedExpr, Expression expr, PineValueClass envValueClass) BuildApplicationFromFunctionRecord(
+        ElmInteractiveEnvironment.FunctionRecord functionRecord,
+        PineVMParseCache parseCache)
+    {
+        if (functionRecord.InnerFunction is Expression.ParseAndEval innerParseAndEval)
+        {
+            // Which env function is the entry pointing to?
+
+            if (CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(innerParseAndEval.Encoded) is
+                ExprMappedToParentEnv.PathInParentEnv bodyExprPath)
+            {
+                if (bodyExprPath.Path.Count is 2 &&
+                    bodyExprPath.Path[0] is 0 && bodyExprPath.Path[1] < functionRecord.EnvFunctions.Length)
+                {
+                    var namedValue = functionRecord.EnvFunctions.Span[bodyExprPath.Path[1]];
+
+                    var envClass =
+                        PineValueClass.Create(
+                            [
+                            ..functionRecord.EnvFunctions.ToArray()
+                             .Select((envFuncValue, index) =>
+                             new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                                 [0, index],
+                                 envFuncValue))
+                             ]);
+
+                    if (parseCache.ParseExpression(namedValue).IsOkOrNull() is { } expr)
+                    {
+                        return (namedValue, expr, envClass);
+                    }
                 }
             }
-            else
-            {
-                mutatedDict[kvp.Key] = kvp.Value;
-            }
         }
-        */
 
-        _namesFromCompiledEnv = mutatedDict.ToFrozenDictionary();
+        {
+            var innerFunctionEncoded = ExpressionEncoding.EncodeExpressionAsValue(functionRecord.InnerFunction);
+
+            var envClass = PineValueClass.Create(
+                 [
+                 ..functionRecord.EnvFunctions.ToArray()
+                         .Select((envFuncValue, index) =>
+                         new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                             [0, index],
+                             envFuncValue))
+                 ]);
+
+            return (innerFunctionEncoded, functionRecord.InnerFunction, envClass);
+        }
     }
 
     /// <summary>

@@ -864,7 +864,8 @@ public class CodeAnalysis
         return false;
     }
 
-    public static Result<string, StaticProgram>
+
+    public static Result<string, (StaticProgram staticProgram, IReadOnlyDictionary<DeclQualifiedName, string> declsFailed)>
         ParseAsStaticMonomorphicProgram(
         ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedEnvironment,
         Func<DeclQualifiedName, bool> includeDeclaration,
@@ -906,32 +907,51 @@ public class CodeAnalysis
         }
 
         return
-            ParseAsStaticMonomorphicProgramAssigningNames(
+            ParseAsStaticMonomorphicProgram(
                 includedFunctionRecords,
                 namesFromCompiledEnv.NameFromDecl,
                 parseCache);
     }
 
-    public static Result<string, StaticProgram>
-        ParseAsStaticMonomorphicProgramAssigningNames(
+    public static (StaticProgram staticProgram, IReadOnlyDictionary<DeclQualifiedName, string> declsFailed)
+        ParseAsStaticMonomorphicProgram(
         IReadOnlyDictionary<DeclQualifiedName, ElmInteractiveEnvironment.FunctionRecord> rootDecls,
         Func<PineValue, PineValueClass, string?> nameForDecl,
         PineVMParseCache parseCache)
     {
+        /*
+         * With the overall design, parsing of roots that are higher-kinded functions (e.g., `List.map`) will fail.
+         * Thus, it is normal for us to fail to parse a subset of declarations when feeding whole modules unfiltered into the code analysis.
+         * To account for this, we collect all parsing failures in a separate collection,
+         * instead of exiting when parsing of one of the given roots fails.
+         * */
+
         Dictionary<StaticFunctionIdentifier, (Expression origExpr, StaticExpressionGen body)> lessSpecializedInterfaces = [];
 
-        foreach (var functionRecord in rootDecls)
+        Dictionary<DeclQualifiedName, string> declsFailures = [];
+
+
+        bool DontInline(PineValue expr, PineValueClass envClass)
+        {
+            return nameForDecl(expr, envClass) is not null;
+        }
+
+
+        foreach (var rootDecl in rootDecls)
         {
             var parseResult =
                 ParseAsStaticMonomorphicProgram(
-                    functionRecord.Value,
+                    rootDecl.Value,
+                    DontInline,
                     parseCache);
 
             if (parseResult.IsErrOrNull() is { } err)
             {
-                return
+                declsFailures[rootDecl.Key] =
                     "Failed to parse as static monomorphic program from root '" +
-                    functionRecord.Key.FullName + "': " + err;
+                    rootDecl.Key.FullName + "': " + err;
+
+                continue;
             }
 
             if (parseResult.IsOkOrNull() is not { } parsedFunctions)
@@ -947,9 +967,9 @@ public class CodeAnalysis
                 {
                     if (!existing.body.Equals(entry.Value.body))
                     {
-                        return
+                        throw new Exception(
                             "Conflict: Two different function bodies for the same function identifier: " +
-                            entry.Key + "\nExisting body:\n" + existing.body + "\nNew body:\n" + entry.Value.body;
+                            entry.Key + "\nExisting body:\n" + existing.body + "\nNew body:\n" + entry.Value.body);
                     }
                 }
                 else
@@ -996,11 +1016,14 @@ public class CodeAnalysis
         {
             var functionIdentifier = ReduceFunctionIdentifier(functionIdentifierOrig);
 
-            return
-                nameForDecl(
+            if (nameForDecl(
                     functionIdentifier.EncodedExpr,
-                    functionIdentifier.EnvClass)
-                ??
+                    functionIdentifier.EnvClass) is { } direct)
+            {
+                return direct;
+            }
+
+            return
                 AnonymousFunctionName(
                     functionIdentifier.EncodedExpr,
                     functionIdentifier.EnvClass,
@@ -1025,7 +1048,7 @@ public class CodeAnalysis
         var program = new StaticProgram(namedFunctions);
         var pruned = PruneUnusedEnvironmentReferences(program);
 
-        return pruned;
+        return (pruned, declsFailures);
     }
 
     private static StaticFunctionInterface InterfaceForFunction<T>(
@@ -1072,47 +1095,31 @@ public class CodeAnalysis
     public static Result<string, IReadOnlyDictionary<StaticFunctionIdentifier, (Expression origExpr, StaticExpressionGen body)>>
         ParseAsStaticMonomorphicProgram(
         ElmInteractiveEnvironment.FunctionRecord functionRecord,
+        Func<PineValue, PineValueClass, bool> dontInline,
         PineVMParseCache parseCache)
     {
-        IReadOnlyList<PineValue> mockArguments =
-            [.. Enumerable.Repeat(PineValue.EmptyList, functionRecord.ParameterCount)];
-
-        var buildAppResult =
-            ElmInteractiveEnvironment.ApplyFunctionArgumentsForEvalExpr(functionRecord, mockArguments);
-
-        if (buildAppResult.IsErrOrNull() is { } err)
-        {
-            return
-                "Failed to build application of function record with mock arguments: " + err;
-        }
-
-        if (buildAppResult.IsOkOrNullable() is not { } appExprAndEnv)
-        {
-            throw new Exception(
-                "Unexpected return type: " +
-                buildAppResult.GetType().Name);
-        }
+        var (_, appliedExpr, appliedEnv) =
+            NamesFromCompiledEnv.BuildApplicationFromFunctionRecord(functionRecord, parseCache);
 
         return
             ParseAsStaticMonomorphicProgram(
-                rootExpression: appExprAndEnv.expression,
-                rootEnvironment: appExprAndEnv.environment,
+                rootExpression: appliedExpr,
+                rootEnvValueClass: appliedEnv,
+                dontInline: dontInline,
                 parseCache: parseCache);
     }
 
     public static Result<string, IReadOnlyDictionary<StaticFunctionIdentifier, (Expression origExpr, StaticExpressionGen body)>>
         ParseAsStaticMonomorphicProgram(
         Expression rootExpression,
-        PineValue rootEnvironment,
+        PineValueClass rootEnvValueClass,
+        Func<PineValue, PineValueClass, bool> dontInline,
         PineVMParseCache parseCache)
     {
         var observedSetInitial =
             new List<(Expression origExpr, Expression inlinedExpr, PineValueClass constraint)>();
 
         var queue = new Queue<(Expression expr, PineValueClass envValueClass)>();
-
-        var rootEnvValueClass =
-            PineValueClass.CreateEquals(rootEnvironment);
 
         queue.Enqueue((rootExpression, rootEnvValueClass));
 
@@ -1124,17 +1131,13 @@ public class CodeAnalysis
                 continue;
 
             var currentExprInlined =
-                InlineParseAndEvalUsingLiteralFunctionRecursive(current.expr, parseCache);
+                InlineParseAndEvalUsingLiteralFunctionRecursive(
+                    current.expr,
+                    current.envValueClass,
+                    dontInline,
+                    parseCache);
 
-            /*
-             * Do not record root in observed set, as we will use it as the entry point anyway.
-             * */
-
-            if (!(current.expr == rootExpression &&
-                current.envValueClass == rootEnvValueClass))
-            {
-                observedSetInitial.Add((current.expr, currentExprInlined, current.envValueClass));
-            }
+            observedSetInitial.Add((current.expr, currentExprInlined, current.envValueClass));
 
             var allParseAndEvalExpressions =
                 Expression.EnumerateSelfAndDescendants(currentExprInlined)
@@ -1177,26 +1180,27 @@ public class CodeAnalysis
                     return "Could not map environment value class through parseAndEval.Environment";
                 }
 
-                /*
-                 * Special case also for the encoded part of parse&eval:
-                 * */
+                var childExprValueResult =
+                    TryGetChildEncodedExprValue(
+                        parseAndEvalExpr,
+                        current.envValueClass,
+                        parseCache);
 
-                if (Core.CodeAnalysis.CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(parseAndEvalExpr.Encoded) is not ExprMappedToParentEnv.PathInParentEnv pathInParentEnv)
                 {
-                    // Cannot interpret the encoded part as a path from the environment.
-                    // This means we cannot statically determine what part of the environment
-                    // is parsed by this parse&eval expression.
-                    // Therefore, we have to give up on static analysis of this program.
-
-                    return "Could not interpret parseAndEval.Encoded as path from environment";
+                    if (childExprValueResult.IsErrOrNull() is { } err)
+                    {
+                        return "Failed to resolve parseAndEval.Encoded to a value: " + err;
+                    }
                 }
 
-                if (current.envValueClass.TryGetValue(pathInParentEnv.Path) is not { } parsedValue)
+                if (childExprValueResult.IsOkOrNull() is not { } childExprValue)
                 {
-                    return "Could not find value for parseAndEval.Encoded in the given environment";
+                    throw new Exception(
+                        "Unexpected return type: " +
+                        childExprValueResult.GetType().Name);
                 }
 
-                var childParseResult = parseCache.ParseExpression(parsedValue);
+                var childParseResult = parseCache.ParseExpression(childExprValue);
 
                 {
                     if (childParseResult.IsErrOrNull() is { } err)
@@ -1313,7 +1317,7 @@ public class CodeAnalysis
         PineValueClass valueClass,
         PineVMParseCache parseCache)
     {
-        bool KeepEntry(PineValue value)
+        bool KeepEntryAsIs(PineValue value)
         {
             var parseResult = parseCache.ParseExpression(value);
 
@@ -1322,53 +1326,61 @@ public class CodeAnalysis
                 return true;
             }
 
-            if (value is PineValue.ListValue listValue)
-            {
-                for (var i = 0; i < listValue.Items.Length; ++i)
-                {
-                    if (KeepEntry(listValue.Items.Span[i]))
-                    {
-                        return true;
-                    }
-                }
-            }
-
             return false;
         }
 
-        var entriesRemaining =
-            valueClass.ParsedItems
-            .Where(parsedItem => KeepEntry(parsedItem.Value))
-            .ToArray();
+        var entriesRemaining = new List<KeyValuePair<IReadOnlyList<int>, PineValue>>();
+
+        var candidates = new Queue<KeyValuePair<IReadOnlyList<int>, PineValue>>(valueClass.ParsedItems);
+
+        while (candidates.Count > 0)
+        {
+            var candidate = candidates.Dequeue();
+
+            if (KeepEntryAsIs(candidate.Value))
+            {
+                entriesRemaining.Add(candidate);
+                continue;
+            }
+
+            if (candidate.Value is PineValue.ListValue listValue)
+            {
+                for (var i = 0; i < listValue.Items.Length; ++i)
+                {
+                    candidates.Enqueue(
+                        new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                            [.. candidate.Key, i],
+                            listValue.Items.Span[i]));
+                }
+            }
+        }
 
         return PineValueClass.Create(entriesRemaining);
     }
 
     static Expression InlineParseAndEvalUsingLiteralFunctionRecursive(
         Expression expression,
-        PineVMParseCache parseCache)
-    {
-        var currentExpression = expression;
-
-        while (true)
-        {
-            var inlinedExpr =
-                InlineParseAndEvalUsingLiteralFunction(currentExpression, parseCache);
-
-            if (inlinedExpr.Equals(currentExpression))
-                break;
-
-            currentExpression = inlinedExpr;
-        }
-
-        return currentExpression;
-    }
-
-    static Expression InlineParseAndEvalUsingLiteralFunction(
-        Expression expression,
+        PineValueClass envConstraint,
+        Func<PineValue, PineValueClass, bool> dontInline,
         PineVMParseCache parseCache)
     {
         return
+            InlineParseAndEvalUsingLiteralFunctionRecursive(
+                expression,
+                envConstraint,
+                dontInline,
+                parseCache,
+                alreadyInlined: []);
+    }
+
+    static Expression InlineParseAndEvalUsingLiteralFunctionRecursive(
+        Expression expression,
+        PineValueClass envValueClass,
+        Func<PineValue, PineValueClass, bool> dontInline,
+        PineVMParseCache parseCache,
+        ImmutableHashSet<Expression> alreadyInlined)
+    {
+        var reducedExpression =
             ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
             findReplacement: expr =>
             {
@@ -1385,9 +1397,29 @@ public class CodeAnalysis
 
                 var parseIndependentResult = ParseIndependentParseAndEvalExpression(parseAndEval, parseCache);
 
-                if (parseIndependentResult.IsOkOrNull() is not { } staticExpr)
+                if (parseIndependentResult.IsOkOrNullable() is not { } childExprAndValue)
                 {
                     // Cannot inline parse&eval expressions that cannot be parsed independently.
+                    return null;
+                }
+
+                var (childExprValue, childExpr) = childExprAndValue;
+
+                var childEnvValueClass = MapValueClass(envValueClass, parseAndEval.Environment);
+
+                if (childEnvValueClass is null)
+                {
+                    return null;
+                }
+
+                if (dontInline(childExprValue, childEnvValueClass))
+                {
+                    return null;
+                }
+
+                if (alreadyInlined.Contains(childExpr))
+                {
+                    // Prevent infinite recursion on self-referential parse&eval expressions.
                     return null;
                 }
 
@@ -1403,14 +1435,22 @@ public class CodeAnalysis
 
                             return null;
                         },
-                        staticExpr).expr;
+                        childExpr).expr;
 
                 var inlinedExprReduced =
                     ReducePineExpression.ReduceExpressionBottomUp(inlinedExpr, parseCache);
 
-                return inlinedExprReduced;
+                return
+                InlineParseAndEvalUsingLiteralFunctionRecursive(
+                    expression: inlinedExprReduced,
+                    envValueClass: childEnvValueClass,
+                    dontInline: dontInline,
+                    parseCache: parseCache,
+                    alreadyInlined: alreadyInlined.Add(childExpr));
             },
             expression).expr;
+
+        return reducedExpression;
     }
 
     static Result<string, StaticExpressionGen> ParseAsStaticExpression(
@@ -1487,17 +1527,24 @@ public class CodeAnalysis
                     envExpr);
             }
 
-            // Try get function value from the environment class:
+            var childExprValueResult =
+                TryGetChildEncodedExprValue(
+                    parseAndEval,
+                    envValueClass,
+                    parseCache);
 
-            if (Core.CodeAnalysis.CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(parseAndEval.Encoded) is not
-                ExprMappedToParentEnv.PathInParentEnv pathInParentEnv)
             {
-                return "Could not interpret parseAndEval.Encoded as path from environment";
+                if (childExprValueResult.IsErrOrNull() is { } err)
+                {
+                    return "Failed to resolve parseAndEval.Encoded to a value: " + err;
+                }
             }
 
-            if (envValueClass.TryGetValue(pathInParentEnv.Path) is not { } parsedValue)
+            if (childExprValueResult.IsOkOrNull() is not { } childExprValue)
             {
-                return "Could not find value for parseAndEval.Encoded in the given environment";
+                throw new Exception(
+                    "Unexpected return type: " +
+                    childExprValueResult.GetType().Name);
             }
 
             var childEnvClass = MapValueClass(envValueClass, parseAndEval.Environment);
@@ -1507,7 +1554,7 @@ public class CodeAnalysis
                 return "Could not map environment value class through parseAndEval.Environment";
             }
 
-            var parseExprResult = parseCache.ParseExpression(parsedValue);
+            var parseExprResult = parseCache.ParseExpression(childExprValue);
 
             {
                 if (parseExprResult.IsErrOrNull() is { } err)
@@ -1525,7 +1572,7 @@ public class CodeAnalysis
 
             var childFunctionName =
                 new StaticFunctionIdentifier(
-                    parsedValue,
+                    childExprValue,
                     childEnvClass);
 
             return
@@ -1666,6 +1713,42 @@ public class CodeAnalysis
             expression.GetType().Name);
     }
 
+    static Result<string, PineValue> TryGetChildEncodedExprValue(
+        Expression.ParseAndEval parseAndEval,
+        PineValueClass envValueClass,
+        PineVMParseCache parseCache)
+    {
+        if (Core.CodeAnalysis.CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(parseAndEval.Encoded) is
+            ExprMappedToParentEnv.PathInParentEnv pathInParentEnv)
+        {
+            // Try get function value from the environment class:
+
+            if (envValueClass.TryGetValue(pathInParentEnv.Path) is not { } valueFromPath)
+            {
+                return "Could not find value for parseAndEval.Encoded path in the given environment";
+            }
+
+            return valueFromPath;
+        }
+        else
+        {
+            if (!parseAndEval.Encoded.ReferencesEnvironment &&
+                ReducePineExpression.TryEvaluateExpressionIndependent(
+                    parseAndEval.Encoded,
+                    parseCache).IsOkOrNull() is { } fromLiteral)
+            {
+                return fromLiteral;
+            }
+        }
+
+        // Cannot interpret the encoded part as a path from the environment.
+        // This means we cannot statically determine what part of the environment
+        // is parsed by this parse&eval expression.
+        // Therefore, we have to give up on static analysis of this program.
+
+        return "Could not interpret as path from environment and also not evaluate independently";
+    }
+
     private static bool ParseAndEvalCrashingAlways(
         Expression.ParseAndEval parseAndEval,
         PineVMParseCache parseCache)
@@ -1686,7 +1769,7 @@ public class CodeAnalysis
         return false;
     }
 
-    private static Result<object, Expression>
+    private static Result<object, (PineValue, Expression)>
         ParseIndependentParseAndEvalExpression(
         Expression.ParseAndEval parseAndEval,
         PineVMParseCache parseCache)
@@ -1722,10 +1805,10 @@ public class CodeAnalysis
              * If parsing of a literal fails, it means the program will crash at runtime if the containing branch is taken.
              * */
 
-            return Result<object, Expression>.err("");
+            return Result<object, (PineValue, Expression)>.err("");
         }
 
-        return Result<object, Expression>.ok(parsedExpr);
+        return Result<object, (PineValue, Expression)>.ok((evalIndependentValue, parsedExpr));
     }
 
     private static string AnonymousFunctionName(
