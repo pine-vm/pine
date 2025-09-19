@@ -428,54 +428,31 @@ public class ReducePineExpression
 
                     case nameof(KernelFunction.head):
                         {
-                            if (rootKernelApp.Input is Expression.List inputList)
+                            // 1) Try to collect a selection index and input expression.
+                            var selectInput = rootKernelApp.Input;
+                            int? selectIndex = 0;
+
+                            if (selectInput is Expression.KernelApplication k &&
+                                k.Function is nameof(KernelFunction.skip) &&
+                                k.Input is Expression.List list && list.Items.Count is 2)
                             {
-                                if (inputList.Items.Count is 0)
+                                var countExpr = list.Items[0];
+                                if (TryEvaluateExpressionIndependent(countExpr, parseCache).IsOkOrNull() is { } okSkipCountValue)
                                 {
-                                    return Expression.LiteralInstance(PineValue.EmptyList);
-                                }
-
-                                return inputList.Items[0];
-                            }
-
-                            if (rootKernelApp.Input is Expression.Literal literal)
-                            {
-                                return Expression.LiteralInstance(KernelFunction.head(literal.Value));
-                            }
-
-                            if (rootKernelApp.Input is Expression.KernelApplication headInputKernelApp)
-                            {
-                                if (headInputKernelApp.Function is nameof(KernelFunction.skip))
-                                {
-                                    if (headInputKernelApp.Input is Expression.List headSkipInputList &&
-                                        headSkipInputList.Items.Count is 2)
+                                    if (KernelFunction.SignedIntegerFromValueRelaxed(okSkipCountValue) is { } okSkipCount)
                                     {
-                                        if (TryEvaluateExpressionIndependent(headSkipInputList.Items[0], parseCache).IsOkOrNull() is { } okSkipCountValue)
-                                        {
-                                            if (KernelFunction.SignedIntegerFromValueRelaxed(okSkipCountValue) is { } okSkipCount)
-                                            {
-                                                var skipCountClamped =
-                                                    (int)(okSkipCount < 0 ? 0 : okSkipCount);
-
-                                                if (headSkipInputList.Items[1] is Expression.List headSkipList)
-                                                {
-                                                    if (skipCountClamped < headSkipList.Items.Count)
-                                                    {
-                                                        return headSkipList.Items[skipCountClamped];
-                                                    }
-
-                                                    return Expression.LiteralInstance(PineValue.EmptyList);
-                                                }
-
-                                                if (headSkipInputList.Items[1] is Expression.Literal headSkipLiteral)
-                                                {
-                                                    return Expression.LiteralInstance(
-                                                        KernelFunction.head(
-                                                            KernelFunctionSpecialized.skip(skipCountClamped, headSkipLiteral.Value)));
-                                                }
-                                            }
-                                        }
+                                        selectIndex = (int)(okSkipCount < 0 ? 0 : okSkipCount);
+                                        selectInput = list.Items[1];
                                     }
+                                }
+                            }
+
+                            // 2) Attempt to reduce the input expression for this index.
+                            if (selectIndex is int idx)
+                            {
+                                if (TryReduceSelectListItem(selectInput, idx) is { } reducedSelection)
+                                {
+                                    return reducedSelection;
                                 }
                             }
 
@@ -1154,6 +1131,72 @@ public class ReducePineExpression
             return stringTag;
 
         return new Expression.StringTag(stringTag.Tag, reducedTagged);
+    }
+
+    /// <summary>
+    /// Attempts to select the list item at a given index from the provided expression without
+    /// evaluating with a runtime environment. Supports:
+    /// - Expression.List: returns the item or EmptyList if out of bounds.
+    /// - Expression.Literal(list): returns a literal of the item or EmptyList if out of bounds.
+    /// - Expression.Conditional: pushes the selection into both branches when possible.
+    /// - Expression.StringTag: unwraps and attempts on the tagged expression.
+    /// Returns null if no structural reduction can be applied.
+    /// </summary>
+    private static Expression? TryReduceSelectListItem(Expression inputExpression, int index)
+    {
+        if (index < 0) index = 0;
+
+        switch (inputExpression)
+        {
+            case Expression.List list:
+                {
+                    if (index < list.Items.Count)
+                    {
+                        return list.Items[index];
+                    }
+
+                    return Expression.LiteralInstance(PineValue.EmptyList);
+                }
+
+            case Expression.Literal lit:
+                {
+                    if (lit.Value is PineValue.ListValue lv)
+                    {
+                        if (index < lv.Items.Length)
+                        {
+                            return Expression.LiteralInstance(lv.Items.Span[index]);
+                        }
+
+                        return Expression.LiteralInstance(PineValue.EmptyList);
+                    }
+
+                    // Not a list-literal: no structural reduction.
+                    return null;
+                }
+
+            case Expression.Conditional cond:
+                {
+                    var falseOut = TryReduceSelectListItem(cond.FalseBranch, index);
+                    var trueOut = TryReduceSelectListItem(cond.TrueBranch, index);
+
+                    if (falseOut is not null && trueOut is not null)
+                    {
+                        return Expression.ConditionalInstance(
+                            condition: cond.Condition,
+                            falseBranch: falseOut,
+                            trueBranch: trueOut);
+                    }
+
+                    return null;
+                }
+
+            case Expression.StringTag tag:
+                {
+                    return TryReduceSelectListItem(tag.Tagged, index);
+                }
+        }
+
+        return null;
     }
 }
 
