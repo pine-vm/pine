@@ -361,4 +361,188 @@ public class ReducePineExpressionTests
         // Expect: select sublistB via inner, then select index 2 -> b2
         reduced.Should().Be(b2);
     }
+
+    [Fact]
+    public void Reduce_HeadOverReverse_SelectsLastElement()
+    {
+        var i0 = Expression.LiteralInstance(PineValue.Blob([1]));
+        var i1 = Expression.LiteralInstance(PineValue.Blob([2]));
+        var i2 = Expression.LiteralInstance(PineValue.Blob([3]));
+        var listExpr = Expression.ListInstance([i0, i1, i2]);
+
+        var root = new Expression.KernelApplication(
+            nameof(KernelFunction.head),
+            new Expression.KernelApplication(nameof(KernelFunction.reverse), listExpr));
+
+        var reduced = ReducePineExpression.ReduceExpressionBottomUp(root, s_parseCache);
+        reduced.Should().Be(i2);
+    }
+
+    [Fact]
+    public void Reduce_HeadOverReverseTake_SelectsLastOfTake()
+    {
+        // head(reverse(take(2, [a,b,c]))) -> b
+        var a = Expression.LiteralInstance(PineValue.Blob([1]));
+        var b = Expression.LiteralInstance(PineValue.Blob([2]));
+        var c = Expression.LiteralInstance(PineValue.Blob([3]));
+        var listExpr = Expression.ListInstance([a, b, c]);
+
+        var takeArgs = Expression.ListInstance([
+            Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(2)),
+            listExpr
+        ]);
+
+        var root = new Expression.KernelApplication(
+            nameof(KernelFunction.head),
+            new Expression.KernelApplication(
+                nameof(KernelFunction.reverse),
+                new Expression.KernelApplication(nameof(KernelFunction.take), takeArgs)));
+
+        var reduced = ReducePineExpression.ReduceExpressionBottomUp(root, s_parseCache);
+        reduced.Should().Be(b);
+    }
+
+    [Fact]
+    public void Reduce_TakeLast_AsReverseTakeReverse_SelectsExpected()
+    {
+        // take-last 2 from [a,b,c,d] = reverse(take(2, reverse([a,b,c,d]))) -> [c,d]; head(...) -> c when further taking head
+        var a = Expression.LiteralInstance(PineValue.Blob([1]));
+        var b = Expression.LiteralInstance(PineValue.Blob([2]));
+        var c = Expression.LiteralInstance(PineValue.Blob([3]));
+        var d = Expression.LiteralInstance(PineValue.Blob([4]));
+
+        var listExpr = Expression.ListInstance([a, b, c, d]);
+
+        var reversed = new Expression.KernelApplication(nameof(KernelFunction.reverse), listExpr);
+
+        var takeArgs =
+            Expression.ListInstance(
+                [
+                Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(2)),
+                reversed
+                ]);
+
+        var takeOnReversed = new Expression.KernelApplication(nameof(KernelFunction.take), takeArgs);
+        var takeLast = new Expression.KernelApplication(nameof(KernelFunction.reverse), takeOnReversed);
+
+        // head(take-last 2) -> c
+        var root = new Expression.KernelApplication(nameof(KernelFunction.head), takeLast);
+        var reduced = ReducePineExpression.ReduceExpressionBottomUp(root, s_parseCache);
+        reduced.Should().Be(c);
+    }
+
+    [Fact]
+    public void Reduce_TakeLastOverConditional_PushesIntoBranches_SelectsTail()
+    {
+        // Build conditional list with env-referencing condition to avoid collapsing
+        var condition = Expression.EnvironmentInstance;
+
+        var falseList =
+            Expression.LiteralInstance(PineValue.List([
+                PineValue.Blob([10]),
+                PineValue.Blob([11]),
+                PineValue.Blob([12]),
+                PineValue.Blob([13])
+        ]));
+
+        var trueList =
+            Expression.LiteralInstance(PineValue.List([
+                PineValue.Blob([20]),
+                PineValue.Blob([21]),
+                PineValue.Blob([22]),
+                PineValue.Blob([23])
+        ]));
+
+        var listConditional = Expression.ConditionalInstance(condition, falseList, trueList);
+
+        // take-last 2 -> reverse(take(2, reverse(x)))
+        var rev1 = new Expression.KernelApplication(nameof(KernelFunction.reverse), listConditional);
+
+        var takeArgs =
+            Expression.ListInstance(
+                [
+                Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(2)),
+                rev1
+                ]);
+
+        var take = new Expression.KernelApplication(nameof(KernelFunction.take), takeArgs);
+        var takeLast = new Expression.KernelApplication(nameof(KernelFunction.reverse), take);
+
+        var reduced = ReducePineExpression.ReduceExpressionBottomUp(takeLast, s_parseCache);
+
+        (reduced is Expression.Conditional).Should().BeTrue();
+        var reducedCond = (Expression.Conditional)reduced;
+
+        reducedCond.FalseBranch.Should().Be(
+            Expression.LiteralInstance(
+                PineValue.List(
+                    [
+                    PineValue.Blob([12]),
+                    PineValue.Blob([13])
+                    ])));
+
+        reducedCond.TrueBranch.Should().Be(
+            Expression.LiteralInstance(
+                PineValue.List(
+                    [
+                    PineValue.Blob([22]),
+                    PineValue.Blob([23])
+                    ])));
+    }
+
+    [Fact]
+    public void Reduce_SkipLastOverConditional_PushesIntoBranches_DropsTail()
+    {
+        // Build conditional list with env-referencing condition to avoid collapsing
+        var condition = Expression.EnvironmentInstance;
+
+        var falseList =
+            Expression.LiteralInstance(PineValue.List(
+                [
+                PineValue.Blob([10]),
+                PineValue.Blob([11]),
+                PineValue.Blob([12])
+                ]));
+
+        var trueList =
+            Expression.LiteralInstance(PineValue.List(
+                [
+                PineValue.Blob([20]),
+                PineValue.Blob([21]),
+                PineValue.Blob([22])
+                ]));
+
+        var listConditional = Expression.ConditionalInstance(condition, falseList, trueList);
+
+        // skip-last 1 -> reverse(skip(1, reverse(x)))
+        var rev1 = new Expression.KernelApplication(nameof(KernelFunction.reverse), listConditional);
+        var skipArgs = Expression.ListInstance([
+            Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(1)),
+            rev1
+        ]);
+
+        var skip = new Expression.KernelApplication(nameof(KernelFunction.skip), skipArgs);
+        var skipLast = new Expression.KernelApplication(nameof(KernelFunction.reverse), skip);
+
+        var reduced = ReducePineExpression.ReduceExpressionBottomUp(skipLast, s_parseCache);
+
+        (reduced is Expression.Conditional).Should().BeTrue();
+        var reducedCond = (Expression.Conditional)reduced;
+
+        reducedCond.FalseBranch.Should().Be(
+            Expression.LiteralInstance(
+                PineValue.List(
+                    [
+                    PineValue.Blob([10]),
+                    PineValue.Blob([11])
+                    ])));
+
+        reducedCond.TrueBranch.Should().Be(
+            Expression.LiteralInstance(
+                PineValue.List(
+                    [
+                    PineValue.Blob([20]),
+                    PineValue.Blob([21])
+                    ])));
+    }
 }

@@ -428,33 +428,8 @@ public class ReducePineExpression
 
                     case nameof(KernelFunction.head):
                         {
-                            // 1) Try to collect a selection index and input expression.
-                            var selectInput = rootKernelApp.Input;
-                            int? selectIndex = 0;
-
-                            if (selectInput is Expression.KernelApplication k &&
-                                k.Function is nameof(KernelFunction.skip) &&
-                                k.Input is Expression.List list && list.Items.Count is 2)
-                            {
-                                var countExpr = list.Items[0];
-                                if (TryEvaluateExpressionIndependent(countExpr, parseCache).IsOkOrNull() is { } okSkipCountValue)
-                                {
-                                    if (KernelFunction.SignedIntegerFromValueRelaxed(okSkipCountValue) is { } okSkipCount)
-                                    {
-                                        selectIndex = (int)(okSkipCount < 0 ? 0 : okSkipCount);
-                                        selectInput = list.Items[1];
-                                    }
-                                }
-                            }
-
-                            // 2) Attempt to reduce the input expression for this index.
-                            if (selectIndex is int idx)
-                            {
-                                if (TryReduceSelectListItem(selectInput, idx) is { } reducedSelection)
-                                {
-                                    return reducedSelection;
-                                }
-                            }
+                            if (ApplyKernelFunctionHeadToAllBranches(rootKernelApp.Input) is { } reducedBranches)
+                                return reducedBranches;
 
                             return AttemptReduceViaEval();
                         }
@@ -463,57 +438,51 @@ public class ReducePineExpression
                         {
                             if (rootKernelApp.Input is Expression.List inputList && inputList.Items.Count is 2)
                             {
-                                if (TryEvaluateExpressionIndependent(inputList.Items[0], parseCache).IsOkOrNull() is { } okSkipCountValue)
+                                var countExpr = inputList.Items[0];
+                                var seqExpr = inputList.Items[1];
+
+                                if (TryEvaluateExpressionIndependent(countExpr, parseCache).IsOkOrNull() is { } okSkipCountValue &&
+                                    KernelFunction.SignedIntegerFromValueRelaxed(okSkipCountValue) is { } okSkipCount)
                                 {
-                                    if (KernelFunction.SignedIntegerFromValueRelaxed(okSkipCountValue) is { } okSkipCount)
+                                    if (ApplyKernelFunctionSkipToAllBranches((int)(okSkipCount < 0 ? 0 : okSkipCount), seqExpr) is { } reducedSkip)
                                     {
-                                        if (inputList.Items[1] is Expression.List partiallySkippedList)
-                                        {
-                                            return Expression.ListInstance(
-                                                [.. partiallySkippedList.Items.Skip((int)okSkipCount)]);
-                                        }
-
-                                        if (inputList.Items[1] is Expression.Literal literal)
-                                        {
-                                            return Expression.LiteralInstance(
-                                                KernelFunctionSpecialized.skip((int)okSkipCount, literal.Value));
-                                        }
-
-                                        if (inputList.Items[1] is Expression.KernelApplication innerKernelApp)
-                                        {
-                                            if (innerKernelApp.Function is nameof(KernelFunction.skip)
-                                                && innerKernelApp.Input is Expression.List innerSkipInputList &&
-                                                innerSkipInputList.Items.Count is 2)
-                                            {
-                                                if (TryEvaluateExpressionIndependent(innerSkipInputList.Items[0], parseCache).IsOkOrNull() is { } okInnerSkipCountValue)
-                                                {
-                                                    if (KernelFunction.SignedIntegerFromValueRelaxed(okInnerSkipCountValue) is { } okInnerSkipCount)
-                                                    {
-                                                        var outerSkipCountClamped =
-                                                            okSkipCount < 0 ? 0 : okSkipCount;
-
-                                                        var innerSkipCountClamped =
-                                                            okInnerSkipCount < 0 ? 0 : okInnerSkipCount;
-
-                                                        var aggregateSkipCount = outerSkipCountClamped + innerSkipCountClamped;
-
-                                                        return
-                                                            ContinueWithReducedInput(
-                                                                Expression.ListInstance(
-                                                                    [
-                                                                    Expression.LiteralInstance(
-                                                                        IntegerEncoding.EncodeSignedInteger(aggregateSkipCount)),
-                                                                    innerSkipInputList.Items[1]
-                                                                    ]
-                                                                ));
-                                                    }
-                                                }
-                                            }
-                                        }
+                                        return reducedSkip;
                                     }
                                 }
 
                                 return AttemptReduceViaEval();
+                            }
+
+                            return AttemptReduceViaEval();
+                        }
+
+                    case nameof(KernelFunction.take):
+                        {
+                            if (rootKernelApp.Input is Expression.List takeInput && takeInput.Items.Count is 2)
+                            {
+                                var countExpr = takeInput.Items[0];
+                                var srcExpr = takeInput.Items[1];
+
+                                if (TryEvaluateExpressionIndependent(countExpr, parseCache).IsOkOrNull() is { } okTakeCountValue &&
+                                    KernelFunction.SignedIntegerFromValueRelaxed(okTakeCountValue) is { } okTakeCount)
+                                {
+                                    if (ApplyKernelFunctionTakeToAllBranches((int)okTakeCount, srcExpr) is { } reducedTake)
+                                    {
+                                        return reducedTake;
+                                    }
+                                }
+
+                                return AttemptReduceViaEval();
+                            }
+
+                            return AttemptReduceViaEval();
+                        }
+
+                    case nameof(KernelFunction.reverse):
+                        {
+                            if (ApplyKernelFunctionReverseToAllBranches(rootKernelApp.Input) is { } reducedRev)
+                            {
+                                return reducedRev;
                             }
 
                             return AttemptReduceViaEval();
@@ -1134,6 +1103,282 @@ public class ReducePineExpression
     }
 
     /// <summary>
+    /// Attempts to push a reverse operation into the structure of an expression without evaluation.
+    /// Supports reversing concrete lists and list-literals, cancels double-reverse kernel applications,
+    /// and propagates into both branches of conditionals and into string-tagged subexpressions.
+    /// </summary>
+    /// <param name="expression">The expression representing a list whose result should be reversed.</param>
+    /// <returns>
+    /// A structurally transformed expression equivalent to applying <c>reverse</c>,
+    /// or <c>null</c> if no structural reduction is applicable.
+    /// </returns>
+    public static Expression? ApplyKernelFunctionReverseToAllBranches(
+        Expression expression)
+    {
+        switch (expression)
+        {
+            case Expression.List listExpr:
+                {
+                    if (listExpr.Items.Count <= 1)
+                        return listExpr;
+
+                    var reversed = listExpr.Items.Reverse().ToArray();
+
+                    return Expression.ListInstance(reversed);
+                }
+
+            case Expression.Literal literal:
+                return Expression.LiteralInstance(KernelFunction.reverse(literal.Value));
+
+            case Expression.KernelApplication innerKernelApp:
+                {
+                    if (innerKernelApp.Function is nameof(KernelFunction.reverse))
+                    {
+                        return innerKernelApp.Input;
+                    }
+
+                    return null;
+                }
+
+            case Expression.Conditional cond:
+                {
+                    if (ApplyKernelFunctionReverseToAllBranches(cond.FalseBranch) is { } falseOk &&
+                       ApplyKernelFunctionReverseToAllBranches(cond.TrueBranch) is { } trueOk)
+                    {
+                        return
+                            Expression.ConditionalInstance(
+                                cond.Condition,
+                                falseBranch: falseOk,
+                                trueBranch: trueOk);
+                    }
+
+                    return null;
+                }
+
+            case Expression.StringTag tag:
+                {
+                    if (ApplyKernelFunctionReverseToAllBranches(tag.Tagged) is { } inner)
+                    {
+                        return new Expression.StringTag(tag.Tag, inner);
+                    }
+
+                    return null;
+                }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Attempts to push a skip operation into the expression tree without evaluation.
+    /// Supports concrete lists, list-literals, nested <c>skip</c> kernel applications (which are combined),
+    /// and propagation into both branches of a conditional and into string-tagged expressions.
+    /// </summary>
+    /// <param name="count">Number of elements to skip. Negative values are treated as zero.</param>
+    /// <param name="expression">The source expression from which to skip elements.</param>
+    /// <returns>
+    /// A structurally transformed expression that represents the skip, or <c>null</c>
+    /// if the transformation cannot be applied safely.
+    /// </returns>
+    public static Expression? ApplyKernelFunctionSkipToAllBranches(
+        int count,
+        Expression expression)
+    {
+        var countClamped =
+            count < 0 ? 0 : count;
+
+        if (countClamped is 0)
+            return expression;
+
+        switch (expression)
+        {
+            case Expression.List list:
+                {
+                    if (countClamped <= 0)
+                        return list;
+
+                    if (countClamped >= list.Items.Count)
+                        return Expression.LiteralInstance(PineValue.EmptyList);
+
+                    return Expression.ListInstance([.. list.Items.Skip(countClamped)]);
+                }
+
+            case Expression.Literal literal:
+                return Expression.LiteralInstance(KernelFunctionSpecialized.skip(countClamped, literal.Value));
+
+            case Expression.KernelApplication innerSkip:
+                {
+                    if (innerSkip.Function is nameof(KernelFunction.skip) &&
+                        innerSkip.Input is Expression.List args && args.Items.Count is 2 &&
+                        args.Items[0] is Expression.Literal litCount && KernelFunction.SignedIntegerFromValueRelaxed(litCount.Value) is { } innerCount)
+                    {
+                        var innerCountClamped =
+                            innerCount < 0 ? 0 : (int)innerCount;
+
+                        return
+                            ApplyKernelFunctionSkipToAllBranches(countClamped + innerCountClamped, args.Items[1]);
+                    }
+
+                    return null;
+                }
+
+            case Expression.Conditional conditional:
+                {
+                    if (ApplyKernelFunctionSkipToAllBranches(countClamped, conditional.FalseBranch) is { } falseOk &&
+                        ApplyKernelFunctionSkipToAllBranches(countClamped, conditional.TrueBranch) is { } trueOk)
+                    {
+                        return
+                            Expression.ConditionalInstance(
+                                conditional.Condition,
+                                falseBranch: falseOk,
+                                trueBranch: trueOk);
+                    }
+
+                    return null;
+                }
+
+            case Expression.StringTag tag:
+                {
+                    if (ApplyKernelFunctionSkipToAllBranches(countClamped, tag.Tagged) is { } taggedOk)
+                    {
+                        return new Expression.StringTag(tag.Tag, taggedOk);
+                    }
+
+                    return null;
+                }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Attempts to push a take operation into the expression tree without evaluation.
+    /// Supports concrete lists, list-literals, nested <c>take</c> kernel applications (which are combined),
+    /// and propagation into both branches of a conditional and into string-tagged expressions.
+    /// </summary>
+    /// <param name="count">Number of elements to take. Negative values are treated as zero.</param>
+    /// <param name="expression">The source expression from which to take elements.</param>
+    /// <returns>
+    /// A structurally transformed expression that represents the take, or <c>null</c>
+    /// if the transformation cannot be applied safely.
+    /// </returns>
+    public static Expression? ApplyKernelFunctionTakeToAllBranches(
+        int count,
+        Expression expression)
+    {
+        var countClamped =
+            count < 0 ? 0 : count;
+
+        switch (expression)
+        {
+            case Expression.List list:
+                {
+                    if (countClamped <= 0)
+                        return Expression.LiteralInstance(PineValue.EmptyList);
+
+                    if (countClamped >= list.Items.Count)
+                        return list;
+
+                    return Expression.ListInstance([.. list.Items.Take(countClamped)]);
+                }
+
+            case Expression.Literal literal:
+                return Expression.LiteralInstance(KernelFunctionSpecialized.take(countClamped, literal.Value));
+
+            case Expression.KernelApplication innerTake:
+
+                {
+                    if (innerTake.Function is nameof(KernelFunction.take) &&
+                        innerTake.Input is Expression.List args && args.Items.Count is 2 &&
+                        args.Items[0] is Expression.Literal litCount &&
+                        KernelFunction.SignedIntegerFromValueRelaxed(litCount.Value) is { } innerCount)
+                    {
+                        var innerCountClamped =
+                            innerCount < 0 ? 0 : (int)innerCount;
+
+                        return
+                            ApplyKernelFunctionTakeToAllBranches(
+                                (countClamped + innerCountClamped),
+                                args.Items[1]);
+                    }
+
+                    return null;
+                }
+
+            case Expression.Conditional conditional:
+                {
+                    if (ApplyKernelFunctionTakeToAllBranches(countClamped, conditional.FalseBranch) is { } falseOk &&
+                        ApplyKernelFunctionTakeToAllBranches(countClamped, conditional.TrueBranch) is { } trueOk)
+                    {
+                        return
+                            Expression.ConditionalInstance(
+                                conditional.Condition,
+                                falseBranch: falseOk,
+                                trueBranch: trueOk);
+                    }
+
+                    return null;
+                }
+
+            case Expression.StringTag tag:
+                {
+                    if (ApplyKernelFunctionTakeToAllBranches(countClamped, tag.Tagged) is { } taggedOk)
+                    {
+                        return new Expression.StringTag(tag.Tag, taggedOk);
+                    }
+
+                    return null;
+                }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Attempts to push a head operation (select first element) into the expression tree without evaluation.
+    /// If the input is a concrete list or list-literal, returns the first element or an empty list when out of bounds.
+    /// Propagates into both branches of a conditional and into string-tagged expressions when possible.
+    /// </summary>
+    /// <param name="expression">The source expression representing a list from which to select the head.</param>
+    /// <returns>
+    /// A structurally transformed expression representing the head selection, or <c>null</c>
+    /// if no structural reduction is applicable.
+    /// </returns>
+    public static Expression? ApplyKernelFunctionHeadToAllBranches(Expression expression)
+    {
+        if (TryReduceSelectListItem(expression, 0) is { } selected)
+        {
+            return selected;
+        }
+
+        switch (expression)
+        {
+            case Expression.Conditional cond:
+                {
+                    if (ApplyKernelFunctionHeadToAllBranches(cond.FalseBranch) is { } falseOk &&
+                        ApplyKernelFunctionHeadToAllBranches(cond.TrueBranch) is { } trueOk)
+                    {
+                        return Expression.ConditionalInstance(condition: cond.Condition, falseBranch: falseOk, trueBranch: trueOk);
+                    }
+
+                    return null;
+                }
+
+            case Expression.StringTag tag:
+                {
+                    if (ApplyKernelFunctionHeadToAllBranches(tag.Tagged) is { } taggedOk)
+                    {
+                        return new Expression.StringTag(tag.Tag, taggedOk);
+                    }
+
+                    return null;
+                }
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Attempts to select the list item at a given index from the provided expression without
     /// evaluating with a runtime environment. Supports:
     /// - Expression.List: returns the item or EmptyList if out of bounds.
@@ -1142,7 +1387,7 @@ public class ReducePineExpression
     /// - Expression.StringTag: unwraps and attempts on the tagged expression.
     /// Returns null if no structural reduction can be applied.
     /// </summary>
-    private static Expression? TryReduceSelectListItem(Expression inputExpression, int index)
+    public static Expression? TryReduceSelectListItem(Expression inputExpression, int index)
     {
         if (index < 0) index = 0;
 
