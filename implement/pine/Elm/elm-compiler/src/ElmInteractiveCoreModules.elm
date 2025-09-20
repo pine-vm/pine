@@ -921,11 +921,11 @@ map f xs =
 mapHelp : (a -> b) -> List a -> List b -> List b
 mapHelp f remaining acc =
     case remaining of
-        [] ->
-            Pine_kernel.reverse acc
-
         x :: xs ->
             mapHelp f xs (Pine_kernel.concat [ [ f x ], acc ])
+
+        _ ->
+            Pine_kernel.reverse acc
 
 
 indexedMap : (Int -> a -> b) -> List a -> List b
@@ -936,9 +936,6 @@ indexedMap f xs =
 indexedMapHelp : (Int -> a -> b) -> Int -> List a -> List b -> List b
 indexedMapHelp f index xs acc =
     case xs of
-        [] ->
-            Pine_kernel.reverse acc
-
         x :: following ->
             indexedMapHelp
                 f
@@ -946,20 +943,25 @@ indexedMapHelp f index xs acc =
                 following
                 (Pine_kernel.concat [ [ f index x ], acc ])
 
+        _ ->
+            Pine_kernel.reverse acc
+
 
 foldl : (a -> b -> b) -> b -> List a -> b
 foldl func acc list_in_foldl =
     case list_in_foldl of
-        [] ->
-            acc
-
         x :: xs ->
             foldl func (func x acc) xs
+
+        _ ->
+            acc
 
 
 foldr : (a -> b -> b) -> b -> List a -> b
 foldr func acc list =
-    foldl func acc (reverse list)
+    foldl func
+        acc
+        (Pine_kernel.reverse list)
 
 
 filter : (a -> Bool) -> List a -> List a
@@ -1101,11 +1103,11 @@ concat lists =
 concatMap : (a -> List b) -> List a -> List b
 concatMap f list =
     case list of
-        [] ->
-            []
-
         x :: xs ->
             Pine_kernel.concat [ f x, concatMap f xs ]
+
+        _ ->
+            []
 
 
 intersperse : a -> List a -> List a
@@ -1134,40 +1136,30 @@ intersperseHelp acc offset sep xs =
 map2 : (a -> b -> result) -> List a -> List b -> List result
 map2 mapItems listA listB =
     case ( listA, listB ) of
-        ( [], _ ) ->
-            []
-
-        ( _, [] ) ->
-            []
-
         ( x :: xs, y :: ys ) ->
             cons (mapItems x y) (map2 mapItems xs ys)
+
+        _ ->
+            []
 
 
 map3 : (a -> b -> c -> result) -> List a -> List b -> List c -> List result
 map3 mapItems listA listB listC =
     case ( listA, listB, listC ) of
-        ( [], _, _ ) ->
-            []
-
-        ( _, [], _ ) ->
-            []
-
-        ( _, _, [] ) ->
-            []
-
         ( x :: xs, y :: ys, z :: zs ) ->
             cons (mapItems x y z) (map3 mapItems xs ys zs)
+
+        _ ->
+            []
 
 
 isEmpty : List a -> Bool
 isEmpty xs =
-    case xs of
-        [] ->
-            True
+    if Pine_kernel.equal [ Pine_kernel.length xs, 0 ] then
+        True
 
-        _ ->
-            False
+    else
+        False
 
 
 head : List a -> Maybe a
@@ -1176,7 +1168,7 @@ head list =
         x :: xs ->
             Just x
 
-        [] ->
+        _ ->
             Nothing
 
 
@@ -1186,7 +1178,7 @@ tail list =
         x :: xs ->
             Just xs
 
-        [] ->
+        _ ->
             Nothing
 
 
@@ -1930,7 +1922,7 @@ parseInt src =
         '-' ->
             case parseUnsignedInt src 4 of
                 Just unsignedVal ->
-                    Just -unsignedVal
+                    Just (Pine_kernel.int_mul [ -1, unsignedVal ])
 
                 Nothing ->
                     Nothing
@@ -1947,34 +1939,34 @@ parseUnsignedInt : Int -> Int -> Maybe Int
 parseUnsignedInt src offset0 =
     case Pine_kernel.take [ 4, Pine_kernel.skip [ offset0, src ] ] of
         '0' ->
-            parseUnsignedIntRec 0 src (offset0 + 4)
+            parseUnsignedIntRec 0 src (Pine_kernel.int_add [ offset0, 4 ])
 
         '1' ->
-            parseUnsignedIntRec 1 src (offset0 + 4)
+            parseUnsignedIntRec 1 src (Pine_kernel.int_add [ offset0, 4 ])
 
         '2' ->
-            parseUnsignedIntRec 2 src (offset0 + 4)
+            parseUnsignedIntRec 2 src (Pine_kernel.int_add [ offset0, 4 ])
 
         '3' ->
-            parseUnsignedIntRec 3 src (offset0 + 4)
+            parseUnsignedIntRec 3 src (Pine_kernel.int_add [ offset0, 4 ])
 
         '4' ->
-            parseUnsignedIntRec 4 src (offset0 + 4)
+            parseUnsignedIntRec 4 src (Pine_kernel.int_add [ offset0, 4 ])
 
         '5' ->
-            parseUnsignedIntRec 5 src (offset0 + 4)
+            parseUnsignedIntRec 5 src (Pine_kernel.int_add [ offset0, 4 ])
 
         '6' ->
-            parseUnsignedIntRec 6 src (offset0 + 4)
+            parseUnsignedIntRec 6 src (Pine_kernel.int_add [ offset0, 4 ])
 
         '7' ->
-            parseUnsignedIntRec 7 src (offset0 + 4)
+            parseUnsignedIntRec 7 src (Pine_kernel.int_add [ offset0, 4 ])
 
         '8' ->
-            parseUnsignedIntRec 8 src (offset0 + 4)
+            parseUnsignedIntRec 8 src (Pine_kernel.int_add [ offset0, 4 ])
 
         '9' ->
-            parseUnsignedIntRec 9 src (offset0 + 4)
+            parseUnsignedIntRec 9 src (Pine_kernel.int_add [ offset0, 4 ])
 
         _ ->
             Nothing
@@ -1990,34 +1982,34 @@ parseUnsignedIntRec upper src offset0 =
         Just upper
 
     else if Pine_kernel.equal [ nextChar, '0' ] then
-        parseUnsignedIntRec (upper * 10) src (offset0 + 4)
+        parseUnsignedIntRec (Pine_kernel.int_mul [ upper, 10 ]) src (Pine_kernel.int_add [ offset0, 4 ])
 
     else if Pine_kernel.equal [ nextChar, '1' ] then
-        parseUnsignedIntRec (upper * 10 + 1) src (offset0 + 4)
+        parseUnsignedIntRec (Pine_kernel.int_add [ Pine_kernel.int_mul [ upper, 10 ], 1 ]) src (Pine_kernel.int_add [ offset0, 4 ])
 
     else if Pine_kernel.equal [ nextChar, '2' ] then
-        parseUnsignedIntRec (upper * 10 + 2) src (offset0 + 4)
+        parseUnsignedIntRec (Pine_kernel.int_add [ Pine_kernel.int_mul [ upper, 10 ], 2 ]) src (Pine_kernel.int_add [ offset0, 4 ])
 
     else if Pine_kernel.equal [ nextChar, '3' ] then
-        parseUnsignedIntRec (upper * 10 + 3) src (offset0 + 4)
+        parseUnsignedIntRec (Pine_kernel.int_add [ Pine_kernel.int_mul [ upper, 10 ], 3 ]) src (Pine_kernel.int_add [ offset0, 4 ])
 
     else if Pine_kernel.equal [ nextChar, '4' ] then
-        parseUnsignedIntRec (upper * 10 + 4) src (offset0 + 4)
+        parseUnsignedIntRec (Pine_kernel.int_add [ Pine_kernel.int_mul [ upper, 10 ], 4 ]) src (Pine_kernel.int_add [ offset0, 4 ])
 
     else if Pine_kernel.equal [ nextChar, '5' ] then
-        parseUnsignedIntRec (upper * 10 + 5) src (offset0 + 4)
+        parseUnsignedIntRec (Pine_kernel.int_add [ Pine_kernel.int_mul [ upper, 10 ], 5 ]) src (Pine_kernel.int_add [ offset0, 4 ])
 
     else if Pine_kernel.equal [ nextChar, '6' ] then
-        parseUnsignedIntRec (upper * 10 + 6) src (offset0 + 4)
+        parseUnsignedIntRec (Pine_kernel.int_add [ Pine_kernel.int_mul [ upper, 10 ], 6 ]) src (Pine_kernel.int_add [ offset0, 4 ])
 
     else if Pine_kernel.equal [ nextChar, '7' ] then
-        parseUnsignedIntRec (upper * 10 + 7) src (offset0 + 4)
+        parseUnsignedIntRec (Pine_kernel.int_add [ Pine_kernel.int_mul [ upper, 10 ], 7 ]) src (Pine_kernel.int_add [ offset0, 4 ])
 
     else if Pine_kernel.equal [ nextChar, '8' ] then
-        parseUnsignedIntRec (upper * 10 + 8) src (offset0 + 4)
+        parseUnsignedIntRec (Pine_kernel.int_add [ Pine_kernel.int_mul [ upper, 10 ], 8 ]) src (Pine_kernel.int_add [ offset0, 4 ])
 
     else if Pine_kernel.equal [ nextChar, '9' ] then
-        parseUnsignedIntRec (upper * 10 + 9) src (offset0 + 4)
+        parseUnsignedIntRec (Pine_kernel.int_add [ Pine_kernel.int_mul [ upper, 10 ], 9 ]) src (Pine_kernel.int_add [ offset0, 4 ])
 
     else
         Nothing

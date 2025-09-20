@@ -1,6 +1,11 @@
 module Json.Encode exposing (..)
 
 import Array
+import Char
+
+
+type String
+    = String Int
 
 
 type Value
@@ -50,71 +55,385 @@ object =
 
 encode : Int -> Value -> String
 encode indent value =
+    String (Pine_kernel.concat (encodeUtf32ChunksWithoutIndent value))
+
+
+encodeUtf32ChunksWithoutIndent : Value -> List Int
+encodeUtf32ChunksWithoutIndent value =
     case value of
         NullValue ->
-            "null"
+            [ Pine_kernel.concat [ 'n', 'u', 'l', 'l' ] ]
 
-        BoolValue boolVal ->
-            if boolVal then
-                "true"
+        BoolValue True ->
+            [ Pine_kernel.concat [ 't', 'r', 'u', 'e' ] ]
 
-            else
-                "false"
+        BoolValue False ->
+            [ Pine_kernel.concat [ 'f', 'a', 'l', 's', 'e' ] ]
 
         IntValue intVal ->
-            String.fromInt intVal
+            String.toList (String.fromInt intVal)
 
-        StringValue stringVal ->
-            "\"" ++ escapeString stringVal ++ "\""
+        StringValue (String stringBytes) ->
+            [ '"'
+            , Pine_kernel.concat (encodeStringUtf32ChunksFromBytes 0 [] stringBytes)
+            , '"'
+            ]
 
         ArrayValue values ->
-            "[" ++ String.join "," (List.map (encode indent) values) ++ "]"
+            [ '['
+            , Pine_kernel.concat (encodeArrayItemsUtf32ChunksWithoutIndent 0 [] values)
+            , ']'
+            ]
 
         ObjectValue fields ->
-            "{" ++ String.join "," (List.map (encodeField indent) fields) ++ "}"
+            [ '{'
+            , Pine_kernel.concat (encodeFieldsUtf32ChunksWithoutIndent 0 [] fields)
+            , '}'
+            ]
 
-        FloatValue asString ->
-            asString
-
-
-encodeField : Int -> ( String, Value ) -> String
-encodeField indent ( key, value ) =
-    "\"" ++ escapeString key ++ "\":" ++ encode indent value
+        FloatValue (String utf32Bytes) ->
+            [ utf32Bytes ]
 
 
-escapeString : String -> String
-escapeString stringVal =
-    String.concat (List.map escapeChar (String.toList stringVal))
+encodeArrayItemsUtf32ChunksWithoutIndent : Int -> List Value -> List Int -> List Int
+encodeArrayItemsUtf32ChunksWithoutIndent itemIndex encodedChunks items =
+    if Pine_kernel.equal [ Pine_kernel.length items, itemIndex ] then
+        encodedChunks
+
+    else
+        let
+            nextItem =
+                Pine_kernel.head
+                    (Pine_kernel.take [ 1, Pine_kernel.skip [ itemIndex, items ] ])
+        in
+        encodeArrayItemsUtf32ChunksWithoutIndent
+            (Pine_kernel.int_add [ itemIndex, 1 ])
+            (Pine_kernel.concat
+                [ encodedChunks
+                , encodeUtf32ChunksWithoutIndent nextItem
+                , if Pine_kernel.equal [ Pine_kernel.length items, Pine_kernel.int_add [ itemIndex, 1 ] ] then
+                    []
+
+                  else
+                    [ ',' ]
+                ]
+            )
+            items
 
 
-escapeChar : Char -> String
-escapeChar char =
-    case char of
-        '\u{0008}' ->
-            "\\b"
+encodeFieldsUtf32ChunksWithoutIndent : Int -> List Int -> List ( String, Value ) -> List Int
+encodeFieldsUtf32ChunksWithoutIndent fieldIndex encodedChunks fields =
+    if Pine_kernel.equal [ Pine_kernel.length fields, fieldIndex ] then
+        encodedChunks
 
-        '\t' ->
-            "\\t"
+    else
+        let
+            nextField =
+                Pine_kernel.head
+                    (Pine_kernel.take [ 1, Pine_kernel.skip [ fieldIndex, fields ] ])
+        in
+        encodeFieldsUtf32ChunksWithoutIndent
+            (Pine_kernel.int_add [ fieldIndex, 1 ])
+            (Pine_kernel.concat
+                [ encodedChunks
+                , encodeFieldUtf32ChunksWithoutIndent nextField
+                , if Pine_kernel.equal [ Pine_kernel.length fields, Pine_kernel.int_add [ fieldIndex, 1 ] ] then
+                    []
 
-        '\n' ->
-            "\\n"
+                  else
+                    [ ',' ]
+                ]
+            )
+            fields
 
-        '\u{000C}' ->
-            "\\f"
 
-        '\u{000D}' ->
-            "\\r"
+encodeFieldUtf32ChunksWithoutIndent : ( String, Value ) -> List Int
+encodeFieldUtf32ChunksWithoutIndent ( String keyBytes, value ) =
+    [ '"'
+    , Pine_kernel.concat (encodeStringUtf32ChunksFromBytes 0 [] keyBytes)
+    , Pine_kernel.concat [ '"', ':' ]
+    , Pine_kernel.concat (encodeUtf32ChunksWithoutIndent value)
+    ]
 
-        '"' ->
-            "\\\""
 
-        '\\' ->
-            "\\\\"
+encodeStringUtf32ChunksFromBytes : Int -> List Int -> Int -> List Int
+encodeStringUtf32ChunksFromBytes offset encodedChunks sourceBytes =
+    let
+        simpleEnd : Int
+        simpleEnd =
+            advanceUtf32OffsetForSimpleChars sourceBytes offset
 
-        _ ->
-            String.fromChar char
+        simpleLen : Int
+        simpleLen =
+            Pine_kernel.int_add [ simpleEnd, Pine_kernel.int_mul [ offset, -1 ] ]
+
+        simpleSlice =
+            Pine_kernel.take [ simpleLen, Pine_kernel.skip [ offset, sourceBytes ] ]
+
+        chunksWithSimple : List Int
+        chunksWithSimple =
+            if Pine_kernel.equal [ simpleLen, 0 ] then
+                encodedChunks
+
+            else
+                Pine_kernel.concat [ encodedChunks, [ simpleSlice ] ]
+
+        nextChar =
+            Pine_kernel.take [ 4, Pine_kernel.skip [ simpleEnd, sourceBytes ] ]
+    in
+    if Pine_kernel.equal [ Pine_kernel.length nextChar, 0 ] then
+        chunksWithSimple
+
+    else
+        case nextChar of
+            '\u{0008}' ->
+                encodeStringUtf32ChunksFromBytes
+                    (Pine_kernel.int_add [ simpleEnd, 4 ])
+                    (Pine_kernel.concat [ chunksWithSimple, [ '\\', 'b' ] ])
+                    sourceBytes
+
+            '\t' ->
+                encodeStringUtf32ChunksFromBytes
+                    (Pine_kernel.int_add [ simpleEnd, 4 ])
+                    (Pine_kernel.concat [ chunksWithSimple, [ '\\', '\t' ] ])
+                    sourceBytes
+
+            '\n' ->
+                encodeStringUtf32ChunksFromBytes
+                    (Pine_kernel.int_add [ simpleEnd, 4 ])
+                    (Pine_kernel.concat [ chunksWithSimple, [ '\\', '\n' ] ])
+                    sourceBytes
+
+            '\u{000C}' ->
+                encodeStringUtf32ChunksFromBytes
+                    (Pine_kernel.int_add [ simpleEnd, 4 ])
+                    (Pine_kernel.concat [ chunksWithSimple, [ '\\', 'f' ] ])
+                    sourceBytes
+
+            '\u{000D}' ->
+                encodeStringUtf32ChunksFromBytes
+                    (Pine_kernel.int_add [ simpleEnd, 4 ])
+                    (Pine_kernel.concat [ chunksWithSimple, [ '\\', 'r' ] ])
+                    sourceBytes
+
+            '"' ->
+                encodeStringUtf32ChunksFromBytes
+                    (Pine_kernel.int_add [ simpleEnd, 4 ])
+                    (Pine_kernel.concat [ chunksWithSimple, [ '\\', '"' ] ])
+                    sourceBytes
+
+            '\\' ->
+                encodeStringUtf32ChunksFromBytes
+                    (Pine_kernel.int_add [ simpleEnd, 4 ])
+                    (Pine_kernel.concat [ chunksWithSimple, [ '\\', '\\' ] ])
+                    sourceBytes
+
+            _ ->
+                let
+                    code : Int
+                    code =
+                        Char.toCode nextChar
+
+                    unicodeEscape : List Int
+                    unicodeEscape =
+                        if Pine_kernel.int_is_sorted_asc [ 0, code, 0xFFFF ] then
+                            Pine_kernel.concat
+                                [ [ '\\', 'u' ]
+                                , hex4 code
+                                ]
+
+                        else
+                            let
+                                codePrime =
+                                    Pine_kernel.int_add [ code, -0x00010000 ]
+
+                                hi10 =
+                                    Pine_kernel.bit_shift_right [ 10, codePrime ]
+
+                                lo10 =
+                                    Pine_kernel.bit_and [ 0x03FF, codePrime ]
+
+                                hiUnit =
+                                    Pine_kernel.int_add [ 0xD800, hi10 ]
+
+                                loUnit =
+                                    Pine_kernel.int_add [ 0xDC00, lo10 ]
+                            in
+                            Pine_kernel.concat
+                                [ [ '\\', 'u' ]
+                                , hex4 hiUnit
+                                , [ '\\', 'u' ]
+                                , hex4 loUnit
+                                ]
+                in
+                encodeStringUtf32ChunksFromBytes
+                    (Pine_kernel.int_add [ simpleEnd, 4 ])
+                    (Pine_kernel.concat [ chunksWithSimple, unicodeEscape ])
+                    sourceBytes
+
+
+{-| Advance the pointer up to the next char that escaping is needed for.
+This is an optimization to skip over simple characters quickly.
+It assumes that the input is valid UTF-32.
+-}
+advanceUtf32OffsetForSimpleChars : Int -> Int -> Int
+advanceUtf32OffsetForSimpleChars sourceBytes offset =
+    let
+        nextChar =
+            Pine_kernel.take
+                [ 4
+                , Pine_kernel.skip [ offset, sourceBytes ]
+                ]
+    in
+    if Pine_kernel.equal [ Pine_kernel.length nextChar, 0 ] then
+        offset
+
+    else
+        case nextChar of
+            '"' ->
+                offset
+
+            '\\' ->
+                offset
+
+            '\u{0000}' ->
+                offset
+
+            '\u{0001}' ->
+                offset
+
+            '\u{0002}' ->
+                offset
+
+            '\u{0003}' ->
+                offset
+
+            '\u{0004}' ->
+                offset
+
+            '\u{0005}' ->
+                offset
+
+            '\u{0006}' ->
+                offset
+
+            '\u{0007}' ->
+                offset
+
+            '\u{0008}' ->
+                offset
+
+            '\t' ->
+                offset
+
+            '\n' ->
+                offset
+
+            '\u{000B}' ->
+                offset
+
+            '\u{000C}' ->
+                offset
+
+            '\u{000D}' ->
+                offset
+
+            _ ->
+                advanceUtf32OffsetForSimpleChars sourceBytes (Pine_kernel.int_add [ offset, 4 ])
 
 
 float : Float -> Value
 float float =
     FloatValue (String.fromFloat float)
+
+
+hexDigitChar : Int -> Int
+hexDigitChar n =
+    case n of
+        0 ->
+            '0'
+
+        1 ->
+            '1'
+
+        2 ->
+            '2'
+
+        3 ->
+            '3'
+
+        4 ->
+            '4'
+
+        5 ->
+            '5'
+
+        6 ->
+            '6'
+
+        7 ->
+            '7'
+
+        8 ->
+            '8'
+
+        9 ->
+            '9'
+
+        10 ->
+            'A'
+
+        11 ->
+            'B'
+
+        12 ->
+            'C'
+
+        13 ->
+            'D'
+
+        14 ->
+            'E'
+
+        15 ->
+            'F'
+
+        _ ->
+            '?'
+
+
+hex4 : Int -> List Int
+hex4 n =
+    let
+        uintBytes =
+            Pine_kernel.skip [ 1, n ]
+
+        n3 =
+            Pine_kernel.bit_and
+                [ Pine_kernel.skip [ 1, 15 ]
+                , Pine_kernel.bit_shift_right [ 12, uintBytes ]
+                ]
+
+        n2 =
+            Pine_kernel.bit_and
+                [ Pine_kernel.skip [ 1, 15 ]
+                , Pine_kernel.bit_shift_right [ 8, uintBytes ]
+                ]
+
+        n1 =
+            Pine_kernel.bit_and
+                [ Pine_kernel.skip [ 1, 15 ]
+                , Pine_kernel.bit_shift_right [ 4, uintBytes ]
+                ]
+
+        n0 =
+            Pine_kernel.bit_and
+                [ Pine_kernel.skip [ 1, 15 ]
+                , uintBytes
+                ]
+    in
+    [ hexDigitChar n3
+    , hexDigitChar n2
+    , hexDigitChar n1
+    , hexDigitChar n0
+    ]

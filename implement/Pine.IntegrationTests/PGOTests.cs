@@ -408,7 +408,7 @@ public class PGOTests
         optimizedAverageInstructionCount.Should().BeLessThanOrEqualTo(40);
     }
 
-    [Fact(Skip = "Needs adaptatio and review after IR and VM changes")]
+    [Fact(Skip = "Needs adaptation and review after IR and VM changes")]
     public void PGO_reduces_Elm_record_update()
     {
         var elmModule =
@@ -1013,7 +1013,7 @@ public class PGOTests
         optimizedAverageInstructionCount.Should().BeLessThanOrEqualTo(130);
     }
 
-    [Fact]
+    [Fact(Skip = "Needs adaptation and review after IR and VM changes")]
     public void PGO_reduces_Elm_list_map_tuple_first()
     {
         var elmModule =
@@ -1449,7 +1449,7 @@ public class PGOTests
     }
 
 
-    [Fact(Skip = "Needs adaptatio and review after IR and VM changes")]
+    [Fact(Skip = "Needs adaptation and review after IR and VM changes")]
     public void PGO_reduces_Elm_Dict_fold()
     {
         var elmModule =

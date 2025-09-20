@@ -216,7 +216,7 @@ index targetIndex decoder jsonValue =
                     Err
                         (Failure
                             ("Expecting an array with at least "
-                                ++ String.fromInt (targetIndex + 1)
+                                ++ String.fromInt (Pine_kernel.int_add [ targetIndex, 1 ])
                                 ++ " entries"
                             )
                             jsonValue
@@ -668,7 +668,7 @@ parseValue srcBytes offset0 =
 
             '"' ->
                 -- Parse a JSON string (the leading quote is consumed here)
-                case parseJsonStringLiteral srcBytes (offset1 + 4) of
+                case parseJsonStringLiteral srcBytes (Pine_kernel.int_add [ offset1, 4 ]) of
                     ( Ok str, offset2 ) ->
                         ( Ok (StringValue str), offset2 )
 
@@ -677,7 +677,7 @@ parseValue srcBytes offset0 =
 
             '[' ->
                 -- Parse an array (leading '[' is already consumed).
-                case parseArray srcBytes (offset1 + 4) of
+                case parseArray srcBytes (Pine_kernel.int_add [ offset1, 4 ]) of
                     ( Ok values, offset2 ) ->
                         ( Ok (ArrayValue values), offset2 )
 
@@ -686,7 +686,7 @@ parseValue srcBytes offset0 =
 
             '{' ->
                 -- Parse an object (leading '{' is already consumed).
-                case parseObjectRec [] srcBytes (offset1 + 4) of
+                case parseObjectRec [] srcBytes (Pine_kernel.int_add [ offset1, 4 ]) of
                     ( Ok fields, offset2 ) ->
                         ( Ok (ObjectValue fields), offset2 )
 
@@ -716,7 +716,7 @@ parseNull srcBytes offset0 =
             Pine_kernel.take [ 16, Pine_kernel.skip [ offset0, srcBytes ] ]
     in
     if Pine_kernel.equal [ nextChars, Pine_kernel.concat [ 'n', 'u', 'l', 'l' ] ] then
-        ( Ok NullValue, offset0 + 16 )
+        ( Ok NullValue, Pine_kernel.int_add [ offset0, 16 ] )
 
     else
         ( Err "Expecting 'null'", offset0 )
@@ -730,7 +730,7 @@ parseTrue srcBytes offset0 =
             Pine_kernel.take [ 16, Pine_kernel.skip [ offset0, srcBytes ] ]
     in
     if Pine_kernel.equal [ nextChars, Pine_kernel.concat [ 't', 'r', 'u', 'e' ] ] then
-        ( Ok (BoolValue True), offset0 + 16 )
+        ( Ok (BoolValue True), Pine_kernel.int_add [ offset0, 16 ] )
 
     else
         ( Err "Expecting 'true'", offset0 )
@@ -744,7 +744,7 @@ parseFalse srcBytes offset0 =
             Pine_kernel.take [ 20, Pine_kernel.skip [ offset0, srcBytes ] ]
     in
     if Pine_kernel.equal [ nextChars, Pine_kernel.concat [ 'f', 'a', 'l', 's', 'e' ] ] then
-        ( Ok (BoolValue False), offset0 + 20 )
+        ( Ok (BoolValue False), Pine_kernel.int_add [ offset0, 20 ] )
 
     else
         ( Err "Expecting 'false'", offset0 )
@@ -832,7 +832,7 @@ parseArray srcBytes offset0 =
 
     else if Pine_kernel.equal [ nextChar, ']' ] then
         -- If it's a ']', that means an empty array: "[]"
-        ( Ok [], offset1 + 4 )
+        ( Ok [], Pine_kernel.int_add [ offset1, 4 ] )
 
     else
         -- Otherwise, parse one or more items
@@ -871,11 +871,11 @@ parseArrayItems itemsBefore srcBytes offset0 =
                 case nextChar of
                     ',' ->
                         -- If we see a comma, skip it and parse the next item
-                        parseArrayItems items srcBytes (offset1 + 4)
+                        parseArrayItems items srcBytes (Pine_kernel.int_add [ offset1, 4 ])
 
                     ']' ->
                         -- End of array
-                        ( Ok items, offset1 + 4 )
+                        ( Ok items, Pine_kernel.int_add [ offset1, 4 ] )
 
                     _ ->
                         ( Err ("Expecting ',' or ']', got '" ++ String.fromChar nextChar ++ "'"), offset1 )
@@ -901,13 +901,13 @@ parseObjectRec fieldsBefore srcBytes offset0 =
         case nextChar of
             -- If it's a '}', that means an empty object: "{}"
             '}' ->
-                ( Ok fieldsBefore, offset1 + 4 )
+                ( Ok fieldsBefore, Pine_kernel.int_add [ offset1, 4 ] )
 
             -- Otherwise, parse one or more key-value pairs
             '"' ->
                 let
                     ( keyResult, offsetAfterKey ) =
-                        parseJsonStringLiteral srcBytes (offset1 + 4)
+                        parseJsonStringLiteral srcBytes (Pine_kernel.int_add [ offset1, 4 ])
                 in
                 case keyResult of
                     Err msg ->
@@ -929,7 +929,7 @@ parseObjectRec fieldsBefore srcBytes offset0 =
                                 -- If we see a colon, skip it and parse the value
                                 let
                                     offset3 =
-                                        skipWhitespace srcBytes (offset2 + 4)
+                                        skipWhitespace srcBytes (Pine_kernel.int_add [ offset2, 4 ])
 
                                     ( valResult, offsetAfterVal ) =
                                         parseValue srcBytes offset3
@@ -960,11 +960,11 @@ parseObjectRec fieldsBefore srcBytes offset0 =
                                             case nextChar3 of
                                                 ',' ->
                                                     -- If we see a comma, skip it and parse the next item
-                                                    parseObjectRec fields srcBytes (offset4 + 4)
+                                                    parseObjectRec fields srcBytes (Pine_kernel.int_add [ offset4, 4 ])
 
                                                 '}' ->
                                                     -- End of object
-                                                    ( Ok fields, offset4 + 4 )
+                                                    ( Ok fields, Pine_kernel.int_add [ offset4, 4 ] )
 
                                                 _ ->
                                                     ( Err ("Expecting ',' or '}', got '" ++ String.fromChar nextChar3 ++ "'"), offset4 )
@@ -1014,11 +1014,13 @@ parseJsonStringLiteral sourceBytes offset =
 parseJsonStringSegments : Int -> Int -> List Int -> ( Result String (List Int), Int )
 parseJsonStringSegments sourceBytes offset slicesSoFar =
     let
+        simpleSegmentEndOffset : Int
         simpleSegmentEndOffset =
             parseJsonStringSimpleChars sourceBytes offset
 
+        simpleSegmentSliceLength : Int
         simpleSegmentSliceLength =
-            simpleSegmentEndOffset - offset
+            Pine_kernel.int_add [ simpleSegmentEndOffset, Pine_kernel.int_mul [ offset, -1 ] ]
 
         simpleSegmentSlice =
             Pine_kernel.take
@@ -1092,49 +1094,49 @@ parseEscape sourceBytes offset =
         nextChar =
             Pine_kernel.take
                 [ 4
-                , Pine_kernel.skip [ offset + 4, sourceBytes ]
+                , Pine_kernel.skip [ Pine_kernel.int_add [ offset, 4 ], sourceBytes ]
                 ]
     in
     case nextChar of
         -- Standard JSON escapes
         'n' ->
             -- Append newline and continue
-            ( Ok '\n', offset + 8 )
+            ( Ok '\n', Pine_kernel.int_add [ offset, 8 ] )
 
         'r' ->
-            ( Ok '\u{000D}', offset + 8 )
+            ( Ok '\u{000D}', Pine_kernel.int_add [ offset, 8 ] )
 
         't' ->
-            ( Ok '\t', offset + 8 )
+            ( Ok '\t', Pine_kernel.int_add [ offset, 8 ] )
 
         '"' ->
-            ( Ok '"', offset + 8 )
+            ( Ok '"', Pine_kernel.int_add [ offset, 8 ] )
 
         '\\' ->
-            ( Ok '\\', offset + 8 )
+            ( Ok '\\', Pine_kernel.int_add [ offset, 8 ] )
 
         '/' ->
-            ( Ok '/', offset + 8 )
+            ( Ok '/', Pine_kernel.int_add [ offset, 8 ] )
 
         'b' ->
             -- Typically backspace is ASCII 8, but some folks map it differently.
             -- For now, let's do ASCII 8 (BS).
-            ( Ok (Char.fromCode 8), offset + 8 )
+            ( Ok (Char.fromCode 8), Pine_kernel.int_add [ offset, 8 ] )
 
         'f' ->
             -- Typically form feed is ASCII 12.
-            ( Ok (Char.fromCode 12), offset + 8 )
+            ( Ok (Char.fromCode 12), Pine_kernel.int_add [ offset, 8 ] )
 
         'u' ->
             -- JSON allows \\uXXXX (4 hex digits)
             parseUnicodeEscape
                 sourceBytes
-                (offset + 8)
+                (Pine_kernel.int_add [ offset, 8 ])
 
         -- Unrecognized escape
         _ ->
             ( Err ("Unrecognized escape sequence: " ++ String.fromChar nextChar)
-            , offset + 8
+            , Pine_kernel.int_add [ offset, 8 ]
             )
 
 
@@ -1162,7 +1164,7 @@ parseUnicodeEscape sourceBytes offset =
         followingTwoChars =
             Pine_kernel.take
                 [ 8
-                , Pine_kernel.skip [ offset + 16, sourceBytes ]
+                , Pine_kernel.skip [ Pine_kernel.int_add [ offset, 16 ], sourceBytes ]
                 ]
     in
     if Pine_kernel.equal [ offsetAfterHex, 16 ] then
@@ -1175,7 +1177,7 @@ parseUnicodeEscape sourceBytes offset =
                     fourHexChars2 =
                         Pine_kernel.take
                             [ 16
-                            , Pine_kernel.skip [ offset + 24, sourceBytes ]
+                            , Pine_kernel.skip [ Pine_kernel.int_add [ offset, 24 ], sourceBytes ]
                             ]
 
                     ( codeUnit2, offsetAfterHex2 ) =
@@ -1194,12 +1196,23 @@ parseUnicodeEscape sourceBytes offset =
                         -- Combine into a single code point
                         let
                             fullCodePoint =
-                                0x00010000
-                                    + ((hi - 0xD800) * 0x0400)
-                                    + (lo - 0xDC00)
+                                Pine_kernel.int_add
+                                    [ 0x00010000
+                                    , Pine_kernel.int_mul
+                                        [ Pine_kernel.int_add [ hi, -0xD800 ]
+                                        , 0x0400
+                                        ]
+                                    , lo
+                                    , -0xDC00
+                                    ]
                         in
                         ( Ok (Char.fromCode fullCodePoint)
-                        , offset + 16 + 8 + 16
+                        , Pine_kernel.int_add
+                            [ offset
+                            , 16
+                            , 8
+                            , 16
+                            ]
                         )
 
                     else
@@ -1208,27 +1221,39 @@ parseUnicodeEscape sourceBytes offset =
                         -- Option B: throw an error.
                         -- This example will just treat the high code as a normal char:
                         ( Ok (Char.fromCode hi)
-                        , offset + 16
+                        , Pine_kernel.int_add
+                            [ offset
+                            , 16
+                            ]
                         )
 
                 else
                     -- The next \u did not have 4 valid hex digits
                     ( Err "Unexpected end of input in second \\u of a surrogate pair"
-                    , offset + 16 + 8 + 24
+                    , Pine_kernel.int_add
+                        [ offset
+                        , 16
+                        , 8
+                        , 24
+                        ]
                     )
 
             else
                 -- No second "\u"—so decode `hi` as-is.
-                ( Ok (Char.fromCode hi), offset + 16 )
+                ( Ok (Char.fromCode hi)
+                , Pine_kernel.int_add [ offset, 16 ]
+                )
 
         else
             -- Not a high surrogate, just parse `\\uXXXX` as a single character
-            ( Ok (Char.fromCode hi), offset + 16 )
+            ( Ok (Char.fromCode hi)
+            , Pine_kernel.int_add [ offset, 16 ]
+            )
 
     else
         -- We did not get 4 valid hex digits
         ( Err "Unexpected end of input in \\u escape (need 4 hex digits)"
-        , offset + 6
+        , Pine_kernel.int_add [ offset, 6 ]
         )
 
 
@@ -1248,7 +1273,7 @@ parseInt srcBytes offset0 =
         in
         case unsignedResult of
             Ok unsignedVal ->
-                ( Ok -unsignedVal
+                ( Ok (Pine_kernel.int_mul [ -1, unsignedVal ])
                 , offset1
                 )
 
@@ -1266,34 +1291,34 @@ parseUnsignedInt : Int -> Int -> ( Result String Int, Int )
 parseUnsignedInt srcBytes offset0 =
     case Pine_kernel.take [ 4, Pine_kernel.skip [ offset0, srcBytes ] ] of
         '0' ->
-            ( Ok 0, offset0 + 4 )
+            ( Ok 0, Pine_kernel.int_add [ offset0, 4 ] )
 
         '1' ->
-            parseUnsignedIntRec 1 srcBytes (offset0 + 4)
+            parseUnsignedIntRec 1 srcBytes (Pine_kernel.int_add [ offset0, 4 ])
 
         '2' ->
-            parseUnsignedIntRec 2 srcBytes (offset0 + 4)
+            parseUnsignedIntRec 2 srcBytes (Pine_kernel.int_add [ offset0, 4 ])
 
         '3' ->
-            parseUnsignedIntRec 3 srcBytes (offset0 + 4)
+            parseUnsignedIntRec 3 srcBytes (Pine_kernel.int_add [ offset0, 4 ])
 
         '4' ->
-            parseUnsignedIntRec 4 srcBytes (offset0 + 4)
+            parseUnsignedIntRec 4 srcBytes (Pine_kernel.int_add [ offset0, 4 ])
 
         '5' ->
-            parseUnsignedIntRec 5 srcBytes (offset0 + 4)
+            parseUnsignedIntRec 5 srcBytes (Pine_kernel.int_add [ offset0, 4 ])
 
         '6' ->
-            parseUnsignedIntRec 6 srcBytes (offset0 + 4)
+            parseUnsignedIntRec 6 srcBytes (Pine_kernel.int_add [ offset0, 4 ])
 
         '7' ->
-            parseUnsignedIntRec 7 srcBytes (offset0 + 4)
+            parseUnsignedIntRec 7 srcBytes (Pine_kernel.int_add [ offset0, 4 ])
 
         '8' ->
-            parseUnsignedIntRec 8 srcBytes (offset0 + 4)
+            parseUnsignedIntRec 8 srcBytes (Pine_kernel.int_add [ offset0, 4 ])
 
         '9' ->
-            parseUnsignedIntRec 9 srcBytes (offset0 + 4)
+            parseUnsignedIntRec 9 srcBytes (Pine_kernel.int_add [ offset0, 4 ])
 
         _ ->
             ( Err "Expecting a digit", offset0 )
@@ -1303,34 +1328,64 @@ parseUnsignedIntRec : Int -> Int -> Int -> ( Result String Int, Int )
 parseUnsignedIntRec upper srcBytes offset0 =
     case Pine_kernel.take [ 4, Pine_kernel.skip [ offset0, srcBytes ] ] of
         '0' ->
-            parseUnsignedIntRec (upper * 10) srcBytes (offset0 + 4)
+            parseUnsignedIntRec
+                (Pine_kernel.int_mul [ upper, 10 ])
+                srcBytes
+                (Pine_kernel.int_add [ offset0, 4 ])
 
         '1' ->
-            parseUnsignedIntRec (upper * 10 + 1) srcBytes (offset0 + 4)
+            parseUnsignedIntRec
+                (Pine_kernel.int_add [ Pine_kernel.int_mul [ upper, 10 ], 1 ])
+                srcBytes
+                (Pine_kernel.int_add [ offset0, 4 ])
 
         '2' ->
-            parseUnsignedIntRec (upper * 10 + 2) srcBytes (offset0 + 4)
+            parseUnsignedIntRec
+                (Pine_kernel.int_add [ Pine_kernel.int_mul [ upper, 10 ], 2 ])
+                srcBytes
+                (Pine_kernel.int_add [ offset0, 4 ])
 
         '3' ->
-            parseUnsignedIntRec (upper * 10 + 3) srcBytes (offset0 + 4)
+            parseUnsignedIntRec
+                (Pine_kernel.int_add [ Pine_kernel.int_mul [ upper, 10 ], 3 ])
+                srcBytes
+                (Pine_kernel.int_add [ offset0, 4 ])
 
         '4' ->
-            parseUnsignedIntRec (upper * 10 + 4) srcBytes (offset0 + 4)
+            parseUnsignedIntRec
+                (Pine_kernel.int_add [ Pine_kernel.int_mul [ upper, 10 ], 4 ])
+                srcBytes
+                (Pine_kernel.int_add [ offset0, 4 ])
 
         '5' ->
-            parseUnsignedIntRec (upper * 10 + 5) srcBytes (offset0 + 4)
+            parseUnsignedIntRec
+                (Pine_kernel.int_add [ Pine_kernel.int_mul [ upper, 10 ], 5 ])
+                srcBytes
+                (Pine_kernel.int_add [ offset0, 4 ])
 
         '6' ->
-            parseUnsignedIntRec (upper * 10 + 6) srcBytes (offset0 + 4)
+            parseUnsignedIntRec
+                (Pine_kernel.int_add [ Pine_kernel.int_mul [ upper, 10 ], 6 ])
+                srcBytes
+                (Pine_kernel.int_add [ offset0, 4 ])
 
         '7' ->
-            parseUnsignedIntRec (upper * 10 + 7) srcBytes (offset0 + 4)
+            parseUnsignedIntRec
+                (Pine_kernel.int_add [ Pine_kernel.int_mul [ upper, 10 ], 7 ])
+                srcBytes
+                (Pine_kernel.int_add [ offset0, 4 ])
 
         '8' ->
-            parseUnsignedIntRec (upper * 10 + 8) srcBytes (offset0 + 4)
+            parseUnsignedIntRec
+                (Pine_kernel.int_add [ Pine_kernel.int_mul [ upper, 10 ], 8 ])
+                srcBytes
+                (Pine_kernel.int_add [ offset0, 4 ])
 
         '9' ->
-            parseUnsignedIntRec (upper * 10 + 9) srcBytes (offset0 + 4)
+            parseUnsignedIntRec
+                (Pine_kernel.int_add [ Pine_kernel.int_mul [ upper, 10 ], 9 ])
+                srcBytes
+                (Pine_kernel.int_add [ offset0, 4 ])
 
         _ ->
             ( Ok upper, offset0 )
@@ -1340,70 +1395,70 @@ convert1OrMoreHexadecimal : Int -> Int -> ( Int, Int )
 convert1OrMoreHexadecimal offset srcBytes =
     case Pine_kernel.take [ 4, Pine_kernel.skip [ offset, srcBytes ] ] of
         '0' ->
-            convert0OrMoreHexadecimal 0 (offset + 4) srcBytes
+            convert0OrMoreHexadecimal 0 (Pine_kernel.int_add [ offset, 4 ]) srcBytes
 
         '1' ->
-            convert0OrMoreHexadecimal 1 (offset + 4) srcBytes
+            convert0OrMoreHexadecimal 1 (Pine_kernel.int_add [ offset, 4 ]) srcBytes
 
         '2' ->
-            convert0OrMoreHexadecimal 2 (offset + 4) srcBytes
+            convert0OrMoreHexadecimal 2 (Pine_kernel.int_add [ offset, 4 ]) srcBytes
 
         '3' ->
-            convert0OrMoreHexadecimal 3 (offset + 4) srcBytes
+            convert0OrMoreHexadecimal 3 (Pine_kernel.int_add [ offset, 4 ]) srcBytes
 
         '4' ->
-            convert0OrMoreHexadecimal 4 (offset + 4) srcBytes
+            convert0OrMoreHexadecimal 4 (Pine_kernel.int_add [ offset, 4 ]) srcBytes
 
         '5' ->
-            convert0OrMoreHexadecimal 5 (offset + 4) srcBytes
+            convert0OrMoreHexadecimal 5 (Pine_kernel.int_add [ offset, 4 ]) srcBytes
 
         '6' ->
-            convert0OrMoreHexadecimal 6 (offset + 4) srcBytes
+            convert0OrMoreHexadecimal 6 (Pine_kernel.int_add [ offset, 4 ]) srcBytes
 
         '7' ->
-            convert0OrMoreHexadecimal 7 (offset + 4) srcBytes
+            convert0OrMoreHexadecimal 7 (Pine_kernel.int_add [ offset, 4 ]) srcBytes
 
         '8' ->
-            convert0OrMoreHexadecimal 8 (offset + 4) srcBytes
+            convert0OrMoreHexadecimal 8 (Pine_kernel.int_add [ offset, 4 ]) srcBytes
 
         '9' ->
-            convert0OrMoreHexadecimal 9 (offset + 4) srcBytes
+            convert0OrMoreHexadecimal 9 (Pine_kernel.int_add [ offset, 4 ]) srcBytes
 
         'a' ->
-            convert0OrMoreHexadecimal 10 (offset + 4) srcBytes
+            convert0OrMoreHexadecimal 10 (Pine_kernel.int_add [ offset, 4 ]) srcBytes
 
         'A' ->
-            convert0OrMoreHexadecimal 10 (offset + 4) srcBytes
+            convert0OrMoreHexadecimal 10 (Pine_kernel.int_add [ offset, 4 ]) srcBytes
 
         'b' ->
-            convert0OrMoreHexadecimal 11 (offset + 4) srcBytes
+            convert0OrMoreHexadecimal 11 (Pine_kernel.int_add [ offset, 4 ]) srcBytes
 
         'B' ->
-            convert0OrMoreHexadecimal 11 (offset + 4) srcBytes
+            convert0OrMoreHexadecimal 11 (Pine_kernel.int_add [ offset, 4 ]) srcBytes
 
         'c' ->
-            convert0OrMoreHexadecimal 12 (offset + 4) srcBytes
+            convert0OrMoreHexadecimal 12 (Pine_kernel.int_add [ offset, 4 ]) srcBytes
 
         'C' ->
-            convert0OrMoreHexadecimal 12 (offset + 4) srcBytes
+            convert0OrMoreHexadecimal 12 (Pine_kernel.int_add [ offset, 4 ]) srcBytes
 
         'd' ->
-            convert0OrMoreHexadecimal 13 (offset + 4) srcBytes
+            convert0OrMoreHexadecimal 13 (Pine_kernel.int_add [ offset, 4 ]) srcBytes
 
         'D' ->
-            convert0OrMoreHexadecimal 13 (offset + 4) srcBytes
+            convert0OrMoreHexadecimal 13 (Pine_kernel.int_add [ offset, 4 ]) srcBytes
 
         'e' ->
-            convert0OrMoreHexadecimal 14 (offset + 4) srcBytes
+            convert0OrMoreHexadecimal 14 (Pine_kernel.int_add [ offset, 4 ]) srcBytes
 
         'E' ->
-            convert0OrMoreHexadecimal 14 (offset + 4) srcBytes
+            convert0OrMoreHexadecimal 14 (Pine_kernel.int_add [ offset, 4 ]) srcBytes
 
         'f' ->
-            convert0OrMoreHexadecimal 15 (offset + 4) srcBytes
+            convert0OrMoreHexadecimal 15 (Pine_kernel.int_add [ offset, 4 ]) srcBytes
 
         'F' ->
-            convert0OrMoreHexadecimal 15 (offset + 4) srcBytes
+            convert0OrMoreHexadecimal 15 (Pine_kernel.int_add [ offset, 4 ]) srcBytes
 
         _ ->
             ( 0, -1 )
@@ -1422,70 +1477,136 @@ convert0OrMoreHexadecimal soFar offset srcBytes =
     else
         case nextChar of
             '0' ->
-                convert0OrMoreHexadecimal (soFar * 16) (offset + 4) srcBytes
+                convert0OrMoreHexadecimal
+                    (Pine_kernel.int_mul [ soFar, 16 ])
+                    (Pine_kernel.int_add [ offset, 4 ])
+                    srcBytes
 
             '1' ->
-                convert0OrMoreHexadecimal (soFar * 16 + 1) (offset + 4) srcBytes
+                convert0OrMoreHexadecimal
+                    (Pine_kernel.int_add [ Pine_kernel.int_mul [ soFar, 16 ], 1 ])
+                    (Pine_kernel.int_add [ offset, 4 ])
+                    srcBytes
 
             '2' ->
-                convert0OrMoreHexadecimal (soFar * 16 + 2) (offset + 4) srcBytes
+                convert0OrMoreHexadecimal
+                    (Pine_kernel.int_add [ Pine_kernel.int_mul [ soFar, 16 ], 2 ])
+                    (Pine_kernel.int_add [ offset, 4 ])
+                    srcBytes
 
             '3' ->
-                convert0OrMoreHexadecimal (soFar * 16 + 3) (offset + 4) srcBytes
+                convert0OrMoreHexadecimal
+                    (Pine_kernel.int_add [ Pine_kernel.int_mul [ soFar, 16 ], 3 ])
+                    (Pine_kernel.int_add [ offset, 4 ])
+                    srcBytes
 
             '4' ->
-                convert0OrMoreHexadecimal (soFar * 16 + 4) (offset + 4) srcBytes
+                convert0OrMoreHexadecimal
+                    (Pine_kernel.int_add [ Pine_kernel.int_mul [ soFar, 16 ], 4 ])
+                    (Pine_kernel.int_add [ offset, 4 ])
+                    srcBytes
 
             '5' ->
-                convert0OrMoreHexadecimal (soFar * 16 + 5) (offset + 4) srcBytes
+                convert0OrMoreHexadecimal
+                    (Pine_kernel.int_add [ Pine_kernel.int_mul [ soFar, 16 ], 5 ])
+                    (Pine_kernel.int_add [ offset, 4 ])
+                    srcBytes
 
             '6' ->
-                convert0OrMoreHexadecimal (soFar * 16 + 6) (offset + 4) srcBytes
+                convert0OrMoreHexadecimal
+                    (Pine_kernel.int_add [ Pine_kernel.int_mul [ soFar, 16 ], 6 ])
+                    (Pine_kernel.int_add [ offset, 4 ])
+                    srcBytes
 
             '7' ->
-                convert0OrMoreHexadecimal (soFar * 16 + 7) (offset + 4) srcBytes
+                convert0OrMoreHexadecimal
+                    (Pine_kernel.int_add [ Pine_kernel.int_mul [ soFar, 16 ], 7 ])
+                    (Pine_kernel.int_add [ offset, 4 ])
+                    srcBytes
 
             '8' ->
-                convert0OrMoreHexadecimal (soFar * 16 + 8) (offset + 4) srcBytes
+                convert0OrMoreHexadecimal
+                    (Pine_kernel.int_add [ Pine_kernel.int_mul [ soFar, 16 ], 8 ])
+                    (Pine_kernel.int_add [ offset, 4 ])
+                    srcBytes
 
             '9' ->
-                convert0OrMoreHexadecimal (soFar * 16 + 9) (offset + 4) srcBytes
+                convert0OrMoreHexadecimal
+                    (Pine_kernel.int_add [ Pine_kernel.int_mul [ soFar, 16 ], 9 ])
+                    (Pine_kernel.int_add [ offset, 4 ])
+                    srcBytes
 
             'a' ->
-                convert0OrMoreHexadecimal (soFar * 16 + 10) (offset + 4) srcBytes
+                convert0OrMoreHexadecimal
+                    (Pine_kernel.int_add [ Pine_kernel.int_mul [ soFar, 16 ], 10 ])
+                    (Pine_kernel.int_add [ offset, 4 ])
+                    srcBytes
 
             'A' ->
-                convert0OrMoreHexadecimal (soFar * 16 + 10) (offset + 4) srcBytes
+                convert0OrMoreHexadecimal
+                    (Pine_kernel.int_add [ Pine_kernel.int_mul [ soFar, 16 ], 10 ])
+                    (Pine_kernel.int_add [ offset, 4 ])
+                    srcBytes
 
             'b' ->
-                convert0OrMoreHexadecimal (soFar * 16 + 11) (offset + 4) srcBytes
+                convert0OrMoreHexadecimal
+                    (Pine_kernel.int_add [ Pine_kernel.int_mul [ soFar, 16 ], 11 ])
+                    (Pine_kernel.int_add [ offset, 4 ])
+                    srcBytes
 
             'B' ->
-                convert0OrMoreHexadecimal (soFar * 16 + 11) (offset + 4) srcBytes
+                convert0OrMoreHexadecimal
+                    (Pine_kernel.int_add [ Pine_kernel.int_mul [ soFar, 16 ], 11 ])
+                    (Pine_kernel.int_add [ offset, 4 ])
+                    srcBytes
 
             'c' ->
-                convert0OrMoreHexadecimal (soFar * 16 + 12) (offset + 4) srcBytes
+                convert0OrMoreHexadecimal
+                    (Pine_kernel.int_add [ Pine_kernel.int_mul [ soFar, 16 ], 12 ])
+                    (Pine_kernel.int_add [ offset, 4 ])
+                    srcBytes
 
             'C' ->
-                convert0OrMoreHexadecimal (soFar * 16 + 12) (offset + 4) srcBytes
+                convert0OrMoreHexadecimal
+                    (Pine_kernel.int_add [ Pine_kernel.int_mul [ soFar, 16 ], 12 ])
+                    (Pine_kernel.int_add [ offset, 4 ])
+                    srcBytes
 
             'd' ->
-                convert0OrMoreHexadecimal (soFar * 16 + 13) (offset + 4) srcBytes
+                convert0OrMoreHexadecimal
+                    (Pine_kernel.int_add [ Pine_kernel.int_mul [ soFar, 16 ], 13 ])
+                    (Pine_kernel.int_add [ offset, 4 ])
+                    srcBytes
 
             'D' ->
-                convert0OrMoreHexadecimal (soFar * 16 + 13) (offset + 4) srcBytes
+                convert0OrMoreHexadecimal
+                    (Pine_kernel.int_add [ Pine_kernel.int_mul [ soFar, 16 ], 13 ])
+                    (Pine_kernel.int_add [ offset, 4 ])
+                    srcBytes
 
             'e' ->
-                convert0OrMoreHexadecimal (soFar * 16 + 14) (offset + 4) srcBytes
+                convert0OrMoreHexadecimal
+                    (Pine_kernel.int_add [ Pine_kernel.int_mul [ soFar, 16 ], 14 ])
+                    (Pine_kernel.int_add [ offset, 4 ])
+                    srcBytes
 
             'E' ->
-                convert0OrMoreHexadecimal (soFar * 16 + 14) (offset + 4) srcBytes
+                convert0OrMoreHexadecimal
+                    (Pine_kernel.int_add [ Pine_kernel.int_mul [ soFar, 16 ], 14 ])
+                    (Pine_kernel.int_add [ offset, 4 ])
+                    srcBytes
 
             'f' ->
-                convert0OrMoreHexadecimal (soFar * 16 + 15) (offset + 4) srcBytes
+                convert0OrMoreHexadecimal
+                    (Pine_kernel.int_add [ Pine_kernel.int_mul [ soFar, 16 ], 15 ])
+                    (Pine_kernel.int_add [ offset, 4 ])
+                    srcBytes
 
             'F' ->
-                convert0OrMoreHexadecimal (soFar * 16 + 15) (offset + 4) srcBytes
+                convert0OrMoreHexadecimal
+                    (Pine_kernel.int_add [ Pine_kernel.int_mul [ soFar, 16 ], 15 ])
+                    (Pine_kernel.int_add [ offset, 4 ])
+                    srcBytes
 
             _ ->
                 ( 0, -1 )
@@ -1502,16 +1623,16 @@ skipWhitespace strBytes offset =
     in
     case nextChar of
         ' ' ->
-            skipWhitespace strBytes (offset + 4)
+            skipWhitespace strBytes (Pine_kernel.int_add [ offset, 4 ])
 
         '\t' ->
-            skipWhitespace strBytes (offset + 4)
+            skipWhitespace strBytes (Pine_kernel.int_add [ offset, 4 ])
 
         '\n' ->
-            skipWhitespace strBytes (offset + 4)
+            skipWhitespace strBytes (Pine_kernel.int_add [ offset, 4 ])
 
         '\u{000D}' ->
-            skipWhitespace strBytes (offset + 4)
+            skipWhitespace strBytes (Pine_kernel.int_add [ offset, 4 ])
 
         _ ->
             offset

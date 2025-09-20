@@ -1,4 +1,4 @@
-effect module Time where { subscription = MySub } exposing
+module Time exposing
     ( Month(..)
     , Posix
     , Weekday(..)
@@ -9,9 +9,7 @@ effect module Time where { subscription = MySub } exposing
     , utc
     )
 
-import Basics exposing (..)
 import Dict
-import List exposing ((::))
 
 
 type Posix
