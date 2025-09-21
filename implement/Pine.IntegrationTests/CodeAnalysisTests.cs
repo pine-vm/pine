@@ -905,8 +905,13 @@ public class CodeAnalysisTests
                         GT
 
                 else if
-                    zzz_anon_c78b4c00_dda26649
-                        param_1_0
+                    Pine_kernel.equal
+                        [ Pine_kernel.take
+                            [ 0
+                            , param_1_0
+                            ]
+                        , []
+                        ]
                 then
                     Basics.compareList
                         param_1_0
@@ -1108,16 +1113,6 @@ public class CodeAnalysisTests
 
                 else
                     GT
-
-
-            zzz_anon_c78b4c00_dda26649 param_1_0 =
-                Pine_kernel.equal
-                    [ Pine_kernel.take
-                        [ 0
-                        , param_1_0
-                        ]
-                    , []
-                    ]
             
             """"
             .Trim());

@@ -948,8 +948,7 @@ public class CodeAnalysis
             if (parseResult.IsErrOrNull() is { } err)
             {
                 declsFailures[rootDecl.Key] =
-                    "Failed to parse as static monomorphic program from root '" +
-                    rootDecl.Key.FullName + "': " + err;
+                    "Failed to parse from root '" + rootDecl.Key.FullName + "': " + err;
 
                 continue;
             }
@@ -1389,21 +1388,43 @@ public class CodeAnalysis
                     return null;
                 }
 
-                if (parseAndEval.Encoded.ReferencesEnvironment)
+                var childExprValueResult =
+                    TryGetChildEncodedExprValue(
+                        parseAndEval,
+                        envValueClass,
+                        parseCache);
+
                 {
-                    // Cannot inline parse&eval expressions that reference the environment.
-                    return null;
+                    if (childExprValueResult.IsErrOrNull() is { } err)
+                    {
+                        // Cannot inline parse&eval expressions that cannot be resolved to a value.
+                        return null;
+                    }
                 }
 
-                var parseIndependentResult = ParseIndependentParseAndEvalExpression(parseAndEval, parseCache);
-
-                if (parseIndependentResult.IsOkOrNullable() is not { } childExprAndValue)
+                if (childExprValueResult.IsOkOrNull() is not { } childExprValue)
                 {
-                    // Cannot inline parse&eval expressions that cannot be parsed independently.
-                    return null;
+                    throw new Exception(
+                        "Unexpected return type: " +
+                        childExprValueResult.GetType().Name);
                 }
 
-                var (childExprValue, childExpr) = childExprAndValue;
+                var parseChildExprResult = parseCache.ParseExpression(childExprValue);
+
+                {
+                    if (parseChildExprResult.IsErrOrNull() is { } err)
+                    {
+                        // Cannot inline parse&eval expressions that cannot be parsed.
+                        return null;
+                    }
+                }
+
+                if (parseChildExprResult.IsOkOrNull() is not { } childExpr)
+                {
+                    throw new Exception(
+                        "Unexpected return type: " +
+                        parseChildExprResult.GetType().Name);
+                }
 
                 var childEnvValueClass = MapValueClass(envValueClass, parseAndEval.Environment);
 
