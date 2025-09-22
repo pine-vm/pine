@@ -1294,6 +1294,713 @@ public class CodeAnalysisTests
     }
 
     [Fact]
+    public void Parse_Dict_insert()
+    {
+        var compiledEnv =
+            BundledElmEnvironments.BundledElmCompilerCompiledEnvValue()
+            ??
+            throw new System.Exception("Failed to load Elm compiler from bundle.");
+
+        var parseCache = new PineVMParseCache();
+
+        var parsedEnv =
+            ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnv)
+            .Extract(err => throw new System.Exception("Failed parsing interactive environment: " + err));
+
+        var (staticProgram, declsFailed) =
+            PineVM.CodeAnalysis.ParseAsStaticMonomorphicProgram(
+                parsedEnv,
+                includeDeclaration:
+                declName =>
+                {
+                    return declName == new DeclQualifiedName(["Dict"], "insert");
+                },
+                parseCache)
+            .Extract(err => throw new System.Exception("Failed parsing as static program: " + err));
+
+        staticProgram.Should().NotBeNull();
+
+        var wholeProgramText = StaticExpressionDisplay.RenderStaticProgram(staticProgram);
+
+        wholeProgramText.Trim().Should().Be(
+            """"
+            Basics.compare param_1_0 param_1_1 =
+                if
+                    Pine_kernel.equal
+                        [ param_1_0
+                        , param_1_1
+                        ]
+                then
+                    EQ
+
+                else if
+                    if
+                        Pine_kernel.equal
+                            [ String
+                            , param_1_1[0]
+                            ]
+                    then
+                        Pine_kernel.equal
+                            [ String
+                            , param_1_0[0]
+                            ]
+
+                    else
+                        False
+                then
+                    Basics.compareStrings
+                        0
+                        param_1_0[1][0]
+                        param_1_1[1][0]
+
+                else if
+                    if
+                        Pine_kernel.equal
+                            [ Elm_Float
+                            , param_1_1[0]
+                            ]
+                    then
+                        Pine_kernel.equal
+                            [ Elm_Float
+                            , param_1_0[0]
+                            ]
+
+                    else
+                        False
+                then
+                    if
+                        Pine_kernel.equal
+                            [ Pine_kernel.int_mul
+                                [ param_1_0[1][0]
+                                , param_1_1[1][1]
+                                ]
+                            , Pine_kernel.int_mul
+                                [ param_1_1[1][0]
+                                , param_1_0[1][1]
+                                ]
+                            ]
+                    then
+                        EQ
+
+                    else if
+                        Pine_kernel.int_is_sorted_asc
+                            [ Pine_kernel.int_mul
+                                [ param_1_0[1][0]
+                                , param_1_1[1][1]
+                                ]
+                            , Pine_kernel.int_mul
+                                [ param_1_1[1][0]
+                                , param_1_0[1][1]
+                                ]
+                            ]
+                    then
+                        LT
+
+                    else
+                        GT
+
+                else if
+                    Pine_kernel.equal
+                        [ Elm_Float
+                        , param_1_0[0]
+                        ]
+                then
+                    if
+                        Pine_kernel.equal
+                            [ param_1_0[1][0]
+                            , Pine_kernel.int_mul
+                                [ param_1_0[1][1]
+                                , param_1_1
+                                ]
+                            ]
+                    then
+                        EQ
+
+                    else if
+                        Pine_kernel.int_is_sorted_asc
+                            [ param_1_0[1][0]
+                            , Pine_kernel.int_mul
+                                [ param_1_0[1][1]
+                                , param_1_1
+                                ]
+                            ]
+                    then
+                        LT
+
+                    else
+                        GT
+
+                else if
+                    Pine_kernel.equal
+                        [ Elm_Float
+                        , param_1_1[0]
+                        ]
+                then
+                    if
+                        Pine_kernel.equal
+                            [ Pine_kernel.int_mul
+                                [ param_1_0
+                                , param_1_1[1][1]
+                                ]
+                            , param_1_1[1][0]
+                            ]
+                    then
+                        EQ
+
+                    else if
+                        Pine_kernel.int_is_sorted_asc
+                            [ Pine_kernel.int_mul
+                                [ param_1_0
+                                , param_1_1[1][1]
+                                ]
+                            , param_1_1[1][0]
+                            ]
+                    then
+                        LT
+
+                    else
+                        GT
+
+                else if
+                    zzz_anon_c78b4c00_dda26649
+                        param_1_0
+                then
+                    Basics.compareList
+                        param_1_0
+                        param_1_1
+
+                else if
+                    Pine_kernel.int_is_sorted_asc
+                        [ param_1_0
+                        , param_1_1
+                        ]
+                then
+                    LT
+
+                else
+                    GT
+
+
+            Basics.compareList param_1_0 param_1_1 =
+                if
+                    Pine_kernel.equal
+                        [ param_1_0
+                        , []
+                        ]
+                then
+                    if
+                        Pine_kernel.equal
+                            [ param_1_1
+                            , []
+                            ]
+                    then
+                        EQ
+
+                    else
+                        LT
+
+                else if
+                    Pine_kernel.negate
+                        (Pine_kernel.equal
+                            [ Pine_kernel.length
+                                param_1_0
+                            , 0
+                            ]
+                        )
+                then
+                    if
+                        Pine_kernel.equal
+                            [ param_1_1
+                            , []
+                            ]
+                    then
+                        GT
+
+                    else if
+                        Pine_kernel.negate
+                            (Pine_kernel.equal
+                                [ Pine_kernel.length
+                                    param_1_1
+                                , 0
+                                ]
+                            )
+                    then
+                        if
+                            Pine_kernel.equal
+                                [ Basics.compare
+                                    param_1_0[0]
+                                    param_1_1[0]
+                                , EQ
+                                ]
+                        then
+                            Basics.compareList
+                                (Pine_kernel.skip
+                                    [ 1
+                                    , param_1_0
+                                    ]
+                                )
+                                (Pine_kernel.skip
+                                    [ 1
+                                    , param_1_1
+                                    ]
+                                )
+
+                        else
+                            Basics.compare
+                                param_1_0[0]
+                                param_1_1[0]
+
+                    else
+                        <always_crash>
+
+                else
+                    <always_crash>
+
+
+            Basics.compareStrings param_1_0 param_1_1 param_1_2 =
+                if
+                    Pine_kernel.equal
+                        [ Pine_kernel.length
+                            (Pine_kernel.take
+                                [ 4
+                                , Pine_kernel.skip
+                                    [ param_1_0
+                                    , param_1_1
+                                    ]
+                                ]
+                            )
+                        , 0
+                        ]
+                then
+                    if
+                        Pine_kernel.equal
+                            [ Pine_kernel.length
+                                (Pine_kernel.take
+                                    [ 4
+                                    , Pine_kernel.skip
+                                        [ param_1_0
+                                        , param_1_2
+                                        ]
+                                    ]
+                                )
+                            , 0
+                            ]
+                    then
+                        EQ
+
+                    else
+                        LT
+
+                else if
+                    Pine_kernel.equal
+                        [ Pine_kernel.length
+                            (Pine_kernel.take
+                                [ 4
+                                , Pine_kernel.skip
+                                    [ param_1_0
+                                    , param_1_2
+                                    ]
+                                ]
+                            )
+                        , 0
+                        ]
+                then
+                    GT
+
+                else if
+                    Pine_kernel.equal
+                        [ Pine_kernel.take
+                            [ 4
+                            , Pine_kernel.skip
+                                [ param_1_0
+                                , param_1_1
+                                ]
+                            ]
+                        , Pine_kernel.take
+                            [ 4
+                            , Pine_kernel.skip
+                                [ param_1_0
+                                , param_1_2
+                                ]
+                            ]
+                        ]
+                then
+                    Basics.compareStrings
+                        (Pine_kernel.int_add
+                            [ param_1_0
+                            , 4
+                            ]
+                        )
+                        param_1_1
+                        param_1_2
+
+                else if
+                    Pine_kernel.int_is_sorted_asc
+                        [ Pine_kernel.concat
+                            [ 0
+                            , Pine_kernel.take
+                                [ 4
+                                , Pine_kernel.skip
+                                    [ param_1_0
+                                    , param_1_1
+                                    ]
+                                ]
+                            ]
+                        , Pine_kernel.concat
+                            [ 0
+                            , Pine_kernel.take
+                                [ 4
+                                , Pine_kernel.skip
+                                    [ param_1_0
+                                    , param_1_2
+                                    ]
+                                ]
+                            ]
+                        ]
+                then
+                    LT
+
+                else
+                    GT
+
+
+            Dict.insert param_1_0 param_1_1 param_1_2 =
+                if
+                    if
+                        Pine_kernel.equal
+                            [ Red
+                            , Pine_kernel.head
+                                (Pine_kernel.head
+                                    (Pine_kernel.head
+                                        (Pine_kernel.skip
+                                            [ 1
+                                            , zzz_anon_ea679199_b65beb0f
+                                                param_1_0
+                                                param_1_1
+                                                param_1_2
+                                            ]
+                                        )
+                                    )
+                                )
+                            ]
+                    then
+                        Pine_kernel.equal
+                            [ RBNode_elm_builtin
+                            , Pine_kernel.head
+                                (zzz_anon_ea679199_b65beb0f
+                                    param_1_0
+                                    param_1_1
+                                    param_1_2)
+                            ]
+
+                    else
+                        False
+                then
+                    [ RBNode_elm_builtin
+                    , [ Black
+                      , Pine_kernel.head
+                          (Pine_kernel.skip
+                              [ 1
+                              , Pine_kernel.head
+                                  (Pine_kernel.skip
+                                      [ 1
+                                      , zzz_anon_ea679199_b65beb0f
+                                          param_1_0
+                                          param_1_1
+                                          param_1_2
+                                      ]
+                                  )
+                              ]
+                          )
+                      , Pine_kernel.head
+                          (Pine_kernel.skip
+                              [ 2
+                              , Pine_kernel.head
+                                  (Pine_kernel.skip
+                                      [ 1
+                                      , zzz_anon_ea679199_b65beb0f
+                                          param_1_0
+                                          param_1_1
+                                          param_1_2
+                                      ]
+                                  )
+                              ]
+                          )
+                      , Pine_kernel.head
+                          (Pine_kernel.skip
+                              [ 3
+                              , Pine_kernel.head
+                                  (Pine_kernel.skip
+                                      [ 1
+                                      , zzz_anon_ea679199_b65beb0f
+                                          param_1_0
+                                          param_1_1
+                                          param_1_2
+                                      ]
+                                  )
+                              ]
+                          )
+                      , Pine_kernel.head
+                          (Pine_kernel.skip
+                              [ 4
+                              , Pine_kernel.head
+                                  (Pine_kernel.skip
+                                      [ 1
+                                      , zzz_anon_ea679199_b65beb0f
+                                          param_1_0
+                                          param_1_1
+                                          param_1_2
+                                      ]
+                                  )
+                              ]
+                          )
+                      ]
+                    ]
+
+                else
+                    zzz_anon_ea679199_b65beb0f
+                        param_1_0
+                        param_1_1
+                        param_1_2
+
+
+            zzz_anon_c78b4c00_dda26649 param_1_0 =
+                Pine_kernel.equal
+                    [ Pine_kernel.take
+                        [ 0
+                        , param_1_0
+                        ]
+                    , []
+                    ]
+
+
+            zzz_anon_e6d15ff4_dda26649 param_1_0 param_1_1 param_1_2 param_1_3 param_1_4 =
+                if
+                    if
+                        Pine_kernel.equal
+                            [ Red
+                            , param_1_4[1][0][0]
+                            ]
+                    then
+                        Pine_kernel.equal
+                            [ RBNode_elm_builtin
+                            , param_1_4[0]
+                            ]
+
+                    else
+                        False
+                then
+                    if
+                        if
+                            Pine_kernel.equal
+                                [ Red
+                                , param_1_3[1][0][0]
+                                ]
+                        then
+                            Pine_kernel.equal
+                                [ RBNode_elm_builtin
+                                , param_1_3[0]
+                                ]
+
+                        else
+                            False
+                    then
+                        [ RBNode_elm_builtin
+                        , [ Red
+                          , param_1_1
+                          , param_1_2
+                          , [ RBNode_elm_builtin
+                            , [ Black
+                              , param_1_3[1][1]
+                              , param_1_3[1][2]
+                              , param_1_3[1][3]
+                              , param_1_3[1][4]
+                              ]
+                            ]
+                          , [ RBNode_elm_builtin
+                            , [ Black
+                              , param_1_4[1][1]
+                              , param_1_4[1][2]
+                              , param_1_4[1][3]
+                              , param_1_4[1][4]
+                              ]
+                            ]
+                          ]
+                        ]
+
+                    else
+                        [ RBNode_elm_builtin
+                        , [ param_1_0
+                          , param_1_4[1][1]
+                          , param_1_4[1][2]
+                          , [ RBNode_elm_builtin
+                            , [ Red
+                              , param_1_1
+                              , param_1_2
+                              , param_1_3
+                              , param_1_4[1][3]
+                              ]
+                            ]
+                          , param_1_4[1][4]
+                          ]
+                        ]
+
+                else if
+                    if
+                        Pine_kernel.equal
+                            [ Red
+                            , param_1_3[1][3][1][0][0]
+                            ]
+                    then
+                        if
+                            Pine_kernel.equal
+                                [ RBNode_elm_builtin
+                                , param_1_3[1][3][0]
+                                ]
+                        then
+                            if
+                                Pine_kernel.equal
+                                    [ Red
+                                    , param_1_3[1][0][0]
+                                    ]
+                            then
+                                Pine_kernel.equal
+                                    [ RBNode_elm_builtin
+                                    , param_1_3[0]
+                                    ]
+
+                            else
+                                False
+
+                        else
+                            False
+
+                    else
+                        False
+                then
+                    [ RBNode_elm_builtin
+                    , [ Red
+                      , param_1_3[1][1]
+                      , param_1_3[1][2]
+                      , [ RBNode_elm_builtin
+                        , [ Black
+                          , param_1_3[1][3][1][1]
+                          , param_1_3[1][3][1][2]
+                          , param_1_3[1][3][1][3]
+                          , param_1_3[1][3][1][4]
+                          ]
+                        ]
+                      , [ RBNode_elm_builtin
+                        , [ Black
+                          , param_1_1
+                          , param_1_2
+                          , param_1_3[1][4]
+                          , param_1_4
+                          ]
+                        ]
+                      ]
+                    ]
+
+                else
+                    [ RBNode_elm_builtin
+                    , [ param_1_0
+                      , param_1_1
+                      , param_1_2
+                      , param_1_3
+                      , param_1_4
+                      ]
+                    ]
+
+
+            zzz_anon_ea679199_b65beb0f param_1_0 param_1_1 param_1_2 =
+                if
+                    Pine_kernel.equal
+                        [ RBEmpty_elm_builtin
+                        , param_1_2[0]
+                        ]
+                then
+                    [ RBNode_elm_builtin
+                    , [ Red
+                      , param_1_0
+                      , param_1_1
+                      , Dict.empty
+                      , Dict.empty
+                      ]
+                    ]
+
+                else if
+                    Pine_kernel.equal
+                        [ RBNode_elm_builtin
+                        , param_1_2[0]
+                        ]
+                then
+                    if
+                        Pine_kernel.equal
+                            [ LT
+                            , Pine_kernel.head
+                                (Basics.compare
+                                    param_1_0
+                                    param_1_2[1][1])
+                            ]
+                    then
+                        zzz_anon_e6d15ff4_dda26649
+                            param_1_2[1][0]
+                            param_1_2[1][1]
+                            param_1_2[1][2]
+                            (zzz_anon_ea679199_b65beb0f
+                                param_1_0
+                                param_1_1
+                                param_1_2[1][3])
+                            param_1_2[1][4]
+
+                    else if
+                        Pine_kernel.equal
+                            [ EQ
+                            , Pine_kernel.head
+                                (Basics.compare
+                                    param_1_0
+                                    param_1_2[1][1])
+                            ]
+                    then
+                        [ RBNode_elm_builtin
+                        , [ param_1_2[1][0]
+                          , param_1_2[1][1]
+                          , param_1_1
+                          , param_1_2[1][3]
+                          , param_1_2[1][4]
+                          ]
+                        ]
+
+                    else if
+                        Pine_kernel.equal
+                            [ GT
+                            , Pine_kernel.head
+                                (Basics.compare
+                                    param_1_0
+                                    param_1_2[1][1])
+                            ]
+                    then
+                        zzz_anon_e6d15ff4_dda26649
+                            param_1_2[1][0]
+                            param_1_2[1][1]
+                            param_1_2[1][2]
+                            param_1_2[1][3]
+                            (zzz_anon_ea679199_b65beb0f
+                                param_1_0
+                                param_1_1
+                                param_1_2[1][4])
+
+                    else
+                        <always_crash>
+
+                else
+                    <always_crash>
+            
+            """"
+            .Trim());
+    }
+
+    [Fact]
     public void Parse_Test_apply_function_from_other_module()
     {
         var elmJsonFile =

@@ -30,7 +30,8 @@ public static class StaticExpressionExtension
     /// <c>f param_1_0 param_1_2 = ...</c>, ensuring deterministic naming and ordering across builds and platforms.
     /// </remarks>
     public static IReadOnlyList<IReadOnlyList<int>> ImplicitFunctionParameterList<TFunctionName>(
-        this StaticExpression<TFunctionName> functionBody)
+        this StaticExpression<TFunctionName> functionBody,
+        PineValueClass ignoreDeterminedByEnv)
     {
         var collectedPaths = new HashSet<IReadOnlyList<int>>(IntPathEqualityComparer.Instance);
 
@@ -40,6 +41,12 @@ public static class StaticExpressionExtension
                 expr,
                 pathEndExpression: StaticExpression<TFunctionName>.EnvironmentInstance) is { } path)
             {
+                if (ignoreDeterminedByEnv.TryGetValue(path) is not null)
+                {
+                    // This path is already determined by the environment; ignore it.
+                    return true;
+                }
+
                 collectedPaths.Add(path);
 
                 // We found a concrete path endpoint; no need to traverse below this node.

@@ -928,6 +928,8 @@ public class CodeAnalysis
 
         Dictionary<StaticFunctionIdentifier, (Expression origExpr, StaticExpressionGen body)> lessSpecializedInterfaces = [];
 
+        HashSet<StaticFunctionIdentifier> rootsIds = [];
+
         Dictionary<DeclQualifiedName, string> declsFailures = [];
 
 
@@ -939,13 +941,13 @@ public class CodeAnalysis
 
         foreach (var rootDecl in rootDecls)
         {
-            var parseResult =
+            var parseRootResult =
                 ParseAsStaticMonomorphicProgram(
                     rootDecl.Value,
                     DontInline,
                     parseCache);
 
-            if (parseResult.IsErrOrNull() is { } err)
+            if (parseRootResult.IsErrOrNull() is { } err)
             {
                 declsFailures[rootDecl.Key] =
                     "Failed to parse from root '" + rootDecl.Key.FullName + "': " + err;
@@ -953,14 +955,16 @@ public class CodeAnalysis
                 continue;
             }
 
-            if (parseResult.IsOkOrNull() is not { } parsedFunctions)
+            if (parseRootResult.IsOkOrNull() is not { } parsedRoot)
             {
                 throw new Exception(
                     "Unexpected return type: " +
-                    parseResult.GetType().Name);
+                    parseRootResult.GetType().Name);
             }
 
-            foreach (var entry in parsedFunctions)
+            rootsIds.Add(parsedRoot.RootId);
+
+            foreach (var entry in parsedRoot.AllReferenced)
             {
                 if (lessSpecializedInterfaces.TryGetValue(entry.Key, out var existing))
                 {
@@ -1015,18 +1019,13 @@ public class CodeAnalysis
         {
             var functionIdentifier = ReduceFunctionIdentifier(functionIdentifierOrig);
 
-            if (nameForDecl(
-                    functionIdentifier.EncodedExpr,
-                    functionIdentifier.EnvClass) is { } direct)
+            if (nameForDecl(functionIdentifier.EncodedExpr, functionIdentifier.EnvClass) is { } direct)
             {
                 return direct;
             }
 
             return
-                AnonymousFunctionName(
-                    functionIdentifier.EncodedExpr,
-                    functionIdentifier.EnvClass,
-                    hashCache);
+                AnonymousFunctionName(functionIdentifier.EncodedExpr, functionIdentifier.EnvClass, hashCache);
         }
 
         var namedFunctions =
@@ -1048,22 +1047,32 @@ public class CodeAnalysis
                 keySelector: entry => entry.Key,
                 elementSelector: entry => entry.Value.bodyMapped);
 
-        var prunedFunctions =
-            PruneUnusedEnvironmentReferences(namedFunctionsOnlyBodies);
+        var simplifiedFunctions =
+            SimplifyFunctions(namedFunctionsOnlyBodies);
+
+        var rootsNames =
+            rootsIds
+            .Select(DeclNameCombined)
+            .ToImmutableHashSet();
+
+        var simplifiedFunctionsReachable =
+            FilterForRoots(simplifiedFunctions, rootsNames);
 
         var mergedFunctions =
-            namedFunctions
+            simplifiedFunctionsReachable
             .ToFrozenDictionary(
                 keySelector:
                 entry => entry.Key,
                 elementSelector:
                 entry =>
                 {
-                    var prunedBody = prunedFunctions[entry.Key];
+                    var origEntry = namedFunctions[entry.Key];
 
-                    var functionInterface = InterfaceForFunction(prunedBody);
+                    var prunedBody = simplifiedFunctions[entry.Key];
 
-                    return (entry.Value.origExpr, interf: functionInterface, prunedBody, entry.Value.EnvClass);
+                    var functionInterface = InterfaceForFunction(prunedBody, origEntry.EnvClass);
+
+                    return (origEntry.origExpr, interf: functionInterface, prunedBody, origEntry.EnvClass);
                 });
 
         var program = new StaticProgram(mergedFunctions);
@@ -1072,9 +1081,13 @@ public class CodeAnalysis
     }
 
     private static StaticFunctionInterface InterfaceForFunction<T>(
-        StaticExpression<T> functionBody)
+        StaticExpression<T> functionBody,
+        PineValueClass ignoreDeterminedByEnv)
     {
-        var allImplicitParam = functionBody.ImplicitFunctionParameterList();
+        var allImplicitParam =
+            StaticExpressionExtension.ImplicitFunctionParameterList(
+                functionBody,
+                ignoreDeterminedByEnv);
 
         /*
          * TODO: Replace stupid heuristic with an adaptive approach:
@@ -1112,7 +1125,7 @@ public class CodeAnalysis
     }
 
 
-    public static Result<string, IReadOnlyDictionary<StaticFunctionIdentifier, (Expression origExpr, StaticExpressionGen body)>>
+    public static Result<string, ParsedFromSingleRoot>
         ParseAsStaticMonomorphicProgram(
         ElmInteractiveEnvironment.FunctionRecord functionRecord,
         Func<PineValue, PineValueClass, bool> dontInline,
@@ -1129,7 +1142,11 @@ public class CodeAnalysis
                 parseCache: parseCache);
     }
 
-    public static Result<string, IReadOnlyDictionary<StaticFunctionIdentifier, (Expression origExpr, StaticExpressionGen body)>>
+    public record ParsedFromSingleRoot(
+        StaticFunctionIdentifier RootId,
+        IReadOnlyDictionary<StaticFunctionIdentifier, (Expression origExpr, StaticExpressionGen body)> AllReferenced);
+
+    public static Result<string, ParsedFromSingleRoot>
         ParseAsStaticMonomorphicProgram(
         Expression rootExpression,
         PineValueClass rootEnvValueClass,
@@ -1330,7 +1347,16 @@ public class CodeAnalysis
             genFunctions[functionIdent] = (observedCombo.origExpr, staticExpr);
         }
 
-        return genFunctions;
+        var rootExprValue =
+            ExpressionEncoding.EncodeExpressionAsValue(rootExpression);
+
+        var rootId =
+            genFunctions.Keys
+            .Single(c =>
+            c.EncodedExpr.Equals(rootExprValue) &&
+            c.EnvClass.SatisfiedByConstraint(rootEnvValueClass));
+
+        return new ParsedFromSingleRoot(rootId, genFunctions);
     }
 
     static PineValueClass FilterClassRemovingAllNonExpressions(
@@ -1344,6 +1370,19 @@ public class CodeAnalysis
             if (parseResult.IsOkOrNull() is { })
             {
                 return true;
+            }
+
+            if (ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(value, parseCache).IsOkOrNull() is { } asFunctionRecord)
+            {
+                /*
+                 * Adapt to how the assignment of names currently works:
+                 * Keep as is if this entry represents a function record, as 'NamesFromCompiledEnv' currently does.
+                 * */
+
+                if (0 < asFunctionRecord.EnvFunctions.Length)
+                {
+                    return true;
+                }
             }
 
             return false;
@@ -1745,7 +1784,9 @@ public class CodeAnalysis
 
             if (envValueClass.TryGetValue(pathInParentEnv.Path) is not { } valueFromPath)
             {
-                return "Could not find value for parseAndEval.Encoded path in the given environment";
+                return
+                    "Could not find value for parseAndEval.Encoded path [" +
+                    string.Join(',', pathInParentEnv.Path) + "] in the given environment";
             }
 
             return valueFromPath;
@@ -1911,19 +1952,111 @@ public class CodeAnalysis
         return null;
     }
 
-    // =====================
-    // Pruning pass to remove superfluous env references in static program
-    // =====================
-
-    /// <summary>
-    /// Removes superfluous parameter references from a static program.
-    /// For each function, computes the set of environment paths actually used across the call graph,
-    /// and replaces subexpressions encoding unused parameter references with an empty list literal.
-    /// Also recomputes function interfaces for the pruned bodies.
-    /// </summary>
-    public static IReadOnlyDictionary<string, StaticExpression<string>> PruneUnusedEnvironmentReferences(
-        IReadOnlyDictionary<string, StaticExpression<string>> namedFunctions)
+    public static IReadOnlyDictionary<FunctionIdentifier, StaticExpression<FunctionIdentifier>>
+        SimplifyFunctions<FunctionIdentifier>(
+        IReadOnlyDictionary<FunctionIdentifier, StaticExpression<FunctionIdentifier>> namedFunctionsBeforeInline)
+        where FunctionIdentifier : notnull
     {
+        var distinctCallSitesByFunc =
+            namedFunctionsBeforeInline
+            .ToFrozenDictionary(
+                kvp => kvp.Key,
+                kvp => CollectCallSites(kvp.Value).Distinct().ToImmutableArray());
+
+        var directDependenciesByFunc =
+            distinctCallSitesByFunc
+            .ToFrozenDictionary(
+                kvp => kvp.Key,
+                kvp => kvp.Value.Select(app => app.FunctionName).Distinct().ToFrozenSet());
+
+        IEnumerable<FunctionIdentifier> EnumerateDependenciesTransitive(FunctionIdentifier functionName)
+        {
+            var visited = new HashSet<FunctionIdentifier>();
+
+            var stack = new Stack<FunctionIdentifier>([functionName]);
+
+            while (stack.Count > 0)
+            {
+                var current = stack.Pop();
+
+                if (!visited.Add(current))
+                {
+                    continue;
+                }
+
+                if (directDependenciesByFunc.TryGetValue(current, out var directDeps))
+                {
+                    foreach (var dep in directDeps)
+                    {
+                        yield return dep;
+
+                        stack.Push(dep);
+                    }
+                }
+            }
+        }
+
+        var transitiveDependenciesByFunc =
+            directDependenciesByFunc
+            .ToFrozenDictionary(
+                kvp => kvp.Key,
+                kvp => EnumerateDependenciesTransitive(kvp.Key).ToFrozenSet());
+
+        bool FunctionIsRecursive(FunctionIdentifier functionName)
+        {
+            return
+                transitiveDependenciesByFunc.TryGetValue(functionName, out var deps) &&
+                deps.Contains(functionName);
+        }
+
+        var namedFunctions =
+            namedFunctionsBeforeInline
+            .ToFrozenDictionary(
+                kvp => kvp.Key,
+                kvp =>
+                {
+                    var bodyInlined =
+                    StaticExpressionExtension.TransformStaticExpressionWithOptionalReplacement(
+                        findReplacement: node =>
+                        {
+                            if (node is StaticExpression<FunctionIdentifier>.FunctionApplication app)
+                            {
+                                if (FunctionIsRecursive(app.FunctionName))
+                                {
+                                    // Do not inline recursive functions
+                                    return null;
+                                }
+
+                                var callee = namedFunctionsBeforeInline[app.FunctionName];
+
+                                if (callee is StaticExpression<FunctionIdentifier>.FunctionApplication calleeApp &&
+                                calleeApp.Arguments == StaticExpression<FunctionIdentifier>.EnvironmentInstance)
+                                {
+                                    return
+                                    StaticExpression<FunctionIdentifier>.FunctionApplicationInstance(
+                                        functionName: calleeApp.FunctionName,
+                                        arguments: app.Arguments);
+                                }
+                            }
+                            return null;
+                        },
+                        expression: kvp.Value).expr;
+
+                    return bodyInlined;
+                });
+
+        distinctCallSitesByFunc =
+            namedFunctionsBeforeInline
+            .ToFrozenDictionary(
+                kvp => kvp.Key,
+                kvp => CollectCallSites(kvp.Value).Distinct().ToImmutableArray());
+
+        directDependenciesByFunc =
+            distinctCallSitesByFunc
+            .ToFrozenDictionary(
+                kvp => kvp.Key,
+                kvp => kvp.Value.Select(app => app.FunctionName).Distinct().ToFrozenSet());
+
         var directEnvPathsByFunc =
             namedFunctions
             .ToFrozenDictionary(
@@ -1931,19 +2064,11 @@ public class CodeAnalysis
                 kvp.Key,
                 kvp =>
                 StaticExpressionExtension.CollectEnvPathsOutsideFunctionApplications(kvp.Value)
-                .ToFrozenSet(IntPathEqualityComparer.Instance),
-                StringComparer.Ordinal);
-
-        var distinctCallSitesByFunc =
-            namedFunctions
-            .ToFrozenDictionary(
-                kvp => kvp.Key,
-                kvp => CollectCallSites(kvp.Value).Distinct().ToImmutableArray(),
-                StringComparer.Ordinal);
+                .ToFrozenSet(IntPathEqualityComparer.Instance));
 
         IReadOnlySet<IReadOnlyList<int>> CollectAllUsedPathsTransitive(
-            string functionName,
-            ImmutableStack<string> stack)
+            FunctionIdentifier functionName,
+            ImmutableStack<FunctionIdentifier> stack)
         {
             var collected =
                 directEnvPathsByFunc[functionName]
@@ -2017,9 +2142,9 @@ public class CodeAnalysis
             .ToFrozenDictionary(kvp => kvp.Key, kvp => CollectAllUsedPathsTransitive(kvp.Key, stack: []));
 
         bool IsPathOrPrefixUsed(
-            string functionName,
+            FunctionIdentifier functionName,
             IReadOnlyList<int> path,
-            ImmutableStack<(string functionName, IReadOnlyList<int> path)> stack)
+            ImmutableStack<(FunctionIdentifier functionName, IReadOnlyList<int> path)> stack)
         {
             if (!allUsedPathsByFunc.TryGetValue(functionName, out var allUsedPaths))
             {
@@ -2053,9 +2178,9 @@ public class CodeAnalysis
             return true;
         }
 
-        StaticExpression<string> RemoveUnusedFromFunctionBody(
-            string currentFunctionName,
-            StaticExpression<string> functionBody)
+        StaticExpression<FunctionIdentifier> RemoveUnusedFromFunctionBody(
+            FunctionIdentifier currentFunctionName,
+            StaticExpression<FunctionIdentifier> functionBody)
         {
             return
                 ReplaceEnvPathsInBody(functionBody, path =>
@@ -2065,7 +2190,7 @@ public class CodeAnalysis
                         return null;
                     }
 
-                    return StaticExpression<string>.LiteralInstance(PineValue.EmptyList);
+                    return StaticExpression<FunctionIdentifier>.LiteralInstance(PineValue.EmptyList);
                 });
         }
 
@@ -2073,8 +2198,70 @@ public class CodeAnalysis
             namedFunctions
             .ToFrozenDictionary(
                 kvp => kvp.Key,
-                kvp => RemoveUnusedFromFunctionBody(kvp.Key, kvp.Value),
-                StringComparer.Ordinal);
+                kvp => RemoveUnusedFromFunctionBody(kvp.Key, kvp.Value));
+    }
+
+    static private IReadOnlyDictionary<FunctionIdentifier, StaticExpression<FunctionIdentifier>>
+        FilterForRoots<FunctionIdentifier>(
+        IReadOnlyDictionary<FunctionIdentifier, StaticExpression<FunctionIdentifier>> functions,
+        IReadOnlySet<FunctionIdentifier> roots)
+        where FunctionIdentifier : notnull
+    {
+        var distinctCallSitesByFunc =
+            functions
+            .ToFrozenDictionary(
+                kvp => kvp.Key,
+                kvp => CollectCallSites(kvp.Value).Distinct().ToImmutableArray());
+
+        var directDependenciesByFunc =
+            distinctCallSitesByFunc
+            .ToFrozenDictionary(
+                kvp => kvp.Key,
+                kvp => kvp.Value.Select(app => app.FunctionName).Distinct().ToFrozenSet());
+
+        IEnumerable<FunctionIdentifier> EnumerateDependenciesTransitive(FunctionIdentifier functionName)
+        {
+            var visited = new HashSet<FunctionIdentifier>();
+
+            var stack = new Stack<FunctionIdentifier>([functionName]);
+
+            while (stack.Count > 0)
+            {
+                var current = stack.Pop();
+
+                if (!visited.Add(current))
+                {
+                    continue;
+                }
+
+                if (directDependenciesByFunc.TryGetValue(current, out var directDeps))
+                {
+                    foreach (var dep in directDeps)
+                    {
+                        yield return dep;
+
+                        stack.Push(dep);
+                    }
+                }
+            }
+        }
+
+        var transitiveDependenciesByFunc =
+            directDependenciesByFunc
+            .ToFrozenDictionary(
+                kvp => kvp.Key,
+                kvp => EnumerateDependenciesTransitive(kvp.Key).ToFrozenSet());
+
+        var rootsTransitiveDependencies =
+            roots
+            .SelectMany(r => transitiveDependenciesByFunc.TryGetValue(r, out var deps) ? deps : [])
+            .Concat(roots)
+            .ToFrozenSet();
+
+        return
+            functions
+            .Where(kvp => rootsTransitiveDependencies.Contains(kvp.Key))
+            .ToFrozenDictionary();
     }
 
     private static IEnumerable<StaticExpression<TFunctionId>.FunctionApplication> CollectCallSites<TFunctionId>(
@@ -2106,6 +2293,16 @@ public class CodeAnalysis
                 StaticExpression<TFuncId>.EnvironmentInstance) is { } path)
             {
                 yield return [.. path, .. pathSuffix];
+                continue;
+            }
+
+            if (current is StaticExpression<TFuncId>.FunctionApplication)
+            {
+                /*
+                 * TODO: Map via function application (New environment composition)
+                 * Perhaps an incremental substitution helps break these down in an easy way.
+                 * */
+
                 continue;
             }
 
