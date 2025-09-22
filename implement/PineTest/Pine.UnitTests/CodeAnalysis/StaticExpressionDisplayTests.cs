@@ -654,6 +654,44 @@ public class StaticExpressionDisplayTests
                     ]
                 """
             },
+
+            new
+            {
+                Name = "KernelApplication_Nested_Head_With_Parens",
+                Program =
+                new StaticProgram(
+                    ImmutableDictionary<string, (Expression, StaticFunctionInterface, StaticExpression<string>, PineValueClass)>.Empty
+                    .SetItem(
+                        "decl_a",
+                        (Expression.ListInstance([]),
+                        InterfaceFromParamCount(1),
+                        StaticExpression.KernelApplicationInstance(
+                            function: "head",
+                            input: StaticExpression.KernelApplicationInstance(
+                                function: "skip",
+                                input: StaticExpression.ListInstance(
+                                    [
+                                        StaticExpression.LiteralInstance(
+                                            ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1))),
+
+                                        Param_1_0(),
+                                    ]
+                                )
+                            )
+                        ),
+                        PineValueClass.Create([])))),
+
+                Expected =
+                """
+                decl_a param_1_0 =
+                    Pine_kernel.head
+                        (Pine_kernel.skip
+                            [ 1
+                            , param_1_0
+                            ]
+                        )
+                """
+            },
         };
 
         for (var i = 0; i < scenarios.Length; i++)

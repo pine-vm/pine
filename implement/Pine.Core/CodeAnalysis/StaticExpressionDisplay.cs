@@ -197,7 +197,7 @@ public static class StaticExpressionDisplay
                         functionApplicationRenderer,
                         environmentPathReferenceRenderer,
                         indentLevel + 1,
-                        containerDelimits: true))
+                        containerDelimits: false))
                     {
                         yield return line;
                     }

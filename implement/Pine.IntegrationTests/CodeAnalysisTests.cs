@@ -358,50 +358,59 @@ public class CodeAnalysisTests
                     Pine_kernel.concat
                         [ Test.dictToShuffledList
                             (Pine_kernel.head
-                                Pine_kernel.skip
+                                (Pine_kernel.skip
                                     [ 3
                                     , Pine_kernel.head
-                                        Pine_kernel.skip
+                                        (Pine_kernel.skip
                                             [ 1
                                             , param_1_0
                                             ]
+                                        )
                                     ]
+                                )
                             )
                         , Test.dictToShuffledList
                             (Pine_kernel.head
-                                Pine_kernel.skip
+                                (Pine_kernel.skip
                                     [ 4
                                     , Pine_kernel.head
-                                        Pine_kernel.skip
+                                        (Pine_kernel.skip
                                             [ 1
                                             , param_1_0
                                             ]
+                                        )
                                     ]
+                                )
                             )
                         , [ [ Pine_kernel.head
-                                Pine_kernel.skip
+                                (Pine_kernel.skip
                                     [ 1
                                     , Pine_kernel.head
-                                        Pine_kernel.skip
+                                        (Pine_kernel.skip
                                             [ 1
                                             , param_1_0
                                             ]
+                                        )
                                     ]
+                                )
                             , Pine_kernel.head
-                                Pine_kernel.skip
+                                (Pine_kernel.skip
                                     [ 2
                                     , Pine_kernel.head
-                                        Pine_kernel.skip
+                                        (Pine_kernel.skip
                                             [ 1
                                             , param_1_0
                                             ]
+                                        )
                                     ]
+                                )
                             ]
                           ]
                         ]
 
                 else
                     <always_crash>
+
             """"
             .Trim());
     }
@@ -513,13 +522,14 @@ public class CodeAnalysisTests
                 if
                     Pine_kernel.equal
                         [ Pine_kernel.length
-                            Pine_kernel.take
+                            (Pine_kernel.take
                                 [ 4
                                 , Pine_kernel.skip
                                     [ param_1_1
                                     , param_1_2
                                     ]
                                 ]
+                            )
                         , 0
                         ]
                 then
@@ -674,18 +684,22 @@ public class CodeAnalysisTests
                     Basics.compareStrings
                         0
                         (Pine_kernel.head
-                            Pine_kernel.head
-                                Pine_kernel.skip
+                            (Pine_kernel.head
+                                (Pine_kernel.skip
                                     [ 1
                                     , param_1_0
                                     ]
+                                )
+                            )
                         )
                         (Pine_kernel.head
-                            Pine_kernel.head
-                                Pine_kernel.skip
+                            (Pine_kernel.head
+                                (Pine_kernel.skip
                                     [ 1
                                     , param_1_1
                                     ]
+                                )
+                            )
                         )
 
                 else if
@@ -709,37 +723,45 @@ public class CodeAnalysisTests
                         Pine_kernel.equal
                             [ Pine_kernel.int_mul
                                 [ Pine_kernel.head
-                                    Pine_kernel.head
-                                        Pine_kernel.skip
+                                    (Pine_kernel.head
+                                        (Pine_kernel.skip
                                             [ 1
                                             , param_1_0
                                             ]
+                                        )
+                                    )
                                 , Pine_kernel.head
-                                    Pine_kernel.skip
+                                    (Pine_kernel.skip
                                         [ 1
                                         , Pine_kernel.head
-                                            Pine_kernel.skip
+                                            (Pine_kernel.skip
                                                 [ 1
                                                 , param_1_1
                                                 ]
+                                            )
                                         ]
+                                    )
                                 ]
                             , Pine_kernel.int_mul
                                 [ Pine_kernel.head
-                                    Pine_kernel.head
-                                        Pine_kernel.skip
+                                    (Pine_kernel.head
+                                        (Pine_kernel.skip
                                             [ 1
                                             , param_1_1
                                             ]
+                                        )
+                                    )
                                 , Pine_kernel.head
-                                    Pine_kernel.skip
+                                    (Pine_kernel.skip
                                         [ 1
                                         , Pine_kernel.head
-                                            Pine_kernel.skip
+                                            (Pine_kernel.skip
                                                 [ 1
                                                 , param_1_0
                                                 ]
+                                            )
                                         ]
+                                    )
                                 ]
                             ]
                     then
@@ -749,37 +771,45 @@ public class CodeAnalysisTests
                         Pine_kernel.int_is_sorted_asc
                             [ Pine_kernel.int_mul
                                 [ Pine_kernel.head
-                                    Pine_kernel.head
-                                        Pine_kernel.skip
+                                    (Pine_kernel.head
+                                        (Pine_kernel.skip
                                             [ 1
                                             , param_1_0
                                             ]
+                                        )
+                                    )
                                 , Pine_kernel.head
-                                    Pine_kernel.skip
+                                    (Pine_kernel.skip
                                         [ 1
                                         , Pine_kernel.head
-                                            Pine_kernel.skip
+                                            (Pine_kernel.skip
                                                 [ 1
                                                 , param_1_1
                                                 ]
+                                            )
                                         ]
+                                    )
                                 ]
                             , Pine_kernel.int_mul
                                 [ Pine_kernel.head
-                                    Pine_kernel.head
-                                        Pine_kernel.skip
+                                    (Pine_kernel.head
+                                        (Pine_kernel.skip
                                             [ 1
                                             , param_1_1
                                             ]
+                                        )
+                                    )
                                 , Pine_kernel.head
-                                    Pine_kernel.skip
+                                    (Pine_kernel.skip
                                         [ 1
                                         , Pine_kernel.head
-                                            Pine_kernel.skip
+                                            (Pine_kernel.skip
                                                 [ 1
                                                 , param_1_0
                                                 ]
+                                            )
                                         ]
+                                    )
                                 ]
                             ]
                     then
@@ -798,21 +828,25 @@ public class CodeAnalysisTests
                     if
                         Pine_kernel.equal
                             [ Pine_kernel.head
-                                Pine_kernel.head
-                                    Pine_kernel.skip
+                                (Pine_kernel.head
+                                    (Pine_kernel.skip
                                         [ 1
                                         , param_1_0
                                         ]
+                                    )
+                                )
                             , Pine_kernel.int_mul
                                 [ Pine_kernel.head
-                                    Pine_kernel.skip
+                                    (Pine_kernel.skip
                                         [ 1
                                         , Pine_kernel.head
-                                            Pine_kernel.skip
+                                            (Pine_kernel.skip
                                                 [ 1
                                                 , param_1_0
                                                 ]
+                                            )
                                         ]
+                                    )
                                 , param_1_1
                                 ]
                             ]
@@ -822,21 +856,25 @@ public class CodeAnalysisTests
                     else if
                         Pine_kernel.int_is_sorted_asc
                             [ Pine_kernel.head
-                                Pine_kernel.head
-                                    Pine_kernel.skip
+                                (Pine_kernel.head
+                                    (Pine_kernel.skip
                                         [ 1
                                         , param_1_0
                                         ]
+                                    )
+                                )
                             , Pine_kernel.int_mul
                                 [ Pine_kernel.head
-                                    Pine_kernel.skip
+                                    (Pine_kernel.skip
                                         [ 1
                                         , Pine_kernel.head
-                                            Pine_kernel.skip
+                                            (Pine_kernel.skip
                                                 [ 1
                                                 , param_1_0
                                                 ]
+                                            )
                                         ]
+                                    )
                                 , param_1_1
                                 ]
                             ]
@@ -858,21 +896,25 @@ public class CodeAnalysisTests
                             [ Pine_kernel.int_mul
                                 [ param_1_0
                                 , Pine_kernel.head
-                                    Pine_kernel.skip
+                                    (Pine_kernel.skip
                                         [ 1
                                         , Pine_kernel.head
-                                            Pine_kernel.skip
+                                            (Pine_kernel.skip
                                                 [ 1
                                                 , param_1_1
                                                 ]
+                                            )
                                         ]
+                                    )
                                 ]
                             , Pine_kernel.head
-                                Pine_kernel.head
-                                    Pine_kernel.skip
+                                (Pine_kernel.head
+                                    (Pine_kernel.skip
                                         [ 1
                                         , param_1_1
                                         ]
+                                    )
+                                )
                             ]
                     then
                         EQ
@@ -882,21 +924,25 @@ public class CodeAnalysisTests
                             [ Pine_kernel.int_mul
                                 [ param_1_0
                                 , Pine_kernel.head
-                                    Pine_kernel.skip
+                                    (Pine_kernel.skip
                                         [ 1
                                         , Pine_kernel.head
-                                            Pine_kernel.skip
+                                            (Pine_kernel.skip
                                                 [ 1
                                                 , param_1_1
                                                 ]
+                                            )
                                         ]
+                                    )
                                 ]
                             , Pine_kernel.head
-                                Pine_kernel.head
-                                    Pine_kernel.skip
+                                (Pine_kernel.head
+                                    (Pine_kernel.skip
                                         [ 1
                                         , param_1_1
                                         ]
+                                    )
+                                )
                             ]
                     then
                         LT
@@ -944,11 +990,12 @@ public class CodeAnalysisTests
 
                 else if
                     Pine_kernel.negate
-                        Pine_kernel.equal
+                        (Pine_kernel.equal
                             [ Pine_kernel.length
                                 param_1_0
                             , 0
                             ]
+                        )
                 then
                     if
                         Pine_kernel.equal
@@ -960,11 +1007,12 @@ public class CodeAnalysisTests
 
                     else if
                         Pine_kernel.negate
-                            Pine_kernel.equal
+                            (Pine_kernel.equal
                                 [ Pine_kernel.length
                                     param_1_1
                                 , 0
                                 ]
+                            )
                     then
                         if
                             Pine_kernel.equal
@@ -1010,26 +1058,28 @@ public class CodeAnalysisTests
                 if
                     Pine_kernel.equal
                         [ Pine_kernel.length
-                            Pine_kernel.take
+                            (Pine_kernel.take
                                 [ 4
                                 , Pine_kernel.skip
                                     [ param_1_0
                                     , param_1_1
                                     ]
                                 ]
+                            )
                         , 0
                         ]
                 then
                     if
                         Pine_kernel.equal
                             [ Pine_kernel.length
-                                Pine_kernel.take
+                                (Pine_kernel.take
                                     [ 4
                                     , Pine_kernel.skip
                                         [ param_1_0
                                         , param_1_2
                                         ]
                                     ]
+                                )
                             , 0
                             ]
                     then
@@ -1041,13 +1091,14 @@ public class CodeAnalysisTests
                 else if
                     Pine_kernel.equal
                         [ Pine_kernel.length
-                            Pine_kernel.take
+                            (Pine_kernel.take
                                 [ 4
                                 , Pine_kernel.skip
                                     [ param_1_0
                                     , param_1_2
                                     ]
                                 ]
+                            )
                         , 0
                         ]
                 then
