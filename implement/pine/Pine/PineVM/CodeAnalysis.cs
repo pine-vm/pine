@@ -948,8 +948,7 @@ public class CodeAnalysis
             if (parseResult.IsErrOrNull() is { } err)
             {
                 declsFailures[rootDecl.Key] =
-                    "Failed to parse as static monomorphic program from root '" +
-                    rootDecl.Key.FullName + "': " + err;
+                    "Failed to parse from root '" + rootDecl.Key.FullName + "': " + err;
 
                 continue;
             }
@@ -1040,15 +1039,36 @@ public class CodeAnalysis
                 {
                     var bodyMapped = StaticExpressionGen.MapFunctionIdentifier(entry.Value.body, DeclNameCombined);
 
-                    return
-                        (entry.Value.origExpr, interf: InterfaceForFunction(entry.Value.body), bodyMapped, entry.Key.EnvClass);
+                    return (entry.Value.origExpr, bodyMapped, entry.Key.EnvClass);
                 });
 
-        // Build program and prune unused env references
-        var program = new StaticProgram(namedFunctions);
-        var pruned = PruneUnusedEnvironmentReferences(program);
+        var namedFunctionsOnlyBodies =
+            namedFunctions
+            .ToFrozenDictionary(
+                keySelector: entry => entry.Key,
+                elementSelector: entry => entry.Value.bodyMapped);
 
-        return (pruned, declsFailures);
+        var prunedFunctions =
+            PruneUnusedEnvironmentReferences(namedFunctionsOnlyBodies);
+
+        var mergedFunctions =
+            namedFunctions
+            .ToFrozenDictionary(
+                keySelector:
+                entry => entry.Key,
+                elementSelector:
+                entry =>
+                {
+                    var prunedBody = prunedFunctions[entry.Key];
+
+                    var functionInterface = InterfaceForFunction(prunedBody);
+
+                    return (entry.Value.origExpr, interf: functionInterface, prunedBody, entry.Value.EnvClass);
+                });
+
+        var program = new StaticProgram(mergedFunctions);
+
+        return (program, declsFailures);
     }
 
     private static StaticFunctionInterface InterfaceForFunction<T>(
@@ -1901,27 +1921,27 @@ public class CodeAnalysis
     /// and replaces subexpressions encoding unused parameter references with an empty list literal.
     /// Also recomputes function interfaces for the pruned bodies.
     /// </summary>
-    public static StaticProgram PruneUnusedEnvironmentReferences(StaticProgram program)
+    public static IReadOnlyDictionary<string, StaticExpression<string>> PruneUnusedEnvironmentReferences(
+        IReadOnlyDictionary<string, StaticExpression<string>> namedFunctions)
     {
         var directEnvPathsByFunc =
-            program.NamedFunctions
+            namedFunctions
             .ToFrozenDictionary(
                 kvp =>
                 kvp.Key,
                 kvp =>
-                StaticExpressionExtension.CollectEnvPathsOutsideFunctionApplications(kvp.Value.body)
+                StaticExpressionExtension.CollectEnvPathsOutsideFunctionApplications(kvp.Value)
                 .ToFrozenSet(IntPathEqualityComparer.Instance),
                 StringComparer.Ordinal);
 
         var distinctCallSitesByFunc =
-            program.NamedFunctions
+            namedFunctions
             .ToFrozenDictionary(
                 kvp => kvp.Key,
-                kvp => CollectCallSites(kvp.Value.body).Distinct().ToImmutableArray(),
+                kvp => CollectCallSites(kvp.Value).Distinct().ToImmutableArray(),
                 StringComparer.Ordinal);
 
         IReadOnlySet<IReadOnlyList<int>> CollectAllUsedPathsTransitive(
-            StaticProgram program,
             string functionName,
             ImmutableStack<string> stack)
         {
@@ -1929,12 +1949,10 @@ public class CodeAnalysis
                 directEnvPathsByFunc[functionName]
                 .ToHashSet(IntPathEqualityComparer.Instance);
 
-            if (!program.NamedFunctions.TryGetValue(functionName, out var func))
+            if (!namedFunctions.TryGetValue(functionName, out var funcBody))
             {
                 throw new Exception("Function not found in program: " + functionName);
             }
-
-            var (origExpr, interf, body, constraint) = func;
 
             if (stack.Contains(functionName))
             {
@@ -1946,7 +1964,7 @@ public class CodeAnalysis
                 var calleeName = app.FunctionName;
 
                 var calleeUsedPaths =
-                    CollectAllUsedPathsTransitive(program, calleeName, stack.Push(functionName));
+                    CollectAllUsedPathsTransitive(calleeName, stack.Push(functionName));
 
                 // Map paths from callee back to caller via argument expression
 
@@ -1995,8 +2013,8 @@ public class CodeAnalysis
         }
 
         var allUsedPathsByFunc =
-            program.NamedFunctions
-            .ToFrozenDictionary(kvp => kvp.Key, kvp => CollectAllUsedPathsTransitive(program, kvp.Key, stack: []));
+            namedFunctions
+            .ToFrozenDictionary(kvp => kvp.Key, kvp => CollectAllUsedPathsTransitive(kvp.Key, stack: []));
 
         bool IsPathOrPrefixUsed(
             string functionName,
@@ -2051,17 +2069,12 @@ public class CodeAnalysis
                 });
         }
 
-        var rebuilt = new Dictionary<string, (Expression origExpr, StaticFunctionInterface interf, StaticExpression<string> body, PineValueClass constraint)>();
-
-        foreach (var (funcName, (origExpr, interf, body, constraint)) in program.NamedFunctions)
-        {
-            var prunedBody = RemoveUnusedFromFunctionBody(funcName, body);
-            var prunedInterface = InterfaceForFunction(prunedBody);
-
-            rebuilt[funcName] = (origExpr, prunedInterface, prunedBody, constraint);
-        }
-
-        return new StaticProgram(rebuilt);
+        return
+            namedFunctions
+            .ToFrozenDictionary(
+                kvp => kvp.Key,
+                kvp => RemoveUnusedFromFunctionBody(kvp.Key, kvp.Value),
+                StringComparer.Ordinal);
     }
 
     private static IEnumerable<StaticExpression<TFunctionId>.FunctionApplication> CollectCallSites<TFunctionId>(
