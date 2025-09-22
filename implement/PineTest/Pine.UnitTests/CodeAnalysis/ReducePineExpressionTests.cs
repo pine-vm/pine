@@ -70,7 +70,7 @@ public class ReducePineExpressionTests
         var falseBranch = Expression.LiteralInstance(PineValue.Blob([7]));
 
         var conditional = Expression.ConditionalInstance(
-            condition: Expression.LiteralInstance(Pine.Core.PineVM.PineKernelValues.TrueValue),
+            condition: Expression.LiteralInstance(Core.PineVM.PineKernelValues.TrueValue),
             falseBranch: falseBranch,
             trueBranch: trueBranch);
 

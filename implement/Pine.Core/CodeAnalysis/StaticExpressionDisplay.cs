@@ -450,10 +450,45 @@ public static class StaticExpressionDisplay
     /// <returns>A textual representation of the program using LF line endings.</returns>
     public static string RenderStaticProgram(StaticProgram staticProgram)
     {
+        static string? SubstituteEnvironmentPath(IReadOnlyList<int> path, string leafExpr)
+        {
+            if (path.Count is 0)
+            {
+                return null;
+            }
+            else
+            {
+                return leafExpr + string.Concat(path.Select(offset => "[" + offset.ToString() + "]"));
+            }
+        }
+
+        return RenderStaticProgram(staticProgram, SubstituteEnvironmentPath);
+    }
+
+    /// <summary>
+    /// Render a whole <see cref="StaticProgram"/>, allowing a custom substitution for environment path references.
+    /// </summary>
+    /// <param name="staticProgram">The static program to render.</param>
+    /// <param name="substituteEnvironmentPath">
+    /// Optional callback to customize how references into the environment are rendered when they extend beyond
+    /// declared parameter paths. The callback receives the remaining tail path and the already rendered text for the
+    /// matched parameter prefix (e.g., "param_0"). It should return a replacement string to use, or <see langword="null"/>
+    /// to fall back to the default rendering. Signature: <c>(IReadOnlyList&lt;int&gt; pathTail, string leafExpr) =&gt; string?</c>.
+    /// </param>
+    /// <returns>A textual representation of the program using LF line endings.</returns>
+    public static string RenderStaticProgram(
+        StaticProgram staticProgram,
+        Func<IReadOnlyList<int>, string, string?>? substituteEnvironmentPath)
+    {
         IReadOnlyList<string> namedFunctionsTexts =
             [..staticProgram.NamedFunctions
             .OrderBy(kvp => kvp.Key)
-            .Select(kvp => RenderNamedFunction(staticProgram, kvp.Key, kvp.Value.body))];
+            .Select(kvp =>
+            RenderNamedFunction(
+                staticProgram,
+                kvp.Key,
+                kvp.Value.body,
+                substituteEnvironmentPath: substituteEnvironmentPath))];
 
         var wholeProgramText =
             string.Join(
@@ -470,11 +505,18 @@ public static class StaticExpressionDisplay
     /// <param name="staticProgram">The program that provides function application rendering and interfaces.</param>
     /// <param name="functionName">The name of the function to render.</param>
     /// <param name="functionBody">The static expression representing the function body.</param>
+    /// <param name="substituteEnvironmentPath">
+    /// Optional callback to customize how references into the environment are rendered when they extend beyond
+    /// declared parameter paths. The callback receives the remaining tail path and the already rendered text for the
+    /// matched parameter prefix (e.g., "param_0"). It should return a replacement string to use, or <c>null</c> to
+    /// fall back to the default rendering. Signature: <c>(IReadOnlyList&lt;int&gt; pathTail, string leafExpr) =&gt; string?</c>.
+    /// </param>
     /// <returns>The full function definition text.</returns>
     public static string RenderNamedFunction(
         StaticProgram staticProgram,
         string functionName,
-        StaticExpression<string> functionBody)
+        StaticExpression<string> functionBody,
+        Func<IReadOnlyList<int>, string, string?>? substituteEnvironmentPath)
     {
         var functionInterface = staticProgram.GetFunctionApplicationRendering(functionName).FunctionInterface;
 
@@ -483,14 +525,39 @@ public static class StaticExpressionDisplay
         var headerText =
             (functionName + " " + string.Join(" ", functionParameters.Select(RenderParamRef))).Trim() + " =";
 
+        string? RenderParamRefCombined(IReadOnlyList<int> path)
+        {
+            if (substituteEnvironmentPath is not null)
+            {
+                // Find longest tail handled by 'RenderParamRef'
+
+                for (var tailStartIndex = 0; tailStartIndex < path.Count; tailStartIndex++)
+                {
+                    if (RenderParamRef(functionInterface)([.. path.SkipLast(tailStartIndex)]) is { } tailExpr)
+                    {
+                        if (substituteEnvironmentPath([.. path.TakeLast(tailStartIndex)], tailExpr) is { } substituted)
+                        {
+                            return substituted;
+                        }
+                        else
+                        {
+                            break;
+                        }
+                    }
+                }
+            }
+
+            return RenderParamRef(functionInterface)(path);
+        }
+
         return
             headerText +
             "\n" +
-            StaticExpressionDisplay.RenderToString(
+            RenderToString(
                 functionBody,
-                blobValueRenderer: StaticExpressionDisplay.DefaultBlobRenderer,
+                blobValueRenderer: DefaultBlobRenderer,
                 functionApplicationRenderer: staticProgram.GetFunctionApplicationRendering,
-                environmentPathReferenceRenderer: RenderParamRef(functionInterface),
+                environmentPathReferenceRenderer: RenderParamRefCombined,
                 indentString: "    ",
                 indentLevel: 1);
     }

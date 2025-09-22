@@ -342,8 +342,7 @@ public class CodeAnalysisTests
                 if
                     Pine_kernel.equal
                         [ RBEmpty_elm_builtin
-                        , Pine_kernel.head
-                            param_1_0
+                        , param_1_0[0]
                         ]
                 then
                     []
@@ -351,59 +350,16 @@ public class CodeAnalysisTests
                 else if
                     Pine_kernel.equal
                         [ RBNode_elm_builtin
-                        , Pine_kernel.head
-                            param_1_0
+                        , param_1_0[0]
                         ]
                 then
                     Pine_kernel.concat
                         [ Test.dictToShuffledList
-                            (Pine_kernel.head
-                                (Pine_kernel.skip
-                                    [ 3
-                                    , Pine_kernel.head
-                                        (Pine_kernel.skip
-                                            [ 1
-                                            , param_1_0
-                                            ]
-                                        )
-                                    ]
-                                )
-                            )
+                            param_1_0[1][3]
                         , Test.dictToShuffledList
-                            (Pine_kernel.head
-                                (Pine_kernel.skip
-                                    [ 4
-                                    , Pine_kernel.head
-                                        (Pine_kernel.skip
-                                            [ 1
-                                            , param_1_0
-                                            ]
-                                        )
-                                    ]
-                                )
-                            )
-                        , [ [ Pine_kernel.head
-                                (Pine_kernel.skip
-                                    [ 1
-                                    , Pine_kernel.head
-                                        (Pine_kernel.skip
-                                            [ 1
-                                            , param_1_0
-                                            ]
-                                        )
-                                    ]
-                                )
-                            , Pine_kernel.head
-                                (Pine_kernel.skip
-                                    [ 2
-                                    , Pine_kernel.head
-                                        (Pine_kernel.skip
-                                            [ 1
-                                            , param_1_0
-                                            ]
-                                        )
-                                    ]
-                                )
+                            param_1_0[1][4]
+                        , [ [ param_1_0[1][1]
+                            , param_1_0[1][2]
                             ]
                           ]
                         ]
@@ -668,14 +624,12 @@ public class CodeAnalysisTests
                     if
                         Pine_kernel.equal
                             [ String
-                            , Pine_kernel.head
-                                param_1_1
+                            , param_1_1[0]
                             ]
                     then
                         Pine_kernel.equal
                             [ String
-                            , Pine_kernel.head
-                                param_1_0
+                            , param_1_0[0]
                             ]
 
                     else
@@ -683,37 +637,19 @@ public class CodeAnalysisTests
                 then
                     Basics.compareStrings
                         0
-                        (Pine_kernel.head
-                            (Pine_kernel.head
-                                (Pine_kernel.skip
-                                    [ 1
-                                    , param_1_0
-                                    ]
-                                )
-                            )
-                        )
-                        (Pine_kernel.head
-                            (Pine_kernel.head
-                                (Pine_kernel.skip
-                                    [ 1
-                                    , param_1_1
-                                    ]
-                                )
-                            )
-                        )
+                        param_1_0[1][0]
+                        param_1_1[1][0]
 
                 else if
                     if
                         Pine_kernel.equal
                             [ Elm_Float
-                            , Pine_kernel.head
-                                param_1_1
+                            , param_1_1[0]
                             ]
                     then
                         Pine_kernel.equal
                             [ Elm_Float
-                            , Pine_kernel.head
-                                param_1_0
+                            , param_1_0[0]
                             ]
 
                     else
@@ -722,46 +658,12 @@ public class CodeAnalysisTests
                     if
                         Pine_kernel.equal
                             [ Pine_kernel.int_mul
-                                [ Pine_kernel.head
-                                    (Pine_kernel.head
-                                        (Pine_kernel.skip
-                                            [ 1
-                                            , param_1_0
-                                            ]
-                                        )
-                                    )
-                                , Pine_kernel.head
-                                    (Pine_kernel.skip
-                                        [ 1
-                                        , Pine_kernel.head
-                                            (Pine_kernel.skip
-                                                [ 1
-                                                , param_1_1
-                                                ]
-                                            )
-                                        ]
-                                    )
+                                [ param_1_0[1][0]
+                                , param_1_1[1][1]
                                 ]
                             , Pine_kernel.int_mul
-                                [ Pine_kernel.head
-                                    (Pine_kernel.head
-                                        (Pine_kernel.skip
-                                            [ 1
-                                            , param_1_1
-                                            ]
-                                        )
-                                    )
-                                , Pine_kernel.head
-                                    (Pine_kernel.skip
-                                        [ 1
-                                        , Pine_kernel.head
-                                            (Pine_kernel.skip
-                                                [ 1
-                                                , param_1_0
-                                                ]
-                                            )
-                                        ]
-                                    )
+                                [ param_1_1[1][0]
+                                , param_1_0[1][1]
                                 ]
                             ]
                     then
@@ -770,46 +672,12 @@ public class CodeAnalysisTests
                     else if
                         Pine_kernel.int_is_sorted_asc
                             [ Pine_kernel.int_mul
-                                [ Pine_kernel.head
-                                    (Pine_kernel.head
-                                        (Pine_kernel.skip
-                                            [ 1
-                                            , param_1_0
-                                            ]
-                                        )
-                                    )
-                                , Pine_kernel.head
-                                    (Pine_kernel.skip
-                                        [ 1
-                                        , Pine_kernel.head
-                                            (Pine_kernel.skip
-                                                [ 1
-                                                , param_1_1
-                                                ]
-                                            )
-                                        ]
-                                    )
+                                [ param_1_0[1][0]
+                                , param_1_1[1][1]
                                 ]
                             , Pine_kernel.int_mul
-                                [ Pine_kernel.head
-                                    (Pine_kernel.head
-                                        (Pine_kernel.skip
-                                            [ 1
-                                            , param_1_1
-                                            ]
-                                        )
-                                    )
-                                , Pine_kernel.head
-                                    (Pine_kernel.skip
-                                        [ 1
-                                        , Pine_kernel.head
-                                            (Pine_kernel.skip
-                                                [ 1
-                                                , param_1_0
-                                                ]
-                                            )
-                                        ]
-                                    )
+                                [ param_1_1[1][0]
+                                , param_1_0[1][1]
                                 ]
                             ]
                     then
@@ -821,32 +689,14 @@ public class CodeAnalysisTests
                 else if
                     Pine_kernel.equal
                         [ Elm_Float
-                        , Pine_kernel.head
-                            param_1_0
+                        , param_1_0[0]
                         ]
                 then
                     if
                         Pine_kernel.equal
-                            [ Pine_kernel.head
-                                (Pine_kernel.head
-                                    (Pine_kernel.skip
-                                        [ 1
-                                        , param_1_0
-                                        ]
-                                    )
-                                )
+                            [ param_1_0[1][0]
                             , Pine_kernel.int_mul
-                                [ Pine_kernel.head
-                                    (Pine_kernel.skip
-                                        [ 1
-                                        , Pine_kernel.head
-                                            (Pine_kernel.skip
-                                                [ 1
-                                                , param_1_0
-                                                ]
-                                            )
-                                        ]
-                                    )
+                                [ param_1_0[1][1]
                                 , param_1_1
                                 ]
                             ]
@@ -855,26 +705,9 @@ public class CodeAnalysisTests
 
                     else if
                         Pine_kernel.int_is_sorted_asc
-                            [ Pine_kernel.head
-                                (Pine_kernel.head
-                                    (Pine_kernel.skip
-                                        [ 1
-                                        , param_1_0
-                                        ]
-                                    )
-                                )
+                            [ param_1_0[1][0]
                             , Pine_kernel.int_mul
-                                [ Pine_kernel.head
-                                    (Pine_kernel.skip
-                                        [ 1
-                                        , Pine_kernel.head
-                                            (Pine_kernel.skip
-                                                [ 1
-                                                , param_1_0
-                                                ]
-                                            )
-                                        ]
-                                    )
+                                [ param_1_0[1][1]
                                 , param_1_1
                                 ]
                             ]
@@ -887,34 +720,16 @@ public class CodeAnalysisTests
                 else if
                     Pine_kernel.equal
                         [ Elm_Float
-                        , Pine_kernel.head
-                            param_1_1
+                        , param_1_1[0]
                         ]
                 then
                     if
                         Pine_kernel.equal
                             [ Pine_kernel.int_mul
                                 [ param_1_0
-                                , Pine_kernel.head
-                                    (Pine_kernel.skip
-                                        [ 1
-                                        , Pine_kernel.head
-                                            (Pine_kernel.skip
-                                                [ 1
-                                                , param_1_1
-                                                ]
-                                            )
-                                        ]
-                                    )
+                                , param_1_1[1][1]
                                 ]
-                            , Pine_kernel.head
-                                (Pine_kernel.head
-                                    (Pine_kernel.skip
-                                        [ 1
-                                        , param_1_1
-                                        ]
-                                    )
-                                )
+                            , param_1_1[1][0]
                             ]
                     then
                         EQ
@@ -923,26 +738,9 @@ public class CodeAnalysisTests
                         Pine_kernel.int_is_sorted_asc
                             [ Pine_kernel.int_mul
                                 [ param_1_0
-                                , Pine_kernel.head
-                                    (Pine_kernel.skip
-                                        [ 1
-                                        , Pine_kernel.head
-                                            (Pine_kernel.skip
-                                                [ 1
-                                                , param_1_1
-                                                ]
-                                            )
-                                        ]
-                                    )
+                                , param_1_1[1][1]
                                 ]
-                            , Pine_kernel.head
-                                (Pine_kernel.head
-                                    (Pine_kernel.skip
-                                        [ 1
-                                        , param_1_1
-                                        ]
-                                    )
-                                )
+                            , param_1_1[1][0]
                             ]
                     then
                         LT
@@ -1017,12 +815,8 @@ public class CodeAnalysisTests
                         if
                             Pine_kernel.equal
                                 [ Basics.compare
-                                    (Pine_kernel.head
-                                        param_1_0
-                                    )
-                                    (Pine_kernel.head
-                                        param_1_1
-                                    )
+                                    param_1_0[0]
+                                    param_1_1[0]
                                 , EQ
                                 ]
                         then
@@ -1040,12 +834,8 @@ public class CodeAnalysisTests
 
                         else
                             Basics.compare
-                                (Pine_kernel.head
-                                    param_1_0
-                                )
-                                (Pine_kernel.head
-                                    param_1_1
-                                )
+                                param_1_0[0]
+                                param_1_1[0]
 
                     else
                         <always_crash>

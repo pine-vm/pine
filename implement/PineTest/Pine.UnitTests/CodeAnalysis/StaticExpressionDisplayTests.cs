@@ -698,7 +698,7 @@ public class StaticExpressionDisplayTests
         {
             var sc = scenarios[i];
 
-            var actual = StaticExpressionDisplay.RenderStaticProgram(sc.Program);
+            var actual = StaticExpressionDisplay.RenderStaticProgram(sc.Program, substituteEnvironmentPath: null);
 
             try
             {
