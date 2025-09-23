@@ -27,7 +27,8 @@ public class PineVMParseCache
             .GetOrAdd(
                 expressionValue,
                 valueFactory:
-                ExpressionEncoding.ParseExpressionFromValue);
+                value =>
+                ExpressionEncoding.ParseExpressionFromValue(value, ParseExpression));
     }
 }
 
