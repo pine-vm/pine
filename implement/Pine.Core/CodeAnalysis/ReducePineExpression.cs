@@ -748,122 +748,194 @@ public class ReducePineExpression
         Func<Expression, Expression?> findReplacement,
         Expression expression)
     {
-        if (findReplacement(expression) is { } fromReplacement)
-            return (fromReplacement, false);
+        return
+            TransformPineExpressionWithOptionalReplacement(
+                findReplacement,
+                expression,
+                cache: []);
+    }
 
-        switch (expression)
+    private static (Expression expr, bool referencesOriginalEnv) TransformPineExpressionWithOptionalReplacement(
+        Func<Expression, Expression?> findReplacement,
+        Expression expression,
+        Dictionary<Expression, (Expression expr, bool referencesOriginalEnv)> cache)
+    {
+        if (cache.TryGetValue(expression, out var cached))
+            return cached;
+
+        (Expression expr, bool referencesOriginalEnv) LessCache()
         {
-            case Expression.Literal:
-                return (expression, false);
+            if (findReplacement(expression) is { } fromReplacement)
+                return (fromReplacement, false);
 
-            case Expression.List list:
-                {
-                    var referencesOriginalEnv = false;
+            switch (expression)
+            {
+                case Expression.Literal:
+                    return (expression, false);
 
-                    var mappedItems = new Expression[list.Items.Count];
-
-                    for (var i = 0; i < list.Items.Count; i++)
+                case Expression.List list:
                     {
-                        var (mappedItem, itemReferencesOriginalEnv) =
-                            TransformPineExpressionWithOptionalReplacement(
-                                findReplacement: findReplacement,
-                                expression: list.Items[i]);
+                        var referencesOriginalEnv = false;
 
-                        mappedItems[i] = mappedItem;
-                        referencesOriginalEnv = referencesOriginalEnv || itemReferencesOriginalEnv;
+                        var mappedItems = new Expression[list.Items.Count];
+
+                        var anyChanged = false;
+
+                        for (var i = 0; i < list.Items.Count; i++)
+                        {
+                            var (mappedItem, itemReferencesOriginalEnv) =
+                                TransformPineExpressionWithOptionalReplacement(
+                                    findReplacement: findReplacement,
+                                    expression: list.Items[i],
+                                    cache);
+
+                            anyChanged = anyChanged || (mappedItem != list.Items[i]);
+
+                            mappedItems[i] = mappedItem;
+
+                            referencesOriginalEnv = referencesOriginalEnv || itemReferencesOriginalEnv;
+                        }
+
+                        if (!anyChanged)
+                        {
+                            return (list, referencesOriginalEnv);
+                        }
+
+                        return (Expression.ListInstance(mappedItems), referencesOriginalEnv);
                     }
 
-                    return (Expression.ListInstance(mappedItems), referencesOriginalEnv);
-                }
+                case Expression.ParseAndEval parseAndEval:
+                    {
+                        var encodedTransform =
+                            TransformPineExpressionWithOptionalReplacement(
+                                findReplacement,
+                                parseAndEval.Encoded,
+                                cache);
 
-            case Expression.ParseAndEval parseAndEval:
-                {
-                    var encodedTransform =
-                        TransformPineExpressionWithOptionalReplacement(
-                            findReplacement,
-                            parseAndEval.Encoded);
+                        var envTransform =
+                            TransformPineExpressionWithOptionalReplacement(
+                                findReplacement,
+                                parseAndEval.Environment,
+                                cache);
 
-                    var envTransform =
-                        TransformPineExpressionWithOptionalReplacement(
-                            findReplacement,
-                            parseAndEval.Environment);
+                        var referencesOriginalEnv =
+                            encodedTransform.referencesOriginalEnv ||
+                            envTransform.referencesOriginalEnv;
 
-                    return
-                        (
-                        new Expression.ParseAndEval
-                        (
-                            encoded: encodedTransform.expr,
-                            environment: envTransform.expr
-                        ),
-                        encodedTransform.referencesOriginalEnv || envTransform.referencesOriginalEnv);
-                }
+                        if (encodedTransform.expr == parseAndEval.Encoded &&
+                            envTransform.expr == parseAndEval.Environment)
+                        {
+                            return (parseAndEval, referencesOriginalEnv);
+                        }
 
-            case Expression.KernelApplication kernelApp:
-                {
-                    var argumentTransform =
-                        TransformPineExpressionWithOptionalReplacement(
-                            findReplacement,
-                            kernelApp.Input);
-
-                    return
-                        (
-                        new Expression.KernelApplication(
-                            function: kernelApp.Function,
-                            input: argumentTransform.expr),
-                        argumentTransform.referencesOriginalEnv);
-                }
-
-            case Expression.Conditional conditional:
-                {
-                    var conditionTransform =
-                        TransformPineExpressionWithOptionalReplacement(
-                            findReplacement,
-                            conditional.Condition);
-
-                    var trueBranchTransform =
-                        TransformPineExpressionWithOptionalReplacement(
-                            findReplacement,
-                            conditional.TrueBranch);
-
-                    var falseBranchTransform =
-                        TransformPineExpressionWithOptionalReplacement(
-                            findReplacement,
-                            conditional.FalseBranch);
-
-                    return (
-                        Expression.ConditionalInstance
-                        (
-                            condition: conditionTransform.expr,
-                            falseBranch: falseBranchTransform.expr,
-                            trueBranch: trueBranchTransform.expr
+                        return
+                            (new Expression.ParseAndEval
+                            (
+                                encoded: encodedTransform.expr,
+                                environment: envTransform.expr
                             ),
+                            referencesOriginalEnv);
+                    }
+
+                case Expression.KernelApplication kernelApp:
+                    {
+                        var argumentTransform =
+                            TransformPineExpressionWithOptionalReplacement(
+                                findReplacement,
+                                kernelApp.Input,
+                                cache);
+
+                        if (argumentTransform.expr == kernelApp.Input)
+                        {
+                            return (kernelApp, argumentTransform.referencesOriginalEnv);
+                        }
+
+                        return
+                            (
+                            new Expression.KernelApplication(
+                                function: kernelApp.Function,
+                                input: argumentTransform.expr),
+                            argumentTransform.referencesOriginalEnv);
+                    }
+
+                case Expression.Conditional conditional:
+                    {
+                        var conditionTransform =
+                            TransformPineExpressionWithOptionalReplacement(
+                                findReplacement,
+                                conditional.Condition,
+                                cache);
+
+                        var trueBranchTransform =
+                            TransformPineExpressionWithOptionalReplacement(
+                                findReplacement,
+                                conditional.TrueBranch,
+                                cache);
+
+                        var falseBranchTransform =
+                            TransformPineExpressionWithOptionalReplacement(
+                                findReplacement,
+                                conditional.FalseBranch,
+                                cache);
+
+                        var referencesOriginalEnv =
                             conditionTransform.referencesOriginalEnv ||
                             falseBranchTransform.referencesOriginalEnv ||
-                            trueBranchTransform.referencesOriginalEnv);
-                }
+                            trueBranchTransform.referencesOriginalEnv;
 
-            case Expression.Environment:
-                return (expression, true);
+                        if (conditionTransform.expr == conditional.Condition &&
+                            trueBranchTransform.expr == conditional.TrueBranch &&
+                            falseBranchTransform.expr == conditional.FalseBranch)
+                        {
+                            return (conditional, referencesOriginalEnv);
+                        }
 
-            case Expression.StringTag stringTagExpr:
-                {
-                    var taggedTransform =
-                        TransformPineExpressionWithOptionalReplacement(
-                            findReplacement,
-                            stringTagExpr.Tagged);
+                        return
+                            (Expression.ConditionalInstance
+                            (
+                                condition: conditionTransform.expr,
+                                falseBranch: falseBranchTransform.expr,
+                                trueBranch: trueBranchTransform.expr
+                                ),
+                            referencesOriginalEnv);
+                    }
 
-                    return
-                        (new Expression.StringTag
-                        (
-                            stringTagExpr.Tag,
-                            taggedTransform.expr
-                        ),
-                        taggedTransform.referencesOriginalEnv);
-                }
+                case Expression.Environment:
+                    return (expression, true);
+
+                case Expression.StringTag stringTagExpr:
+                    {
+                        var taggedTransform =
+                            TransformPineExpressionWithOptionalReplacement(
+                                findReplacement,
+                                stringTagExpr.Tagged,
+                                cache);
+
+                        if (taggedTransform.expr == stringTagExpr.Tagged)
+                        {
+                            return
+                                (stringTagExpr, taggedTransform.referencesOriginalEnv);
+                        }
+
+                        return
+                            (new Expression.StringTag
+                            (
+                                stringTagExpr.Tag,
+                                taggedTransform.expr
+                            ),
+                            taggedTransform.referencesOriginalEnv);
+                    }
+            }
+
+            throw new NotImplementedException(
+                "Expression type not implemented: " + expression.GetType().FullName);
         }
 
-        throw new NotImplementedException(
-            "Expression type not implemented: " + expression.GetType().FullName);
+        var result = LessCache();
+
+        cache[expression] = result;
+
+        return result;
     }
 
     /// <summary>
