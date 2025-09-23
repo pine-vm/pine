@@ -73,31 +73,49 @@ public static class ExpressionEncoding
     }
 
     /// <summary>
-    /// Parse a Pine value as Pine expression.
-    /// 
-    /// Inverse of <see cref="EncodeExpressionAsValue"/>.
+    /// Parses a <see cref="PineValue"/> as a Pine <see cref="Expression"/>.
     /// </summary>
+    /// <param name="value">The value to decode as an expression.</param>
+    /// <returns>
+    /// An <see cref="Result{ErrT, OkT}"/> where <c>Ok</c> carries the decoded <see cref="Expression"/>,
+    /// and <c>Err</c> contains a diagnostic message if decoding fails.
+    /// </returns>
+    /// <remarks>
+    /// Inverse of <see cref="EncodeExpressionAsValue"/>.
+    /// This overload delegates to <see cref="ParseExpressionFromValue(PineValue, Func{PineValue, Result{string, Expression}})"/>
+    /// using itself as the <c>generalParser</c> for nested expressions.
+    /// </remarks>
     public static Result<string, Expression> ParseExpressionFromValue(
         PineValue value)
     {
-        if (value is PineValue.ListValue listValue)
-        {
-            if (ReusedInstances.Instance.ExpressionDecodings?.TryGetValue(listValue, out var reusedInstance) ?? false)
-                return reusedInstance;
-        }
-
         return
-            ParseExpressionFromValueDefault(
+            ParseExpressionFromValue(
                 value,
                 generalParser: ParseExpressionFromValue);
     }
 
-    private static Result<string, Expression> ParseExpressionFromValueDefault(
+    /// <summary>
+    /// Parses a <see cref="PineValue"/> as a Pine <see cref="Expression"/>,
+    /// using the supplied <paramref name="generalParser"/> to decode nested expressions.
+    /// </summary>
+    /// <param name="value">The value to decode as an expression.</param>
+    /// <param name="generalParser">
+    /// A function used to parse any nested <see cref="PineValue"/> values into <see cref="Expression"/> instances.
+    /// Callers can supply a memoizing or instrumented parser; the default overload passes this method itself.
+    /// </param>
+    /// <returns>
+    /// An <see cref="Result{ErrT, OkT}"/> where <c>Ok</c> carries the decoded <see cref="Expression"/>,
+    /// and <c>Err</c> contains a diagnostic message if decoding fails.
+    /// </returns>
+    public static Result<string, Expression> ParseExpressionFromValue(
         PineValue value,
         Func<PineValue, Result<string, Expression>> generalParser)
     {
         if (value is not PineValue.ListValue rootList)
             return "Unexpected value type, not a list: " + value.GetType().FullName;
+
+        if (ReusedInstances.Instance.ExpressionDecodings?.TryGetValue(rootList, out var reusedInstance) ?? false)
+            return reusedInstance;
 
         if (rootList.Items.Length is not 2)
             return "Unexpected number of items in list: Not 2 but " + rootList.Items.Length;
