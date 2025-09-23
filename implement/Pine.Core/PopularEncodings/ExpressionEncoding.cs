@@ -135,7 +135,7 @@ public static class ExpressionEncoding
                 ?
                 "Unexpected number of arguments for list: Not 1 but " + tagArguments.Items.Length
                 :
-                ParseExpressionList(tagArguments.Items.Span[0]),
+                ParseExpressionList(generalParser, tagArguments.Items.Span[0]),
 
                 "ParseAndEval" =>
                 ParseParseAndEval(generalParser, tagArguments.Items),
@@ -157,7 +157,9 @@ public static class ExpressionEncoding
             };
     }
 
-    private static Result<string, Expression> ParseExpressionList(PineValue pineValue)
+    private static Result<string, Expression> ParseExpressionList(
+        Func<PineValue, Result<string, Expression>> generalParser,
+        PineValue pineValue)
     {
         if (pineValue is not PineValue.ListValue listValue)
             return "Expected list value";
@@ -168,7 +170,7 @@ public static class ExpressionEncoding
         {
             var itemValue = listValue.Items.Span[i];
 
-            var parseItemResult = ParseExpressionFromValue(itemValue);
+            var parseItemResult = generalParser(itemValue);
 
             if (parseItemResult.IsErrOrNull() is { } err)
             {
