@@ -232,6 +232,8 @@ public abstract record Expression
     public record ParseAndEval
         : Expression
     {
+        private readonly int _slimHashCode;
+
         /// <summary>
         /// Subexpression that is evaluated to obtain the value to be parsed as a Pine expression.
         /// </summary>
@@ -255,6 +257,8 @@ public abstract record Expression
             Expression encoded,
             Expression environment)
         {
+            _slimHashCode = HashCode.Combine(encoded, environment);
+
             Encoded = encoded;
             Environment = environment;
 
@@ -263,6 +267,25 @@ public abstract record Expression
 
             ReferencesEnvironment =
                 encoded.ReferencesEnvironment || environment.ReferencesEnvironment;
+        }
+
+        /// <inheritdoc/>
+        override public int GetHashCode() =>
+            _slimHashCode;
+
+        /// <inheritdoc/>
+        public virtual bool Equals(ParseAndEval? other)
+        {
+            if (other is not { } notNull)
+                return false;
+
+            if (ReferenceEquals(this, notNull))
+                return true;
+
+            return
+                _slimHashCode == notNull._slimHashCode &&
+                Encoded.Equals(notNull.Encoded) &&
+                Environment.Equals(notNull.Environment);
         }
     }
 
@@ -277,6 +300,8 @@ public abstract record Expression
     public record KernelApplication
         : Expression
     {
+        private readonly int _slimHashCode;
+
         /// <summary>
         /// The name of the kernel function to be applied.
         /// </summary>
@@ -300,6 +325,8 @@ public abstract record Expression
             string function,
             Expression input)
         {
+            _slimHashCode = HashCode.Combine(function, input);
+
             Function = function;
             Input = input;
 
@@ -313,7 +340,11 @@ public abstract record Expression
             if (other is not { } notNull)
                 return false;
 
+            if (ReferenceEquals(this, notNull))
+                return true;
+
             return
+                _slimHashCode == notNull._slimHashCode &&
                 notNull.Function == Function &&
                 (ReferenceEquals(notNull.Input, Input) || notNull.Input.Equals(Input));
         }
@@ -321,12 +352,7 @@ public abstract record Expression
         /// <inheritdoc/>
         public override int GetHashCode()
         {
-            var hash = new HashCode();
-
-            hash.Add(Function);
-            hash.Add(Input);
-
-            return hash.ToHashCode();
+            return _slimHashCode;
         }
     }
 
