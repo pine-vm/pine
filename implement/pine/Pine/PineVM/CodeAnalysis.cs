@@ -1777,13 +1777,19 @@ public class CodeAnalysis
         PineValueClass envValueClass,
         PineVMParseCache parseCache)
     {
-        if (Core.CodeAnalysis.CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(parseAndEval.Encoded) is
+        if (parseAndEval.Encoded.ReferencesEnvironment &&
+            Core.CodeAnalysis.CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(parseAndEval.Encoded) is
             ExprMappedToParentEnv.PathInParentEnv pathInParentEnv)
         {
             // Try get function value from the environment class:
 
             if (envValueClass.TryGetValue(pathInParentEnv.Path) is not { } valueFromPath)
             {
+                // Cannot interpret the encoded part as a path from the environment.
+                // This means we cannot statically determine what part of the environment
+                // is parsed by this parse&eval expression.
+                // Therefore, we have to give up on static analysis of this program.
+
                 return
                     "Could not find value for parseAndEval.Encoded path [" +
                     string.Join(',', pathInParentEnv.Path) + "] in the given environment";
@@ -1793,21 +1799,15 @@ public class CodeAnalysis
         }
         else
         {
-            if (!parseAndEval.Encoded.ReferencesEnvironment &&
-                ReducePineExpression.TryEvaluateExpressionIndependent(
-                    parseAndEval.Encoded,
-                    parseCache).IsOkOrNull() is { } fromLiteral)
+            if (ReducePineExpression.TryEvaluateExpressionIndependent(
+                parseAndEval.Encoded,
+                parseCache).IsOkOrNull() is { } fromLiteral)
             {
                 return fromLiteral;
             }
+
+            return "Could not evaluate parseAndEval.Encoded independently";
         }
-
-        // Cannot interpret the encoded part as a path from the environment.
-        // This means we cannot statically determine what part of the environment
-        // is parsed by this parse&eval expression.
-        // Therefore, we have to give up on static analysis of this program.
-
-        return "Could not interpret as path from environment and also not evaluate independently";
     }
 
     private static bool ParseAndEvalCrashingAlways(
