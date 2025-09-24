@@ -180,13 +180,13 @@
                         ],
                         [
                           { "BlobAsString": "Literal" },
-                          { "ListAsString_2024": "\u0004" }
+                          [ { "AsBase64": "BA==" } ]
                         ]
                       ]
                     ],
                     [
                       { "BlobAsString": "Literal" },
-                      { "ListAsString_2024": "\u0004" }
+                      [ { "AsBase64": "BA==" } ]
                     ]
                   ]
                 ]
@@ -243,7 +243,7 @@
                                 [
                                   [
                                     { "BlobAsString": "Literal" },
-                                    { "ListAsString_2024": "\u0004" }
+                                    [ { "AsBase64": "BA==" } ]
                                   ],
                                   [
                                     { "BlobAsString": "KernelApplication" },
@@ -347,7 +347,7 @@
         ],
         [
           { "BlobAsString": "Literal" },
-          { "ListAsString_2024": "\u0004" }
+          [ { "AsBase64": "BA==" } ]
         ]
       ]
     ],

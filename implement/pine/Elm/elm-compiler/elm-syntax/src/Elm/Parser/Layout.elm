@@ -26,17 +26,23 @@ whitespaceAndCommentsOrEmpty =
         -- since comments are comparatively rare
         -- but expensive to check for, we allow shortcutting
         (ParserFast.offsetSourceAndThenOrSucceed
-            (\offset source ->
-                case List.take 2 (List.drop offset source) of
-                    [ '-', '-' ] ->
-                        -- this will always succeed from here, so no need to fall back to Rope.empty
-                        Just fromSingleLineCommentNode
+            (\offsetBytes sourceBytes ->
+                let
+                    nextTwoChars =
+                        Pine_kernel.take
+                            [ 8
+                            , Pine_kernel.skip [ offsetBytes, sourceBytes ]
+                            ]
+                in
+                if Pine_kernel.equal [ nextTwoChars, Pine_kernel.concat [ '-', '-' ] ] then
+                    -- this will always succeed from here, so no need to fall back to Rope.empty
+                    Just fromSingleLineCommentNode
 
-                    [ '{', '-' ] ->
-                        Just fromMultilineCommentNodeOrEmptyOnProblem
+                else if Pine_kernel.equal [ nextTwoChars, Pine_kernel.concat [ '{', '-' ] ] then
+                    Just fromMultilineCommentNodeOrEmptyOnProblem
 
-                    _ ->
-                        Nothing
+                else
+                    Nothing
             )
             Rope.empty
         )
@@ -202,7 +208,7 @@ moduleLevelIndentationFollowedBy : Parser a -> Parser a
 moduleLevelIndentationFollowedBy nextParser =
     ParserFast.columnAndThen
         (\column ->
-            if column == 1 then
+            if Pine_kernel.equal [ column, 1 ] then
                 nextParser
 
             else
@@ -218,7 +224,7 @@ problemModuleLevelIndentation =
 endsTopIndented : Parser a -> Parser a
 endsTopIndented parser =
     ParserFast.validateEndColumnIndentation
-        (\column indent -> column - indent == 0)
+        (\column indent -> Pine_kernel.equal [ column, indent ])
         "must be on top indentation"
         parser
 
@@ -227,7 +233,7 @@ onTopIndentationFollowedBy : Parser a -> Parser a
 onTopIndentationFollowedBy nextParser =
     ParserFast.columnIndentAndThen
         (\column indent ->
-            if column - indent == 0 then
+            if Pine_kernel.equal [ column, indent ] then
                 nextParser
 
             else

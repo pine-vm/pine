@@ -21,39 +21,39 @@ subExpression =
     -- However, since this parser is called _a lot_,
     --   we squeeze out a bit more speed by de-duplicating slices etc
     ParserFast.offsetSourceAndThen
-        (\offset source ->
-            case List.take 1 (List.drop offset source) of
-                [ '"' ] ->
+        (\offsetBytes sourceBytes ->
+            case Pine_kernel.take [ 4, Pine_kernel.skip [ offsetBytes, sourceBytes ] ] of
+                '"' ->
                     literalExpression
 
-                [ '(' ] ->
+                '(' ->
                     tupledExpressionIfNecessaryFollowedByRecordAccess
 
-                [ '[' ] ->
+                '[' ->
                     listOrGlslExpression
 
-                [ '{' ] ->
+                '{' ->
                     recordExpressionFollowedByRecordAccess
 
-                [ 'c' ] ->
+                'c' ->
                     caseOrUnqualifiedReferenceExpression
 
-                [ '\\' ] ->
+                '\\' ->
                     lambdaExpression
 
-                [ 'l' ] ->
+                'l' ->
                     letOrUnqualifiedReferenceExpression
 
-                [ 'i' ] ->
+                'i' ->
                     ifOrUnqualifiedReferenceExpression
 
-                [ '.' ] ->
+                '.' ->
                     recordAccessFunctionExpression
 
-                [ '-' ] ->
+                '-' ->
                     negationOperation
 
-                [ '\'' ] ->
+                '\'' ->
                     charLiteralExpression
 
                 _ ->
@@ -1059,24 +1059,25 @@ negationOperation : Parser (WithComments (Node Expression))
 negationOperation =
     ParserFast.symbolBacktrackableFollowedBy "-"
         (ParserFast.offsetSourceAndThen
-            (\offset source ->
-                case List.take 1 (List.drop (offset - 2) source) of
-                    [ ' ' ] ->
+            (\offsetBytes sourceBytes ->
+                case
+                    Pine_kernel.take
+                        [ 4
+                        , Pine_kernel.skip [ Pine_kernel.int_add [ offsetBytes, -8 ], sourceBytes ]
+                        ]
+                of
+                    ' ' ->
                         negationAfterMinus
 
                     -- not "\n" or "\r" since expressions are always indented
-                    [ '(' ] ->
+                    '(' ->
                         negationAfterMinus
 
-                    [ ')' ] ->
+                    ')' ->
                         negationAfterMinus
 
                     -- from the end of a multiline comment
-                    [ '}' ] ->
-                        negationAfterMinus
-
-                    -- TODO only for tests
-                    [] ->
+                    '}' ->
                         negationAfterMinus
 
                     _ ->

@@ -163,8 +163,8 @@ type PStep value
 
 type State
     = PState
-        -- source
-        (List Char)
+        -- source Utf32 bytes
+        Int
         -- offset
         Int
         -- indent
@@ -173,6 +173,10 @@ type State
         Int
         -- column
         Int
+
+
+type String
+    = String Int
 
 
 {-| Try a parser. Here are some examples using the [`keyword`](#keyword)
@@ -195,15 +199,10 @@ to avoid breaking changes
 
 -}
 run : Parser a -> String -> Result (List Parser.DeadEnd) a
-run (Parser parse) src =
-    let
-        srcChars : List Char
-        srcChars =
-            String.toList src
-    in
-    case parse (PState srcChars 0 1 1 1) of
+run (Parser parse) (String srcBytes) =
+    case parse (PState srcBytes 0 1 1 1) of
         Good value (PState finalSrc finalOffset _ finalRow finalCol) ->
-            if finalOffset - List.length finalSrc == 0 then
+            if Pine_kernel.equal [ finalOffset, Pine_kernel.length srcBytes ] then
                 Ok value
 
             else
@@ -392,30 +391,30 @@ character may take two slots. So in JavaScript, `'abc'.length === 3` but
 moves by those rules.
 
 -}
-offsetSourceAndThen : (Int -> List Char -> Parser a) -> Parser a
+offsetSourceAndThen : (Int -> Int -> Parser a) -> Parser a
 offsetSourceAndThen callback =
     Parser
         (\s ->
             let
-                (PState src offset _ _ _) =
+                (PState srcBytes offset _ _ _) =
                     s
 
                 (Parser parse) =
-                    callback offset src
+                    callback offset srcBytes
             in
             parse s
         )
 
 
-offsetSourceAndThenOrSucceed : (Int -> List Char -> Maybe (Parser a)) -> a -> Parser a
+offsetSourceAndThenOrSucceed : (Int -> Int -> Maybe (Parser a)) -> a -> Parser a
 offsetSourceAndThenOrSucceed callback fallback =
     Parser
         (\s ->
             let
-                (PState src offset _ _ _) =
+                (PState srcBytes offsetBytes _ _ _) =
                     s
             in
-            case callback offset src of
+            case callback offsetBytes srcBytes of
                 Nothing ->
                     Good fallback s
 
@@ -1805,21 +1804,35 @@ integerDecimalMapWithRange rangeAndIntToRes =
     Parser
         (\s0 ->
             let
-                (PState s0Src s0Offset s0Indent s0Row s0Col) =
+                (PState s0SrcBytes s0Offset s0Indent s0Row s0Col) =
                     s0
 
                 s1 : { int : Int, offset : Int }
                 s1 =
-                    convertIntegerDecimal s0Offset s0Src
+                    convertIntegerDecimal s0Offset s0SrcBytes
             in
-            if s1.offset == -1 then
+            if Pine_kernel.equal [ s1.offset, -1 ] then
                 Bad False (ExpectingNumber s0Row s0Col)
 
             else
                 let
+                    numberBytesLength : Int
+                    numberBytesLength =
+                        Pine_kernel.int_add
+                            [ s1.offset
+                            , Pine_kernel.int_mul [ -1, s0Offset ]
+                            ]
+
+                    numberCharsLength : Int
+                    numberCharsLength =
+                        Pine_kernel.concat
+                            [ Pine_kernel.take [ 1, 0 ]
+                            , Pine_kernel.bit_shift_right [ 2, Pine_kernel.skip [ 1, numberBytesLength ] ]
+                            ]
+
                     newColumn : Int
                     newColumn =
-                        s0Col + (s1.offset - s0Offset)
+                        s0Col + numberCharsLength
                 in
                 Good
                     (rangeAndIntToRes
@@ -1829,7 +1842,7 @@ integerDecimalMapWithRange rangeAndIntToRes =
                         s1.int
                     )
                     (PState
-                        s0Src
+                        s0SrcBytes
                         s1.offset
                         s0Indent
                         s0Row
@@ -1862,21 +1875,35 @@ integerDecimalOrHexadecimalMapWithRange rangeAndIntDecimalToRes rangeAndIntHexad
     Parser
         (\s0 ->
             let
-                (PState s0Src s0Offset s0Indent s0Row s0Col) =
+                (PState s0SrcBytes s0Offset s0Indent s0Row s0Col) =
                     s0
 
                 s1 : { base : Base, offsetAndInt : { int : Int, offset : Int } }
                 s1 =
-                    convertIntegerDecimalOrHexadecimal s0Offset s0Src
+                    convertIntegerDecimalOrHexadecimal s0Offset s0SrcBytes
             in
             if s1.offsetAndInt.offset == -1 then
                 Bad False (ExpectingNumber s0Row s0Col)
 
             else
                 let
+                    numberBytesLength : Int
+                    numberBytesLength =
+                        Pine_kernel.int_add
+                            [ s1.offsetAndInt.offset
+                            , Pine_kernel.int_mul [ -1, s0Offset ]
+                            ]
+
+                    numberCharsLength : Int
+                    numberCharsLength =
+                        Pine_kernel.concat
+                            [ Pine_kernel.take [ 1, 0 ]
+                            , Pine_kernel.bit_shift_right [ 2, Pine_kernel.skip [ 1, numberBytesLength ] ]
+                            ]
+
                     newColumn : Int
                     newColumn =
-                        s0Col + (s1.offsetAndInt.offset - s0Offset)
+                        s0Col + numberCharsLength
 
                     range : Range
                     range =
@@ -1893,7 +1920,7 @@ integerDecimalOrHexadecimalMapWithRange rangeAndIntDecimalToRes rangeAndIntHexad
                             rangeAndIntHexadecimalToRes range s1.offsetAndInt.int
                     )
                     (PState
-                        s0Src
+                        s0SrcBytes
                         s1.offsetAndInt.offset
                         s0Indent
                         s0Row
@@ -1924,7 +1951,7 @@ integerDecimalOrHexadecimalMapWithRange rangeAndIntDecimalToRes rangeAndIntHexad
 floatOrIntegerDecimalOrHexadecimalMapWithRange : (Range -> Float -> res) -> (Range -> Int -> res) -> (Range -> Int -> res) -> Parser res
 floatOrIntegerDecimalOrHexadecimalMapWithRange rangeAndFloatToRes rangeAndIntDecimalToRes rangeAndIntHexadecimalToRes =
     Parser
-        (\(PState s0Src s0Offset s0Indent s0Row s0Col) ->
+        (\(PState s0SrcBytes s0Offset s0Indent s0Row s0Col) ->
             let
                 s0OffsetInt : Int
                 s0OffsetInt =
@@ -1932,7 +1959,7 @@ floatOrIntegerDecimalOrHexadecimalMapWithRange rangeAndFloatToRes rangeAndIntDec
 
                 s1 : { base : Base, offsetAndInt : { int : Int, offset : Int } }
                 s1 =
-                    convertIntegerDecimalOrHexadecimal s0Offset s0Src
+                    convertIntegerDecimalOrHexadecimal s0Offset s0SrcBytes
             in
             if s1.offsetAndInt.offset == -1 then
                 Bad False (ExpectingNumber s0Row s0Col)
@@ -1941,13 +1968,27 @@ floatOrIntegerDecimalOrHexadecimalMapWithRange rangeAndFloatToRes rangeAndIntDec
                 let
                     offsetAfterFloat : Int
                     offsetAfterFloat =
-                        skipFloatAfterIntegerDecimal s1.offsetAndInt.offset s0Src
+                        skipFloatAfterIntegerDecimal s1.offsetAndInt.offset s0SrcBytes
                 in
                 if offsetAfterFloat == -1 then
                     let
+                        numberBytesLength : Int
+                        numberBytesLength =
+                            Pine_kernel.int_add
+                                [ s1.offsetAndInt.offset
+                                , Pine_kernel.int_mul [ -1, s0OffsetInt ]
+                                ]
+
+                        numberCharsLength : Int
+                        numberCharsLength =
+                            Pine_kernel.concat
+                                [ Pine_kernel.take [ 1, 0 ]
+                                , Pine_kernel.bit_shift_right [ 2, Pine_kernel.skip [ 1, numberBytesLength ] ]
+                                ]
+
                         newColumn : Int
                         newColumn =
-                            s0Col + (s1.offsetAndInt.offset - s0OffsetInt)
+                            s0Col + numberCharsLength
 
                         range : Range
                         range =
@@ -1964,7 +2005,7 @@ floatOrIntegerDecimalOrHexadecimalMapWithRange rangeAndFloatToRes rangeAndIntDec
                                 rangeAndIntHexadecimalToRes range s1.offsetAndInt.int
                         )
                         (PState
-                            s0Src
+                            s0SrcBytes
                             s1.offsetAndInt.offset
                             s0Indent
                             s0Row
@@ -1973,18 +2014,40 @@ floatOrIntegerDecimalOrHexadecimalMapWithRange rangeAndFloatToRes rangeAndIntDec
 
                 else
                     let
-                        slice : List Char
-                        slice =
-                            List.take
-                                (offsetAfterFloat - s0OffsetInt)
-                                (List.drop s0OffsetInt s0Src)
+                        sliceBytesLength : Int
+                        sliceBytesLength =
+                            Pine_kernel.int_add
+                                [ offsetAfterFloat
+                                , Pine_kernel.int_mul [ -1, s0OffsetInt ]
+                                ]
+
+                        sliceBytes : Int
+                        sliceBytes =
+                            Pine_kernel.take
+                                [ sliceBytesLength
+                                , Pine_kernel.skip [ s0OffsetInt, s0SrcBytes ]
+                                ]
                     in
-                    case String.toFloat (String.fromList slice) of
+                    case String.toFloat (String sliceBytes) of
                         Just float ->
                             let
+                                numberBytesLength : Int
+                                numberBytesLength =
+                                    Pine_kernel.int_add
+                                        [ offsetAfterFloat
+                                        , Pine_kernel.int_mul [ -1, s0OffsetInt ]
+                                        ]
+
+                                numberCharsLength : Int
+                                numberCharsLength =
+                                    Pine_kernel.concat
+                                        [ Pine_kernel.take [ 1, 0 ]
+                                        , Pine_kernel.bit_shift_right [ 2, Pine_kernel.skip [ 1, numberBytesLength ] ]
+                                        ]
+
                                 newColumn : Int
                                 newColumn =
-                                    s0Col + (offsetAfterFloat - s0OffsetInt)
+                                    s0Col + numberCharsLength
                             in
                             Good
                                 (rangeAndFloatToRes
@@ -1994,7 +2057,7 @@ floatOrIntegerDecimalOrHexadecimalMapWithRange rangeAndFloatToRes rangeAndIntDec
                                     float
                                 )
                                 (PState
-                                    s0Src
+                                    s0SrcBytes
                                     offsetAfterFloat
                                     s0Indent
                                     s0Row
@@ -2006,270 +2069,270 @@ floatOrIntegerDecimalOrHexadecimalMapWithRange rangeAndFloatToRes rangeAndIntDec
         )
 
 
-skipFloatAfterIntegerDecimal : Int -> List Char -> Int
-skipFloatAfterIntegerDecimal offset src =
-    case List.take 1 (List.drop offset src) of
-        [ '.' ] ->
+skipFloatAfterIntegerDecimal : Int -> Int -> Int
+skipFloatAfterIntegerDecimal offsetBytes srcBytes =
+    case Pine_kernel.take [ 4, Pine_kernel.skip [ offsetBytes, srcBytes ] ] of
+        '.' ->
             let
                 offsetAfterDigits : Int
                 offsetAfterDigits =
-                    skip1OrMoreDigits0To9 (offset + 1) src
+                    skip1OrMoreDigits0To9 (offsetBytes + 4) srcBytes
             in
             if offsetAfterDigits == -1 then
                 -1
 
             else
-                case List.take 1 (List.drop offsetAfterDigits src) of
-                    [ 'e' ] ->
-                        skipAfterFloatExponentMark (offsetAfterDigits + 1) src
+                case Pine_kernel.take [ 4, Pine_kernel.skip [ offsetAfterDigits, srcBytes ] ] of
+                    'e' ->
+                        skipAfterFloatExponentMark (offsetAfterDigits + 4) srcBytes
 
-                    [ 'E' ] ->
-                        skipAfterFloatExponentMark (offsetAfterDigits + 1) src
+                    'E' ->
+                        skipAfterFloatExponentMark (offsetAfterDigits + 4) srcBytes
 
                     _ ->
                         offsetAfterDigits
 
-        [ 'e' ] ->
-            skipAfterFloatExponentMark (offset + 1) src
+        'e' ->
+            skipAfterFloatExponentMark (offsetBytes + 4) srcBytes
 
-        [ 'E' ] ->
-            skipAfterFloatExponentMark (offset + 1) src
-
-        _ ->
-            -1
-
-
-skipAfterFloatExponentMark : Int -> List Char -> Int
-skipAfterFloatExponentMark offset src =
-    case List.take 1 (List.drop offset src) of
-        [ '+' ] ->
-            skip1OrMoreDigits0To9 (offset + 1) src
-
-        [ '-' ] ->
-            skip1OrMoreDigits0To9 (offset + 1) src
-
-        _ ->
-            skip1OrMoreDigits0To9 offset src
-
-
-skip1OrMoreDigits0To9 : Int -> List Char -> Int
-skip1OrMoreDigits0To9 offset src =
-    case List.take 1 (List.drop offset src) of
-        [ '0' ] ->
-            skip0OrMoreDigits0To9 (offset + 1) src
-
-        [ '1' ] ->
-            skip0OrMoreDigits0To9 (offset + 1) src
-
-        [ '2' ] ->
-            skip0OrMoreDigits0To9 (offset + 1) src
-
-        [ '3' ] ->
-            skip0OrMoreDigits0To9 (offset + 1) src
-
-        [ '4' ] ->
-            skip0OrMoreDigits0To9 (offset + 1) src
-
-        [ '5' ] ->
-            skip0OrMoreDigits0To9 (offset + 1) src
-
-        [ '6' ] ->
-            skip0OrMoreDigits0To9 (offset + 1) src
-
-        [ '7' ] ->
-            skip0OrMoreDigits0To9 (offset + 1) src
-
-        [ '8' ] ->
-            skip0OrMoreDigits0To9 (offset + 1) src
-
-        [ '9' ] ->
-            skip0OrMoreDigits0To9 (offset + 1) src
+        'E' ->
+            skipAfterFloatExponentMark (offsetBytes + 4) srcBytes
 
         _ ->
             -1
 
 
-skip0OrMoreDigits0To9 : Int -> List Char -> Int
-skip0OrMoreDigits0To9 offset src =
-    case List.take 1 (List.drop offset src) of
-        [ '0' ] ->
-            skip0OrMoreDigits0To9 (offset + 1) src
+skipAfterFloatExponentMark : Int -> Int -> Int
+skipAfterFloatExponentMark offsetBytes srcBytes =
+    case Pine_kernel.take [ 4, Pine_kernel.skip [ offsetBytes, srcBytes ] ] of
+        '+' ->
+            skip1OrMoreDigits0To9 (offsetBytes + 1) srcBytes
 
-        [ '1' ] ->
-            skip0OrMoreDigits0To9 (offset + 1) src
-
-        [ '2' ] ->
-            skip0OrMoreDigits0To9 (offset + 1) src
-
-        [ '3' ] ->
-            skip0OrMoreDigits0To9 (offset + 1) src
-
-        [ '4' ] ->
-            skip0OrMoreDigits0To9 (offset + 1) src
-
-        [ '5' ] ->
-            skip0OrMoreDigits0To9 (offset + 1) src
-
-        [ '6' ] ->
-            skip0OrMoreDigits0To9 (offset + 1) src
-
-        [ '7' ] ->
-            skip0OrMoreDigits0To9 (offset + 1) src
-
-        [ '8' ] ->
-            skip0OrMoreDigits0To9 (offset + 1) src
-
-        [ '9' ] ->
-            skip0OrMoreDigits0To9 (offset + 1) src
+        '-' ->
+            skip1OrMoreDigits0To9 (offsetBytes + 1) srcBytes
 
         _ ->
-            offset
+            skip1OrMoreDigits0To9 offsetBytes srcBytes
 
 
-convert1OrMoreHexadecimal : Int -> List Char -> { int : Int, offset : Int }
-convert1OrMoreHexadecimal offset src =
-    case List.take 1 (List.drop offset src) of
-        [ '0' ] ->
-            convert0OrMoreHexadecimal 0 (offset + 1) src
+skip1OrMoreDigits0To9 : Int -> Int -> Int
+skip1OrMoreDigits0To9 offsetBytes srcBytes =
+    case Pine_kernel.take [ 4, Pine_kernel.skip [ offsetBytes, srcBytes ] ] of
+        '0' ->
+            skip0OrMoreDigits0To9 (offsetBytes + 4) srcBytes
 
-        [ '1' ] ->
-            convert0OrMoreHexadecimal 1 (offset + 1) src
+        '1' ->
+            skip0OrMoreDigits0To9 (offsetBytes + 4) srcBytes
 
-        [ '2' ] ->
-            convert0OrMoreHexadecimal 2 (offset + 1) src
+        '2' ->
+            skip0OrMoreDigits0To9 (offsetBytes + 4) srcBytes
 
-        [ '3' ] ->
-            convert0OrMoreHexadecimal 3 (offset + 1) src
+        '3' ->
+            skip0OrMoreDigits0To9 (offsetBytes + 4) srcBytes
 
-        [ '4' ] ->
-            convert0OrMoreHexadecimal 4 (offset + 1) src
+        '4' ->
+            skip0OrMoreDigits0To9 (offsetBytes + 4) srcBytes
 
-        [ '5' ] ->
-            convert0OrMoreHexadecimal 5 (offset + 1) src
+        '5' ->
+            skip0OrMoreDigits0To9 (offsetBytes + 4) srcBytes
 
-        [ '6' ] ->
-            convert0OrMoreHexadecimal 6 (offset + 1) src
+        '6' ->
+            skip0OrMoreDigits0To9 (offsetBytes + 4) srcBytes
 
-        [ '7' ] ->
-            convert0OrMoreHexadecimal 7 (offset + 1) src
+        '7' ->
+            skip0OrMoreDigits0To9 (offsetBytes + 4) srcBytes
 
-        [ '8' ] ->
-            convert0OrMoreHexadecimal 8 (offset + 1) src
+        '8' ->
+            skip0OrMoreDigits0To9 (offsetBytes + 4) srcBytes
 
-        [ '9' ] ->
-            convert0OrMoreHexadecimal 9 (offset + 1) src
+        '9' ->
+            skip0OrMoreDigits0To9 (offsetBytes + 4) srcBytes
 
-        [ 'a' ] ->
-            convert0OrMoreHexadecimal 10 (offset + 1) src
+        _ ->
+            -1
 
-        [ 'A' ] ->
-            convert0OrMoreHexadecimal 10 (offset + 1) src
 
-        [ 'b' ] ->
-            convert0OrMoreHexadecimal 11 (offset + 1) src
+skip0OrMoreDigits0To9 : Int -> Int -> Int
+skip0OrMoreDigits0To9 offsetBytes srcBytes =
+    case Pine_kernel.take [ 4, Pine_kernel.skip [ offsetBytes, srcBytes ] ] of
+        '0' ->
+            skip0OrMoreDigits0To9 (offsetBytes + 4) srcBytes
 
-        [ 'B' ] ->
-            convert0OrMoreHexadecimal 11 (offset + 1) src
+        '1' ->
+            skip0OrMoreDigits0To9 (offsetBytes + 4) srcBytes
 
-        [ 'c' ] ->
-            convert0OrMoreHexadecimal 12 (offset + 1) src
+        '2' ->
+            skip0OrMoreDigits0To9 (offsetBytes + 4) srcBytes
 
-        [ 'C' ] ->
-            convert0OrMoreHexadecimal 12 (offset + 1) src
+        '3' ->
+            skip0OrMoreDigits0To9 (offsetBytes + 4) srcBytes
 
-        [ 'd' ] ->
-            convert0OrMoreHexadecimal 13 (offset + 1) src
+        '4' ->
+            skip0OrMoreDigits0To9 (offsetBytes + 4) srcBytes
 
-        [ 'D' ] ->
-            convert0OrMoreHexadecimal 13 (offset + 1) src
+        '5' ->
+            skip0OrMoreDigits0To9 (offsetBytes + 4) srcBytes
 
-        [ 'e' ] ->
-            convert0OrMoreHexadecimal 14 (offset + 1) src
+        '6' ->
+            skip0OrMoreDigits0To9 (offsetBytes + 4) srcBytes
 
-        [ 'E' ] ->
-            convert0OrMoreHexadecimal 14 (offset + 1) src
+        '7' ->
+            skip0OrMoreDigits0To9 (offsetBytes + 4) srcBytes
 
-        [ 'f' ] ->
-            convert0OrMoreHexadecimal 15 (offset + 1) src
+        '8' ->
+            skip0OrMoreDigits0To9 (offsetBytes + 4) srcBytes
 
-        [ 'F' ] ->
-            convert0OrMoreHexadecimal 15 (offset + 1) src
+        '9' ->
+            skip0OrMoreDigits0To9 (offsetBytes + 4) srcBytes
+
+        _ ->
+            offsetBytes
+
+
+convert1OrMoreHexadecimal : Int -> Int -> { int : Int, offset : Int }
+convert1OrMoreHexadecimal offsetBytes srcBytes =
+    case Pine_kernel.take [ 4, Pine_kernel.skip [ offsetBytes, srcBytes ] ] of
+        '0' ->
+            convert0OrMoreHexadecimal 0 (offsetBytes + 4) srcBytes
+
+        '1' ->
+            convert0OrMoreHexadecimal 1 (offsetBytes + 4) srcBytes
+
+        '2' ->
+            convert0OrMoreHexadecimal 2 (offsetBytes + 4) srcBytes
+
+        '3' ->
+            convert0OrMoreHexadecimal 3 (offsetBytes + 4) srcBytes
+
+        '4' ->
+            convert0OrMoreHexadecimal 4 (offsetBytes + 4) srcBytes
+
+        '5' ->
+            convert0OrMoreHexadecimal 5 (offsetBytes + 4) srcBytes
+
+        '6' ->
+            convert0OrMoreHexadecimal 6 (offsetBytes + 4) srcBytes
+
+        '7' ->
+            convert0OrMoreHexadecimal 7 (offsetBytes + 4) srcBytes
+
+        '8' ->
+            convert0OrMoreHexadecimal 8 (offsetBytes + 4) srcBytes
+
+        '9' ->
+            convert0OrMoreHexadecimal 9 (offsetBytes + 4) srcBytes
+
+        'a' ->
+            convert0OrMoreHexadecimal 10 (offsetBytes + 4) srcBytes
+
+        'A' ->
+            convert0OrMoreHexadecimal 10 (offsetBytes + 4) srcBytes
+
+        'b' ->
+            convert0OrMoreHexadecimal 11 (offsetBytes + 4) srcBytes
+
+        'B' ->
+            convert0OrMoreHexadecimal 11 (offsetBytes + 4) srcBytes
+
+        'c' ->
+            convert0OrMoreHexadecimal 12 (offsetBytes + 4) srcBytes
+
+        'C' ->
+            convert0OrMoreHexadecimal 12 (offsetBytes + 4) srcBytes
+
+        'd' ->
+            convert0OrMoreHexadecimal 13 (offsetBytes + 4) srcBytes
+
+        'D' ->
+            convert0OrMoreHexadecimal 13 (offsetBytes + 4) srcBytes
+
+        'e' ->
+            convert0OrMoreHexadecimal 14 (offsetBytes + 4) srcBytes
+
+        'E' ->
+            convert0OrMoreHexadecimal 14 (offsetBytes + 4) srcBytes
+
+        'f' ->
+            convert0OrMoreHexadecimal 15 (offsetBytes + 4) srcBytes
+
+        'F' ->
+            convert0OrMoreHexadecimal 15 (offsetBytes + 4) srcBytes
 
         _ ->
             { int = 0, offset = -1 }
 
 
-convert0OrMoreHexadecimal : Int -> Int -> List Char -> { int : Int, offset : Int }
-convert0OrMoreHexadecimal soFar offset src =
-    case List.take 1 (List.drop offset src) of
-        [ '0' ] ->
-            convert0OrMoreHexadecimal (soFar * 16) (offset + 1) src
+convert0OrMoreHexadecimal : Int -> Int -> Int -> { int : Int, offset : Int }
+convert0OrMoreHexadecimal soFar offsetBytes srcBytes =
+    case Pine_kernel.take [ 4, Pine_kernel.skip [ offsetBytes, srcBytes ] ] of
+        '0' ->
+            convert0OrMoreHexadecimal (soFar * 16) (offsetBytes + 4) srcBytes
 
-        [ '1' ] ->
-            convert0OrMoreHexadecimal (soFar * 16 + 1) (offset + 1) src
+        '1' ->
+            convert0OrMoreHexadecimal (soFar * 16 + 1) (offsetBytes + 4) srcBytes
 
-        [ '2' ] ->
-            convert0OrMoreHexadecimal (soFar * 16 + 2) (offset + 1) src
+        '2' ->
+            convert0OrMoreHexadecimal (soFar * 16 + 2) (offsetBytes + 4) srcBytes
 
-        [ '3' ] ->
-            convert0OrMoreHexadecimal (soFar * 16 + 3) (offset + 1) src
+        '3' ->
+            convert0OrMoreHexadecimal (soFar * 16 + 3) (offsetBytes + 4) srcBytes
 
-        [ '4' ] ->
-            convert0OrMoreHexadecimal (soFar * 16 + 4) (offset + 1) src
+        '4' ->
+            convert0OrMoreHexadecimal (soFar * 16 + 4) (offsetBytes + 4) srcBytes
 
-        [ '5' ] ->
-            convert0OrMoreHexadecimal (soFar * 16 + 5) (offset + 1) src
+        '5' ->
+            convert0OrMoreHexadecimal (soFar * 16 + 5) (offsetBytes + 4) srcBytes
 
-        [ '6' ] ->
-            convert0OrMoreHexadecimal (soFar * 16 + 6) (offset + 1) src
+        '6' ->
+            convert0OrMoreHexadecimal (soFar * 16 + 6) (offsetBytes + 4) srcBytes
 
-        [ '7' ] ->
-            convert0OrMoreHexadecimal (soFar * 16 + 7) (offset + 1) src
+        '7' ->
+            convert0OrMoreHexadecimal (soFar * 16 + 7) (offsetBytes + 4) srcBytes
 
-        [ '8' ] ->
-            convert0OrMoreHexadecimal (soFar * 16 + 8) (offset + 1) src
+        '8' ->
+            convert0OrMoreHexadecimal (soFar * 16 + 8) (offsetBytes + 4) srcBytes
 
-        [ '9' ] ->
-            convert0OrMoreHexadecimal (soFar * 16 + 9) (offset + 1) src
+        '9' ->
+            convert0OrMoreHexadecimal (soFar * 16 + 9) (offsetBytes + 4) srcBytes
 
-        [ 'a' ] ->
-            convert0OrMoreHexadecimal (soFar * 16 + 10) (offset + 1) src
+        'a' ->
+            convert0OrMoreHexadecimal (soFar * 16 + 10) (offsetBytes + 4) srcBytes
 
-        [ 'A' ] ->
-            convert0OrMoreHexadecimal (soFar * 16 + 10) (offset + 1) src
+        'A' ->
+            convert0OrMoreHexadecimal (soFar * 16 + 10) (offsetBytes + 4) srcBytes
 
-        [ 'b' ] ->
-            convert0OrMoreHexadecimal (soFar * 16 + 11) (offset + 1) src
+        'b' ->
+            convert0OrMoreHexadecimal (soFar * 16 + 11) (offsetBytes + 4) srcBytes
 
-        [ 'B' ] ->
-            convert0OrMoreHexadecimal (soFar * 16 + 11) (offset + 1) src
+        'B' ->
+            convert0OrMoreHexadecimal (soFar * 16 + 11) (offsetBytes + 4) srcBytes
 
-        [ 'c' ] ->
-            convert0OrMoreHexadecimal (soFar * 16 + 12) (offset + 1) src
+        'c' ->
+            convert0OrMoreHexadecimal (soFar * 16 + 12) (offsetBytes + 4) srcBytes
 
-        [ 'C' ] ->
-            convert0OrMoreHexadecimal (soFar * 16 + 12) (offset + 1) src
+        'C' ->
+            convert0OrMoreHexadecimal (soFar * 16 + 12) (offsetBytes + 4) srcBytes
 
-        [ 'd' ] ->
-            convert0OrMoreHexadecimal (soFar * 16 + 13) (offset + 1) src
+        'd' ->
+            convert0OrMoreHexadecimal (soFar * 16 + 13) (offsetBytes + 4) srcBytes
 
-        [ 'D' ] ->
-            convert0OrMoreHexadecimal (soFar * 16 + 13) (offset + 1) src
+        'D' ->
+            convert0OrMoreHexadecimal (soFar * 16 + 13) (offsetBytes + 4) srcBytes
 
-        [ 'e' ] ->
-            convert0OrMoreHexadecimal (soFar * 16 + 14) (offset + 1) src
+        'e' ->
+            convert0OrMoreHexadecimal (soFar * 16 + 14) (offsetBytes + 4) srcBytes
 
-        [ 'E' ] ->
-            convert0OrMoreHexadecimal (soFar * 16 + 14) (offset + 1) src
+        'E' ->
+            convert0OrMoreHexadecimal (soFar * 16 + 14) (offsetBytes + 4) srcBytes
 
-        [ 'f' ] ->
-            convert0OrMoreHexadecimal (soFar * 16 + 15) (offset + 1) src
+        'f' ->
+            convert0OrMoreHexadecimal (soFar * 16 + 15) (offsetBytes + 4) srcBytes
 
-        [ 'F' ] ->
-            convert0OrMoreHexadecimal (soFar * 16 + 15) (offset + 1) src
+        'F' ->
+            convert0OrMoreHexadecimal (soFar * 16 + 15) (offsetBytes + 4) srcBytes
 
         _ ->
-            { int = soFar, offset = offset }
+            { int = soFar, offset = offsetBytes }
 
 
 type Base
@@ -2277,49 +2340,49 @@ type Base
     | Hexadecimal
 
 
-convertIntegerDecimalOrHexadecimal : Int -> List Char -> { base : Base, offsetAndInt : { int : Int, offset : Int } }
-convertIntegerDecimalOrHexadecimal offset src =
-    case List.take 1 (List.drop offset src) of
-        [ '0' ] ->
-            case List.take 1 (List.drop (offset + 1) src) of
-                [ 'x' ] ->
+convertIntegerDecimalOrHexadecimal : Int -> Int -> { base : Base, offsetAndInt : { int : Int, offset : Int } }
+convertIntegerDecimalOrHexadecimal offsetBytes srcBytes =
+    case Pine_kernel.take [ 4, Pine_kernel.skip [ offsetBytes, srcBytes ] ] of
+        '0' ->
+            case Pine_kernel.take [ 4, Pine_kernel.skip [ offsetBytes + 4, srcBytes ] ] of
+                'x' ->
                     let
                         --_ = Debug.todo "not huh"
                         hex : { int : Int, offset : Int }
                         hex =
-                            convert1OrMoreHexadecimal (offset + 2) src
+                            convert1OrMoreHexadecimal (offsetBytes + 8) srcBytes
                     in
                     { base = Hexadecimal, offsetAndInt = { int = hex.int, offset = hex.offset } }
 
                 _ ->
-                    { base = Decimal, offsetAndInt = { int = 0, offset = offset + 1 } }
+                    { base = Decimal, offsetAndInt = { int = 0, offset = offsetBytes + 4 } }
 
-        [ '1' ] ->
-            { base = Decimal, offsetAndInt = convert0OrMore0To9s 1 (offset + 1) src }
+        '1' ->
+            { base = Decimal, offsetAndInt = convert0OrMore0To9s 1 (offsetBytes + 4) srcBytes }
 
-        [ '2' ] ->
-            { base = Decimal, offsetAndInt = convert0OrMore0To9s 2 (offset + 1) src }
+        '2' ->
+            { base = Decimal, offsetAndInt = convert0OrMore0To9s 2 (offsetBytes + 4) srcBytes }
 
-        [ '3' ] ->
-            { base = Decimal, offsetAndInt = convert0OrMore0To9s 3 (offset + 1) src }
+        '3' ->
+            { base = Decimal, offsetAndInt = convert0OrMore0To9s 3 (offsetBytes + 4) srcBytes }
 
-        [ '4' ] ->
-            { base = Decimal, offsetAndInt = convert0OrMore0To9s 4 (offset + 1) src }
+        '4' ->
+            { base = Decimal, offsetAndInt = convert0OrMore0To9s 4 (offsetBytes + 4) srcBytes }
 
-        [ '5' ] ->
-            { base = Decimal, offsetAndInt = convert0OrMore0To9s 5 (offset + 1) src }
+        '5' ->
+            { base = Decimal, offsetAndInt = convert0OrMore0To9s 5 (offsetBytes + 4) srcBytes }
 
-        [ '6' ] ->
-            { base = Decimal, offsetAndInt = convert0OrMore0To9s 6 (offset + 1) src }
+        '6' ->
+            { base = Decimal, offsetAndInt = convert0OrMore0To9s 6 (offsetBytes + 4) srcBytes }
 
-        [ '7' ] ->
-            { base = Decimal, offsetAndInt = convert0OrMore0To9s 7 (offset + 1) src }
+        '7' ->
+            { base = Decimal, offsetAndInt = convert0OrMore0To9s 7 (offsetBytes + 4) srcBytes }
 
-        [ '8' ] ->
-            { base = Decimal, offsetAndInt = convert0OrMore0To9s 8 (offset + 1) src }
+        '8' ->
+            { base = Decimal, offsetAndInt = convert0OrMore0To9s 8 (offsetBytes + 4) srcBytes }
 
-        [ '9' ] ->
-            { base = Decimal, offsetAndInt = convert0OrMore0To9s 9 (offset + 1) src }
+        '9' ->
+            { base = Decimal, offsetAndInt = convert0OrMore0To9s 9 (offsetBytes + 4) srcBytes }
 
         _ ->
             errorAsBaseOffsetAndInt
@@ -2330,38 +2393,38 @@ errorAsBaseOffsetAndInt =
     { base = Decimal, offsetAndInt = { int = 0, offset = -1 } }
 
 
-convertIntegerDecimal : Int -> List Char -> { int : Int, offset : Int }
-convertIntegerDecimal offset src =
-    case List.take 1 (List.drop offset src) of
-        [ '0' ] ->
-            { int = 0, offset = offset + 1 }
+convertIntegerDecimal : Int -> Int -> { int : Int, offset : Int }
+convertIntegerDecimal offsetBytes srcBytes =
+    case Pine_kernel.take [ 4, Pine_kernel.skip [ offsetBytes, srcBytes ] ] of
+        '0' ->
+            { int = 0, offset = offsetBytes + 4 }
 
-        [ '1' ] ->
-            convert0OrMore0To9s 1 (offset + 1) src
+        '1' ->
+            convert0OrMore0To9s 1 (offsetBytes + 4) srcBytes
 
-        [ '2' ] ->
-            convert0OrMore0To9s 2 (offset + 1) src
+        '2' ->
+            convert0OrMore0To9s 2 (offsetBytes + 4) srcBytes
 
-        [ '3' ] ->
-            convert0OrMore0To9s 3 (offset + 1) src
+        '3' ->
+            convert0OrMore0To9s 3 (offsetBytes + 4) srcBytes
 
-        [ '4' ] ->
-            convert0OrMore0To9s 4 (offset + 1) src
+        '4' ->
+            convert0OrMore0To9s 4 (offsetBytes + 4) srcBytes
 
-        [ '5' ] ->
-            convert0OrMore0To9s 5 (offset + 1) src
+        '5' ->
+            convert0OrMore0To9s 5 (offsetBytes + 4) srcBytes
 
-        [ '6' ] ->
-            convert0OrMore0To9s 6 (offset + 1) src
+        '6' ->
+            convert0OrMore0To9s 6 (offsetBytes + 4) srcBytes
 
-        [ '7' ] ->
-            convert0OrMore0To9s 7 (offset + 1) src
+        '7' ->
+            convert0OrMore0To9s 7 (offsetBytes + 4) srcBytes
 
-        [ '8' ] ->
-            convert0OrMore0To9s 8 (offset + 1) src
+        '8' ->
+            convert0OrMore0To9s 8 (offsetBytes + 4) srcBytes
 
-        [ '9' ] ->
-            convert0OrMore0To9s 9 (offset + 1) src
+        '9' ->
+            convert0OrMore0To9s 9 (offsetBytes + 4) srcBytes
 
         _ ->
             errorAsOffsetAndInt
@@ -2372,41 +2435,41 @@ errorAsOffsetAndInt =
     { int = 0, offset = -1 }
 
 
-convert0OrMore0To9s : Int -> Int -> List Char -> { int : Int, offset : Int }
-convert0OrMore0To9s soFar offset src =
-    case List.take 1 (List.drop offset src) of
-        [ '0' ] ->
-            convert0OrMore0To9s (soFar * 10) (offset + 1) src
+convert0OrMore0To9s : Int -> Int -> Int -> { int : Int, offset : Int }
+convert0OrMore0To9s soFar offsetBytes srcBytes =
+    case Pine_kernel.take [ 4, Pine_kernel.skip [ offsetBytes, srcBytes ] ] of
+        '0' ->
+            convert0OrMore0To9s (soFar * 10) (offsetBytes + 4) srcBytes
 
-        [ '1' ] ->
-            convert0OrMore0To9s (soFar * 10 + 1) (offset + 1) src
+        '1' ->
+            convert0OrMore0To9s (soFar * 10 + 1) (offsetBytes + 4) srcBytes
 
-        [ '2' ] ->
-            convert0OrMore0To9s (soFar * 10 + 2) (offset + 1) src
+        '2' ->
+            convert0OrMore0To9s (soFar * 10 + 2) (offsetBytes + 4) srcBytes
 
-        [ '3' ] ->
-            convert0OrMore0To9s (soFar * 10 + 3) (offset + 1) src
+        '3' ->
+            convert0OrMore0To9s (soFar * 10 + 3) (offsetBytes + 4) srcBytes
 
-        [ '4' ] ->
-            convert0OrMore0To9s (soFar * 10 + 4) (offset + 1) src
+        '4' ->
+            convert0OrMore0To9s (soFar * 10 + 4) (offsetBytes + 4) srcBytes
 
-        [ '5' ] ->
-            convert0OrMore0To9s (soFar * 10 + 5) (offset + 1) src
+        '5' ->
+            convert0OrMore0To9s (soFar * 10 + 5) (offsetBytes + 4) srcBytes
 
-        [ '6' ] ->
-            convert0OrMore0To9s (soFar * 10 + 6) (offset + 1) src
+        '6' ->
+            convert0OrMore0To9s (soFar * 10 + 6) (offsetBytes + 4) srcBytes
 
-        [ '7' ] ->
-            convert0OrMore0To9s (soFar * 10 + 7) (offset + 1) src
+        '7' ->
+            convert0OrMore0To9s (soFar * 10 + 7) (offsetBytes + 4) srcBytes
 
-        [ '8' ] ->
-            convert0OrMore0To9s (soFar * 10 + 8) (offset + 1) src
+        '8' ->
+            convert0OrMore0To9s (soFar * 10 + 8) (offsetBytes + 4) srcBytes
 
-        [ '9' ] ->
-            convert0OrMore0To9s (soFar * 10 + 9) (offset + 1) src
+        '9' ->
+            convert0OrMore0To9s (soFar * 10 + 9) (offsetBytes + 4) srcBytes
 
         _ ->
-            { int = soFar, offset = offset }
+            { int = soFar, offset = offsetBytes }
 
 
 {-| Parse exact text like `(` and `,`.
@@ -2422,18 +2485,21 @@ yourself in weird situations. For example, is `3--4` a typo? Or is it `3 - -4`?
 
 -}
 symbol : String -> res -> Parser res
-symbol str res =
+symbol ((String strBytes) as str) res =
     let
-        strChars : List Char
-        strChars =
-            String.toList str
+        strBytesLength : Int
+        strBytesLength =
+            Pine_kernel.length strBytes
 
         strLength : Int
         strLength =
-            List.length strChars
+            Pine_kernel.concat
+                [ Pine_kernel.take [ 1, 0 ]
+                , Pine_kernel.bit_shift_right [ 2, Pine_kernel.skip [ 1, strBytesLength ] ]
+                ]
     in
     Parser
-        (\(PState sSrc sOffset sIndent sRow sCol) ->
+        (\(PState sSrcBytes sOffset sIndent sRow sCol) ->
             let
                 sOffsetInt : Int
                 sOffsetInt =
@@ -2443,10 +2509,15 @@ symbol str res =
                 sColInt =
                     sCol
             in
-            if List.take strLength (List.drop sOffset sSrc) == strChars then
+            if
+                Pine_kernel.equal
+                    [ Pine_kernel.take [ strBytesLength, Pine_kernel.skip [ sOffsetInt, sSrcBytes ] ]
+                    , strBytes
+                    ]
+            then
                 Good res
-                    (PState sSrc
-                        (sOffsetInt + strLength)
+                    (PState sSrcBytes
+                        (sOffsetInt + strBytesLength)
                         sIndent
                         sRow
                         (sColInt + strLength)
@@ -2458,20 +2529,23 @@ symbol str res =
 
 
 followedBySymbol : String -> Parser a -> Parser a
-followedBySymbol str (Parser parsePrevious) =
+followedBySymbol ((String strBytes) as str) (Parser parsePrevious) =
     let
-        strChars : List Char
-        strChars =
-            String.toList str
+        strBytesLength : Int
+        strBytesLength =
+            Pine_kernel.length strBytes
 
         strLength : Int
         strLength =
-            List.length strChars
+            Pine_kernel.concat
+                [ Pine_kernel.take [ 1, 0 ]
+                , Pine_kernel.bit_shift_right [ 2, Pine_kernel.skip [ 1, strBytesLength ] ]
+                ]
     in
     Parser
         (\s0 ->
             case parsePrevious s0 of
-                Good res (PState s1Src s1Offset s1Indent s1Row s1Col) ->
+                Good res (PState s1SrcBytes s1Offset s1Indent s1Row s1Col) ->
                     let
                         s1OffsetInt : Int
                         s1OffsetInt =
@@ -2481,11 +2555,16 @@ followedBySymbol str (Parser parsePrevious) =
                         s1ColInt =
                             s1Col
                     in
-                    if List.take strLength (List.drop s1OffsetInt s1Src) == strChars then
+                    if
+                        Pine_kernel.equal
+                            [ Pine_kernel.take [ strBytesLength, Pine_kernel.skip [ s1OffsetInt, s1SrcBytes ] ]
+                            , strBytes
+                            ]
+                    then
                         Good res
                             (PState
-                                s1Src
-                                (s1OffsetInt + strLength)
+                                s1SrcBytes
+                                (s1OffsetInt + strBytesLength)
                                 s1Indent
                                 s1Row
                                 (s1ColInt + strLength)
@@ -2500,18 +2579,21 @@ followedBySymbol str (Parser parsePrevious) =
 
 
 symbolWithEndLocation : String -> (Location -> res) -> Parser res
-symbolWithEndLocation str endLocationToRes =
+symbolWithEndLocation ((String strBytes) as str) endLocationToRes =
     let
-        strChars : List Char
-        strChars =
-            String.toList str
+        strBytesLength : Int
+        strBytesLength =
+            Pine_kernel.length strBytes
 
         strLength : Int
         strLength =
-            List.length strChars
+            Pine_kernel.concat
+                [ Pine_kernel.take [ 1, 0 ]
+                , Pine_kernel.bit_shift_right [ 2, Pine_kernel.skip [ 1, strBytesLength ] ]
+                ]
     in
     Parser
-        (\(PState sSrc sOffset sIndent sRow sCol) ->
+        (\(PState sSrcBytes sOffset sIndent sRow sCol) ->
             let
                 sOffsetInt : Int
                 sOffsetInt =
@@ -2521,13 +2603,14 @@ symbolWithEndLocation str endLocationToRes =
                 sColInt =
                     sCol
 
-                srcSlice : List Char
-                srcSlice =
-                    List.take
-                        strLength
-                        (List.drop sOffsetInt sSrc)
+                srcSliceBytes : Int
+                srcSliceBytes =
+                    Pine_kernel.take
+                        [ strBytesLength
+                        , Pine_kernel.skip [ sOffsetInt, sSrcBytes ]
+                        ]
             in
-            if srcSlice == strChars then
+            if Pine_kernel.equal [ srcSliceBytes, strBytes ] then
                 let
                     newCol : Int
                     newCol =
@@ -2535,8 +2618,9 @@ symbolWithEndLocation str endLocationToRes =
                 in
                 Good
                     (endLocationToRes { row = sRow, column = newCol })
-                    (PState sSrc
-                        (sOffsetInt + strLength)
+                    (PState
+                        sSrcBytes
+                        (sOffsetInt + strBytesLength)
                         sIndent
                         sRow
                         newCol
@@ -2548,18 +2632,21 @@ symbolWithEndLocation str endLocationToRes =
 
 
 symbolWithRange : String -> (Range -> res) -> Parser res
-symbolWithRange str startAndEndLocationToRes =
+symbolWithRange ((String strBytes) as str) startAndEndLocationToRes =
     let
-        strChars : List Char
-        strChars =
-            String.toList str
+        strBytesLength : Int
+        strBytesLength =
+            Pine_kernel.length strBytes
 
         strLength : Int
         strLength =
-            List.length strChars
+            Pine_kernel.concat
+                [ Pine_kernel.take [ 1, 0 ]
+                , Pine_kernel.bit_shift_right [ 2, Pine_kernel.skip [ 1, strBytesLength ] ]
+                ]
     in
     Parser
-        (\(PState sSrc sOffset sIndent sRow sCol) ->
+        (\(PState sSrcBytes sOffset sIndent sRow sCol) ->
             let
                 sOffsetInt : Int
                 sOffsetInt =
@@ -2569,13 +2656,14 @@ symbolWithRange str startAndEndLocationToRes =
                 sColInt =
                     sCol
 
-                srcSlice : List Char
-                srcSlice =
-                    List.take
-                        strLength
-                        (List.drop sOffsetInt sSrc)
+                srcSliceBytes : Int
+                srcSliceBytes =
+                    Pine_kernel.take
+                        [ strBytesLength
+                        , Pine_kernel.skip [ sOffsetInt, sSrcBytes ]
+                        ]
             in
-            if srcSlice == strChars then
+            if Pine_kernel.equal [ srcSliceBytes, strBytes ] then
                 let
                     newCol : Int
                     newCol =
@@ -2587,8 +2675,9 @@ symbolWithRange str startAndEndLocationToRes =
                         , end = { row = sRow, column = newCol }
                         }
                     )
-                    (PState sSrc
-                        (sOffsetInt + strLength)
+                    (PState
+                        sSrcBytes
+                        (sOffsetInt + strBytesLength)
                         sIndent
                         sRow
                         newCol
@@ -2606,17 +2695,24 @@ symbolFollowedBy : String -> Parser next -> Parser next
 symbolFollowedBy str parseNext =
     Parser
         (symbolFollowedByParser
-            (String.toList str)
+            str
             parseNext
         )
 
 
-symbolFollowedByParser : List Char -> Parser next -> State -> PStep next
-symbolFollowedByParser strChars (Parser parseNext) (PState sSrc sOffset sIndent sRow sCol) =
+symbolFollowedByParser : String -> Parser next -> State -> PStep next
+symbolFollowedByParser ((String strBytes) as str) (Parser parseNext) (PState sSrcBytes sOffset sIndent sRow sCol) =
     let
+        strBytesLength : Int
+        strBytesLength =
+            Pine_kernel.length strBytes
+
         strLength : Int
         strLength =
-            List.length strChars
+            Pine_kernel.concat
+                [ Pine_kernel.take [ 1, 0 ]
+                , Pine_kernel.bit_shift_right [ 2, Pine_kernel.skip [ 1, strBytesLength ] ]
+                ]
 
         sOffsetInt : Int
         sOffsetInt =
@@ -2626,16 +2722,18 @@ symbolFollowedByParser strChars (Parser parseNext) (PState sSrc sOffset sIndent 
         sColInt =
             sCol
 
-        srcSlice : List Char
-        srcSlice =
-            List.take
-                strLength
-                (List.drop sOffsetInt sSrc)
+        strSliceBytes : Int
+        strSliceBytes =
+            Pine_kernel.take
+                [ strBytesLength
+                , Pine_kernel.skip [ sOffsetInt, sSrcBytes ]
+                ]
     in
-    if srcSlice == strChars then
+    if Pine_kernel.equal [ strBytes, strSliceBytes ] then
         parseNext
-            (PState sSrc
-                (sOffsetInt + strLength)
+            (PState
+                sSrcBytes
+                (sOffsetInt + strBytesLength)
                 sIndent
                 sRow
                 (sColInt + strLength)
@@ -2643,25 +2741,28 @@ symbolFollowedByParser strChars (Parser parseNext) (PState sSrc sOffset sIndent 
             |> pStepCommit
 
     else
-        Bad False (ExpectingSymbol sRow sCol (String.fromList strChars))
+        Bad False (ExpectingSymbol sRow sCol str)
 
 
 {-| Make sure the given String isn't empty and does not contain \\n
 or 2-part UTF-16 characters.
 -}
 symbolBacktrackableFollowedBy : String -> Parser next -> Parser next
-symbolBacktrackableFollowedBy str (Parser parseNext) =
+symbolBacktrackableFollowedBy ((String strBytes) as str) (Parser parseNext) =
     let
-        strChars : List Char
-        strChars =
-            String.toList str
+        strBytesLength : Int
+        strBytesLength =
+            Pine_kernel.length strBytes
 
         strLength : Int
         strLength =
-            List.length strChars
+            Pine_kernel.concat
+                [ Pine_kernel.take [ 1, 0 ]
+                , Pine_kernel.bit_shift_right [ 2, Pine_kernel.skip [ 1, strBytesLength ] ]
+                ]
     in
     Parser
-        (\(PState sSrc sOffset sIndent sRow sCol) ->
+        (\(PState sSrcBytes sOffset sIndent sRow sCol) ->
             let
                 sOffsetInt : Int
                 sOffsetInt =
@@ -2671,16 +2772,18 @@ symbolBacktrackableFollowedBy str (Parser parseNext) =
                 sColInt =
                     sCol
 
-                srcSlice : List Char
-                srcSlice =
-                    List.take
-                        strLength
-                        (List.drop sOffsetInt sSrc)
+                strSliceBytes : Int
+                strSliceBytes =
+                    Pine_kernel.take
+                        [ strBytesLength
+                        , Pine_kernel.skip [ sOffsetInt, sSrcBytes ]
+                        ]
             in
-            if srcSlice == strChars then
+            if Pine_kernel.equal [ strSliceBytes, strBytes ] then
                 parseNext
-                    (PState sSrc
-                        (sOffsetInt + strLength)
+                    (PState
+                        sSrcBytes
+                        (sOffsetInt + strBytesLength)
                         sIndent
                         sRow
                         (sColInt + strLength)
@@ -2716,18 +2819,21 @@ This will help with the weird cases like
 
 -}
 keyword : String -> res -> Parser res
-keyword kwd res =
+keyword ((String kwdCharsBytes) as kwd) res =
     let
-        kwdChars : List Char
-        kwdChars =
-            String.toList kwd
+        kwdCharsBytesLength : Int
+        kwdCharsBytesLength =
+            Pine_kernel.length kwdCharsBytes
 
         kwdLength : Int
         kwdLength =
-            List.length kwdChars
+            Pine_kernel.concat
+                [ Pine_kernel.take [ 1, 0 ]
+                , Pine_kernel.bit_shift_right [ 2, Pine_kernel.skip [ 1, kwdCharsBytesLength ] ]
+                ]
     in
     Parser
-        (\(PState sSrc sOffset sIndent sRow sCol) ->
+        (\(PState sSrcBytes sOffset sIndent sRow sCol) ->
             let
                 sOffsetInt : Int
                 sOffsetInt =
@@ -2735,19 +2841,27 @@ keyword kwd res =
 
                 newOffset : Int
                 newOffset =
-                    sOffsetInt + kwdLength
+                    sOffsetInt + kwdCharsBytesLength
 
                 sColInt : Int
                 sColInt =
                     sCol
+
+                -- each char is 4 bytes in UTF-32
             in
-            if List.take kwdLength (List.drop sOffset sSrc) == kwdChars then
-                if isSubCharAlphaNumOrUnderscore newOffset sSrc then
+            if
+                Pine_kernel.equal
+                    [ kwdCharsBytes
+                    , Pine_kernel.take [ kwdCharsBytesLength, Pine_kernel.skip [ sOffsetInt, sSrcBytes ] ]
+                    ]
+            then
+                if isSubCharAlphaNumOrUnderscore newOffset sSrcBytes then
                     Bad False (ExpectingKeyword sRow sCol kwd)
 
                 else
                     Good res
-                        (PState sSrc
+                        (PState
+                            sSrcBytes
                             newOffset
                             sIndent
                             sRow
@@ -2759,17 +2873,14 @@ keyword kwd res =
         )
 
 
-isSubCharAlphaNumOrUnderscore : Int -> List Char -> Bool
-isSubCharAlphaNumOrUnderscore offset string =
-    case List.take 1 (List.drop offset string) of
-        [ '_' ] ->
+isSubCharAlphaNumOrUnderscore : Int -> Int -> Bool
+isSubCharAlphaNumOrUnderscore offsetBytes stringBytes =
+    case Pine_kernel.take [ 4, Pine_kernel.skip [ offsetBytes, stringBytes ] ] of
+        '_' ->
             True
 
-        [ c ] ->
+        c ->
             Char.isAlphaNum c
-
-        _ ->
-            False
 
 
 {-| Make sure the given String isn't empty and does not contain \\n
@@ -2779,44 +2890,48 @@ keywordFollowedBy : String -> Parser next -> Parser next
 keywordFollowedBy kwd parseNext =
     Parser
         (keywordFollowedByParser
-            (String.toList kwd)
+            kwd
             parseNext
         )
 
 
-keywordFollowedByParser : List Char -> Parser next -> State -> PStep next
-keywordFollowedByParser kwdChars (Parser parseNext) (PState sSrc sOffset sIndent sRow sCol) =
+keywordFollowedByParser : String -> Parser next -> State -> PStep next
+keywordFollowedByParser ((String kwdCharsBytes) as kwd) (Parser parseNext) (PState sSrcBytes sOffsetBytes sIndent sRow sCol) =
     let
+        kwdCharsBytesLength : Int
+        kwdCharsBytesLength =
+            Pine_kernel.length kwdCharsBytes
+
         kwdLength : Int
         kwdLength =
-            List.length kwdChars
-
-        sOffsetInt : Int
-        sOffsetInt =
-            sOffset
+            Pine_kernel.concat
+                [ Pine_kernel.take [ 1, 0 ]
+                , Pine_kernel.bit_shift_right [ 2, Pine_kernel.skip [ 1, kwdCharsBytesLength ] ]
+                ]
 
         sColInt : Int
         sColInt =
             sCol
 
-        srcSlice : List Char
-        srcSlice =
-            List.take
-                kwdLength
-                (List.drop sOffsetInt sSrc)
+        srcSliceBytes : Int
+        srcSliceBytes =
+            Pine_kernel.take
+                [ kwdCharsBytesLength
+                , Pine_kernel.skip [ sOffsetBytes, sSrcBytes ]
+                ]
 
         newOffset : Int
         newOffset =
-            sOffsetInt + kwdLength
+            Pine_kernel.int_add [ sOffsetBytes, kwdCharsBytesLength ]
     in
-    if srcSlice == kwdChars then
-        if isSubCharAlphaNumOrUnderscore newOffset sSrc then
-            Bad False (ExpectingKeyword sRow sCol (String.fromList kwdChars))
+    if Pine_kernel.equal [ srcSliceBytes, kwdCharsBytes ] then
+        if isSubCharAlphaNumOrUnderscore newOffset sSrcBytes then
+            Bad False (ExpectingKeyword sRow sCol kwd)
 
         else
             parseNext
                 (PState
-                    sSrc
+                    sSrcBytes
                     newOffset
                     sIndent
                     sRow
@@ -2825,21 +2940,21 @@ keywordFollowedByParser kwdChars (Parser parseNext) (PState sSrc sOffset sIndent
                 |> pStepCommit
 
     else
-        Bad False (ExpectingKeyword sRow sCol (String.fromList kwdChars))
+        Bad False (ExpectingKeyword sRow sCol kwd)
 
 
 anyChar : Parser Char
 anyChar =
     Parser
-        (\(PState sSrc sOffset sIndent sRow sCol) ->
+        (\(PState sSrcBytes sOffsetBytes sIndent sRow sCol) ->
             let
-                sOffsetInt : Int
-                sOffsetInt =
-                    sOffset
+                sOffsetBytesInt : Int
+                sOffsetBytesInt =
+                    sOffsetBytes
 
                 newOffset : Int
                 newOffset =
-                    charOrEnd sOffsetInt sSrc
+                    charOrEnd sOffsetBytesInt sSrcBytes
 
                 sColInt : Int
                 sColInt =
@@ -2857,8 +2972,8 @@ anyChar =
                 -- newline
                 Good '\n'
                     (PState
-                        sSrc
-                        (sOffsetInt + 1)
+                        sSrcBytes
+                        (sOffsetBytesInt + 4)
                         sIndent
                         (sRowInt + 1)
                         1
@@ -2866,38 +2981,50 @@ anyChar =
 
             else
                 -- found
-                case List.take 1 (List.drop sOffsetInt sSrc) of
-                    [] ->
-                        Bad False (ExpectingAnyChar sRowInt sCol)
+                let
+                    foundChar : Char
+                    foundChar =
+                        Pine_kernel.take [ 4, Pine_kernel.skip [ sOffsetBytesInt, sSrcBytes ] ]
+                in
+                if Pine_kernel.equal [ Pine_kernel.length foundChar, 0 ] then
+                    Bad False (ExpectingAnyChar sRowInt sCol)
 
-                    c :: _ ->
-                        Good c
-                            (PState sSrc
-                                newOffset
-                                sIndent
-                                sRowInt
-                                (sColInt + 1)
-                            )
+                else
+                    Good foundChar
+                        (PState
+                            sSrcBytes
+                            newOffset
+                            sIndent
+                            sRowInt
+                            (sColInt + 1)
+                        )
         )
 
 
-charOrEnd : Int -> List Char -> Int
-charOrEnd offset string =
-    case List.take 1 (List.drop offset string) of
-        [ '\n' ] ->
-            -2
+charOrEnd : Int -> Int -> Int
+charOrEnd offsetBytes stringBytes =
+    let
+        nextCharBytes : Int
+        nextCharBytes =
+            Pine_kernel.take
+                [ 4
+                , Pine_kernel.skip [ offsetBytes, stringBytes ]
+                ]
+    in
+    if Pine_kernel.equal [ nextCharBytes, '\n' ] then
+        -2
 
-        [] ->
-            -1
+    else if Pine_kernel.equal [ Pine_kernel.length nextCharBytes, 0 ] then
+        -1
 
-        _ ->
-            offset + 1
+    else
+        offsetBytes + 4
 
 
 whileMapWithRange : (Char -> Bool) -> (Range -> String -> res) -> Parser res
 whileMapWithRange isGood rangeAndConsumedStringToRes =
     Parser
-        (\(PState s0Src s0Offset s0Indent s0Row s0Col) ->
+        (\(PState s0SrcBytes s0Offset s0Indent s0Row s0Col) ->
             let
                 s0OffsetInt : Int
                 s0OffsetInt =
@@ -2905,7 +3032,7 @@ whileMapWithRange isGood rangeAndConsumedStringToRes =
 
                 s1 : State
                 s1 =
-                    skipWhileHelp isGood s0Offset s0Row s0Col s0Src s0Indent
+                    skipWhileHelp isGood s0Offset s0Row s0Col s0SrcBytes s0Indent
 
                 (PState _ s1Offset _ s1Row s1Col) =
                     s1
@@ -2914,76 +3041,102 @@ whileMapWithRange isGood rangeAndConsumedStringToRes =
                 s1OffsetInt =
                     s1Offset
 
-                length : Int
-                length =
-                    s1OffsetInt - s0OffsetInt
+                sliceBytesLength : Int
+                sliceBytesLength =
+                    Pine_kernel.int_add
+                        [ s1OffsetInt
+                        , Pine_kernel.int_mul [ -1, s0OffsetInt ]
+                        ]
 
-                slice : List Char
-                slice =
-                    List.take
-                        length
-                        (List.drop s0Offset s0Src)
+                sliceBytes : Int
+                sliceBytes =
+                    Pine_kernel.take
+                        [ sliceBytesLength
+                        , Pine_kernel.skip [ s0OffsetInt, s0SrcBytes ]
+                        ]
             in
             Good
                 (rangeAndConsumedStringToRes
                     { start = { row = s0Row, column = s0Col }
                     , end = { row = s1Row, column = s1Col }
                     }
-                    (String.fromList slice)
+                    (String sliceBytes)
                 )
                 s1
         )
 
 
-skipWhileHelp : (Char -> Bool) -> Int -> Int -> Int -> List Char -> Int -> State
-skipWhileHelp isGood offset row col src indent =
-    case List.take 1 (List.drop offset src) of
-        actualChar :: _ ->
-            if isGood actualChar then
-                case actualChar of
-                    '\n' ->
-                        skipWhileHelp isGood (offset + 1) (row + 1) 1 src indent
+skipWhileHelp : (Char -> Bool) -> Int -> Int -> Int -> Int -> Int -> State
+skipWhileHelp isGood offset row col srcBytes indent =
+    let
+        nextChar : Char
+        nextChar =
+            Pine_kernel.take [ 4, Pine_kernel.skip [ offset, srcBytes ] ]
+    in
+    -- Predicate 'isGood' might be lax and return True for an empty blob too, therefore check for end of source
+    if Pine_kernel.equal [ Pine_kernel.length nextChar, 0 ] then
+        -- end of source
+        PState srcBytes offset indent row col
 
-                    _ ->
-                        skipWhileHelp isGood (offset + 1) row (col + 1) src indent
+    else if isGood nextChar then
+        if Pine_kernel.equal [ nextChar, '\n' ] then
+            skipWhileHelp
+                isGood
+                (offset + 4)
+                (row + 1)
+                1
+                srcBytes
+                indent
 
-            else
-                -- no match
-                PState src offset indent row col
+        else
+            skipWhileHelp
+                isGood
+                (offset + 4)
+                row
+                (col + 1)
+                srcBytes
+                indent
 
-        [] ->
-            -- no match
-            PState src offset indent row col
-
-
-skipWhileWithoutLinebreakHelp : (Char -> Bool) -> Int -> Int -> Int -> List Char -> Int -> State
-skipWhileWithoutLinebreakHelp isGood offset row col src indent =
-    case List.take 1 (List.drop offset src) of
-        actualChar :: _ ->
-            if isGood actualChar then
-                skipWhileWithoutLinebreakHelp isGood (offset + 1) row (col + 1) src indent
-
-            else
-                -- no match
-                PState src offset indent row col
-
-        [] ->
-            -- no match
-            PState src offset indent row col
+    else
+        -- no match
+        PState srcBytes offset indent row col
 
 
-skipWhileWithoutLinebreakAnd2PartUtf16Help : (Char -> Bool) -> Int -> List Char -> Int
-skipWhileWithoutLinebreakAnd2PartUtf16Help isGood offset src =
-    case List.take 1 (List.drop offset src) of
-        actualChar :: _ ->
-            if isGood actualChar then
-                skipWhileWithoutLinebreakAnd2PartUtf16Help isGood (offset + 1) src
+skipWhileWithoutLinebreakHelp : (Char -> Bool) -> Int -> Int -> Int -> Int -> Int -> State
+skipWhileWithoutLinebreakHelp isGood offset row col srcBytes indent =
+    let
+        nextChar : Int
+        nextChar =
+            Pine_kernel.take [ 4, Pine_kernel.skip [ offset, srcBytes ] ]
+    in
+    if Pine_kernel.equal [ Pine_kernel.length nextChar, 0 ] then
+        -- end of source
+        PState srcBytes offset indent row col
 
-            else
-                offset
+    else if isGood nextChar then
+        skipWhileWithoutLinebreakHelp
+            isGood
+            (offset + 4)
+            row
+            (col + 1)
+            srcBytes
+            indent
 
-        [] ->
-            offset
+    else
+        -- no match
+        PState srcBytes offset indent row col
+
+
+skipWhileWithoutLinebreakAnd2PartUtf16Help : (Char -> Bool) -> Int -> Int -> Int
+skipWhileWithoutLinebreakAnd2PartUtf16Help isGood offset srcBytes =
+    if isGood (Pine_kernel.take [ 4, Pine_kernel.skip [ offset, srcBytes ] ]) then
+        skipWhileWithoutLinebreakAnd2PartUtf16Help
+            isGood
+            (offset + 4)
+            srcBytes
+
+    else
+        offset
 
 
 followedBySkipWhileWhitespace : Parser before -> Parser before
@@ -3012,31 +3165,46 @@ followedBySkipWhileWhitespace (Parser parseBefore) =
 skipWhileWhitespaceFollowedBy : Parser next -> Parser next
 skipWhileWhitespaceFollowedBy (Parser parseNext) =
     Parser
-        (\(PState s0Src s0Offset s0Indent s0Row s0Col) ->
+        (\(PState s0SrcBytes s0OffsetBytes s0Indent s0Row s0Col) ->
             let
                 s1 : State
                 s1 =
-                    skipWhileWhitespaceHelp s0Offset s0Row s0Col s0Src s0Indent
+                    skipWhileWhitespaceHelp s0OffsetBytes s0Row s0Col s0SrcBytes s0Indent
             in
             parseNext s1 |> pStepCommit
         )
 
 
-skipWhileWhitespaceHelp : Int -> Int -> Int -> List Char -> Int -> State
-skipWhileWhitespaceHelp offset row col src indent =
-    case List.take 1 (List.drop offset src) of
-        [ ' ' ] ->
-            skipWhileWhitespaceHelp (offset + 1) row (col + 1) src indent
+skipWhileWhitespaceHelp : Int -> Int -> Int -> Int -> Int -> State
+skipWhileWhitespaceHelp offsetBytes row col srcBytes indent =
+    case Pine_kernel.take [ 4, Pine_kernel.skip [ offsetBytes, srcBytes ] ] of
+        ' ' ->
+            skipWhileWhitespaceHelp
+                (offsetBytes + 4)
+                row
+                (col + 1)
+                srcBytes
+                indent
 
-        [ '\n' ] ->
-            skipWhileWhitespaceHelp (offset + 1) (row + 1) 1 src indent
+        '\n' ->
+            skipWhileWhitespaceHelp
+                (offsetBytes + 4)
+                (row + 1)
+                1
+                srcBytes
+                indent
 
-        [ '\u{000D}' ] ->
-            skipWhileWhitespaceHelp (offset + 1) row (col + 1) src indent
+        '\u{000D}' ->
+            skipWhileWhitespaceHelp
+                (offsetBytes + 4)
+                row
+                (col + 1)
+                srcBytes
+                indent
 
         -- empty or non-whitespace
         _ ->
-            PState src offset indent row col
+            PState srcBytes offsetBytes indent row col
 
 
 changeIndent : Int -> State -> State
@@ -3071,8 +3239,15 @@ withIndentSetToColumnMinus columnToMoveIndentationBaseBackBy (Parser parse) =
             let
                 (PState _ _ s0Indent _ s0Col) =
                     s0
+
+                newIndent : Int
+                newIndent =
+                    Pine_kernel.int_add
+                        [ s0Col
+                        , Pine_kernel.int_mul [ -1, columnToMoveIndentationBaseBackBy ]
+                        ]
             in
-            case parse (changeIndent (s0Col - columnToMoveIndentationBaseBackBy) s0) of
+            case parse (changeIndent newIndent s0) of
                 Good a s1 ->
                     Good a (changeIndent s0Indent s1)
 
@@ -3151,7 +3326,7 @@ ifFollowedByWhileValidateWithoutLinebreakParser :
     -> (String -> Bool)
     -> State
     -> PStep String
-ifFollowedByWhileValidateWithoutLinebreakParser firstIsOkay afterFirstIsOkay resultIsOkay (PState sSrc sOffset sIndent sRow sCol) =
+ifFollowedByWhileValidateWithoutLinebreakParser firstIsOkay afterFirstIsOkay resultIsOkay (PState sSrcBytes sOffset sIndent sRow sCol) =
     let
         sOffsetInt : Int
         sOffsetInt =
@@ -3160,51 +3335,57 @@ ifFollowedByWhileValidateWithoutLinebreakParser firstIsOkay afterFirstIsOkay res
         sColInt : Int
         sColInt =
             sCol
+
+        firstChar : Char
+        firstChar =
+            Pine_kernel.take
+                [ 4
+                , Pine_kernel.skip [ sOffsetInt, sSrcBytes ]
+                ]
     in
-    case List.take 1 (List.drop sOffset sSrc) of
-        [] ->
-            Bad False (ExpectingCharSatisfyingPredicate sRow sCol)
+    if firstIsOkay firstChar then
+        let
+            s1 : State
+            s1 =
+                skipWhileWithoutLinebreakHelp
+                    afterFirstIsOkay
+                    (sOffsetInt + 4)
+                    sRow
+                    (sColInt + 1)
+                    sSrcBytes
+                    sIndent
 
-        firstChar :: _ ->
-            if firstIsOkay firstChar then
-                let
-                    s1 : State
-                    s1 =
-                        skipWhileWithoutLinebreakHelp
-                            afterFirstIsOkay
-                            (sOffsetInt + 1)
-                            sRow
-                            (sColInt + 1)
-                            sSrc
-                            sIndent
+            (PState _ s1Offset _ _ _) =
+                s1
 
-                    (PState _ s1Offset _ _ _) =
-                        s1
+            nameBytesLength : Int
+            nameBytesLength =
+                Pine_kernel.int_add
+                    [ s1Offset
+                    , Pine_kernel.int_mul [ -1, sOffsetInt ]
+                    ]
 
-                    s1OffsetInt : Int
-                    s1OffsetInt =
-                        s1Offset
+            nameBytes : Int
+            nameBytes =
+                Pine_kernel.take
+                    [ nameBytesLength
+                    , Pine_kernel.skip [ sOffsetInt, sSrcBytes ]
+                    ]
 
-                    nameChars : List Char
-                    nameChars =
-                        List.take
-                            (s1OffsetInt - sOffsetInt)
-                            (List.drop sOffsetInt sSrc)
+            name : String
+            name =
+                String nameBytes
+        in
+        if resultIsOkay name then
+            Good name s1
 
-                    name : String
-                    name =
-                        String.fromList nameChars
-                in
-                if resultIsOkay name then
-                    Good name s1
+        else
+            Bad
+                False
+                (ExpectingStringSatisfyingPredicate sRow (sColInt + 1))
 
-                else
-                    Bad
-                        False
-                        (ExpectingStringSatisfyingPredicate sRow (sColInt + 1))
-
-            else
-                Bad False (ExpectingCharSatisfyingPredicate sRow sCol)
+    else
+        Bad False (ExpectingCharSatisfyingPredicate sRow sCol)
 
 
 whileWithoutLinebreakAnd2PartUtf16ToResultAndThen :
@@ -3214,32 +3395,32 @@ whileWithoutLinebreakAnd2PartUtf16ToResultAndThen :
     -> Parser res
 whileWithoutLinebreakAnd2PartUtf16ToResultAndThen whileCharIsOkay consumedStringToIntermediateOrErr intermediateToFollowupParser =
     Parser
-        (\(PState s0Src s0Offset s0Indent s0Row s0Col) ->
+        (\(PState s0SrcBytes s0Offset s0Indent s0Row s0Col) ->
             let
-                s0OffsetInt : Int
-                s0OffsetInt =
-                    s0Offset
-
                 s1Offset : Int
                 s1Offset =
                     skipWhileWithoutLinebreakAnd2PartUtf16Help
                         whileCharIsOkay
                         s0Offset
-                        s0Src
+                        s0SrcBytes
 
-                whileContentLength : Int
-                whileContentLength =
-                    s1Offset - s0OffsetInt
+                whileContentBytesLength : Int
+                whileContentBytesLength =
+                    Pine_kernel.int_add
+                        [ s1Offset
+                        , Pine_kernel.int_mul [ -1, s0Offset ]
+                        ]
 
-                whileContentSlice : List Char
-                whileContentSlice =
-                    List.take
-                        whileContentLength
-                        (List.drop s0Offset s0Src)
+                whileContentSliceBytes : Int
+                whileContentSliceBytes =
+                    Pine_kernel.take
+                        [ whileContentBytesLength
+                        , Pine_kernel.skip [ s0Offset, s0SrcBytes ]
+                        ]
 
                 whileContent : String
                 whileContent =
-                    String.fromList whileContentSlice
+                    String whileContentSliceBytes
             in
             case consumedStringToIntermediateOrErr whileContent of
                 Err problemMessage ->
@@ -3247,15 +3428,23 @@ whileWithoutLinebreakAnd2PartUtf16ToResultAndThen whileCharIsOkay consumedString
 
                 Ok intermediate ->
                     let
+                        whileContentCharsLength : Int
+                        whileContentCharsLength =
+                            Pine_kernel.concat
+                                [ Pine_kernel.take [ 1, 0 ]
+                                , Pine_kernel.bit_shift_right [ 2, Pine_kernel.skip [ 1, whileContentBytesLength ] ]
+                                ]
+
                         s1Column : Int
                         s1Column =
-                            s0Col + (s1Offset - s0Offset)
+                            s0Col + whileContentCharsLength
 
                         (Parser parseFollowup) =
                             intermediateToFollowupParser intermediate
                     in
                     parseFollowup
-                        (PState s0Src
+                        (PState
+                            s0SrcBytes
                             s1Offset
                             s0Indent
                             s0Row
@@ -3271,19 +3460,22 @@ whileWithoutLinebreakAnd2PartUtf16ValidateMapWithRangeBacktrackableFollowedBySym
     -> (String -> Bool)
     -> String
     -> Parser res
-whileWithoutLinebreakAnd2PartUtf16ValidateMapWithRangeBacktrackableFollowedBySymbol whileRangeAndContentToRes whileCharIsOkay whileResultIsOkay mandatoryFinalSymbol =
+whileWithoutLinebreakAnd2PartUtf16ValidateMapWithRangeBacktrackableFollowedBySymbol whileRangeAndContentToRes whileCharIsOkay whileResultIsOkay (String mandatoryFinalSymbolBytes) =
     let
+        mandatoryFinalSymbolBytesLength : Int
+        mandatoryFinalSymbolBytesLength =
+            Pine_kernel.length mandatoryFinalSymbolBytes
+
         mandatoryFinalSymbolLength : Int
         mandatoryFinalSymbolLength =
-            String.length mandatoryFinalSymbol
+            Pine_kernel.concat
+                [ Pine_kernel.take [ 1, 0 ]
+                , Pine_kernel.bit_shift_right [ 2, Pine_kernel.skip [ 1, mandatoryFinalSymbolBytesLength ] ]
+                ]
     in
     Parser
-        (\(PState s0Src s0Offset s0Indent s0Row s0Col) ->
+        (\(PState s0SrcBytes s0Offset s0Indent s0Row s0Col) ->
             let
-                s0OffsetInt : Int
-                s0OffsetInt =
-                    s0Offset
-
                 s0ColInt : Int
                 s0ColInt =
                     s0Col
@@ -3293,40 +3485,55 @@ whileWithoutLinebreakAnd2PartUtf16ValidateMapWithRangeBacktrackableFollowedBySym
                     skipWhileWithoutLinebreakAnd2PartUtf16Help
                         whileCharIsOkay
                         s0Offset
-                        s0Src
+                        s0SrcBytes
 
-                whileContentLength : Int
-                whileContentLength =
-                    s1Offset - s0OffsetInt
+                whileContentBytesLength : Int
+                whileContentBytesLength =
+                    Pine_kernel.int_add
+                        [ s1Offset
+                        , Pine_kernel.int_mul [ -1, s0Offset ]
+                        ]
 
-                whileContentSlice : List Char
-                whileContentSlice =
-                    List.take
-                        whileContentLength
-                        (List.drop s0Offset s0Src)
+                whileContentSliceBytes : Int
+                whileContentSliceBytes =
+                    Pine_kernel.take
+                        [ whileContentBytesLength
+                        , Pine_kernel.skip [ s0Offset, s0SrcBytes ]
+                        ]
 
                 whileContent : String
                 whileContent =
-                    String.fromList whileContentSlice
+                    String whileContentSliceBytes
 
-                finalSymbolSlice : List Char
-                finalSymbolSlice =
-                    List.take
-                        mandatoryFinalSymbolLength
-                        (List.drop s1Offset s0Src)
-
-                finalSymbolString : String
-                finalSymbolString =
-                    String.fromList finalSymbolSlice
+                finalSymbolSliceBytes : Int
+                finalSymbolSliceBytes =
+                    Pine_kernel.take
+                        [ mandatoryFinalSymbolBytesLength
+                        , Pine_kernel.skip [ s1Offset, s0SrcBytes ]
+                        ]
             in
             if
-                (finalSymbolString == (mandatoryFinalSymbol ++ ""))
+                Pine_kernel.equal [ finalSymbolSliceBytes, mandatoryFinalSymbolBytes ]
                     && whileResultIsOkay whileContent
             then
                 let
+                    skippedBytesLength : Int
+                    skippedBytesLength =
+                        Pine_kernel.int_add
+                            [ s1Offset
+                            , Pine_kernel.int_mul [ -1, s0Offset ]
+                            ]
+
+                    skippedCharsLength : Int
+                    skippedCharsLength =
+                        Pine_kernel.concat
+                            [ Pine_kernel.take [ 1, 0 ]
+                            , Pine_kernel.bit_shift_right [ 2, Pine_kernel.skip [ 1, skippedBytesLength ] ]
+                            ]
+
                     s1Column : Int
                     s1Column =
-                        s0ColInt + (s1Offset - s0OffsetInt)
+                        s0Col + skippedCharsLength
                 in
                 Good
                     (whileRangeAndContentToRes
@@ -3335,8 +3542,9 @@ whileWithoutLinebreakAnd2PartUtf16ValidateMapWithRangeBacktrackableFollowedBySym
                         }
                         whileContent
                     )
-                    (PState s0Src
-                        (s1Offset + mandatoryFinalSymbolLength)
+                    (PState
+                        s0SrcBytes
+                        (s1Offset + mandatoryFinalSymbolBytesLength)
                         s0Indent
                         s0Row
                         (s1Column + mandatoryFinalSymbolLength)
@@ -3355,19 +3563,15 @@ ifFollowedByWhileValidateMapWithRangeWithoutLinebreak :
     -> Parser res
 ifFollowedByWhileValidateMapWithRangeWithoutLinebreak toResult firstIsOkay afterFirstIsOkay resultIsOkay =
     Parser
-        (\(PState s0Src s0Offset s0Indent s0Row s0Col) ->
+        (\(PState s0SrcBytes s0Offset s0Indent s0Row s0Col) ->
             let
-                s0OffsetInt : Int
-                s0OffsetInt =
-                    s0Offset
-
                 s0ColInt : Int
                 s0ColInt =
                     s0Col
 
                 firstOffset : Int
                 firstOffset =
-                    isSubCharWithoutLinebreak firstIsOkay s0Offset s0Src
+                    isSubCharWithoutLinebreak firstIsOkay s0Offset s0SrcBytes
             in
             if firstOffset == -1 then
                 Bad False (ExpectingCharSatisfyingPredicate s0Row s0Col)
@@ -3380,22 +3584,30 @@ ifFollowedByWhileValidateMapWithRangeWithoutLinebreak toResult firstIsOkay after
                             afterFirstIsOkay
                             firstOffset
                             s0Row
-                            (s0ColInt + 1)
-                            s0Src
+                            (Pine_kernel.int_add [ s0ColInt, 1 ])
+                            s0SrcBytes
                             s0Indent
 
                     (PState _ s1Offset _ s1Row s1Col) =
                         s1
 
-                    nameSlice : List Char
-                    nameSlice =
-                        List.take
-                            (s1Offset - s0OffsetInt)
-                            (List.drop s0OffsetInt s0Src)
+                    nameSliceBytesLength : Int
+                    nameSliceBytesLength =
+                        Pine_kernel.int_add
+                            [ s1Offset
+                            , Pine_kernel.int_mul [ -1, s0Offset ]
+                            ]
+
+                    nameSliceBytes : Int
+                    nameSliceBytes =
+                        Pine_kernel.take
+                            [ nameSliceBytesLength
+                            , Pine_kernel.skip [ s0Offset, s0SrcBytes ]
+                            ]
 
                     name : String
                     name =
-                        String.fromList nameSlice
+                        String nameSliceBytes
                 in
                 if resultIsOkay name then
                     Good
@@ -3408,7 +3620,7 @@ ifFollowedByWhileValidateMapWithRangeWithoutLinebreak toResult firstIsOkay after
                         s1
 
                 else
-                    Bad False (ExpectingStringSatisfyingPredicate s0Row (s0ColInt + 1))
+                    Bad False (ExpectingStringSatisfyingPredicate s0Row (Pine_kernel.int_add [ s0ColInt, 1 ]))
         )
 
 
@@ -3418,19 +3630,15 @@ ifFollowedByWhileWithoutLinebreak :
     -> Parser String
 ifFollowedByWhileWithoutLinebreak firstIsOkay afterFirstIsOkay =
     Parser
-        (\(PState sSrc sOffset sIndent sRow sCol) ->
+        (\(PState sSrcBytes sOffset sIndent sRow sCol) ->
             let
-                sOffsetInt : Int
-                sOffsetInt =
-                    sOffset
-
                 sColInt : Int
                 sColInt =
                     sCol
 
                 firstOffset : Int
                 firstOffset =
-                    isSubCharWithoutLinebreak firstIsOkay sOffset sSrc
+                    isSubCharWithoutLinebreak firstIsOkay sOffset sSrcBytes
             in
             if firstOffset == -1 then
                 Bad False (ExpectingCharSatisfyingPredicate sRow sCol)
@@ -3444,19 +3652,27 @@ ifFollowedByWhileWithoutLinebreak firstIsOkay afterFirstIsOkay =
                             firstOffset
                             sRow
                             (sColInt + 1)
-                            sSrc
+                            sSrcBytes
                             sIndent
 
                     (PState _ s1Offset _ _ _) =
                         s1
 
-                    nameSlice : List Char
-                    nameSlice =
-                        List.take
-                            (s1Offset - sOffsetInt)
-                            (List.drop sOffsetInt sSrc)
+                    nameSliceBytesLength : Int
+                    nameSliceBytesLength =
+                        Pine_kernel.int_add
+                            [ s1Offset
+                            , Pine_kernel.int_mul [ -1, sOffset ]
+                            ]
+
+                    nameSliceBytes : Int
+                    nameSliceBytes =
+                        Pine_kernel.take
+                            [ nameSliceBytesLength
+                            , Pine_kernel.skip [ sOffset, sSrcBytes ]
+                            ]
                 in
-                Good (String.fromList nameSlice) s1
+                Good (String nameSliceBytes) s1
         )
 
 
@@ -3467,19 +3683,11 @@ ifFollowedByWhileMapWithRangeWithoutLinebreak :
     -> Parser res
 ifFollowedByWhileMapWithRangeWithoutLinebreak rangeAndConsumedStringToRes firstIsOkay afterFirstIsOkay =
     Parser
-        (\(PState s0Src s0Offset s0Indent s0Row s0Col) ->
+        (\(PState s0SrcBytes s0Offset s0Indent s0Row s0Col) ->
             let
-                s0OffsetInt : Int
-                s0OffsetInt =
-                    s0Offset
-
-                s0ColInt : Int
-                s0ColInt =
-                    s0Col
-
                 firstOffset : Int
                 firstOffset =
-                    isSubCharWithoutLinebreak firstIsOkay s0Offset s0Src
+                    isSubCharWithoutLinebreak firstIsOkay s0Offset s0SrcBytes
             in
             if firstOffset == -1 then
                 Bad False (ExpectingCharSatisfyingPredicate s0Row s0Col)
@@ -3492,8 +3700,8 @@ ifFollowedByWhileMapWithRangeWithoutLinebreak rangeAndConsumedStringToRes firstI
                             afterFirstIsOkay
                             firstOffset
                             s0Row
-                            (s0ColInt + 1)
-                            s0Src
+                            (Pine_kernel.int_add [ s0Col, 1 ])
+                            s0SrcBytes
                             s0Indent
 
                     (PState _ s1Offset _ s1Row s1Col) =
@@ -3503,18 +3711,26 @@ ifFollowedByWhileMapWithRangeWithoutLinebreak rangeAndConsumedStringToRes firstI
                     s1OffsetInt =
                         s1Offset
 
-                    consumedChars : List Char
-                    consumedChars =
-                        List.take
-                            (s1OffsetInt - s0OffsetInt)
-                            (List.drop s0OffsetInt s0Src)
+                    consumedBytesLength : Int
+                    consumedBytesLength =
+                        Pine_kernel.int_add
+                            [ s1OffsetInt
+                            , Pine_kernel.int_mul [ -1, s0Offset ]
+                            ]
+
+                    consumedBytes : Int
+                    consumedBytes =
+                        Pine_kernel.take
+                            [ consumedBytesLength
+                            , Pine_kernel.skip [ s0Offset, s0SrcBytes ]
+                            ]
                 in
                 Good
                     (rangeAndConsumedStringToRes
                         { start = { row = s0Row, column = s0Col }
                         , end = { row = s1Row, column = s1Col }
                         }
-                        (String.fromList consumedChars)
+                        (String consumedBytes)
                     )
                     s1
         )
@@ -3527,19 +3743,15 @@ ifFollowedByWhileMapWithoutLinebreak :
     -> Parser res
 ifFollowedByWhileMapWithoutLinebreak consumedStringToRes firstIsOkay afterFirstIsOkay =
     Parser
-        (\(PState s0Src s0Offset s0Indent s0Row s0Col) ->
+        (\(PState s0SrcBytes s0Offset s0Indent s0Row s0Col) ->
             let
-                s0OffsetInt : Int
-                s0OffsetInt =
-                    s0Offset
-
                 s0ColInt : Int
                 s0ColInt =
                     s0Col
 
                 firstOffset : Int
                 firstOffset =
-                    isSubCharWithoutLinebreak firstIsOkay s0Offset s0Src
+                    isSubCharWithoutLinebreak firstIsOkay s0Offset s0SrcBytes
             in
             if firstOffset == -1 then
                 Bad False (ExpectingCharSatisfyingPredicate s0Row s0Col)
@@ -3552,8 +3764,8 @@ ifFollowedByWhileMapWithoutLinebreak consumedStringToRes firstIsOkay afterFirstI
                             afterFirstIsOkay
                             firstOffset
                             s0Row
-                            (s0ColInt + 1)
-                            s0Src
+                            (Pine_kernel.int_add [ s0ColInt, 1 ])
+                            s0SrcBytes
                             s0Indent
 
                     (PState _ s1Offset _ _ _) =
@@ -3563,15 +3775,23 @@ ifFollowedByWhileMapWithoutLinebreak consumedStringToRes firstIsOkay afterFirstI
                     s1OffsetInt =
                         s1Offset
 
-                    consumedChars : List Char
-                    consumedChars =
-                        List.take
-                            (s1OffsetInt - s0OffsetInt)
-                            (List.drop s0OffsetInt s0Src)
+                    consumedCharsBytesLength : Int
+                    consumedCharsBytesLength =
+                        Pine_kernel.int_add
+                            [ s1OffsetInt
+                            , Pine_kernel.int_mul [ -1, s0Offset ]
+                            ]
+
+                    consumedCharsBytes : Int
+                    consumedCharsBytes =
+                        Pine_kernel.take
+                            [ consumedCharsBytesLength
+                            , Pine_kernel.skip [ s0Offset, s0SrcBytes ]
+                            ]
 
                     consumedString : String
                     consumedString =
-                        String.fromList consumedChars
+                        String consumedCharsBytes
                 in
                 Good
                     (consumedStringToRes consumedString)
@@ -3620,7 +3840,7 @@ nestableMultiCommentMapWithRange rangeContentToRes ( openChar, openTail ) ( clos
                     let
                         newNesting : Int
                         newNesting =
-                            soFarNesting + nestingChange
+                            Pine_kernel.int_add [ soFarNesting, nestingChange ]
                     in
                     if newNesting == 0 then
                         Done soFarContent
@@ -3644,7 +3864,7 @@ charDoesNotEqualAnyOfTwo a b char =
 while : (Char -> Bool) -> Parser String
 while isGood =
     Parser
-        (\(PState s0Src s0Offset s0Indent s0Row s0Col) ->
+        (\(PState s0SrcBytes s0Offset s0Indent s0Row s0Col) ->
             let
                 s0OffsetInt : Int
                 s0OffsetInt =
@@ -3652,7 +3872,7 @@ while isGood =
 
                 s1 : State
                 s1 =
-                    skipWhileHelp isGood s0Offset s0Row s0Col s0Src s0Indent
+                    skipWhileHelp isGood s0Offset s0Row s0Col s0SrcBytes s0Indent
 
                 (PState _ s1Offset _ _ _) =
                     s1
@@ -3661,14 +3881,22 @@ while isGood =
                 s1OffsetInt =
                     s1Offset
 
-                slice : List Char
-                slice =
-                    List.take
-                        (s1OffsetInt - s0OffsetInt)
-                        (List.drop s0Offset s0Src)
+                sliceBytesLength : Int
+                sliceBytesLength =
+                    Pine_kernel.int_add
+                        [ s1OffsetInt
+                        , Pine_kernel.int_mul [ -1, s0OffsetInt ]
+                        ]
+
+                sliceBytes : Int
+                sliceBytes =
+                    Pine_kernel.take
+                        [ sliceBytesLength
+                        , Pine_kernel.skip [ s0OffsetInt, s0SrcBytes ]
+                        ]
             in
             Good
-                (String.fromList slice)
+                (String sliceBytes)
                 s1
         )
 
@@ -3676,7 +3904,7 @@ while isGood =
 whileWithoutLinebreak : (Char -> Bool) -> Parser String
 whileWithoutLinebreak isGood =
     Parser
-        (\(PState s0Src s0Offset s0Indent s0Row s0Col) ->
+        (\(PState s0SrcBytes s0Offset s0Indent s0Row s0Col) ->
             let
                 s0OffsetInt : Int
                 s0OffsetInt =
@@ -3684,7 +3912,7 @@ whileWithoutLinebreak isGood =
 
                 s1 : State
                 s1 =
-                    skipWhileWithoutLinebreakHelp isGood s0Offset s0Row s0Col s0Src s0Indent
+                    skipWhileWithoutLinebreakHelp isGood s0Offset s0Row s0Col s0SrcBytes s0Indent
 
                 (PState _ s1Offset _ _ _) =
                     s1
@@ -3693,14 +3921,22 @@ whileWithoutLinebreak isGood =
                 s1OffsetInt =
                     s1Offset
 
-                slice : List Char
-                slice =
-                    List.take
-                        (s1OffsetInt - s0OffsetInt)
-                        (List.drop s0Offset s0Src)
+                sliceBytesLength : Int
+                sliceBytesLength =
+                    Pine_kernel.int_add
+                        [ s1OffsetInt
+                        , Pine_kernel.int_mul [ -1, s0OffsetInt ]
+                        ]
+
+                sliceBytes : Int
+                sliceBytes =
+                    Pine_kernel.take
+                        [ sliceBytesLength
+                        , Pine_kernel.skip [ s0OffsetInt, s0SrcBytes ]
+                        ]
             in
             Good
-                (String.fromList slice)
+                (String sliceBytes)
                 s1
         )
 
@@ -3711,15 +3947,11 @@ anyCharFollowedByWhileMap :
     -> Parser res
 anyCharFollowedByWhileMap consumedStringToRes afterFirstIsOkay =
     Parser
-        (\(PState sSrc sOffset sIndent sRow sCol) ->
+        (\(PState sSrcBytes sOffset sIndent sRow sCol) ->
             let
-                sOffsetInt : Int
-                sOffsetInt =
-                    sOffset
-
                 firstOffset : Int
                 firstOffset =
-                    charOrEnd sOffset sSrc
+                    charOrEnd sOffset sSrcBytes
             in
             if firstOffset == -1 then
                 -- end of source
@@ -3730,10 +3962,22 @@ anyCharFollowedByWhileMap consumedStringToRes afterFirstIsOkay =
                     s1 : State
                     s1 =
                         if firstOffset == -2 then
-                            skipWhileHelp afterFirstIsOkay (sOffsetInt + 1) (sRow + 1) 1 sSrc sIndent
+                            skipWhileHelp
+                                afterFirstIsOkay
+                                (Pine_kernel.int_add [ sOffset, 4 ])
+                                (Pine_kernel.int_add [ sRow, 1 ])
+                                1
+                                sSrcBytes
+                                sIndent
 
                         else
-                            skipWhileHelp afterFirstIsOkay firstOffset sRow (sCol + 1) sSrc sIndent
+                            skipWhileHelp
+                                afterFirstIsOkay
+                                firstOffset
+                                sRow
+                                (Pine_kernel.int_add [ sCol, 1 ])
+                                sSrcBytes
+                                sIndent
 
                     (PState _ s1Offset _ _ _) =
                         s1
@@ -3742,13 +3986,21 @@ anyCharFollowedByWhileMap consumedStringToRes afterFirstIsOkay =
                     s1OffsetInt =
                         s1Offset
 
-                    slice : List Char
-                    slice =
-                        List.take
-                            (s1OffsetInt - sOffsetInt)
-                            (List.drop sOffsetInt sSrc)
+                    sliceBytesLength : Int
+                    sliceBytesLength =
+                        Pine_kernel.int_add
+                            [ s1OffsetInt
+                            , Pine_kernel.int_mul [ -1, sOffset ]
+                            ]
+
+                    sliceBytes : Int
+                    sliceBytes =
+                        Pine_kernel.take
+                            [ sliceBytesLength
+                            , Pine_kernel.skip [ sOffset, sSrcBytes ]
+                            ]
                 in
-                Good (consumedStringToRes (String.fromList slice)) s1
+                Good (consumedStringToRes (String sliceBytes)) s1
         )
 
 
@@ -3851,22 +4103,19 @@ The `newOffset` value can be a few different things:
     words wide.
 
 -}
-isSubCharWithoutLinebreak : (Char -> Bool) -> Int -> List Char -> Int
-isSubCharWithoutLinebreak predicate offset string =
-    case List.take 1 (List.drop offset string) of
-        actualChar :: _ ->
-            if predicate actualChar then
-                offset + 1
+isSubCharWithoutLinebreak : (Char -> Bool) -> Int -> Int -> Int
+isSubCharWithoutLinebreak predicate offsetBytes stringBytes =
+    -- case List.take 1 (List.drop offset string) of
+    let
+        nextCharBytes : Int
+        nextCharBytes =
+            Pine_kernel.take
+                [ 4
+                , Pine_kernel.skip [ offsetBytes, stringBytes ]
+                ]
+    in
+    if predicate nextCharBytes then
+        offsetBytes + 4
 
-            else
-                -1
-
-        [] ->
-            -1
-
-
-stringSlice : Int -> Int -> List Char -> List Char
-stringSlice start end list =
-    List.take
-        (end - start)
-        (List.drop start list)
+    else
+        -1

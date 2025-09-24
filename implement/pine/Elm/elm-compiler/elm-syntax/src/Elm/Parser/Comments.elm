@@ -14,7 +14,7 @@ singleLineComment =
                 Node
                     { start = { row = range.start.row, column = range.start.column - 2 }
                     , end =
-                        { row = range.start.row
+                        { row = range.end.row
                         , column = range.end.column
                         }
                     }
@@ -26,9 +26,9 @@ singleLineComment =
 multilineComment : ParserFast.Parser (Node String)
 multilineComment =
     ParserFast.offsetSourceAndThen
-        (\offset source ->
-            case List.take 1 (List.drop (offset + 2) source) of
-                [ '|' ] ->
+        (\offsetBytes sourceBytes ->
+            case Pine_kernel.take [ 4, Pine_kernel.skip [ offsetBytes + 8, sourceBytes ] ] of
+                '|' ->
                     problemUnexpectedDocumentation
 
                 _ ->

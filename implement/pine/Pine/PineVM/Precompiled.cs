@@ -859,8 +859,8 @@ public class Precompiled
 
         {
             /*
-             * chompWhileHelp : (Char -> Bool) -> ( Int, Int, Int ) -> List Char -> ( Int, Int, Int )
-             * chompWhileHelp isGood ( offset, row, col ) srcChars =
+             * chompWhileHelp : (Char -> Bool) -> ( Int, Int, Int ) -> Int -> ( Int, Int, Int )
+             * chompWhileHelp isGood ( offset, row, col ) srcBytes =
              * */
 
             var chompWhileHelpEnvClass =
@@ -874,7 +874,7 @@ public class Precompiled
                         elmKernelParser_chompWhileHelpExpressionValue),
                 ]);
 
-            PineValueClass chompWhileHelpEnvClassFromPredicate(PineValue predicateValue)
+            PineValueClass ChompWhileHelpEnvClassFromPredicate(PineValue predicateValue)
             {
                 return
                     PineValueClass.Create(
@@ -888,7 +888,7 @@ public class Precompiled
                 new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
                     elmKernelParser_chompWhileHelpExpression,
                     [new PrecompiledEntry(
-                        chompWhileHelpEnvClassFromPredicate(
+                        ChompWhileHelpEnvClassFromPredicate(
                             popularValueDictionary["predicate_first_arg_equals_ASCII_char_space_32"]),
                         ElmKernelParser_chompWhileHelp_single_char_space_32)]);
 
@@ -896,7 +896,7 @@ public class Precompiled
                 new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
                     elmKernelParser_chompWhileHelpExpression,
                     [new PrecompiledEntry(
-                        chompWhileHelpEnvClassFromPredicate(
+                        ChompWhileHelpEnvClassFromPredicate(
                             popularValueDictionary["predicate_first_arg_equals_ASCII_char_minus_45"]),
                         ElmKernelParser_chompWhileHelp_single_char_minus_45)]);
 
@@ -904,7 +904,7 @@ public class Precompiled
                 new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
                     elmKernelParser_chompWhileHelpExpression,
                     [new PrecompiledEntry(
-                        chompWhileHelpEnvClassFromPredicate(
+                        ChompWhileHelpEnvClassFromPredicate(
                             popularValueDictionary["predicate_first_arg_is_not_ASCII_carriage_return_or_newline"]),
                         ElmKernelParser_chompWhileHelp_not_carriage_return_or_newline)]);
 
@@ -912,7 +912,7 @@ public class Precompiled
                 new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
                     elmKernelParser_chompWhileHelpExpression,
                     [new PrecompiledEntry(
-                        chompWhileHelpEnvClassFromPredicate(
+                        ChompWhileHelpEnvClassFromPredicate(
                             popularValueDictionary["predicate_nestableComment_char_is_not_elm_multiline_comment_open_or_close"]),
                         ElmKernelParser_chompWhileHelp_not_elm_multiline_comment_open_or_close)]);
 
@@ -920,7 +920,7 @@ public class Precompiled
                 new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
                     elmKernelParser_chompWhileHelpExpression,
                     [new PrecompiledEntry(
-                        chompWhileHelpEnvClassFromPredicate(
+                        ChompWhileHelpEnvClassFromPredicate(
                             popularValueDictionary["predicate_parser_char_is_alpha_num_or_underscore"]),
                         ElmKernelParser_chompWhileHelp_is_alpha_num_or_underscore)]);
 
@@ -946,9 +946,6 @@ public class Precompiled
                     [
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
                         [0, 0],
-                        adaptivePartialApplicationExpressionValue),
-                    new KeyValuePair<IReadOnlyList<int>, PineValue>(
-                        [0, 1],
                         skipWhileWhitespaceHelpExpressionValue),
                     ]);
 
@@ -1026,15 +1023,15 @@ public class Precompiled
                 PineValueClass.Create(
                     [
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
-                        [0,0],
+                        [0, 0],
                         adaptivePartialApplicationExpressionValue),
 
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
-                        [0,1],
+                        [0, 1],
                         skipWhileHelpExpressionValue),
                     ]);
 
-            PineValueClass envClassFromPredicate(PineValue predicateValue)
+            PineValueClass EnvClassFromPredicate(PineValue predicateValue)
             {
                 return
                     PineValueClass.Create(
@@ -1048,7 +1045,7 @@ public class Precompiled
                 new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
                     skipWhileHelpExpression,
                     [new PrecompiledEntry(
-                        envClassFromPredicate(
+                        EnvClassFromPredicate(
                             popularValueDictionary["predicate_nestableComment_char_is_not_elm_multiline_comment_open_or_close"]),
                         ParserFast_skipWhileHelp_not_elm_multiline_comment_open_or_close)]);
 
@@ -1056,7 +1053,7 @@ public class Precompiled
                 new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
                     skipWhileHelpExpression,
                     [new PrecompiledEntry(
-                        envClassFromPredicate(
+                        EnvClassFromPredicate(
                             popularValueDictionary["predicate_first_arg_is_not_ASCII_quote_or_backslash"]),
                         ParserFast_skipWhileHelp_not_ASCII_quote_or_backslash)]);
 
@@ -1098,12 +1095,6 @@ public class Precompiled
             var envClass =
                 PineValueClass.Create(
                     [
-                    new KeyValuePair<IReadOnlyList<int>, PineValue>(
-                    [0],
-                    PineValue.List(
-                        [
-                        charToCodeExpressionValue,
-                        ]))
                     ]);
 
             yield return
@@ -1121,12 +1112,6 @@ public class Precompiled
             var envClass =
                 PineValueClass.Create(
                     [
-                    new KeyValuePair<IReadOnlyList<int>, PineValue>(
-                    [0],
-                    PineValue.List(
-                        [
-                        charToCodeExpressionValue,
-                        ]))
                     ]);
 
             yield return
@@ -1342,8 +1327,9 @@ public class Precompiled
         isLower : Char -> Bool
         isLower char =
             let
+                code : Int
                 code =
-                    toCode char
+                    Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], char ]
             in
             Pine_kernel.int_is_sorted_asc [ 0x61, code, 0x7A ]
 
@@ -3598,8 +3584,8 @@ public class Precompiled
         PineVMParseCache parseCache)
     {
         /*
-         * chompWhileHelp : (Char -> Bool) -> ( Int, Int, Int ) -> List Char -> ( Int, Int, Int )
-         * chompWhileHelp isGood ( offset, row, col ) srcChars =
+        chompWhileHelp : (Char -> Bool) -> ( Int, Int, Int ) -> Int -> ( Int, Int, Int )
+        chompWhileHelp isGood ( offset, row, col ) srcBytes =
          * 
          * */
 
@@ -3625,24 +3611,22 @@ public class Precompiled
         PineVMParseCache parseCache) =>
         ElmKernelParser_chompWhileHelp_single_char(
             environment,
-            PineValue.Blob([32]));
+            32);
 
     static PrecompiledResult.FinalValue? ElmKernelParser_chompWhileHelp_single_char_minus_45(
         PineValue environment,
         PineVMParseCache parseCache) =>
         ElmKernelParser_chompWhileHelp_single_char(
             environment,
-            PineValue.Blob([45]));
+            45);
 
     static PrecompiledResult.FinalValue? ElmKernelParser_chompWhileHelp_not_carriage_return_or_newline(
         PineValue environment,
         PineVMParseCache parseCache)
     {
-        var carriageReturnChar =
-            PineValue.Blob([13]);
+        var carriageReturnChar = 13;
 
-        var newlineChar =
-            PineValue.Blob([10]);
+        var newlineChar = 10;
 
         return
             ElmKernelParser_chompWhileHelp(
@@ -3655,11 +3639,9 @@ public class Precompiled
         PineValue environment,
         PineVMParseCache parseCache)
     {
-        var openChar =
-            PineValue.Blob([(byte)'{']);
+        var openChar = '{';
 
-        var closeChar =
-            PineValue.Blob([(byte)'-']);
+        var closeChar = '-';
 
         return
             ElmKernelParser_chompWhileHelp(
@@ -3672,37 +3654,25 @@ public class Precompiled
         PineValue environment,
         PineVMParseCache parseCache)
     {
-        static bool charValuePredicate(PineValue charValue)
+        static bool CharValuePredicate(int charValue)
         {
-            if (charValue is not PineValue.BlobValue blobValue)
-            {
-                return false;
-            }
-
-            if (blobValue.Bytes.Length is not 1)
-            {
-                return false;
-            }
-
-            var byteValue = blobValue.Bytes.Span[0];
-
             return
-                (byteValue >= 48 && byteValue <= 57) ||
-                (byteValue >= 65 && byteValue <= 90) ||
-                (byteValue >= 97 && byteValue <= 122) ||
-                byteValue == '_';
+                (charValue >= 48 && charValue <= 57) ||
+                (charValue >= 65 && charValue <= 90) ||
+                (charValue >= 97 && charValue <= 122) ||
+                charValue == '_';
         }
 
         return
             ElmKernelParser_chompWhileHelp(
                 environment,
                 charValuePredicate:
-                charValuePredicate);
+                CharValuePredicate);
     }
 
     static PrecompiledResult.FinalValue? ElmKernelParser_chompWhileHelp_single_char(
         PineValue environment,
-        PineValue charValue)
+        int charValue)
     {
         return
             ElmKernelParser_chompWhileHelp(
@@ -3712,16 +3682,48 @@ public class Precompiled
 
     static PrecompiledResult.FinalValue? ElmKernelParser_chompWhileHelp(
         PineValue environment,
-        Func<PineValue, bool> charValuePredicate)
+        Func<int, bool> charValuePredicate)
     {
         /*
-         * chompWhileHelp : (Char -> Bool) -> ( Int, Int, Int ) -> List Char -> ( Int, Int, Int )
-         * chompWhileHelp isGood ( offset, row, col ) srcChars =
+        chompWhileHelp : (Char -> Bool) -> ( Int, Int, Int ) -> Int -> ( Int, Int, Int )
+        chompWhileHelp isGood ( offset, row, col ) srcBytes =
+            let
+                nextChar =
+                    Pine_kernel.take [ 4, Pine_kernel.skip [ offset, srcBytes ] ]
+            in
+            if isGood nextChar then
+                if Pine_kernel.equal [ nextChar, '\n' ] then
+                    -- matched a newline
+                    chompWhileHelp
+                        isGood
+                        ( Pine_kernel.int_add [ offset, 4 ]
+                        , Pine_kernel.int_add [ row, 1 ]
+                        , 1
+                        )
+                        srcBytes
+
+                else
+                    -- normal match
+                    chompWhileHelp
+                        isGood
+                        ( Pine_kernel.int_add [ offset, 4 ]
+                        , row
+                        , Pine_kernel.int_add [ col, 1 ]
+                        )
+                        srcBytes
+
+            else
+                -- no match
+                ( offset
+                , row
+                , col
+                )
+
          * 
          * */
 
         var offsetValue =
-        PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1, 0]);
+            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1, 0]);
 
         var rowValue =
             PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1, 1]);
@@ -3729,7 +3731,7 @@ public class Precompiled
         var colValue =
             PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1, 2]);
 
-        var srcCharsValue =
+        var srcBytes =
             PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 2]);
 
         if (IntegerEncoding.ParseSignedIntegerRelaxed(offsetValue).IsOkOrNullable() is not { } startOffset)
@@ -3747,7 +3749,7 @@ public class Precompiled
             return null;
         }
 
-        if (srcCharsValue is not PineValue.ListValue srcCharsList)
+        if (srcBytes is not PineValue.BlobValue srcBytesBlob)
         {
             return null;
         }
@@ -3765,21 +3767,25 @@ public class Precompiled
 
         while (true)
         {
-            if (srcCharsList.Items.Length <= offset)
+            if (srcBytesBlob.Bytes.Length <= offset + 3)
             {
                 break;
             }
 
-            var currentChar = srcCharsList.Items.Span[offset];
+            var currentChar =
+                (srcBytesBlob.Bytes.Span[offset] << 24) |
+                (srcBytesBlob.Bytes.Span[offset + 1] << 16) |
+                (srcBytesBlob.Bytes.Span[offset + 2] << 8) |
+                (srcBytesBlob.Bytes.Span[offset + 3]);
 
             if (!charValuePredicate(currentChar))
             {
                 break;
             }
 
-            ++offset;
+            offset += 4;
 
-            if (currentChar == Character_ASCII_Newline_Value)
+            if (currentChar is '\n')
             {
                 ++row;
                 col = 1;
@@ -4759,7 +4765,7 @@ public class Precompiled
                     currentLineLength =
                         Pine_kernel.int_add [ offset, -currentLineStart ]
 
-                    currentLineChars : List Char
+                    currentLineChars : Int
                     currentLineChars =
                         Pine_kernel.take
                             [ currentLineLength
@@ -4777,7 +4783,7 @@ public class Precompiled
                     currentLineLength =
                         Pine_kernel.int_add [ offset, -currentLineStart ]
 
-                    currentLineChars : List Char
+                    currentLineChars : Int
                     currentLineChars =
                         Pine_kernel.take
                             [ currentLineLength
@@ -5228,21 +5234,36 @@ public class Precompiled
         PineVMParseCache parseCache)
     {
         /*
-        skipWhileWhitespaceHelp : Int -> Int -> Int -> List Char -> Int -> State
-        skipWhileWhitespaceHelp offset row col src indent =
-            case List.take 1 (List.drop offset src) of
-                [ ' ' ] ->
-                    skipWhileWhitespaceHelp (offset + 1) row (col + 1) src indent
+        skipWhileWhitespaceHelp : Int -> Int -> Int -> Int -> Int -> State
+        skipWhileWhitespaceHelp offsetBytes row col srcBytes indent =
+            case Pine_kernel.take [ 4, Pine_kernel.skip [ offsetBytes, srcBytes ] ] of
+                ' ' ->
+                    skipWhileWhitespaceHelp
+                        (offsetBytes + 4)
+                        row
+                        (col + 1)
+                        srcBytes
+                        indent
 
-                [ '\n' ] ->
-                    skipWhileWhitespaceHelp (offset + 1) (row + 1) 1 src indent
+                '\n' ->
+                    skipWhileWhitespaceHelp
+                        (offsetBytes + 4)
+                        (row + 1)
+                        1
+                        srcBytes
+                        indent
 
-                [ '\u{000D}' ] ->
-                    skipWhileWhitespaceHelp (offset + 1) row (col + 1) src indent
+                '\u{000D}' ->
+                    skipWhileWhitespaceHelp
+                        (offsetBytes + 4)
+                        row
+                        (col + 1)
+                        srcBytes
+                        indent
 
                 -- empty or non-whitespace
                 _ ->
-                    PState src offset indent row col
+                    PState srcBytes offsetBytes indent row col
 
          * */
 
@@ -5256,7 +5277,7 @@ public class Precompiled
         var colValue =
             PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 2]);
 
-        var srcCharsValue =
+        var srcBytesValue =
             PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 3]);
 
         var indentValue =
@@ -5277,51 +5298,36 @@ public class Precompiled
             return null;
         }
 
-        if (srcCharsValue is not PineValue.ListValue srcCharsList)
+        if (srcBytesValue is not PineValue.BlobValue srcBytesBlob)
         {
             return null;
         }
 
         var offset = (int)startOffset;
 
-        while (true)
+        while (offset + 3 < srcBytesBlob.Bytes.Length)
         {
-            if (srcCharsList.Items.Length <= offset)
+            var currentChar = srcBytesBlob.Bytes.Slice(start: offset, length: 4);
+
+            if (currentChar.Span[0] is not 0 ||
+                currentChar.Span[1] is not 0 ||
+                currentChar.Span[2] is not 0)
             {
                 break;
             }
 
-            var currentChar = srcCharsList.Items.Span[offset];
-
-            if (currentChar is not PineValue.BlobValue currentCharBlob)
-            {
-                break;
-            }
-
-            if (currentCharBlob.Bytes.Length is not 4)
-            {
-                break;
-            }
-
-            if (currentCharBlob.Bytes.Span[0] is not 0 ||
-                currentCharBlob.Bytes.Span[1] is not 0 ||
-                currentCharBlob.Bytes.Span[2] is not 0)
-            {
-                break;
-            }
-
-            var byteValue = currentCharBlob.Bytes.Span[3];
+            var byteValue = currentChar.Span[3];
 
             if (byteValue is 32)
             {
-                ++offset;
+                offset += 4;
                 ++col;
                 continue;
             }
 
             if (byteValue is 10)
             {
-                ++offset;
+                offset += 4;
                 ++row;
                 col = 1;
                 continue;
@@ -5329,7 +5335,7 @@ public class Precompiled
 
             if (byteValue is 13)
             {
-                ++offset;
+                offset += 4;
                 ++col;
                 continue;
             }
@@ -5344,7 +5350,7 @@ public class Precompiled
                     Tag_PState_Name_Value,
                     PineValue.List(
                         [
-                        srcCharsValue,
+                        srcBytesValue,
                         IntegerEncoding.EncodeSignedInteger(offset),
                         indentValue,
                         IntegerEncoding.EncodeSignedInteger(row),
@@ -5362,20 +5368,29 @@ public class Precompiled
         PineVMParseCache parseCache)
     {
         /*
-        skipWhileWithoutLinebreakHelp : (Char -> Bool) -> Int -> Int -> Int -> List Char -> Int -> State
-        skipWhileWithoutLinebreakHelp isGood offset row col src indent =
-            case List.take 1 (List.drop offset src) of
-                actualChar :: _ ->
-                    if isGood actualChar then
-                        skipWhileWithoutLinebreakHelp isGood (offset + 1) row (col + 1) src indent
+        skipWhileWithoutLinebreakHelp : (Char -> Bool) -> Int -> Int -> Int -> Int -> Int -> State
+        skipWhileWithoutLinebreakHelp isGood offset row col srcBytes indent =
+            let
+                nextChar : Int
+                nextChar =
+                    Pine_kernel.take [ 4, Pine_kernel.skip [ offset, srcBytes ] ]
+            in
+            if Pine_kernel.equal [ Pine_kernel.length nextChar, 0 ] then
+                -- end of source
+                PState srcBytes offset indent row col
 
-                    else
-                        -- no match
-                        PState src offset indent row col
+            else if isGood nextChar then
+                skipWhileWithoutLinebreakHelp
+                    isGood
+                    (offset + 4)
+                    row
+                    (col + 1)
+                    srcBytes
+                    indent
 
-                [] ->
-                    -- no match
-                    PState src offset indent row col
+            else
+                -- no match
+                PState srcBytes offset indent row col
          * */
 
         var isGoodFunctionValue =
@@ -5405,26 +5420,21 @@ public class Precompiled
             Char.isAlphaNum c || c == '_'
          * */
 
-        static bool charValuePredicate(PineValue charValue)
+        static bool CharValuePredicate(ReadOnlyMemory<byte> charValue)
         {
-            if (charValue is not PineValue.BlobValue blobValue)
+            if (charValue.Length is not 4)
             {
                 return false;
             }
 
-            if (blobValue.Bytes.Length is not 4)
+            if (charValue.Span[0] is not 0 ||
+                charValue.Span[1] is not 0 ||
+                charValue.Span[2] is not 0)
             {
                 return false;
             }
 
-            if (blobValue.Bytes.Span[0] is not 0 ||
-                blobValue.Bytes.Span[1] is not 0 ||
-                blobValue.Bytes.Span[2] is not 0)
-            {
-                return false;
-            }
-
-            var byteValue = blobValue.Bytes.Span[3];
+            var byteValue = charValue.Span[3];
 
             return
                 (byteValue >= 48 && byteValue <= 57) ||
@@ -5436,34 +5446,28 @@ public class Precompiled
         return
             ParserFast_skipWhileWithoutLinebreakHelp(
                 environment,
-                parseCache,
-                charValuePredicate);
+                CharValuePredicate);
     }
 
     static Func<PrecompiledResult>? ParserFast_skipWhileWithoutLinebreakHelp_is_not_ASCII_quote_or_backslash(
         PineValue environment,
         PineVMParseCache parseCache)
     {
-        static bool charValuePredicate(PineValue charValue)
+        static bool CharValuePredicate(ReadOnlyMemory<byte> charValue)
         {
-            if (charValue is not PineValue.BlobValue blobValue)
+            if (charValue.Length is not 4)
             {
                 return false;
             }
 
-            if (blobValue.Bytes.Length is not 4)
-            {
-                return false;
-            }
-
-            if (blobValue.Bytes.Span[0] is not 0 ||
-                blobValue.Bytes.Span[1] is not 0 ||
-                blobValue.Bytes.Span[2] is not 0)
+            if (charValue.Span[0] is not 0 ||
+                charValue.Span[1] is not 0 ||
+                charValue.Span[2] is not 0)
             {
                 return true;
             }
 
-            var byteValue = blobValue.Bytes.Span[3];
+            var byteValue = charValue.Span[3];
 
             return
                 byteValue != '"' && byteValue != '\\';
@@ -5472,30 +5476,37 @@ public class Precompiled
         return
             ParserFast_skipWhileWithoutLinebreakHelp(
                 environment,
-                parseCache,
-                charValuePredicate);
+                CharValuePredicate);
     }
 
     static Func<PrecompiledResult>? ParserFast_skipWhileWithoutLinebreakHelp(
         PineValue environment,
-        PineVMParseCache parseCache,
-        Func<PineValue, bool> charValuePredicate)
+        Func<ReadOnlyMemory<byte>, bool> charValuePredicate)
     {
         /*
-        skipWhileWithoutLinebreakHelp : (Char -> Bool) -> Int -> Int -> Int -> List Char -> Int -> State
-        skipWhileWithoutLinebreakHelp isGood offset row col src indent =
-            case List.take 1 (List.drop offset src) of
-                actualChar :: _ ->
-                    if isGood actualChar then
-                        skipWhileWithoutLinebreakHelp isGood (offset + 1) row (col + 1) src indent
+        skipWhileWithoutLinebreakHelp : (Char -> Bool) -> Int -> Int -> Int -> Int -> Int -> State
+        skipWhileWithoutLinebreakHelp isGood offset row col srcBytes indent =
+            let
+                nextChar : Int
+                nextChar =
+                    Pine_kernel.take [ 4, Pine_kernel.skip [ offset, srcBytes ] ]
+            in
+            if Pine_kernel.equal [ Pine_kernel.length nextChar, 0 ] then
+                -- end of source
+                PState srcBytes offset indent row col
 
-                    else
-                        -- no match
-                        PState src offset indent row col
+            else if isGood nextChar then
+                skipWhileWithoutLinebreakHelp
+                    isGood
+                    (offset + 4)
+                    row
+                    (col + 1)
+                    srcBytes
+                    indent
 
-                [] ->
-                    -- no match
-                    PState src offset indent row col
+            else
+                -- no match
+                PState srcBytes offset indent row col
          * */
 
         var offsetValue =
@@ -5507,7 +5518,7 @@ public class Precompiled
         var colValue =
             PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 3]);
 
-        var srcCharsValue =
+        var srcBytesValue =
             PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 4]);
 
         var indentValue =
@@ -5523,7 +5534,7 @@ public class Precompiled
             return null;
         }
 
-        if (srcCharsValue is not PineValue.ListValue srcCharsList)
+        if (srcBytesValue is not PineValue.BlobValue srcBytesBlob)
         {
             return null;
         }
@@ -5532,16 +5543,18 @@ public class Precompiled
 
         while (true)
         {
-            if (srcCharsList.Items.Length <= offset)
-            {
-                break;
-            }
+            var sliceLength =
+                srcBytesBlob.Bytes.Length < offset + 4
+                ?
+                srcBytesBlob.Bytes.Length - offset
+                :
+                4;
 
-            var currentChar = srcCharsList.Items.Span[offset];
+            var nextChar = srcBytesBlob.Bytes.Slice(start: offset, length: sliceLength);
 
-            if (charValuePredicate(currentChar))
+            if (charValuePredicate(nextChar))
             {
-                ++offset;
+                offset += 4;
                 ++col;
                 continue;
             }
@@ -5556,7 +5569,7 @@ public class Precompiled
                     Tag_PState_Name_Value,
                     PineValue.List(
                         [
-                        srcCharsValue,
+                        srcBytesValue,
                         IntegerEncoding.EncodeSignedInteger(offset),
                         indentValue,
                         rowValue,
@@ -5573,43 +5586,51 @@ public class Precompiled
         PineValue environment,
         PineVMParseCache parseCache)
     {
-        var openChar =
-            PineValue.Blob([0, 0, 0, (byte)'{']);
+        static bool CharValuePredicate(ReadOnlyMemory<byte> charValue)
+        {
+            if (charValue.Length is not 4)
+            {
+                return false;
+            }
 
-        var closeChar =
-            PineValue.Blob([0, 0, 0, (byte)'-']);
+            if (charValue.Span[0] is not 0 ||
+                charValue.Span[1] is not 0 ||
+                charValue.Span[2] is not 0)
+            {
+                return true;
+            }
+
+            var byteValue = charValue.Span[3];
+
+            return
+                !(byteValue == (byte)'{' || byteValue == (byte)'-');
+        }
 
         return
             ParserFast_skipWhileHelp(
                 environment,
-                charValuePredicate:
-                c => !(c == openChar || c == closeChar));
+                charValuePredicate: CharValuePredicate);
     }
 
     static PrecompiledResult.FinalValue? ParserFast_skipWhileHelp_not_ASCII_quote_or_backslash(
         PineValue environment,
         PineVMParseCache parseCache)
     {
-        static bool charValuePredicate(PineValue charValue)
+        static bool CharValuePredicate(ReadOnlyMemory<byte> charValue)
         {
-            if (charValue is not PineValue.BlobValue blobValue)
+            if (charValue.Length is not 4)
             {
                 return false;
             }
 
-            if (blobValue.Bytes.Length is not 4)
-            {
-                return false;
-            }
-
-            if (blobValue.Bytes.Span[0] is not 0 ||
-                blobValue.Bytes.Span[1] is not 0 ||
-                blobValue.Bytes.Span[2] is not 0)
+            if (charValue.Span[0] is not 0 ||
+                charValue.Span[1] is not 0 ||
+                charValue.Span[2] is not 0)
             {
                 return true;
             }
 
-            var byteValue = blobValue.Bytes.Span[3];
+            var byteValue = charValue.Span[3];
 
             return
                 byteValue != '"' && byteValue != '\\';
@@ -5618,33 +5639,48 @@ public class Precompiled
         return
             ParserFast_skipWhileHelp(
                 environment,
-                charValuePredicate: charValuePredicate);
+                charValuePredicate: CharValuePredicate);
     }
 
     static PrecompiledResult.FinalValue? ParserFast_skipWhileHelp(
         PineValue environment,
-        Func<PineValue, bool> charValuePredicate)
+        Func<ReadOnlyMemory<byte>, bool> charValuePredicate)
     {
         /*
-        skipWhileHelp : (Char -> Bool) -> Int -> Int -> Int -> List Char -> Int -> State
-        skipWhileHelp isGood offset row col src indent =
-            case List.take 1 (List.drop offset src) of
-                actualChar :: _ ->
-                    if isGood actualChar then
-                        case actualChar of
-                            '\n' ->
-                                skipWhileHelp isGood (offset + 1) (row + 1) 1 src indent
+        skipWhileHelp : (Char -> Bool) -> Int -> Int -> Int -> Int -> Int -> State
+        skipWhileHelp isGood offset row col srcBytes indent =
+            let
+                nextChar : Char
+                nextChar =
+                    Pine_kernel.take [ 4, Pine_kernel.skip [ offset, srcBytes ] ]
+            in
+            -- Predicate 'isGood' might be lax and return True for an empty blob too, therefore check for end of source
+            if Pine_kernel.equal [ Pine_kernel.length nextChar, 0 ] then
+                -- end of source
+                PState srcBytes offset indent row col
 
-                            _ ->
-                                skipWhileHelp isGood (offset + 1) row (col + 1) src indent
+            else if isGood nextChar then
+                if Pine_kernel.equal [ nextChar, '\n' ] then
+                    skipWhileHelp
+                        isGood
+                        (offset + 4)
+                        (row + 1)
+                        1
+                        srcBytes
+                        indent
 
-                    else
-                        -- no match
-                        PState src offset indent row col
+                else
+                    skipWhileHelp
+                        isGood
+                        (offset + 4)
+                        row
+                        (col + 1)
+                        srcBytes
+                        indent
 
-                [] ->
-                    -- no match
-                    PState src offset indent row col
+            else
+                -- no match
+                PState srcBytes offset indent row col
          * 
          * */
 
@@ -5657,7 +5693,7 @@ public class Precompiled
         var colValue =
             PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 3]);
 
-        var srcCharsValue =
+        var srcBytesValue =
             PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 4]);
 
         var indentValue =
@@ -5678,7 +5714,7 @@ public class Precompiled
             return null;
         }
 
-        if (srcCharsValue is not PineValue.ListValue srcCharsList)
+        if (srcBytesValue is not PineValue.BlobValue srcBytesBlob)
         {
             return null;
         }
@@ -5690,23 +5726,30 @@ public class Precompiled
 
         var offset = (int)startOffset;
 
-        while (true)
+        while (offset < srcBytesBlob.Bytes.Length)
         {
-            if (srcCharsList.Items.Length <= offset)
-            {
-                break;
-            }
+            var sliceLength =
+                srcBytesBlob.Bytes.Length < offset + 4
+                ?
+                srcBytesBlob.Bytes.Length - offset
+                :
+                4;
 
-            var currentChar = srcCharsList.Items.Span[offset];
+            var currentChar =
+                srcBytesBlob.Bytes.Slice(start: offset, length: sliceLength);
 
             if (!charValuePredicate(currentChar))
             {
                 break;
             }
 
-            ++offset;
+            offset += 4;
 
-            if (currentChar == Character_ASCII_Newline_Value)
+            if (currentChar.Length is 4 &&
+                currentChar.Span[0] is 0 &&
+                currentChar.Span[1] is 0 &&
+                currentChar.Span[2] is 0 &&
+                currentChar.Span[3] is 10)
             {
                 ++row;
                 col = 1;
@@ -5723,7 +5766,7 @@ public class Precompiled
                 Tag_PState_Name_Value,
                 PineValue.List(
                     [
-                    srcCharsValue,
+                    srcBytesBlob,
                     IntegerEncoding.EncodeSignedInteger(offset),
                     indentValue,
                     IntegerEncoding.EncodeSignedInteger(row),
@@ -5742,24 +5785,41 @@ public class Precompiled
         PineVMParseCache parseCache)
     {
         /*
-        skipWhileHelp : (Char -> Bool) -> Int -> Int -> Int -> String -> Int -> State
-        skipWhileHelp isGood offset row col src indent =
+        skipWhileHelp : (Char -> Bool) -> Int -> Int -> Int -> Int -> Int -> State
+        skipWhileHelp isGood offset row col srcBytes indent =
             let
-                actualChar : String
-                actualChar =
-                    String.slice offset (offset + 1) src
+                nextChar : Char
+                nextChar =
+                    Pine_kernel.take [ 4, Pine_kernel.skip [ offset, srcBytes ] ]
             in
-            if String.any isGood actualChar then
-                case actualChar of
-                    "\n" ->
-                        skipWhileHelp isGood (offset + 1) (row + 1) 1 src indent
+            -- Predicate 'isGood' might be lax and return True for an empty blob too, therefore check for end of source
+            if Pine_kernel.equal [ Pine_kernel.length nextChar, 0 ] then
+                -- end of source
+                PState srcBytes offset indent row col
 
-                    _ ->
-                        skipWhileHelp isGood (offset + 1) row (col + 1) src indent
+            else if isGood nextChar then
+                if Pine_kernel.equal [ nextChar, '\n' ] then
+                    skipWhileHelp
+                        isGood
+                        (offset + 4)
+                        (row + 1)
+                        1
+                        srcBytes
+                        indent
+
+                else
+                    skipWhileHelp
+                        isGood
+                        (offset + 4)
+                        row
+                        (col + 1)
+                        srcBytes
+                        indent
 
             else
                 -- no match
-                PState src offset indent row col
+                PState srcBytes offset indent row col
+         * 
          * */
 
         var isGoodFunctionValue =

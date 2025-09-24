@@ -24,6 +24,10 @@ import Elm.Syntax.Range exposing (Range)
 import ParserFast
 
 
+type String
+    = String Int
+
+
 isNotReserved : String -> Bool
 isNotReserved name =
     case name of
@@ -105,16 +109,29 @@ escapedCharValueMap charToRes =
 
 
 hexStringToInt : String -> Int
-hexStringToInt string =
-    String.foldr
-        (\c soFar ->
-            { exponent = soFar.exponent + 1
-            , result = soFar.result + 16 ^ soFar.exponent * charToHex c
-            }
-        )
-        { exponent = 0, result = 0 }
-        string
-        |> .result
+hexStringToInt (String stringBytes) =
+    hexStringBytesToInt 0 0 stringBytes
+
+
+hexStringBytesToInt : Int -> Int -> Int -> Int
+hexStringBytesToInt offset sum srcBytes =
+    let
+        nextChar : Char
+        nextChar =
+            Pine_kernel.take [ 4, Pine_kernel.skip [ offset, srcBytes ] ]
+    in
+    if Pine_kernel.equal [ Pine_kernel.length nextChar, 0 ] then
+        sum
+
+    else
+        hexStringBytesToInt
+            (Pine_kernel.int_add [ offset, 4 ])
+            (Pine_kernel.int_add
+                [ Pine_kernel.int_mul [ 16, sum ]
+                , charToHex nextChar
+                ]
+            )
+            srcBytes
 
 
 charToHex : Char -> Int
