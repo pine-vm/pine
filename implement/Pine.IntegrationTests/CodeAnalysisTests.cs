@@ -83,18 +83,15 @@ public class CodeAnalysisTests
         var namesFromCompiledEnv =
             NamesFromCompiledEnv.FromCompiledEnvironment(parsedEnv, parseCache);
 
-        var (staticProgram, declsFailed) =
-            PineVM.CodeAnalysis.ParseAsStaticMonomorphicProgram(
+        var staticProgram =
+            ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
                 parsedEnv,
                 includeDeclaration:
                 declName =>
                 {
                     return declName.Namespaces.SequenceEqual(["Test"]);
                 },
-                parseCache)
-            .Extract(err => throw new System.Exception("Failed parsing as static program: " + err));
-
-        staticProgram.Should().NotBeNull();
+                parseCache);
 
         var wholeProgramText = StaticExpressionDisplay.RenderStaticProgram(staticProgram);
 
@@ -209,18 +206,15 @@ public class CodeAnalysisTests
         var namesFromCompiledEnv =
             NamesFromCompiledEnv.FromCompiledEnvironment(parsedEnv, parseCache);
 
-        var (staticProgram, declsFailed) =
-            PineVM.CodeAnalysis.ParseAsStaticMonomorphicProgram(
+        var staticProgram =
+            ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
                 parsedEnv,
                 includeDeclaration:
                 declName =>
                 {
                     return declName.Namespaces.SequenceEqual(["Test"]);
                 },
-                parseCache)
-            .Extract(err => throw new System.Exception("Failed parsing as static program: " + err));
-
-        staticProgram.Should().NotBeNull();
+                parseCache);
 
         var wholeProgramText = StaticExpressionDisplay.RenderStaticProgram(staticProgram);
 
@@ -321,18 +315,15 @@ public class CodeAnalysisTests
         var namesFromCompiledEnv =
             NamesFromCompiledEnv.FromCompiledEnvironment(parsedEnv, parseCache);
 
-        var (staticProgram, declsFailed) =
-            PineVM.CodeAnalysis.ParseAsStaticMonomorphicProgram(
+        var staticProgram =
+            ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
                 parsedEnv,
                 includeDeclaration:
                 declName =>
                 {
                     return declName.Namespaces.SequenceEqual(["Test"]);
                 },
-                parseCache)
-            .Extract(err => throw new System.Exception("Failed parsing as static program: " + err));
-
-        staticProgram.Should().NotBeNull();
+                parseCache);
 
         var wholeProgramText = StaticExpressionDisplay.RenderStaticProgram(staticProgram);
 
@@ -457,18 +448,15 @@ public class CodeAnalysisTests
             ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnv)
             .Extract(err => throw new System.Exception("Failed parsing interactive environment: " + err));
 
-        var (staticProgram, declsFailed) =
-            PineVM.CodeAnalysis.ParseAsStaticMonomorphicProgram(
+        var staticProgram =
+            ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
                 parsedEnv,
                 includeDeclaration:
                 declName =>
                 {
                     return declName.Namespaces.SequenceEqual(["Test"]);
                 },
-                parseCache)
-            .Extract(err => throw new System.Exception("Failed parsing as static program: " + err));
-
-        staticProgram.Should().NotBeNull();
+                parseCache);
 
         var wholeProgramText = StaticExpressionDisplay.RenderStaticProgram(staticProgram);
 
@@ -594,18 +582,15 @@ public class CodeAnalysisTests
             ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnv)
             .Extract(err => throw new System.Exception("Failed parsing interactive environment: " + err));
 
-        var (staticProgram, declsFailed) =
-            PineVM.CodeAnalysis.ParseAsStaticMonomorphicProgram(
+        var staticProgram =
+            ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
                 parsedEnv,
                 includeDeclaration:
                 declName =>
                 {
                     return declName == new DeclQualifiedName(["Basics"], "compare");
                 },
-                parseCache)
-            .Extract(err => throw new System.Exception("Failed parsing as static program: " + err));
-
-        staticProgram.Should().NotBeNull();
+                parseCache);
 
         var wholeProgramText = StaticExpressionDisplay.RenderStaticProgram(staticProgram);
 
@@ -1105,18 +1090,15 @@ public class CodeAnalysisTests
             ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnv)
             .Extract(err => throw new System.Exception("Failed parsing interactive environment: " + err));
 
-        var (staticProgram, declsFailed) =
-            PineVM.CodeAnalysis.ParseAsStaticMonomorphicProgram(
+        var staticProgram =
+            ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
                 parsedEnv,
                 includeDeclaration:
                 declName =>
                 {
                     return declName == new DeclQualifiedName(["Test"], "idiv");
                 },
-                parseCache)
-            .Extract(err => throw new System.Exception("Failed parsing as static program: " + err));
-
-        staticProgram.Should().NotBeNull();
+                parseCache);
 
         var wholeProgramText = StaticExpressionDisplay.RenderStaticProgram(staticProgram);
 
@@ -1307,18 +1289,15 @@ public class CodeAnalysisTests
             ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnv)
             .Extract(err => throw new System.Exception("Failed parsing interactive environment: " + err));
 
-        var (staticProgram, declsFailed) =
-            PineVM.CodeAnalysis.ParseAsStaticMonomorphicProgram(
+        var staticProgram =
+            ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
                 parsedEnv,
                 includeDeclaration:
                 declName =>
                 {
                     return declName == new DeclQualifiedName(["Dict"], "insert");
                 },
-                parseCache)
-            .Extract(err => throw new System.Exception("Failed parsing as static program: " + err));
-
-        staticProgram.Should().NotBeNull();
+                parseCache);
 
         var wholeProgramText = StaticExpressionDisplay.RenderStaticProgram(staticProgram);
 
@@ -2157,23 +2136,15 @@ public class CodeAnalysisTests
             ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnv)
             .Extract(err => throw new System.Exception("Failed parsing interactive environment: " + err));
 
-        var (staticProgram, declsFailed) =
-            PineVM.CodeAnalysis.ParseAsStaticMonomorphicProgram(
+        var staticProgram =
+            ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
                 parsedEnv,
                 includeDeclaration:
                 declName =>
                 {
                     return declName == new DeclQualifiedName(["Test"], "hexStringToInt");
                 },
-                parseCache)
-            .Extract(err => throw new System.Exception("Failed parsing as static program: " + err));
-
-        staticProgram.Should().NotBeNull();
-
-        foreach (var decl in declsFailed)
-        {
-            throw new System.Exception("Failed to parse declaration " + decl.Key.FullName + ": " + decl.Value);
-        }
+                parseCache);
 
         var wholeProgramText = StaticExpressionDisplay.RenderStaticProgram(staticProgram);
 
@@ -2487,18 +2458,15 @@ public class CodeAnalysisTests
             ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnv)
             .Extract(err => throw new System.Exception("Failed parsing interactive environment: " + err));
 
-        var (staticProgram, declsFailed) =
-            PineVM.CodeAnalysis.ParseAsStaticMonomorphicProgram(
+        var staticProgram =
+            ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
                 parsedEnv,
                 includeDeclaration:
                 declName =>
                 {
                     return declName == new DeclQualifiedName(["Test"], "listRepeatMultiply");
                 },
-                parseCache)
-            .Extract(err => throw new System.Exception("Failed parsing as static program: " + err));
-
-        staticProgram.Should().NotBeNull();
+                parseCache);
 
         var wholeProgramText = StaticExpressionDisplay.RenderStaticProgram(staticProgram);
 
@@ -2541,6 +2509,28 @@ public class CodeAnalysisTests
             
             """"
             .Trim());
+    }
+
+    private static StaticProgram ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
+        ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedEnvironment,
+        System.Func<DeclQualifiedName, bool> includeDeclaration,
+        PineVMParseCache parseCache)
+    {
+        var (staticProgram, declsFailed) =
+            PineVM.CodeAnalysis.ParseAsStaticMonomorphicProgram(
+                parsedEnvironment,
+                includeDeclaration: includeDeclaration,
+                parseCache: parseCache)
+            .Extract(err => throw new System.Exception("Failed parsing as static program: " + err));
+
+        foreach (var decl in declsFailed)
+        {
+            throw new System.Exception("Failed to parse declaration " + decl.Key.FullName + ": " + decl.Value);
+        }
+
+        staticProgram.Should().NotBeNull();
+
+        return staticProgram;
     }
 
     [Fact]
