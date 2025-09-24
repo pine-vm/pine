@@ -1210,7 +1210,7 @@ public class CodeAnalysis
                  * Only forward items modeled in the popular environment composition style:
                  * */
 
-                var childEnvClass = MapValueClass(current.envValueClass, parseAndEvalExpr.Environment);
+                var childEnvClass = PineValueClass.MapValueClass(current.envValueClass, parseAndEvalExpr.Environment);
 
                 if (childEnvClass is null)
                 {
@@ -1464,7 +1464,7 @@ public class CodeAnalysis
 
                 var (childExprValue, childExpr) = childExprAndValue;
 
-                var childEnvValueClass = MapValueClass(envValueClass, parseAndEval.Environment);
+                var childEnvValueClass = PineValueClass.MapValueClass(envValueClass, parseAndEval.Environment);
 
                 if (childEnvValueClass is null)
                 {
@@ -1606,7 +1606,7 @@ public class CodeAnalysis
                     childExprValueResult.GetType().Name);
             }
 
-            var childEnvClass = MapValueClass(envValueClass, parseAndEval.Environment);
+            var childEnvClass = PineValueClass.MapValueClass(envValueClass, parseAndEval.Environment);
 
             if (childEnvClass is null)
             {
@@ -1884,72 +1884,6 @@ public class CodeAnalysis
         // Name so that anonymous one appear at the end when sorting alphabetically:
 
         return $"zzz_anon_{exprHashBase16[..8]}_{pineValueClass.HashBase16[..8]}";
-    }
-
-    private static PineValueClass? MapValueClass(
-        PineValueClass envClass,
-        Expression expression)
-    {
-        if (expression is Expression.Environment)
-        {
-            return envClass;
-        }
-
-        if (expression is Expression.Literal literal)
-        {
-            return PineValueClass.CreateEquals(literal.Value);
-        }
-
-        if (Core.CodeAnalysis.CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(expression) is
-            ExprMappedToParentEnv.PathInParentEnv pathInParentEnv)
-        {
-            if (envClass.TryGetValue(pathInParentEnv.Path) is { } valueAtPath)
-            {
-                return PineValueClass.CreateEquals(valueAtPath);
-            }
-
-            return envClass.PartUnderPath(pathInParentEnv.Path);
-        }
-
-        if (expression is Expression.List listExpr)
-        {
-            var itemClasses = new PineValueClass?[listExpr.Items.Count];
-
-            for (var itemIndex = 0; itemIndex < listExpr.Items.Count; ++itemIndex)
-            {
-                var item = listExpr.Items[itemIndex];
-
-                var itemClass = MapValueClass(envClass, item);
-
-                itemClasses[itemIndex] = itemClass;
-            }
-
-            var itemsFlattened = new List<KeyValuePair<IReadOnlyList<int>, PineValue>>();
-
-            for (var itemIndex = 0; itemIndex < itemClasses.Length; ++itemIndex)
-            {
-                if (itemClasses[itemIndex] is not { } itemClass)
-                {
-                    continue;
-                }
-
-                foreach (var classItem in itemClass.ParsedItems)
-                {
-                    itemsFlattened.Add(
-                        new KeyValuePair<IReadOnlyList<int>, PineValue>(
-                            [itemIndex, .. classItem.Key],
-                            classItem.Value));
-                }
-            }
-
-            if (itemsFlattened.Count is 0)
-                return null;
-
-            return
-                PineValueClass.Create(itemsFlattened);
-        }
-
-        return null;
     }
 
     public static IReadOnlyDictionary<FunctionIdentifier, StaticExpression<FunctionIdentifier>>

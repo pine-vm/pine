@@ -111,6 +111,16 @@ public record NamesFromCompiledEnv
         ElmInteractiveEnvironment.FunctionRecord functionRecord,
         PineVMParseCache parseCache)
     {
+        var outerEnvClass =
+            PineValueClass.Create(
+                [
+                 ..functionRecord.EnvFunctions.ToArray()
+                     .Select((envFuncValue, index) =>
+                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                         [0, index],
+                         envFuncValue))
+                 ]);
+
         if (functionRecord.InnerFunction is Expression.ParseAndEval innerParseAndEval)
         {
             // Which env function is the entry pointing to?
@@ -123,19 +133,18 @@ public record NamesFromCompiledEnv
                 {
                     var namedValue = functionRecord.EnvFunctions.Span[bodyExprPath.Path[1]];
 
-                    var envClass =
-                        PineValueClass.Create(
-                            [
-                            ..functionRecord.EnvFunctions.ToArray()
-                             .Select((envFuncValue, index) =>
-                             new KeyValuePair<IReadOnlyList<int>, PineValue>(
-                                 [0, index],
-                                 envFuncValue))
-                             ]);
+                    var innerEnvClass =
+                        PineValueClass.MapValueClass(outerEnvClass, innerParseAndEval.Environment);
+
+                    if (innerEnvClass is null)
+                    {
+                        throw new System.NotImplementedException(
+                            "Failed to map outer environment class to inner environment.");
+                    }
 
                     if (parseCache.ParseExpression(namedValue).IsOkOrNull() is { } expr)
                     {
-                        return (namedValue, expr, envClass);
+                        return (namedValue, expr, innerEnvClass);
                     }
                 }
             }
@@ -144,16 +153,7 @@ public record NamesFromCompiledEnv
         {
             var innerFunctionEncoded = ExpressionEncoding.EncodeExpressionAsValue(functionRecord.InnerFunction);
 
-            var envClass = PineValueClass.Create(
-                 [
-                 ..functionRecord.EnvFunctions.ToArray()
-                         .Select((envFuncValue, index) =>
-                         new KeyValuePair<IReadOnlyList<int>, PineValue>(
-                             [0, index],
-                             envFuncValue))
-                 ]);
-
-            return (innerFunctionEncoded, functionRecord.InnerFunction, envClass);
+            return (innerFunctionEncoded, functionRecord.InnerFunction, outerEnvClass);
         }
     }
 

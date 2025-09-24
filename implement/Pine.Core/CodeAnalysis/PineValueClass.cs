@@ -34,6 +34,11 @@ public record PineValueClass
     private readonly FastRepresentation _fastRepresentation;
 
     /// <summary>
+    /// Gets an empty <see cref="PineValueClass"/> with no constraints.
+    /// </summary>
+    public static readonly PineValueClass Empty = Create([]);
+
+    /// <summary>
     /// Representation optimized for fast check at runtime.
     /// Independent of the identity of the constraint, this internal representation could
     /// use different ordering to check the most distinctive items first.
@@ -183,14 +188,17 @@ public record PineValueClass
     public static PineValueClass Create(
         IReadOnlyList<KeyValuePair<IReadOnlyList<int>, PineValue>> parsedItems)
     {
+        if (parsedItems.Count is 0 && Empty is not null)
+            return Empty;
+
         PineValue[] parsedItemsPineValues =
             [.. parsedItems
-        .OrderBy(kv => kv.Key, IntPathComparer.Instance)
-        .Select(item =>
-        (PineValue)
-        PineValue.List(
-            [PineValue.List([.. item.Key.Select(pathItem => IntegerEncoding.EncodeSignedInteger(pathItem))]),
-            item.Value]))];
+            .OrderBy(kv => kv.Key, IntPathComparer.Instance)
+            .Select(item =>
+            (PineValue)
+            PineValue.List(
+                [PineValue.List([.. item.Key.Select(pathItem => IntegerEncoding.EncodeSignedInteger(pathItem))]),
+                item.Value]))];
 
         var hashBase16 =
             Convert.ToHexStringLower(s_valueHashCache.GetHash(PineValue.List(parsedItemsPineValues)).Span);
@@ -427,6 +435,86 @@ public record PineValueClass
 
                 return [new KeyValuePair<IReadOnlyList<int>, PineValue>([.. item.Key.Skip(path.Count)], item.Value)];
             })]);
+    }
+
+    /// <summary>
+    /// Attempts to infer a value-class for an expression under a given environment constraint.
+    /// </summary>
+    /// <param name="envClass">Constraint describing known values available at the root environment.</param>
+    /// <param name="expression">
+    /// Expression to analyze. Recognized cases:
+    /// - <see cref="Expression.Environment"/>: returns <paramref name="envClass"/>.
+    /// - <see cref="Expression.Literal"/>: returns an equality constraint to the literal value.
+    /// - Path in parent env (via <see cref="CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(Expression)"/>):
+    ///   if the path resolves in <paramref name="envClass"/>, returns an equality constraint to that value;
+    ///   otherwise returns the projection of <paramref name="envClass"/> under that path via <see cref="PartUnderPath"/>.
+    /// - <see cref="Expression.List"/>: maps each item recursively and combines constraints under their list indices.
+    /// Other expression kinds are not handled and yield null.
+    /// </param>
+    /// <returns>
+    /// A <see cref="PineValueClass"/> describing the values the expression can take under
+    /// <paramref name="envClass"/>, or null if no useful constraint can be inferred.
+    /// </returns>
+    public static PineValueClass? MapValueClass(
+        PineValueClass envClass,
+        Expression expression)
+    {
+        if (expression is Expression.Environment)
+        {
+            return envClass;
+        }
+
+        if (expression is Expression.Literal literal)
+        {
+            return CreateEquals(literal.Value);
+        }
+
+        if (CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(expression) is
+            ExprMappedToParentEnv.PathInParentEnv pathInParentEnv)
+        {
+            if (envClass.TryGetValue(pathInParentEnv.Path) is { } valueAtPath)
+            {
+                return CreateEquals(valueAtPath);
+            }
+
+            return envClass.PartUnderPath(pathInParentEnv.Path);
+        }
+
+        if (expression is Expression.List listExpr)
+        {
+            var itemClasses = new PineValueClass?[listExpr.Items.Count];
+
+            for (var itemIndex = 0; itemIndex < listExpr.Items.Count; ++itemIndex)
+            {
+                var item = listExpr.Items[itemIndex];
+
+                var itemClass = MapValueClass(envClass, item);
+
+                itemClasses[itemIndex] = itemClass;
+            }
+
+            var itemsFlattened = new List<KeyValuePair<IReadOnlyList<int>, PineValue>>();
+
+            for (var itemIndex = 0; itemIndex < itemClasses.Length; ++itemIndex)
+            {
+                if (itemClasses[itemIndex] is not { } itemClass)
+                {
+                    continue;
+                }
+
+                foreach (var classItem in itemClass.ParsedItems)
+                {
+                    itemsFlattened.Add(
+                        new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                            [itemIndex, .. classItem.Key],
+                            classItem.Value));
+                }
+            }
+
+            return Create(itemsFlattened);
+        }
+
+        return null;
     }
 }
 

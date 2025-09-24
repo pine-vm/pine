@@ -2001,6 +2001,404 @@ public class CodeAnalysisTests
     }
 
     [Fact]
+    public void Parse_Test_hexStringToInt()
+    {
+        var elmJsonFile =
+            """
+            {
+                "type": "application",
+                "source-directories": [
+                    "src"
+                ],
+                "elm-version": "0.19.1",
+                "dependencies": {
+                    "direct": {
+                        "elm/core": "1.0.5"
+                    },
+                    "indirect": {
+                    }
+                },
+                "test-dependencies": {
+                    "direct": {
+                        "elm-explorations/test": "2.2.0"
+                    },
+                    "indirect": {
+                    }
+                }
+            }
+            """;
+
+        var elmModuleText =
+            """
+            module Test exposing (..)
+
+
+            type String
+                = String Int
+
+
+            hexStringToInt : String -> Int
+            hexStringToInt (String stringBytes) =
+                hexStringBytesToInt 0 0 stringBytes
+
+
+            hexStringBytesToInt : Int -> Int -> Int -> Int
+            hexStringBytesToInt offset sum srcBytes =
+                let
+                    nextChar : Char
+                    nextChar =
+                        Pine_kernel.take [ 4, Pine_kernel.skip [ offset, srcBytes ] ]
+                in
+                if Pine_kernel.equal [ Pine_kernel.length nextChar, 0 ] then
+                    sum
+
+                else
+                    hexStringBytesToInt
+                        (Pine_kernel.int_add [ offset, 4 ])
+                        (Pine_kernel.int_add
+                            [ Pine_kernel.int_mul [ 16, sum ]
+                            , charToHex nextChar
+                            ]
+                        )
+                        srcBytes
+
+
+            charToHex : Char -> Int
+            charToHex c =
+                case c of
+                    '0' ->
+                        0
+
+                    '1' ->
+                        1
+
+                    '2' ->
+                        2
+
+                    '3' ->
+                        3
+
+                    '4' ->
+                        4
+
+                    '5' ->
+                        5
+
+                    '6' ->
+                        6
+
+                    '7' ->
+                        7
+
+                    '8' ->
+                        8
+
+                    '9' ->
+                        9
+
+                    'a' ->
+                        10
+
+                    'b' ->
+                        11
+
+                    'c' ->
+                        12
+
+                    'd' ->
+                        13
+
+                    'e' ->
+                        14
+
+                    'f' ->
+                        15
+
+                    'A' ->
+                        10
+
+                    'B' ->
+                        11
+
+                    'C' ->
+                        12
+
+                    'D' ->
+                        13
+
+                    'E' ->
+                        14
+
+                    -- 'F'
+                    _ ->
+                        15
+            """;
+
+        var appCodeTree =
+            BlobTreeWithStringPath.EmptyTree
+            .SetNodeAtPathSorted(
+                ["elm.json"],
+                BlobTreeWithStringPath.Blob(Encoding.UTF8.GetBytes(elmJsonFile)))
+            .SetNodeAtPathSorted(
+                ["src", "Test.elm"],
+                BlobTreeWithStringPath.Blob(Encoding.UTF8.GetBytes(elmModuleText)));
+
+        var compiledEnv =
+            ElmCompiler.CompileInteractiveEnvironment(
+                appCodeTree,
+                rootFilePaths: [["src", "Test.elm"]],
+                skipLowering: true,
+                skipFilteringForSourceDirs: false)
+            .Extract(err => throw new System.Exception(err));
+
+        var parseCache = new PineVMParseCache();
+
+        var parsedEnv =
+            ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnv)
+            .Extract(err => throw new System.Exception("Failed parsing interactive environment: " + err));
+
+        var (staticProgram, declsFailed) =
+            PineVM.CodeAnalysis.ParseAsStaticMonomorphicProgram(
+                parsedEnv,
+                includeDeclaration:
+                declName =>
+                {
+                    return declName == new DeclQualifiedName(["Test"], "hexStringToInt");
+                },
+                parseCache)
+            .Extract(err => throw new System.Exception("Failed parsing as static program: " + err));
+
+        staticProgram.Should().NotBeNull();
+
+        foreach (var decl in declsFailed)
+        {
+            throw new System.Exception("Failed to parse declaration " + decl.Key.FullName + ": " + decl.Value);
+        }
+
+        var wholeProgramText = StaticExpressionDisplay.RenderStaticProgram(staticProgram);
+
+        wholeProgramText.Trim().Should().Be(
+            """"
+            Test.charToHex param_1_0 =
+                if
+                    Pine_kernel.equal
+                        [ param_1_0
+                        , '0'
+                        ]
+                then
+                    0
+
+                else if
+                    Pine_kernel.equal
+                        [ param_1_0
+                        , '1'
+                        ]
+                then
+                    1
+
+                else if
+                    Pine_kernel.equal
+                        [ param_1_0
+                        , '2'
+                        ]
+                then
+                    2
+
+                else if
+                    Pine_kernel.equal
+                        [ param_1_0
+                        , '3'
+                        ]
+                then
+                    3
+
+                else if
+                    Pine_kernel.equal
+                        [ param_1_0
+                        , '4'
+                        ]
+                then
+                    4
+
+                else if
+                    Pine_kernel.equal
+                        [ param_1_0
+                        , '5'
+                        ]
+                then
+                    5
+
+                else if
+                    Pine_kernel.equal
+                        [ param_1_0
+                        , '6'
+                        ]
+                then
+                    6
+
+                else if
+                    Pine_kernel.equal
+                        [ param_1_0
+                        , '7'
+                        ]
+                then
+                    7
+
+                else if
+                    Pine_kernel.equal
+                        [ param_1_0
+                        , '8'
+                        ]
+                then
+                    8
+
+                else if
+                    Pine_kernel.equal
+                        [ param_1_0
+                        , '9'
+                        ]
+                then
+                    9
+
+                else if
+                    Pine_kernel.equal
+                        [ param_1_0
+                        , 'a'
+                        ]
+                then
+                    10
+
+                else if
+                    Pine_kernel.equal
+                        [ param_1_0
+                        , 'b'
+                        ]
+                then
+                    11
+
+                else if
+                    Pine_kernel.equal
+                        [ param_1_0
+                        , 'c'
+                        ]
+                then
+                    12
+
+                else if
+                    Pine_kernel.equal
+                        [ param_1_0
+                        , 'd'
+                        ]
+                then
+                    13
+
+                else if
+                    Pine_kernel.equal
+                        [ param_1_0
+                        , 'e'
+                        ]
+                then
+                    14
+
+                else if
+                    Pine_kernel.equal
+                        [ param_1_0
+                        , 'f'
+                        ]
+                then
+                    15
+
+                else if
+                    Pine_kernel.equal
+                        [ param_1_0
+                        , 'A'
+                        ]
+                then
+                    10
+
+                else if
+                    Pine_kernel.equal
+                        [ param_1_0
+                        , 'B'
+                        ]
+                then
+                    11
+
+                else if
+                    Pine_kernel.equal
+                        [ param_1_0
+                        , 'C'
+                        ]
+                then
+                    12
+
+                else if
+                    Pine_kernel.equal
+                        [ param_1_0
+                        , 'D'
+                        ]
+                then
+                    13
+
+                else if
+                    Pine_kernel.equal
+                        [ param_1_0
+                        , 'E'
+                        ]
+                then
+                    14
+
+                else
+                    15
+
+
+            Test.hexStringBytesToInt param_1_0 param_1_1 param_1_2 =
+                if
+                    Pine_kernel.equal
+                        [ Pine_kernel.length
+                            (Pine_kernel.take
+                                [ 4
+                                , Pine_kernel.skip
+                                    [ param_1_0
+                                    , param_1_2
+                                    ]
+                                ]
+                            )
+                        , 0
+                        ]
+                then
+                    param_1_1
+
+                else
+                    Test.hexStringBytesToInt
+                        (Pine_kernel.int_add
+                            [ param_1_0
+                            , 4
+                            ]
+                        )
+                        (Pine_kernel.int_add
+                            [ Pine_kernel.int_mul
+                                [ 16
+                                , param_1_1
+                                ]
+                            , Test.charToHex
+                                (Pine_kernel.take
+                                    [ 4
+                                    , Pine_kernel.skip
+                                        [ param_1_0
+                                        , param_1_2
+                                        ]
+                                    ]
+                                )
+                            ]
+                        )
+                        param_1_2
+            
+            """"
+            .Trim());
+    }
+
+    [Fact]
     public void Parse_Test_apply_function_from_other_module()
     {
         var elmJsonFile =
