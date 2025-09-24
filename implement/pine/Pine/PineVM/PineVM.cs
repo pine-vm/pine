@@ -3062,6 +3062,28 @@ public class PineVM : IPineVM
             if (skipCount is 0 && takeCount == argumentBlob.Bytes.Length)
                 return argument;
 
+            if (takeCount is 1)
+            {
+                return PineValue.BlobSingleByte(argumentBlob.Bytes.Span[skipCount]);
+            }
+            else if (takeCount is 2)
+            {
+                return
+                    PineValue.ReusedBlobTupleFromBytes(
+                        first: argumentBlob.Bytes.Span[skipCount],
+                        second: argumentBlob.Bytes.Span[skipCount + 1]);
+            }
+            else if (takeCount is 4)
+            {
+                if (argumentBlob.Bytes.Span[skipCount] is 0 &&
+                    argumentBlob.Bytes.Span[skipCount + 1] is 0)
+                {
+                    return PineValue.ReusedBlobCharFourByte(
+                        third: argumentBlob.Bytes.Span[skipCount + 2],
+                        fourth: argumentBlob.Bytes.Span[skipCount + 3]);
+                }
+            }
+
             var slicedBytes =
                 argumentBlob.Bytes.Slice(start: skipCount, length: takeCount);
 
