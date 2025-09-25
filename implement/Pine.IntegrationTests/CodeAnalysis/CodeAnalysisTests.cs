@@ -8,7 +8,7 @@ using System.Linq;
 using System.Text;
 using Xunit;
 
-namespace Pine.IntegrationTests;
+namespace Pine.IntegrationTests.CodeAnalysis;
 
 public class CodeAnalysisTests
 {
@@ -84,7 +84,7 @@ public class CodeAnalysisTests
             NamesFromCompiledEnv.FromCompiledEnvironment(parsedEnv, parseCache);
 
         var staticProgram =
-            ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
+            CodeAnalysisTestHelper.ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
                 parsedEnv,
                 includeDeclaration:
                 declName =>
@@ -207,7 +207,7 @@ public class CodeAnalysisTests
             NamesFromCompiledEnv.FromCompiledEnvironment(parsedEnv, parseCache);
 
         var staticProgram =
-            ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
+            CodeAnalysisTestHelper.ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
                 parsedEnv,
                 includeDeclaration:
                 declName =>
@@ -316,7 +316,7 @@ public class CodeAnalysisTests
             NamesFromCompiledEnv.FromCompiledEnvironment(parsedEnv, parseCache);
 
         var staticProgram =
-            ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
+            CodeAnalysisTestHelper.ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
                 parsedEnv,
                 includeDeclaration:
                 declName =>
@@ -449,7 +449,7 @@ public class CodeAnalysisTests
             .Extract(err => throw new System.Exception("Failed parsing interactive environment: " + err));
 
         var staticProgram =
-            ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
+            CodeAnalysisTestHelper.ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
                 parsedEnv,
                 includeDeclaration:
                 declName =>
@@ -583,7 +583,7 @@ public class CodeAnalysisTests
             .Extract(err => throw new System.Exception("Failed parsing interactive environment: " + err));
 
         var staticProgram =
-            ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
+            CodeAnalysisTestHelper.ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
                 parsedEnv,
                 includeDeclaration:
                 declName =>
@@ -1091,7 +1091,7 @@ public class CodeAnalysisTests
             .Extract(err => throw new System.Exception("Failed parsing interactive environment: " + err));
 
         var staticProgram =
-            ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
+            CodeAnalysisTestHelper.ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
                 parsedEnv,
                 includeDeclaration:
                 declName =>
@@ -1290,7 +1290,7 @@ public class CodeAnalysisTests
             .Extract(err => throw new System.Exception("Failed parsing interactive environment: " + err));
 
         var staticProgram =
-            ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
+            CodeAnalysisTestHelper.ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
                 parsedEnv,
                 includeDeclaration:
                 declName =>
@@ -2137,7 +2137,7 @@ public class CodeAnalysisTests
             .Extract(err => throw new System.Exception("Failed parsing interactive environment: " + err));
 
         var staticProgram =
-            ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
+            CodeAnalysisTestHelper.ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
                 parsedEnv,
                 includeDeclaration:
                 declName =>
@@ -2459,7 +2459,7 @@ public class CodeAnalysisTests
             .Extract(err => throw new System.Exception("Failed parsing interactive environment: " + err));
 
         var staticProgram =
-            ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
+            CodeAnalysisTestHelper.ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
                 parsedEnv,
                 includeDeclaration:
                 declName =>
@@ -2509,28 +2509,6 @@ public class CodeAnalysisTests
             
             """"
             .Trim());
-    }
-
-    private static StaticProgram ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
-        ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedEnvironment,
-        System.Func<DeclQualifiedName, bool> includeDeclaration,
-        PineVMParseCache parseCache)
-    {
-        var (staticProgram, declsFailed) =
-            PineVM.CodeAnalysis.ParseAsStaticMonomorphicProgram(
-                parsedEnvironment,
-                includeDeclaration: includeDeclaration,
-                parseCache: parseCache)
-            .Extract(err => throw new System.Exception("Failed parsing as static program: " + err));
-
-        foreach (var decl in declsFailed)
-        {
-            throw new System.Exception("Failed to parse declaration " + decl.Key.FullName + ": " + decl.Value);
-        }
-
-        staticProgram.Should().NotBeNull();
-
-        return staticProgram;
     }
 
     [Fact]
@@ -2588,7 +2566,7 @@ public class CodeAnalysisTests
             try
             {
                 var envClassResult =
-                    CodeAnalysis.MinimalValueClassForStaticProgram(
+                    Core.CodeAnalysis.CodeAnalysis.MinimalValueClassForStaticProgram(
                         expression: testCase.expression,
                         availableEnvironment: PineValueClass.CreateEquals(testCase.environment));
 

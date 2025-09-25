@@ -222,7 +222,7 @@ public class CompilePineToDotNetTests
 
         foreach (var (expression, expected) in testCases)
         {
-            var result = CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(expression);
+            var result = Core.CodeAnalysis.CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(expression);
 
             result.Should().Be(expected);
         }
