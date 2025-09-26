@@ -41,7 +41,7 @@ public partial class CompileToCSharp
     {
         var compilationUnitSyntax =
             SyntaxFactory.CompilationUnit()
-                .WithUsings(new SyntaxList<UsingDirectiveSyntax>(compileCSharpClassResult.UsingDirectives))
+                .WithUsings([.. compileCSharpClassResult.UsingDirectives])
                 .WithMembers(
                     SyntaxFactory.List(
                         [.. additionalMembers ?? [], compileCSharpClassResult.ClassDeclarationSyntax]));

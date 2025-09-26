@@ -374,24 +374,19 @@ public class CompilePineToDotNetTests
                     {
                         var env_1 =
                             KernelFunction.head(
-                                KernelFunction.skip(
-                                    1,
-                                    env));
+                                KernelFunction.skip(1, env));
 
                         var env_1_0 =
-                            KernelFunction.head(
-                                env_1);
+                            KernelFunction.head(env_1);
 
-                        return simpleFunction_uparam(
-                                env_1_0);
+                        return simpleFunction_uparam(env_1_0);
                     }
 
 
                     public static PineValue simpleFunction_uparam(PineValue env_1_0)
                     {
                         var env_1_0_as_int =
-                            KernelFunction.SignedIntegerFromValueRelaxed(
-                                env_1_0);
+                            KernelFunction.SignedIntegerFromValueRelaxed(env_1_0);
 
                         var stack_3_as_int =
                             env_1_0_as_int + 1L;
@@ -401,8 +396,8 @@ public class CompilePineToDotNetTests
 
                         if (stack_3_as_int is { } stack_3_as_int_not_null)
                         {
-                            stack_3 = IntegerEncoding.EncodeSignedInteger(
-                                stack_3_as_int_not_null);
+                            stack_3 =
+                                IntegerEncoding.EncodeSignedInteger(stack_3_as_int_not_null);
                         }
 
                         return stack_3;
@@ -440,24 +435,19 @@ public class CompilePineToDotNetTests
                     {
                         var env_1 =
                             KernelFunction.head(
-                                KernelFunction.skip(
-                                    1,
-                                    env));
+                                KernelFunction.skip(1, env));
 
                         var env_1_0 =
-                            KernelFunction.head(
-                                env_1);
+                            KernelFunction.head(env_1);
 
-                        return simpleFunction_uparam(
-                                env_1_0);
+                        return simpleFunction_uparam(env_1_0);
                     }
 
 
                     public static PineValue simpleFunction_uparam(PineValue env_1_0)
                     {
                         var env_1_0_as_int =
-                            KernelFunction.SignedIntegerFromValueRelaxed(
-                                env_1_0);
+                            KernelFunction.SignedIntegerFromValueRelaxed(env_1_0);
 
                         var stack_3_as_int =
                             env_1_0_as_int * 3L;
@@ -470,8 +460,8 @@ public class CompilePineToDotNetTests
 
                         if (stack_4_as_int is { } stack_4_as_int_not_null)
                         {
-                            stack_4 = IntegerEncoding.EncodeSignedInteger(
-                                stack_4_as_int_not_null);
+                            stack_4 =
+                                IntegerEncoding.EncodeSignedInteger(stack_4_as_int_not_null);
                         }
 
                         return stack_4;
