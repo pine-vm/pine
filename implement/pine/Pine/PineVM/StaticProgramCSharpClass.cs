@@ -16,7 +16,8 @@ public record StaticProgramCSharpClass(
     public static StaticProgramCSharpClass FromDeclarations(
         string className,
         IReadOnlyDictionary<string, (Expression origExpr, StaticFunctionInterface interf, StaticExpression<DeclQualifiedName> body, PineValueClass constraint)> declarations,
-        IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions)
+        IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
+        IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls)
     {
         IReadOnlyList<MethodDeclarationSyntax> functions =
             [.. declarations
@@ -26,7 +27,7 @@ public record StaticProgramCSharpClass(
                 functionInterface: kv.Value.interf,
                 body: kv.Value.body,
                 availableFunctions,
-                constraint: kv.Value.constraint))];
+                availableValueDecls))];
 
         var classSyntax =
             SyntaxFactory.ClassDeclaration(className)
@@ -42,13 +43,19 @@ public record StaticProgramCSharpClass(
 
     public string RenderToString()
     {
+        return RenderToString(ClassDeclarationSyntax);
+    }
+
+    public static string RenderToString(
+        ClassDeclarationSyntax classDeclarationSyntax)
+    {
         var generateTextResult =
             CompileToCSharp.GenerateCSharpFile(
                 compileCSharpClassResult: new CompileCSharpClassResult(
                     new SyntaxContainerConfig(
-                        ContainerTypeName: ClassDeclarationSyntax.Identifier.Text,
+                        ContainerTypeName: classDeclarationSyntax.Identifier.Text,
                         DictionaryMemberName: ""),
-                    ClassDeclarationSyntax: ClassDeclarationSyntax,
+                    ClassDeclarationSyntax: classDeclarationSyntax,
                     UsingDirectives: []));
 
         return generateTextResult.FileText;
@@ -59,13 +66,14 @@ public record StaticProgramCSharpClass(
         StaticFunctionInterface functionInterface,
         StaticExpression<DeclQualifiedName> body,
         IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
-        PineValueClass constraint)
+        IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls)
     {
         var statementSyntax =
             CompileToCSharpStatement(
                 expression: body,
                 functionInterface,
-                availableFunctions);
+                availableFunctions,
+                availableValueDecls);
 
         return
             MemberDeclarationSyntaxForExpression(
@@ -102,11 +110,13 @@ public record StaticProgramCSharpClass(
     public static StatementSyntax CompileToCSharpStatement(
         StaticExpression<DeclQualifiedName> expression,
         StaticFunctionInterface functionInterface,
-        IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions) =>
+        IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
+        IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls) =>
         CompileToCSharpStatement(
             expression,
             functionInterface,
             availableFunctions,
+            availableValueDecls,
             statementFromResult: ResultThrowOrReturn,
             alreadyDeclared: ImmutableDictionary<StaticExpression<DeclQualifiedName>, string>.Empty);
 
@@ -114,6 +124,7 @@ public record StaticProgramCSharpClass(
         StaticExpression<DeclQualifiedName> expression,
         StaticFunctionInterface functionInterface,
         IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
+        IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls,
         System.Func<ExpressionSyntax, StatementSyntax> statementFromResult,
         ImmutableDictionary<StaticExpression<DeclQualifiedName>, string> alreadyDeclared)
     {
@@ -172,6 +183,7 @@ public record StaticProgramCSharpClass(
                                     subexpr,
                                     functionInterface,
                                     availableFunctions,
+                                    availableValueDecls,
                                     mutatedDeclared))))));
 
             newDeclaredStatements.Add(statement);
@@ -189,6 +201,7 @@ public record StaticProgramCSharpClass(
                     conditionalExpr.Condition,
                     functionInterface,
                     availableFunctions,
+                    availableValueDecls,
                     newAlreadyDeclared);
 
             var trueBranchStatement =
@@ -196,6 +209,7 @@ public record StaticProgramCSharpClass(
                     conditionalExpr.TrueBranch,
                     functionInterface,
                     availableFunctions,
+                    availableValueDecls,
                     statementFromResult,
                     newAlreadyDeclared);
 
@@ -204,6 +218,7 @@ public record StaticProgramCSharpClass(
                     conditionalExpr.FalseBranch,
                     functionInterface,
                     availableFunctions,
+                    availableValueDecls,
                     statementFromResult,
                     newAlreadyDeclared);
 
@@ -242,17 +257,18 @@ public record StaticProgramCSharpClass(
         }
 
         {
-            var lessCSE =
+            var resultExpression =
                 CompileToCSharpExpression(
                     expression,
                     functionInterface,
                     availableFunctions,
+                    availableValueDecls,
                     newAlreadyDeclared);
 
             IReadOnlyList<StatementSyntax> allStatements =
                 [
                 .. newDeclaredStatements,
-                statementFromResult(lessCSE)
+                statementFromResult(resultExpression)
                 ];
 
             return SyntaxFactory.Block(allStatements);
@@ -290,11 +306,22 @@ public record StaticProgramCSharpClass(
         StaticExpression<DeclQualifiedName> expression,
         StaticFunctionInterface functionInterface,
         IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
+        IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls,
         ImmutableDictionary<StaticExpression<DeclQualifiedName>, string> alreadyDeclared)
     {
         if (alreadyDeclared.TryGetValue(expression, out var existingVarName))
         {
             return SyntaxFactory.IdentifierName(existingVarName);
+        }
+
+        ExpressionSyntax? OverrideValueLiteralExpression(PineValue pineValue)
+        {
+            if (availableValueDecls.TryGetValue(pineValue, out var declName))
+            {
+                return SyntaxFactory.IdentifierName(declName.FullName);
+            }
+
+            return null;
         }
 
         if (StaticExpressionExtension.TryParseAsPathToExpression(
@@ -313,10 +340,15 @@ public record StaticProgramCSharpClass(
 
         if (expression is StaticExpression<DeclQualifiedName>.Literal literal)
         {
+            if (OverrideValueLiteralExpression(literal.Value) is { } overriddenExpr)
+            {
+                return overriddenExpr;
+            }
+
             var toLiteral =
                 CompileToCSharp.CompileToCSharpLiteralExpression(
                     literal.Value,
-                    overrideDefaultExpression: _ => null);
+                    overrideDefaultExpression: OverrideValueLiteralExpression);
 
             return toLiteral.exprSyntax;
         }
@@ -330,6 +362,7 @@ public record StaticProgramCSharpClass(
                     item,
                     functionInterface,
                     availableFunctions,
+                    availableValueDecls,
                     alreadyDeclared))
                 .ToImmutableArray();
 
@@ -360,6 +393,7 @@ public record StaticProgramCSharpClass(
                     conditional.Condition,
                     functionInterface,
                     availableFunctions,
+                    availableValueDecls,
                     alreadyDeclared);
 
             var trueBranchExpr =
@@ -367,6 +401,7 @@ public record StaticProgramCSharpClass(
                     conditional.TrueBranch,
                     functionInterface,
                     availableFunctions,
+                    availableValueDecls,
                     alreadyDeclared);
 
             var falseBranchExpr =
@@ -374,6 +409,7 @@ public record StaticProgramCSharpClass(
                     conditional.FalseBranch,
                     functionInterface,
                     availableFunctions,
+                    availableValueDecls,
                     alreadyDeclared);
 
             return
@@ -390,6 +426,7 @@ public record StaticProgramCSharpClass(
                     kernelApp,
                     functionInterface,
                     availableFunctions,
+                    availableValueDecls,
                     alreadyDeclared);
         }
 
@@ -409,6 +446,7 @@ public record StaticProgramCSharpClass(
                     funcApp.Arguments,
                     functionInterface,
                     availableFunctions,
+                    availableValueDecls,
                     alreadyDeclared))
                 .ToImmutableArray();
 
@@ -430,6 +468,7 @@ public record StaticProgramCSharpClass(
                     parseAndEval.Encoded,
                     functionInterface,
                     availableFunctions,
+                    availableValueDecls,
                     alreadyDeclared);
 
             return
@@ -453,6 +492,7 @@ public record StaticProgramCSharpClass(
         StaticExpression<DeclQualifiedName>.KernelApplication kernelApp,
         StaticFunctionInterface functionInterface,
         IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
+        IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls,
         ImmutableDictionary<StaticExpression<DeclQualifiedName>, string> alreadyDeclared)
     {
         if (kernelApp.Function is nameof(KernelFunction.equal))
@@ -468,6 +508,7 @@ public record StaticProgramCSharpClass(
                             listInput.Items[0],
                             functionInterface,
                             availableFunctions,
+                            availableValueDecls,
                             alreadyDeclared);
 
                     var rightExpr =
@@ -475,6 +516,7 @@ public record StaticProgramCSharpClass(
                             listInput.Items[1],
                             functionInterface,
                             availableFunctions,
+                            availableValueDecls,
                             alreadyDeclared);
 
                     return
@@ -491,6 +533,7 @@ public record StaticProgramCSharpClass(
                 kernelApp.Input,
                 functionInterface,
                 availableFunctions,
+                availableValueDecls,
                 alreadyDeclared);
 
         // Generic case: Invoke KernelFunction.ApplyKernelFunctionGeneric
@@ -517,6 +560,7 @@ public record StaticProgramCSharpClass(
         StaticExpression<DeclQualifiedName> argumentExpr,
         StaticFunctionInterface functionInterface,
         IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
+        IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls,
         ImmutableDictionary<StaticExpression<DeclQualifiedName>, string> alreadyDeclared)
     {
         if (StaticExpressionExtension.GetSubexpressionAtPath(argumentExpr, paramPath) is { } subexpr)
@@ -526,6 +570,7 @@ public record StaticProgramCSharpClass(
                     subexpr.subexpr,
                     functionInterface,
                     availableFunctions,
+                    availableValueDecls,
                     alreadyDeclared: alreadyDeclared);
 
             if (subexpr.pathRemaining.Count is 0)
