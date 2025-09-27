@@ -70,4 +70,14 @@ Published the first version of the Elm developer tools VS Code extension, with a
 ## 2025-03-08 - Resolved Remaining Dependencies on V8 JavaScript Engine 🚀🔥✅
 
 + Resolved the last usage of the V8 JavaScript engine by switching applications over to Pine.
++ Pine is now *Free From JavaScript* 🌱
+
+## 2025-09-27 - New Pine to CS Compiler
+
+We introduce a new compilation path to pick low-hanging fruits for optimizing runtime efficiency. The idea behind this approach is not to emit any higher-order function directly but to instantiate it for each set of function arguments in use following the given compilation roots. One limitation of this approach is it works only for a subset of functions that do not depend on any generic parse&eval (metaprogramming). This constraint is satisfied for all programs (entry points) compiled from static source languages like Elm. For details, see [2025-07-27-pine-project-siracusa.md](./../explore/2025-07-27-pine-project-siracusa.md)
+
+How does this differ from the compilation to C# started in 2023?
+
++ Overall split into separate stages: First, parse from Pine as a static (monomorphic) program. That makes it easier to read and reason about the parts that perform optimizations and emissions.
++ Design to avoid exploding C# compilation times discovered earlier: Emit more statements to have less nesting in expressions.
 

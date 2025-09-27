@@ -14,7 +14,7 @@ namespace Pine.Core.CodeAnalysis;
 /// and <c>constraint</c> contains the value-class constraints inferred/assigned for the function.
 /// </param>
 public record StaticProgram(
-    IReadOnlyDictionary<string, (Expression origExpr, StaticFunctionInterface interf, StaticExpression<string> body, PineValueClass constraint)> NamedFunctions)
+    IReadOnlyDictionary<DeclQualifiedName, (Expression origExpr, StaticFunctionInterface interf, StaticExpression<DeclQualifiedName> body, PineValueClass constraint)> NamedFunctions)
 {
     /// <summary>
     /// Returns a <see cref="StaticExpressionDisplay.FunctionApplicationRendering"/> describing how to render
@@ -23,14 +23,14 @@ public record StaticProgram(
     /// <param name="functionName">The name of the function to retrieve rendering metadata for.</param>
     /// <returns>A rendering descriptor containing the function name and its static interface.</returns>
     /// <exception cref="KeyNotFoundException">Thrown when the function name is not present in <see cref="NamedFunctions"/>.</exception>
-    public StaticExpressionDisplay.FunctionApplicationRendering GetFunctionApplicationRendering(string functionName)
+    public StaticExpressionDisplay.FunctionApplicationRendering GetFunctionApplicationRendering(DeclQualifiedName functionName)
     {
         if (NamedFunctions.TryGetValue(functionName, out var funcInfo))
         {
             return
                 new StaticExpressionDisplay.FunctionApplicationRendering
                 (
-                    FunctionName: functionName,
+                    FunctionName: functionName.FullName,
                     FunctionInterface: funcInfo.interf
                 );
         }

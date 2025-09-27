@@ -174,7 +174,7 @@ public record NamesFromCompiledEnv
     /// The first (most specific) matching fully qualified name if a match is found; otherwise <c>null</c>.
     /// Specificity is determined via <see cref="PineValueClassSpecificityComparer"/>.
     /// </returns>
-    public string? NameFromDecl(
+    public DeclQualifiedName? NameFromDecl(
         PineValue pineValue,
         PineValueClass envClass)
     {
@@ -188,7 +188,7 @@ public record NamesFromCompiledEnv
 
             if (matchingClasses.Length > 0)
             {
-                return matchingClasses[0].declName.FullName;
+                return matchingClasses[0].declName;
             }
         }
 

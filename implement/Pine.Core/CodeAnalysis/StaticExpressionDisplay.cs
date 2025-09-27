@@ -482,7 +482,7 @@ public static class StaticExpressionDisplay
     {
         IReadOnlyList<string> namedFunctionsTexts =
             [..staticProgram.NamedFunctions
-            .OrderBy(kvp => kvp.Key)
+            .OrderBy(kvp => kvp.Key.FullName)
             .Select(kvp =>
             RenderNamedFunction(
                 staticProgram,
@@ -514,8 +514,8 @@ public static class StaticExpressionDisplay
     /// <returns>The full function definition text.</returns>
     public static string RenderNamedFunction(
         StaticProgram staticProgram,
-        string functionName,
-        StaticExpression<string> functionBody,
+        DeclQualifiedName functionName,
+        StaticExpression<DeclQualifiedName> functionBody,
         Func<IReadOnlyList<int>, string, string?>? substituteEnvironmentPath)
     {
         var functionInterface = staticProgram.GetFunctionApplicationRendering(functionName).FunctionInterface;

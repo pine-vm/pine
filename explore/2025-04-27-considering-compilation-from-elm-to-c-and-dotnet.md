@@ -50,3 +50,20 @@ related:
 
 + <https://forum.botlab.org/t/c-net-and-elm-operations/3224>
 
+## 2025-09 Update
+
+When I mentioned this idea on the Elm Slack server, Martin Janiczek pointed out that Lue is working on something like this. Indeed, Lue went on a great exploration of compilation to F#/.NET:
+
++ <https://github.com/lue-bird/elm-syntax-to-fsharp/blob/decedecadda18b606650e51e67f5ecf05ef8e9c9/README.md>
++ <https://discourse.elm-lang.org/t/elm-to-f-transpiler/10313>
+
+How Awesome! Lue also explored compilation from Elm to a few other programming languages. Here are some examples:
+
++ Rust: <https://github.com/lue-bird/elm-syntax-to-rust/blob/2aee732f9da5af24abfd1b8e476bbbfc1600b78a/README.md>
++ Swift: <https://github.com/lue-bird/elm-syntax-to-swift/blob/4712f2d54056397c683efdb65f0743caa65223d7/README.md>
++ MoonBit: <https://github.com/lue-bird/elm-syntax-to-moonbit/blob/d5144e22fd8c12a22793c3d35276cc581275f07c/README.md>
+
+I eventually decided to prioritize the non-Elm-specific compilation, landing code analysis for Pine programs, and further compilation to C# in September:
+
++ [2025-07-27-pine-project-siracusa.md](./2025-07-27-pine-project-siracusa.md)
++ [Changelog - 2025-09-27](./../implement/CHANGELOG.md#2025-09-27---new-pine-to-cs-compiler)

@@ -1538,16 +1538,16 @@ public partial class CompileToCSharp
         PineValue pineValue,
         Func<PineValue, ExpressionSyntax?> overrideDefaultExpression)
     {
-        (ExpressionSyntax, ValueSyntaxKind) continueCompile(PineValue pineValue) =>
+        ExpressionSyntax ContinueCompile(PineValue pineValue) =>
             overrideDefaultExpression(pineValue) is { } fromOverride ?
-            (fromOverride, new ValueSyntaxKind.Other())
+            fromOverride
             :
-            CompileToCSharpLiteralExpression(pineValue, overrideDefaultExpression);
+            CompileToCSharpLiteralExpression(pineValue, overrideDefaultExpression).exprSyntax;
 
         if (pineValue == PineValue.EmptyList)
             return (PineCSharpSyntaxFactory.PineValueEmptyListSyntax, new ValueSyntaxKind.Other());
 
-        static long? attemptMapToSignedInteger(PineValue pineValue)
+        static long? AttemptMapToSignedInteger(PineValue pineValue)
         {
             if (IntegerEncoding.ParseSignedIntegerStrict(pineValue) is Result<string, BigInteger>.Ok okInteger &&
                 IntegerEncoding.EncodeSignedInteger(okInteger.Value) == pineValue &&
@@ -1572,7 +1572,7 @@ public partial class CompileToCSharp
                             PineCSharpSyntaxFactory.ExpressionSyntaxForIntegerLiteral(asInt64)))));
         }
 
-        if (attemptMapToSignedInteger(pineValue) is { } asInt64)
+        if (AttemptMapToSignedInteger(pineValue) is { } asInt64)
         {
             return (ExpressionSyntaxForSignedInt(asInt64), new ValueSyntaxKind.AsSignedInteger(asInt64));
         }
@@ -1582,7 +1582,7 @@ public partial class CompileToCSharp
             var asIntegers =
                 list.Items
                 .ToArray()
-                .Select(attemptMapToSignedInteger)
+                .Select(AttemptMapToSignedInteger)
                 .WhereHasValue()
                 .ToImmutableArray();
 
@@ -1606,26 +1606,33 @@ public partial class CompileToCSharp
             }
         }
 
-        if (StringEncoding.StringFromValue(pineValue) is Result<string, string>.Ok okString)
+        ExpressionSyntax DefaultRepresentationOfList(ReadOnlyMemory<PineValue> list)
         {
+            var itemSyntaxes = new ExpressionSyntax[list.Length];
+
+            for (var i = 0; i < list.Length; ++i)
+            {
+                itemSyntaxes[i] = ContinueCompile(list.Span[i]);
+            }
+
             return
-                (SyntaxFactory.InvocationExpression(
+                SyntaxFactory.InvocationExpression(
                     SyntaxFactory.MemberAccessExpression(
                         SyntaxKind.SimpleMemberAccessExpression,
-                        SyntaxFactory.IdentifierName(nameof(StringEncoding)),
-                        SyntaxFactory.IdentifierName(nameof(StringEncoding.ValueFromString))))
+                        SyntaxFactory.IdentifierName(nameof(PineValue)),
+                        SyntaxFactory.IdentifierName(nameof(PineValue.List))))
                 .WithArgumentList(
                     SyntaxFactory.ArgumentList(
                         SyntaxFactory.SingletonSeparatedList(
                             SyntaxFactory.Argument(
-                                SyntaxFactory.LiteralExpression(
-                                    SyntaxKind.StringLiteralExpression,
-                                    SyntaxFactory.Literal(okString.Value)))))),
-                                    new ValueSyntaxKind.AsString(okString.Value));
-
+                                SyntaxFactory.CollectionExpression(
+                                    SyntaxFactory.SeparatedList<CollectionElementSyntax>(
+                                        itemSyntaxes
+                                        .Select(SyntaxFactory.ExpressionElement)))
+                                ))));
         }
 
-        ExpressionSyntax defaultRepresentationOfBlob(ReadOnlyMemory<byte> blob)
+        ExpressionSyntax DefaultRepresentationOfBlob(ReadOnlyMemory<byte> blob)
         {
             var bytesIntegers =
                 blob
@@ -1656,43 +1663,43 @@ public partial class CompileToCSharp
                                 ))));
         }
 
-        ExpressionSyntax defaultRepresentationOfList(ReadOnlyMemory<PineValue> list)
+        if (pineValue is PineValue.BlobValue blobValue)
         {
-            var itemSyntaxes =
-                list
-                .ToArray()
-                .Select(item => continueCompile(item).Item1).ToImmutableList();
+            if (StringEncoding.StringFromBlobValue(blobValue.Bytes).IsOkOrNull() is { } okString &&
+            StringEncoding.ValueFromString(okString) == blobValue)
+            {
+                return
+                    (SyntaxFactory.InvocationExpression(
+                        SyntaxFactory.MemberAccessExpression(
+                            SyntaxKind.SimpleMemberAccessExpression,
+                            SyntaxFactory.IdentifierName(nameof(StringEncoding)),
+                            SyntaxFactory.IdentifierName(nameof(StringEncoding.ValueFromString))))
+                    .WithArgumentList(
+                        SyntaxFactory.ArgumentList(
+                            SyntaxFactory.SingletonSeparatedList(
+                                SyntaxFactory.Argument(
+                                    SyntaxFactory.LiteralExpression(
+                                        SyntaxKind.StringLiteralExpression,
+                                        SyntaxFactory.Literal(okString)))))),
+                                        new ValueSyntaxKind.AsString(okString));
+
+            }
 
             return
-                SyntaxFactory.InvocationExpression(
-                    SyntaxFactory.MemberAccessExpression(
-                        SyntaxKind.SimpleMemberAccessExpression,
-                        SyntaxFactory.IdentifierName("PineValue"),
-                        SyntaxFactory.IdentifierName("List")))
-                .WithArgumentList(
-                    SyntaxFactory.ArgumentList(
-                        SyntaxFactory.SingletonSeparatedList(
-                            SyntaxFactory.Argument(
-                                SyntaxFactory.CollectionExpression(
-                                    SyntaxFactory.SeparatedList<CollectionElementSyntax>(
-                                        itemSyntaxes
-                                        .Select(SyntaxFactory.ExpressionElement)))
-                                ))));
+                (DefaultRepresentationOfBlob(blobValue.Bytes),
+                new ValueSyntaxKind.Other());
         }
 
-        return pineValue switch
+
+        if (pineValue is PineValue.ListValue listValue)
         {
-            PineValue.BlobValue blobValue =>
-            (defaultRepresentationOfBlob(blobValue.Bytes),
-            new ValueSyntaxKind.Other()),
+            return
+                (DefaultRepresentationOfList(listValue.Items),
+                new ValueSyntaxKind.Other());
+        }
 
-            PineValue.ListValue listValue =>
-            (defaultRepresentationOfList(listValue.Items),
-            new ValueSyntaxKind.Other()),
-
-            _ =>
-            throw new Exception("Unknown value type: " + pineValue.GetType().FullName)
-        };
+        throw new NotImplementedException(
+            "Literal type not implemented: " + pineValue.GetType().FullName);
     }
 
     private static IEnumerable<PineValue> EnumerateAllLiterals(Expression expression) =>

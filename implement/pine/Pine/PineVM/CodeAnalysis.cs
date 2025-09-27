@@ -916,7 +916,7 @@ public class CodeAnalysis
     public static (StaticProgram staticProgram, IReadOnlyDictionary<DeclQualifiedName, string> declsFailed)
         ParseAsStaticMonomorphicProgram(
         IReadOnlyDictionary<DeclQualifiedName, ElmInteractiveEnvironment.FunctionRecord> rootDecls,
-        Func<PineValue, PineValueClass, string?> nameForDecl,
+        Func<PineValue, PineValueClass, DeclQualifiedName?> nameForDecl,
         PineVMParseCache parseCache)
     {
         /*
@@ -1015,7 +1015,7 @@ public class CodeAnalysis
             return new StaticFunctionIdentifier(functionIdentifier.EncodedExpr, mostSpecificName);
         }
 
-        string DeclNameCombined(StaticFunctionIdentifier functionIdentifierOrig)
+        DeclQualifiedName DeclNameCombined(StaticFunctionIdentifier functionIdentifierOrig)
         {
             var functionIdentifier = ReduceFunctionIdentifier(functionIdentifierOrig);
 
@@ -1025,7 +1025,9 @@ public class CodeAnalysis
             }
 
             return
-                AnonymousFunctionName(functionIdentifier.EncodedExpr, functionIdentifier.EnvClass, hashCache);
+                new DeclQualifiedName(
+                    [],
+                    AnonymousFunctionName(functionIdentifier.EncodedExpr, functionIdentifier.EnvClass, hashCache));
         }
 
         var namedFunctions =
