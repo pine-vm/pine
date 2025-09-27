@@ -864,7 +864,7 @@ public class JsonDecodeParseIntTests
 
         // Console.WriteLine("C# code:\n" + csharpText);
 
-        testClassCsharpText.Should().Be(
+        testClassCsharpText.Trim().Should().Be(
             """
             public static class Test
             {
@@ -940,52 +940,46 @@ public class JsonDecodeParseIntTests
                                                     ])))
                                     ]);
                         }
-                        else
+
+                        if (StringEncoding.ValueFromString("Err") == local_002)
                         {
-                            if (StringEncoding.ValueFromString("Err") == local_002)
-                            {
-                                return
-                                    PineValue.List(
-                                        [
-                                            PineValue.List(
-                                                [
-                                                    StringEncoding.ValueFromString("Err"),
-                                                    PineValue.List(
-                                                        [
+                            return
+                                PineValue.List(
+                                    [
+                                        PineValue.List(
+                                            [
+                                                StringEncoding.ValueFromString("Err"),
+                                                PineValue.List(
+                                                    [
+                                                        KernelFunction.ApplyKernelFunctionGeneric(
+                                                            "head",
                                                             KernelFunction.ApplyKernelFunctionGeneric(
                                                                 "head",
                                                                 KernelFunction.ApplyKernelFunctionGeneric(
-                                                                    "head",
-                                                                    KernelFunction.ApplyKernelFunctionGeneric(
-                                                                        "skip",
-                                                                        PineValue.List(
-                                                                            [
-                                                                                IntegerEncoding.EncodeSignedInteger(1),
-                                                                                local_001
-                                                                            ]))))
-                                                        ])
-                                                ]),
+                                                                    "skip",
+                                                                    PineValue.List(
+                                                                        [
+                                                                            IntegerEncoding.EncodeSignedInteger(1),
+                                                                            local_001
+                                                                        ]))))
+                                                    ])
+                                            ]),
+                                        KernelFunction.ApplyKernelFunctionGeneric(
+                                            "head",
                                             KernelFunction.ApplyKernelFunctionGeneric(
-                                                "head",
-                                                KernelFunction.ApplyKernelFunctionGeneric(
-                                                    "skip",
-                                                    PineValue.List(
-                                                        [
-                                                            IntegerEncoding.EncodeSignedInteger(1),
-                                                            local_000
-                                                        ])))
-                                        ]);
-                            }
-                            else
-                            {
-                                throw new ParseExpressionException("TODO: Include details from encoded and env subexpressions");
-                            }
+                                                "skip",
+                                                PineValue.List(
+                                                    [
+                                                        IntegerEncoding.EncodeSignedInteger(1),
+                                                        local_000
+                                                    ])))
+                                    ]);
                         }
+
+                        throw new ParseExpressionException("TODO: Include details from encoded and env subexpressions");
                     }
-                    else
-                    {
-                        return Test.parseUnsignedInt(param_1_0, param_1_1);
-                    }
+
+                    return Test.parseUnsignedInt(param_1_0, param_1_1);
                 }
 
 
@@ -1027,182 +1021,162 @@ public class JsonDecodeParseIntTests
                                             ]))
                                 ]);
                     }
-                    else
+
+                    if (local_000 == StringEncoding.ValueFromString("1"))
                     {
-                        if (local_000 == StringEncoding.ValueFromString("1"))
-                        {
-                            return
-                                Test.parseUnsignedIntRec(
-                                    IntegerEncoding.EncodeSignedInteger(1),
-                                    param_1_0,
-                                    KernelFunction.ApplyKernelFunctionGeneric(
-                                        "int_add",
+                        return
+                            Test.parseUnsignedIntRec(
+                                IntegerEncoding.EncodeSignedInteger(1),
+                                param_1_0,
+                                KernelFunction.ApplyKernelFunctionGeneric(
+                                    "int_add",
+                                    PineValue.List(
+                                        [
+                                            param_1_1,
+                                            IntegerEncoding.EncodeSignedInteger(4)
+                                        ])));
+                    }
+
+                    if (local_000 == StringEncoding.ValueFromString("2"))
+                    {
+                        return
+                            Test.parseUnsignedIntRec(
+                                IntegerEncoding.EncodeSignedInteger(2),
+                                param_1_0,
+                                KernelFunction.ApplyKernelFunctionGeneric(
+                                    "int_add",
+                                    PineValue.List(
+                                        [
+                                            param_1_1,
+                                            IntegerEncoding.EncodeSignedInteger(4)
+                                        ])));
+                    }
+
+                    if (local_000 == StringEncoding.ValueFromString("3"))
+                    {
+                        return
+                            Test.parseUnsignedIntRec(
+                                IntegerEncoding.EncodeSignedInteger(3),
+                                param_1_0,
+                                KernelFunction.ApplyKernelFunctionGeneric(
+                                    "int_add",
+                                    PineValue.List(
+                                        [
+                                            param_1_1,
+                                            IntegerEncoding.EncodeSignedInteger(4)
+                                        ])));
+                    }
+
+                    if (local_000 == StringEncoding.ValueFromString("4"))
+                    {
+                        return
+                            Test.parseUnsignedIntRec(
+                                IntegerEncoding.EncodeSignedInteger(4),
+                                param_1_0,
+                                KernelFunction.ApplyKernelFunctionGeneric(
+                                    "int_add",
+                                    PineValue.List(
+                                        [
+                                            param_1_1,
+                                            IntegerEncoding.EncodeSignedInteger(4)
+                                        ])));
+                    }
+
+                    if (local_000 == StringEncoding.ValueFromString("5"))
+                    {
+                        return
+                            Test.parseUnsignedIntRec(
+                                IntegerEncoding.EncodeSignedInteger(5),
+                                param_1_0,
+                                KernelFunction.ApplyKernelFunctionGeneric(
+                                    "int_add",
+                                    PineValue.List(
+                                        [
+                                            param_1_1,
+                                            IntegerEncoding.EncodeSignedInteger(4)
+                                        ])));
+                    }
+
+                    if (local_000 == StringEncoding.ValueFromString("6"))
+                    {
+                        return
+                            Test.parseUnsignedIntRec(
+                                IntegerEncoding.EncodeSignedInteger(6),
+                                param_1_0,
+                                KernelFunction.ApplyKernelFunctionGeneric(
+                                    "int_add",
+                                    PineValue.List(
+                                        [
+                                            param_1_1,
+                                            IntegerEncoding.EncodeSignedInteger(4)
+                                        ])));
+                    }
+
+                    if (local_000 == StringEncoding.ValueFromString("7"))
+                    {
+                        return
+                            Test.parseUnsignedIntRec(
+                                IntegerEncoding.EncodeSignedInteger(7),
+                                param_1_0,
+                                KernelFunction.ApplyKernelFunctionGeneric(
+                                    "int_add",
+                                    PineValue.List(
+                                        [
+                                            param_1_1,
+                                            IntegerEncoding.EncodeSignedInteger(4)
+                                        ])));
+                    }
+
+                    if (local_000 == StringEncoding.ValueFromString("8"))
+                    {
+                        return
+                            Test.parseUnsignedIntRec(
+                                IntegerEncoding.EncodeSignedInteger(8),
+                                param_1_0,
+                                KernelFunction.ApplyKernelFunctionGeneric(
+                                    "int_add",
+                                    PineValue.List(
+                                        [
+                                            param_1_1,
+                                            IntegerEncoding.EncodeSignedInteger(4)
+                                        ])));
+                    }
+
+                    if (local_000 == StringEncoding.ValueFromString("9"))
+                    {
+                        return
+                            Test.parseUnsignedIntRec(
+                                IntegerEncoding.EncodeSignedInteger(9),
+                                param_1_0,
+                                KernelFunction.ApplyKernelFunctionGeneric(
+                                    "int_add",
+                                    PineValue.List(
+                                        [
+                                            param_1_1,
+                                            IntegerEncoding.EncodeSignedInteger(4)
+                                        ])));
+                    }
+
+                    return
+                        PineValue.List(
+                            [
+                                PineValue.List(
+                                    [
+                                        StringEncoding.ValueFromString("Err"),
                                         PineValue.List(
                                             [
-                                                param_1_1,
-                                                IntegerEncoding.EncodeSignedInteger(4)
-                                            ])));
-                        }
-                        else
-                        {
-                            if (local_000 == StringEncoding.ValueFromString("2"))
-                            {
-                                return
-                                    Test.parseUnsignedIntRec(
-                                        IntegerEncoding.EncodeSignedInteger(2),
-                                        param_1_0,
-                                        KernelFunction.ApplyKernelFunctionGeneric(
-                                            "int_add",
-                                            PineValue.List(
-                                                [
-                                                    param_1_1,
-                                                    IntegerEncoding.EncodeSignedInteger(4)
-                                                ])));
-                            }
-                            else
-                            {
-                                if (local_000 == StringEncoding.ValueFromString("3"))
-                                {
-                                    return
-                                        Test.parseUnsignedIntRec(
-                                            IntegerEncoding.EncodeSignedInteger(3),
-                                            param_1_0,
-                                            KernelFunction.ApplyKernelFunctionGeneric(
-                                                "int_add",
                                                 PineValue.List(
                                                     [
-                                                        param_1_1,
-                                                        IntegerEncoding.EncodeSignedInteger(4)
-                                                    ])));
-                                }
-                                else
-                                {
-                                    if (local_000 == StringEncoding.ValueFromString("4"))
-                                    {
-                                        return
-                                            Test.parseUnsignedIntRec(
-                                                IntegerEncoding.EncodeSignedInteger(4),
-                                                param_1_0,
-                                                KernelFunction.ApplyKernelFunctionGeneric(
-                                                    "int_add",
-                                                    PineValue.List(
-                                                        [
-                                                            param_1_1,
-                                                            IntegerEncoding.EncodeSignedInteger(4)
-                                                        ])));
-                                    }
-                                    else
-                                    {
-                                        if (local_000 == StringEncoding.ValueFromString("5"))
-                                        {
-                                            return
-                                                Test.parseUnsignedIntRec(
-                                                    IntegerEncoding.EncodeSignedInteger(5),
-                                                    param_1_0,
-                                                    KernelFunction.ApplyKernelFunctionGeneric(
-                                                        "int_add",
+                                                        StringEncoding.ValueFromString("String"),
                                                         PineValue.List(
                                                             [
-                                                                param_1_1,
-                                                                IntegerEncoding.EncodeSignedInteger(4)
-                                                            ])));
-                                        }
-                                        else
-                                        {
-                                            if (local_000 == StringEncoding.ValueFromString("6"))
-                                            {
-                                                return
-                                                    Test.parseUnsignedIntRec(
-                                                        IntegerEncoding.EncodeSignedInteger(6),
-                                                        param_1_0,
-                                                        KernelFunction.ApplyKernelFunctionGeneric(
-                                                            "int_add",
-                                                            PineValue.List(
-                                                                [
-                                                                    param_1_1,
-                                                                    IntegerEncoding.EncodeSignedInteger(4)
-                                                                ])));
-                                            }
-                                            else
-                                            {
-                                                if (local_000 == StringEncoding.ValueFromString("7"))
-                                                {
-                                                    return
-                                                        Test.parseUnsignedIntRec(
-                                                            IntegerEncoding.EncodeSignedInteger(7),
-                                                            param_1_0,
-                                                            KernelFunction.ApplyKernelFunctionGeneric(
-                                                                "int_add",
-                                                                PineValue.List(
-                                                                    [
-                                                                        param_1_1,
-                                                                        IntegerEncoding.EncodeSignedInteger(4)
-                                                                    ])));
-                                                }
-                                                else
-                                                {
-                                                    if (local_000 == StringEncoding.ValueFromString("8"))
-                                                    {
-                                                        return
-                                                            Test.parseUnsignedIntRec(
-                                                                IntegerEncoding.EncodeSignedInteger(8),
-                                                                param_1_0,
-                                                                KernelFunction.ApplyKernelFunctionGeneric(
-                                                                    "int_add",
-                                                                    PineValue.List(
-                                                                        [
-                                                                            param_1_1,
-                                                                            IntegerEncoding.EncodeSignedInteger(4)
-                                                                        ])));
-                                                    }
-                                                    else
-                                                    {
-                                                        if (local_000 == StringEncoding.ValueFromString("9"))
-                                                        {
-                                                            return
-                                                                Test.parseUnsignedIntRec(
-                                                                    IntegerEncoding.EncodeSignedInteger(9),
-                                                                    param_1_0,
-                                                                    KernelFunction.ApplyKernelFunctionGeneric(
-                                                                        "int_add",
-                                                                        PineValue.List(
-                                                                            [
-                                                                                param_1_1,
-                                                                                IntegerEncoding.EncodeSignedInteger(4)
-                                                                            ])));
-                                                        }
-                                                        else
-                                                        {
-                                                            return
-                                                                PineValue.List(
-                                                                    [
-                                                                        PineValue.List(
-                                                                            [
-                                                                                StringEncoding.ValueFromString("Err"),
-                                                                                PineValue.List(
-                                                                                    [
-                                                                                        PineValue.List(
-                                                                                            [
-                                                                                                StringEncoding.ValueFromString("String"),
-                                                                                                PineValue.List(
-                                                                                                    [
-                                                                                                        StringEncoding.ValueFromString("Expecting a digit")
-                                                                                                    ])
-                                                                                            ])
-                                                                                    ])
-                                                                            ]),
-                                                                        param_1_1
-                                                                    ]);
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
+                                                                StringEncoding.ValueFromString("Expecting a digit")
+                                                            ])
+                                                    ])
+                                            ])
+                                    ]),
+                                param_1_1
+                            ]);
                 }
 
 
@@ -1243,286 +1217,266 @@ public class JsonDecodeParseIntTests
                                             IntegerEncoding.EncodeSignedInteger(4)
                                         ])));
                     }
-                    else
+
+                    if (local_000 == StringEncoding.ValueFromString("1"))
                     {
-                        if (local_000 == StringEncoding.ValueFromString("1"))
-                        {
-                            return
-                                Test.parseUnsignedIntRec(
-                                    KernelFunction.ApplyKernelFunctionGeneric(
-                                        "int_add",
-                                        PineValue.List(
-                                            [
-                                                KernelFunction.ApplyKernelFunctionGeneric(
-                                                    "int_mul",
-                                                    PineValue.List(
-                                                        [
-                                                            param_1_0,
-                                                            IntegerEncoding.EncodeSignedInteger(10)
-                                                        ])),
-                                                IntegerEncoding.EncodeSignedInteger(1)
-                                            ])),
-                                    param_1_1,
-                                    KernelFunction.ApplyKernelFunctionGeneric(
-                                        "int_add",
-                                        PineValue.List(
-                                            [
-                                                param_1_2,
-                                                IntegerEncoding.EncodeSignedInteger(4)
-                                            ])));
-                        }
-                        else
-                        {
-                            if (local_000 == StringEncoding.ValueFromString("2"))
-                            {
-                                return
-                                    Test.parseUnsignedIntRec(
-                                        KernelFunction.ApplyKernelFunctionGeneric(
-                                            "int_add",
-                                            PineValue.List(
-                                                [
-                                                    KernelFunction.ApplyKernelFunctionGeneric(
-                                                        "int_mul",
-                                                        PineValue.List(
-                                                            [
-                                                                param_1_0,
-                                                                IntegerEncoding.EncodeSignedInteger(10)
-                                                            ])),
-                                                    IntegerEncoding.EncodeSignedInteger(2)
-                                                ])),
-                                        param_1_1,
-                                        KernelFunction.ApplyKernelFunctionGeneric(
-                                            "int_add",
-                                            PineValue.List(
-                                                [
-                                                    param_1_2,
-                                                    IntegerEncoding.EncodeSignedInteger(4)
-                                                ])));
-                            }
-                            else
-                            {
-                                if (local_000 == StringEncoding.ValueFromString("3"))
-                                {
-                                    return
-                                        Test.parseUnsignedIntRec(
+                        return
+                            Test.parseUnsignedIntRec(
+                                KernelFunction.ApplyKernelFunctionGeneric(
+                                    "int_add",
+                                    PineValue.List(
+                                        [
                                             KernelFunction.ApplyKernelFunctionGeneric(
-                                                "int_add",
+                                                "int_mul",
                                                 PineValue.List(
                                                     [
-                                                        KernelFunction.ApplyKernelFunctionGeneric(
-                                                            "int_mul",
-                                                            PineValue.List(
-                                                                [
-                                                                    param_1_0,
-                                                                    IntegerEncoding.EncodeSignedInteger(10)
-                                                                ])),
-                                                        IntegerEncoding.EncodeSignedInteger(3)
+                                                        param_1_0,
+                                                        IntegerEncoding.EncodeSignedInteger(10)
                                                     ])),
-                                            param_1_1,
+                                            IntegerEncoding.EncodeSignedInteger(1)
+                                        ])),
+                                param_1_1,
+                                KernelFunction.ApplyKernelFunctionGeneric(
+                                    "int_add",
+                                    PineValue.List(
+                                        [
+                                            param_1_2,
+                                            IntegerEncoding.EncodeSignedInteger(4)
+                                        ])));
+                    }
+
+                    if (local_000 == StringEncoding.ValueFromString("2"))
+                    {
+                        return
+                            Test.parseUnsignedIntRec(
+                                KernelFunction.ApplyKernelFunctionGeneric(
+                                    "int_add",
+                                    PineValue.List(
+                                        [
                                             KernelFunction.ApplyKernelFunctionGeneric(
-                                                "int_add",
+                                                "int_mul",
                                                 PineValue.List(
                                                     [
-                                                        param_1_2,
-                                                        IntegerEncoding.EncodeSignedInteger(4)
-                                                    ])));
-                                }
-                                else
-                                {
-                                    if (local_000 == StringEncoding.ValueFromString("4"))
-                                    {
-                                        return
-                                            Test.parseUnsignedIntRec(
-                                                KernelFunction.ApplyKernelFunctionGeneric(
-                                                    "int_add",
-                                                    PineValue.List(
-                                                        [
-                                                            KernelFunction.ApplyKernelFunctionGeneric(
-                                                                "int_mul",
-                                                                PineValue.List(
-                                                                    [
-                                                                        param_1_0,
-                                                                        IntegerEncoding.EncodeSignedInteger(10)
-                                                                    ])),
-                                                            IntegerEncoding.EncodeSignedInteger(4)
-                                                        ])),
-                                                param_1_1,
-                                                KernelFunction.ApplyKernelFunctionGeneric(
-                                                    "int_add",
-                                                    PineValue.List(
-                                                        [
-                                                            param_1_2,
-                                                            IntegerEncoding.EncodeSignedInteger(4)
-                                                        ])));
-                                    }
-                                    else
-                                    {
-                                        if (local_000 == StringEncoding.ValueFromString("5"))
-                                        {
-                                            return
-                                                Test.parseUnsignedIntRec(
-                                                    KernelFunction.ApplyKernelFunctionGeneric(
-                                                        "int_add",
-                                                        PineValue.List(
-                                                            [
-                                                                KernelFunction.ApplyKernelFunctionGeneric(
-                                                                    "int_mul",
-                                                                    PineValue.List(
-                                                                        [
-                                                                            param_1_0,
-                                                                            IntegerEncoding.EncodeSignedInteger(10)
-                                                                        ])),
-                                                                IntegerEncoding.EncodeSignedInteger(5)
-                                                            ])),
-                                                    param_1_1,
-                                                    KernelFunction.ApplyKernelFunctionGeneric(
-                                                        "int_add",
-                                                        PineValue.List(
-                                                            [
-                                                                param_1_2,
-                                                                IntegerEncoding.EncodeSignedInteger(4)
-                                                            ])));
-                                        }
-                                        else
-                                        {
-                                            if (local_000 == StringEncoding.ValueFromString("6"))
-                                            {
-                                                return
-                                                    Test.parseUnsignedIntRec(
-                                                        KernelFunction.ApplyKernelFunctionGeneric(
-                                                            "int_add",
-                                                            PineValue.List(
-                                                                [
-                                                                    KernelFunction.ApplyKernelFunctionGeneric(
-                                                                        "int_mul",
-                                                                        PineValue.List(
-                                                                            [
-                                                                                param_1_0,
-                                                                                IntegerEncoding.EncodeSignedInteger(10)
-                                                                            ])),
-                                                                    IntegerEncoding.EncodeSignedInteger(6)
-                                                                ])),
-                                                        param_1_1,
-                                                        KernelFunction.ApplyKernelFunctionGeneric(
-                                                            "int_add",
-                                                            PineValue.List(
-                                                                [
-                                                                    param_1_2,
-                                                                    IntegerEncoding.EncodeSignedInteger(4)
-                                                                ])));
-                                            }
-                                            else
-                                            {
-                                                if (local_000 == StringEncoding.ValueFromString("7"))
-                                                {
-                                                    return
-                                                        Test.parseUnsignedIntRec(
-                                                            KernelFunction.ApplyKernelFunctionGeneric(
-                                                                "int_add",
-                                                                PineValue.List(
-                                                                    [
-                                                                        KernelFunction.ApplyKernelFunctionGeneric(
-                                                                            "int_mul",
-                                                                            PineValue.List(
-                                                                                [
-                                                                                    param_1_0,
-                                                                                    IntegerEncoding.EncodeSignedInteger(10)
-                                                                                ])),
-                                                                        IntegerEncoding.EncodeSignedInteger(7)
-                                                                    ])),
-                                                            param_1_1,
-                                                            KernelFunction.ApplyKernelFunctionGeneric(
-                                                                "int_add",
-                                                                PineValue.List(
-                                                                    [
-                                                                        param_1_2,
-                                                                        IntegerEncoding.EncodeSignedInteger(4)
-                                                                    ])));
-                                                }
-                                                else
-                                                {
-                                                    if (local_000 == StringEncoding.ValueFromString("8"))
-                                                    {
-                                                        return
-                                                            Test.parseUnsignedIntRec(
-                                                                KernelFunction.ApplyKernelFunctionGeneric(
-                                                                    "int_add",
-                                                                    PineValue.List(
-                                                                        [
-                                                                            KernelFunction.ApplyKernelFunctionGeneric(
-                                                                                "int_mul",
-                                                                                PineValue.List(
-                                                                                    [
-                                                                                        param_1_0,
-                                                                                        IntegerEncoding.EncodeSignedInteger(10)
-                                                                                    ])),
-                                                                            IntegerEncoding.EncodeSignedInteger(8)
-                                                                        ])),
-                                                                param_1_1,
-                                                                KernelFunction.ApplyKernelFunctionGeneric(
-                                                                    "int_add",
-                                                                    PineValue.List(
-                                                                        [
-                                                                            param_1_2,
-                                                                            IntegerEncoding.EncodeSignedInteger(4)
-                                                                        ])));
-                                                    }
-                                                    else
-                                                    {
-                                                        if (local_000 == StringEncoding.ValueFromString("9"))
-                                                        {
-                                                            return
-                                                                Test.parseUnsignedIntRec(
-                                                                    KernelFunction.ApplyKernelFunctionGeneric(
-                                                                        "int_add",
-                                                                        PineValue.List(
-                                                                            [
-                                                                                KernelFunction.ApplyKernelFunctionGeneric(
-                                                                                    "int_mul",
-                                                                                    PineValue.List(
-                                                                                        [
-                                                                                            param_1_0,
-                                                                                            IntegerEncoding.EncodeSignedInteger(10)
-                                                                                        ])),
-                                                                                IntegerEncoding.EncodeSignedInteger(9)
-                                                                            ])),
-                                                                    param_1_1,
-                                                                    KernelFunction.ApplyKernelFunctionGeneric(
-                                                                        "int_add",
-                                                                        PineValue.List(
-                                                                            [
-                                                                                param_1_2,
-                                                                                IntegerEncoding.EncodeSignedInteger(4)
-                                                                            ])));
-                                                        }
-                                                        else
-                                                        {
-                                                            return
-                                                                PineValue.List(
-                                                                    [
-                                                                        PineValue.List(
-                                                                            [
-                                                                                StringEncoding.ValueFromString("Ok"),
-                                                                                PineValue.List(
-                                                                                    [param_1_0])
-                                                                            ]),
-                                                                        param_1_2
-                                                                    ]);
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                                                        param_1_0,
+                                                        IntegerEncoding.EncodeSignedInteger(10)
+                                                    ])),
+                                            IntegerEncoding.EncodeSignedInteger(2)
+                                        ])),
+                                param_1_1,
+                                KernelFunction.ApplyKernelFunctionGeneric(
+                                    "int_add",
+                                    PineValue.List(
+                                        [
+                                            param_1_2,
+                                            IntegerEncoding.EncodeSignedInteger(4)
+                                        ])));
                     }
+
+                    if (local_000 == StringEncoding.ValueFromString("3"))
+                    {
+                        return
+                            Test.parseUnsignedIntRec(
+                                KernelFunction.ApplyKernelFunctionGeneric(
+                                    "int_add",
+                                    PineValue.List(
+                                        [
+                                            KernelFunction.ApplyKernelFunctionGeneric(
+                                                "int_mul",
+                                                PineValue.List(
+                                                    [
+                                                        param_1_0,
+                                                        IntegerEncoding.EncodeSignedInteger(10)
+                                                    ])),
+                                            IntegerEncoding.EncodeSignedInteger(3)
+                                        ])),
+                                param_1_1,
+                                KernelFunction.ApplyKernelFunctionGeneric(
+                                    "int_add",
+                                    PineValue.List(
+                                        [
+                                            param_1_2,
+                                            IntegerEncoding.EncodeSignedInteger(4)
+                                        ])));
+                    }
+
+                    if (local_000 == StringEncoding.ValueFromString("4"))
+                    {
+                        return
+                            Test.parseUnsignedIntRec(
+                                KernelFunction.ApplyKernelFunctionGeneric(
+                                    "int_add",
+                                    PineValue.List(
+                                        [
+                                            KernelFunction.ApplyKernelFunctionGeneric(
+                                                "int_mul",
+                                                PineValue.List(
+                                                    [
+                                                        param_1_0,
+                                                        IntegerEncoding.EncodeSignedInteger(10)
+                                                    ])),
+                                            IntegerEncoding.EncodeSignedInteger(4)
+                                        ])),
+                                param_1_1,
+                                KernelFunction.ApplyKernelFunctionGeneric(
+                                    "int_add",
+                                    PineValue.List(
+                                        [
+                                            param_1_2,
+                                            IntegerEncoding.EncodeSignedInteger(4)
+                                        ])));
+                    }
+
+                    if (local_000 == StringEncoding.ValueFromString("5"))
+                    {
+                        return
+                            Test.parseUnsignedIntRec(
+                                KernelFunction.ApplyKernelFunctionGeneric(
+                                    "int_add",
+                                    PineValue.List(
+                                        [
+                                            KernelFunction.ApplyKernelFunctionGeneric(
+                                                "int_mul",
+                                                PineValue.List(
+                                                    [
+                                                        param_1_0,
+                                                        IntegerEncoding.EncodeSignedInteger(10)
+                                                    ])),
+                                            IntegerEncoding.EncodeSignedInteger(5)
+                                        ])),
+                                param_1_1,
+                                KernelFunction.ApplyKernelFunctionGeneric(
+                                    "int_add",
+                                    PineValue.List(
+                                        [
+                                            param_1_2,
+                                            IntegerEncoding.EncodeSignedInteger(4)
+                                        ])));
+                    }
+
+                    if (local_000 == StringEncoding.ValueFromString("6"))
+                    {
+                        return
+                            Test.parseUnsignedIntRec(
+                                KernelFunction.ApplyKernelFunctionGeneric(
+                                    "int_add",
+                                    PineValue.List(
+                                        [
+                                            KernelFunction.ApplyKernelFunctionGeneric(
+                                                "int_mul",
+                                                PineValue.List(
+                                                    [
+                                                        param_1_0,
+                                                        IntegerEncoding.EncodeSignedInteger(10)
+                                                    ])),
+                                            IntegerEncoding.EncodeSignedInteger(6)
+                                        ])),
+                                param_1_1,
+                                KernelFunction.ApplyKernelFunctionGeneric(
+                                    "int_add",
+                                    PineValue.List(
+                                        [
+                                            param_1_2,
+                                            IntegerEncoding.EncodeSignedInteger(4)
+                                        ])));
+                    }
+
+                    if (local_000 == StringEncoding.ValueFromString("7"))
+                    {
+                        return
+                            Test.parseUnsignedIntRec(
+                                KernelFunction.ApplyKernelFunctionGeneric(
+                                    "int_add",
+                                    PineValue.List(
+                                        [
+                                            KernelFunction.ApplyKernelFunctionGeneric(
+                                                "int_mul",
+                                                PineValue.List(
+                                                    [
+                                                        param_1_0,
+                                                        IntegerEncoding.EncodeSignedInteger(10)
+                                                    ])),
+                                            IntegerEncoding.EncodeSignedInteger(7)
+                                        ])),
+                                param_1_1,
+                                KernelFunction.ApplyKernelFunctionGeneric(
+                                    "int_add",
+                                    PineValue.List(
+                                        [
+                                            param_1_2,
+                                            IntegerEncoding.EncodeSignedInteger(4)
+                                        ])));
+                    }
+
+                    if (local_000 == StringEncoding.ValueFromString("8"))
+                    {
+                        return
+                            Test.parseUnsignedIntRec(
+                                KernelFunction.ApplyKernelFunctionGeneric(
+                                    "int_add",
+                                    PineValue.List(
+                                        [
+                                            KernelFunction.ApplyKernelFunctionGeneric(
+                                                "int_mul",
+                                                PineValue.List(
+                                                    [
+                                                        param_1_0,
+                                                        IntegerEncoding.EncodeSignedInteger(10)
+                                                    ])),
+                                            IntegerEncoding.EncodeSignedInteger(8)
+                                        ])),
+                                param_1_1,
+                                KernelFunction.ApplyKernelFunctionGeneric(
+                                    "int_add",
+                                    PineValue.List(
+                                        [
+                                            param_1_2,
+                                            IntegerEncoding.EncodeSignedInteger(4)
+                                        ])));
+                    }
+
+                    if (local_000 == StringEncoding.ValueFromString("9"))
+                    {
+                        return
+                            Test.parseUnsignedIntRec(
+                                KernelFunction.ApplyKernelFunctionGeneric(
+                                    "int_add",
+                                    PineValue.List(
+                                        [
+                                            KernelFunction.ApplyKernelFunctionGeneric(
+                                                "int_mul",
+                                                PineValue.List(
+                                                    [
+                                                        param_1_0,
+                                                        IntegerEncoding.EncodeSignedInteger(10)
+                                                    ])),
+                                            IntegerEncoding.EncodeSignedInteger(9)
+                                        ])),
+                                param_1_1,
+                                KernelFunction.ApplyKernelFunctionGeneric(
+                                    "int_add",
+                                    PineValue.List(
+                                        [
+                                            param_1_2,
+                                            IntegerEncoding.EncodeSignedInteger(4)
+                                        ])));
+                    }
+
+                    return
+                        PineValue.List(
+                            [
+                                PineValue.List(
+                                    [
+                                        StringEncoding.ValueFromString("Ok"),
+                                        PineValue.List(
+                                            [param_1_0])
+                                    ]),
+                                param_1_2
+                            ]);
                 }
             }
-
             
-            """);
+
+            """.Trim());
     }
 }
 
@@ -2074,52 +2028,43 @@ public static class Test
                                         ])))
                         ]);
             }
-            else
+            if (StringEncoding.ValueFromString("Err") == local_002)
             {
-                if (StringEncoding.ValueFromString("Err") == local_002)
-                {
-                    return
-                        PineValue.List(
-                            [
-                                PineValue.List(
-                                    [
-                                        StringEncoding.ValueFromString("Err"),
-                                        PineValue.List(
-                                            [
+                return
+                    PineValue.List(
+                        [
+                            PineValue.List(
+                                [
+                                    StringEncoding.ValueFromString("Err"),
+                                    PineValue.List(
+                                        [
+                                            KernelFunction.ApplyKernelFunctionGeneric(
+                                                "head",
                                                 KernelFunction.ApplyKernelFunctionGeneric(
                                                     "head",
                                                     KernelFunction.ApplyKernelFunctionGeneric(
-                                                        "head",
-                                                        KernelFunction.ApplyKernelFunctionGeneric(
-                                                            "skip",
-                                                            PineValue.List(
-                                                                [
-                                                                    IntegerEncoding.EncodeSignedInteger(1),
-                                                                    local_001
-                                                                ]))))
-                                            ])
-                                    ]),
+                                                        "skip",
+                                                        PineValue.List(
+                                                            [
+                                                                IntegerEncoding.EncodeSignedInteger(1),
+                                                                local_001
+                                                            ]))))
+                                        ])
+                                ]),
+                            KernelFunction.ApplyKernelFunctionGeneric(
+                                "head",
                                 KernelFunction.ApplyKernelFunctionGeneric(
-                                    "head",
-                                    KernelFunction.ApplyKernelFunctionGeneric(
-                                        "skip",
-                                        PineValue.List(
-                                            [
-                                                IntegerEncoding.EncodeSignedInteger(1),
-                                                local_000
-                                            ])))
-                            ]);
-                }
-                else
-                {
-                    throw new ParseExpressionException("TODO: Include details from encoded and env subexpressions");
-                }
+                                    "skip",
+                                    PineValue.List(
+                                        [
+                                            IntegerEncoding.EncodeSignedInteger(1),
+                                            local_000
+                                        ])))
+                        ]);
             }
+            throw new ParseExpressionException("TODO: Include details from encoded and env subexpressions");
         }
-        else
-        {
-            return Test.parseUnsignedInt(param_1_0, param_1_1);
-        }
+        return Test.parseUnsignedInt(param_1_0, param_1_1);
     }
 
 
@@ -2161,182 +2106,152 @@ public static class Test
                                 ]))
                     ]);
         }
-        else
+        if (local_000 == StringEncoding.ValueFromString("1"))
         {
-            if (local_000 == StringEncoding.ValueFromString("1"))
-            {
-                return
-                    Test.parseUnsignedIntRec(
-                        IntegerEncoding.EncodeSignedInteger(1),
-                        param_1_0,
-                        KernelFunction.ApplyKernelFunctionGeneric(
-                            "int_add",
+            return
+                Test.parseUnsignedIntRec(
+                    IntegerEncoding.EncodeSignedInteger(1),
+                    param_1_0,
+                    KernelFunction.ApplyKernelFunctionGeneric(
+                        "int_add",
+                        PineValue.List(
+                            [
+                                param_1_1,
+                                IntegerEncoding.EncodeSignedInteger(4)
+                            ])));
+        }
+        if (local_000 == StringEncoding.ValueFromString("2"))
+        {
+            return
+                Test.parseUnsignedIntRec(
+                    IntegerEncoding.EncodeSignedInteger(2),
+                    param_1_0,
+                    KernelFunction.ApplyKernelFunctionGeneric(
+                        "int_add",
+                        PineValue.List(
+                            [
+                                param_1_1,
+                                IntegerEncoding.EncodeSignedInteger(4)
+                            ])));
+        }
+        if (local_000 == StringEncoding.ValueFromString("3"))
+        {
+            return
+                Test.parseUnsignedIntRec(
+                    IntegerEncoding.EncodeSignedInteger(3),
+                    param_1_0,
+                    KernelFunction.ApplyKernelFunctionGeneric(
+                        "int_add",
+                        PineValue.List(
+                            [
+                                param_1_1,
+                                IntegerEncoding.EncodeSignedInteger(4)
+                            ])));
+        }
+        if (local_000 == StringEncoding.ValueFromString("4"))
+        {
+            return
+                Test.parseUnsignedIntRec(
+                    IntegerEncoding.EncodeSignedInteger(4),
+                    param_1_0,
+                    KernelFunction.ApplyKernelFunctionGeneric(
+                        "int_add",
+                        PineValue.List(
+                            [
+                                param_1_1,
+                                IntegerEncoding.EncodeSignedInteger(4)
+                            ])));
+        }
+        if (local_000 == StringEncoding.ValueFromString("5"))
+        {
+            return
+                Test.parseUnsignedIntRec(
+                    IntegerEncoding.EncodeSignedInteger(5),
+                    param_1_0,
+                    KernelFunction.ApplyKernelFunctionGeneric(
+                        "int_add",
+                        PineValue.List(
+                            [
+                                param_1_1,
+                                IntegerEncoding.EncodeSignedInteger(4)
+                            ])));
+        }
+        if (local_000 == StringEncoding.ValueFromString("6"))
+        {
+            return
+                Test.parseUnsignedIntRec(
+                    IntegerEncoding.EncodeSignedInteger(6),
+                    param_1_0,
+                    KernelFunction.ApplyKernelFunctionGeneric(
+                        "int_add",
+                        PineValue.List(
+                            [
+                                param_1_1,
+                                IntegerEncoding.EncodeSignedInteger(4)
+                            ])));
+        }
+        if (local_000 == StringEncoding.ValueFromString("7"))
+        {
+            return
+                Test.parseUnsignedIntRec(
+                    IntegerEncoding.EncodeSignedInteger(7),
+                    param_1_0,
+                    KernelFunction.ApplyKernelFunctionGeneric(
+                        "int_add",
+                        PineValue.List(
+                            [
+                                param_1_1,
+                                IntegerEncoding.EncodeSignedInteger(4)
+                            ])));
+        }
+        if (local_000 == StringEncoding.ValueFromString("8"))
+        {
+            return
+                Test.parseUnsignedIntRec(
+                    IntegerEncoding.EncodeSignedInteger(8),
+                    param_1_0,
+                    KernelFunction.ApplyKernelFunctionGeneric(
+                        "int_add",
+                        PineValue.List(
+                            [
+                                param_1_1,
+                                IntegerEncoding.EncodeSignedInteger(4)
+                            ])));
+        }
+        if (local_000 == StringEncoding.ValueFromString("9"))
+        {
+            return
+                Test.parseUnsignedIntRec(
+                    IntegerEncoding.EncodeSignedInteger(9),
+                    param_1_0,
+                    KernelFunction.ApplyKernelFunctionGeneric(
+                        "int_add",
+                        PineValue.List(
+                            [
+                                param_1_1,
+                                IntegerEncoding.EncodeSignedInteger(4)
+                            ])));
+        }
+        return
+            PineValue.List(
+                [
+                    PineValue.List(
+                        [
+                            StringEncoding.ValueFromString("Err"),
                             PineValue.List(
                                 [
-                                    param_1_1,
-                                    IntegerEncoding.EncodeSignedInteger(4)
-                                ])));
-            }
-            else
-            {
-                if (local_000 == StringEncoding.ValueFromString("2"))
-                {
-                    return
-                        Test.parseUnsignedIntRec(
-                            IntegerEncoding.EncodeSignedInteger(2),
-                            param_1_0,
-                            KernelFunction.ApplyKernelFunctionGeneric(
-                                "int_add",
-                                PineValue.List(
-                                    [
-                                        param_1_1,
-                                        IntegerEncoding.EncodeSignedInteger(4)
-                                    ])));
-                }
-                else
-                {
-                    if (local_000 == StringEncoding.ValueFromString("3"))
-                    {
-                        return
-                            Test.parseUnsignedIntRec(
-                                IntegerEncoding.EncodeSignedInteger(3),
-                                param_1_0,
-                                KernelFunction.ApplyKernelFunctionGeneric(
-                                    "int_add",
                                     PineValue.List(
                                         [
-                                            param_1_1,
-                                            IntegerEncoding.EncodeSignedInteger(4)
-                                        ])));
-                    }
-                    else
-                    {
-                        if (local_000 == StringEncoding.ValueFromString("4"))
-                        {
-                            return
-                                Test.parseUnsignedIntRec(
-                                    IntegerEncoding.EncodeSignedInteger(4),
-                                    param_1_0,
-                                    KernelFunction.ApplyKernelFunctionGeneric(
-                                        "int_add",
-                                        PineValue.List(
-                                            [
-                                                param_1_1,
-                                                IntegerEncoding.EncodeSignedInteger(4)
-                                            ])));
-                        }
-                        else
-                        {
-                            if (local_000 == StringEncoding.ValueFromString("5"))
-                            {
-                                return
-                                    Test.parseUnsignedIntRec(
-                                        IntegerEncoding.EncodeSignedInteger(5),
-                                        param_1_0,
-                                        KernelFunction.ApplyKernelFunctionGeneric(
-                                            "int_add",
+                                            StringEncoding.ValueFromString("String"),
                                             PineValue.List(
                                                 [
-                                                    param_1_1,
-                                                    IntegerEncoding.EncodeSignedInteger(4)
-                                                ])));
-                            }
-                            else
-                            {
-                                if (local_000 == StringEncoding.ValueFromString("6"))
-                                {
-                                    return
-                                        Test.parseUnsignedIntRec(
-                                            IntegerEncoding.EncodeSignedInteger(6),
-                                            param_1_0,
-                                            KernelFunction.ApplyKernelFunctionGeneric(
-                                                "int_add",
-                                                PineValue.List(
-                                                    [
-                                                        param_1_1,
-                                                        IntegerEncoding.EncodeSignedInteger(4)
-                                                    ])));
-                                }
-                                else
-                                {
-                                    if (local_000 == StringEncoding.ValueFromString("7"))
-                                    {
-                                        return
-                                            Test.parseUnsignedIntRec(
-                                                IntegerEncoding.EncodeSignedInteger(7),
-                                                param_1_0,
-                                                KernelFunction.ApplyKernelFunctionGeneric(
-                                                    "int_add",
-                                                    PineValue.List(
-                                                        [
-                                                            param_1_1,
-                                                            IntegerEncoding.EncodeSignedInteger(4)
-                                                        ])));
-                                    }
-                                    else
-                                    {
-                                        if (local_000 == StringEncoding.ValueFromString("8"))
-                                        {
-                                            return
-                                                Test.parseUnsignedIntRec(
-                                                    IntegerEncoding.EncodeSignedInteger(8),
-                                                    param_1_0,
-                                                    KernelFunction.ApplyKernelFunctionGeneric(
-                                                        "int_add",
-                                                        PineValue.List(
-                                                            [
-                                                                param_1_1,
-                                                                IntegerEncoding.EncodeSignedInteger(4)
-                                                            ])));
-                                        }
-                                        else
-                                        {
-                                            if (local_000 == StringEncoding.ValueFromString("9"))
-                                            {
-                                                return
-                                                    Test.parseUnsignedIntRec(
-                                                        IntegerEncoding.EncodeSignedInteger(9),
-                                                        param_1_0,
-                                                        KernelFunction.ApplyKernelFunctionGeneric(
-                                                            "int_add",
-                                                            PineValue.List(
-                                                                [
-                                                                    param_1_1,
-                                                                    IntegerEncoding.EncodeSignedInteger(4)
-                                                                ])));
-                                            }
-                                            else
-                                            {
-                                                return
-                                                    PineValue.List(
-                                                        [
-                                                            PineValue.List(
-                                                                [
-                                                                    StringEncoding.ValueFromString("Err"),
-                                                                    PineValue.List(
-                                                                        [
-                                                                            PineValue.List(
-                                                                                [
-                                                                                    StringEncoding.ValueFromString("String"),
-                                                                                    PineValue.List(
-                                                                                        [
-                                                                                            StringEncoding.ValueFromString("Expecting a digit")
-                                                                                        ])
-                                                                                ])
-                                                                        ])
-                                                                ]),
-                                                            param_1_1
-                                                        ]);
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+                                                    StringEncoding.ValueFromString("Expecting a digit")
+                                                ])
+                                        ])
+                                ])
+                        ]),
+                    param_1_1
+                ]);
     }
 
 
@@ -2377,281 +2292,251 @@ public static class Test
                                 IntegerEncoding.EncodeSignedInteger(4)
                             ])));
         }
-        else
+        if (local_000 == StringEncoding.ValueFromString("1"))
         {
-            if (local_000 == StringEncoding.ValueFromString("1"))
-            {
-                return
-                    Test.parseUnsignedIntRec(
-                        KernelFunction.ApplyKernelFunctionGeneric(
-                            "int_add",
-                            PineValue.List(
-                                [
-                                    KernelFunction.ApplyKernelFunctionGeneric(
-                                        "int_mul",
-                                        PineValue.List(
-                                            [
-                                                param_1_0,
-                                                IntegerEncoding.EncodeSignedInteger(10)
-                                            ])),
-                                    IntegerEncoding.EncodeSignedInteger(1)
-                                ])),
-                        param_1_1,
-                        KernelFunction.ApplyKernelFunctionGeneric(
-                            "int_add",
-                            PineValue.List(
-                                [
-                                    param_1_2,
-                                    IntegerEncoding.EncodeSignedInteger(4)
-                                ])));
-            }
-            else
-            {
-                if (local_000 == StringEncoding.ValueFromString("2"))
-                {
-                    return
-                        Test.parseUnsignedIntRec(
-                            KernelFunction.ApplyKernelFunctionGeneric(
-                                "int_add",
-                                PineValue.List(
-                                    [
-                                        KernelFunction.ApplyKernelFunctionGeneric(
-                                            "int_mul",
-                                            PineValue.List(
-                                                [
-                                                    param_1_0,
-                                                    IntegerEncoding.EncodeSignedInteger(10)
-                                                ])),
-                                        IntegerEncoding.EncodeSignedInteger(2)
-                                    ])),
-                            param_1_1,
-                            KernelFunction.ApplyKernelFunctionGeneric(
-                                "int_add",
-                                PineValue.List(
-                                    [
-                                        param_1_2,
-                                        IntegerEncoding.EncodeSignedInteger(4)
-                                    ])));
-                }
-                else
-                {
-                    if (local_000 == StringEncoding.ValueFromString("3"))
-                    {
-                        return
-                            Test.parseUnsignedIntRec(
+            return
+                Test.parseUnsignedIntRec(
+                    KernelFunction.ApplyKernelFunctionGeneric(
+                        "int_add",
+                        PineValue.List(
+                            [
                                 KernelFunction.ApplyKernelFunctionGeneric(
-                                    "int_add",
+                                    "int_mul",
                                     PineValue.List(
                                         [
-                                            KernelFunction.ApplyKernelFunctionGeneric(
-                                                "int_mul",
-                                                PineValue.List(
-                                                    [
-                                                        param_1_0,
-                                                        IntegerEncoding.EncodeSignedInteger(10)
-                                                    ])),
-                                            IntegerEncoding.EncodeSignedInteger(3)
+                                            param_1_0,
+                                            IntegerEncoding.EncodeSignedInteger(10)
                                         ])),
-                                param_1_1,
+                                IntegerEncoding.EncodeSignedInteger(1)
+                            ])),
+                    param_1_1,
+                    KernelFunction.ApplyKernelFunctionGeneric(
+                        "int_add",
+                        PineValue.List(
+                            [
+                                param_1_2,
+                                IntegerEncoding.EncodeSignedInteger(4)
+                            ])));
+        }
+        if (local_000 == StringEncoding.ValueFromString("2"))
+        {
+            return
+                Test.parseUnsignedIntRec(
+                    KernelFunction.ApplyKernelFunctionGeneric(
+                        "int_add",
+                        PineValue.List(
+                            [
                                 KernelFunction.ApplyKernelFunctionGeneric(
-                                    "int_add",
+                                    "int_mul",
                                     PineValue.List(
                                         [
-                                            param_1_2,
-                                            IntegerEncoding.EncodeSignedInteger(4)
-                                        ])));
-                    }
-                    else
-                    {
-                        if (local_000 == StringEncoding.ValueFromString("4"))
-                        {
-                            return
-                                Test.parseUnsignedIntRec(
-                                    KernelFunction.ApplyKernelFunctionGeneric(
-                                        "int_add",
-                                        PineValue.List(
-                                            [
-                                                KernelFunction.ApplyKernelFunctionGeneric(
-                                                    "int_mul",
-                                                    PineValue.List(
-                                                        [
-                                                            param_1_0,
-                                                            IntegerEncoding.EncodeSignedInteger(10)
-                                                        ])),
-                                                IntegerEncoding.EncodeSignedInteger(4)
-                                            ])),
-                                    param_1_1,
-                                    KernelFunction.ApplyKernelFunctionGeneric(
-                                        "int_add",
-                                        PineValue.List(
-                                            [
-                                                param_1_2,
-                                                IntegerEncoding.EncodeSignedInteger(4)
-                                            ])));
-                        }
-                        else
-                        {
-                            if (local_000 == StringEncoding.ValueFromString("5"))
-                            {
-                                return
-                                    Test.parseUnsignedIntRec(
-                                        KernelFunction.ApplyKernelFunctionGeneric(
-                                            "int_add",
-                                            PineValue.List(
-                                                [
-                                                    KernelFunction.ApplyKernelFunctionGeneric(
-                                                        "int_mul",
-                                                        PineValue.List(
-                                                            [
-                                                                param_1_0,
-                                                                IntegerEncoding.EncodeSignedInteger(10)
-                                                            ])),
-                                                    IntegerEncoding.EncodeSignedInteger(5)
-                                                ])),
-                                        param_1_1,
-                                        KernelFunction.ApplyKernelFunctionGeneric(
-                                            "int_add",
-                                            PineValue.List(
-                                                [
-                                                    param_1_2,
-                                                    IntegerEncoding.EncodeSignedInteger(4)
-                                                ])));
-                            }
-                            else
-                            {
-                                if (local_000 == StringEncoding.ValueFromString("6"))
-                                {
-                                    return
-                                        Test.parseUnsignedIntRec(
-                                            KernelFunction.ApplyKernelFunctionGeneric(
-                                                "int_add",
-                                                PineValue.List(
-                                                    [
-                                                        KernelFunction.ApplyKernelFunctionGeneric(
-                                                            "int_mul",
-                                                            PineValue.List(
-                                                                [
-                                                                    param_1_0,
-                                                                    IntegerEncoding.EncodeSignedInteger(10)
-                                                                ])),
-                                                        IntegerEncoding.EncodeSignedInteger(6)
-                                                    ])),
-                                            param_1_1,
-                                            KernelFunction.ApplyKernelFunctionGeneric(
-                                                "int_add",
-                                                PineValue.List(
-                                                    [
-                                                        param_1_2,
-                                                        IntegerEncoding.EncodeSignedInteger(4)
-                                                    ])));
-                                }
-                                else
-                                {
-                                    if (local_000 == StringEncoding.ValueFromString("7"))
-                                    {
-                                        return
-                                            Test.parseUnsignedIntRec(
-                                                KernelFunction.ApplyKernelFunctionGeneric(
-                                                    "int_add",
-                                                    PineValue.List(
-                                                        [
-                                                            KernelFunction.ApplyKernelFunctionGeneric(
-                                                                "int_mul",
-                                                                PineValue.List(
-                                                                    [
-                                                                        param_1_0,
-                                                                        IntegerEncoding.EncodeSignedInteger(10)
-                                                                    ])),
-                                                            IntegerEncoding.EncodeSignedInteger(7)
-                                                        ])),
-                                                param_1_1,
-                                                KernelFunction.ApplyKernelFunctionGeneric(
-                                                    "int_add",
-                                                    PineValue.List(
-                                                        [
-                                                            param_1_2,
-                                                            IntegerEncoding.EncodeSignedInteger(4)
-                                                        ])));
-                                    }
-                                    else
-                                    {
-                                        if (local_000 == StringEncoding.ValueFromString("8"))
-                                        {
-                                            return
-                                                Test.parseUnsignedIntRec(
-                                                    KernelFunction.ApplyKernelFunctionGeneric(
-                                                        "int_add",
-                                                        PineValue.List(
-                                                            [
-                                                                KernelFunction.ApplyKernelFunctionGeneric(
-                                                                    "int_mul",
-                                                                    PineValue.List(
-                                                                        [
-                                                                            param_1_0,
-                                                                            IntegerEncoding.EncodeSignedInteger(10)
-                                                                        ])),
-                                                                IntegerEncoding.EncodeSignedInteger(8)
-                                                            ])),
-                                                    param_1_1,
-                                                    KernelFunction.ApplyKernelFunctionGeneric(
-                                                        "int_add",
-                                                        PineValue.List(
-                                                            [
-                                                                param_1_2,
-                                                                IntegerEncoding.EncodeSignedInteger(4)
-                                                            ])));
-                                        }
-                                        else
-                                        {
-                                            if (local_000 == StringEncoding.ValueFromString("9"))
-                                            {
-                                                return
-                                                    Test.parseUnsignedIntRec(
-                                                        KernelFunction.ApplyKernelFunctionGeneric(
-                                                            "int_add",
-                                                            PineValue.List(
-                                                                [
-                                                                    KernelFunction.ApplyKernelFunctionGeneric(
-                                                                        "int_mul",
-                                                                        PineValue.List(
-                                                                            [
-                                                                                param_1_0,
-                                                                                IntegerEncoding.EncodeSignedInteger(10)
-                                                                            ])),
-                                                                    IntegerEncoding.EncodeSignedInteger(9)
-                                                                ])),
-                                                        param_1_1,
-                                                        KernelFunction.ApplyKernelFunctionGeneric(
-                                                            "int_add",
-                                                            PineValue.List(
-                                                                [
-                                                                    param_1_2,
-                                                                    IntegerEncoding.EncodeSignedInteger(4)
-                                                                ])));
-                                            }
-                                            else
-                                            {
-                                                return
-                                                    PineValue.List(
-                                                        [
-                                                            PineValue.List(
-                                                                [
-                                                                    StringEncoding.ValueFromString("Ok"),
-                                                                    PineValue.List(
-                                                                        [param_1_0])
-                                                                ]),
-                                                            param_1_2
-                                                        ]);
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+                                            param_1_0,
+                                            IntegerEncoding.EncodeSignedInteger(10)
+                                        ])),
+                                IntegerEncoding.EncodeSignedInteger(2)
+                            ])),
+                    param_1_1,
+                    KernelFunction.ApplyKernelFunctionGeneric(
+                        "int_add",
+                        PineValue.List(
+                            [
+                                param_1_2,
+                                IntegerEncoding.EncodeSignedInteger(4)
+                            ])));
         }
+        if (local_000 == StringEncoding.ValueFromString("3"))
+        {
+            return
+                Test.parseUnsignedIntRec(
+                    KernelFunction.ApplyKernelFunctionGeneric(
+                        "int_add",
+                        PineValue.List(
+                            [
+                                KernelFunction.ApplyKernelFunctionGeneric(
+                                    "int_mul",
+                                    PineValue.List(
+                                        [
+                                            param_1_0,
+                                            IntegerEncoding.EncodeSignedInteger(10)
+                                        ])),
+                                IntegerEncoding.EncodeSignedInteger(3)
+                            ])),
+                    param_1_1,
+                    KernelFunction.ApplyKernelFunctionGeneric(
+                        "int_add",
+                        PineValue.List(
+                            [
+                                param_1_2,
+                                IntegerEncoding.EncodeSignedInteger(4)
+                            ])));
+        }
+        if (local_000 == StringEncoding.ValueFromString("4"))
+        {
+            return
+                Test.parseUnsignedIntRec(
+                    KernelFunction.ApplyKernelFunctionGeneric(
+                        "int_add",
+                        PineValue.List(
+                            [
+                                KernelFunction.ApplyKernelFunctionGeneric(
+                                    "int_mul",
+                                    PineValue.List(
+                                        [
+                                            param_1_0,
+                                            IntegerEncoding.EncodeSignedInteger(10)
+                                        ])),
+                                IntegerEncoding.EncodeSignedInteger(4)
+                            ])),
+                    param_1_1,
+                    KernelFunction.ApplyKernelFunctionGeneric(
+                        "int_add",
+                        PineValue.List(
+                            [
+                                param_1_2,
+                                IntegerEncoding.EncodeSignedInteger(4)
+                            ])));
+        }
+        if (local_000 == StringEncoding.ValueFromString("5"))
+        {
+            return
+                Test.parseUnsignedIntRec(
+                    KernelFunction.ApplyKernelFunctionGeneric(
+                        "int_add",
+                        PineValue.List(
+                            [
+                                KernelFunction.ApplyKernelFunctionGeneric(
+                                    "int_mul",
+                                    PineValue.List(
+                                        [
+                                            param_1_0,
+                                            IntegerEncoding.EncodeSignedInteger(10)
+                                        ])),
+                                IntegerEncoding.EncodeSignedInteger(5)
+                            ])),
+                    param_1_1,
+                    KernelFunction.ApplyKernelFunctionGeneric(
+                        "int_add",
+                        PineValue.List(
+                            [
+                                param_1_2,
+                                IntegerEncoding.EncodeSignedInteger(4)
+                            ])));
+        }
+        if (local_000 == StringEncoding.ValueFromString("6"))
+        {
+            return
+                Test.parseUnsignedIntRec(
+                    KernelFunction.ApplyKernelFunctionGeneric(
+                        "int_add",
+                        PineValue.List(
+                            [
+                                KernelFunction.ApplyKernelFunctionGeneric(
+                                    "int_mul",
+                                    PineValue.List(
+                                        [
+                                            param_1_0,
+                                            IntegerEncoding.EncodeSignedInteger(10)
+                                        ])),
+                                IntegerEncoding.EncodeSignedInteger(6)
+                            ])),
+                    param_1_1,
+                    KernelFunction.ApplyKernelFunctionGeneric(
+                        "int_add",
+                        PineValue.List(
+                            [
+                                param_1_2,
+                                IntegerEncoding.EncodeSignedInteger(4)
+                            ])));
+        }
+        if (local_000 == StringEncoding.ValueFromString("7"))
+        {
+            return
+                Test.parseUnsignedIntRec(
+                    KernelFunction.ApplyKernelFunctionGeneric(
+                        "int_add",
+                        PineValue.List(
+                            [
+                                KernelFunction.ApplyKernelFunctionGeneric(
+                                    "int_mul",
+                                    PineValue.List(
+                                        [
+                                            param_1_0,
+                                            IntegerEncoding.EncodeSignedInteger(10)
+                                        ])),
+                                IntegerEncoding.EncodeSignedInteger(7)
+                            ])),
+                    param_1_1,
+                    KernelFunction.ApplyKernelFunctionGeneric(
+                        "int_add",
+                        PineValue.List(
+                            [
+                                param_1_2,
+                                IntegerEncoding.EncodeSignedInteger(4)
+                            ])));
+        }
+        if (local_000 == StringEncoding.ValueFromString("8"))
+        {
+            return
+                Test.parseUnsignedIntRec(
+                    KernelFunction.ApplyKernelFunctionGeneric(
+                        "int_add",
+                        PineValue.List(
+                            [
+                                KernelFunction.ApplyKernelFunctionGeneric(
+                                    "int_mul",
+                                    PineValue.List(
+                                        [
+                                            param_1_0,
+                                            IntegerEncoding.EncodeSignedInteger(10)
+                                        ])),
+                                IntegerEncoding.EncodeSignedInteger(8)
+                            ])),
+                    param_1_1,
+                    KernelFunction.ApplyKernelFunctionGeneric(
+                        "int_add",
+                        PineValue.List(
+                            [
+                                param_1_2,
+                                IntegerEncoding.EncodeSignedInteger(4)
+                            ])));
+        }
+        if (local_000 == StringEncoding.ValueFromString("9"))
+        {
+            return
+                Test.parseUnsignedIntRec(
+                    KernelFunction.ApplyKernelFunctionGeneric(
+                        "int_add",
+                        PineValue.List(
+                            [
+                                KernelFunction.ApplyKernelFunctionGeneric(
+                                    "int_mul",
+                                    PineValue.List(
+                                        [
+                                            param_1_0,
+                                            IntegerEncoding.EncodeSignedInteger(10)
+                                        ])),
+                                IntegerEncoding.EncodeSignedInteger(9)
+                            ])),
+                    param_1_1,
+                    KernelFunction.ApplyKernelFunctionGeneric(
+                        "int_add",
+                        PineValue.List(
+                            [
+                                param_1_2,
+                                IntegerEncoding.EncodeSignedInteger(4)
+                            ])));
+        }
+        return
+            PineValue.List(
+                [
+                    PineValue.List(
+                        [
+                            StringEncoding.ValueFromString("Ok"),
+                            PineValue.List(
+                                [param_1_0])
+                        ]),
+                    param_1_2
+                ]);
     }
 }
 

@@ -207,6 +207,25 @@ public record StaticProgramCSharpClass(
                     statementFromResult,
                     newAlreadyDeclared);
 
+            // If the 'if' block ends with a return/throw, the 'else' is redundant. Emit without 'else' and inline the false branch.
+            if (BranchEndsWithReturnOrThrow(trueBranchStatement))
+            {
+                var ifStatementNoElse =
+                    SyntaxFactory.IfStatement(
+                        condition: conditionExpr,
+                        statement: trueBranchStatement,
+                        @else: null);
+
+                IReadOnlyList<StatementSyntax> allStatementsNoElse =
+                    [
+                        .. newDeclaredStatements,
+                        ifStatementNoElse,
+                        .. ExtractStatements(falseBranchStatement)
+                    ];
+
+                return SyntaxFactory.Block(allStatementsNoElse);
+            }
+
             var ifStatement =
                 SyntaxFactory.IfStatement(
                     condition: conditionExpr,
@@ -238,6 +257,33 @@ public record StaticProgramCSharpClass(
 
             return SyntaxFactory.Block(allStatements);
         }
+    }
+
+    private static bool BranchEndsWithReturnOrThrow(StatementSyntax statement)
+    {
+        if (statement is BlockSyntax block)
+        {
+            if (block.Statements.Count is 0)
+            {
+                return false;
+            }
+
+            var last = block.Statements.Last();
+
+            return last is ReturnStatementSyntax || last is ThrowStatementSyntax;
+        }
+
+        return statement is ReturnStatementSyntax || statement is ThrowStatementSyntax;
+    }
+
+    private static IReadOnlyList<StatementSyntax> ExtractStatements(StatementSyntax statement)
+    {
+        if (statement is BlockSyntax block)
+        {
+            return block.Statements;
+        }
+
+        return [statement];
     }
 
     public static ExpressionSyntax CompileToCSharpExpression(
