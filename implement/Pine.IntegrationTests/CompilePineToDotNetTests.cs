@@ -87,6 +87,144 @@ public class CompilePineToDotNetTests
         syntax.ToFullString().Should().Be("System.Collections.Generic.IReadOnlyDictionary<Pine.Core.PineValue,System.String>");
     }
 
+    [Fact]
+    public void Test_TypeSyntaxFromType_with_using_alias()
+    {
+        // Create a using alias: using MyDict = System.Collections.Generic.Dictionary<string, int>;
+        var usingAlias =
+            SyntaxFactory.UsingDirective(
+                alias: SyntaxFactory.NameEquals(SyntaxFactory.IdentifierName("MyDict")),
+                name: SyntaxFactory.ParseName("System.Collections.Generic.Dictionary"));
+
+        var context = new DeclarationSyntaxGenerationContext([usingAlias]);
+
+        var syntax = CompileTypeSyntax.TypeSyntaxFromType(
+            typeof(Dictionary<string, int>),
+            context);
+
+        syntax.ToFullString().Should().Be("MyDict<System.String,System.Int32>");
+    }
+
+    [Fact]
+    public void Test_TypeSyntaxFromType_with_current_namespace_shortening()
+    {
+        var context =
+            new DeclarationSyntaxGenerationContext(
+                UsingDirectives: [],
+                CurrentNamespace: "Pine.Core");
+
+        var syntax = CompileTypeSyntax.TypeSyntaxFromType(
+            typeof(PineValue),
+            context);
+
+        syntax.ToFullString().Should().Be("PineValue");
+    }
+
+    [Fact]
+    public void Test_TypeSyntaxFromType_with_current_namespace_partial_shortening()
+    {
+        var context =
+            new DeclarationSyntaxGenerationContext(
+                UsingDirectives: [],
+                CurrentNamespace: "Pine");
+
+        var syntax =
+            CompileTypeSyntax.TypeSyntaxFromType(
+                typeof(PineValue),
+                context);
+
+        syntax.ToFullString().Should().Be("Core.PineValue");
+    }
+
+    [Fact]
+    public void Test_TypeSyntaxFromType_with_no_shortening_when_different_namespace()
+    {
+        var context =
+            new DeclarationSyntaxGenerationContext(
+                UsingDirectives: [],
+                CurrentNamespace: "SomeOther.Namespace");
+
+        var syntax = CompileTypeSyntax.TypeSyntaxFromType(
+            typeof(PineValue),
+            context);
+
+        syntax.ToFullString().Should().Be("Pine.Core.PineValue");
+    }
+
+    [Fact]
+    public void Test_TypeSyntaxFromType_using_directive_takes_precedence_over_namespace()
+    {
+        var usingDirective =
+            SyntaxFactory.UsingDirective(
+                SyntaxFactory.ParseName("Pine.Core"));
+
+        var context =
+            new DeclarationSyntaxGenerationContext(
+                UsingDirectives: [usingDirective],
+                CurrentNamespace: "DifferentNamespace");
+
+        var syntax = CompileTypeSyntax.TypeSyntaxFromType(
+            typeof(PineValue),
+            context);
+
+        syntax.ToFullString().Should().Be("PineValue");
+    }
+
+    [Fact]
+    public void Test_TypeSyntaxFromType_generic_type_with_namespace_shortening()
+    {
+        var context =
+            new DeclarationSyntaxGenerationContext(
+                UsingDirectives: [],
+                CurrentNamespace: "Pine.Core");
+
+        var syntax = CompileTypeSyntax.TypeSyntaxFromType(
+            typeof(Result<string, PineValue>),
+            context);
+
+        syntax.ToFullString().Should().Be("Result<System.String,PineValue>");
+    }
+
+    [Fact]
+    public void Test_TypeSyntaxFromType_backwards_compatibility()
+    {
+        // Test that the old method signature still works
+        var syntax =
+            CompileTypeSyntax.TypeSyntaxFromType(
+                typeof(PineValue),
+                usings: []);
+
+        syntax.ToFullString().Should().Be("Pine.Core.PineValue");
+    }
+
+    [Fact]
+    public void Test_ShortestRelativeNamespace_with_current_namespace_shortening()
+    {
+        var context =
+            new DeclarationSyntaxGenerationContext(
+                UsingDirectives: [],
+                CurrentNamespace: "Pine.Core");
+
+        var result =
+            CompileTypeSyntax.ShortestRelativeNamespace(
+                "Pine.Core.CodeAnalysis.SomeType",
+                context);
+
+        result.Should().BeEquivalentTo(["CodeAnalysis", "SomeType"]);
+    }
+
+    [Fact]
+    public void Test_ShortestRelativeNamespace_backwards_compatibility()
+    {
+        // Test that the old method signature still works
+        var result =
+            CompileTypeSyntax.ShortestRelativeNamespace(
+                "Pine.Core",
+                usings: []);
+
+        result.Should().BeEquivalentTo(["Pine", "Core"]);
+    }
+
     [Fact(Skip = "Inlining disabled for head")]
     public void Test_compile_specialized_for_kernel_head()
     {

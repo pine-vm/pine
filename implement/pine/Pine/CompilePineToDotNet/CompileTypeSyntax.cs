@@ -12,10 +12,37 @@ public static class CompileTypeSyntax
 {
     public static TypeSyntax TypeSyntaxFromType(
         Type type,
-        IReadOnlyCollection<UsingDirectiveSyntax> usings)
+        IReadOnlyCollection<UsingDirectiveSyntax> usings) =>
+        TypeSyntaxFromType(type, new DeclarationSyntaxGenerationContext(usings));
+
+    public static TypeSyntax TypeSyntaxFromType(
+        Type type,
+        DeclarationSyntaxGenerationContext context)
     {
+        // Check if the type can be represented using a using alias
+
+        if (TryGetAliasForType(type, context) is { } aliasTypeName)
+        {
+            SimpleNameSyntax aliasSyntax = SyntaxFactory.IdentifierName(aliasTypeName);
+
+            if (type.IsGenericType)
+            {
+                var genericTypeName = aliasTypeName;
+
+                aliasSyntax =
+                    SyntaxFactory.GenericName(
+                        SyntaxFactory.Identifier(genericTypeName),
+                        SyntaxFactory.TypeArgumentList(
+                            SyntaxFactory.SeparatedList(
+                                type.GetGenericArguments()
+                                .Select(ga => TypeSyntaxFromType(ga, context)))));
+            }
+
+            return aliasSyntax;
+        }
+
         var namespaceSegments =
-            ShortestRelativeNamespace(type.Namespace ?? "", usings)
+            ShortestRelativeNamespace(type.Namespace ?? "", context)
             .Concat(NamespaceSegmentsResultingFromDeclaringTypes(type))
             .ToImmutableArray();
 
@@ -36,13 +63,46 @@ public static class CompileTypeSyntax
                     SyntaxFactory.TypeArgumentList(
                         SyntaxFactory.SeparatedList(
                             type.GetGenericArguments()
-                            .Select(ga => TypeSyntaxFromType(ga, usings)))));
+                            .Select(ga => TypeSyntaxFromType(ga, context)))));
         }
 
         return
             NameSyntaxFromQualifiedName(
                 namespaceSegments: namespaceSegments,
                 nameInNamespace: nameInNamespace);
+    }
+
+    private static string? TryGetAliasForType(Type type, DeclarationSyntaxGenerationContext context)
+    {
+        // Get the namespace and name for comparison
+        var namespacePart = type.Namespace ?? "";
+        var typeName = type.Name;
+
+        // Handle generic types by getting the generic type definition name without the arity
+        if (type.IsGenericType)
+        {
+            var genericTypeDefinition = type.GetGenericTypeDefinition();
+            namespacePart = genericTypeDefinition.Namespace ?? "";
+            typeName = genericTypeDefinition.Name.Split('`').First();
+        }
+
+        // Construct the full name for comparison
+        var fullTypeName = string.IsNullOrEmpty(namespacePart) ? typeName : $"{namespacePart}.{typeName}";
+
+        foreach (var usingDirective in context.UsingDirectives)
+        {
+            // Check if this is an alias using directive (has an Alias property)
+            if (usingDirective.Alias is not null && usingDirective.Name is not null)
+            {
+                var aliasTarget = usingDirective.Name.ToFullString().Trim();
+                if (aliasTarget == fullTypeName)
+                {
+                    return usingDirective.Alias.Name.Identifier.ValueText;
+                }
+            }
+        }
+
+        return null;
     }
 
     public static IEnumerable<string> NamespaceSegmentsResultingFromDeclaringTypes(Type type) =>
@@ -58,7 +118,12 @@ public static class CompileTypeSyntax
 
     public static IReadOnlyList<string> ShortestRelativeNamespace(
         string fullNamespace,
-        IReadOnlyCollection<UsingDirectiveSyntax> usings)
+        IReadOnlyCollection<UsingDirectiveSyntax> usings) =>
+        ShortestRelativeNamespace(fullNamespace, new DeclarationSyntaxGenerationContext(usings));
+
+    public static IReadOnlyList<string> ShortestRelativeNamespace(
+        string fullNamespace,
+        DeclarationSyntaxGenerationContext context)
     {
         static IReadOnlyList<string> SegmentsFromName(string name) =>
             name.Split('.', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
@@ -67,12 +132,32 @@ public static class CompileTypeSyntax
             SegmentsFromName(fullNamespace);
 
         var usingsNames =
-            usings
+            context.UsingDirectives
             .SelectWhereNotNull(usingDirective => usingDirective.Name?.ToFullString()?.Trim())
             .Select(SegmentsFromName);
 
+        // Check if the namespace is covered by using directives
         if (usingsNames.Any(usingName => usingName.SequenceEqual(namespaceSegments)))
             return [];
+
+        // Check if the current namespace allows shortening the path
+        if (context.CurrentNamespace is not null)
+        {
+            var currentNamespaceSegments = SegmentsFromName(context.CurrentNamespace);
+
+            // If the target namespace exactly matches the current namespace, we can omit it entirely
+            if (currentNamespaceSegments.SequenceEqual(namespaceSegments))
+            {
+                return [];
+            }
+
+            // If the target namespace starts with the current namespace, we can shorten it
+            if (namespaceSegments.Count > currentNamespaceSegments.Count &&
+                currentNamespaceSegments.SequenceEqual(namespaceSegments.Take(currentNamespaceSegments.Count)))
+            {
+                return namespaceSegments.Skip(currentNamespaceSegments.Count).ToArray();
+            }
+        }
 
         return namespaceSegments;
     }
