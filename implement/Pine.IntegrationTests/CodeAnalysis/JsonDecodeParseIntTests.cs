@@ -875,11 +875,7 @@ public class JsonDecodeParseIntTests
                     PineValue param_1_0,
                     PineValue param_1_1)
                 {
-                    if (KernelFunctionSpecialized.take(
-                        4,
-                        KernelFunction.skip(
-                            PineValue.List(
-                                [param_1_1, param_1_0]))) == CommonReusedValues.Blob_37f21fcb)
+                    if (Pine.Core.Internal.KernelFunctionFused.FusedSkipAndTake(param_1_0, param_1_1, 4) == CommonReusedValues.Blob_37f21fcb)
                     {
                         PineValue local_000 =
                             Test.parseUnsignedInt(
@@ -946,11 +942,7 @@ public class JsonDecodeParseIntTests
                     PineValue param_1_1)
                 {
                     PineValue local_000 =
-                        KernelFunctionSpecialized.take(
-                            4,
-                            KernelFunction.skip(
-                                PineValue.List(
-                                    [param_1_1, param_1_0])));
+                        Pine.Core.Internal.KernelFunctionFused.FusedSkipAndTake(param_1_0, param_1_1, 4);
 
                     if (local_000 == CommonReusedValues.Blob_Str_0)
                     {
@@ -1066,11 +1058,7 @@ public class JsonDecodeParseIntTests
                     while (true)
                     {
                         PineValue local_000 =
-                            KernelFunctionSpecialized.take(
-                                4,
-                                KernelFunction.skip(
-                                    PineValue.List(
-                                        [local_param_1_2, local_param_1_1])));
+                            Pine.Core.Internal.KernelFunctionFused.FusedSkipAndTake(local_param_1_1, local_param_1_2, 4);
 
                         if (local_000 == CommonReusedValues.Blob_Str_0)
                         {
@@ -3042,11 +3030,7 @@ public static class Test
         PineValue param_1_0,
         PineValue param_1_1)
     {
-        if (KernelFunctionSpecialized.take(
-            4,
-            KernelFunction.skip(
-                PineValue.List(
-                    [param_1_1, param_1_0]))) == CommonReusedValues.Blob_37f21fcb)
+        if (KernelFunctionFused.FusedSkipAndTake(param_1_0, param_1_1, 4) == CommonReusedValues.Blob_37f21fcb)
         {
             PineValue local_000 =
                 Test.parseUnsignedInt(
@@ -3065,19 +3049,19 @@ public static class Test
                     PineValue.List(
                         [
                             PineValue.List(
-                                [
-                                    CommonReusedValues.Blob_Str_Ok,
-                                    PineValue.List(
-                                        [
-                                            KernelFunctionSpecialized.int_mul(
-                                                -1,
-                                                KernelFunction.head(
+                                    [
+                                        CommonReusedValues.Blob_Str_Ok,
+                                        PineValue.List(
+                                            [
+                                                KernelFunctionSpecialized.int_mul(
+                                                    -1,
                                                     KernelFunction.head(
-                                                        KernelFunctionSpecialized.skip(1, local_001))))
-                                        ])
-                                ]),
-                            KernelFunction.head(
-                                KernelFunctionSpecialized.skip(1, local_000))
+                                                        KernelFunction.head(
+                                                            KernelFunctionSpecialized.skip(1, local_001))))
+                                            ])
+                                    ]),
+                                KernelFunction.head(
+                                    KernelFunctionSpecialized.skip(1, local_000))
                         ]);
             }
 
@@ -3087,17 +3071,17 @@ public static class Test
                     PineValue.List(
                         [
                             PineValue.List(
-                                [
-                                    CommonReusedValues.Blob_Str_Err,
-                                    PineValue.List(
-                                        [
-                                            KernelFunction.head(
+                                    [
+                                        CommonReusedValues.Blob_Str_Err,
+                                        PineValue.List(
+                                            [
                                                 KernelFunction.head(
-                                                    KernelFunctionSpecialized.skip(1, local_001)))
-                                        ])
-                                ]),
-                            KernelFunction.head(
-                                KernelFunctionSpecialized.skip(1, local_000))
+                                                    KernelFunction.head(
+                                                        KernelFunctionSpecialized.skip(1, local_001)))
+                                            ])
+                                    ]),
+                                KernelFunction.head(
+                                    KernelFunctionSpecialized.skip(1, local_000))
                         ]);
             }
 
@@ -3113,11 +3097,7 @@ public static class Test
         PineValue param_1_1)
     {
         PineValue local_000 =
-            KernelFunctionSpecialized.take(
-                4,
-                KernelFunction.skip(
-                    PineValue.List(
-                        [param_1_1, param_1_0])));
+            KernelFunctionFused.FusedSkipAndTake(param_1_0, param_1_1, 4);
 
         if (local_000 == CommonReusedValues.Blob_Str_0)
         {
@@ -3125,7 +3105,7 @@ public static class Test
                 PineValue.List(
                     [
                         CommonReusedValues.List_c3304aab,
-                        KernelFunctionSpecialized.int_add(4, param_1_1)
+                            KernelFunctionSpecialized.int_add(4, param_1_1)
                     ]);
         }
 
@@ -3233,11 +3213,7 @@ public static class Test
         while (true)
         {
             PineValue local_000 =
-                KernelFunctionSpecialized.take(
-                    4,
-                    KernelFunction.skip(
-                        PineValue.List(
-                            [local_param_1_2, local_param_1_1])));
+                KernelFunctionFused.FusedSkipAndTake(local_param_1_1, local_param_1_2, 4);
 
             if (local_000 == CommonReusedValues.Blob_Str_0)
             {
@@ -3371,16 +3347,17 @@ public static class Test
                 PineValue.List(
                     [
                         PineValue.List(
-                            [
-                                CommonReusedValues.Blob_Str_Ok,
-                                PineValue.List(
-                                    [local_param_1_0])
-                            ]),
-                        local_param_1_2
+                                [
+                                    CommonReusedValues.Blob_Str_Ok,
+                                    PineValue.List(
+                                        [local_param_1_0])
+                                ]),
+                            local_param_1_2
                     ]);
         }
     }
 }
+
 
 public static class CommonReusedValues
 {

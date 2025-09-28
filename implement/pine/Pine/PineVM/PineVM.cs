@@ -1,5 +1,6 @@
 using Pine.Core;
 using Pine.Core.CodeAnalysis;
+using Pine.Core.Internal;
 using Pine.Core.PineVM;
 using Pine.Core.PopularEncodings;
 using Pine.Pine.PineVM;
@@ -1889,13 +1890,12 @@ public class PineVM : IPineVM
 
                             PineValue resultValue = PineValue.EmptyList;
 
-                            if (KernelFunction.SignedIntegerFromValueRelaxed(takeCountValue) is { } takeCount &&
-                                KernelFunction.SignedIntegerFromValueRelaxed(skipCountValue) is { } skipCount)
+                            if (KernelFunction.SignedIntegerFromValueRelaxed(takeCountValue) is { } takeCount)
                             {
                                 resultValue =
-                                    FusedSkipAndTake(
+                                    KernelFunctionFused.FusedSkipAndTake(
                                         prevValue,
-                                        skipCount: (int)skipCount,
+                                        skipCountValue: skipCountValue,
                                         takeCount: (int)takeCount);
                             }
 
@@ -1915,16 +1915,11 @@ public class PineVM : IPineVM
 
                             var prevValue = currentFrame.PopTopmostFromStack();
 
-                            PineValue resultValue = PineValue.EmptyList;
-
-                            if (KernelFunction.SignedIntegerFromValueRelaxed(skipCountValue) is { } skipCount)
-                            {
-                                resultValue =
-                                    FusedSkipAndTake(
-                                        prevValue,
-                                        skipCount: (int)skipCount,
-                                        takeCount: takeCount);
-                            }
+                            var resultValue =
+                                KernelFunctionFused.FusedSkipAndTake(
+                                    prevValue,
+                                    skipCountValue: skipCountValue,
+                                    takeCount: takeCount);
 
                             currentFrame.PushInstructionResult(resultValue);
 
@@ -2993,67 +2988,6 @@ public class PineVM : IPineVM
             KernelFunction.ApplyKernelFunctionGeneric(
                 function: application.Function,
                 inputValue: inputValue);
-    }
-
-    public static PineValue FusedSkipAndTake(PineValue argument, int skipCount, int takeCount)
-    {
-        skipCount =
-            skipCount < 0 ? 0 : skipCount;
-
-        if (argument is PineValue.ListValue argumentList)
-        {
-            var takeLimit =
-                argumentList.Items.Length - skipCount;
-
-            takeCount =
-                takeLimit < takeCount
-                ?
-                takeLimit
-                :
-                takeCount;
-
-            if (takeCount < 1)
-                return PineValue.EmptyList;
-
-            if (skipCount is 0 && takeCount == argumentList.Items.Length)
-                return argument;
-
-            var slicedItems = new PineValue[takeCount];
-
-            for (var i = 0; i < takeCount; ++i)
-            {
-                slicedItems[i] = argumentList.Items.Span[skipCount + i];
-            }
-
-            return PineValue.List(slicedItems);
-        }
-
-        if (argument is PineValue.BlobValue argumentBlob)
-        {
-            var takeLimit =
-                argumentBlob.Bytes.Length - skipCount;
-
-            takeCount =
-                takeLimit < takeCount
-                ?
-                takeLimit
-                :
-                takeCount;
-
-            if (takeCount < 1)
-                return PineValue.EmptyBlob;
-
-            if (skipCount is 0 && takeCount == argumentBlob.Bytes.Length)
-                return argument;
-
-            var slicedBytes =
-                argumentBlob.Bytes.Slice(start: skipCount, length: takeCount);
-
-            return PineValue.Blob(slicedBytes);
-        }
-
-        throw new NotImplementedException(
-            "Unexpected argument type: " + argument.GetType());
     }
 
     public static PineValue ValueFromPathInValueOrEmptyList(

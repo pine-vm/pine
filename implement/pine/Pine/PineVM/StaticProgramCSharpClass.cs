@@ -4,6 +4,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Pine.CompilePineToDotNet;
 using Pine.Core;
 using Pine.Core.CodeAnalysis;
+using Pine.Core.Internal;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -680,6 +681,60 @@ public record StaticProgramCSharpClass(
                             leftExpr,
                             rightExpr);
                 }
+            }
+        }
+
+        // Fuse take(skip(seq)) where take count is a compile-time integer
+        if (kernelApp.Function is nameof(KernelFunction.take) &&
+            kernelApp.Input is StaticExpression<DeclQualifiedName>.List takeArgsList &&
+            takeArgsList.Items.Count is 2 &&
+            takeArgsList.Items[1] is StaticExpression<DeclQualifiedName>.KernelApplication skipApp &&
+            skipApp.Function is nameof(KernelFunction.skip) &&
+            skipApp.Input is StaticExpression<DeclQualifiedName>.List skipArgsList &&
+            skipArgsList.Items.Count is 2)
+        {
+            if (takeArgsList.Items[0] is StaticExpression<DeclQualifiedName>.Literal takeCountLiteral &&
+                KernelFunction.SignedIntegerFromValueRelaxed(takeCountLiteral.Value) is { } takeCountBI &&
+                takeCountBI >= int.MinValue && takeCountBI <= int.MaxValue)
+            {
+                var argumentExpr =
+                    CompileToCSharpExpression(
+                        skipArgsList.Items[1],
+                        selfFunctionInterface,
+                        availableFunctions,
+                        availableValueDecls,
+                        alreadyDeclared);
+
+                var skipCountExpr =
+                    CompileToCSharpExpression(
+                        skipArgsList.Items[0],
+                        selfFunctionInterface,
+                        availableFunctions,
+                        availableValueDecls,
+                        alreadyDeclared);
+
+                // Build fully-qualified invocation: Pine.Core.Internal.KernelFunctionFused.FusedSkipAndTake(argument, skipCountValue, takeCount)
+                var fusedInvocation =
+                    SyntaxFactory.InvocationExpression(
+                        SyntaxFactory.MemberAccessExpression(
+                            SyntaxKind.SimpleMemberAccessExpression,
+                            CompileTypeSyntax.TypeSyntaxFromType(
+                                typeof(KernelFunctionFused),
+                                usings: []),
+                            SyntaxFactory.IdentifierName(nameof(KernelFunctionFused.FusedSkipAndTake))))
+                    .WithArgumentList(
+                        SyntaxFactory.ArgumentList(
+                            SyntaxFactory.SeparatedList<ArgumentSyntax>(
+                                new SyntaxNodeOrToken[]
+                                {
+                                    SyntaxFactory.Argument(argumentExpr),
+                                    SyntaxFactory.Token(SyntaxKind.CommaToken),
+                                    SyntaxFactory.Argument(skipCountExpr),
+                                    SyntaxFactory.Token(SyntaxKind.CommaToken),
+                                    SyntaxFactory.Argument(PineCSharpSyntaxFactory.ExpressionSyntaxForIntegerLiteral((long)(int)takeCountBI))
+                                })));
+
+                return fusedInvocation;
             }
         }
 
