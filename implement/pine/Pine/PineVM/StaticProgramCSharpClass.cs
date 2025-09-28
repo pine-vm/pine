@@ -719,44 +719,27 @@ public record StaticProgramCSharpClass(
         if (kernelApp.Input is StaticExpression<DeclQualifiedName>.List argumentsList &&
             CompileToCSharp.SpecializedInterfacesFromKernelFunctionName(kernelApp.Function) is { } specializedInterfaces)
         {
-            foreach (var specializedInterface in specializedInterfaces)
+            var isCommutative =
+                kernelApp.Function
+                switch
+                {
+                    nameof(KernelFunction.int_add) => true,
+                    nameof(KernelFunction.int_mul) => true,
+
+                    nameof(KernelFunction.bit_and) => true,
+                    nameof(KernelFunction.bit_or) => true,
+                    nameof(KernelFunction.bit_xor) => true,
+
+                    _ => false,
+                };
+
+            if (TryMatchSpecializedInterface(
+                specializedInterfaces,
+                argumentsList,
+                isCommutative,
+                TryRenderArgument) is { } matchedExpression)
             {
-                // TODO: Rückbau: We discontinued variants returning Result instances.
-                if (specializedInterface.ReturnType.IsInstanceOfResult)
-                    continue;
-
-                if (specializedInterface.ParameterTypes.Count != argumentsList.Items.Count)
-                    continue;
-
-                var argumentExprs =
-                    new List<ExpressionSyntax>(capacity: specializedInterface.ParameterTypes.Count);
-
-                for (var paramIndex = 0; paramIndex < specializedInterface.ParameterTypes.Count; paramIndex++)
-                {
-                    var paramType = specializedInterface.ParameterTypes[paramIndex];
-
-                    // Can we render the argument to the required parameter type?
-
-                    var argumentExpr =
-                        TryRenderArgument(
-                            argumentsList.Items[paramIndex],
-                            paramType);
-
-                    if (argumentExpr is null)
-                    {
-                        break;
-                    }
-
-                    argumentExprs.Add(argumentExpr);
-                }
-
-                if (argumentExprs.Count != argumentsList.Items.Count)
-                {
-                    continue;
-                }
-
-                return
-                    specializedInterface.CompileInvocation(argumentExprs);
+                return matchedExpression;
             }
         }
 
@@ -823,6 +806,100 @@ public record StaticProgramCSharpClass(
 
         throw new System.NotImplementedException(
             "Failed to find subexpression at path [" + string.Join(',', paramPath) + "] in argument expression.");
+    }
+
+    private static ExpressionSyntax? TryMatchSpecializedInterface(
+        IReadOnlyList<CompileToCSharp.KernelFunctionSpecializedInfo> specializedInterfaces,
+        StaticExpression<DeclQualifiedName>.List argumentsList,
+        bool isCommutative,
+        System.Func<StaticExpression<DeclQualifiedName>, CompileToCSharp.KernelFunctionParameterType, ExpressionSyntax?> tryRenderArgument)
+    {
+        IEnumerable<IReadOnlyList<StaticExpression<DeclQualifiedName>>> EnumerateArgumentsPermutations()
+        {
+            yield return argumentsList.Items;
+
+            if (isCommutative && argumentsList.Items.Count > 1)
+            {
+                foreach (var permutation in GetPermutations(argumentsList.Items))
+                {
+                    // Skip the original order, we already tried it
+                    if (permutation.SequenceEqual(argumentsList.Items))
+                        continue;
+
+                    yield return permutation;
+                }
+            }
+        }
+
+        foreach (var specializedInterface in specializedInterfaces)
+        {
+            foreach (var argumentOrder in EnumerateArgumentsPermutations())
+            {
+                if (TryMatchSpecializedInterfaceWithArgumentsOrder(
+                    specializedInterface,
+                    argumentOrder,
+                    tryRenderArgument) is { } matchedExpr)
+                {
+                    return matchedExpr;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static ExpressionSyntax? TryMatchSpecializedInterfaceWithArgumentsOrder(
+        CompileToCSharp.KernelFunctionSpecializedInfo specializedInterface,
+        IReadOnlyList<StaticExpression<DeclQualifiedName>> arguments,
+        System.Func<StaticExpression<DeclQualifiedName>, CompileToCSharp.KernelFunctionParameterType, ExpressionSyntax?> tryRenderArgument)
+    {
+        // TODO: Rückbau: We discontinued variants returning Result instances.
+        if (specializedInterface.ReturnType.IsInstanceOfResult)
+            return null;
+
+        if (specializedInterface.ParameterTypes.Count != arguments.Count)
+            return null;
+
+        var argumentExprs =
+            new List<ExpressionSyntax>(capacity: specializedInterface.ParameterTypes.Count);
+
+        for (var paramIndex = 0; paramIndex < specializedInterface.ParameterTypes.Count; paramIndex++)
+        {
+            var paramType = specializedInterface.ParameterTypes[paramIndex];
+
+            // Can we render the argument to the required parameter type?
+
+            var argumentExpr = tryRenderArgument(arguments[paramIndex], paramType);
+
+            if (argumentExpr is null)
+            {
+                return null;
+            }
+
+            argumentExprs.Add(argumentExpr);
+        }
+
+        return specializedInterface.CompileInvocation(argumentExprs);
+    }
+
+    private static IEnumerable<IReadOnlyList<T>> GetPermutations<T>(IReadOnlyList<T> items)
+    {
+        if (items.Count <= 1)
+        {
+            yield return items;
+            yield break;
+        }
+
+        for (var i = 0; i < items.Count; i++)
+        {
+            var item = items[i];
+            var remainingItems = items.Where((_, index) => index != i).ToList();
+
+            foreach (var permutation in GetPermutations(remainingItems))
+            {
+                yield return new List<T> { item }.Concat(permutation).ToList();
+            }
+        }
     }
 
     public static IEnumerable<StaticExpression<FuncId>> CollectSubexpressionsToSeparate<FuncId>(
