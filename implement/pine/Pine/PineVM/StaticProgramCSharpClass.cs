@@ -14,7 +14,7 @@ public record StaticProgramCSharpClass(
     ClassDeclarationSyntax ClassDeclarationSyntax)
 {
     public static StaticProgramCSharpClass FromDeclarations(
-        string className,
+        DeclQualifiedName className,
         IReadOnlyDictionary<string, (Expression origExpr, StaticFunctionInterface interf, StaticExpression<DeclQualifiedName> body, PineValueClass constraint)> declarations,
         IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
         IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls)
@@ -23,14 +23,14 @@ public record StaticProgramCSharpClass(
             [.. declarations
             .Select(kv =>
             RenderFunctionToMethod(
-                functionName: kv.Key,
+                selfFunctionName: className.ContainedDeclName(kv.Key),
                 functionInterface: kv.Value.interf,
                 body: kv.Value.body,
                 availableFunctions,
                 availableValueDecls))];
 
         var classSyntax =
-            SyntaxFactory.ClassDeclaration(className)
+            SyntaxFactory.ClassDeclaration(className.DeclName)
                 .WithMembers(
                     SyntaxFactory.List<MemberDeclarationSyntax>([.. functions]))
                 .WithModifiers(
@@ -62,22 +62,23 @@ public record StaticProgramCSharpClass(
     }
 
     public static MethodDeclarationSyntax RenderFunctionToMethod(
-        string functionName,
+        DeclQualifiedName selfFunctionName,
         StaticFunctionInterface functionInterface,
         StaticExpression<DeclQualifiedName> body,
         IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
         IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls)
     {
         var statementSyntax =
-            CompileToCSharpStatement(
-                expression: body,
+            CompileToCSharpFunction(
+                functionBody: body,
+                selfFunctionName: selfFunctionName,
                 functionInterface,
                 availableFunctions,
                 availableValueDecls);
 
         return
             MemberDeclarationSyntaxForExpression(
-                declarationName: functionName,
+                declarationName: selfFunctionName.DeclName,
                 statementSyntax: statementSyntax,
                 functionInterface: functionInterface);
     }
@@ -107,25 +108,188 @@ public record StaticProgramCSharpClass(
             .WithBody(blockSyntax);
     }
 
-    public static StatementSyntax CompileToCSharpStatement(
-        StaticExpression<DeclQualifiedName> expression,
-        StaticFunctionInterface functionInterface,
+    public static StatementSyntax CompileToCSharpFunction(
+        StaticExpression<DeclQualifiedName> functionBody,
+        DeclQualifiedName selfFunctionName,
+        StaticFunctionInterface selfFunctionInterface,
         IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
-        IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls) =>
-        CompileToCSharpStatement(
-            expression,
-            functionInterface,
-            availableFunctions,
-            availableValueDecls,
-            statementFromResult: ResultThrowOrReturn,
-            alreadyDeclared: ImmutableDictionary<StaticExpression<DeclQualifiedName>, string>.Empty);
+        IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls)
+    {
+        var hasTailRecursiveCalls =
+            ContainsFunctionApplicationAsTailCall(
+                functionBody,
+                selfFunctionName);
+
+        if (hasTailRecursiveCalls)
+        {
+            // TODO: Expand to cover cases where we have a common reused derivation from params that does not vary between calls.
+
+            // Map all params to locals that we can update in place.
+
+            var paramToLocalMap =
+                selfFunctionInterface.ParamsPaths
+                .ToImmutableDictionary(
+                    path => path,
+                    path => "local_" + RenderParamRef(path),
+                    keyComparer: IntPathEqualityComparer.Instance);
+
+            ExpressionSyntax? SelfFunctionInterfaceDelegate(IReadOnlyList<int> path)
+            {
+                if (paramToLocalMap.TryGetValue(path, out var localName))
+                {
+                    return SyntaxFactory.IdentifierName(localName);
+                }
+
+                return null;
+            }
+
+            IReadOnlyList<StatementSyntax> StatementsFromResult(
+                StaticExpression<DeclQualifiedName> expr,
+                ImmutableDictionary<StaticExpression<DeclQualifiedName>, string> alreadyDeclared)
+            {
+                // Check if the result is a tail call to self.
+
+                if (expr is StaticExpression<DeclQualifiedName>.FunctionApplication funcApp &&
+                    funcApp.FunctionName == selfFunctionName)
+                {
+                    var assignments = new List<StatementSyntax>();
+
+                    foreach (var paramPath in selfFunctionInterface.ParamsPaths)
+                    {
+                        if (!paramToLocalMap.TryGetValue(paramPath, out var localName))
+                        {
+                            throw new System.Exception("Internal error: Missing local for param path.");
+                        }
+
+                        var argumentExpr =
+                            ExpressionForFunctionParam(
+                                paramPath,
+                                funcApp.Arguments,
+                                SelfFunctionInterfaceDelegate,
+                                availableFunctions,
+                                availableValueDecls,
+                                alreadyDeclared);
+
+                        // Do not emit redundant assignments if the argument is the same as the current local value.
+
+                        if (argumentExpr is IdentifierNameSyntax idName &&
+                            idName.Identifier.Text == localName)
+                        {
+                            continue;
+                        }
+
+                        assignments.Add(
+                            SyntaxFactory.ExpressionStatement(
+                                SyntaxFactory.AssignmentExpression(
+                                    SyntaxKind.SimpleAssignmentExpression,
+                                    SyntaxFactory.IdentifierName(localName),
+                                    argumentExpr)));
+                    }
+
+                    return
+                        [
+                        .. assignments,
+                        SyntaxFactory.ContinueStatement()
+                        ];
+                }
+
+                var resultExpression =
+                    CompileToCSharpExpression(
+                        expr,
+                        SelfFunctionInterfaceDelegate,
+                        availableFunctions,
+                        availableValueDecls,
+                        alreadyDeclared);
+
+                return [ResultThrowOrReturn(resultExpression)];
+            }
+
+            var loopBodyStatement =
+                CompileToCSharpStatement(
+                    functionBody,
+                    SelfFunctionInterfaceDelegate,
+                    availableFunctions,
+                    availableValueDecls,
+                    statementsFromResult: StatementsFromResult,
+                    alreadyDeclared: ImmutableDictionary<StaticExpression<DeclQualifiedName>, string>.Empty);
+
+            var paramDeclarations =
+                selfFunctionInterface.ParamsPaths
+                .Select(paramPath =>
+                    SyntaxFactory.LocalDeclarationStatement(
+                SyntaxFactory.VariableDeclaration(
+                    SyntaxFactory.IdentifierName(nameof(PineValue)))
+                .WithVariables(
+                    SyntaxFactory.SingletonSeparatedList(
+                        SyntaxFactory.VariableDeclarator(
+                            SyntaxFactory.Identifier(paramToLocalMap[paramPath]))
+                        .WithInitializer(
+                            SyntaxFactory.EqualsValueClause(
+                                SyntaxFactory.IdentifierName(RenderParamRef(paramPath))))))))
+                .ToImmutableArray();
+
+            // Create while(true) loop
+            var whileLoop =
+                SyntaxFactory.WhileStatement(
+                    SyntaxFactory.LiteralExpression(SyntaxKind.TrueLiteralExpression),
+                    loopBodyStatement);
+
+            IReadOnlyList<StatementSyntax> allStatements =
+                [
+                .. paramDeclarations,
+                whileLoop
+                ];
+
+            return SyntaxFactory.Block(allStatements);
+        }
+        else
+        {
+            ExpressionSyntax? SelfFunctionInterfaceDelegate(IReadOnlyList<int> path)
+            {
+                if (selfFunctionInterface.ParamsPaths
+                    .Select((p, i) => (path: p, index: i))
+                    .FirstOrDefault(pi => IntPathEqualityComparer.Instance.Equals(pi.path, path)) is { } match)
+                {
+                    var paramRef = RenderParamRef(match.path);
+
+                    return SyntaxFactory.IdentifierName(paramRef);
+                }
+
+                return null;
+            }
+
+            IReadOnlyList<StatementSyntax> StatementsFromResult(
+                StaticExpression<DeclQualifiedName> expr,
+                ImmutableDictionary<StaticExpression<DeclQualifiedName>, string> alreadyDeclared)
+            {
+                var resultExpression =
+                    CompileToCSharpExpression(
+                        expr,
+                        SelfFunctionInterfaceDelegate,
+                        availableFunctions,
+                        availableValueDecls,
+                        alreadyDeclared);
+
+                return [ResultThrowOrReturn(resultExpression)];
+            }
+
+            return
+                CompileToCSharpStatement(
+                    functionBody,
+                    SelfFunctionInterfaceDelegate,
+                    availableFunctions,
+                    availableValueDecls,
+                    statementsFromResult: StatementsFromResult,
+                    alreadyDeclared: ImmutableDictionary<StaticExpression<DeclQualifiedName>, string>.Empty);
+        }
+    }
 
     public static StatementSyntax CompileToCSharpStatement(
         StaticExpression<DeclQualifiedName> expression,
-        StaticFunctionInterface functionInterface,
+        System.Func<IReadOnlyList<int>, ExpressionSyntax?> selfFunctionInterface,
         IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
         IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls,
-        System.Func<ExpressionSyntax, StatementSyntax> statementFromResult,
+        System.Func<StaticExpression<DeclQualifiedName>, ImmutableDictionary<StaticExpression<DeclQualifiedName>, string>, IReadOnlyList<StatementSyntax>> statementsFromResult,
         ImmutableDictionary<StaticExpression<DeclQualifiedName>, string> alreadyDeclared)
     {
         bool IgnoreSubexpressionCollectingForCSE(
@@ -181,7 +345,7 @@ public record StaticProgramCSharpClass(
                             SyntaxFactory.EqualsValueClause(
                                 CompileToCSharpExpression(
                                     subexpr,
-                                    functionInterface,
+                                    selfFunctionInterface,
                                     availableFunctions,
                                     availableValueDecls,
                                     mutatedDeclared))))));
@@ -199,7 +363,7 @@ public record StaticProgramCSharpClass(
             var conditionExpr =
                 CompileToCSharpExpression(
                     conditionalExpr.Condition,
-                    functionInterface,
+                    selfFunctionInterface,
                     availableFunctions,
                     availableValueDecls,
                     newAlreadyDeclared);
@@ -207,23 +371,23 @@ public record StaticProgramCSharpClass(
             var trueBranchStatement =
                 CompileToCSharpStatement(
                     conditionalExpr.TrueBranch,
-                    functionInterface,
+                    selfFunctionInterface,
                     availableFunctions,
                     availableValueDecls,
-                    statementFromResult,
+                    statementsFromResult,
                     newAlreadyDeclared);
 
             var falseBranchStatement =
                 CompileToCSharpStatement(
                     conditionalExpr.FalseBranch,
-                    functionInterface,
+                    selfFunctionInterface,
                     availableFunctions,
                     availableValueDecls,
-                    statementFromResult,
+                    statementsFromResult,
                     newAlreadyDeclared);
 
             // If the 'if' block ends with a return/throw, the 'else' is redundant. Emit without 'else' and inline the false branch.
-            if (BranchEndsWithReturnOrThrow(trueBranchStatement))
+            if (BranchEndsWithExitOrLoop(trueBranchStatement))
             {
                 var ifStatementNoElse =
                     SyntaxFactory.IfStatement(
@@ -257,25 +421,17 @@ public record StaticProgramCSharpClass(
         }
 
         {
-            var resultExpression =
-                CompileToCSharpExpression(
-                    expression,
-                    functionInterface,
-                    availableFunctions,
-                    availableValueDecls,
-                    newAlreadyDeclared);
-
             IReadOnlyList<StatementSyntax> allStatements =
                 [
                 .. newDeclaredStatements,
-                statementFromResult(resultExpression)
+                .. statementsFromResult(expression, newAlreadyDeclared)
                 ];
 
             return SyntaxFactory.Block(allStatements);
         }
     }
 
-    private static bool BranchEndsWithReturnOrThrow(StatementSyntax statement)
+    private static bool BranchEndsWithExitOrLoop(StatementSyntax statement)
     {
         if (statement is BlockSyntax block)
         {
@@ -286,11 +442,14 @@ public record StaticProgramCSharpClass(
 
             var last = block.Statements.Last();
 
-            return last is ReturnStatementSyntax || last is ThrowStatementSyntax;
+            return StatementIsExitOrLoop(last);
         }
 
-        return statement is ReturnStatementSyntax || statement is ThrowStatementSyntax;
+        return StatementIsExitOrLoop(statement);
     }
+
+    private static bool StatementIsExitOrLoop(StatementSyntax statementSyntax) =>
+        statementSyntax is ReturnStatementSyntax or ThrowStatementSyntax or ContinueStatementSyntax;
 
     private static IReadOnlyList<StatementSyntax> ExtractStatements(StatementSyntax statement)
     {
@@ -304,7 +463,7 @@ public record StaticProgramCSharpClass(
 
     public static ExpressionSyntax CompileToCSharpExpression(
         StaticExpression<DeclQualifiedName> expression,
-        StaticFunctionInterface functionInterface,
+        System.Func<IReadOnlyList<int>, ExpressionSyntax?> selfFunctionInterface,
         IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
         IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls,
         ImmutableDictionary<StaticExpression<DeclQualifiedName>, string> alreadyDeclared)
@@ -328,13 +487,9 @@ public record StaticProgramCSharpClass(
             expression,
             StaticExpression<DeclQualifiedName>.EnvironmentInstance) is { } pathToEnv)
         {
-            if (functionInterface.ParamsPaths
-                .Select((p, i) => (path: p, index: i))
-                .FirstOrDefault(pi => IntPathEqualityComparer.Instance.Equals(pi.path, pathToEnv)) is { } match)
+            if (selfFunctionInterface(pathToEnv) is { } match)
             {
-                var paramRef = RenderParamRef(match.path);
-
-                return SyntaxFactory.IdentifierName(paramRef);
+                return match;
             }
         }
 
@@ -360,7 +515,7 @@ public record StaticProgramCSharpClass(
                 .Select(item =>
                 CompileToCSharpExpression(
                     item,
-                    functionInterface,
+                    selfFunctionInterface,
                     availableFunctions,
                     availableValueDecls,
                     alreadyDeclared))
@@ -391,7 +546,7 @@ public record StaticProgramCSharpClass(
             var conditionExpr =
                 CompileToCSharpExpression(
                     conditional.Condition,
-                    functionInterface,
+                    selfFunctionInterface,
                     availableFunctions,
                     availableValueDecls,
                     alreadyDeclared);
@@ -399,7 +554,7 @@ public record StaticProgramCSharpClass(
             var trueBranchExpr =
                 CompileToCSharpExpression(
                     conditional.TrueBranch,
-                    functionInterface,
+                    selfFunctionInterface,
                     availableFunctions,
                     availableValueDecls,
                     alreadyDeclared);
@@ -407,7 +562,7 @@ public record StaticProgramCSharpClass(
             var falseBranchExpr =
                 CompileToCSharpExpression(
                     conditional.FalseBranch,
-                    functionInterface,
+                    selfFunctionInterface,
                     availableFunctions,
                     availableValueDecls,
                     alreadyDeclared);
@@ -424,7 +579,7 @@ public record StaticProgramCSharpClass(
             return
                 CompileToCSharpExpression(
                     kernelApp,
-                    functionInterface,
+                    selfFunctionInterface,
                     availableFunctions,
                     availableValueDecls,
                     alreadyDeclared);
@@ -444,7 +599,7 @@ public record StaticProgramCSharpClass(
                 ExpressionForFunctionParam(
                     argumentPath,
                     funcApp.Arguments,
-                    functionInterface,
+                    selfFunctionInterface,
                     availableFunctions,
                     availableValueDecls,
                     alreadyDeclared))
@@ -466,7 +621,7 @@ public record StaticProgramCSharpClass(
             var renderedEncodedExpr =
                 CompileToCSharpExpression(
                     parseAndEval.Encoded,
-                    functionInterface,
+                    selfFunctionInterface,
                     availableFunctions,
                     availableValueDecls,
                     alreadyDeclared);
@@ -490,7 +645,7 @@ public record StaticProgramCSharpClass(
 
     public static ExpressionSyntax CompileToCSharpExpression(
         StaticExpression<DeclQualifiedName>.KernelApplication kernelApp,
-        StaticFunctionInterface functionInterface,
+        System.Func<IReadOnlyList<int>, ExpressionSyntax?> selfFunctionInterface,
         IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
         IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls,
         ImmutableDictionary<StaticExpression<DeclQualifiedName>, string> alreadyDeclared)
@@ -506,7 +661,7 @@ public record StaticProgramCSharpClass(
                     var leftExpr =
                         CompileToCSharpExpression(
                             listInput.Items[0],
-                            functionInterface,
+                            selfFunctionInterface,
                             availableFunctions,
                             availableValueDecls,
                             alreadyDeclared);
@@ -514,7 +669,7 @@ public record StaticProgramCSharpClass(
                     var rightExpr =
                         CompileToCSharpExpression(
                             listInput.Items[1],
-                            functionInterface,
+                            selfFunctionInterface,
                             availableFunctions,
                             availableValueDecls,
                             alreadyDeclared);
@@ -538,7 +693,7 @@ public record StaticProgramCSharpClass(
                     return
                         CompileToCSharpExpression(
                             argumentExpr,
-                            functionInterface,
+                            selfFunctionInterface,
                             availableFunctions,
                             availableValueDecls,
                             alreadyDeclared);
@@ -608,7 +763,7 @@ public record StaticProgramCSharpClass(
         var inputExpr =
             CompileToCSharpExpression(
                 kernelApp.Input,
-                functionInterface,
+                selfFunctionInterface,
                 availableFunctions,
                 availableValueDecls,
                 alreadyDeclared);
@@ -641,7 +796,7 @@ public record StaticProgramCSharpClass(
     public static ExpressionSyntax ExpressionForFunctionParam(
         IReadOnlyList<int> paramPath,
         StaticExpression<DeclQualifiedName> argumentExpr,
-        StaticFunctionInterface functionInterface,
+        System.Func<IReadOnlyList<int>, ExpressionSyntax?> selfFunctionInterface,
         IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
         IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls,
         ImmutableDictionary<StaticExpression<DeclQualifiedName>, string> alreadyDeclared)
@@ -651,7 +806,7 @@ public record StaticProgramCSharpClass(
             var renderedExpr =
                 CompileToCSharpExpression(
                     subexpr.subexpr,
-                    functionInterface,
+                    selfFunctionInterface,
                     availableFunctions,
                     availableValueDecls,
                     alreadyDeclared: alreadyDeclared);
@@ -793,5 +948,24 @@ public record StaticProgramCSharpClass(
     private static string RenderParamRef(IReadOnlyList<int> path)
     {
         return "param_" + string.Join('_', path);
+    }
+
+    private static bool ContainsFunctionApplicationAsTailCall(
+        StaticExpression<DeclQualifiedName> expression,
+        DeclQualifiedName functionName)
+    {
+        if (expression is StaticExpression<DeclQualifiedName>.FunctionApplication funcApp)
+        {
+            return funcApp.FunctionName == functionName;
+        }
+
+        if (expression is StaticExpression<DeclQualifiedName>.Conditional conditional)
+        {
+            return
+                ContainsFunctionApplicationAsTailCall(conditional.TrueBranch, functionName) ||
+                ContainsFunctionApplicationAsTailCall(conditional.FalseBranch, functionName);
+        }
+
+        return false;
     }
 }

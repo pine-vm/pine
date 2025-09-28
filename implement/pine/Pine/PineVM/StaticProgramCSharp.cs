@@ -79,7 +79,7 @@ public record StaticProgramCSharp(
 
                     return
                     StaticProgramCSharpClass.FromDeclarations(
-                        className: cn.DeclName,
+                        className: cn,
                         functionsInClass,
                         availableFunctions,
                         commonValueClass.availableDecls);

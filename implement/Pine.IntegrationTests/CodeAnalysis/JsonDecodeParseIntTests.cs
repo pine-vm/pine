@@ -1054,132 +1054,164 @@ public class JsonDecodeParseIntTests
                     PineValue param_1_1,
                     PineValue param_1_2)
                 {
-                    PineValue local_000 =
-                        KernelFunctionSpecialized.take(
-                            4,
-                            KernelFunction.skip(
-                                PineValue.List(
-                                    [param_1_2, param_1_1])));
+                    PineValue local_param_1_0 =
+                        param_1_0;
 
-                    if (local_000 == CommonReusedValues.Blob_Str_0)
-                    {
-                        return
-                            Test.parseUnsignedIntRec(
-                                KernelFunctionSpecialized.int_mul(param_1_0, CommonReusedValues.Blob_Int_10),
-                                param_1_1,
-                                KernelFunctionSpecialized.int_add(param_1_2, CommonReusedValues.Blob_Int_4));
-                    }
+                    PineValue local_param_1_1 =
+                        param_1_1;
 
-                    if (local_000 == CommonReusedValues.Blob_Str_1)
+                    PineValue local_param_1_2 =
+                        param_1_2;
+
+                    while (true)
                     {
-                        return
-                            Test.parseUnsignedIntRec(
+                        PineValue local_000 =
+                            KernelFunctionSpecialized.take(
+                                4,
+                                KernelFunction.skip(
+                                    PineValue.List(
+                                        [local_param_1_2, local_param_1_1])));
+
+                        if (local_000 == CommonReusedValues.Blob_Str_0)
+                        {
+                            local_param_1_0 =
+                                KernelFunctionSpecialized.int_mul(local_param_1_0, CommonReusedValues.Blob_Int_10);
+
+                            local_param_1_2 =
+                                KernelFunctionSpecialized.int_add(local_param_1_2, CommonReusedValues.Blob_Int_4);
+
+                            continue;
+                        }
+
+                        if (local_000 == CommonReusedValues.Blob_Str_1)
+                        {
+                            local_param_1_0 =
                                 KernelFunctionSpecialized.int_add(
-                                    KernelFunctionSpecialized.int_mul(param_1_0, CommonReusedValues.Blob_Int_10),
-                                    CommonReusedValues.Blob_Int_1),
-                                param_1_1,
-                                KernelFunctionSpecialized.int_add(param_1_2, CommonReusedValues.Blob_Int_4));
-                    }
+                                    KernelFunctionSpecialized.int_mul(local_param_1_0, CommonReusedValues.Blob_Int_10),
+                                    CommonReusedValues.Blob_Int_1);
 
-                    if (local_000 == CommonReusedValues.Blob_Str_2)
-                    {
-                        return
-                            Test.parseUnsignedIntRec(
+                            local_param_1_2 =
+                                KernelFunctionSpecialized.int_add(local_param_1_2, CommonReusedValues.Blob_Int_4);
+
+                            continue;
+                        }
+
+                        if (local_000 == CommonReusedValues.Blob_Str_2)
+                        {
+                            local_param_1_0 =
                                 KernelFunctionSpecialized.int_add(
-                                    KernelFunctionSpecialized.int_mul(param_1_0, CommonReusedValues.Blob_Int_10),
-                                    CommonReusedValues.Blob_Int_2),
-                                param_1_1,
-                                KernelFunctionSpecialized.int_add(param_1_2, CommonReusedValues.Blob_Int_4));
-                    }
+                                    KernelFunctionSpecialized.int_mul(local_param_1_0, CommonReusedValues.Blob_Int_10),
+                                    CommonReusedValues.Blob_Int_2);
 
-                    if (local_000 == CommonReusedValues.Blob_Str_3)
-                    {
-                        return
-                            Test.parseUnsignedIntRec(
+                            local_param_1_2 =
+                                KernelFunctionSpecialized.int_add(local_param_1_2, CommonReusedValues.Blob_Int_4);
+
+                            continue;
+                        }
+
+                        if (local_000 == CommonReusedValues.Blob_Str_3)
+                        {
+                            local_param_1_0 =
                                 KernelFunctionSpecialized.int_add(
-                                    KernelFunctionSpecialized.int_mul(param_1_0, CommonReusedValues.Blob_Int_10),
-                                    CommonReusedValues.Blob_Int_3),
-                                param_1_1,
-                                KernelFunctionSpecialized.int_add(param_1_2, CommonReusedValues.Blob_Int_4));
-                    }
+                                    KernelFunctionSpecialized.int_mul(local_param_1_0, CommonReusedValues.Blob_Int_10),
+                                    CommonReusedValues.Blob_Int_3);
 
-                    if (local_000 == CommonReusedValues.Blob_Str_4)
-                    {
-                        return
-                            Test.parseUnsignedIntRec(
+                            local_param_1_2 =
+                                KernelFunctionSpecialized.int_add(local_param_1_2, CommonReusedValues.Blob_Int_4);
+
+                            continue;
+                        }
+
+                        if (local_000 == CommonReusedValues.Blob_Str_4)
+                        {
+                            local_param_1_0 =
                                 KernelFunctionSpecialized.int_add(
-                                    KernelFunctionSpecialized.int_mul(param_1_0, CommonReusedValues.Blob_Int_10),
-                                    CommonReusedValues.Blob_Int_4),
-                                param_1_1,
-                                KernelFunctionSpecialized.int_add(param_1_2, CommonReusedValues.Blob_Int_4));
-                    }
+                                    KernelFunctionSpecialized.int_mul(local_param_1_0, CommonReusedValues.Blob_Int_10),
+                                    CommonReusedValues.Blob_Int_4);
 
-                    if (local_000 == CommonReusedValues.Blob_Str_5)
-                    {
-                        return
-                            Test.parseUnsignedIntRec(
+                            local_param_1_2 =
+                                KernelFunctionSpecialized.int_add(local_param_1_2, CommonReusedValues.Blob_Int_4);
+
+                            continue;
+                        }
+
+                        if (local_000 == CommonReusedValues.Blob_Str_5)
+                        {
+                            local_param_1_0 =
                                 KernelFunctionSpecialized.int_add(
-                                    KernelFunctionSpecialized.int_mul(param_1_0, CommonReusedValues.Blob_Int_10),
-                                    CommonReusedValues.Blob_Int_5),
-                                param_1_1,
-                                KernelFunctionSpecialized.int_add(param_1_2, CommonReusedValues.Blob_Int_4));
-                    }
+                                    KernelFunctionSpecialized.int_mul(local_param_1_0, CommonReusedValues.Blob_Int_10),
+                                    CommonReusedValues.Blob_Int_5);
 
-                    if (local_000 == CommonReusedValues.Blob_Str_6)
-                    {
-                        return
-                            Test.parseUnsignedIntRec(
+                            local_param_1_2 =
+                                KernelFunctionSpecialized.int_add(local_param_1_2, CommonReusedValues.Blob_Int_4);
+
+                            continue;
+                        }
+
+                        if (local_000 == CommonReusedValues.Blob_Str_6)
+                        {
+                            local_param_1_0 =
                                 KernelFunctionSpecialized.int_add(
-                                    KernelFunctionSpecialized.int_mul(param_1_0, CommonReusedValues.Blob_Int_10),
-                                    CommonReusedValues.Blob_Int_6),
-                                param_1_1,
-                                KernelFunctionSpecialized.int_add(param_1_2, CommonReusedValues.Blob_Int_4));
-                    }
+                                    KernelFunctionSpecialized.int_mul(local_param_1_0, CommonReusedValues.Blob_Int_10),
+                                    CommonReusedValues.Blob_Int_6);
 
-                    if (local_000 == CommonReusedValues.Blob_Str_7)
-                    {
-                        return
-                            Test.parseUnsignedIntRec(
+                            local_param_1_2 =
+                                KernelFunctionSpecialized.int_add(local_param_1_2, CommonReusedValues.Blob_Int_4);
+
+                            continue;
+                        }
+
+                        if (local_000 == CommonReusedValues.Blob_Str_7)
+                        {
+                            local_param_1_0 =
                                 KernelFunctionSpecialized.int_add(
-                                    KernelFunctionSpecialized.int_mul(param_1_0, CommonReusedValues.Blob_Int_10),
-                                    CommonReusedValues.Blob_Int_7),
-                                param_1_1,
-                                KernelFunctionSpecialized.int_add(param_1_2, CommonReusedValues.Blob_Int_4));
-                    }
+                                    KernelFunctionSpecialized.int_mul(local_param_1_0, CommonReusedValues.Blob_Int_10),
+                                    CommonReusedValues.Blob_Int_7);
 
-                    if (local_000 == CommonReusedValues.Blob_Str_8)
-                    {
-                        return
-                            Test.parseUnsignedIntRec(
+                            local_param_1_2 =
+                                KernelFunctionSpecialized.int_add(local_param_1_2, CommonReusedValues.Blob_Int_4);
+
+                            continue;
+                        }
+
+                        if (local_000 == CommonReusedValues.Blob_Str_8)
+                        {
+                            local_param_1_0 =
                                 KernelFunctionSpecialized.int_add(
-                                    KernelFunctionSpecialized.int_mul(param_1_0, CommonReusedValues.Blob_Int_10),
-                                    CommonReusedValues.Blob_Int_8),
-                                param_1_1,
-                                KernelFunctionSpecialized.int_add(param_1_2, CommonReusedValues.Blob_Int_4));
-                    }
+                                    KernelFunctionSpecialized.int_mul(local_param_1_0, CommonReusedValues.Blob_Int_10),
+                                    CommonReusedValues.Blob_Int_8);
 
-                    if (local_000 == CommonReusedValues.Blob_Str_9)
-                    {
-                        return
-                            Test.parseUnsignedIntRec(
+                            local_param_1_2 =
+                                KernelFunctionSpecialized.int_add(local_param_1_2, CommonReusedValues.Blob_Int_4);
+
+                            continue;
+                        }
+
+                        if (local_000 == CommonReusedValues.Blob_Str_9)
+                        {
+                            local_param_1_0 =
                                 KernelFunctionSpecialized.int_add(
-                                    KernelFunctionSpecialized.int_mul(param_1_0, CommonReusedValues.Blob_Int_10),
-                                    CommonReusedValues.Blob_Int_9),
-                                param_1_1,
-                                KernelFunctionSpecialized.int_add(param_1_2, CommonReusedValues.Blob_Int_4));
-                    }
+                                    KernelFunctionSpecialized.int_mul(local_param_1_0, CommonReusedValues.Blob_Int_10),
+                                    CommonReusedValues.Blob_Int_9);
 
-                    return
-                        PineValue.List(
-                            [
-                                PineValue.List(
-                                    [
-                                        CommonReusedValues.Blob_Str_Ok,
-                                        PineValue.List(
-                                            [param_1_0])
-                                    ]),
-                                param_1_2
-                            ]);
+                            local_param_1_2 =
+                                KernelFunctionSpecialized.int_add(local_param_1_2, CommonReusedValues.Blob_Int_4);
+
+                            continue;
+                        }
+
+                        return
+                            PineValue.List(
+                                [
+                                    PineValue.List(
+                                        [
+                                            CommonReusedValues.Blob_Str_Ok,
+                                            PineValue.List(
+                                                [local_param_1_0])
+                                        ]),
+                                    local_param_1_2
+                                ]);
+                    }
                 }
             }
 
@@ -3007,8 +3039,8 @@ public static class Test
      * */
 
     public static PineValue parseInt(
-            PineValue param_1_0,
-            PineValue param_1_1)
+        PineValue param_1_0,
+        PineValue param_1_1)
     {
         if (KernelFunctionSpecialized.take(
             4,
@@ -3033,19 +3065,19 @@ public static class Test
                     PineValue.List(
                         [
                             PineValue.List(
-                                [
-                                    CommonReusedValues.Blob_Str_Ok,
-                                    PineValue.List(
-                                        [
-                                            KernelFunctionSpecialized.int_mul(
-                                                -1,
+                            [
+                                CommonReusedValues.Blob_Str_Ok,
+                                PineValue.List(
+                                    [
+                                        KernelFunctionSpecialized.int_mul(
+                                            -1,
+                                            KernelFunction.head(
                                                 KernelFunction.head(
-                                                    KernelFunction.head(
-                                                        KernelFunctionSpecialized.skip(1, local_001))))
-                                        ])
-                                ]),
-                            KernelFunction.head(
-                                KernelFunctionSpecialized.skip(1, local_000))
+                                                    KernelFunctionSpecialized.skip(1, local_001))))
+                                    ])
+                            ]),
+                        KernelFunction.head(
+                            KernelFunctionSpecialized.skip(1, local_000))
                         ]);
             }
 
@@ -3055,17 +3087,17 @@ public static class Test
                     PineValue.List(
                         [
                             PineValue.List(
-                                [
-                                    CommonReusedValues.Blob_Str_Err,
-                                    PineValue.List(
-                                        [
+                            [
+                                CommonReusedValues.Blob_Str_Err,
+                                PineValue.List(
+                                    [
+                                        KernelFunction.head(
                                             KernelFunction.head(
-                                                KernelFunction.head(
-                                                    KernelFunctionSpecialized.skip(1, local_001)))
-                                        ])
-                                ]),
-                            KernelFunction.head(
-                                KernelFunctionSpecialized.skip(1, local_000))
+                                                KernelFunctionSpecialized.skip(1, local_001)))
+                                    ])
+                            ]),
+                        KernelFunction.head(
+                            KernelFunctionSpecialized.skip(1, local_000))
                         ]);
             }
 
@@ -3093,7 +3125,7 @@ public static class Test
                 PineValue.List(
                     [
                         CommonReusedValues.List_c3304aab,
-                        KernelFunctionSpecialized.int_add(param_1_1, CommonReusedValues.Blob_Int_4)
+                    KernelFunctionSpecialized.int_add(param_1_1, CommonReusedValues.Blob_Int_4)
                     ]);
         }
 
@@ -3189,132 +3221,164 @@ public static class Test
         PineValue param_1_1,
         PineValue param_1_2)
     {
-        PineValue local_000 =
-            KernelFunctionSpecialized.take(
-                4,
-                KernelFunction.skip(
-                    PineValue.List(
-                        [param_1_2, param_1_1])));
+        PineValue local_param_1_0 =
+            param_1_0;
 
-        if (local_000 == CommonReusedValues.Blob_Str_0)
-        {
-            return
-                Test.parseUnsignedIntRec(
-                    KernelFunctionSpecialized.int_mul(param_1_0, CommonReusedValues.Blob_Int_10),
-                    param_1_1,
-                    KernelFunctionSpecialized.int_add(param_1_2, CommonReusedValues.Blob_Int_4));
-        }
+        PineValue local_param_1_1 =
+            param_1_1;
 
-        if (local_000 == CommonReusedValues.Blob_Str_1)
+        PineValue local_param_1_2 =
+            param_1_2;
+
+        while (true)
         {
-            return
-                Test.parseUnsignedIntRec(
+            PineValue local_000 =
+                KernelFunctionSpecialized.take(
+                    4,
+                    KernelFunction.skip(
+                        PineValue.List(
+                            [local_param_1_2, local_param_1_1])));
+
+            if (local_000 == CommonReusedValues.Blob_Str_0)
+            {
+                local_param_1_0 =
+                    KernelFunctionSpecialized.int_mul(local_param_1_0, CommonReusedValues.Blob_Int_10);
+
+                local_param_1_2 =
+                    KernelFunctionSpecialized.int_add(local_param_1_2, CommonReusedValues.Blob_Int_4);
+
+                continue;
+            }
+
+            if (local_000 == CommonReusedValues.Blob_Str_1)
+            {
+                local_param_1_0 =
                     KernelFunctionSpecialized.int_add(
-                        KernelFunctionSpecialized.int_mul(param_1_0, CommonReusedValues.Blob_Int_10),
-                        CommonReusedValues.Blob_Int_1),
-                    param_1_1,
-                    KernelFunctionSpecialized.int_add(param_1_2, CommonReusedValues.Blob_Int_4));
-        }
+                        KernelFunctionSpecialized.int_mul(local_param_1_0, CommonReusedValues.Blob_Int_10),
+                        CommonReusedValues.Blob_Int_1);
 
-        if (local_000 == CommonReusedValues.Blob_Str_2)
-        {
-            return
-                Test.parseUnsignedIntRec(
+                local_param_1_2 =
+                    KernelFunctionSpecialized.int_add(local_param_1_2, CommonReusedValues.Blob_Int_4);
+
+                continue;
+            }
+
+            if (local_000 == CommonReusedValues.Blob_Str_2)
+            {
+                local_param_1_0 =
                     KernelFunctionSpecialized.int_add(
-                        KernelFunctionSpecialized.int_mul(param_1_0, CommonReusedValues.Blob_Int_10),
-                        CommonReusedValues.Blob_Int_2),
-                    param_1_1,
-                    KernelFunctionSpecialized.int_add(param_1_2, CommonReusedValues.Blob_Int_4));
-        }
+                        KernelFunctionSpecialized.int_mul(local_param_1_0, CommonReusedValues.Blob_Int_10),
+                        CommonReusedValues.Blob_Int_2);
 
-        if (local_000 == CommonReusedValues.Blob_Str_3)
-        {
-            return
-                Test.parseUnsignedIntRec(
+                local_param_1_2 =
+                    KernelFunctionSpecialized.int_add(local_param_1_2, CommonReusedValues.Blob_Int_4);
+
+                continue;
+            }
+
+            if (local_000 == CommonReusedValues.Blob_Str_3)
+            {
+                local_param_1_0 =
                     KernelFunctionSpecialized.int_add(
-                        KernelFunctionSpecialized.int_mul(param_1_0, CommonReusedValues.Blob_Int_10),
-                        CommonReusedValues.Blob_Int_3),
-                    param_1_1,
-                    KernelFunctionSpecialized.int_add(param_1_2, CommonReusedValues.Blob_Int_4));
-        }
+                        KernelFunctionSpecialized.int_mul(local_param_1_0, CommonReusedValues.Blob_Int_10),
+                        CommonReusedValues.Blob_Int_3);
 
-        if (local_000 == CommonReusedValues.Blob_Str_4)
-        {
-            return
-                Test.parseUnsignedIntRec(
+                local_param_1_2 =
+                    KernelFunctionSpecialized.int_add(local_param_1_2, CommonReusedValues.Blob_Int_4);
+
+                continue;
+            }
+
+            if (local_000 == CommonReusedValues.Blob_Str_4)
+            {
+                local_param_1_0 =
                     KernelFunctionSpecialized.int_add(
-                        KernelFunctionSpecialized.int_mul(param_1_0, CommonReusedValues.Blob_Int_10),
-                        CommonReusedValues.Blob_Int_4),
-                    param_1_1,
-                    KernelFunctionSpecialized.int_add(param_1_2, CommonReusedValues.Blob_Int_4));
-        }
+                        KernelFunctionSpecialized.int_mul(local_param_1_0, CommonReusedValues.Blob_Int_10),
+                        CommonReusedValues.Blob_Int_4);
 
-        if (local_000 == CommonReusedValues.Blob_Str_5)
-        {
-            return
-                Test.parseUnsignedIntRec(
+                local_param_1_2 =
+                    KernelFunctionSpecialized.int_add(local_param_1_2, CommonReusedValues.Blob_Int_4);
+
+                continue;
+            }
+
+            if (local_000 == CommonReusedValues.Blob_Str_5)
+            {
+                local_param_1_0 =
                     KernelFunctionSpecialized.int_add(
-                        KernelFunctionSpecialized.int_mul(param_1_0, CommonReusedValues.Blob_Int_10),
-                        CommonReusedValues.Blob_Int_5),
-                    param_1_1,
-                    KernelFunctionSpecialized.int_add(param_1_2, CommonReusedValues.Blob_Int_4));
-        }
+                        KernelFunctionSpecialized.int_mul(local_param_1_0, CommonReusedValues.Blob_Int_10),
+                        CommonReusedValues.Blob_Int_5);
 
-        if (local_000 == CommonReusedValues.Blob_Str_6)
-        {
-            return
-                Test.parseUnsignedIntRec(
+                local_param_1_2 =
+                    KernelFunctionSpecialized.int_add(local_param_1_2, CommonReusedValues.Blob_Int_4);
+
+                continue;
+            }
+
+            if (local_000 == CommonReusedValues.Blob_Str_6)
+            {
+                local_param_1_0 =
                     KernelFunctionSpecialized.int_add(
-                        KernelFunctionSpecialized.int_mul(param_1_0, CommonReusedValues.Blob_Int_10),
-                        CommonReusedValues.Blob_Int_6),
-                    param_1_1,
-                    KernelFunctionSpecialized.int_add(param_1_2, CommonReusedValues.Blob_Int_4));
-        }
+                        KernelFunctionSpecialized.int_mul(local_param_1_0, CommonReusedValues.Blob_Int_10),
+                        CommonReusedValues.Blob_Int_6);
 
-        if (local_000 == CommonReusedValues.Blob_Str_7)
-        {
-            return
-                Test.parseUnsignedIntRec(
+                local_param_1_2 =
+                    KernelFunctionSpecialized.int_add(local_param_1_2, CommonReusedValues.Blob_Int_4);
+
+                continue;
+            }
+
+            if (local_000 == CommonReusedValues.Blob_Str_7)
+            {
+                local_param_1_0 =
                     KernelFunctionSpecialized.int_add(
-                        KernelFunctionSpecialized.int_mul(param_1_0, CommonReusedValues.Blob_Int_10),
-                        CommonReusedValues.Blob_Int_7),
-                    param_1_1,
-                    KernelFunctionSpecialized.int_add(param_1_2, CommonReusedValues.Blob_Int_4));
-        }
+                        KernelFunctionSpecialized.int_mul(local_param_1_0, CommonReusedValues.Blob_Int_10),
+                        CommonReusedValues.Blob_Int_7);
 
-        if (local_000 == CommonReusedValues.Blob_Str_8)
-        {
-            return
-                Test.parseUnsignedIntRec(
+                local_param_1_2 =
+                    KernelFunctionSpecialized.int_add(local_param_1_2, CommonReusedValues.Blob_Int_4);
+
+                continue;
+            }
+
+            if (local_000 == CommonReusedValues.Blob_Str_8)
+            {
+                local_param_1_0 =
                     KernelFunctionSpecialized.int_add(
-                        KernelFunctionSpecialized.int_mul(param_1_0, CommonReusedValues.Blob_Int_10),
-                        CommonReusedValues.Blob_Int_8),
-                    param_1_1,
-                    KernelFunctionSpecialized.int_add(param_1_2, CommonReusedValues.Blob_Int_4));
-        }
+                        KernelFunctionSpecialized.int_mul(local_param_1_0, CommonReusedValues.Blob_Int_10),
+                        CommonReusedValues.Blob_Int_8);
 
-        if (local_000 == CommonReusedValues.Blob_Str_9)
-        {
-            return
-                Test.parseUnsignedIntRec(
+                local_param_1_2 =
+                    KernelFunctionSpecialized.int_add(local_param_1_2, CommonReusedValues.Blob_Int_4);
+
+                continue;
+            }
+
+            if (local_000 == CommonReusedValues.Blob_Str_9)
+            {
+                local_param_1_0 =
                     KernelFunctionSpecialized.int_add(
-                        KernelFunctionSpecialized.int_mul(param_1_0, CommonReusedValues.Blob_Int_10),
-                        CommonReusedValues.Blob_Int_9),
-                    param_1_1,
-                    KernelFunctionSpecialized.int_add(param_1_2, CommonReusedValues.Blob_Int_4));
-        }
+                        KernelFunctionSpecialized.int_mul(local_param_1_0, CommonReusedValues.Blob_Int_10),
+                        CommonReusedValues.Blob_Int_9);
 
-        return
-            PineValue.List(
-                [
-                    PineValue.List(
+                local_param_1_2 =
+                    KernelFunctionSpecialized.int_add(local_param_1_2, CommonReusedValues.Blob_Int_4);
+
+                continue;
+            }
+
+            return
+                PineValue.List(
+                    [
+                        PineValue.List(
                         [
                             CommonReusedValues.Blob_Str_Ok,
                             PineValue.List(
-                                [param_1_0])
+                                [local_param_1_0])
                         ]),
-                    param_1_2
-                ]);
+                    local_param_1_2
+                    ]);
+        }
     }
 }
 

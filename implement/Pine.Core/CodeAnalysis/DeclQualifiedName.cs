@@ -87,5 +87,20 @@ public record DeclQualifiedName(
             Namespaces: parts[..^1],
             DeclName: parts[^1]);
     }
+
+    /// <summary>
+    /// Returns a new <see cref="DeclQualifiedName"/> representing a declaration named <paramref name="containedDeclName"/> 
+    /// contained within the current declaration. The new qualified name appends the current <see cref="DeclName"/> 
+    /// to the <see cref="Namespaces"/> and sets <see cref="DeclName"/> to <paramref name="containedDeclName"/>.
+    /// </summary>
+    /// <param name="containedDeclName">The name of the contained declaration.</param>
+    /// <returns>
+    /// A <see cref="DeclQualifiedName"/> with namespaces extended by the current <see cref="DeclName"/>, 
+    /// and <see cref="DeclName"/> set to <paramref name="containedDeclName"/>.
+    /// </returns>
+    public DeclQualifiedName ContainedDeclName(string containedDeclName) =>
+        new(
+            Namespaces: [.. Namespaces, DeclName],
+            DeclName: containedDeclName);
 }
 
