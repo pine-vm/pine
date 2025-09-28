@@ -244,6 +244,14 @@ public static class KernelFunctionSpecialized
         return int_add(intA, intB);
     }
 
+    public static PineValue int_add(BigInteger summandA, PineValue summandBValue)
+    {
+        if (SignedIntegerFromValueRelaxed(summandBValue) is not { } intValue)
+            return PineValue.EmptyList;
+
+        return int_add(summandA, intValue);
+    }
+
     public static PineValue int_add(BigInteger summandA, BigInteger summandB) =>
         IntegerEncoding.EncodeSignedInteger(summandA + summandB);
 
@@ -256,6 +264,14 @@ public static class KernelFunctionSpecialized
             return PineValue.EmptyList;
 
         return int_mul(intA, intB);
+    }
+
+    public static PineValue int_mul(BigInteger factorA, PineValue factorBValue)
+    {
+        if (SignedIntegerFromValueRelaxed(factorBValue) is not { } intValue)
+            return PineValue.EmptyList;
+
+        return int_mul(factorA, intValue);
     }
 
     public static PineValue int_mul(BigInteger factorA, BigInteger factorB) =>
@@ -405,8 +421,13 @@ public static class KernelFunctionSpecialized
 
     public static PineValue bit_shift_left(
         BigInteger shiftCount,
-        PineValue.BlobValue blobValue)
+        PineValue value)
     {
+        if (value is not PineValue.BlobValue blobValue)
+        {
+            return PineValue.EmptyList;
+        }
+
         var offsetBytes = (int)(shiftCount / 8);
         var offsetBits = (int)(shiftCount % 8);
 
@@ -432,8 +453,13 @@ public static class KernelFunctionSpecialized
 
     public static PineValue bit_shift_right(
         BigInteger shiftCount,
-        PineValue.BlobValue blobValue)
+        PineValue value)
     {
+        if (value is not PineValue.BlobValue blobValue)
+        {
+            return PineValue.EmptyList;
+        }
+
         var offsetBytes = (int)(shiftCount / 8);
         var offsetBits = (int)(shiftCount % 8);
 

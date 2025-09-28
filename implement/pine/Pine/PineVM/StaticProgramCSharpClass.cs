@@ -528,6 +528,83 @@ public record StaticProgramCSharpClass(
             }
         }
 
+        ExpressionSyntax? TryRenderArgument(
+            StaticExpression<DeclQualifiedName> argumentExpr,
+            CompileToCSharp.KernelFunctionParameterType paramType)
+        {
+            switch (paramType)
+            {
+                case CompileToCSharp.KernelFunctionParameterType.Generic:
+                    return
+                        CompileToCSharpExpression(
+                            argumentExpr,
+                            functionInterface,
+                            availableFunctions,
+                            availableValueDecls,
+                            alreadyDeclared);
+
+                case CompileToCSharp.KernelFunctionParameterType.Integer:
+                    {
+                        if (argumentExpr is StaticExpression<DeclQualifiedName>.Literal literal &&
+                            KernelFunction.SignedIntegerFromValueRelaxed(literal.Value) is { } integer &&
+                            long.MinValue < integer && integer < long.MaxValue)
+                        {
+                            return
+                                PineCSharpSyntaxFactory.ExpressionSyntaxForIntegerLiteral((long)integer);
+                        }
+
+                        return null;
+                    }
+
+                default:
+                    return null;
+            }
+        }
+
+        if (kernelApp.Input is StaticExpression<DeclQualifiedName>.List argumentsList &&
+            CompileToCSharp.SpecializedInterfacesFromKernelFunctionName(kernelApp.Function) is { } specializedInterfaces)
+        {
+            foreach (var specializedInterface in specializedInterfaces)
+            {
+                // TODO: Rückbau: We discontinued variants returning Result instances.
+                if (specializedInterface.ReturnType.IsInstanceOfResult)
+                    continue;
+
+                if (specializedInterface.ParameterTypes.Count != argumentsList.Items.Count)
+                    continue;
+
+                var argumentExprs =
+                    new List<ExpressionSyntax>(capacity: specializedInterface.ParameterTypes.Count);
+
+                for (var paramIndex = 0; paramIndex < specializedInterface.ParameterTypes.Count; paramIndex++)
+                {
+                    var paramType = specializedInterface.ParameterTypes[paramIndex];
+
+                    // Can we render the argument to the required parameter type?
+
+                    var argumentExpr =
+                        TryRenderArgument(
+                            argumentsList.Items[paramIndex],
+                            paramType);
+
+                    if (argumentExpr is null)
+                    {
+                        break;
+                    }
+
+                    argumentExprs.Add(argumentExpr);
+                }
+
+                if (argumentExprs.Count != argumentsList.Items.Count)
+                {
+                    continue;
+                }
+
+                return
+                    specializedInterface.CompileInvocation(argumentExprs);
+            }
+        }
+
         var inputExpr =
             CompileToCSharpExpression(
                 kernelApp.Input,
@@ -535,6 +612,11 @@ public record StaticProgramCSharpClass(
                 availableFunctions,
                 availableValueDecls,
                 alreadyDeclared);
+
+        if (CompileToCSharp.CompileKernelFunctionGenericInvocation(kernelApp.Function, inputExpr) is { } specializedInvocation)
+        {
+            return specializedInvocation;
+        }
 
         // Generic case: Invoke KernelFunction.ApplyKernelFunctionGeneric
 
@@ -546,13 +628,14 @@ public record StaticProgramCSharpClass(
                     SyntaxFactory.IdentifierName(nameof(KernelFunction.ApplyKernelFunctionGeneric))))
             .WithArgumentList(
                 SyntaxFactory.ArgumentList(
-                    SyntaxFactory.SeparatedList([
+                    SyntaxFactory.SeparatedList(
+                        [
                         SyntaxFactory.Argument(
-                                SyntaxFactory.LiteralExpression(
-                                    SyntaxKind.StringLiteralExpression,
-                                    SyntaxFactory.Literal(kernelApp.Function))),
-                            SyntaxFactory.Argument(inputExpr)
-                    ])));
+                                    SyntaxFactory.LiteralExpression(
+                                        SyntaxKind.StringLiteralExpression,
+                                        SyntaxFactory.Literal(kernelApp.Function))),
+                        SyntaxFactory.Argument(inputExpr)
+                        ])));
     }
 
     public static ExpressionSyntax ExpressionForFunctionParam(

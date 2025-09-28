@@ -4,6 +4,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Pine.Core;
 using Pine.Core.PopularEncodings;
 using System;
+using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -14,6 +15,25 @@ namespace Pine.CompilePineToDotNet;
 
 public partial class CompileToCSharp
 {
+    public static IReadOnlyList<KernelFunctionSpecializedInfo>? SpecializedInterfacesFromKernelFunctionName(
+        string kernelFunctionName)
+    {
+        if (s_kernelFunctionsInfo.Value.TryGetValue(kernelFunctionName, out var functionInfo))
+            return functionInfo.SpecializedImplementations;
+
+        return null;
+    }
+
+    public static ExpressionSyntax? CompileKernelFunctionGenericInvocation(
+        string kernelFunctionName,
+        ExpressionSyntax argumentExpression)
+    {
+        if (s_kernelFunctionsInfo.Value.TryGetValue(kernelFunctionName, out var functionInfo))
+            return functionInfo.CompileGenericInvocation(argumentExpression);
+
+        return null;
+    }
+
     public record ParsedKernelApplicationArgumentExpression(
         IReadOnlyDictionary<KernelFunctionParameterType, CompiledExpression> ArgumentSyntaxFromParameterType,
         long? AsLiteralInt64);
@@ -23,25 +43,28 @@ public partial class CompileToCSharp
         IReadOnlyList<KernelFunctionSpecializedInfo> SpecializedImplementations,
         Func<Expression, ExpressionCompilationEnvironment, Result<string, CompiledExpression>?>? TryInline);
 
-    private record KernelFunctionSpecializedInfo(
+    public record KernelFunctionSpecializedInfo(
         IReadOnlyList<KernelFunctionParameterType> ParameterTypes,
         KernelFunctionSpecializedInfoReturnType ReturnType,
         Func<IReadOnlyList<ExpressionSyntax>, InvocationExpressionSyntax> CompileInvocation);
 
-    private record KernelFunctionSpecializedInfoReturnType(
+    public record KernelFunctionSpecializedInfoReturnType(
         bool IsInstanceOfResult);
 
     public enum KernelFunctionParameterType
     {
         Generic = 1,
         Integer = 10,
+
+        // ReadOnlySpan<PineValue>
+        SpanGeneric = 100,
     }
 
     public static Result<string, IReadOnlyList<ParsedKernelApplicationArgumentExpression>>? ParseKernelApplicationInputAsList(
         Expression kernelAppInputExpr,
         ExpressionCompilationEnvironment environment)
     {
-        Result<string, IReadOnlyList<ParsedKernelApplicationArgumentExpression>> continueWithList(IEnumerable<Expression> list) =>
+        Result<string, IReadOnlyList<ParsedKernelApplicationArgumentExpression>> ContinueWithList(IEnumerable<Expression> list) =>
             list
             .Select(e => ParseKernelApplicationArgument(e, environment))
             .ListCombine();
@@ -50,13 +73,13 @@ public partial class CompileToCSharp
             kernelAppInputExpr switch
             {
                 Expression.List listExpressionArgument =>
-                    continueWithList(listExpressionArgument.Items),
+                    ContinueWithList(listExpressionArgument.Items),
 
                 Expression.Literal literalExpressionArgument =>
                     literalExpressionArgument.Value switch
                     {
                         PineValue.ListValue literalList =>
-                            continueWithList(
+                            ContinueWithList(
                                 literalList.Items.ToArray().Select(Expression.LiteralInstance)),
 
                         _ => null
@@ -102,15 +125,53 @@ public partial class CompileToCSharp
                         AsLiteralInt64: asLiteralInt64));
     }
 
-    private static readonly Lazy<IReadOnlyDictionary<string, KernelFunctionInfo>> KernelFunctionsInfo =
+    private static readonly Lazy<IReadOnlyDictionary<string, KernelFunctionInfo>> s_kernelFunctionsInfo =
         new(ReadKernelFunctionsInfoViaReflection);
 
-    private static IReadOnlyDictionary<string, KernelFunctionInfo> ReadKernelFunctionsInfoViaReflection()
+    private static FrozenDictionary<string, KernelFunctionInfo> ReadKernelFunctionsInfoViaReflection()
     {
-        var kernelFunctionContainerType = typeof(KernelFunction);
-        var methodsInfos = kernelFunctionContainerType.GetMethods(BindingFlags.Static | BindingFlags.Public);
+        var kernelFunctionContainerType =
+            typeof(KernelFunction);
 
-        static KernelFunctionParameterType parseKernelFunctionParameterType(Type parameterType)
+        var kernelFunctionSpecializedContainerType =
+            typeof(Core.Internal.KernelFunctionSpecialized);
+
+        var genericMethodsInfos =
+            kernelFunctionContainerType.GetMethods(BindingFlags.Static | BindingFlags.Public);
+
+
+        var usingDirectivesTypes = new[]
+        {
+            typeof(KernelFunction),
+            typeof(Core.Internal.KernelFunctionSpecialized),
+        };
+
+        // TODO: Let consumer configure set of usings for emitting C# code.
+
+        var usingDirectives =
+            usingDirectivesTypes
+            .Select(t => t.Namespace)
+            .WhereNotNull()
+            .Distinct()
+            .Select(ns => SyntaxFactory.UsingDirective(SyntaxFactory.IdentifierName(ns)))
+            .ToImmutableList();
+
+        var kernelFunctionsNames =
+            genericMethodsInfos
+            .Where(methodInfo => methodInfo.ReturnType == typeof(PineValue))
+            .Select(m => m.Name.ToLowerInvariant())
+            .ToFrozenSet();
+
+        var specializedMethodsInfos =
+            kernelFunctionSpecializedContainerType.GetMethods(BindingFlags.Static | BindingFlags.Public);
+
+        IReadOnlyList<MethodInfo> allCandidatesPool =
+            [
+            .. genericMethodsInfos,
+            .. specializedMethodsInfos
+            ];
+
+        static KernelFunctionParameterType ParseKernelFunctionParameterType(Type parameterType)
         {
             if (parameterType == typeof(BigInteger))
                 return KernelFunctionParameterType.Integer;
@@ -118,72 +179,92 @@ public partial class CompileToCSharp
             if (parameterType == typeof(PineValue))
                 return KernelFunctionParameterType.Generic;
 
-            throw new Exception("Unknown parameter type: " + parameterType.FullName);
+            if (parameterType == typeof(ReadOnlySpan<PineValue>))
+                return KernelFunctionParameterType.SpanGeneric;
+
+            throw new NotImplementedException(
+                "Unknown parameter type: " + parameterType.FullName);
         }
 
-        static Result<string, KernelFunctionSpecializedInfoReturnType> parseKernelFunctionReturnType(Type returnType)
+        InvocationExpressionSyntax CompileInvocationForArgumentList(
+            MethodInfo selectedMethodInfo,
+            ArgumentListSyntax argumentListSyntax)
         {
-            if (returnType == typeof(PineValue))
-                return Result<string, KernelFunctionSpecializedInfoReturnType>.ok(
-                    new KernelFunctionSpecializedInfoReturnType(IsInstanceOfResult: false));
-
-            if (returnType == typeof(Result<string, PineValue>))
-                return Result<string, KernelFunctionSpecializedInfoReturnType>.ok(
-                    new KernelFunctionSpecializedInfoReturnType(IsInstanceOfResult: true));
-
-            return Result<string, KernelFunctionSpecializedInfoReturnType>.err("Not a supported type");
+            return
+                SyntaxFactory.InvocationExpression(
+                    SyntaxFactory.MemberAccessExpression(
+                        SyntaxKind.SimpleMemberAccessExpression,
+                            CompileTypeSyntax.TypeSyntaxFromType(
+                                selectedMethodInfo.DeclaringType!,
+                                usings: usingDirectives),
+                        SyntaxFactory.IdentifierName(selectedMethodInfo.Name)),
+                    argumentListSyntax);
         }
 
-        KernelFunctionInfo ReadKernelFunctionInfo(MethodInfo genericMethodInfo)
-        {
-            InvocationExpressionSyntax compileInvocationForArgumentList(ArgumentListSyntax argumentListSyntax)
-            {
-                return
-                    SyntaxFactory.InvocationExpression(
-                        SyntaxFactory.MemberAccessExpression(
-                            SyntaxKind.SimpleMemberAccessExpression,
-                            SyntaxFactory.MemberAccessExpression(
-                                SyntaxKind.SimpleMemberAccessExpression,
-                                SyntaxFactory.QualifiedName(SyntaxFactory.IdentifierName("Pine"),
-                                    SyntaxFactory.IdentifierName("PineVM")),
-                                SyntaxFactory.IdentifierName(kernelFunctionContainerType.Name)),
-                            SyntaxFactory.IdentifierName(genericMethodInfo.Name)),
-                        argumentListSyntax);
-            }
-
-            InvocationExpressionSyntax compileGenericInvocation(ExpressionSyntax argumentExpression) =>
-                compileInvocationForArgumentList(SyntaxFactory.ArgumentList(
+        InvocationExpressionSyntax CompileGenericInvocation(
+            MethodInfo genericMethodInfo,
+            ExpressionSyntax argumentExpression) =>
+            CompileInvocationForArgumentList(
+                genericMethodInfo,
+                SyntaxFactory.ArgumentList(
                     SyntaxFactory.SingletonSeparatedList(
                         SyntaxFactory.Argument(argumentExpression))));
 
-            var specializedImplementations =
-                methodsInfos
-                    .Where(candidateMethod =>
-                        candidateMethod.Name == genericMethodInfo.Name &&
-                        candidateMethod != genericMethodInfo &&
-                        candidateMethod.DeclaringType == kernelFunctionContainerType)
-                    .SelectWhere(methodInfo =>
-                    parseKernelFunctionReturnType(methodInfo.ReturnType).ToMaybe().Map(returnType => (methodInfo, returnType)))
-                    .Select(specializedMethodInfoAndReturnType =>
-                    {
-                        var parameterTypes =
-                            specializedMethodInfoAndReturnType.methodInfo
-                                .GetParameters().Select(pi => parseKernelFunctionParameterType(pi.ParameterType))
-                                .ToImmutableList();
+        KernelFunctionInfo? ReadKernelFunctionInfo(string functionName)
+        {
+            var genericVariant =
+                genericMethodsInfos
+                .FirstOrDefault(mi =>
+                    mi.Name.Equals(functionName, StringComparison.OrdinalIgnoreCase) &&
+                    mi.ReturnType == typeof(PineValue) &&
+                    mi.GetParameters().Length is 1 &&
+                    mi.GetParameters()[0].ParameterType == typeof(PineValue));
 
-                        return
-                            new KernelFunctionSpecializedInfo(
-                                ParameterTypes: parameterTypes,
-                                ReturnType: specializedMethodInfoAndReturnType.returnType,
-                                CompileInvocation: argumentsExpressions =>
-                                    compileInvocationForArgumentList(SyntaxFactory.ArgumentList(
-                                        SyntaxFactory.SeparatedList(
-                                            argumentsExpressions.Select(SyntaxFactory.Argument)))));
-                    })
-                    .ToImmutableList();
+            if (genericVariant is null)
+            {
+                // We only consider functions that have a generic variant.
+                return null;
+            }
+
+            var specializedImpls = new List<KernelFunctionSpecializedInfo>();
+
+            foreach (var methodInfo in allCandidatesPool)
+            {
+                if (methodInfo.ReturnType != typeof(PineValue))
+                {
+                    continue;
+                }
+
+                if (!methodInfo.Name.Equals(functionName, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                if (methodInfo == genericVariant)
+                {
+                    continue;
+                }
+
+                var parameterTypes =
+                    methodInfo
+                        .GetParameters().Select(pi => ParseKernelFunctionParameterType(pi.ParameterType))
+                        .ToImmutableList();
+
+                specializedImpls.Add(
+                    new KernelFunctionSpecializedInfo(
+                        ParameterTypes: parameterTypes,
+                        ReturnType: new KernelFunctionSpecializedInfoReturnType(IsInstanceOfResult: false),
+                        CompileInvocation: argumentsExpressions =>
+                            CompileInvocationForArgumentList(
+                                methodInfo,
+                                SyntaxFactory.ArgumentList(
+                                    SyntaxFactory.SeparatedList(
+                                        argumentsExpressions.Select(SyntaxFactory.Argument))))));
+
+            }
 
             var tryInline =
-                genericMethodInfo.Name switch
+                functionName switch
                 {
                     nameof(KernelFunction.equal) =>
                     (Func<Expression, ExpressionCompilationEnvironment, Result<string, CompiledExpression>?>)
@@ -217,25 +298,30 @@ public partial class CompileToCSharp
                     null
                 };
 
+            var specializedImplsRanked =
+                specializedImpls
+                .Order(KernelFunctionSpecializedSpecificityComparer.Instance)
+                .ToImmutableList();
+
             return
                 new KernelFunctionInfo(
-                    CompileGenericInvocation: compileGenericInvocation,
-                    SpecializedImplementations: specializedImplementations,
+                    CompileGenericInvocation: argExpr => CompileGenericInvocation(genericVariant, argExpr),
+                    SpecializedImplementations: specializedImplsRanked,
                     TryInline: tryInline);
         }
 
-        return
-            methodsInfos
-            .Where(methodInfo =>
-            methodInfo.ReturnType == typeof(PineValue) &&
-            methodInfo.GetParameters() switch
-            {
-                [var singleParameter] when singleParameter.ParameterType == typeof(PineValue) =>
-                true,
+        var mutatedDict = new Dictionary<string, KernelFunctionInfo>();
 
-                _ =>
-                false
-            })
-            .ToImmutableDictionary(m => m.Name, ReadKernelFunctionInfo);
+        foreach (var name in kernelFunctionsNames)
+        {
+            if (ReadKernelFunctionInfo(name) is KernelFunctionInfo info)
+            {
+                mutatedDict[name] = info;
+            }
+        }
+
+        return
+            mutatedDict
+            .ToFrozenDictionary();
     }
 }

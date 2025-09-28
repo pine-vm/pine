@@ -21,10 +21,14 @@ public static class PineCSharpSyntaxFactory
 
     public static SyntaxToken SyntaxTokenForIntegerLiteral(long integer) =>
         SyntaxFactory.Literal(
-            integer.ToString("N0", IntegerLiteralNumberFormatInfo),
+            int.MinValue <= integer && integer <= int.MaxValue
+            ?
+            CommandLineInterface.FormatIntegerForDisplay(integer)
+            :
+            CommandLineInterface.FormatIntegerForDisplay(integer) + "L",
             integer);
 
-    static readonly NumberFormatInfo IntegerLiteralNumberFormatInfo = new()
+    static readonly NumberFormatInfo s_integerLiteralNumberFormatInfo = new()
     {
         NumberGroupSeparator = "_",
         NumberGroupSizes = [3]

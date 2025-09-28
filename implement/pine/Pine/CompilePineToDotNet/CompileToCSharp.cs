@@ -859,14 +859,14 @@ public partial class CompileToCSharp
         Expression.KernelApplication kernelApplicationExpression,
         ExpressionCompilationEnvironment environment)
     {
-        if (!KernelFunctionsInfo.Value.TryGetValue(kernelApplicationExpression.Function,
+        if (!s_kernelFunctionsInfo.Value.TryGetValue(kernelApplicationExpression.Function,
               out var kernelFunctionInfo))
         {
             return
                 Result<string, CompiledExpression>.err(
                     "Kernel function name " + kernelApplicationExpression.Function + " does not match any of the " +
-                    KernelFunctionsInfo.Value.Count + " known names: " +
-                    string.Join(", ", KernelFunctionsInfo.Value.Keys));
+                    s_kernelFunctionsInfo.Value.Count + " known names: " +
+                    string.Join(", ", s_kernelFunctionsInfo.Value.Keys));
         }
 
         return

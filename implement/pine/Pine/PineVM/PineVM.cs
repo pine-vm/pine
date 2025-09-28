@@ -2504,13 +2504,10 @@ public class PineVM : IPineVM
 
                             PineValue resultValue = PineValue.EmptyList;
 
-                            if (value is PineValue.BlobValue blobValue)
+                            if (KernelFunction.SignedIntegerFromValueRelaxed(shiftValue) is { } shiftCount)
                             {
-                                if (KernelFunction.SignedIntegerFromValueRelaxed(shiftValue) is { } shiftCount)
-                                {
-                                    resultValue =
-                                        KernelFunctionSpecialized.bit_shift_left(shiftCount, blobValue);
-                                }
+                                resultValue =
+                                    KernelFunctionSpecialized.bit_shift_left(shiftCount, value);
                             }
 
                             currentFrame.PushInstructionResult(resultValue);
@@ -2527,13 +2524,8 @@ public class PineVM : IPineVM
 
                             var value = currentFrame.PopTopmostFromStack();
 
-                            PineValue resultValue = PineValue.EmptyList;
-
-                            if (value is PineValue.BlobValue blobValue)
-                            {
-                                resultValue =
-                                    KernelFunctionSpecialized.bit_shift_left(shiftCount, blobValue);
-                            }
+                            var resultValue =
+                                KernelFunctionSpecialized.bit_shift_left(shiftCount, value);
 
                             currentFrame.PushInstructionResult(resultValue);
 
@@ -2547,13 +2539,10 @@ public class PineVM : IPineVM
 
                             PineValue resultValue = PineValue.EmptyList;
 
-                            if (value is PineValue.BlobValue blobValue)
+                            if (KernelFunction.SignedIntegerFromValueRelaxed(shiftValue) is { } shiftCount)
                             {
-                                if (KernelFunction.SignedIntegerFromValueRelaxed(shiftValue) is { } shiftCount)
-                                {
-                                    resultValue =
-                                        KernelFunctionSpecialized.bit_shift_right(shiftCount, blobValue);
-                                }
+                                resultValue =
+                                    KernelFunctionSpecialized.bit_shift_right(shiftCount, value);
                             }
 
                             currentFrame.PushInstructionResult(resultValue);
@@ -2570,13 +2559,8 @@ public class PineVM : IPineVM
 
                             var value = currentFrame.PopTopmostFromStack();
 
-                            PineValue resultValue = PineValue.EmptyList;
-
-                            if (value is PineValue.BlobValue blobValue)
-                            {
-                                resultValue =
-                                    KernelFunctionSpecialized.bit_shift_right(shiftCount, blobValue);
-                            }
+                            var resultValue =
+                                KernelFunctionSpecialized.bit_shift_right(shiftCount, value);
 
                             currentFrame.PushInstructionResult(resultValue);
 
