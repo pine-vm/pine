@@ -319,29 +319,6 @@ public static class KernelFunction
 
     public static PineValue int_is_sorted_asc(PineValue value)
     {
-        if (value is PineValue.BlobValue blobValue)
-        {
-            var isSorted = true;
-
-            if (blobValue.Bytes.Length > 0)
-            {
-                var previous = blobValue.Bytes.Span[0];
-
-                foreach (var current in blobValue.Bytes.Span[1..])
-                {
-                    if (current < previous)
-                    {
-                        isSorted = false;
-                        break;
-                    }
-
-                    previous = current;
-                }
-            }
-
-            return ValueFromBool(isSorted);
-        }
-
         if (value is PineValue.ListValue listValue)
         {
             var listItems = listValue.Items.Span;
@@ -372,6 +349,11 @@ public static class KernelFunction
             }
 
             return ValueFromBool(true);
+        }
+
+        if (value is PineValue.BlobValue)
+        {
+            return PineValue.EmptyList;
         }
 
         throw new NotImplementedException(

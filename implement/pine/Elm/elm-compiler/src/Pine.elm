@@ -476,9 +476,6 @@ kernelFunction_int_mul_list aggregate list =
 kernelFunction_int_is_sorted_asc : Value -> Value
 kernelFunction_int_is_sorted_asc value =
     case value of
-        BlobValue bytes ->
-            valueFromBool (List.sort bytes == bytes)
-
         ListValue list ->
             case list of
                 [] ->
@@ -491,6 +488,9 @@ kernelFunction_int_is_sorted_asc value =
 
                         Ok firstInt ->
                             int_is_sorted_asc_recursive rest firstInt
+
+        _ ->
+            listValue_Empty
 
 
 kernelFunction_bit_and : Value -> Value
