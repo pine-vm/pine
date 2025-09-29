@@ -19,7 +19,8 @@ public record StaticProgramCSharp(
     private const string CommonValueClassName = "CommonReusedValues";
 
     public static StaticProgramCSharp FromStaticProgram(
-        StaticProgram staticProgram)
+        StaticProgram staticProgram,
+        DeclarationSyntaxContext declarationSyntaxContext)
     {
         var literalsValues =
             PineValue.CollectAllComponentsFromRoots(CollectLiteralsValues(staticProgram));
@@ -82,7 +83,8 @@ public record StaticProgramCSharp(
                         className: cn,
                         functionsInClass,
                         availableFunctions,
-                        commonValueClass.availableDecls);
+                        commonValueClass.availableDecls,
+                        declarationSyntaxContext);
                 });
 
         return

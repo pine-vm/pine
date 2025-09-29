@@ -89,6 +89,9 @@ public partial class CompileToCSharp
             .Select(ns => SyntaxFactory.UsingDirective(SyntaxFactory.IdentifierName(ns)))
             .ToImmutableList();
 
+        var declarationSyntaxContext =
+            new DeclarationSyntaxContext(usingDirectives);
+
         MethodDeclarationSyntax memberDeclarationSyntaxForExpression(
             string declarationName,
             BlockSyntax blockSyntax,
@@ -108,7 +111,7 @@ public partial class CompileToCSharp
                 .WithBody(blockSyntax);
         }
 
-        static Result<string, IReadOnlyDictionary<ExpressionUsageAnalysis, CompiledExpressionFunction>> CompileExpressionFunctions(
+        Result<string, IReadOnlyDictionary<ExpressionUsageAnalysis, CompiledExpressionFunction>> CompileExpressionFunctions(
             IReadOnlyCollection<ExpressionUsageAnalysis> expressionsUsagesBeforeOrdering)
         {
             var expressionsUsages =
@@ -221,7 +224,8 @@ public partial class CompileToCSharp
                     var functionEnv =
                         new FunctionCompilationEnv(
                             SelfInterface: functionInterface,
-                            CompilationUnit: compilationUnitEnv);
+                            CompilationUnit: compilationUnitEnv,
+                            declarationSyntaxContext);
 
                     var result =
                         s_compilerCache.CompileToCSharpFunctionBlockSyntax(
@@ -945,7 +949,10 @@ public partial class CompileToCSharp
                                 environment,
                                 argumentsCs =>
                                 {
-                                    var plainInvocationSyntax = specializedImpl.CompileInvocation(argumentsCs);
+                                    var plainInvocationSyntax =
+                                    specializedImpl.CompileInvocation(
+                                        argumentsCs,
+                                        environment.FunctionEnvironment.DeclarationSyntaxContext);
 
                                     return
                                     CompiledExpression.WithTypeGenericValue(
@@ -971,7 +978,11 @@ public partial class CompileToCSharp
                 environment,
                 createLetBindingsForCse: false)
             .Map(compiledArgument =>
-            compiledArgument.Map(environment, argumentCs => kernelFunctionInfo.CompileGenericInvocation(argumentCs))
+            compiledArgument
+            .Map(environment, argumentCs =>
+            kernelFunctionInfo.CompileGenericInvocation(
+                argumentCs,
+                environment.FunctionEnvironment.DeclarationSyntaxContext))
             .MergeBindings(compiledArgument.LetBindings));
     }
 

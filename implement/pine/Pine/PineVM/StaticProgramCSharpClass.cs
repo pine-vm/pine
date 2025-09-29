@@ -18,7 +18,8 @@ public record StaticProgramCSharpClass(
         DeclQualifiedName className,
         IReadOnlyDictionary<string, (Expression origExpr, StaticFunctionInterface interf, StaticExpression<DeclQualifiedName> body, PineValueClass constraint)> declarations,
         IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
-        IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls)
+        IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls,
+        DeclarationSyntaxContext declarationSyntaxContext)
     {
         IReadOnlyList<MethodDeclarationSyntax> functions =
             [.. declarations
@@ -28,7 +29,8 @@ public record StaticProgramCSharpClass(
                 functionInterface: kv.Value.interf,
                 body: kv.Value.body,
                 availableFunctions,
-                availableValueDecls))];
+                availableValueDecls,
+                declarationSyntaxContext))];
 
         var classSyntax =
             SyntaxFactory.ClassDeclaration(className.DeclName)
@@ -67,7 +69,8 @@ public record StaticProgramCSharpClass(
         StaticFunctionInterface functionInterface,
         StaticExpression<DeclQualifiedName> body,
         IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
-        IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls)
+        IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls,
+        DeclarationSyntaxContext declarationSyntaxContext)
     {
         var statementSyntax =
             CompileToCSharpFunction(
@@ -75,7 +78,8 @@ public record StaticProgramCSharpClass(
                 selfFunctionName: selfFunctionName,
                 functionInterface,
                 availableFunctions,
-                availableValueDecls);
+                availableValueDecls,
+                declarationSyntaxContext);
 
         return
             MemberDeclarationSyntaxForExpression(
@@ -114,7 +118,8 @@ public record StaticProgramCSharpClass(
         DeclQualifiedName selfFunctionName,
         StaticFunctionInterface selfFunctionInterface,
         IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
-        IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls)
+        IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls,
+        DeclarationSyntaxContext declarationSyntaxContext)
     {
         var hasTailRecursiveCalls =
             ContainsFunctionApplicationAsTailCall(
@@ -169,6 +174,7 @@ public record StaticProgramCSharpClass(
                                 SelfFunctionInterfaceDelegate,
                                 availableFunctions,
                                 availableValueDecls,
+                                declarationSyntaxContext,
                                 alreadyDeclared);
 
                         // Do not emit redundant assignments if the argument is the same as the current local value.
@@ -200,6 +206,7 @@ public record StaticProgramCSharpClass(
                         SelfFunctionInterfaceDelegate,
                         availableFunctions,
                         availableValueDecls,
+                        declarationSyntaxContext,
                         alreadyDeclared);
 
                 return [ResultThrowOrReturn(resultExpression)];
@@ -211,6 +218,7 @@ public record StaticProgramCSharpClass(
                     SelfFunctionInterfaceDelegate,
                     availableFunctions,
                     availableValueDecls,
+                    declarationSyntaxContext,
                     statementsFromResult: StatementsFromResult,
                     alreadyDeclared: ImmutableDictionary<StaticExpression<DeclQualifiedName>, string>.Empty);
 
@@ -269,6 +277,7 @@ public record StaticProgramCSharpClass(
                         SelfFunctionInterfaceDelegate,
                         availableFunctions,
                         availableValueDecls,
+                        declarationSyntaxContext,
                         alreadyDeclared);
 
                 return [ResultThrowOrReturn(resultExpression)];
@@ -280,6 +289,7 @@ public record StaticProgramCSharpClass(
                     SelfFunctionInterfaceDelegate,
                     availableFunctions,
                     availableValueDecls,
+                    declarationSyntaxContext,
                     statementsFromResult: StatementsFromResult,
                     alreadyDeclared: ImmutableDictionary<StaticExpression<DeclQualifiedName>, string>.Empty);
         }
@@ -290,6 +300,7 @@ public record StaticProgramCSharpClass(
         System.Func<IReadOnlyList<int>, ExpressionSyntax?> selfFunctionInterface,
         IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
         IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls,
+        DeclarationSyntaxContext declarationSyntaxContext,
         System.Func<StaticExpression<DeclQualifiedName>, ImmutableDictionary<StaticExpression<DeclQualifiedName>, string>, IReadOnlyList<StatementSyntax>> statementsFromResult,
         ImmutableDictionary<StaticExpression<DeclQualifiedName>, string> alreadyDeclared)
     {
@@ -349,6 +360,7 @@ public record StaticProgramCSharpClass(
                                     selfFunctionInterface,
                                     availableFunctions,
                                     availableValueDecls,
+                                    declarationSyntaxContext,
                                     mutatedDeclared))))));
 
             newDeclaredStatements.Add(statement);
@@ -367,6 +379,7 @@ public record StaticProgramCSharpClass(
                     selfFunctionInterface,
                     availableFunctions,
                     availableValueDecls,
+                    declarationSyntaxContext,
                     newAlreadyDeclared);
 
             var trueBranchStatement =
@@ -375,6 +388,7 @@ public record StaticProgramCSharpClass(
                     selfFunctionInterface,
                     availableFunctions,
                     availableValueDecls,
+                    declarationSyntaxContext,
                     statementsFromResult,
                     newAlreadyDeclared);
 
@@ -384,6 +398,7 @@ public record StaticProgramCSharpClass(
                     selfFunctionInterface,
                     availableFunctions,
                     availableValueDecls,
+                    declarationSyntaxContext,
                     statementsFromResult,
                     newAlreadyDeclared);
 
@@ -467,6 +482,7 @@ public record StaticProgramCSharpClass(
         System.Func<IReadOnlyList<int>, ExpressionSyntax?> selfFunctionInterface,
         IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
         IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls,
+        DeclarationSyntaxContext declarationSyntaxContext,
         ImmutableDictionary<StaticExpression<DeclQualifiedName>, string> alreadyDeclared)
     {
         if (alreadyDeclared.TryGetValue(expression, out var existingVarName))
@@ -519,6 +535,7 @@ public record StaticProgramCSharpClass(
                     selfFunctionInterface,
                     availableFunctions,
                     availableValueDecls,
+                    declarationSyntaxContext,
                     alreadyDeclared))
                 .ToImmutableArray();
 
@@ -550,6 +567,7 @@ public record StaticProgramCSharpClass(
                     selfFunctionInterface,
                     availableFunctions,
                     availableValueDecls,
+                    declarationSyntaxContext,
                     alreadyDeclared);
 
             var trueBranchExpr =
@@ -558,6 +576,7 @@ public record StaticProgramCSharpClass(
                     selfFunctionInterface,
                     availableFunctions,
                     availableValueDecls,
+                    declarationSyntaxContext,
                     alreadyDeclared);
 
             var falseBranchExpr =
@@ -566,6 +585,7 @@ public record StaticProgramCSharpClass(
                     selfFunctionInterface,
                     availableFunctions,
                     availableValueDecls,
+                    declarationSyntaxContext,
                     alreadyDeclared);
 
             return
@@ -578,11 +598,12 @@ public record StaticProgramCSharpClass(
         if (expression is StaticExpression<DeclQualifiedName>.KernelApplication kernelApp)
         {
             return
-                CompileToCSharpExpression(
+                CompileKernelAppToCSharpExpression(
                     kernelApp,
                     selfFunctionInterface,
                     availableFunctions,
                     availableValueDecls,
+                    declarationSyntaxContext,
                     alreadyDeclared);
         }
 
@@ -603,6 +624,7 @@ public record StaticProgramCSharpClass(
                     selfFunctionInterface,
                     availableFunctions,
                     availableValueDecls,
+                    declarationSyntaxContext,
                     alreadyDeclared))
                 .ToImmutableArray();
 
@@ -625,6 +647,7 @@ public record StaticProgramCSharpClass(
                     selfFunctionInterface,
                     availableFunctions,
                     availableValueDecls,
+                    declarationSyntaxContext,
                     alreadyDeclared);
 
             return
@@ -644,11 +667,12 @@ public record StaticProgramCSharpClass(
             "C# code generation for expression type " + expression.GetType() + " is not implemented.");
     }
 
-    public static ExpressionSyntax CompileToCSharpExpression(
+    public static ExpressionSyntax CompileKernelAppToCSharpExpression(
         StaticExpression<DeclQualifiedName>.KernelApplication kernelApp,
         System.Func<IReadOnlyList<int>, ExpressionSyntax?> selfFunctionInterface,
         IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
         IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls,
+        DeclarationSyntaxContext declarationSyntaxContext,
         ImmutableDictionary<StaticExpression<DeclQualifiedName>, string> alreadyDeclared)
     {
         if (kernelApp.Function is nameof(KernelFunction.equal))
@@ -665,6 +689,7 @@ public record StaticProgramCSharpClass(
                             selfFunctionInterface,
                             availableFunctions,
                             availableValueDecls,
+                            declarationSyntaxContext,
                             alreadyDeclared);
 
                     var rightExpr =
@@ -673,6 +698,7 @@ public record StaticProgramCSharpClass(
                             selfFunctionInterface,
                             availableFunctions,
                             availableValueDecls,
+                            declarationSyntaxContext,
                             alreadyDeclared);
 
                     return
@@ -689,6 +715,7 @@ public record StaticProgramCSharpClass(
             selfFunctionInterface,
             availableFunctions,
             availableValueDecls,
+            declarationSyntaxContext,
             alreadyDeclared) is { } fusedExpression)
         {
             return fusedExpression;
@@ -707,6 +734,7 @@ public record StaticProgramCSharpClass(
                             selfFunctionInterface,
                             availableFunctions,
                             availableValueDecls,
+                            declarationSyntaxContext,
                             alreadyDeclared);
 
                 case CompileToCSharp.KernelFunctionParameterType.Integer:
@@ -748,7 +776,8 @@ public record StaticProgramCSharpClass(
                 specializedInterfaces,
                 argumentsList,
                 isCommutative,
-                TryRenderArgument) is { } matchedExpression)
+                TryRenderArgument,
+                declarationSyntaxContext) is { } matchedExpression)
             {
                 return matchedExpression;
             }
@@ -760,9 +789,14 @@ public record StaticProgramCSharpClass(
                 selfFunctionInterface,
                 availableFunctions,
                 availableValueDecls,
+                declarationSyntaxContext,
                 alreadyDeclared);
 
-        if (CompileToCSharp.CompileKernelFunctionGenericInvocation(kernelApp.Function, inputExpr) is { } specializedInvocation)
+        if (CompileToCSharp.CompileKernelFunctionGenericInvocation(
+            kernelApp.Function,
+            inputExpr,
+            declarationSyntaxContext)
+            is { } specializedInvocation)
         {
             return specializedInvocation;
         }
@@ -792,31 +826,13 @@ public record StaticProgramCSharpClass(
         System.Func<IReadOnlyList<int>, ExpressionSyntax?> selfFunctionInterface,
         IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
         IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls,
+        DeclarationSyntaxContext declarationSyntaxContext,
         ImmutableDictionary<StaticExpression<DeclQualifiedName>, string> alreadyDeclared)
     {
 
-        // TODO: Let consumer configure set of usings for emitting C# code.
-
-        var usingDirectivesTypes = new[]
-        {
-            typeof(KernelFunction),
-            typeof(KernelFunctionSpecialized),
-        };
-
-        var usingDirectives =
-            usingDirectivesTypes
-            .Select(t => t.Namespace)
-            .WhereNotNull()
-            .Distinct()
-            .Select(ns => SyntaxFactory.UsingDirective(SyntaxFactory.IdentifierName(ns)))
-            .ToImmutableList();
-
         TypeSyntax TypeSyntaxFromType(System.Type type)
         {
-            return
-                CompileTypeSyntax.TypeSyntaxFromType(
-                    type,
-                    usings: usingDirectives);
+            return CompileTypeSyntax.TypeSyntaxFromType(type, declarationSyntaxContext);
         }
 
         // Variant 1: Fuse take(skip(seq)) where take count is a compile-time integer
@@ -838,6 +854,7 @@ public record StaticProgramCSharpClass(
                         selfFunctionInterface,
                         availableFunctions,
                         availableValueDecls,
+                        declarationSyntaxContext,
                         alreadyDeclared);
 
                 var skipCountExpr =
@@ -846,6 +863,7 @@ public record StaticProgramCSharpClass(
                         selfFunctionInterface,
                         availableFunctions,
                         availableValueDecls,
+                        declarationSyntaxContext,
                         alreadyDeclared);
 
                 // Build fully-qualified invocation: Pine.Core.Internal.KernelFunctionFused.SkipAndTake(argument: ..., skipCountValue: ..., takeCount: ...)
@@ -898,6 +916,7 @@ public record StaticProgramCSharpClass(
                         selfFunctionInterface,
                         availableFunctions,
                         availableValueDecls,
+                        declarationSyntaxContext,
                         alreadyDeclared);
 
                 // Build fully-qualified invocation: Pine.Core.Internal.KernelFunctionFused.TakeLast(takeCount: n, value: seq)
@@ -932,6 +951,7 @@ public record StaticProgramCSharpClass(
         System.Func<IReadOnlyList<int>, ExpressionSyntax?> selfFunctionInterface,
         IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
         IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls,
+        DeclarationSyntaxContext declarationSyntaxContext,
         ImmutableDictionary<StaticExpression<DeclQualifiedName>, string> alreadyDeclared)
     {
         if (StaticExpressionExtension.GetSubexpressionAtPath(argumentExpr, paramPath) is { } subexpr)
@@ -942,6 +962,7 @@ public record StaticProgramCSharpClass(
                     selfFunctionInterface,
                     availableFunctions,
                     availableValueDecls,
+                    declarationSyntaxContext,
                     alreadyDeclared: alreadyDeclared);
 
             if (subexpr.pathRemaining.Count is 0)
@@ -962,7 +983,8 @@ public record StaticProgramCSharpClass(
         IReadOnlyList<CompileToCSharp.KernelFunctionSpecializedInfo> specializedInterfaces,
         StaticExpression<DeclQualifiedName>.List argumentsList,
         bool isCommutative,
-        System.Func<StaticExpression<DeclQualifiedName>, CompileToCSharp.KernelFunctionParameterType, ExpressionSyntax?> tryRenderArgument)
+        System.Func<StaticExpression<DeclQualifiedName>, CompileToCSharp.KernelFunctionParameterType, ExpressionSyntax?> tryRenderArgument,
+        DeclarationSyntaxContext declarationSyntaxContext)
     {
         IEnumerable<IReadOnlyList<StaticExpression<DeclQualifiedName>>> EnumerateArgumentsPermutations()
         {
@@ -988,7 +1010,8 @@ public record StaticProgramCSharpClass(
                 if (TryMatchSpecializedInterfaceWithArgumentsOrder(
                     specializedInterface,
                     argumentOrder,
-                    tryRenderArgument) is { } matchedExpr)
+                    tryRenderArgument,
+                    declarationSyntaxContext) is { } matchedExpr)
                 {
                     return matchedExpr;
                 }
@@ -1001,7 +1024,8 @@ public record StaticProgramCSharpClass(
     private static ExpressionSyntax? TryMatchSpecializedInterfaceWithArgumentsOrder(
         CompileToCSharp.KernelFunctionSpecializedInfo specializedInterface,
         IReadOnlyList<StaticExpression<DeclQualifiedName>> arguments,
-        System.Func<StaticExpression<DeclQualifiedName>, CompileToCSharp.KernelFunctionParameterType, ExpressionSyntax?> tryRenderArgument)
+        System.Func<StaticExpression<DeclQualifiedName>, CompileToCSharp.KernelFunctionParameterType, ExpressionSyntax?> tryRenderArgument,
+        DeclarationSyntaxContext declarationSyntaxContext)
     {
         // TODO: Rückbau: We discontinued variants returning Result instances.
         if (specializedInterface.ReturnType.IsInstanceOfResult)
@@ -1029,7 +1053,7 @@ public record StaticProgramCSharpClass(
             argumentExprs.Add(argumentExpr);
         }
 
-        return specializedInterface.CompileInvocation(argumentExprs);
+        return specializedInterface.CompileInvocation(argumentExprs, declarationSyntaxContext);
     }
 
     private static IEnumerable<IReadOnlyList<T>> GetPermutations<T>(IReadOnlyList<T> items)

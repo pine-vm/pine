@@ -13,11 +13,11 @@ public static class CompileTypeSyntax
     public static TypeSyntax TypeSyntaxFromType(
         Type type,
         IReadOnlyCollection<UsingDirectiveSyntax> usings) =>
-        TypeSyntaxFromType(type, new DeclarationSyntaxGenerationContext(usings));
+        TypeSyntaxFromType(type, new DeclarationSyntaxContext(usings));
 
     public static TypeSyntax TypeSyntaxFromType(
         Type type,
-        DeclarationSyntaxGenerationContext context)
+        DeclarationSyntaxContext context)
     {
         // Check if the type can be represented using a using alias
 
@@ -72,7 +72,7 @@ public static class CompileTypeSyntax
                 nameInNamespace: nameInNamespace);
     }
 
-    private static string? TryGetAliasForType(Type type, DeclarationSyntaxGenerationContext context)
+    private static string? TryGetAliasForType(Type type, DeclarationSyntaxContext context)
     {
         // Get the namespace and name for comparison
         var namespacePart = type.Namespace ?? "";
@@ -119,11 +119,11 @@ public static class CompileTypeSyntax
     public static IReadOnlyList<string> ShortestRelativeNamespace(
         string fullNamespace,
         IReadOnlyCollection<UsingDirectiveSyntax> usings) =>
-        ShortestRelativeNamespace(fullNamespace, new DeclarationSyntaxGenerationContext(usings));
+        ShortestRelativeNamespace(fullNamespace, new DeclarationSyntaxContext(usings));
 
     public static IReadOnlyList<string> ShortestRelativeNamespace(
         string fullNamespace,
-        DeclarationSyntaxGenerationContext context)
+        DeclarationSyntaxContext context)
     {
         static IReadOnlyList<string> SegmentsFromName(string name) =>
             name.Split('.', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);

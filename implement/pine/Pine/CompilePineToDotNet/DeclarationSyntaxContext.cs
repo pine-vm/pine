@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace Pine.CompilePineToDotNet
 {
-    public record DeclarationSyntaxGenerationContext(
+    public record DeclarationSyntaxContext(
         IReadOnlyCollection<UsingDirectiveSyntax> UsingDirectives,
         string? CurrentNamespace = null);
 }

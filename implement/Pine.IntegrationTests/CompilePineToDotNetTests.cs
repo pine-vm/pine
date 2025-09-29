@@ -96,7 +96,7 @@ public class CompilePineToDotNetTests
                 alias: SyntaxFactory.NameEquals(SyntaxFactory.IdentifierName("MyDict")),
                 name: SyntaxFactory.ParseName("System.Collections.Generic.Dictionary"));
 
-        var context = new DeclarationSyntaxGenerationContext([usingAlias]);
+        var context = new DeclarationSyntaxContext([usingAlias]);
 
         var syntax = CompileTypeSyntax.TypeSyntaxFromType(
             typeof(Dictionary<string, int>),
@@ -109,7 +109,7 @@ public class CompilePineToDotNetTests
     public void Test_TypeSyntaxFromType_with_current_namespace_shortening()
     {
         var context =
-            new DeclarationSyntaxGenerationContext(
+            new DeclarationSyntaxContext(
                 UsingDirectives: [],
                 CurrentNamespace: "Pine.Core");
 
@@ -124,7 +124,7 @@ public class CompilePineToDotNetTests
     public void Test_TypeSyntaxFromType_with_current_namespace_partial_shortening()
     {
         var context =
-            new DeclarationSyntaxGenerationContext(
+            new DeclarationSyntaxContext(
                 UsingDirectives: [],
                 CurrentNamespace: "Pine");
 
@@ -140,7 +140,7 @@ public class CompilePineToDotNetTests
     public void Test_TypeSyntaxFromType_with_no_shortening_when_different_namespace()
     {
         var context =
-            new DeclarationSyntaxGenerationContext(
+            new DeclarationSyntaxContext(
                 UsingDirectives: [],
                 CurrentNamespace: "SomeOther.Namespace");
 
@@ -159,7 +159,7 @@ public class CompilePineToDotNetTests
                 SyntaxFactory.ParseName("Pine.Core"));
 
         var context =
-            new DeclarationSyntaxGenerationContext(
+            new DeclarationSyntaxContext(
                 UsingDirectives: [usingDirective],
                 CurrentNamespace: "DifferentNamespace");
 
@@ -174,7 +174,7 @@ public class CompilePineToDotNetTests
     public void Test_TypeSyntaxFromType_generic_type_with_namespace_shortening()
     {
         var context =
-            new DeclarationSyntaxGenerationContext(
+            new DeclarationSyntaxContext(
                 UsingDirectives: [],
                 CurrentNamespace: "Pine.Core");
 
@@ -201,7 +201,7 @@ public class CompilePineToDotNetTests
     public void Test_ShortestRelativeNamespace_with_current_namespace_shortening()
     {
         var context =
-            new DeclarationSyntaxGenerationContext(
+            new DeclarationSyntaxContext(
                 UsingDirectives: [],
                 CurrentNamespace: "Pine.Core");
 
@@ -242,7 +242,8 @@ public class CompilePineToDotNetTests
                         ArgumentEvalGenericName: "eval"),
                     CompilationUnit: new CompilationUnitEnv(
                         AvailableExpr: ImmutableDictionary<Expression, CompilationUnitEnvExprEntry>.Empty,
-                        DefaultInterface: new ExprFunctionCompilationInterface(EnvItemsParamNames: [], ArgumentEvalGenericName: "eval"))));
+                        DefaultInterface: new ExprFunctionCompilationInterface(EnvItemsParamNames: [], ArgumentEvalGenericName: "eval")),
+                    DeclarationSyntaxContext: new DeclarationSyntaxContext([])));
 
         var expectedSyntaxText = """
             environment switch

@@ -9,7 +9,8 @@ namespace Pine.CompilePineToDotNet;
 
 public record FunctionCompilationEnv(
     ExprFunctionCompilationInterface SelfInterface,
-    CompilationUnitEnv CompilationUnit)
+    CompilationUnitEnv CompilationUnit,
+    DeclarationSyntaxContext DeclarationSyntaxContext)
 {
     public virtual bool Equals(FunctionCompilationEnv? other)
     {

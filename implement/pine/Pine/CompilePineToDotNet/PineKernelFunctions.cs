@@ -26,10 +26,11 @@ public partial class CompileToCSharp
 
     public static ExpressionSyntax? CompileKernelFunctionGenericInvocation(
         string kernelFunctionName,
-        ExpressionSyntax argumentExpression)
+        ExpressionSyntax argumentExpression,
+        DeclarationSyntaxContext declarationSyntaxContext)
     {
         if (s_kernelFunctionsInfo.Value.TryGetValue(kernelFunctionName, out var functionInfo))
-            return functionInfo.CompileGenericInvocation(argumentExpression);
+            return functionInfo.CompileGenericInvocation(argumentExpression, declarationSyntaxContext);
 
         return null;
     }
@@ -39,14 +40,14 @@ public partial class CompileToCSharp
         long? AsLiteralInt64);
 
     private record KernelFunctionInfo(
-        Func<ExpressionSyntax, InvocationExpressionSyntax> CompileGenericInvocation,
+        Func<ExpressionSyntax, DeclarationSyntaxContext, InvocationExpressionSyntax> CompileGenericInvocation,
         IReadOnlyList<KernelFunctionSpecializedInfo> SpecializedImplementations,
         Func<Expression, ExpressionCompilationEnvironment, Result<string, CompiledExpression>?>? TryInline);
 
     public record KernelFunctionSpecializedInfo(
         IReadOnlyList<KernelFunctionParameterType> ParameterTypes,
         KernelFunctionSpecializedInfoReturnType ReturnType,
-        Func<IReadOnlyList<ExpressionSyntax>, InvocationExpressionSyntax> CompileInvocation);
+        Func<IReadOnlyList<ExpressionSyntax>, DeclarationSyntaxContext, InvocationExpressionSyntax> CompileInvocation);
 
     public record KernelFunctionSpecializedInfoReturnType(
         bool IsInstanceOfResult);
@@ -139,23 +140,6 @@ public partial class CompileToCSharp
         var genericMethodsInfos =
             kernelFunctionContainerType.GetMethods(BindingFlags.Static | BindingFlags.Public);
 
-
-        var usingDirectivesTypes = new[]
-        {
-            typeof(KernelFunction),
-            typeof(Core.Internal.KernelFunctionSpecialized),
-        };
-
-        // TODO: Let consumer configure set of usings for emitting C# code.
-
-        var usingDirectives =
-            usingDirectivesTypes
-            .Select(t => t.Namespace)
-            .WhereNotNull()
-            .Distinct()
-            .Select(ns => SyntaxFactory.UsingDirective(SyntaxFactory.IdentifierName(ns)))
-            .ToImmutableList();
-
         var kernelFunctionsNames =
             genericMethodsInfos
             .Where(methodInfo => methodInfo.ReturnType == typeof(PineValue))
@@ -188,7 +172,8 @@ public partial class CompileToCSharp
 
         InvocationExpressionSyntax CompileInvocationForArgumentList(
             MethodInfo selectedMethodInfo,
-            ArgumentListSyntax argumentListSyntax)
+            ArgumentListSyntax argumentListSyntax,
+            DeclarationSyntaxContext declarationSyntaxContext)
         {
             return
                 SyntaxFactory.InvocationExpression(
@@ -196,19 +181,21 @@ public partial class CompileToCSharp
                         SyntaxKind.SimpleMemberAccessExpression,
                             CompileTypeSyntax.TypeSyntaxFromType(
                                 selectedMethodInfo.DeclaringType!,
-                                usings: usingDirectives),
+                                declarationSyntaxContext),
                         SyntaxFactory.IdentifierName(selectedMethodInfo.Name)),
                     argumentListSyntax);
         }
 
         InvocationExpressionSyntax CompileGenericInvocation(
             MethodInfo genericMethodInfo,
-            ExpressionSyntax argumentExpression) =>
+            ExpressionSyntax argumentExpression,
+            DeclarationSyntaxContext declarationSyntaxContext) =>
             CompileInvocationForArgumentList(
                 genericMethodInfo,
                 SyntaxFactory.ArgumentList(
                     SyntaxFactory.SingletonSeparatedList(
-                        SyntaxFactory.Argument(argumentExpression))));
+                        SyntaxFactory.Argument(argumentExpression))),
+                declarationSyntaxContext);
 
         KernelFunctionInfo? ReadKernelFunctionInfo(string functionName)
         {
@@ -254,12 +241,14 @@ public partial class CompileToCSharp
                     new KernelFunctionSpecializedInfo(
                         ParameterTypes: parameterTypes,
                         ReturnType: new KernelFunctionSpecializedInfoReturnType(IsInstanceOfResult: false),
-                        CompileInvocation: argumentsExpressions =>
+                        CompileInvocation:
+                        (argumentsExpressions, declContext) =>
                             CompileInvocationForArgumentList(
                                 methodInfo,
                                 SyntaxFactory.ArgumentList(
                                     SyntaxFactory.SeparatedList(
-                                        argumentsExpressions.Select(SyntaxFactory.Argument))))));
+                                        argumentsExpressions.Select(SyntaxFactory.Argument))),
+                                declContext)));
 
             }
 
@@ -305,7 +294,7 @@ public partial class CompileToCSharp
 
             return
                 new KernelFunctionInfo(
-                    CompileGenericInvocation: argExpr => CompileGenericInvocation(genericVariant, argExpr),
+                    CompileGenericInvocation: (argExpr, declContext) => CompileGenericInvocation(genericVariant, argExpr, declContext),
                     SpecializedImplementations: specializedImplsRanked,
                     TryInline: tryInline);
         }

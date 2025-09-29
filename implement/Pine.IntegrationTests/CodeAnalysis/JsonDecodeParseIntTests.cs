@@ -1,9 +1,14 @@
 using AwesomeAssertions;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Pine.CompilePineToDotNet;
 using Pine.Core;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Internal;
 using Pine.Core.PopularEncodings;
 using Pine.Elm;
+using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using Xunit;
 
@@ -11,6 +16,28 @@ namespace Pine.IntegrationTests.CodeAnalysis;
 
 public class JsonDecodeParseIntTests
 {
+    static readonly DeclarationSyntaxContext s_declarationSyntaxContext = BuildDeclarationSyntaxContext();
+
+    static DeclarationSyntaxContext BuildDeclarationSyntaxContext()
+    {
+        var usingDirectivesTypes = new[]
+        {
+            typeof(KernelFunction),
+            typeof(KernelFunctionSpecialized),
+            typeof(KernelFunctionFused)
+        };
+
+        IReadOnlyList<UsingDirectiveSyntax> usingDirectives =
+            [..usingDirectivesTypes
+            .Select(t => t.Namespace)
+            .WhereNotNull()
+            .Distinct()
+            .Select(ns => SyntaxFactory.UsingDirective(SyntaxFactory.IdentifierName(ns)))
+            ];
+
+        return
+            new DeclarationSyntaxContext(usingDirectives);
+    }
     /*
      * This module focuses on a set of functions to parse integers as they could appear in a JSON parser.
      * 
@@ -857,7 +884,10 @@ public class JsonDecodeParseIntTests
             """"
             .Trim());
 
-        var asCsharp = Pine.PineVM.StaticProgramCSharp.FromStaticProgram(staticProgram);
+        var asCsharp =
+            Pine.PineVM.StaticProgramCSharp.FromStaticProgram(
+                staticProgram,
+                s_declarationSyntaxContext);
 
         var testClass = asCsharp.ModulesClasses[new DeclQualifiedName([], "Test")];
 
