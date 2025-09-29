@@ -12,9 +12,30 @@ public class KernelFunctionSpecializedSpecificityComparer :
     private static int SpecificityRank(KernelFunctionParameterType t) => t switch
     {
         // More specific gets a higher rank
-        KernelFunctionParameterType.Integer => 3,
-        KernelFunctionParameterType.SpanGeneric => 2,
-        KernelFunctionParameterType.Generic => 1,
+
+        KernelFunctionParameterType.Integer =>
+        3,
+
+        KernelFunctionParameterType.SpanGeneric =>
+        2,
+
+        KernelFunctionParameterType.Generic =>
+        1,
+
+        _ =>
+        0
+    };
+
+    private static int ReturnTypeSpecificityRank(KernelFunctionSpecializedReturnType t) => t switch
+    {
+        // More specific gets a higher rank
+
+        KernelFunctionSpecializedReturnType.Boolean =>
+        2,
+
+        KernelFunctionSpecializedReturnType.Generic =>
+        1,
+
         _ => 0
     };
 
@@ -60,6 +81,15 @@ public class KernelFunctionSpecializedSpecificityComparer :
             return yParams.Count < xParams.Count ? -1 : 1;
         }
 
+        // Quaternary: return type specificity (descending)
+        var xRetRank = ReturnTypeSpecificityRank(x.ReturnType);
+        var yRetRank = ReturnTypeSpecificityRank(y.ReturnType);
+
+        if (xRetRank != yRetRank)
+        {
+            return yRetRank < xRetRank ? -1 : 1;
+        }
+
         // Final: stable order by parameter enum values (just in case different enums with same ranks)
         for (var i = 0; i < xParams.Count; i++)
         {
@@ -67,6 +97,12 @@ public class KernelFunctionSpecializedSpecificityComparer :
 
             if (cmp is not 0)
                 return cmp;
+        }
+
+        // As ultimate tie-break, stable order by return type enum value
+        if (x.ReturnType != y.ReturnType)
+        {
+            return ((int)x.ReturnType).CompareTo((int)y.ReturnType);
         }
 
         return 0;
@@ -78,6 +114,9 @@ public class KernelFunctionSpecializedSpecificityComparer :
             return true;
 
         if (x is null || y is null)
+            return false;
+
+        if (x.ReturnType != y.ReturnType)
             return false;
 
         if (x.ParameterTypes.Count != y.ParameterTypes.Count)
@@ -97,10 +136,14 @@ public class KernelFunctionSpecializedSpecificityComparer :
         unchecked
         {
             var hash = 17;
+
             foreach (var p in obj.ParameterTypes)
             {
                 hash = hash * 31 + (int)p;
             }
+
+            hash = hash * 31 + (int)obj.ReturnType;
+
             return hash;
         }
     }

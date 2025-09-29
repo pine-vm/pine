@@ -175,7 +175,8 @@ public record StaticProgramCSharpClass(
                                 availableFunctions,
                                 availableValueDecls,
                                 declarationSyntaxContext,
-                                alreadyDeclared);
+                                alreadyDeclared)
+                            .AsGenericValue(declarationSyntaxContext);
 
                         // Do not emit redundant assignments if the argument is the same as the current local value.
 
@@ -207,7 +208,8 @@ public record StaticProgramCSharpClass(
                         availableFunctions,
                         availableValueDecls,
                         declarationSyntaxContext,
-                        alreadyDeclared);
+                        alreadyDeclared)
+                    .AsGenericValue(declarationSyntaxContext);
 
                 return [ResultThrowOrReturn(resultExpression)];
             }
@@ -278,7 +280,8 @@ public record StaticProgramCSharpClass(
                         availableFunctions,
                         availableValueDecls,
                         declarationSyntaxContext,
-                        alreadyDeclared);
+                        alreadyDeclared)
+                    .AsGenericValue(declarationSyntaxContext);
 
                 return [ResultThrowOrReturn(resultExpression)];
             }
@@ -361,7 +364,8 @@ public record StaticProgramCSharpClass(
                                     availableFunctions,
                                     availableValueDecls,
                                     declarationSyntaxContext,
-                                    mutatedDeclared))))));
+                                    mutatedDeclared)
+                                .AsGenericValue(declarationSyntaxContext))))));
 
             newDeclaredStatements.Add(statement);
 
@@ -407,7 +411,7 @@ public record StaticProgramCSharpClass(
             {
                 var ifStatementNoElse =
                     SyntaxFactory.IfStatement(
-                        condition: conditionExpr,
+                        condition: conditionExpr.AsBooleanValue(declarationSyntaxContext),
                         statement: trueBranchStatement,
                         @else: null);
 
@@ -423,7 +427,7 @@ public record StaticProgramCSharpClass(
 
             var ifStatement =
                 SyntaxFactory.IfStatement(
-                    condition: conditionExpr,
+                    condition: conditionExpr.AsBooleanValue(declarationSyntaxContext),
                     statement: trueBranchStatement,
                     @else: SyntaxFactory.ElseClause(falseBranchStatement));
 
@@ -477,7 +481,7 @@ public record StaticProgramCSharpClass(
         return [statement];
     }
 
-    public static ExpressionSyntax CompileToCSharpExpression(
+    public static CompiledCSharpExpression CompileToCSharpExpression(
         StaticExpression<DeclQualifiedName> expression,
         System.Func<IReadOnlyList<int>, ExpressionSyntax?> selfFunctionInterface,
         IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
@@ -487,7 +491,9 @@ public record StaticProgramCSharpClass(
     {
         if (alreadyDeclared.TryGetValue(expression, out var existingVarName))
         {
-            return SyntaxFactory.IdentifierName(existingVarName);
+            return
+                CompiledCSharpExpression.Generic(
+                    SyntaxFactory.IdentifierName(existingVarName));
         }
 
         ExpressionSyntax? OverrideValueLiteralExpression(PineValue pineValue)
@@ -506,7 +512,7 @@ public record StaticProgramCSharpClass(
         {
             if (selfFunctionInterface(pathToEnv) is { } match)
             {
-                return match;
+                return CompiledCSharpExpression.Generic(match);
             }
         }
 
@@ -514,7 +520,7 @@ public record StaticProgramCSharpClass(
         {
             if (OverrideValueLiteralExpression(literal.Value) is { } overriddenExpr)
             {
-                return overriddenExpr;
+                return CompiledCSharpExpression.Generic(overriddenExpr);
             }
 
             var toLiteral =
@@ -522,12 +528,12 @@ public record StaticProgramCSharpClass(
                     literal.Value,
                     overrideDefaultExpression: OverrideValueLiteralExpression);
 
-            return toLiteral.exprSyntax;
+            return CompiledCSharpExpression.Generic(toLiteral.exprSyntax);
         }
 
         if (expression is StaticExpression<DeclQualifiedName>.List list)
         {
-            var elementExprs =
+            var itemExprs =
                 list.Items
                 .Select(item =>
                 CompileToCSharpExpression(
@@ -542,12 +548,12 @@ public record StaticProgramCSharpClass(
             var collectionExprs =
                 SyntaxFactory.CollectionExpression(
                     SyntaxFactory.SeparatedList<CollectionElementSyntax>(
-                        elementExprs
-                        .Select(SyntaxFactory.ExpressionElement)));
+                        itemExprs
+                        .Select(itemExpr => SyntaxFactory.ExpressionElement(itemExpr.AsGenericValue(declarationSyntaxContext)))));
 
             // Invoke PineValue.List( ... )
 
-            return
+            var genericCSharpExpr =
                 SyntaxFactory.InvocationExpression(
                     SyntaxFactory.MemberAccessExpression(
                         SyntaxKind.SimpleMemberAccessExpression,
@@ -557,6 +563,8 @@ public record StaticProgramCSharpClass(
                     SyntaxFactory.ArgumentList(
                         SyntaxFactory.SingletonSeparatedList(
                             SyntaxFactory.Argument(collectionExprs))));
+
+            return CompiledCSharpExpression.Generic(genericCSharpExpr);
         }
 
         if (expression is StaticExpression<DeclQualifiedName>.Conditional conditional)
@@ -588,11 +596,27 @@ public record StaticProgramCSharpClass(
                     declarationSyntaxContext,
                     alreadyDeclared);
 
-            return
+            if (trueBranchExpr.Type == CompiledCSharpExpression.ValueType.Boolean &&
+                falseBranchExpr.Type == CompiledCSharpExpression.ValueType.Boolean)
+            {
+                // Both branches are boolean, so produce a boolean result.
+
+                var booleanCSharpExpr =
+                    SyntaxFactory.ConditionalExpression(
+                        condition: conditionExpr.AsBooleanValue(declarationSyntaxContext),
+                        whenTrue: trueBranchExpr.AsBooleanValue(declarationSyntaxContext),
+                        whenFalse: falseBranchExpr.AsBooleanValue(declarationSyntaxContext));
+
+                return CompiledCSharpExpression.Boolean(booleanCSharpExpr);
+            }
+
+            var genericCSharpExpr =
                 SyntaxFactory.ConditionalExpression(
-                    condition: conditionExpr,
-                    whenTrue: trueBranchExpr,
-                    whenFalse: falseBranchExpr);
+                    condition: conditionExpr.AsBooleanValue(declarationSyntaxContext),
+                    whenTrue: trueBranchExpr.AsGenericValue(declarationSyntaxContext),
+                    whenFalse: falseBranchExpr.AsGenericValue(declarationSyntaxContext));
+
+            return CompiledCSharpExpression.Generic(genericCSharpExpr);
         }
 
         if (expression is StaticExpression<DeclQualifiedName>.KernelApplication kernelApp)
@@ -628,15 +652,17 @@ public record StaticProgramCSharpClass(
                     alreadyDeclared))
                 .ToImmutableArray();
 
-            return
+            var genericCSharpExpr =
                 SyntaxFactory.InvocationExpression(
                     SyntaxFactory.IdentifierName(funcApp.FunctionName.FullName))
                 .WithArgumentList(
                     SyntaxFactory.ArgumentList(
                         SyntaxFactory.SeparatedList(
                             [
-                            .. arguments.Select(SyntaxFactory.Argument)
+                            .. arguments.Select(argExpr => SyntaxFactory.Argument(argExpr.AsGenericValue(declarationSyntaxContext)))
                             ])));
+
+            return CompiledCSharpExpression.Generic(genericCSharpExpr);
         }
 
         if (expression is StaticExpression<DeclQualifiedName>.CrashingParseAndEval parseAndEval)
@@ -650,11 +676,13 @@ public record StaticProgramCSharpClass(
                     declarationSyntaxContext,
                     alreadyDeclared);
 
-            return
+            var genericCSharpExpr =
                 PineCSharpSyntaxFactory.ThrowParseExpressionException(
                     SyntaxFactory.LiteralExpression(
                         SyntaxKind.StringLiteralExpression,
                         SyntaxFactory.Literal("TODO: Include details from encoded and env subexpressions")));
+
+            return CompiledCSharpExpression.Generic(genericCSharpExpr);
         }
 
         if (expression is StaticExpression<DeclQualifiedName>.Environment)
@@ -667,7 +695,7 @@ public record StaticProgramCSharpClass(
             "C# code generation for expression type " + expression.GetType() + " is not implemented.");
     }
 
-    public static ExpressionSyntax CompileKernelAppToCSharpExpression(
+    public static CompiledCSharpExpression CompileKernelAppToCSharpExpression(
         StaticExpression<DeclQualifiedName>.KernelApplication kernelApp,
         System.Func<IReadOnlyList<int>, ExpressionSyntax?> selfFunctionInterface,
         IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
@@ -701,11 +729,29 @@ public record StaticProgramCSharpClass(
                             declarationSyntaxContext,
                             alreadyDeclared);
 
-                    return
-                        SyntaxFactory.BinaryExpression(
-                            SyntaxKind.EqualsExpression,
-                            leftExpr,
-                            rightExpr);
+                    if (leftExpr.Type == CompiledCSharpExpression.ValueType.Boolean &&
+                       rightExpr.Type == CompiledCSharpExpression.ValueType.Boolean)
+                    {
+                        var booleanCSharpExpr =
+                            SyntaxFactory.BinaryExpression(
+                                SyntaxKind.EqualsExpression,
+                                leftExpr.AsBooleanValue(declarationSyntaxContext),
+                                rightExpr.AsBooleanValue(declarationSyntaxContext));
+
+                        return CompiledCSharpExpression.Boolean(booleanCSharpExpr);
+                    }
+
+                    {
+                        var booleanCSharpExpr =
+                            SyntaxFactory.BinaryExpression(
+                                SyntaxKind.EqualsExpression,
+                                EnsureIsParenthesizedForComposition(
+                                    leftExpr.AsGenericValue(declarationSyntaxContext)),
+                                EnsureIsParenthesizedForComposition(
+                                    rightExpr.AsGenericValue(declarationSyntaxContext)));
+
+                        return CompiledCSharpExpression.Boolean(booleanCSharpExpr);
+                    }
                 }
             }
         }
@@ -735,7 +781,8 @@ public record StaticProgramCSharpClass(
                             availableFunctions,
                             availableValueDecls,
                             declarationSyntaxContext,
-                            alreadyDeclared);
+                            alreadyDeclared)
+                        .AsGenericValue(declarationSyntaxContext);
 
                 case CompileToCSharp.KernelFunctionParameterType.Integer:
                     {
@@ -794,16 +841,16 @@ public record StaticProgramCSharpClass(
 
         if (CompileToCSharp.CompileKernelFunctionGenericInvocation(
             kernelApp.Function,
-            inputExpr,
+            inputExpr.AsGenericValue(declarationSyntaxContext),
             declarationSyntaxContext)
             is { } specializedInvocation)
         {
-            return specializedInvocation;
+            return CompiledCSharpExpression.Generic(specializedInvocation);
         }
 
         // Generic case: Invoke KernelFunction.ApplyKernelFunctionGeneric
 
-        return
+        var genericCSharpExpr =
             SyntaxFactory.InvocationExpression(
                 SyntaxFactory.MemberAccessExpression(
                     SyntaxKind.SimpleMemberAccessExpression,
@@ -817,11 +864,13 @@ public record StaticProgramCSharpClass(
                             SyntaxFactory.LiteralExpression(
                                 SyntaxKind.StringLiteralExpression,
                                 SyntaxFactory.Literal(kernelApp.Function))),
-                        SyntaxFactory.Argument(inputExpr)
+                        SyntaxFactory.Argument(inputExpr.AsGenericValue(declarationSyntaxContext))
                         ])));
+
+        return CompiledCSharpExpression.Generic(genericCSharpExpr);
     }
 
-    private static ExpressionSyntax? TryCompileKernelFusion(
+    private static CompiledCSharpExpression? TryCompileKernelFusion(
         StaticExpression<DeclQualifiedName>.KernelApplication kernelApp,
         System.Func<IReadOnlyList<int>, ExpressionSyntax?> selfFunctionInterface,
         IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
@@ -867,7 +916,7 @@ public record StaticProgramCSharpClass(
                         alreadyDeclared);
 
                 // Build fully-qualified invocation: Pine.Core.Internal.KernelFunctionFused.SkipAndTake(argument: ..., skipCountValue: ..., takeCount: ...)
-                return
+                var genericCSharpExpr =
                     SyntaxFactory.InvocationExpression(
                         SyntaxFactory.MemberAccessExpression(
                             SyntaxKind.SimpleMemberAccessExpression,
@@ -883,14 +932,16 @@ public record StaticProgramCSharpClass(
 
                                     SyntaxFactory.Token(SyntaxKind.CommaToken),
 
-                                    SyntaxFactory.Argument(skipCountExpr)
+                                    SyntaxFactory.Argument(skipCountExpr.AsGenericValue(declarationSyntaxContext))
                                         .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("skipCountValue"))),
 
                                     SyntaxFactory.Token(SyntaxKind.CommaToken),
 
-                                    SyntaxFactory.Argument(argumentExpr)
+                                    SyntaxFactory.Argument(argumentExpr.AsGenericValue(declarationSyntaxContext))
                                         .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("argument"))),
                                 })));
+
+                return CompiledCSharpExpression.Generic(genericCSharpExpr);
             }
         }
 
@@ -920,7 +971,7 @@ public record StaticProgramCSharpClass(
                         alreadyDeclared);
 
                 // Build fully-qualified invocation: Pine.Core.Internal.KernelFunctionFused.TakeLast(takeCount: n, value: seq)
-                return
+                var genericCSharpExpr =
                     SyntaxFactory.InvocationExpression(
                         SyntaxFactory.MemberAccessExpression(
                             SyntaxKind.SimpleMemberAccessExpression,
@@ -936,16 +987,18 @@ public record StaticProgramCSharpClass(
 
                                     SyntaxFactory.Token(SyntaxKind.CommaToken),
 
-                                    SyntaxFactory.Argument(seqExpr)
+                                    SyntaxFactory.Argument(seqExpr.AsGenericValue(declarationSyntaxContext))
                                         .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("value")))
                                 })));
+
+                return CompiledCSharpExpression.Generic(genericCSharpExpr);
             }
         }
 
         return null;
     }
 
-    public static ExpressionSyntax ExpressionForFunctionParam(
+    public static CompiledCSharpExpression ExpressionForFunctionParam(
         IReadOnlyList<int> paramPath,
         StaticExpression<DeclQualifiedName> argumentExpr,
         System.Func<IReadOnlyList<int>, ExpressionSyntax?> selfFunctionInterface,
@@ -979,7 +1032,7 @@ public record StaticProgramCSharpClass(
             "Failed to find subexpression at path [" + string.Join(',', paramPath) + "] in argument expression.");
     }
 
-    private static ExpressionSyntax? TryMatchSpecializedInterface(
+    private static CompiledCSharpExpression? TryMatchSpecializedInterface(
         IReadOnlyList<CompileToCSharp.KernelFunctionSpecializedInfo> specializedInterfaces,
         StaticExpression<DeclQualifiedName>.List argumentsList,
         bool isCommutative,
@@ -1021,16 +1074,12 @@ public record StaticProgramCSharpClass(
         return null;
     }
 
-    private static ExpressionSyntax? TryMatchSpecializedInterfaceWithArgumentsOrder(
+    private static CompiledCSharpExpression? TryMatchSpecializedInterfaceWithArgumentsOrder(
         CompileToCSharp.KernelFunctionSpecializedInfo specializedInterface,
         IReadOnlyList<StaticExpression<DeclQualifiedName>> arguments,
         System.Func<StaticExpression<DeclQualifiedName>, CompileToCSharp.KernelFunctionParameterType, ExpressionSyntax?> tryRenderArgument,
         DeclarationSyntaxContext declarationSyntaxContext)
     {
-        // TODO: Rückbau: We discontinued variants returning Result instances.
-        if (specializedInterface.ReturnType.IsInstanceOfResult)
-            return null;
-
         if (specializedInterface.ParameterTypes.Count != arguments.Count)
             return null;
 
@@ -1053,7 +1102,24 @@ public record StaticProgramCSharpClass(
             argumentExprs.Add(argumentExpr);
         }
 
-        return specializedInterface.CompileInvocation(argumentExprs, declarationSyntaxContext);
+        var csharpExpr =
+            specializedInterface.CompileInvocation(
+                argumentExprs,
+                declarationSyntaxContext);
+
+        return
+            specializedInterface.ReturnType switch
+            {
+                CompileToCSharp.KernelFunctionSpecializedReturnType.Boolean =>
+                CompiledCSharpExpression.Boolean(csharpExpr),
+
+                CompileToCSharp.KernelFunctionSpecializedReturnType.Generic =>
+                CompiledCSharpExpression.Generic(csharpExpr),
+
+                _ =>
+                throw new System.NotImplementedException(
+                    "Unknown specialized return type " + specializedInterface.ReturnType)
+            };
     }
 
     private static IEnumerable<IReadOnlyList<T>> GetPermutations<T>(IReadOnlyList<T> items)
@@ -1218,5 +1284,34 @@ public record StaticProgramCSharpClass(
         }
 
         return false;
+    }
+
+    public static ExpressionSyntax EnsureIsParenthesizedForComposition(
+        ExpressionSyntax expression)
+    {
+        if (ExpressionNeedsParensForComposition(expression))
+        {
+            return SyntaxFactory.ParenthesizedExpression(expression);
+        }
+
+        return expression;
+    }
+
+    public static bool ExpressionNeedsParensForComposition(
+        ExpressionSyntax expression)
+    {
+        if (expression is IdentifierNameSyntax)
+            return false;
+
+        if (expression is MemberAccessExpressionSyntax)
+            return false;
+
+        if (expression is LiteralExpressionSyntax)
+            return false;
+
+        if (expression is InvocationExpressionSyntax)
+            return false;
+
+        return true;
     }
 }

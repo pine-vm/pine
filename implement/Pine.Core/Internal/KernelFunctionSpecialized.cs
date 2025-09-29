@@ -250,6 +250,115 @@ public static class KernelFunctionSpecialized
     public static PineValue int_mul(BigInteger factorA, BigInteger factorB) =>
         IntegerEncoding.EncodeSignedInteger(factorA * factorB);
 
+    public static PineValue int_mul(BigInteger factorA, BigInteger factorB, BigInteger factorC) =>
+        IntegerEncoding.EncodeSignedInteger(factorA * factorB * factorC);
+
+    public static PineValue int_mul(PineValue factorA, PineValue factorB, BigInteger factorC)
+    {
+        if (SignedIntegerFromValueRelaxed(factorA) is not { } intA)
+            return PineValue.EmptyList;
+
+        if (SignedIntegerFromValueRelaxed(factorB) is not { } intB)
+            return PineValue.EmptyList;
+
+        return int_mul(intA, intB, factorC);
+    }
+
+    public static PineValue int_is_sorted_asc(
+        PineValue left,
+        PineValue right)
+    {
+        if (SignedIntegerFromValueRelaxed(left) is not { } leftInt)
+        {
+            return PineValue.EmptyList;
+        }
+
+        if (SignedIntegerFromValueRelaxed(right) is not { } rightInt)
+        {
+            return PineValue.EmptyList;
+        }
+
+        return
+            ValueFromBool(leftInt <= rightInt);
+    }
+
+    public static PineValue int_is_sorted_asc(
+        BigInteger left,
+        PineValue middle,
+        BigInteger right)
+    {
+        if (SignedIntegerFromValueRelaxed(middle) is not { } middleInt)
+        {
+            return PineValue.EmptyList;
+        }
+
+        return ValueFromBool(left <= middleInt && middleInt <= right);
+    }
+
+    public static PineValue int_is_sorted_asc(
+        BigInteger left,
+        BigInteger middle,
+        BigInteger right)
+    {
+        return ValueFromBool(left <= middle && middle <= right);
+    }
+
+    public static bool int_is_sorted_asc_as_boolean(
+        PineValue left,
+        PineValue right)
+    {
+        // Return type: Would value equal the canonical 'True' value if it were returned?
+
+        if (SignedIntegerFromValueRelaxed(left) is not { } leftInt)
+        {
+            return false;
+        }
+
+        if (SignedIntegerFromValueRelaxed(right) is not { } rightInt)
+        {
+            return false;
+        }
+
+        return leftInt <= rightInt;
+    }
+
+    public static bool int_is_sorted_asc_as_boolean(
+        BigInteger left,
+        PineValue right)
+    {
+        // Return type: Would value equal the canonical 'True' value if it were returned?
+
+        if (SignedIntegerFromValueRelaxed(right) is not { } rightInt)
+        {
+            return false;
+        }
+
+        return left <= rightInt;
+    }
+
+    public static bool int_is_sorted_asc_as_boolean(
+        PineValue left,
+        BigInteger right)
+    {
+        // Return type: Would value equal the canonical 'True' value if it were returned?
+
+        if (SignedIntegerFromValueRelaxed(left) is not { } leftInt)
+        {
+            return false;
+        }
+
+        return leftInt <= right;
+    }
+
+    public static bool int_is_sorted_asc_as_boolean(
+        BigInteger left,
+        BigInteger middle,
+        BigInteger right)
+    {
+        // Return type: Would value equal the canonical 'True' value if it were returned?
+        return left <= middle && middle <= right;
+    }
+
     public static PineValue bit_and(
         PineValue left,
         PineValue right)

@@ -46,16 +46,20 @@ public partial class CompileToCSharp
 
     public record KernelFunctionSpecializedInfo(
         IReadOnlyList<KernelFunctionParameterType> ParameterTypes,
-        KernelFunctionSpecializedInfoReturnType ReturnType,
+        KernelFunctionSpecializedReturnType ReturnType,
         Func<IReadOnlyList<ExpressionSyntax>, DeclarationSyntaxContext, InvocationExpressionSyntax> CompileInvocation);
 
-    public record KernelFunctionSpecializedInfoReturnType(
-        bool IsInstanceOfResult);
+    public enum KernelFunctionSpecializedReturnType
+    {
+        Generic = 10,
+
+        Boolean = 30,
+    }
 
     public enum KernelFunctionParameterType
     {
-        Generic = 1,
-        Integer = 10,
+        Generic = 10,
+        Integer = 40,
 
         // ReadOnlySpan<PineValue>
         SpanGeneric = 100,
@@ -199,6 +203,13 @@ public partial class CompileToCSharp
 
         KernelFunctionInfo? ReadKernelFunctionInfo(string functionName)
         {
+            bool NameMatchesSpecializedVariant(MethodInfo mi) =>
+                mi.Name.Equals(functionName, StringComparison.OrdinalIgnoreCase) ||
+                /*
+                 * Variants with specialized return types appear with expanded names, like 'int_is_sorted_asc_as_boolean'
+                 * */
+                mi.Name.StartsWith(functionName + "_", StringComparison.OrdinalIgnoreCase);
+
             var genericVariant =
                 genericMethodsInfos
                 .FirstOrDefault(mi =>
@@ -217,18 +228,19 @@ public partial class CompileToCSharp
 
             foreach (var methodInfo in allCandidatesPool)
             {
-                if (methodInfo.ReturnType != typeof(PineValue))
-                {
-                    continue;
-                }
-
-                if (!methodInfo.Name.Equals(functionName, StringComparison.OrdinalIgnoreCase))
+                if (!NameMatchesSpecializedVariant(methodInfo))
                 {
                     continue;
                 }
 
                 if (methodInfo == genericVariant)
                 {
+                    continue;
+                }
+
+                if (TryParseKernelFunctionSpecializedReturnType(methodInfo.ReturnType) is not { } returnType)
+                {
+                    // We only consider functions with a known return type.
                     continue;
                 }
 
@@ -240,7 +252,7 @@ public partial class CompileToCSharp
                 specializedImpls.Add(
                     new KernelFunctionSpecializedInfo(
                         ParameterTypes: parameterTypes,
-                        ReturnType: new KernelFunctionSpecializedInfoReturnType(IsInstanceOfResult: false),
+                        ReturnType: returnType,
                         CompileInvocation:
                         (argumentsExpressions, declContext) =>
                             CompileInvocationForArgumentList(
@@ -312,5 +324,17 @@ public partial class CompileToCSharp
         return
             mutatedDict
             .ToFrozenDictionary();
+    }
+
+    static KernelFunctionSpecializedReturnType? TryParseKernelFunctionSpecializedReturnType(
+        Type type)
+    {
+        if (type == typeof(PineValue))
+            return KernelFunctionSpecializedReturnType.Generic;
+
+        if (type == typeof(bool))
+            return KernelFunctionSpecializedReturnType.Boolean;
+
+        return null;
     }
 }

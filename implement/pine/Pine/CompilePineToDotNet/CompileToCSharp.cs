@@ -956,9 +956,6 @@ public partial class CompileToCSharp
 
                                     return
                                     CompiledExpression.WithTypeGenericValue(
-                                        specializedImpl.ReturnType.IsInstanceOfResult ?
-                                        wrapInvocationInWithDefault(plainInvocationSyntax)
-                                        :
                                         plainInvocationSyntax,
                                         aggregateLetBindings,
                                         aggregateDependencies);

@@ -4,6 +4,7 @@ using Pine.CompilePineToDotNet;
 using Pine.Core;
 using Pine.Core.Addressing;
 using Pine.Core.CodeAnalysis;
+using Pine.Core.PineVM;
 using Pine.Core.PopularEncodings;
 using System;
 using System.Collections.Frozen;
@@ -183,6 +184,12 @@ public record StaticProgramCSharp(
         PineValue value,
         ConcurrentPineValueHashCache valueHashCache)
     {
+        if (value == PineKernelValues.TrueValue)
+            return "Bool_True";
+
+        if (value == PineKernelValues.FalseValue)
+            return "Bool_False";
+
         if (value is PineValue.BlobValue blob)
         {
             if (IntegerEncoding.ParseSignedIntegerStrict(blob).IsOkOrNullable() is { } asInt)

@@ -510,8 +510,18 @@ public static class PineCSharpSyntaxFactory
                         })));
     }
 
-    public static ExpressionSyntax PineValueFromBoolExpression(ExpressionSyntax expressionSyntax) =>
-        InvocationExpressionOnPineVMKernelFunctionClass(nameof(KernelFunction.ValueFromBool))
+    public static ExpressionSyntax PineValueFromBoolExpression(
+        ExpressionSyntax expressionSyntax) =>
+        PineValueFromBoolExpression(
+            expressionSyntax,
+            declarationSyntaxContext: DeclarationSyntaxContext.None);
+
+    public static ExpressionSyntax PineValueFromBoolExpression(
+        ExpressionSyntax expressionSyntax,
+        DeclarationSyntaxContext declarationSyntaxContext) =>
+        InvocationExpressionOnPineVMKernelFunctionClass(
+            nameof(KernelFunction.ValueFromBool),
+            declarationSyntaxContext)
         .WithArgumentList(
             SyntaxFactory.ArgumentList(
                 SyntaxFactory.SingletonSeparatedList(
@@ -540,17 +550,12 @@ public static class PineCSharpSyntaxFactory
                 SyntaxFactory.IdentifierName(memberIdentifierName)));
 
     public static InvocationExpressionSyntax InvocationExpressionOnPineVMKernelFunctionClass(
-        string memberIdentifierName) =>
+        string memberIdentifierName,
+        DeclarationSyntaxContext declarationSyntaxContext) =>
         SyntaxFactory.InvocationExpression(
             SyntaxFactory.MemberAccessExpression(
                 SyntaxKind.SimpleMemberAccessExpression,
-                SyntaxFactory.MemberAccessExpression(
-                    SyntaxKind.SimpleMemberAccessExpression,
-                    SyntaxFactory.MemberAccessExpression(
-                        SyntaxKind.SimpleMemberAccessExpression,
-                        SyntaxFactory.IdentifierName("Pine"),
-                        SyntaxFactory.IdentifierName("PineVM")),
-                    SyntaxFactory.IdentifierName(nameof(KernelFunction))),
+                CompileTypeSyntax.TypeSyntaxFromType(typeof(KernelFunction), declarationSyntaxContext),
                 SyntaxFactory.IdentifierName(memberIdentifierName)));
 
     public static QualifiedNameSyntax EvalExprDelegateTypeSyntax =>
