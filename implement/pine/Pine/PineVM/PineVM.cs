@@ -1738,12 +1738,8 @@ public class PineVM : IPineVM
 
                             var prevValue = currentFrame.PopTopmostFromStack();
 
-                            PineValue resultValue = PineValue.EmptyList;
-
-                            if (KernelFunction.SignedIntegerFromValueRelaxed(skipCountValue) is { } skipCount)
-                            {
-                                resultValue = KernelFunctionSpecialized.skip(skipCount, prevValue);
-                            }
+                            var resultValue =
+                                KernelFunctionSpecialized.skip(skipCountValue, prevValue);
 
                             currentFrame.PushInstructionResult(resultValue);
 
@@ -1772,12 +1768,8 @@ public class PineVM : IPineVM
 
                             var prevValue = currentFrame.PopTopmostFromStack();
 
-                            PineValue resultValue = PineValue.EmptyList;
-
-                            if (KernelFunction.SignedIntegerFromValueRelaxed(takeCountValue) is { } takeCount)
-                            {
-                                resultValue = KernelFunctionSpecialized.take(takeCount, prevValue);
-                            }
+                            var resultValue =
+                                KernelFunctionSpecialized.take(takeCountValue, prevValue);
 
                             currentFrame.PushInstructionResult(resultValue);
 
@@ -1811,7 +1803,7 @@ public class PineVM : IPineVM
                             var prevValue = currentFrame.PopTopmostFromStack();
 
                             var resultValue =
-                                KernelFunctionSpecialized.takeLast(takeCount, prevValue);
+                                KernelFunctionFused.TakeLast(takeCount: takeCount, prevValue);
 
                             currentFrame.PushInstructionResult(resultValue);
 
@@ -1893,10 +1885,10 @@ public class PineVM : IPineVM
                             if (KernelFunction.SignedIntegerFromValueRelaxed(takeCountValue) is { } takeCount)
                             {
                                 resultValue =
-                                    KernelFunctionFused.FusedSkipAndTake(
-                                        prevValue,
+                                    KernelFunctionFused.SkipAndTake(
+                                        takeCount: (int)takeCount,
                                         skipCountValue: skipCountValue,
-                                        takeCount: (int)takeCount);
+                                        prevValue);
                             }
 
                             currentFrame.PushInstructionResult(resultValue);
@@ -1916,10 +1908,10 @@ public class PineVM : IPineVM
                             var prevValue = currentFrame.PopTopmostFromStack();
 
                             var resultValue =
-                                KernelFunctionFused.FusedSkipAndTake(
-                                    prevValue,
+                                KernelFunctionFused.SkipAndTake(
+                                    takeCount: takeCount,
                                     skipCountValue: skipCountValue,
-                                    takeCount: takeCount);
+                                    prevValue);
 
                             currentFrame.PushInstructionResult(resultValue);
 
@@ -2416,7 +2408,7 @@ public class PineVM : IPineVM
                             var left = currentFrame.PopTopmostFromStack();
 
                             var resultValue =
-                                KernelFunctionSpecialized.bit_and_binary(left, right);
+                                KernelFunctionSpecialized.bit_and(left, right);
 
                             currentFrame.PushInstructionResult(resultValue);
 
@@ -2432,7 +2424,7 @@ public class PineVM : IPineVM
                             var left = currentFrame.PopTopmostFromStack();
 
                             var resultValue =
-                                KernelFunctionSpecialized.bit_and_binary(left, right);
+                                KernelFunctionSpecialized.bit_and(left, right);
 
                             currentFrame.PushInstructionResult(resultValue);
 
@@ -2445,7 +2437,7 @@ public class PineVM : IPineVM
                             var left = currentFrame.PopTopmostFromStack();
 
                             var resultValue =
-                                KernelFunctionSpecialized.bit_or_binary(left, right);
+                                KernelFunctionSpecialized.bit_or(left, right);
 
                             currentFrame.PushInstructionResult(resultValue);
 
@@ -2461,7 +2453,7 @@ public class PineVM : IPineVM
                             var left = currentFrame.PopTopmostFromStack();
 
                             var resultValue =
-                                KernelFunctionSpecialized.bit_or_binary(left, right);
+                                KernelFunctionSpecialized.bit_or(left, right);
 
                             currentFrame.PushInstructionResult(resultValue);
 
@@ -2474,7 +2466,7 @@ public class PineVM : IPineVM
                             var left = currentFrame.PopTopmostFromStack();
 
                             var resultValue =
-                                KernelFunctionSpecialized.bit_xor_binary(left, right);
+                                KernelFunctionSpecialized.bit_xor(left, right);
 
                             currentFrame.PushInstructionResult(resultValue);
 

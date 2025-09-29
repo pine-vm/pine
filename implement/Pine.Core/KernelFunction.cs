@@ -411,7 +411,7 @@ public static class KernelFunction
                 return PineValue.EmptyList;
             }
 
-            merged = Internal.KernelFunctionSpecialized.bit_and_binary(merged, blobValue);
+            merged = Internal.KernelFunctionSpecialized.bit_and(merged, blobValue);
         }
 
         return merged;
@@ -450,7 +450,7 @@ public static class KernelFunction
                 return PineValue.EmptyList;
             }
 
-            merged = Internal.KernelFunctionSpecialized.bit_or_binary(merged, blobValue);
+            merged = Internal.KernelFunctionSpecialized.bit_or(merged, blobValue);
         }
 
         return merged;
@@ -489,7 +489,7 @@ public static class KernelFunction
                 return PineValue.EmptyList;
             }
 
-            merged = Internal.KernelFunctionSpecialized.bit_xor_binary(merged, blobValue);
+            merged = Internal.KernelFunctionSpecialized.bit_xor(merged, blobValue);
         }
 
         return merged;

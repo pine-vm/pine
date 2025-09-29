@@ -11,6 +11,14 @@ using static Pine.Core.KernelFunction;
 
 public static class KernelFunctionSpecialized
 {
+    public static PineValue skip(PineValue countValue, PineValue value)
+    {
+        if (SignedIntegerFromValueRelaxed(countValue) is not { } count)
+            return PineValue.EmptyList;
+
+        return skip(count, value);
+    }
+
     public static PineValue skip(BigInteger count, PineValue value)
     {
         if (count <= 0)
@@ -42,6 +50,14 @@ public static class KernelFunctionSpecialized
 
         throw new NotImplementedException(
             "Unexpected value type: " + value.GetType().FullName);
+    }
+
+    public static PineValue take(PineValue countValue, PineValue value)
+    {
+        if (SignedIntegerFromValueRelaxed(countValue) is not { } count)
+            return PineValue.EmptyList;
+
+        return take(count, value);
     }
 
     public static PineValue take(BigInteger count, PineValue value)
@@ -79,49 +95,6 @@ public static class KernelFunctionSpecialized
                 return PineValue.EmptyBlob;
 
             return PineValue.Blob(blobValue.Bytes[..(int)count]);
-        }
-
-        throw new NotImplementedException(
-            "Unexpected value type: " + value.GetType().FullName);
-    }
-
-    public static PineValue takeLast(
-        int count,
-        PineValue value)
-    {
-        if (value is PineValue.ListValue listValue)
-        {
-            var listItems = listValue.Items.Span;
-
-            if (listItems.Length <= count)
-                return value;
-
-            if (count <= 0)
-                return PineValue.EmptyList;
-
-            var resultingCount =
-                count <= listItems.Length
-                ?
-                count
-                :
-                listItems.Length;
-
-            var taken = new PineValue[resultingCount];
-
-            listItems[^resultingCount..].CopyTo(taken);
-
-            return PineValue.List(taken);
-        }
-
-        if (value is PineValue.BlobValue blobValue)
-        {
-            if (blobValue.Bytes.Length <= count)
-                return value;
-
-            if (count <= 0)
-                return PineValue.EmptyBlob;
-
-            return PineValue.Blob(blobValue.Bytes[^count..]);
         }
 
         throw new NotImplementedException(
@@ -277,7 +250,7 @@ public static class KernelFunctionSpecialized
     public static PineValue int_mul(BigInteger factorA, BigInteger factorB) =>
         IntegerEncoding.EncodeSignedInteger(factorA * factorB);
 
-    public static PineValue bit_and_binary(
+    public static PineValue bit_and(
         PineValue left,
         PineValue right)
     {
@@ -316,7 +289,7 @@ public static class KernelFunctionSpecialized
         return PineValue.Blob(resultArray);
     }
 
-    public static PineValue bit_or_binary(
+    public static PineValue bit_or(
         PineValue left,
         PineValue right)
     {
@@ -368,7 +341,7 @@ public static class KernelFunctionSpecialized
         return PineValue.Blob(resultArray);
     }
 
-    public static PineValue bit_xor_binary(
+    public static PineValue bit_xor(
         PineValue left,
         PineValue right)
     {
