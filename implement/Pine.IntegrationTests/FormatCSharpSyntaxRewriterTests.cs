@@ -923,6 +923,49 @@ public class FormatCSharpSyntaxRewriterTests
         formattedSyntaxText.Should().Be(expectedFormattedText);
     }
 
+    [Fact]
+    public void Formats_indexer_setter_assignments()
+    {
+        var inputSyntaxText =
+            """
+            void setup(Dictionary<string, object> dict)
+            {
+                dict[CommonReusedValues.List_9a1e26cb] =
+                Dispatch_9a1e26cb;
+
+                dict[CommonReusedValues.List_6a38b355] = Dispatch_6a38b355;
+
+                dict[simple_key] = method_call(param1, param2);
+
+                dict[simple_key] = method_call(param1, param3 == 123);
+            }
+            """.Trim();
+
+        var expectedFormattedText =
+            """
+            void setup(Dictionary<string, object> dict)
+            {
+                dict[CommonReusedValues.List_9a1e26cb] =
+                    Dispatch_9a1e26cb;
+
+                dict[CommonReusedValues.List_6a38b355] =
+                    Dispatch_6a38b355;
+
+                dict[simple_key] =
+                    method_call(param1, param2);
+
+                dict[simple_key] =
+                    method_call(
+                        param1,
+                        param3 == 123);
+            }
+            """.Trim();
+
+        var formattedSyntaxText = FormatCSharpScript(inputSyntaxText);
+
+        formattedSyntaxText.Should().Be(expectedFormattedText);
+    }
+
 
     static string FormatCSharpScript(string inputSyntaxText) =>
         FormatCSharpSyntaxRewriter.FormatSyntaxTree(ParseAsCSharpScript(inputSyntaxText))

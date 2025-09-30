@@ -404,14 +404,20 @@ public class FormatCSharpSyntaxRewriter(
     {
         var node = (AssignmentExpressionSyntax)base.VisitAssignmentExpression(originalNode)!;
 
-        // Put expression on new line with proper indentation
-        var indentationTrivia = ComputeIndentationTriviaForNode(originalNode.Right);
+        // For indexer-style setters, we always put the RHS on a new line indented one level deeper than the assignment line.
+        // For other assignments, preserve previous behavior (indent based on RHS complexity).
+        var isIndexerSetter = originalNode.Left is ElementAccessExpressionSyntax;
+
+        var rhsIndentationTrivia =
+            isIndexerSetter
+            ? ComputeIndentationTriviaForNode(originalNode, addIndentLevels: 1)
+            : ComputeIndentationTriviaForNode(originalNode.Right);
 
         return
             node
             .WithLeft(node.Left.WithTrailingTrivia(SyntaxFactory.Whitespace(" ")))
             .WithOperatorToken(node.OperatorToken.WithTrailingTrivia(SyntaxFactory.LineFeed))
-            .WithRight(node.Right.WithLeadingTrivia(indentationTrivia));
+            .WithRight(node.Right.WithLeadingTrivia(rhsIndentationTrivia));
     }
 
 
