@@ -31,6 +31,8 @@ module Json.Decode exposing
     , nullable
     , oneOf
     , oneOrMore
+    , parseJsonStringToValue
+    , skipWhitespace
     , string
     , succeed
     , value

@@ -4,6 +4,8 @@ using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.PopularEncodings;
 using Pine.Elm;
+using System.Collections.Frozen;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using Xunit;
@@ -2509,6 +2511,145 @@ public class CodeAnalysisTests
             
             """"
             .Trim());
+    }
+
+    private static readonly IReadOnlyDictionary<DeclQualifiedName, bool> s_bundledDeclarationsSupportStatus =
+        /*
+         * Supported status for a subset of declarations in the bundled Elm compiler/LS.
+         * True means the declaration is currently supported by static program parsing.
+         * */
+        new Dictionary<DeclQualifiedName, bool>
+        {
+            { new DeclQualifiedName(["Basics"], "eq"), true },
+
+            // { new DeclQualifiedName(["Basics"], "neq"), true },
+
+            { new DeclQualifiedName(["Basics"], "add"), true },
+            { new DeclQualifiedName(["Basics"], "sub"), true },
+            { new DeclQualifiedName(["Basics"], "mul"), true },
+
+            { new DeclQualifiedName(["Basics"], "idiv"), true },
+
+            // { new DeclQualifiedName(["Basics"], "pow"), true },
+
+            { new DeclQualifiedName(["Basics"], "and"), true },
+            { new DeclQualifiedName(["Basics"], "or"), true },
+            { new DeclQualifiedName(["Basics"], "append"), true },
+
+            { new DeclQualifiedName(["Basics"], "lt"), true },
+            { new DeclQualifiedName(["Basics"], "gt"), true },
+            { new DeclQualifiedName(["Basics"], "le"), true },
+            { new DeclQualifiedName(["Basics"], "ge"), true },
+
+            { new DeclQualifiedName(["Basics"], "min"), true },
+            { new DeclQualifiedName(["Basics"], "max"), true },
+
+            { new DeclQualifiedName(["Basics"], "apR"), false },
+            { new DeclQualifiedName(["Basics"], "apL"), false },
+
+            { new DeclQualifiedName(["Basics"], "composeL"), false },
+            { new DeclQualifiedName(["Basics"], "composeR"), false },
+
+            /*
+             * 
+            { new DeclQualifiedName(["Basics"], "identity"), true },
+            { new DeclQualifiedName(["Basics"], "always"), true },
+            { new DeclQualifiedName(["Basics"], "not"), true },
+            */
+
+            { new DeclQualifiedName(["Basics"], "compare"), true },
+
+            { new DeclQualifiedName(["Basics"], "modBy"), true },
+            { new DeclQualifiedName(["Basics"], "remainderBy"), true },
+
+            // { new DeclQualifiedName(["Basics"], "negate"), true },
+
+
+            { new DeclQualifiedName(["String"], "toInt"), true },
+
+            { new DeclQualifiedName(["String"], "trim"), true },
+            { new DeclQualifiedName(["String"], "trimLeft"), true },
+            { new DeclQualifiedName(["String"], "trimRight"), true },
+
+            { new DeclQualifiedName(["String"], "startsWith"), true },
+            { new DeclQualifiedName(["String"], "endsWith"), true },
+
+            { new DeclQualifiedName(["String"], "toLower"), false }, // Using higher-order function 'map' internally
+            { new DeclQualifiedName(["String"], "toUpper"), false },
+
+            // { new DeclQualifiedName(["String"], "indexes"), true },
+
+            { new DeclQualifiedName(["Dict"], "insert"), true },
+            { new DeclQualifiedName(["Dict"], "remove"), true },
+
+            { new DeclQualifiedName(["Bitwise"], "and"), true },
+            { new DeclQualifiedName(["Bitwise"], "or"), true },
+            { new DeclQualifiedName(["Bitwise"], "xor"), true },
+
+            { new DeclQualifiedName(["Bitwise"], "complement"), true },
+
+            { new DeclQualifiedName(["Bitwise"], "shiftLeftBy"), true },
+            { new DeclQualifiedName(["Bitwise"], "shiftRightBy"), true },
+            { new DeclQualifiedName(["Bitwise"], "shiftRightZfBy"), true },
+
+            { new DeclQualifiedName(["Json","Decode"], "parseJsonStringToValue"), true },
+
+            { new DeclQualifiedName(["Pine"], "blobBytesFromChar"), true },
+            { new DeclQualifiedName(["Pine"], "intFromValue"), true },
+            { new DeclQualifiedName(["Pine"], "valueFromInt"), true },
+        }
+        .ToFrozenDictionary();
+
+    [Fact]
+    public void Parse_bundled_modules()
+    {
+        var compiledEnv =
+            BundledElmEnvironments.BundledElmCompilerCompiledEnvValue()
+            ??
+            throw new System.Exception("Failed to load Elm compiler from bundle.");
+
+        var parseCache = new PineVMParseCache();
+
+        var parsedEnv =
+            ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnv)
+            .Extract(err => throw new System.Exception("Failed parsing interactive environment: " + err));
+
+        var (staticProgram, declsFailed) =
+            PineVM.CodeAnalysis.ParseAsStaticMonomorphicProgram(
+                parsedEnv,
+                includeDeclaration:
+                declName =>
+                {
+                    return s_bundledDeclarationsSupportStatus.ContainsKey(declName);
+                },
+                parseCache)
+            .Extract(err => throw new System.Exception("Failed parsing as static program: " + err));
+
+        staticProgram.Should().NotBeNull();
+
+        foreach (var trackedDecl in s_bundledDeclarationsSupportStatus)
+        {
+            if (trackedDecl.Value)
+            {
+                if (declsFailed.ContainsKey(trackedDecl.Key))
+                {
+                    throw new System.Exception(
+                        $"Declaration {trackedDecl.Key.FullName} was expected to be supported, but parsing failed: {declsFailed[trackedDecl.Key]}");
+                }
+
+                staticProgram.NamedFunctions.Should().ContainKey(trackedDecl.Key);
+            }
+            else
+            {
+                /*
+                 * For the declarations mentioned in the tracked set, ensure we
+                 * switch the 'supported' to true as soon as parsing does not fail anymore
+                 * for that declaration.
+                 * */
+
+                declsFailed.Should().ContainKey(trackedDecl.Key);
+            }
+        }
     }
 
     [Fact]
