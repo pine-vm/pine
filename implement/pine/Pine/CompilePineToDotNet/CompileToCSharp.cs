@@ -348,8 +348,8 @@ public partial class CompileToCSharp
                 var valuesStaticMembers =
                     valuesToDeclare
                     .Select(valueToInclude => (valueToInclude, decl: memberDeclarationForValue(valueToInclude)))
-                    .OrderBy(valueAndMember => valueAndMember.decl.syntaxKind, new CSharpDeclarationOrder.ValueSyntaxKindDeclarationOrder())
-                    .ThenBy(valueAndMember => valueAndMember.valueToInclude, new CSharpDeclarationOrder.ValueDeclarationOrder())
+                    .OrderBy(valueAndMember => valueAndMember.decl.syntaxKind, CSharpDeclarationOrder.ValueSyntaxKindDeclarationOrder.Instance)
+                    .ThenBy(valueAndMember => valueAndMember.valueToInclude, CSharpDeclarationOrder.ValueDeclarationOrder.Instance)
                     .Select(valueAndMember => valueAndMember.decl.commonProps)
                     .ToImmutableList();
 

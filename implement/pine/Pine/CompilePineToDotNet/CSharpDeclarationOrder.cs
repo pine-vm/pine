@@ -23,6 +23,8 @@ public class CSharpDeclarationOrder
 
     public class ValueSyntaxKindDeclarationOrder : IComparer<CompileToCSharp.ValueSyntaxKind>
     {
+        public static readonly ValueSyntaxKindDeclarationOrder Instance = new();
+
         public int Compare(CompileToCSharp.ValueSyntaxKind? x, CompileToCSharp.ValueSyntaxKind? y)
         {
             if (x == y)
@@ -90,6 +92,8 @@ public class CSharpDeclarationOrder
 
     public class ValueDeclarationOrder : IComparer<PineValue>
     {
+        public static readonly ValueDeclarationOrder Instance = new();
+
         public int Compare(PineValue? x, PineValue? y)
         {
             if (x == y)
@@ -151,6 +155,8 @@ public class CSharpDeclarationOrder
 
     public class BlobValueDeclarationOrder : IComparer<PineValue.BlobValue>
     {
+        public static readonly BlobValueDeclarationOrder Instance = new();
+
         public int Compare(PineValue.BlobValue? x, PineValue.BlobValue? y)
         {
             if (x == y)

@@ -23,17 +23,22 @@ public record StaticProgramCSharp(
         StaticProgram staticProgram,
         DeclarationSyntaxContext declarationSyntaxContext)
     {
-        var literalsValues =
-            PineValue.CollectAllComponentsFromRoots(CollectLiteralsValues(staticProgram));
+        var valuesToReuseRoots =
+            CollectValuesToReuse(staticProgram)
+            .ToFrozenSet();
+
+        var valuesToReuse =
+            PineValue.CollectAllComponentsFromRoots(valuesToReuseRoots);
 
         var valueHashCache =
             new ConcurrentPineValueHashCache();
 
         var commonValueClass =
             StaticValueClassDeclaration(
-                blobValues: literalsValues.blobs,
-                listValues: literalsValues.lists,
+                blobValues: valuesToReuse.blobs,
+                listValues: valuesToReuse.lists,
                 className: CommonValueClassName,
+                declarationSyntaxContext,
                 valueHashCache);
 
         var availableFunctions =
@@ -99,13 +104,19 @@ public record StaticProgramCSharp(
         IReadOnlySet<PineValue.BlobValue> blobValues,
         IReadOnlySet<PineValue.ListValue> listValues,
         string className,
+        DeclarationSyntaxContext declarationSyntaxContext,
         ConcurrentPineValueHashCache valueHashCache)
     {
         var mutatedDict = new Dictionary<PineValue, string>();
 
+        var blobValuesOrdered =
+            blobValues
+            .Order(CSharpDeclarationOrder.BlobValueDeclarationOrder.Instance)
+            .ToList();
+
         var listValuesOrdered =
             listValues
-            .OrderBy(l => l.NodesCount)
+            .Order(CSharpDeclarationOrder.ValueDeclarationOrder.Instance)
             .ToList();
 
         var memberDeclarations = new List<MemberDeclarationSyntax>();
@@ -120,10 +131,10 @@ public record StaticProgramCSharp(
             return null;
         }
 
-        void AddMemberDeclaration(
-            string DeclName,
-            PineValue value)
+        void AddMemberDeclaration(PineValue value)
         {
+            var declName = NameValueDeclaration(value, valueHashCache);
+
             var declExpression =
                 CompileToCSharp.CompileToCSharpLiteralExpression(
                     value,
@@ -141,26 +152,22 @@ public record StaticProgramCSharp(
                         SyntaxFactory.SeparatedList(
                         [
                             SyntaxFactory.VariableDeclarator(
-                                SyntaxFactory.Identifier(DeclName))
+                                SyntaxFactory.Identifier(declName))
                             .WithInitializer(
                                 SyntaxFactory.EqualsValueClause(declExpression.exprSyntax))
                         ]))));
 
-            mutatedDict[value] = DeclName;
+            mutatedDict[value] = declName;
         }
 
-        foreach (var blobValue in blobValues)
+        foreach (var blobValue in blobValuesOrdered)
         {
-            var declName = NameValueDeclaration(blobValue, valueHashCache);
-
-            AddMemberDeclaration(declName, blobValue);
+            AddMemberDeclaration(blobValue);
         }
 
         foreach (var listValue in listValuesOrdered)
         {
-            var declName = NameValueDeclaration(listValue, valueHashCache);
-
-            AddMemberDeclaration(declName, listValue);
+            AddMemberDeclaration(listValue);
         }
 
         var availableDecls =
@@ -244,12 +251,28 @@ public record StaticProgramCSharp(
             $"Naming not implemented for value type {value.GetType()}");
     }
 
-    public static IEnumerable<PineValue> CollectLiteralsValues(
+    public static IEnumerable<PineValue> CollectValuesToReuse(
         StaticProgram staticProgram)
     {
-        return
-            staticProgram.NamedFunctions
-            .SelectMany(kvp => CollectLiteralsValues(kvp.Value.body));
+        foreach (var kvp in staticProgram.NamedFunctions)
+        {
+            foreach (var lit in CollectLiteralsValues(kvp.Value.body))
+                yield return lit;
+
+            foreach (var v in CollectValuesRootsFromValueClass(kvp.Value.constraint))
+                yield return v;
+
+            yield return ExpressionEncoding.EncodeExpressionAsValue(kvp.Value.origExpr);
+        }
+    }
+
+    public static IEnumerable<PineValue> CollectValuesRootsFromValueClass(
+        PineValueClass pvc)
+    {
+        foreach (var item in pvc.ParsedItems)
+        {
+            yield return item.Value;
+        }
     }
 
     public static IEnumerable<PineValue> CollectLiteralsValues<FuncId>(
