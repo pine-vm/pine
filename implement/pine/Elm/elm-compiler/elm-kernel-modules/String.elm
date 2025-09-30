@@ -166,8 +166,38 @@ foldr func acc string =
 
 
 map : (Char -> Char) -> String -> String
-map func string =
-    fromList (List.map func (toList string))
+map func (String charsBytes) =
+    String
+        (charsMap
+            0
+            (Pine_kernel.take [ 0, charsBytes ])
+            func
+            charsBytes
+        )
+
+
+charsMap : Int -> Int -> (Char -> Char) -> Int -> Int
+charsMap offset mappedBytes func charsBytes =
+    let
+        char =
+            Pine_kernel.take
+                [ 4
+                , Pine_kernel.skip [ offset, charsBytes ]
+                ]
+    in
+    if Pine_kernel.equal [ Pine_kernel.length char, 0 ] then
+        mappedBytes
+
+    else
+        let
+            mappedChar =
+                func char
+        in
+        charsMap
+            (Pine_kernel.int_add [ offset, 4 ])
+            (Pine_kernel.concat [ mappedBytes, mappedChar ])
+            func
+            charsBytes
 
 
 filter : (Char -> Bool) -> String -> String
@@ -1396,9 +1426,9 @@ indices pattern string =
 
 toUpper : String -> String
 toUpper string =
-    fromList (List.map Char.toUpper (toList string))
+    map Char.toUpper string
 
 
 toLower : String -> String
 toLower string =
-    fromList (List.map Char.toLower (toList string))
+    map Char.toLower string
