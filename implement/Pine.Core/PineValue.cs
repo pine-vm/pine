@@ -1,3 +1,4 @@
+using Pine.Core.Optimization;
 using Pine.Core.PopularEncodings;
 using System;
 using System.Collections.Frozen;
@@ -31,32 +32,42 @@ public abstract record PineValue : IEquatable<PineValue>
     /// <summary>
     /// Construct a blob value from a sequence of bytes.
     /// </summary>
-    public static PineValue Blob(ReadOnlyMemory<byte> bytes) =>
-        bytes.Length is 0
-        ?
-        EmptyBlob
-        :
-        bytes.Length is 1
-        ?
-        BlobSingleByte(bytes.Span[0])
-        :
-        bytes.Length is 2
-        ?
-        s_reusedBlobTuple[bytes.Span[0] * 256 + bytes.Span[1]]
-        :
-        bytes.Length is 3 && bytes.Span[0] is 2
-        ?
-        s_reusedBlobInteger3ByteNegative[bytes.Span[1] * 256 + bytes.Span[2]]
-        :
-        bytes.Length is 3 && bytes.Span[0] is 4
-        ?
-        s_reusedBlobInteger3BytePositive[bytes.Span[1] * 256 + bytes.Span[2]]
-        :
-        bytes.Length is 4 && bytes.Span[0] is 0 && bytes.Span[1] is 0
-        ?
-        s_reusedBlobChar4Byte[bytes.Span[2] * 256 + bytes.Span[3]]
-        :
-        new BlobValue(bytes);
+    public static PineValue Blob(ReadOnlyMemory<byte> bytes)
+    {
+        if (bytes.Length is 0)
+            return EmptyBlob;
+
+        if (bytes.Length is 1)
+            return BlobSingleByte(bytes.Span[0]);
+
+        if (bytes.Length is 2)
+            return s_reusedBlobTuple[bytes.Span[0] * 256 + bytes.Span[1]];
+
+        if (bytes.Length is 3 && bytes.Span[0] is 2)
+        {
+            return s_reusedBlobInteger3ByteNegative[bytes.Span[1] * 256 + bytes.Span[2]];
+        }
+
+        if (bytes.Length is 3 && bytes.Span[0] is 4)
+        {
+            return s_reusedBlobInteger3BytePositive[bytes.Span[1] * 256 + bytes.Span[2]];
+        }
+
+        if (bytes.Length is 4 && bytes.Span[0] is 0 && bytes.Span[1] is 0)
+        {
+            return s_reusedBlobChar4Byte[bytes.Span[2] * 256 + bytes.Span[3]];
+        }
+
+        if (ReusedBlobInstances is { } reusedSet &&
+            reusedSet.TryGetValue(new BlobValue(bytes), out var reused))
+        {
+            return reused;
+        }
+
+        var newInstance = new BlobValue(bytes);
+
+        return newInstance;
+    }
 
     /// <summary>
     /// Blob value for a single byte.
@@ -95,14 +106,7 @@ public abstract record PineValue : IEquatable<PineValue>
 
         var newInstance = new ListValue(asStruct);
 
-        if (PineValueWeakInterner.TryGetCanonical(newInstance, out var canonical))
-        {
-            return canonical;
-        }
-
-        PineValueWeakInterner.Register(newInstance);
-
-        return newInstance;
+        return PineValueWeakInterner.GetOrAdd(newInstance);
     }
 
     /// <summary>
