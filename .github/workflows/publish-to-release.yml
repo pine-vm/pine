@@ -18,7 +18,7 @@ jobs:
           - environment: windows-2022
             publish-runtime-id: win-x64
           - environment: macos-14
-            publish-runtime-id: osx-x64
+            publish-runtime-id: osx-arm64
 
     runs-on: ${{ matrix.environment }}
 
