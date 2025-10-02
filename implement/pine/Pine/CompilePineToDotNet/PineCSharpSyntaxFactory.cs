@@ -4,7 +4,6 @@ using Microsoft.CodeAnalysis;
 using Pine.Core;
 using Pine.Core.PopularEncodings;
 using Pine.Core.CodeAnalysis;
-using System.Globalization;
 using System;
 using System.Linq;
 using System.Collections.Immutable;
@@ -14,26 +13,6 @@ namespace Pine.CompilePineToDotNet;
 
 public static class PineCSharpSyntaxFactory
 {
-    public static LiteralExpressionSyntax ExpressionSyntaxForIntegerLiteral(long integer) =>
-        SyntaxFactory.LiteralExpression(
-            SyntaxKind.NumericLiteralExpression,
-            SyntaxTokenForIntegerLiteral(integer));
-
-    public static SyntaxToken SyntaxTokenForIntegerLiteral(long integer) =>
-        SyntaxFactory.Literal(
-            int.MinValue <= integer && integer <= int.MaxValue
-            ?
-            CommandLineInterface.FormatIntegerForDisplay(integer)
-            :
-            CommandLineInterface.FormatIntegerForDisplay(integer) + "L",
-            integer);
-
-    static readonly NumberFormatInfo s_integerLiteralNumberFormatInfo = new()
-    {
-        NumberGroupSeparator = "_",
-        NumberGroupSizes = [3]
-    };
-
     public static StatementSyntax BranchForEnvId(
         Expression expr,
         PineValueClass envConstraint,
@@ -108,12 +87,6 @@ public static class PineCSharpSyntaxFactory
         return
             SyntaxFactory.IfStatement(aggregateConditionExpr, branchInvocationBlock);
     }
-
-    public static readonly ExpressionSyntax PineValueEmptyListSyntax =
-        SyntaxFactory.MemberAccessExpression(
-            SyntaxKind.SimpleMemberAccessExpression,
-            SyntaxFactory.IdentifierName(nameof(PineValue)),
-            SyntaxFactory.IdentifierName(nameof(PineValue.EmptyList)));
 
     public const string ValueFromPathInValueDeclarationName = "ValueFromPathInValue";
 
@@ -316,21 +289,6 @@ public static class PineCSharpSyntaxFactory
         .WithSemicolonToken(
             SyntaxFactory.Token(SyntaxKind.SemicolonToken));
 
-    public static StatementSyntax ConsoleWriteLineForLiteralString(string logEntry) =>
-        SyntaxFactory.ExpressionStatement(
-            SyntaxFactory.InvocationExpression(
-                SyntaxFactory.MemberAccessExpression(
-                    SyntaxKind.SimpleMemberAccessExpression,
-                    SyntaxFactory.IdentifierName("Console"),
-                    SyntaxFactory.IdentifierName("WriteLine")))
-            .WithArgumentList(
-                SyntaxFactory.ArgumentList(
-                    SyntaxFactory.SingletonSeparatedList(
-                        SyntaxFactory.Argument(
-                            SyntaxFactory.LiteralExpression(
-                                SyntaxKind.StringLiteralExpression,
-                                SyntaxFactory.Literal(logEntry)))))));
-
     public static ExpressionSyntax GenericInvocationThrowingRuntimeExceptionOnError(
         FunctionCompilationEnv compilationEnv,
         ExpressionSyntax exprExpr,
@@ -380,19 +338,6 @@ public static class PineCSharpSyntaxFactory
                             SyntaxFactory.Argument(messageExpr)))));
     }
 
-    public static ExpressionSyntax ThrowParseExpressionException(
-        ExpressionSyntax messageExpr)
-    {
-        return
-            SyntaxFactory.ThrowExpression(
-                SyntaxFactory.ObjectCreationExpression(
-                    SyntaxFactory.IdentifierName(nameof(ParseExpressionException)))
-                .WithArgumentList(
-                    SyntaxFactory.ArgumentList(
-                        SyntaxFactory.SingletonSeparatedList(
-                            SyntaxFactory.Argument(messageExpr)))));
-    }
-
     public static Expression BuildPineExpressionToGetItemFromPath(
         Expression compositionExpr,
         IReadOnlyList<int> path)
@@ -427,21 +372,6 @@ public static class PineCSharpSyntaxFactory
             BuildPineExpressionToGetItemFromPath(
                 compositionExpr: currentExpr,
                 path: [.. path.Skip(1)]);
-    }
-
-    public static ExpressionSyntax BuildCSharpExpressionToGetItemFromPathOrEmptyList(
-        ExpressionSyntax compositionExpr,
-        IReadOnlyList<int> path)
-    {
-        if (path.Count is 0)
-            return compositionExpr;
-
-        return
-            SyntaxFactory.ParenthesizedExpression(
-                SyntaxFactory.BinaryExpression(
-                    SyntaxKind.CoalesceExpression,
-                    BuildCSharpExpressionToGetItemFromPathOrNull(compositionExpr, path),
-                    PineValueEmptyListSyntax));
     }
 
     public static bool IsList(PineValue pineValue) =>
@@ -510,23 +440,6 @@ public static class PineCSharpSyntaxFactory
                         })));
     }
 
-    public static ExpressionSyntax PineValueFromBoolExpression(
-        ExpressionSyntax expressionSyntax) =>
-        PineValueFromBoolExpression(
-            expressionSyntax,
-            declarationSyntaxContext: DeclarationSyntaxContext.None);
-
-    public static ExpressionSyntax PineValueFromBoolExpression(
-        ExpressionSyntax expressionSyntax,
-        DeclarationSyntaxContext declarationSyntaxContext) =>
-        InvocationExpressionOnPineVMKernelFunctionClass(
-            nameof(KernelFunction.ValueFromBool),
-            declarationSyntaxContext)
-        .WithArgumentList(
-            SyntaxFactory.ArgumentList(
-                SyntaxFactory.SingletonSeparatedList(
-                    SyntaxFactory.Argument(expressionSyntax))));
-
     public static ExpressionSyntax DescribeValueForErrorMessageExpression(
         ExpressionSyntax pineValueExprSyntax) =>
         InvocationExpressionOnPineVMClass(nameof(PineVM.PineVM.DescribeValueForErrorMessage))
@@ -547,15 +460,6 @@ public static class PineCSharpSyntaxFactory
                         SyntaxFactory.IdentifierName("Pine"),
                         SyntaxFactory.IdentifierName("PineVM")),
                     SyntaxFactory.IdentifierName("PineVM")),
-                SyntaxFactory.IdentifierName(memberIdentifierName)));
-
-    public static InvocationExpressionSyntax InvocationExpressionOnPineVMKernelFunctionClass(
-        string memberIdentifierName,
-        DeclarationSyntaxContext declarationSyntaxContext) =>
-        SyntaxFactory.InvocationExpression(
-            SyntaxFactory.MemberAccessExpression(
-                SyntaxKind.SimpleMemberAccessExpression,
-                CompileTypeSyntax.TypeSyntaxFromType(typeof(KernelFunction), declarationSyntaxContext),
                 SyntaxFactory.IdentifierName(memberIdentifierName)));
 
     public static QualifiedNameSyntax EvalExprDelegateTypeSyntax =>

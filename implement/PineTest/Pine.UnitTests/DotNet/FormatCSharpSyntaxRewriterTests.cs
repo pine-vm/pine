@@ -1,10 +1,10 @@
 using AwesomeAssertions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
-using Pine.CompilePineToDotNet;
+using Pine.Core.DotNet;
 using Xunit;
 
-namespace Pine.IntegrationTests;
+namespace Pine.UnitTests.DotNet;
 
 public class FormatCSharpSyntaxRewriterTests
 {

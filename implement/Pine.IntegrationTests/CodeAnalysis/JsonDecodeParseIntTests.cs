@@ -857,18 +857,18 @@ public class JsonDecodeParseIntTests
             """"
             .Trim());
 
-        var asCsharp =
-            Pine.PineVM.StaticProgramCSharp.FromStaticProgram(
+        var asCSharp =
+            Core.DotNet.StaticProgramCSharp.FromStaticProgram(
                 staticProgram,
                 CodeAnalysisTestHelper.DeclarationSyntaxContext);
 
-        var testClass = asCsharp.ModulesClasses[new DeclQualifiedName([], "Test")];
+        var testClass = asCSharp.ModulesClasses[new DeclQualifiedName([], "Test")];
 
         var moduleTestCSharpText =
             testClass.RenderToString();
 
         var commonValuesClassText =
-            Pine.PineVM.StaticProgramCSharpClass.RenderToString(asCsharp.CommonValueClass);
+            Pine.PineVM.StaticProgramCSharpClass.RenderToString(asCSharp.CommonValueClass);
 
         moduleTestCSharpText.Trim().Should().Be(
             """"

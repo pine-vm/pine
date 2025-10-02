@@ -1,9 +1,9 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Pine.CompilePineToDotNet;
 using Pine.Core;
 using Pine.Core.CodeAnalysis;
+using Pine.Core.DotNet;
 using Pine.Core.Internal;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -16,7 +16,7 @@ public record StaticProgramCSharpClass(
 {
     public static StaticProgramCSharpClass FromDeclarations(
         DeclQualifiedName className,
-        IReadOnlyDictionary<string, (Expression origExpr, StaticFunctionInterface interf, StaticExpression<DeclQualifiedName> body, PineValueClass constraint)> declarations,
+        IReadOnlyDictionary<string, (StaticFunctionInterface interf, StaticExpression<DeclQualifiedName> body)> declarations,
         IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
         IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls,
         DeclarationSyntaxContext declarationSyntaxContext)
@@ -52,16 +52,13 @@ public record StaticProgramCSharpClass(
     public static string RenderToString(
         ClassDeclarationSyntax classDeclarationSyntax)
     {
-        var generateTextResult =
-            CompileToCSharp.GenerateCSharpFile(
-                compileCSharpClassResult: new CompileCSharpClassResult(
-                    new SyntaxContainerConfig(
-                        ContainerTypeName: classDeclarationSyntax.Identifier.Text,
-                        DictionaryMemberName: ""),
-                    ClassDeclarationSyntax: classDeclarationSyntax,
-                    UsingDirectives: []));
+        var syntaxTree =
+            CompileToAssembly.BuildCompilationUnitSyntaxTree(
+                classDeclarationSyntax,
+                declarationSyntaxContext: DeclarationSyntaxContext.None,
+                namespacePrefix: []);
 
-        return generateTextResult.FileText;
+        return syntaxTree.ToString();
     }
 
     public static MethodDeclarationSyntax RenderFunctionToMethod(
@@ -72,27 +69,38 @@ public record StaticProgramCSharpClass(
         IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls,
         DeclarationSyntaxContext declarationSyntaxContext)
     {
-        var statementSyntax =
-            CompileToCSharpFunction(
-                functionBody: body,
-                selfFunctionName: selfFunctionName,
-                functionInterface,
-                availableFunctions,
-                availableValueDecls,
-                declarationSyntaxContext);
+        try
+        {
+            var statementSyntax =
+                CompileToCSharpFunction(
+                    functionBody: body,
+                    selfFunctionName: selfFunctionName,
+                    functionInterface,
+                    availableFunctions,
+                    availableValueDecls,
+                    declarationSyntaxContext);
 
-        return
-            MemberDeclarationSyntaxForExpression(
-                declarationName: selfFunctionName.DeclName,
-                statementSyntax: statementSyntax,
-                functionInterface: functionInterface);
+            return
+                MemberDeclarationSyntaxForExpression(
+                    declarationName: selfFunctionName.DeclName,
+                    statementSyntax: statementSyntax,
+                    functionInterface: functionInterface,
+                    declarationSyntaxContext);
+        }
+        catch (System.Exception ex)
+        {
+            throw new System.Exception(
+                "Error compiling function '" + selfFunctionName.FullName + "': " + ex.Message,
+                ex);
+        }
     }
 
 
     static MethodDeclarationSyntax MemberDeclarationSyntaxForExpression(
         string declarationName,
         StatementSyntax statementSyntax,
-        StaticFunctionInterface functionInterface)
+        StaticFunctionInterface functionInterface,
+        DeclarationSyntaxContext declarationSyntaxContext)
     {
         var blockSyntax =
             (statementSyntax as BlockSyntax)
@@ -101,7 +109,8 @@ public record StaticProgramCSharpClass(
 
         return
             SyntaxFactory.MethodDeclaration(
-                returnType: SyntaxFactory.IdentifierName(nameof(PineValue)),
+                returnType:
+                CompileTypeSyntax.TypeSyntaxFromType(typeof(PineValue), declarationSyntaxContext),
                 SyntaxFactory.Identifier(declarationName))
             .WithModifiers(
                 SyntaxFactory.TokenList(
@@ -109,7 +118,8 @@ public record StaticProgramCSharpClass(
                     SyntaxFactory.Token(SyntaxKind.StaticKeyword)))
             .WithParameterList(
                 SyntaxFactory.ParameterList(
-                    SyntaxFactory.SeparatedList(ComposeParameterList(functionInterface))))
+                    SyntaxFactory.SeparatedList(
+                        ComposeParameterList(functionInterface, declarationSyntaxContext))))
             .WithBody(blockSyntax);
     }
 
@@ -229,7 +239,7 @@ public record StaticProgramCSharpClass(
                 .Select(paramPath =>
                     SyntaxFactory.LocalDeclarationStatement(
                 SyntaxFactory.VariableDeclaration(
-                    SyntaxFactory.IdentifierName(nameof(PineValue)))
+                    CompileTypeSyntax.TypeSyntaxFromType(typeof(PineValue), declarationSyntaxContext))
                 .WithVariables(
                     SyntaxFactory.SingletonSeparatedList(
                         SyntaxFactory.VariableDeclarator(
@@ -259,9 +269,9 @@ public record StaticProgramCSharpClass(
             {
                 if (selfFunctionInterface.ParamsPaths
                     .Select((p, i) => (path: p, index: i))
-                    .FirstOrDefault(pi => IntPathEqualityComparer.Instance.Equals(pi.path, path)) is { } match)
+                    .FirstOrDefault(pi => IntPathEqualityComparer.Instance.Equals(pi.path, path)).path is { } matchPath)
                 {
-                    var paramRef = RenderParamRef(match.path);
+                    var paramRef = RenderParamRef(matchPath);
 
                     return SyntaxFactory.IdentifierName(paramRef);
                 }
@@ -351,7 +361,7 @@ public record StaticProgramCSharpClass(
             var statement =
                 SyntaxFactory.LocalDeclarationStatement(
                 SyntaxFactory.VariableDeclaration(
-                    SyntaxFactory.IdentifierName(nameof(PineValue)))
+                    CompileTypeSyntax.TypeSyntaxFromType(typeof(PineValue), declarationSyntaxContext))
                 .WithVariables(
                     SyntaxFactory.SingletonSeparatedList(
                         SyntaxFactory.VariableDeclarator(
@@ -500,7 +510,7 @@ public record StaticProgramCSharpClass(
         {
             if (availableValueDecls.TryGetValue(pineValue, out var declName))
             {
-                return SyntaxFactory.IdentifierName(declName.FullName);
+                return SyntaxFactory.ParseName(declName.FullName);
             }
 
             return null;
@@ -524,9 +534,10 @@ public record StaticProgramCSharpClass(
             }
 
             var toLiteral =
-                CompileToCSharp.CompileToCSharpLiteralExpression(
+                PineCSharpSyntaxFactory.CompileToCSharpLiteralExpression(
                     literal.Value,
-                    overrideDefaultExpression: OverrideValueLiteralExpression);
+                    overrideDefaultExpression: OverrideValueLiteralExpression,
+                    declarationSyntaxContext);
 
             return CompiledCSharpExpression.Generic(toLiteral.exprSyntax);
         }
@@ -557,7 +568,9 @@ public record StaticProgramCSharpClass(
                 SyntaxFactory.InvocationExpression(
                     SyntaxFactory.MemberAccessExpression(
                         SyntaxKind.SimpleMemberAccessExpression,
-                        SyntaxFactory.IdentifierName(nameof(PineValue)),
+                        CompileTypeSyntax.TypeSyntaxFromType(
+                            typeof(PineValue),
+                            declarationSyntaxContext),
                         SyntaxFactory.IdentifierName(nameof(PineValue.List))))
                 .WithArgumentList(
                     SyntaxFactory.ArgumentList(
@@ -654,7 +667,7 @@ public record StaticProgramCSharpClass(
 
             var genericCSharpExpr =
                 SyntaxFactory.InvocationExpression(
-                    SyntaxFactory.IdentifierName(funcApp.FunctionName.FullName))
+                    SyntaxFactory.ParseName(funcApp.FunctionName.FullName))
                 .WithArgumentList(
                     SyntaxFactory.ArgumentList(
                         SyntaxFactory.SeparatedList(
@@ -680,7 +693,8 @@ public record StaticProgramCSharpClass(
                 PineCSharpSyntaxFactory.ThrowParseExpressionException(
                     SyntaxFactory.LiteralExpression(
                         SyntaxKind.StringLiteralExpression,
-                        SyntaxFactory.Literal("TODO: Include details from encoded and env subexpressions")));
+                        SyntaxFactory.Literal("TODO: Include details from encoded and env subexpressions")),
+                    declarationSyntaxContext);
 
             return CompiledCSharpExpression.Generic(genericCSharpExpr);
         }
@@ -730,7 +744,7 @@ public record StaticProgramCSharpClass(
                             alreadyDeclared);
 
                     if (leftExpr.Type == CompiledCSharpExpression.ValueType.Boolean &&
-                       rightExpr.Type == CompiledCSharpExpression.ValueType.Boolean)
+                        rightExpr.Type == CompiledCSharpExpression.ValueType.Boolean)
                     {
                         var booleanCSharpExpr =
                             SyntaxFactory.BinaryExpression(
@@ -769,11 +783,11 @@ public record StaticProgramCSharpClass(
 
         ExpressionSyntax? TryRenderArgument(
             StaticExpression<DeclQualifiedName> argumentExpr,
-            CompileToCSharp.KernelFunctionParameterType paramType)
+            PineKernelFunctions.KernelFunctionParameterType paramType)
         {
             switch (paramType)
             {
-                case CompileToCSharp.KernelFunctionParameterType.Generic:
+                case PineKernelFunctions.KernelFunctionParameterType.Generic:
                     return
                         CompileToCSharpExpression(
                             argumentExpr,
@@ -784,7 +798,7 @@ public record StaticProgramCSharpClass(
                             alreadyDeclared)
                         .AsGenericValue(declarationSyntaxContext);
 
-                case CompileToCSharp.KernelFunctionParameterType.Integer:
+                case PineKernelFunctions.KernelFunctionParameterType.Integer:
                     {
                         if (argumentExpr is StaticExpression<DeclQualifiedName>.Literal literal &&
                             KernelFunction.SignedIntegerFromValueRelaxed(literal.Value) is { } integer &&
@@ -803,7 +817,7 @@ public record StaticProgramCSharpClass(
         }
 
         if (kernelApp.Input is StaticExpression<DeclQualifiedName>.List argumentsList &&
-            CompileToCSharp.SpecializedInterfacesFromKernelFunctionName(kernelApp.Function) is { } specializedInterfaces)
+            PineKernelFunctions.SpecializedInterfacesFromKernelFunctionName(kernelApp.Function) is { } specializedInterfaces)
         {
             var isCommutative =
                 kernelApp.Function
@@ -839,7 +853,7 @@ public record StaticProgramCSharpClass(
                 declarationSyntaxContext,
                 alreadyDeclared);
 
-        if (CompileToCSharp.CompileKernelFunctionGenericInvocation(
+        if (PineKernelFunctions.CompileKernelFunctionGenericInvocation(
             kernelApp.Function,
             inputExpr.AsGenericValue(declarationSyntaxContext),
             declarationSyntaxContext)
@@ -854,7 +868,9 @@ public record StaticProgramCSharpClass(
             SyntaxFactory.InvocationExpression(
                 SyntaxFactory.MemberAccessExpression(
                     SyntaxKind.SimpleMemberAccessExpression,
-                    SyntaxFactory.IdentifierName(nameof(KernelFunction)),
+                    CompileTypeSyntax.TypeSyntaxFromType(
+                        typeof(KernelFunction),
+                        declarationSyntaxContext),
                     SyntaxFactory.IdentifierName(nameof(KernelFunction.ApplyKernelFunctionGeneric))))
             .WithArgumentList(
                 SyntaxFactory.ArgumentList(
@@ -1033,10 +1049,10 @@ public record StaticProgramCSharpClass(
     }
 
     private static CompiledCSharpExpression? TryMatchSpecializedInterface(
-        IReadOnlyList<CompileToCSharp.KernelFunctionSpecializedInfo> specializedInterfaces,
+        IReadOnlyList<PineKernelFunctions.KernelFunctionSpecializedInfo> specializedInterfaces,
         StaticExpression<DeclQualifiedName>.List argumentsList,
         bool isCommutative,
-        System.Func<StaticExpression<DeclQualifiedName>, CompileToCSharp.KernelFunctionParameterType, ExpressionSyntax?> tryRenderArgument,
+        System.Func<StaticExpression<DeclQualifiedName>, PineKernelFunctions.KernelFunctionParameterType, ExpressionSyntax?> tryRenderArgument,
         DeclarationSyntaxContext declarationSyntaxContext)
     {
         IEnumerable<IReadOnlyList<StaticExpression<DeclQualifiedName>>> EnumerateArgumentsPermutations()
@@ -1075,9 +1091,9 @@ public record StaticProgramCSharpClass(
     }
 
     private static CompiledCSharpExpression? TryMatchSpecializedInterfaceWithArgumentsOrder(
-        CompileToCSharp.KernelFunctionSpecializedInfo specializedInterface,
+        PineKernelFunctions.KernelFunctionSpecializedInfo specializedInterface,
         IReadOnlyList<StaticExpression<DeclQualifiedName>> arguments,
-        System.Func<StaticExpression<DeclQualifiedName>, CompileToCSharp.KernelFunctionParameterType, ExpressionSyntax?> tryRenderArgument,
+        System.Func<StaticExpression<DeclQualifiedName>, PineKernelFunctions.KernelFunctionParameterType, ExpressionSyntax?> tryRenderArgument,
         DeclarationSyntaxContext declarationSyntaxContext)
     {
         if (specializedInterface.ParameterTypes.Count != arguments.Count)
@@ -1110,10 +1126,10 @@ public record StaticProgramCSharpClass(
         return
             specializedInterface.ReturnType switch
             {
-                CompileToCSharp.KernelFunctionSpecializedReturnType.Boolean =>
+                PineKernelFunctions.KernelFunctionSpecializedReturnType.Boolean =>
                 CompiledCSharpExpression.Boolean(csharpExpr),
 
-                CompileToCSharp.KernelFunctionSpecializedReturnType.Generic =>
+                PineKernelFunctions.KernelFunctionSpecializedReturnType.Generic =>
                 CompiledCSharpExpression.Generic(csharpExpr),
 
                 _ =>
@@ -1244,13 +1260,17 @@ public record StaticProgramCSharpClass(
     }
 
     public static IReadOnlyList<ParameterSyntax> ComposeParameterList(
-        StaticFunctionInterface functionInterface)
+        StaticFunctionInterface functionInterface,
+        DeclarationSyntaxContext declarationSyntaxContext)
     {
         var envItemsParameters =
             functionInterface.ParamsPaths
             .Select(paramPath =>
             SyntaxFactory.Parameter(SyntaxFactory.Identifier(RenderParamRef(paramPath)))
-            .WithType(SyntaxFactory.IdentifierName(nameof(PineValue))));
+            .WithType(
+                CompileTypeSyntax.TypeSyntaxFromType(
+                    typeof(PineValue),
+                    declarationSyntaxContext)));
 
         return [.. envItemsParameters];
     }
@@ -1264,7 +1284,7 @@ public record StaticProgramCSharpClass(
 
     private static string RenderParamRef(IReadOnlyList<int> path)
     {
-        return "param_" + string.Join('_', path);
+        return "param" + string.Concat(path.Select(i => "_" + i));
     }
 
     private static bool ContainsFunctionApplicationAsTailCall(
@@ -1303,7 +1323,10 @@ public record StaticProgramCSharpClass(
         if (expression is IdentifierNameSyntax)
             return false;
 
-        if (expression is MemberAccessExpressionSyntax)
+        if (expression is QualifiedNameSyntax)
+            return false;
+
+        if (expression is MemberAccessExpressionSyntax memberAccess)
             return false;
 
         if (expression is LiteralExpressionSyntax)

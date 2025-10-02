@@ -5,13 +5,15 @@ using System.Linq;
 using System.Collections.Immutable;
 using System.Collections.Generic;
 
-namespace Pine.CompilePineToDotNet;
+namespace Pine.Core.DotNet;
 
 public class FormatCSharpSyntaxRewriter(
     char indentChar,
     int indentCharsPerLevel)
     : CSharpSyntaxRewriter
 {
+    private static readonly FormatCSharpSyntaxRewriter s_instance = new();
+
     public FormatCSharpSyntaxRewriter()
         : this(
               indentChar: ' ',
@@ -30,7 +32,7 @@ public class FormatCSharpSyntaxRewriter(
 
     public static T FormatSyntaxTree<T>(T syntaxTree)
         where T : SyntaxNode =>
-        (T)new FormatCSharpSyntaxRewriter().Visit(syntaxTree);
+        (T)s_instance.Visit(syntaxTree);
 
     public override SyntaxNode? VisitArgumentList(ArgumentListSyntax originalNode)
     {
@@ -442,7 +444,7 @@ public class FormatCSharpSyntaxRewriter(
         if (node.Expression is not { } expression)
             return node;
 
-        if (ExpressionCausesLineBreaks(expression))
+        if (ExpressionCausesLineBreak(expression))
         {
             // Put expression on new line with proper indentation
             var indentationTrivia = ComputeIndentationTriviaForNode(originalNode.Expression);
@@ -460,7 +462,7 @@ public class FormatCSharpSyntaxRewriter(
     /// <summary>
     /// Determines if an expression will cause line breaks when formatted according to our rules
     /// </summary>
-    private static bool ExpressionCausesLineBreaks(ExpressionSyntax expression)
+    private static bool ExpressionCausesLineBreak(ExpressionSyntax expression)
     {
         return expression switch
         {
@@ -473,27 +475,31 @@ public class FormatCSharpSyntaxRewriter(
             // Function calls cause line breaks if they have complex arguments or are not simple function calls
             // Use the same logic as the invocation expression formatter
             InvocationExpressionSyntax invocationExpr =>
-                invocationExpr.Expression is not IdentifierNameSyntax ||
+                (!IsSimpleExpression(invocationExpr.Expression)) ||
                 invocationExpr.ArgumentList.Arguments.Any(arg => !IsSimpleExpression(arg.Expression)),
 
+            // Conditional expressions always cause line breaks
+            ConditionalExpressionSyntax => true,
+
             // Any expression containing a sub-expression that causes line breaks
-            _ => ContainsComplexSubExpressions(expression)
+            _ => ContainsSubExpressionCausingLineBreak(expression)
         };
     }
 
     /// <summary>
     /// Checks if an expression contains sub-expressions that would cause line breaks
     /// </summary>
-    private static bool ContainsComplexSubExpressions(ExpressionSyntax expression)
+    private static bool ContainsSubExpressionCausingLineBreak(ExpressionSyntax expression)
     {
         foreach (var childNode in expression.DescendantNodes())
         {
             if (childNode is ExpressionSyntax childExpr && childExpr != expression)
             {
-                if (ExpressionCausesLineBreaks(childExpr))
+                if (ExpressionCausesLineBreak(childExpr))
                     return true;
             }
         }
+
         return false;
     }
 
@@ -638,8 +644,7 @@ public class FormatCSharpSyntaxRewriter(
             IfStatementSyntax => false,
             ElseClauseSyntax => false,
 
-            AssignmentExpressionSyntax assignmentExpression =>
-            ExpressionCausesLineBreaks(assignmentExpression.Right),
+            AssignmentExpressionSyntax => true,
 
             WhileStatementSyntax => false,
             ForStatementSyntax => false,
@@ -655,7 +660,7 @@ public class FormatCSharpSyntaxRewriter(
             EqualsValueClauseSyntax => true,
             SwitchExpressionSyntax => true,
             CollectionExpressionSyntax collectionExpression =>
-            ContainsComplexSubExpressions(collectionExpression),
+            ContainsSubExpressionCausingLineBreak(collectionExpression),
 
             // Don't increase indentation for script context nodes
             CompilationUnitSyntax => false,
@@ -678,6 +683,12 @@ public class FormatCSharpSyntaxRewriter(
 
             MemberAccessExpressionSyntax memberAccess =>
             IsSimpleExpression(memberAccess.Expression),
+
+            ParenthesizedExpressionSyntax parenthesizedExpr =>
+            IsSimpleExpression(parenthesizedExpr.Expression),
+
+            QualifiedNameSyntax qualifiedName =>
+            IsSimpleExpression(qualifiedName.Left),
 
             _ =>
             false

@@ -2,12 +2,30 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
-using Pine.Core;
 
-namespace Pine.CompilePineToDotNet;
+namespace Pine.Core.DotNet;
 
+/// <summary>
+/// Helpers that provide deterministic ordering for <see cref="PineValue"/> instances and Pine expressions.
+/// </summary>
+/// <remarks>
+/// These orderings are used during code generation to emit stable, human-friendly declarations.
+/// See also <see cref="ValueSyntaxKindDeclarationOrder"/> which orders based on <see cref="ValueSyntaxKind"/> classification.
+/// </remarks>
 public class CSharpDeclarationOrder
 {
+    /// <summary>
+    /// Orders a mixed set of <see cref="PineValue"/>s for declaration emission.
+    /// </summary>
+    /// <remarks>
+    /// The ordering strategy is:
+    /// <list type="number">
+    /// <item><description>All blobs, ordered by <see cref="BlobValueDeclarationOrder"/>.</description></item>
+    /// <item><description>Then all lists, ordered by <see cref="OrderListValuesBySize(IEnumerable{PineValue.ListValue})"/>.</description></item>
+    /// </list>
+    /// </remarks>
+    /// <param name="pineValues">Values to order.</param>
+    /// <returns>An ordered sequence suitable for deterministic declaration.</returns>
     public static IEnumerable<PineValue> OrderValuesForDeclaration(IEnumerable<PineValue> pineValues)
     {
         var blobs =
@@ -21,11 +39,35 @@ public class CSharpDeclarationOrder
         return blobs.Cast<PineValue>().Concat(orderedLists);
     }
 
-    public class ValueSyntaxKindDeclarationOrder : IComparer<CompileToCSharp.ValueSyntaxKind>
+    /// <summary>
+    /// Comparer that orders instances of <see cref="ValueSyntaxKind"/>.
+    /// </summary>
+    /// <remarks>
+    /// Priority from highest to lowest:
+    /// <list type="number">
+    /// <item><description><see cref="ValueSyntaxKind.AsSignedInteger"/> (by numeric value).</description></item>
+    /// <item><description><see cref="ValueSyntaxKind.AsListOfSignedIntegers"/> (by length, then lexicographically by items).</description></item>
+    /// <item><description><see cref="ValueSyntaxKind.AsString"/> (lexicographically).</description></item>
+    /// <item><description><see cref="ValueSyntaxKind.Other"/>.</description></item>
+    /// </list>
+    /// </remarks>
+    public class ValueSyntaxKindDeclarationOrder : IComparer<ValueSyntaxKind>
     {
+        /// <summary>
+        /// Shared singleton instance of this comparer.
+        /// </summary>
         public static readonly ValueSyntaxKindDeclarationOrder Instance = new();
 
-        public int Compare(CompileToCSharp.ValueSyntaxKind? x, CompileToCSharp.ValueSyntaxKind? y)
+        /// <summary>
+        /// Compares two <see cref="ValueSyntaxKind"/> instances following the priority described in the type remarks.
+        /// </summary>
+        /// <param name="x">Left operand.</param>
+        /// <param name="y">Right operand.</param>
+        /// <returns>
+        /// A signed integer that indicates the relative values of <paramref name="x"/> and <paramref name="y"/>.
+        /// Less than zero means <paramref name="x"/> precedes <paramref name="y"/>; greater than zero means it follows; zero means equal.
+        /// </returns>
+        public int Compare(ValueSyntaxKind? x, ValueSyntaxKind? y)
         {
             if (x == y)
                 return 0;
@@ -36,20 +78,20 @@ public class CSharpDeclarationOrder
             if (y is null)
                 return 1;
 
-            if (x is CompileToCSharp.ValueSyntaxKind.AsSignedInteger xSignedInt)
+            if (x is ValueSyntaxKind.AsSignedInteger xSignedInt)
             {
-                if (y is CompileToCSharp.ValueSyntaxKind.AsSignedInteger ySignedInt)
+                if (y is ValueSyntaxKind.AsSignedInteger ySignedInt)
                     return xSignedInt.Value.CompareTo(ySignedInt.Value);
 
                 return -1;
             }
 
-            if (y is CompileToCSharp.ValueSyntaxKind.AsSignedInteger)
+            if (y is ValueSyntaxKind.AsSignedInteger)
                 return 1;
 
-            if (x is CompileToCSharp.ValueSyntaxKind.AsListOfSignedIntegers xListOfSignedIntegers)
+            if (x is ValueSyntaxKind.AsListOfSignedIntegers xListOfSignedIntegers)
             {
-                if (y is CompileToCSharp.ValueSyntaxKind.AsListOfSignedIntegers yListOfSignedIntegers)
+                if (y is ValueSyntaxKind.AsListOfSignedIntegers yListOfSignedIntegers)
                 {
                     if (xListOfSignedIntegers.Values.Count < yListOfSignedIntegers.Values.Count)
                         return -1;
@@ -72,28 +114,50 @@ public class CSharpDeclarationOrder
                 return -1;
             }
 
-            if (y is CompileToCSharp.ValueSyntaxKind.AsListOfSignedIntegers)
+            if (y is ValueSyntaxKind.AsListOfSignedIntegers)
                 return 1;
 
-            if (x is CompileToCSharp.ValueSyntaxKind.AsString xString)
+            if (x is ValueSyntaxKind.AsString xString)
             {
-                if (y is CompileToCSharp.ValueSyntaxKind.AsString yString)
+                if (y is ValueSyntaxKind.AsString yString)
                     return xString.Value.CompareTo(yString.Value);
 
                 return -1;
             }
 
-            if (y is CompileToCSharp.ValueSyntaxKind.AsString)
+            if (y is ValueSyntaxKind.AsString)
                 return 1;
 
             return 0;
         }
     }
 
+    /// <summary>
+    /// Comparer that orders <see cref="PineValue"/>s of the same primitive kind for deterministic output.
+    /// </summary>
+    /// <remarks>
+    /// Ordering is defined as:
+    /// <list type="bullet">
+    /// <item><description>Blobs: by <see cref="BlobValueDeclarationOrder"/>.</description></item>
+    /// <item><description>Lists: by aggregate size (nodes + contained bytes), then by item count, then lexicographically by items.</description></item>
+    /// </list>
+    /// </remarks>
     public class ValueDeclarationOrder : IComparer<PineValue>
     {
+        /// <summary>
+        /// Shared singleton instance of this comparer.
+        /// </summary>
         public static readonly ValueDeclarationOrder Instance = new();
 
+        /// <summary>
+        /// Compares two <see cref="PineValue"/> instances of compatible kinds.
+        /// </summary>
+        /// <param name="x">Left operand.</param>
+        /// <param name="y">Right operand.</param>
+        /// <returns>
+        /// A signed integer that indicates the relative values of <paramref name="x"/> and <paramref name="y"/>.
+        /// Less than zero means <paramref name="x"/> precedes <paramref name="y"/>; greater than zero means it follows; zero means equal.
+        /// </returns>
         public int Compare(PineValue? x, PineValue? y)
         {
             if (x == y)
@@ -153,10 +217,25 @@ public class CSharpDeclarationOrder
         }
     }
 
+    /// <summary>
+    /// Comparer for <see cref="PineValue.BlobValue"/> that orders by payload length and then by byte content.
+    /// </summary>
     public class BlobValueDeclarationOrder : IComparer<PineValue.BlobValue>
     {
+        /// <summary>
+        /// Shared singleton instance of this comparer.
+        /// </summary>
         public static readonly BlobValueDeclarationOrder Instance = new();
 
+        /// <summary>
+        /// Compares two blob values by length, then lexicographically by bytes.
+        /// </summary>
+        /// <param name="x">Left operand.</param>
+        /// <param name="y">Right operand.</param>
+        /// <returns>
+        /// A signed integer that indicates the relative values of <paramref name="x"/> and <paramref name="y"/>.
+        /// Less than zero means <paramref name="x"/> precedes <paramref name="y"/>; greater than zero means it follows; zero means equal.
+        /// </returns>
         public int Compare(PineValue.BlobValue? x, PineValue.BlobValue? y)
         {
             if (x == y)
@@ -187,12 +266,26 @@ public class CSharpDeclarationOrder
         }
     }
 
+    /// <summary>
+    /// Orders list values by their aggregate size (nodes + contained bytes).
+    /// </summary>
+    /// <param name="listValues">The list values to order.</param>
+    /// <returns>Lists ordered from smaller to larger structural footprint.</returns>
     public static IEnumerable<PineValue.ListValue> OrderListValuesBySize(IEnumerable<PineValue.ListValue> listValues) =>
         listValues
         .Select(value => (value, size: AggregateSizeIncludingDescendants(value)))
         .OrderBy(tuple => tuple.size)
         .Select(tuple => tuple.value);
 
+    /// <summary>
+    /// Orders list values considering containment relationships to obtain a stable order.
+    /// </summary>
+    /// <remarks>
+    /// Starts from lists ordered by size, then appends descendants (breadth-first, reversed) and de-duplicates,
+    /// preserving only those present in the input. This prefers smaller/ancestor lists over larger/descendant lists.
+    /// </remarks>
+    /// <param name="listValues">The list values to order.</param>
+    /// <returns>An ordered sequence of list values accounting for containment.</returns>
     public static IEnumerable<PineValue.ListValue> OrderListValuesByContainment(IEnumerable<PineValue.ListValue> listValues)
     {
         var listValuesSortedBySize =
@@ -214,6 +307,11 @@ public class CSharpDeclarationOrder
         return orderedLists;
     }
 
+    /// <summary>
+    /// Orders expressions so that ancestors appear before their descendants in a deterministic way.
+    /// </summary>
+    /// <param name="expressions">The expressions to order.</param>
+    /// <returns>An ordered sequence of expressions respecting containment.</returns>
     public static IEnumerable<Expression> OrderExpressionsByContainment(IEnumerable<Expression> expressions)
     {
         var descendantLists =
@@ -247,7 +345,7 @@ public class CSharpDeclarationOrder
     {
         var queue = new Queue<PineValue.ListValue>(roots);
 
-        while (queue.Any())
+        while (queue.Count is not 0)
         {
             var current = queue.Dequeue();
 

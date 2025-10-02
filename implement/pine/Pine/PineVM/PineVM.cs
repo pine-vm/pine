@@ -42,6 +42,12 @@ public class PineVM : IPineVM
 
     private readonly IReadOnlyDictionary<PineValue, Func<EvalExprDelegate, PineValue, Result<string, PineValue>>>? overrideInvocations;
 
+    private readonly IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>? _precompiledLeaves;
+
+    private readonly Action<PineValue, PineValue>? _reportEnterPrecompiledLeaf;
+
+    private readonly Action<PineValue, PineValue, PineValue?>? _reportExitPrecompiledLeaf;
+
     public record EvaluationReport(
         PineValue ExpressionValue,
         Expression Expression,
@@ -60,6 +66,9 @@ public class PineVM : IPineVM
         bool disableReductionInCompilation = false,
         bool disablePrecompiled = false,
         bool enableTailRecursionOptimization = false,
+        IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>? precompiledLeaves = null,
+        Action<PineValue, PineValue>? reportEnterPrecompiledLeaf = null,
+        Action<PineValue, PineValue, PineValue?>? reportExitPrecompiledLeaf = null,
         IReadOnlyDictionary<PineValue, Func<EvalExprDelegate, PineValue, Result<string, PineValue>>>? overrideInvocations = null,
         IReadOnlyDictionary<PineValue, IReadOnlyList<string>>? expressionsDisplayNames = null)
     {
@@ -74,6 +83,15 @@ public class PineVM : IPineVM
         this.disableReductionInCompilation = disableReductionInCompilation;
         this.disablePrecompiled = disablePrecompiled;
         this.enableTailRecursionOptimization = enableTailRecursionOptimization;
+
+        _precompiledLeaves =
+            precompiledLeaves
+            ??
+            Core.Bundle.BundledPineToDotnet.LoadBundledTask.Result?.BuildDictionary()
+            .WithDefault(null);
+
+        _reportEnterPrecompiledLeaf = reportEnterPrecompiledLeaf;
+        _reportExitPrecompiledLeaf = reportExitPrecompiledLeaf;
 
         this.overrideInvocations = overrideInvocations;
     }
@@ -1223,7 +1241,7 @@ public class PineVM : IPineVM
 
         var stack = new Stack<StackFrame>();
 
-        string? invokePrecompiledOrBuildStackFrame(
+        string? InvokePrecompiledOrBuildStackFrame(
             PineValue? expressionValue,
             Expression expression,
             PineValue environmentValue,
@@ -1285,7 +1303,7 @@ public class PineVM : IPineVM
                             }
 
                             return
-                                invokePrecompiledOrBuildStackFrame(
+                                InvokePrecompiledOrBuildStackFrame(
                                     expressionValue: continueParseAndEval.ExpressionValue,
                                     expression: contParseOk,
                                     environmentValue: continueParseAndEval.EnvironmentValue,
@@ -1323,6 +1341,25 @@ public class PineVM : IPineVM
             }
             else
             {
+                if (_precompiledLeaves is not null && expressionValue is not null)
+                {
+                    if (_precompiledLeaves.TryGetValue(expressionValue, out var computeLeafDelegate))
+                    {
+                        _reportEnterPrecompiledLeaf?.Invoke(expressionValue, environmentValue);
+
+                        var valueComputedInLeaf = computeLeafDelegate(expressionValue);
+
+                        _reportExitPrecompiledLeaf?.Invoke(expressionValue, environmentValue, valueComputedInLeaf);
+
+                        if (valueComputedInLeaf is { } computedValue)
+                        {
+                            currentFrame.PushInstructionResult(computedValue);
+
+                            return null;
+                        }
+                    }
+                }
+
                 buildAndPushStackFrame
                 (
                     expressionValue: expressionValue,
@@ -1505,7 +1542,7 @@ public class PineVM : IPineVM
 
                     if (stepResult is ApplyStepwise.StepResult.Continue cont)
                     {
-                        if (invokePrecompiledOrBuildStackFrame(
+                        if (InvokePrecompiledOrBuildStackFrame(
                             expressionValue: null,
                             expression: cont.Expression,
                             environmentValue: cont.EnvironmentValue,
@@ -2344,7 +2381,7 @@ public class PineVM : IPineVM
                                 followingInstruction.Kind is StackInstructionKind.Return;
 
                             {
-                                if (invokePrecompiledOrBuildStackFrame(
+                                if (InvokePrecompiledOrBuildStackFrame(
                                     expressionValue: expressionValue,
                                     parseOk,
                                     environmentValue,
@@ -2980,28 +3017,6 @@ public class PineVM : IPineVM
             KernelFunction.ApplyKernelFunctionGeneric(
                 function: application.Function,
                 inputValue: inputValue);
-    }
-
-    public static PineValue ValueFromPathInValueOrEmptyList(
-        PineValue environment,
-        ReadOnlySpan<int> path)
-    {
-        var currentNode = environment;
-
-        for (var i = 0; i < path.Length; i++)
-        {
-            if (currentNode is not PineValue.ListValue listValue)
-                return PineValue.EmptyList;
-
-            var skipCount = path[i];
-
-            if (skipCount >= listValue.Items.Length)
-                return PineValue.EmptyList;
-
-            currentNode = listValue.Items.Span[skipCount < 0 ? 0 : skipCount];
-        }
-
-        return currentNode;
     }
 
     public PineValue EvaluateConditionalExpression(

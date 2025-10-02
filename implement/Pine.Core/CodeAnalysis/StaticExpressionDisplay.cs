@@ -583,6 +583,6 @@ public static class StaticExpressionDisplay
 
     private static string RenderParamRef(IReadOnlyList<int> path)
     {
-        return "param_" + string.Join('_', path);
+        return "param" + string.Concat(path.Select(i => "_" + i));
     }
 }

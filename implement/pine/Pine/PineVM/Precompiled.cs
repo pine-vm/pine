@@ -1284,13 +1284,13 @@ public class Precompiled
          * */
 
         var right =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+            environment.ValueFromPathOrEmptyList([1, 0]);
 
         var left =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
+            environment.ValueFromPathOrEmptyList([1, 1]);
 
         var leftTagName =
-            PineVM.ValueFromPathInValueOrEmptyList(left, [0]);
+            left.ValueFromPathOrEmptyList([0]);
 
         if (leftTagName == Tag_Nothing_Name_Value)
         {
@@ -1298,7 +1298,7 @@ public class Precompiled
         }
 
         var rightTagName =
-            PineVM.ValueFromPathInValueOrEmptyList(right, [0]);
+            right.ValueFromPathOrEmptyList([0]);
 
         if (rightTagName == Tag_Nothing_Name_Value)
         {
@@ -1306,10 +1306,10 @@ public class Precompiled
         }
 
         var leftLikelyFilled =
-            PineVM.ValueFromPathInValueOrEmptyList(left, [1, 0]);
+            left.ValueFromPathOrEmptyList([1, 0]);
 
         var rightLikelyFilled =
-            PineVM.ValueFromPathInValueOrEmptyList(right, [1, 0]);
+            right.ValueFromPathOrEmptyList([1, 0]);
 
         return Tag_Just_Value(
             PineValue.List(
@@ -1336,7 +1336,7 @@ public class Precompiled
          * */
 
         var charValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+            environment.ValueFromPathOrEmptyList([1, 0]);
 
         if (charValue is not PineValue.BlobValue charBlob || charBlob.Bytes.Length < 1)
         {
@@ -1370,7 +1370,7 @@ public class Precompiled
         PineVMParseCache parseCache)
     {
         var charValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+            environment.ValueFromPathOrEmptyList([1, 0]);
 
         if (charValue is not PineValue.BlobValue charBlob || charBlob.Bytes.Length < 1)
         {
@@ -1517,13 +1517,13 @@ public class Precompiled
          * */
 
         var acc =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+            environment.ValueFromPathOrEmptyList([1, 0]);
 
         var offsetValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
+            environment.ValueFromPathOrEmptyList([1, 1]);
 
         var chars =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 2]);
+            environment.ValueFromPathOrEmptyList([1, 2]);
 
         if (IntegerEncoding.ParseSignedIntegerRelaxed(offsetValue).IsOkOrNullable() is not { } offset)
         {
@@ -1735,13 +1735,13 @@ public class Precompiled
          * */
 
         var argOffsetValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+            environment.ValueFromPathOrEmptyList([1, 0]);
 
         var blobValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
+            environment.ValueFromPathOrEmptyList([1, 1]);
 
         var charsValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 2]);
+            environment.ValueFromPathOrEmptyList([1, 2]);
 
         if (charsValue is not PineValue.ListValue charsList)
         {
@@ -2012,12 +2012,12 @@ public class Precompiled
         void collectChunks(PineValue argBuilder)
         {
             var argBuilderTagValue =
-                PineVM.ValueFromPathInValueOrEmptyList(argBuilder, [0]);
+                argBuilder.ValueFromPathOrEmptyList([0]);
 
             if (argBuilderTagValue == Tag_I8_Name_Value)
             {
                 var nValue =
-                    PineVM.ValueFromPathInValueOrEmptyList(argBuilder, [1, 0]);
+                    argBuilder.ValueFromPathOrEmptyList([1, 0]);
 
                 if (IntegerEncoding.ParseSignedIntegerRelaxed(nValue).IsOkOrNullable() is not { } n)
                 {
@@ -2045,10 +2045,10 @@ public class Precompiled
             if (argBuilderTagValue == Tag_I16_Name_Value)
             {
                 var eValue =
-                    PineVM.ValueFromPathInValueOrEmptyList(argBuilder, [1, 0]);
+                    argBuilder.ValueFromPathOrEmptyList([1, 0]);
 
                 var nValue =
-                    PineVM.ValueFromPathInValueOrEmptyList(argBuilder, [1, 1]);
+                    argBuilder.ValueFromPathOrEmptyList([1, 1]);
 
                 if (IntegerEncoding.ParseSignedIntegerRelaxed(nValue).IsOkOrNullable() is not { } n)
                 {
@@ -2078,10 +2078,10 @@ public class Precompiled
             if (argBuilderTagValue == Tag_I32_Name_Value)
             {
                 var eValue =
-                    PineVM.ValueFromPathInValueOrEmptyList(argBuilder, [1, 0]);
+                    argBuilder.ValueFromPathOrEmptyList([1, 0]);
 
                 var nValue =
-                    PineVM.ValueFromPathInValueOrEmptyList(argBuilder, [1, 1]);
+                    argBuilder.ValueFromPathOrEmptyList([1, 1]);
 
                 if (IntegerEncoding.ParseSignedIntegerRelaxed(nValue).IsOkOrNullable() is not { } n)
                 {
@@ -2114,7 +2114,7 @@ public class Precompiled
             if (argBuilderTagValue == Tag_U8_Name_Value)
             {
                 var nValue =
-                    PineVM.ValueFromPathInValueOrEmptyList(argBuilder, [1, 0]);
+                    argBuilder.ValueFromPathOrEmptyList([1, 0]);
 
                 if (IntegerEncoding.ParseSignedIntegerRelaxed(nValue).IsOkOrNullable() is not { } n)
                 {
@@ -2131,10 +2131,10 @@ public class Precompiled
             if (argBuilderTagValue == Tag_U16_Name_Value)
             {
                 var eValue =
-                    PineVM.ValueFromPathInValueOrEmptyList(argBuilder, [1, 0]);
+                    argBuilder.ValueFromPathOrEmptyList([1, 0]);
 
                 var nValue =
-                    PineVM.ValueFromPathInValueOrEmptyList(argBuilder, [1, 1]);
+                    argBuilder.ValueFromPathOrEmptyList([1, 1]);
 
                 if (IntegerEncoding.ParseSignedIntegerRelaxed(nValue).IsOkOrNullable() is not { } n)
                 {
@@ -2163,10 +2163,10 @@ public class Precompiled
             if (argBuilderTagValue == Tag_U32_Name_Value)
             {
                 var eValue =
-                    PineVM.ValueFromPathInValueOrEmptyList(argBuilder, [1, 0]);
+                    argBuilder.ValueFromPathOrEmptyList([1, 0]);
 
                 var nValue =
-                    PineVM.ValueFromPathInValueOrEmptyList(argBuilder, [1, 1]);
+                    argBuilder.ValueFromPathOrEmptyList([1, 1]);
 
                 if (IntegerEncoding.ParseSignedIntegerRelaxed(nValue).IsOkOrNullable() is not { } n)
                 {
@@ -2199,7 +2199,7 @@ public class Precompiled
             if (argBuilderTagValue == Tag_BytesEncoder_Name_Value)
             {
                 var bytesBlobValue =
-                    PineVM.ValueFromPathInValueOrEmptyList(argBuilder, [1, 0, 1, 0]);
+                    argBuilder.ValueFromPathOrEmptyList([1, 0, 1, 0]);
 
                 if (bytesBlobValue is PineValue.BlobValue bytesBlob)
                 {
@@ -2212,7 +2212,7 @@ public class Precompiled
             if (argBuilderTagValue == Tag_SequenceEncoder_Name_Value)
             {
                 var sequenceValue =
-                    PineVM.ValueFromPathInValueOrEmptyList(argBuilder, [1, 0]);
+                    argBuilder.ValueFromPathOrEmptyList([1, 0]);
 
                 if (sequenceValue is PineValue.ListValue sequenceList)
                 {
@@ -2229,7 +2229,7 @@ public class Precompiled
         }
 
         var argBuilder =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+            environment.ValueFromPathOrEmptyList([1, 0]);
 
         collectChunks(argBuilder);
 
@@ -2251,7 +2251,7 @@ public class Precompiled
          * */
 
         var stringArg =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+            environment.ValueFromPathOrEmptyList([1, 0]);
 
         if (stringArg is not PineValue.ListValue stringList)
         {
@@ -2338,7 +2338,7 @@ public class Precompiled
 
 
         var argBytes =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+            environment.ValueFromPathOrEmptyList([1, 0]);
 
         if (argBytes is not PineValue.ListValue argBytesList)
         {
@@ -2389,8 +2389,8 @@ public class Precompiled
         PineValue environment,
         PineVMParseCache parseCache)
     {
-        var argA = PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
-        var argB = PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
+        var argA = environment.ValueFromPathOrEmptyList([1, 0]);
+        var argB = environment.ValueFromPathOrEmptyList([1, 1]);
 
         return BasicsCompare(argA, argB);
     }
@@ -2402,27 +2402,27 @@ public class Precompiled
             return Tag_EQ_Value;
         }
 
-        var aTag = PineVM.ValueFromPathInValueOrEmptyList(a, [0]);
-        var bTag = PineVM.ValueFromPathInValueOrEmptyList(b, [0]);
+        var aTag = a.ValueFromPathOrEmptyList([0]);
+        var bTag = b.ValueFromPathOrEmptyList([0]);
 
         if (aTag == ElmValue.ElmStringTypeTagNameAsValue && bTag == ElmValue.ElmStringTypeTagNameAsValue)
         {
             return
                 CompareStrings(
-                    PineVM.ValueFromPathInValueOrEmptyList(a, [1, 0]),
-                    PineVM.ValueFromPathInValueOrEmptyList(b, [1, 0]));
+                    a.ValueFromPathOrEmptyList([1, 0]),
+                    b.ValueFromPathOrEmptyList([1, 0]));
         }
 
         if (aTag == ElmValue.ElmFloatTypeTagNameAsValue && bTag == ElmValue.ElmFloatTypeTagNameAsValue)
         {
-            var aTagArgs = PineVM.ValueFromPathInValueOrEmptyList(a, [1]);
-            var bTagArgs = PineVM.ValueFromPathInValueOrEmptyList(b, [1]);
+            var aTagArgs = a.ValueFromPathOrEmptyList([1]);
+            var bTagArgs = b.ValueFromPathOrEmptyList([1]);
 
-            var numA = PineVM.ValueFromPathInValueOrEmptyList(aTagArgs, [0]);
-            var denomA = PineVM.ValueFromPathInValueOrEmptyList(aTagArgs, [1]);
+            var numA = aTagArgs.ValueFromPathOrEmptyList([0]);
+            var denomA = aTagArgs.ValueFromPathOrEmptyList([1]);
 
-            var numB = PineVM.ValueFromPathInValueOrEmptyList(bTagArgs, [0]);
-            var denomB = PineVM.ValueFromPathInValueOrEmptyList(bTagArgs, [1]);
+            var numB = bTagArgs.ValueFromPathOrEmptyList([0]);
+            var denomB = bTagArgs.ValueFromPathOrEmptyList([1]);
 
             var leftProduct = KernelFunctionSpecialized.int_mul(numA, denomB);
             var rightProduct = KernelFunctionSpecialized.int_mul(numB, denomA);
@@ -2442,10 +2442,10 @@ public class Precompiled
 
         if (aTag == ElmValue.ElmFloatTypeTagNameAsValue)
         {
-            var aTagArgs = PineVM.ValueFromPathInValueOrEmptyList(a, [1]);
+            var aTagArgs = a.ValueFromPathOrEmptyList([1]);
 
-            var numA = PineVM.ValueFromPathInValueOrEmptyList(aTagArgs, [0]);
-            var denomA = PineVM.ValueFromPathInValueOrEmptyList(aTagArgs, [1]);
+            var numA = aTagArgs.ValueFromPathOrEmptyList([0]);
+            var denomA = aTagArgs.ValueFromPathOrEmptyList([1]);
 
             var rightProduct = KernelFunctionSpecialized.int_mul(denomA, b);
 
@@ -2464,10 +2464,10 @@ public class Precompiled
 
         if (bTag == ElmValue.ElmFloatTypeTagNameAsValue)
         {
-            var bTagArgs = PineVM.ValueFromPathInValueOrEmptyList(b, [1]);
+            var bTagArgs = b.ValueFromPathOrEmptyList([1]);
 
-            var numB = PineVM.ValueFromPathInValueOrEmptyList(bTagArgs, [0]);
-            var denomB = PineVM.ValueFromPathInValueOrEmptyList(bTagArgs, [1]);
+            var numB = bTagArgs.ValueFromPathOrEmptyList([0]);
+            var denomB = bTagArgs.ValueFromPathOrEmptyList([1]);
 
             var leftProduct = KernelFunctionSpecialized.int_mul(a, denomB);
 
@@ -2646,8 +2646,8 @@ public class Precompiled
         PineValue environment,
         PineVMParseCache parseCache)
     {
-        var argA = PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
-        var argB = PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
+        var argA = environment.ValueFromPathOrEmptyList([1, 0]);
+        var argB = environment.ValueFromPathOrEmptyList([1, 1]);
 
         return BasicsEq(argA, argB);
     }
@@ -2668,11 +2668,11 @@ public class Precompiled
             return (true, 0);
         }
 
-        var aTag = PineVM.ValueFromPathInValueOrEmptyList(a, [0]);
-        var bTag = PineVM.ValueFromPathInValueOrEmptyList(b, [0]);
+        var aTag = a.ValueFromPathOrEmptyList([0]);
+        var bTag = b.ValueFromPathOrEmptyList([0]);
 
-        var aTagArgs = PineVM.ValueFromPathInValueOrEmptyList(a, [1]);
-        var bTagArgs = PineVM.ValueFromPathInValueOrEmptyList(b, [1]);
+        var aTagArgs = a.ValueFromPathOrEmptyList([1]);
+        var bTagArgs = b.ValueFromPathOrEmptyList([1]);
 
         if (aTag == ElmValue.ElmFloatTypeTagNameAsValue &&
             aTagArgs is PineValue.ListValue argsList && argsList.Items.Length is 2)
@@ -2721,8 +2721,8 @@ public class Precompiled
 
                 if (aTag == ElmValue.ElmSetTypeTagNameAsValue)
                 {
-                    var dictA = PineVM.ValueFromPathInValueOrEmptyList(a, [1, 0]);
-                    var dictB = PineVM.ValueFromPathInValueOrEmptyList(b, [1, 0]);
+                    var dictA = a.ValueFromPathOrEmptyList([1, 0]);
+                    var dictB = b.ValueFromPathOrEmptyList([1, 0]);
 
                     var dictAKeys = DictKeysRecursive(dictA);
                     var dictBKeys = DictKeysRecursive(dictB);
@@ -2740,7 +2740,7 @@ public class Precompiled
 
     public static ReadOnlyMemory<PineValue> DictToListRecursive(PineValue dict)
     {
-        var tag = PineVM.ValueFromPathInValueOrEmptyList(dict, [0]);
+        var tag = dict.ValueFromPathOrEmptyList([0]);
 
         if (tag == ElmValue.ElmDictEmptyTagNameAsValue)
         {
@@ -2749,12 +2749,12 @@ public class Precompiled
 
         if (tag == ElmValue.ElmDictNotEmptyTagNameAsValue)
         {
-            var dictNotEmptyArgs = PineVM.ValueFromPathInValueOrEmptyList(dict, [1]);
+            var dictNotEmptyArgs = dict.ValueFromPathOrEmptyList([1]);
 
-            var argKey = PineVM.ValueFromPathInValueOrEmptyList(dictNotEmptyArgs, [1]);
-            var argValue = PineVM.ValueFromPathInValueOrEmptyList(dictNotEmptyArgs, [2]);
-            var argLeft = PineVM.ValueFromPathInValueOrEmptyList(dictNotEmptyArgs, [3]);
-            var argRight = PineVM.ValueFromPathInValueOrEmptyList(dictNotEmptyArgs, [4]);
+            var argKey = dictNotEmptyArgs.ValueFromPathOrEmptyList([1]);
+            var argValue = dictNotEmptyArgs.ValueFromPathOrEmptyList([2]);
+            var argLeft = dictNotEmptyArgs.ValueFromPathOrEmptyList([3]);
+            var argRight = dictNotEmptyArgs.ValueFromPathOrEmptyList([4]);
 
             var fromLeft = DictToListRecursive(argLeft);
             var fromRight = DictToListRecursive(argRight);
@@ -2775,7 +2775,7 @@ public class Precompiled
 
     static ReadOnlyMemory<PineValue> DictKeysRecursive(PineValue dict)
     {
-        var tag = PineVM.ValueFromPathInValueOrEmptyList(dict, [0]);
+        var tag = dict.ValueFromPathOrEmptyList([0]);
 
         if (tag == ElmValue.ElmDictEmptyTagNameAsValue)
         {
@@ -2784,12 +2784,12 @@ public class Precompiled
 
         if (tag == ElmValue.ElmDictNotEmptyTagNameAsValue)
         {
-            var dictNotEmptyArgs = PineVM.ValueFromPathInValueOrEmptyList(dict, [1]);
+            var dictNotEmptyArgs = dict.ValueFromPathOrEmptyList([1]);
 
-            var argKey = PineVM.ValueFromPathInValueOrEmptyList(dictNotEmptyArgs, [1]);
+            var argKey = dictNotEmptyArgs.ValueFromPathOrEmptyList([1]);
 
-            var argLeft = PineVM.ValueFromPathInValueOrEmptyList(dictNotEmptyArgs, [3]);
-            var argRight = PineVM.ValueFromPathInValueOrEmptyList(dictNotEmptyArgs, [4]);
+            var argLeft = dictNotEmptyArgs.ValueFromPathOrEmptyList([3]);
+            var argRight = dictNotEmptyArgs.ValueFromPathOrEmptyList([4]);
 
             var fromLeft = DictKeysRecursive(argLeft);
             var fromRight = DictKeysRecursive(argRight);
@@ -2833,8 +2833,8 @@ public class Precompiled
         PineValue environment,
         PineVMParseCache parseCache)
     {
-        var item = PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
-        var list = PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
+        var item = environment.ValueFromPathOrEmptyList([1, 0]);
+        var list = environment.ValueFromPathOrEmptyList([1, 1]);
 
         return ListMember(item, list);
     }
@@ -2878,8 +2878,8 @@ public class Precompiled
         PineValue environment,
         PineVMParseCache parseCache)
     {
-        var key = PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
-        var list = PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
+        var key = environment.ValueFromPathOrEmptyList([1, 0]);
+        var list = environment.ValueFromPathOrEmptyList([1, 1]);
 
         return CommonAssocListGetRecursive(key, list);
     }
@@ -2921,13 +2921,13 @@ public class Precompiled
         PineVMParseCache parseCache)
     {
         var index =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+            environment.ValueFromPathOrEmptyList([1, 0]);
 
         var key =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
+            environment.ValueFromPathOrEmptyList([1, 1]);
 
         var list =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 2]);
+            environment.ValueFromPathOrEmptyList([1, 2]);
 
         if (list is not PineValue.ListValue listValue)
         {
@@ -2983,10 +2983,10 @@ public class Precompiled
         PineVMParseCache parseCache)
     {
         var remaining =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+            environment.ValueFromPathOrEmptyList([1, 0]);
 
         var accumulator =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
+            environment.ValueFromPathOrEmptyList([1, 1]);
 
         if (remaining is not PineValue.ListValue remainingList)
         {
@@ -3026,15 +3026,15 @@ public class Precompiled
         PineValue environment,
         PineVMParseCache parseCache)
     {
-        var targetKey = PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
-        var dict = PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
+        var targetKey = environment.ValueFromPathOrEmptyList([1, 0]);
+        var dict = environment.ValueFromPathOrEmptyList([1, 1]);
 
         return DictGet(targetKey, dict);
     }
 
     static PineValue DictGet(PineValue targetKey, PineValue dict)
     {
-        var dictTag = PineVM.ValueFromPathInValueOrEmptyList(dict, [0]);
+        var dictTag = dict.ValueFromPathOrEmptyList([0]);
 
         if (dictTag == ElmValue.ElmDictEmptyTagNameAsValue)
         {
@@ -3043,12 +3043,12 @@ public class Precompiled
 
         if (dictTag == ElmValue.ElmDictNotEmptyTagNameAsValue)
         {
-            var dictNotEmptyArgs = PineVM.ValueFromPathInValueOrEmptyList(dict, [1]);
+            var dictNotEmptyArgs = dict.ValueFromPathOrEmptyList([1]);
 
-            var key = PineVM.ValueFromPathInValueOrEmptyList(dictNotEmptyArgs, [1]);
-            var value = PineVM.ValueFromPathInValueOrEmptyList(dictNotEmptyArgs, [2]);
-            var left = PineVM.ValueFromPathInValueOrEmptyList(dictNotEmptyArgs, [3]);
-            var right = PineVM.ValueFromPathInValueOrEmptyList(dictNotEmptyArgs, [4]);
+            var key = dictNotEmptyArgs.ValueFromPathOrEmptyList([1]);
+            var value = dictNotEmptyArgs.ValueFromPathOrEmptyList([2]);
+            var left = dictNotEmptyArgs.ValueFromPathOrEmptyList([3]);
+            var right = dictNotEmptyArgs.ValueFromPathOrEmptyList([4]);
 
             var comparison = BasicsCompare(targetKey, key);
 
@@ -3079,7 +3079,7 @@ public class Precompiled
             long n,
             PineValue dict)
         {
-            var dictTag = PineVM.ValueFromPathInValueOrEmptyList(dict, [0]);
+            var dictTag = dict.ValueFromPathOrEmptyList([0]);
 
             if (dictTag == ElmValue.ElmDictEmptyTagNameAsValue)
             {
@@ -3088,10 +3088,10 @@ public class Precompiled
 
             if (dictTag == ElmValue.ElmDictNotEmptyTagNameAsValue)
             {
-                var dictNotEmptyArgs = PineVM.ValueFromPathInValueOrEmptyList(dict, [1]);
+                var dictNotEmptyArgs = dict.ValueFromPathOrEmptyList([1]);
 
-                var left = PineVM.ValueFromPathInValueOrEmptyList(dictNotEmptyArgs, [3]);
-                var right = PineVM.ValueFromPathInValueOrEmptyList(dictNotEmptyArgs, [4]);
+                var left = dictNotEmptyArgs.ValueFromPathOrEmptyList([3]);
+                var right = dictNotEmptyArgs.ValueFromPathOrEmptyList([4]);
 
                 return sizeHelp(sizeHelp(n + 1, right), left);
             }
@@ -3100,13 +3100,13 @@ public class Precompiled
         }
 
         var countValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+            environment.ValueFromPathOrEmptyList([1, 0]);
 
         var count =
             IntegerEncoding.ParseSignedIntegerStrict(countValue)
             .Extract(err => throw new Exception(err));
 
-        var dict = PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
+        var dict = environment.ValueFromPathOrEmptyList([1, 1]);
 
         return IntegerEncoding.EncodeSignedInteger(sizeHelp((long)count, dict));
     }
@@ -3116,8 +3116,8 @@ public class Precompiled
         PineValue environment,
         PineVMParseCache parseCache)
     {
-        var fieldNameValue = PineVM.ValueFromPathInValueOrEmptyList(environment, [1]);
-        var remainingFieldsValue = PineVM.ValueFromPathInValueOrEmptyList(environment, [2]);
+        var fieldNameValue = environment.ValueFromPathOrEmptyList([1]);
+        var remainingFieldsValue = environment.ValueFromPathOrEmptyList([2]);
 
         if (remainingFieldsValue is PineValue.ListValue remainingFields)
         {
@@ -3148,7 +3148,7 @@ public class Precompiled
         PineVMParseCache parseCache)
     {
         var valueArgument =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+            environment.ValueFromPathOrEmptyList([1, 0]);
 
         var (nodeCount, byteCount) =
             CountEncodedPineValueContentRecursive(valueArgument);
@@ -3250,13 +3250,13 @@ public class Precompiled
 
         */
 
-        if (PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]) is not PineValue.ListValue mappedCharsList)
+        if (environment.ValueFromPathOrEmptyList([1, 0]) is not PineValue.ListValue mappedCharsList)
         {
             return null;
         }
 
         var stringArgument =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
+            environment.ValueFromPathOrEmptyList([1, 1]);
 
         if (stringArgument is not PineValue.ListValue stringCharsList)
         {
@@ -3339,7 +3339,7 @@ public class Precompiled
         */
 
         var argStringCharsBlobValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0, 1, 0]);
+            environment.ValueFromPathOrEmptyList([1, 0, 1, 0]);
 
         if (argStringCharsBlobValue is not PineValue.BlobValue charsBlob)
         {
@@ -3371,30 +3371,30 @@ public class Precompiled
         PineVMParseCache parseCache)
     {
         if (IntegerEncoding.ParseSignedIntegerRelaxed(
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0, 0])).IsOkOrNullable() is not { } offset)
+            environment.ValueFromPathOrEmptyList([1, 0, 0])).IsOkOrNullable() is not { } offset)
         {
             return null;
         }
 
         if (IntegerEncoding.ParseSignedIntegerRelaxed(
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0, 1])).IsOkOrNullable() is not { } newlines)
+            environment.ValueFromPathOrEmptyList([1, 0, 1])).IsOkOrNullable() is not { } newlines)
         {
             return null;
         }
 
         if (IntegerEncoding.ParseSignedIntegerRelaxed(
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0, 2])).IsOkOrNullable() is not { } col)
+            environment.ValueFromPathOrEmptyList([1, 0, 2])).IsOkOrNullable() is not { } col)
         {
             return null;
         }
 
-        if (PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1, 0]) is not PineValue.ListValue charsList)
+        if (environment.ValueFromPathOrEmptyList([1, 1, 0]) is not PineValue.ListValue charsList)
         {
             return null;
         }
 
         if (IntegerEncoding.ParseSignedIntegerRelaxed(
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1, 1])).IsOkOrNullable() is not { } end)
+            environment.ValueFromPathOrEmptyList([1, 1, 1])).IsOkOrNullable() is not { } end)
         {
             return null;
         }
@@ -3493,30 +3493,30 @@ public class Precompiled
         PineValue environment,
         PineVMParseCache parseCache)
     {
-        if (PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0, 1, 0]) is not PineValue.ListValue patternList)
+        if (environment.ValueFromPathOrEmptyList([1, 0, 1, 0]) is not PineValue.ListValue patternList)
         {
             return null;
         }
 
         if (IntegerEncoding.ParseSignedIntegerRelaxed(
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1])).IsOkOrNullable() is not { } offset)
+            environment.ValueFromPathOrEmptyList([1, 1])).IsOkOrNullable() is not { } offset)
         {
             return null;
         }
 
         if (IntegerEncoding.ParseSignedIntegerRelaxed(
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 2])).IsOkOrNullable() is not { } row)
+            environment.ValueFromPathOrEmptyList([1, 2])).IsOkOrNullable() is not { } row)
         {
             return null;
         }
 
         if (IntegerEncoding.ParseSignedIntegerRelaxed(
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 3])).IsOkOrNullable() is not { } col)
+            environment.ValueFromPathOrEmptyList([1, 3])).IsOkOrNullable() is not { } col)
         {
             return null;
         }
 
-        if (PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 4]) is not PineValue.ListValue bigCharsList)
+        if (environment.ValueFromPathOrEmptyList([1, 4]) is not PineValue.ListValue bigCharsList)
         {
             return null;
         }
@@ -3590,7 +3590,7 @@ public class Precompiled
          * */
 
         var isGoodFunctionValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+            environment.ValueFromPathOrEmptyList([1, 0]);
 
         var isMatchFunctionValueJson =
             System.Text.Json.JsonSerializer.Serialize(
@@ -3723,16 +3723,16 @@ public class Precompiled
          * */
 
         var offsetValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1, 0]);
+            environment.ValueFromPathOrEmptyList([1, 1, 0]);
 
         var rowValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1, 1]);
+            environment.ValueFromPathOrEmptyList([1, 1, 1]);
 
         var colValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1, 2]);
+            environment.ValueFromPathOrEmptyList([1, 1, 2]);
 
         var srcBytes =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 2]);
+            environment.ValueFromPathOrEmptyList([1, 2]);
 
         if (IntegerEncoding.ParseSignedIntegerRelaxed(offsetValue).IsOkOrNullable() is not { } startOffset)
         {
@@ -3815,13 +3815,13 @@ public class Precompiled
         PineVMParseCache parseCache)
     {
         var argumentMapFunction =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+            environment.ValueFromPathOrEmptyList([1, 0]);
 
         var argumentRemainingItems =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
+            environment.ValueFromPathOrEmptyList([1, 1]);
 
         var argumentMappedItems =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 2]);
+            environment.ValueFromPathOrEmptyList([1, 2]);
 
         if (argumentMappedItems is not PineValue.ListValue mappedList)
         {
@@ -3912,10 +3912,10 @@ public class Precompiled
         PineVMParseCache parseCache)
     {
         var argumentMapFunction =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+            environment.ValueFromPathOrEmptyList([1, 0]);
 
         var argumentItems =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
+            environment.ValueFromPathOrEmptyList([1, 1]);
 
         if (argumentItems is not PineValue.ListValue itemsListValue)
         {
@@ -3945,7 +3945,7 @@ public class Precompiled
         var environmentFunctionsEntry =
             PineValue.List(functionRecordOk.Value.EnvFunctions);
 
-        PineValue environmentForItem(PineValue itemValue)
+        PineValue EnvironmentForItem(PineValue itemValue)
         {
             var argumentsItems = new PineValue[functionRecordOk.Value.ArgumentsAlreadyCollected.Length + 1];
 
@@ -3975,7 +3975,7 @@ public class Precompiled
                 return
                     new PineVM.ApplyStepwise.StepResult.Continue(
                         Expression: functionRecordOk.Value.InnerFunction,
-                        EnvironmentValue: environmentForItem(itemsListValue.Items.Span[itemIndex]),
+                        EnvironmentValue: EnvironmentForItem(itemsListValue.Items.Span[itemIndex]),
                         Callback: step);
             }
 
@@ -3990,7 +3990,7 @@ public class Precompiled
                     start:
                     new PineVM.ApplyStepwise.StepResult.Continue(
                         Expression: functionRecordOk.Value.InnerFunction,
-                        EnvironmentValue: environmentForItem(itemsListValue.Items.Span[itemIndex]),
+                        EnvironmentValue: EnvironmentForItem(itemsListValue.Items.Span[itemIndex]),
                         Callback: step)));
     }
 
@@ -3999,13 +3999,13 @@ public class Precompiled
         PineVMParseCache parseCache)
     {
         var argumentMapFunction =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+            environment.ValueFromPathOrEmptyList([1, 0]);
 
         var argumentAggregate =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
+            environment.ValueFromPathOrEmptyList([1, 1]);
 
         var argumentItems =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 2]);
+            environment.ValueFromPathOrEmptyList([1, 2]);
 
         if (argumentItems is not PineValue.ListValue itemsListValue)
         {
@@ -4104,13 +4104,13 @@ public class Precompiled
         PineVMParseCache parseCache)
     {
         var argumentPredicateFunction =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+            environment.ValueFromPathOrEmptyList([1, 0]);
 
         var argumentListValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
+            environment.ValueFromPathOrEmptyList([1, 1]);
 
         var argumentAccumulated =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 2]);
+            environment.ValueFromPathOrEmptyList([1, 2]);
 
         if (argumentListValue is not PineValue.ListValue itemsList)
         {
@@ -4143,7 +4143,7 @@ public class Precompiled
         var environmentFunctionsEntry =
             PineValue.List(functionRecordOk.Value.EnvFunctions);
 
-        PineValue environmentForItem(PineValue itemValue)
+        PineValue EnvironmentForItem(PineValue itemValue)
         {
             var argumentsItems = new PineValue[functionRecordOk.Value.ArgumentsAlreadyCollected.Length + 1];
 
@@ -4161,7 +4161,7 @@ public class Precompiled
         var itemIndex = 0;
         var includedItemCount = 0;
 
-        PineVM.ApplyStepwise.StepResult step(PineValue itemResultValue)
+        PineVM.ApplyStepwise.StepResult Step(PineValue itemResultValue)
         {
             if (itemResultValue == PineKernelValues.TrueValue)
             {
@@ -4177,8 +4177,8 @@ public class Precompiled
                 return
                     new PineVM.ApplyStepwise.StepResult.Continue(
                         Expression: functionRecordOk.Value.InnerFunction,
-                        EnvironmentValue: environmentForItem(itemsList.Items.Span[itemIndex]),
-                        Callback: step);
+                        EnvironmentValue: EnvironmentForItem(itemsList.Items.Span[itemIndex]),
+                        Callback: Step);
             }
 
             var resultValue =
@@ -4195,8 +4195,8 @@ public class Precompiled
                     start:
                     new PineVM.ApplyStepwise.StepResult.Continue(
                         Expression: functionRecordOk.Value.InnerFunction,
-                        EnvironmentValue: environmentForItem(itemsList.Items.Span[itemIndex]),
-                        Callback: step)));
+                        EnvironmentValue: EnvironmentForItem(itemsList.Items.Span[itemIndex]),
+                        Callback: Step)));
     }
 
     static Func<PrecompiledResult>? ListFilterMapHelp(
@@ -4221,13 +4221,13 @@ public class Precompiled
          * */
 
         var argumentMapItem =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+            environment.ValueFromPathOrEmptyList([1, 0]);
 
         var argumentListValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
+            environment.ValueFromPathOrEmptyList([1, 1]);
 
         var argumentAccumulated =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 2]);
+            environment.ValueFromPathOrEmptyList([1, 2]);
 
         if (argumentListValue is not PineValue.ListValue itemsList)
         {
@@ -4280,15 +4280,15 @@ public class Precompiled
 
         var includedItemCount = 0;
 
-        PineVM.ApplyStepwise.StepResult step(PineValue itemResultValue)
+        PineVM.ApplyStepwise.StepResult Step(PineValue itemResultValue)
         {
             var itemResultValueTag =
-                PineVM.ValueFromPathInValueOrEmptyList(itemResultValue, [0]);
+                itemResultValue.ValueFromPathOrEmptyList([0]);
 
             if (itemResultValueTag == Tag_Just_Name_Value)
             {
                 includedItems[includedItemCount] =
-                    PineVM.ValueFromPathInValueOrEmptyList(itemResultValue, [1, 0]);
+                    itemResultValue.ValueFromPathOrEmptyList([1, 0]);
 
                 ++includedItemCount;
             }
@@ -4308,7 +4308,7 @@ public class Precompiled
                     new PineVM.ApplyStepwise.StepResult.Continue(
                         Expression: functionRecordOk.Value.InnerFunction,
                         EnvironmentValue: environmentForItem(itemsList.Items.Span[itemIndex]),
-                        Callback: step);
+                        Callback: Step);
             }
 
             var resultValue =
@@ -4326,7 +4326,7 @@ public class Precompiled
                     new PineVM.ApplyStepwise.StepResult.Continue(
                         Expression: functionRecordOk.Value.InnerFunction,
                         EnvironmentValue: environmentForItem(itemsList.Items.Span[itemIndex]),
-                        Callback: step)));
+                        Callback: Step)));
     }
 
     static Func<PrecompiledResult>? ListAll(
@@ -4334,10 +4334,10 @@ public class Precompiled
         PineVMParseCache parseCache)
     {
         var argumentMapFunction =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+            environment.ValueFromPathOrEmptyList([1, 0]);
 
         var argumentItems =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
+            environment.ValueFromPathOrEmptyList([1, 1]);
 
         if (argumentItems is not PineValue.ListValue itemsListValue)
         {
@@ -4420,10 +4420,10 @@ public class Precompiled
         PineVMParseCache parseCache)
     {
         var argumentMapFunction =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+            environment.ValueFromPathOrEmptyList([1, 0]);
 
         var argumentItems =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
+            environment.ValueFromPathOrEmptyList([1, 1]);
 
         if (argumentItems is not PineValue.ListValue itemsListValue)
         {
@@ -4521,16 +4521,16 @@ public class Precompiled
          * */
 
         var accValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+            environment.ValueFromPathOrEmptyList([1, 0]);
 
         var offsetValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
+            environment.ValueFromPathOrEmptyList([1, 1]);
 
         var sepValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 2]);
+            environment.ValueFromPathOrEmptyList([1, 2]);
 
         var sourceListValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 3]);
+            environment.ValueFromPathOrEmptyList([1, 3]);
 
         if (sourceListValue is not PineValue.ListValue sourceList)
         {
@@ -4651,13 +4651,13 @@ public class Precompiled
          * */
 
         var startValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+            environment.ValueFromPathOrEmptyList([1, 0]);
 
         var endValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
+            environment.ValueFromPathOrEmptyList([1, 1]);
 
         var charsValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 2, 1, 0]);
+            environment.ValueFromPathOrEmptyList([1, 2, 1, 0]);
 
         if (IntegerEncoding.ParseSignedIntegerRelaxed(startValue).IsOkOrNullable() is not { } start)
         {
@@ -4806,16 +4806,16 @@ public class Precompiled
          * */
 
         var currentLineStartValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+            environment.ValueFromPathOrEmptyList([1, 0]);
 
         var currentLinesValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
+            environment.ValueFromPathOrEmptyList([1, 1]);
 
         var offsetValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 2]);
+            environment.ValueFromPathOrEmptyList([1, 2]);
 
         var charsBytesValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 3]);
+            environment.ValueFromPathOrEmptyList([1, 3]);
 
         if (IntegerEncoding.ParseSignedIntegerRelaxed(currentLineStartValue).IsOkOrNullable() is not { } currentLineStart)
         {
@@ -4872,7 +4872,8 @@ public class Precompiled
 
                     linesValues.Add(
                         PineValue.List(
-                            [Tag_String_Value,
+                            [
+                            Tag_String_Value,
                             PineValue.List([PineValue.Blob(currentLineCharsBytes)])
                             ]));
 
@@ -4913,8 +4914,9 @@ public class Precompiled
 
         linesValues.Add(
             PineValue.List(
-                [Tag_String_Value,
-                    PineValue.List([PineValue.Blob(lastLineCharsBytes)])
+                [
+                Tag_String_Value,
+                PineValue.List([PineValue.Blob(lastLineCharsBytes)])
                 ]));
 
         var finalValue =
@@ -4951,13 +4953,13 @@ public class Precompiled
          * */
 
         var offsetValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+            environment.ValueFromPathOrEmptyList([1, 0]);
 
         var mappedCharsValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
+            environment.ValueFromPathOrEmptyList([1, 1]);
 
         var charsValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 2]);
+            environment.ValueFromPathOrEmptyList([1, 2]);
 
         if (IntegerEncoding.ParseSignedIntegerRelaxed(offsetValue).IsOkOrNullable() is not { } offset)
         {
@@ -5057,19 +5059,19 @@ public class Precompiled
          * */
 
         var offsetValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+            environment.ValueFromPathOrEmptyList([1, 0]);
 
         var collectedValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
+            environment.ValueFromPathOrEmptyList([1, 1]);
 
         var lastStartValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 2]);
+            environment.ValueFromPathOrEmptyList([1, 2]);
 
         var sepBytesValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 3]);
+            environment.ValueFromPathOrEmptyList([1, 3]);
 
         var stringBytesValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 4]);
+            environment.ValueFromPathOrEmptyList([1, 4]);
 
         if (KernelFunction.SignedIntegerFromValueRelaxed(offsetValue) is not { } offset)
         {
@@ -5183,10 +5185,10 @@ public class Precompiled
          * */
 
         var strBytesValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+            environment.ValueFromPathOrEmptyList([1, 0]);
 
         var offsetValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
+            environment.ValueFromPathOrEmptyList([1, 1]);
 
         if (strBytesValue is not PineValue.BlobValue strBytesBlob)
         {
@@ -5269,19 +5271,19 @@ public class Precompiled
 
 
         var offsetValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+            environment.ValueFromPathOrEmptyList([1, 0]);
 
         var rowValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
+            environment.ValueFromPathOrEmptyList([1, 1]);
 
         var colValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 2]);
+            environment.ValueFromPathOrEmptyList([1, 2]);
 
         var srcBytesValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 3]);
+            environment.ValueFromPathOrEmptyList([1, 3]);
 
         var indentValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 4]);
+            environment.ValueFromPathOrEmptyList([1, 4]);
 
         if (IntegerEncoding.ParseSignedIntegerRelaxed(offsetValue).IsOkOrNullable() is not { } startOffset)
         {
@@ -5394,7 +5396,7 @@ public class Precompiled
          * */
 
         var isGoodFunctionValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+            environment.ValueFromPathOrEmptyList([1, 0]);
 
         var isMatchFunctionValueJson =
             System.Text.Json.JsonSerializer.Serialize(
@@ -5510,19 +5512,19 @@ public class Precompiled
          * */
 
         var offsetValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
+            environment.ValueFromPathOrEmptyList([1, 1]);
 
         var rowValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 2]);
+            environment.ValueFromPathOrEmptyList([1, 2]);
 
         var colValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 3]);
+            environment.ValueFromPathOrEmptyList([1, 3]);
 
         var srcBytesValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 4]);
+            environment.ValueFromPathOrEmptyList([1, 4]);
 
         var indentValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 5]);
+            environment.ValueFromPathOrEmptyList([1, 5]);
 
         if (IntegerEncoding.ParseSignedIntegerRelaxed(offsetValue).IsOkOrNullable() is not { } startOffset)
         {
@@ -5685,19 +5687,19 @@ public class Precompiled
          * */
 
         var offsetValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
+            environment.ValueFromPathOrEmptyList([1, 1]);
 
         var rowValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 2]);
+            environment.ValueFromPathOrEmptyList([1, 2]);
 
         var colValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 3]);
+            environment.ValueFromPathOrEmptyList([1, 3]);
 
         var srcBytesValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 4]);
+            environment.ValueFromPathOrEmptyList([1, 4]);
 
         var indentValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 5]);
+            environment.ValueFromPathOrEmptyList([1, 5]);
 
         if (IntegerEncoding.ParseSignedIntegerRelaxed(offsetValue).IsOkOrNullable() is not { } startOffset)
         {
@@ -5823,7 +5825,7 @@ public class Precompiled
          * */
 
         var isGoodFunctionValue =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+            environment.ValueFromPathOrEmptyList([1, 0]);
 
         var isMatchFunctionValueJson =
             System.Text.Json.JsonSerializer.Serialize(
@@ -5967,10 +5969,10 @@ public class Precompiled
          * */
 
         var sourceBytesArg =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 0]);
+            environment.ValueFromPathOrEmptyList([1, 0]);
 
         var offsetArg =
-            PineVM.ValueFromPathInValueOrEmptyList(environment, [1, 1]);
+            environment.ValueFromPathOrEmptyList([1, 1]);
 
         if (sourceBytesArg is not PineValue.BlobValue sourceBytesBlob)
         {

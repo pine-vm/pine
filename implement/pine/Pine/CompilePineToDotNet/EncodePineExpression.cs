@@ -1,10 +1,14 @@
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Pine.Core;
+using Pine.Core.DotNet;
 using System;
 using System.Linq;
 
 namespace Pine.CompilePineToDotNet;
+
+using CoreSyntaxFactory =
+    Core.DotNet.PineCSharpSyntaxFactory;
 
 public partial class CompileToCSharp
 {
@@ -22,7 +26,10 @@ public partial class CompileToCSharp
             Result<string, ExpressionSyntax>.ok(
                 NewConstructorOfExpressionVariant(
                     nameof(Expression.Literal),
-                    CompileToCSharpLiteralExpression(literal.Value, overrideDefaultExpressionForValue).exprSyntax)),
+                    CoreSyntaxFactory.CompileToCSharpLiteralExpression(
+                        literal.Value,
+                        overrideDefaultExpressionForValue,
+                        declarationSyntaxContext: DeclarationSyntaxContext.None).exprSyntax)),
 
             Expression.Environment =>
             Result<string, ExpressionSyntax>.ok(

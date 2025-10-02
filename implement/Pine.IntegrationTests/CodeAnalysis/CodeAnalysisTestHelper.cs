@@ -1,10 +1,11 @@
 using AwesomeAssertions;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Pine.CompilePineToDotNet;
 using Pine.Core;
 using Pine.Core.CodeAnalysis;
+using Pine.Core.DotNet;
 using Pine.Core.Internal;
+using Pine.Core.PopularEncodings;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -22,6 +23,10 @@ public class CodeAnalysisTestHelper
             typeof(KernelFunctionSpecialized),
             typeof(KernelFunctionFused),
             typeof(Core.PineVM.PineKernelValues),
+            typeof(IReadOnlyDictionary<,>),
+            typeof(IntegerEncoding),
+            typeof(StringEncoding),
+            typeof(ParseExpressionException),
         };
 
         IReadOnlyList<UsingDirectiveSyntax> usingDirectives =
@@ -29,7 +34,8 @@ public class CodeAnalysisTestHelper
             .Select(t => t.Namespace)
             .WhereNotNull()
             .Distinct()
-            .Select(ns => SyntaxFactory.UsingDirective(SyntaxFactory.IdentifierName(ns)))
+            .Order()
+            .Select(ns => SyntaxFactory.UsingDirective(SyntaxFactory.ParseName(ns)))
             ];
 
         return
@@ -42,7 +48,7 @@ public class CodeAnalysisTestHelper
         PineVMParseCache parseCache)
     {
         var (staticProgram, declsFailed) =
-            PineVM.CodeAnalysis.ParseAsStaticMonomorphicProgram(
+            Core.CodeAnalysis.CodeAnalysis.ParseAsStaticMonomorphicProgram(
                 parsedEnvironment,
                 includeDeclaration: includeDeclaration,
                 parseCache: parseCache)

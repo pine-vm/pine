@@ -1,5 +1,6 @@
 using Pine;
 using Pine.Core;
+using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Elm;
 using System;
@@ -31,8 +32,26 @@ public class Program
         BuildAndSaveValueDictionary(
             elmCompilers:
             [
-                new KeyValuePair<BlobTreeWithStringPath, PineValue>(elmCompilerValue.sourceFiles, elmCompilerValue.compiled)
+                new KeyValuePair<BlobTreeWithStringPath, PineValue>(
+                    elmCompilerValue.sourceFiles, elmCompilerValue.compiled)
                 ]);
+
+        var parsedEnvironment =
+            ElmInteractiveEnvironment.ParseInteractiveEnvironment(
+                elmCompilerValue.compiled)
+            .Extract(err => throw new Exception(err));
+
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+
+        Pine.Core.Bundle.BundledPineToDotnet.BuildAndWriteBundleFile(
+            parsedEnvironment,
+            DestinationDirectory);
+
+        clock.Stop();
+
+        Console.WriteLine(
+            "Compiled and wrote .NET bundle assembly.dll in " +
+            clock.Elapsed.TotalSeconds.ToString("0.00") + " seconds");
     }
 
     public static void BuildAndSaveValueDictionary(

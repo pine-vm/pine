@@ -6,6 +6,7 @@ using Pine.CompilePineToDotNet;
 using Pine.Core;
 using Pine.Core.Addressing;
 using Pine.Core.CodeAnalysis;
+using Pine.Core.DotNet;
 using Pine.Core.PopularEncodings;
 using Pine.Elm;
 using System.Collections.Generic;
@@ -647,7 +648,8 @@ public class CompilePineToDotNetTests
                         containerConfig:
                         new SyntaxContainerConfig(
                             ContainerTypeName: "Common",
-                            DictionaryMemberName: ""));
+                            DictionaryMemberName: ""),
+                        CodeAnalysis.CodeAnalysisTestHelper.DeclarationSyntaxContext);
 
                 var compilationUnitSyntax =
                     SyntaxFactory.CompilationUnit()

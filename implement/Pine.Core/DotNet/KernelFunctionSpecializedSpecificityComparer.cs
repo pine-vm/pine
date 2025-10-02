@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using System.Linq;
-using static Pine.CompilePineToDotNet.CompileToCSharp;
+using static Pine.Core.DotNet.PineKernelFunctions;
 
-namespace Pine.CompilePineToDotNet;
+namespace Pine.Core.DotNet;
 
 public class KernelFunctionSpecializedSpecificityComparer :
     IComparer<KernelFunctionSpecializedInfo>, IEqualityComparer<KernelFunctionSpecializedInfo>

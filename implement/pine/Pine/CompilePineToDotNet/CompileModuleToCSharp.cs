@@ -2,8 +2,9 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.CSharp;
 using Pine.CompilePineToDotNet;
 using Pine.Core;
-using Pine.Core.PopularEncodings;
 using Pine.Core.CodeAnalysis;
+using Pine.Core.DotNet;
+using Pine.Core.PopularEncodings;
 using Pine.PineVM;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -13,6 +14,9 @@ using Microsoft.CodeAnalysis;
 using System.Text;
 
 namespace Pine.Pine.CompilePineToDotNet;
+
+using CoreSyntaxFactory =
+    Core.DotNet.PineCSharpSyntaxFactory;
 
 public static class CompileModuleToCSharp
 {
@@ -24,7 +28,8 @@ public static class CompileModuleToCSharp
     public static CompileCSharpClassResult
         BuildCSharpClassStringFromModule(
         PineValue compiledModule,
-        SyntaxContainerConfig containerConfig)
+        SyntaxContainerConfig containerConfig,
+        DeclarationSyntaxContext declarationSyntaxContext)
     {
         var parseCache = new PineVMParseCache();
 
@@ -40,7 +45,8 @@ public static class CompileModuleToCSharp
                     parseCache)
                 .Extract(err => throw new Exception(err)),
                 function.Key,
-                parseCache))
+                parseCache,
+                declarationSyntaxContext))
             .ToImmutableList();
 
         var usingDirectivesTypes = new[]
@@ -83,7 +89,8 @@ public static class CompileModuleToCSharp
         BuildCSharpMethodsFromElmFunction(
         ElmInteractiveEnvironment.FunctionRecord functionRecord,
         string functionName,
-        PineVMParseCache parseCache)
+        PineVMParseCache parseCache,
+        DeclarationSyntaxContext declarationSyntaxContext)
     {
         var procedureInterface = UnpackedParams(functionRecord);
 
@@ -97,7 +104,8 @@ public static class CompileModuleToCSharp
                 functionRecord,
                 functionName,
                 procedureInterface,
-                parseCache);
+                parseCache,
+                declarationSyntaxContext);
 
         return [genericMethod, unpackedParamsMethod];
     }
@@ -261,7 +269,8 @@ public static class CompileModuleToCSharp
         ElmInteractiveEnvironment.FunctionRecord functionRecord,
         string functionName,
         ProcedureInterface procedureInterface,
-        PineVMParseCache parseCache)
+        PineVMParseCache parseCache,
+        DeclarationSyntaxContext declarationSyntaxContext)
     {
         var irCompilationResult =
             PineIRCompiler.CompileExpression(
@@ -320,7 +329,8 @@ public static class CompileModuleToCSharp
                     DeclareFromIntToGeneric(
                         IdentifierNameFromLocalAssignment(
                             instruction.AssignmentIndex,
-                            null)))
+                            null),
+                        declarationSyntaxContext))
                 {
                     yield return declStatement;
                 }
@@ -475,7 +485,9 @@ public static class CompileModuleToCSharp
         yield return statementAsInt;
     }
 
-    private static IEnumerable<StatementSyntax> DeclareFromIntToGeneric(string declNameGeneric)
+    private static IEnumerable<StatementSyntax> DeclareFromIntToGeneric(
+        string declNameGeneric,
+        DeclarationSyntaxContext declarationSyntaxContext)
     {
         var declNameAsInt =
             declNameGeneric + SuffixFromEmitType(EmitType.Integer);
@@ -483,14 +495,14 @@ public static class CompileModuleToCSharp
         var declStatement =
             SyntaxFactory.LocalDeclarationStatement(
                 SyntaxFactory.VariableDeclaration(
-                    SyntaxFactory.IdentifierName("PineValue"))
+                    CompileTypeSyntax.TypeSyntaxFromType(typeof(PineValue), declarationSyntaxContext))
                 .WithVariables(
                     SyntaxFactory.SingletonSeparatedList(
                         SyntaxFactory.VariableDeclarator(
                             SyntaxFactory.Identifier(declNameGeneric))
                         .WithInitializer(
                             SyntaxFactory.EqualsValueClause(
-                                PineCSharpSyntaxFactory.PineValueEmptyListSyntax)))));
+                                CoreSyntaxFactory.PineValueEmptyListSyntax(declarationSyntaxContext))))));
 
         var ifStatement =
             SyntaxFactory.IfStatement(

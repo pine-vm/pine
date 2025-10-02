@@ -2,11 +2,14 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Pine.Core;
+using Pine.Core.DotNet;
 using Pine.Core.PopularEncodings;
 using System;
 using System.Collections.Generic;
 
 namespace Pine.CompilePineToDotNet;
+
+using CoreSyntaxFactory = Core.DotNet.PineCSharpSyntaxFactory;
 
 public class PineKernelFunctionsInline
 {
@@ -51,7 +54,7 @@ public class PineKernelFunctionsInline
                     .Map(
                         environment: compilationEnv,
                         firstArgumentTakenZeroCompiledOk =>
-                        PineCSharpSyntaxFactory.PineValueFromBoolExpression(
+                        CoreSyntaxFactory.PineValueFromBoolExpression(
                             PineCSharpSyntaxFactory.BuildCSharpExpressionToCheckIsBlob(firstArgumentTakenZeroCompiledOk))));
             }
 
@@ -67,7 +70,7 @@ public class PineKernelFunctionsInline
                     .Map(
                         environment: compilationEnv,
                         firstArgumentTakenZeroCompiledOk =>
-                        PineCSharpSyntaxFactory.PineValueFromBoolExpression(
+                        CoreSyntaxFactory.PineValueFromBoolExpression(
                             PineCSharpSyntaxFactory.BuildCSharpExpressionToCheckIsList(firstArgumentTakenZeroCompiledOk))));
             }
         }
@@ -92,7 +95,7 @@ public class PineKernelFunctionsInline
                     .Map(
                         compilationEnv,
                         secondArgCs =>
-                        PineCSharpSyntaxFactory.PineValueFromBoolExpression(
+                        CoreSyntaxFactory.PineValueFromBoolExpression(
                             SyntaxFactory.BinaryExpression(
                                 SyntaxKind.EqualsExpression,
                                 firstArgCs,
@@ -227,10 +230,12 @@ public class PineKernelFunctionsInline
                                                         })),
                                                 SyntaxFactory.IdentifierName("head")),
                                             SyntaxFactory.Token(SyntaxKind.CommaToken),
-                                            SwitchExpressionArmDefaultToPineValueEmptyList
+                                            SwitchExpressionArmDefaultToPineValueEmptyList(
+                                                compilationEnv.FunctionEnvironment.DeclarationSyntaxContext)
                                         }))),
                             SyntaxFactory.Token(SyntaxKind.CommaToken),
-                            SwitchExpressionArmDefaultToPineValueEmptyList
+                            SwitchExpressionArmDefaultToPineValueEmptyList(
+                                compilationEnv.FunctionEnvironment.DeclarationSyntaxContext)
                         }
                         ))));
     }
@@ -256,7 +261,8 @@ public class PineKernelFunctionsInline
                 {
                     { } count
                     when count < int.MaxValue =>
-                    secondArgument.ArgumentSyntaxFromParameterType.GetValueOrDefault(CompileToCSharp.KernelFunctionParameterType.Generic) switch
+                    secondArgument.ArgumentSyntaxFromParameterType.GetValueOrDefault(
+                        PineKernelFunctions.KernelFunctionParameterType.Generic) switch
                     {
                         { } secondArgumentCompiled =>
                         Result<string, CompiledExpression>.ok(
@@ -264,7 +270,10 @@ public class PineKernelFunctionsInline
                             .Map(
                                 compilationEnv,
                                 secondArgCs =>
-                                Kernel_Skip((int)Math.Max(0, count), secondArgCs))),
+                                Kernel_Skip(
+                                    (int)Math.Max(0, count),
+                                    secondArgCs,
+                                    compilationEnv.FunctionEnvironment.DeclarationSyntaxContext))),
 
                         _ =>
                         null
@@ -279,9 +288,12 @@ public class PineKernelFunctionsInline
             };
     }
 
-    public static ExpressionSyntax Kernel_Skip(int count, ExpressionSyntax originalValue)
+    public static ExpressionSyntax Kernel_Skip(
+        int count,
+        ExpressionSyntax originalValue,
+        DeclarationSyntaxContext declarationSyntaxContext)
     {
-        var countExpression = PineCSharpSyntaxFactory.ExpressionSyntaxForIntegerLiteral(count);
+        var countExpression = CoreSyntaxFactory.ExpressionSyntaxForIntegerLiteral(count);
 
         return
             SyntaxFactory.SwitchExpression(originalValue)
@@ -348,7 +360,8 @@ public class PineKernelFunctionsInline
                                                             .WithLeftOperand(
                                                                 countExpression)))))))))),
                         SyntaxFactory.Token(SyntaxKind.CommaToken),
-                        SwitchExpressionArmDefaultToPineValueEmptyList
+                        SwitchExpressionArmDefaultToPineValueEmptyList(
+                            declarationSyntaxContext)
                     }));
     }
 
@@ -362,9 +375,13 @@ public class PineKernelFunctionsInline
                     SyntaxFactory.ArgumentList())));
 
 
-    public static readonly SwitchExpressionArmSyntax SwitchExpressionArmDefaultToPineValueEmptyList =
-        SyntaxFactory.SwitchExpressionArm(
-            SyntaxFactory.DiscardPattern(),
-            PineCSharpSyntaxFactory.PineValueEmptyListSyntax);
+    public static SwitchExpressionArmSyntax SwitchExpressionArmDefaultToPineValueEmptyList(
+        DeclarationSyntaxContext declarationSyntaxContext)
+    {
+        return
+            SyntaxFactory.SwitchExpressionArm(
+                SyntaxFactory.DiscardPattern(),
+                CoreSyntaxFactory.PineValueEmptyListSyntax(declarationSyntaxContext));
+    }
 
 }

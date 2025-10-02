@@ -1,7 +1,11 @@
 using AwesomeAssertions;
 using Pine.Core;
 using Pine.Core.CodeAnalysis;
+using Pine.Core.DotNet;
+using Pine.Core.PopularEncodings;
 using Pine.Elm;
+using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using Xunit;
 
@@ -332,18 +336,21 @@ public class OptimizeAndEmitIdivTests
             """"
             .Trim());
 
-        var asCsharp =
-            Pine.PineVM.StaticProgramCSharp.FromStaticProgram(
+        var asCSharp =
+            StaticProgramCSharp.FromStaticProgram(
                 staticProgram,
                 CodeAnalysisTestHelper.DeclarationSyntaxContext);
 
-        var testClass = asCsharp.ModulesClasses[new DeclQualifiedName([], "Test")];
+        var testClass = asCSharp.ModulesClasses[new DeclQualifiedName([], "Test")];
 
         var moduleTestCSharpText =
             testClass.RenderToString();
 
         var commonValuesClassText =
-            Pine.PineVM.StaticProgramCSharpClass.RenderToString(asCsharp.CommonValueClass);
+            Pine.PineVM.StaticProgramCSharpClass.RenderToString(asCSharp.CommonValueClass);
+
+        var dispatcherClassText =
+            Pine.PineVM.StaticProgramCSharpClass.RenderToString(asCSharp.DispatcherClass);
 
         moduleTestCSharpText.Trim().Should().Be(
             """"
@@ -464,17 +471,93 @@ public class OptimizeAndEmitIdivTests
 
             """".Trim());
 
+        dispatcherClassText.Trim().Should().Be(
+            """"
+            public static class Dispatcher
+            {
+                public static IReadOnlyDictionary<PineValue, System.Func<PineValue, PineValue>> dispatcherDictionary =
+                    BuildDispatcherDictionary();
+
+                public static IReadOnlyDictionary<PineValue, System.Func<PineValue, PineValue>> BuildDispatcherDictionary()
+                {
+                    var dict =
+                        new Dictionary<PineValue, System.Func<PineValue, PineValue>>();
+
+                    dict[CommonReusedValues.List_9a1e26cb] =
+                        Dispatch_9a1e26cb;
+
+                    dict[CommonReusedValues.List_6a38b355] =
+                        Dispatch_6a38b355;
+
+                    return dict;
+                }
+
+
+                public static PineValue? Dispatch_9a1e26cb(PineValue environment)
+                {
+                    if (PineValueExtension.ValueFromPathOrEmptyList(
+                        environment,
+                        [0, 0]) == CommonReusedValues.List_6a38b355)
+                    {
+                        var arg_1_0 =
+                            PineValueExtension.ValueFromPathOrEmptyList(
+                                environment,
+                                [1, 0]);
+
+                        var arg_1_1 =
+                            PineValueExtension.ValueFromPathOrEmptyList(
+                                environment,
+                                [1, 1]);
+
+                        return Test.idiv(arg_1_0, arg_1_1);
+                    }
+
+                    return null;
+                }
+
+
+                public static PineValue? Dispatch_6a38b355(PineValue environment)
+                {
+                    if (PineValueExtension.ValueFromPathOrEmptyList(
+                        environment,
+                        [0, 0]) == CommonReusedValues.List_6a38b355)
+                    {
+                        var arg_1_0 =
+                            PineValueExtension.ValueFromPathOrEmptyList(
+                                environment,
+                                [1, 0]);
+
+                        var arg_1_1 =
+                            PineValueExtension.ValueFromPathOrEmptyList(
+                                environment,
+                                [1, 1]);
+
+                        var arg_1_2 =
+                            PineValueExtension.ValueFromPathOrEmptyList(
+                                environment,
+                                [1, 2]);
+
+                        return Test.idivHelper(arg_1_0, arg_1_1, arg_1_2);
+                    }
+
+                    return null;
+                }
+            }
+
+            """"
+            .Trim());
+
         commonValuesClassText.Trim().Should().Be(
             """"
             public static class CommonReusedValues
             {
                 public static readonly PineValue Bool_False =
                     PineValue.Blob(
-                        (byte[])[2]);
+                        [2]);
 
                 public static readonly PineValue Bool_True =
                     PineValue.Blob(
-                        (byte[])[4]);
+                        [4]);
 
                 public static readonly PineValue Blob_Int_neg_1 =
                     IntegerEncoding.EncodeSignedInteger(-1);
@@ -1920,5 +2003,60 @@ public class OptimizeAndEmitIdivTests
 
             """"
             .Trim());
+
+        // Now compile this to a .NET assembly.
+
+        IReadOnlyList<string> compilationNamespacePrefix =
+            ["TestAlfa", "TestBeta"];
+
+        var compileToAssemblyResult =
+            CompileToAssembly.Compile(
+                asCSharp,
+                namespacePrefix: compilationNamespacePrefix,
+                optimizationLevel: Microsoft.CodeAnalysis.OptimizationLevel.Release)
+            .Extract(err =>
+            throw new System.Exception("Compilation to assembly failed: " + err.ToString()));
+
+        var compiledDictionary =
+            compileToAssemblyResult.BuildCompiledExpressionsDictionary()
+            .Extract(err =>
+            throw new System.Exception("Building compiled expressions dictionary failed: " + err.ToString()));
+
+        var testModule =
+            parsedEnv.Modules.Single(m => m.moduleName is "Test");
+
+        var idivDeclValue =
+            testModule.moduleContent.FunctionDeclarations["idiv"];
+
+        var idivFunctionRecord =
+            ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(idivDeclValue, parseCache)
+            .Extract(err => throw new System.Exception(
+                "Parsing function record for 'idiv' failed: " + err.ToString()));
+
+        // Implementation detail: There should be only one entry in environment functions, for idivHelper.
+
+        idivFunctionRecord.EnvFunctions.Length.Should().Be(1);
+
+        var callEnvValue =
+            PineValue.List(
+                [
+                PineValue.List(idivFunctionRecord.EnvFunctions.ToArray()),
+                PineValue.List(
+                    [
+                    IntegerEncoding.EncodeSignedInteger(100),
+                    IntegerEncoding.EncodeSignedInteger(3)
+                    ]),
+                ]);
+
+        var dictEntry =
+            compiledDictionary[idivFunctionRecord.EnvFunctions.Span[0]];
+
+        dictEntry.Should().NotBeNull();
+
+        var resultValue = dictEntry(callEnvValue);
+
+        resultValue.Should().NotBeNull();
+
+        resultValue.Should().Be(IntegerEncoding.EncodeSignedInteger(33));
     }
 }

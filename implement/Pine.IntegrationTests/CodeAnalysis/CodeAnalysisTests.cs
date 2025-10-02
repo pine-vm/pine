@@ -2615,7 +2615,7 @@ public class CodeAnalysisTests
             .Extract(err => throw new System.Exception("Failed parsing interactive environment: " + err));
 
         var (staticProgram, declsFailed) =
-            PineVM.CodeAnalysis.ParseAsStaticMonomorphicProgram(
+            Core.CodeAnalysis.CodeAnalysis.ParseAsStaticMonomorphicProgram(
                 parsedEnv,
                 includeDeclaration:
                 declName =>

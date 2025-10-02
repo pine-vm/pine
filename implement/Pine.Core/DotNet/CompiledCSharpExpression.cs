@@ -1,9 +1,8 @@
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Pine.CompilePineToDotNet;
 using Pine.Core.PineVM;
 
-namespace Pine.Pine.PineVM;
+namespace Pine.Core.DotNet;
 
 public record CompiledCSharpExpression(
     ExpressionSyntax ExpressionSyntax,

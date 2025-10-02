@@ -5,7 +5,7 @@ using System.Numerics;
 
 namespace Pine.Core.Internal;
 
-using static Pine.Core.KernelFunction;
+using static Core.KernelFunction;
 
 #pragma warning disable IDE1006
 

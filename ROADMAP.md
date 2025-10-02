@@ -9,7 +9,7 @@ The runtime efficiency items are not related to the Pine language, but are imple
 - [ ] Emit IR frames using specialized function interfaces from code analysis, to save allocations in call sites.
 - [ ] In IR frames generated from static functions, link directly to call sites, to skip the general lookup of the target.
 - [ ] Use the static program from code analysis to inline functions saving allocations of short-lived structures. (e.g. Pipeline sequences of `Result.map`)
-- [ ] Use static program from code analysis to emit to more concrete form, like C# or WASM. 🏗️ Work in progress now...
+- [X] Use static program from code analysis to emit to more concrete form, like C# or WASM.
 - [x] For emitting to lower level forms, ensure tail call optimization works to avoid stack overflows (like it already does in the IR-interpreter).
 - [ ] Introduce specialized representation for slice of blob value to make slicing cheaper.
 - [ ] Introduce specialized representation for slice of list value to make slicing cheaper.
