@@ -93,7 +93,16 @@ public abstract record PineValue : IEquatable<PineValue>
             }
         }
 
-        return new ListValue(asStruct);
+        var newInstance = new ListValue(asStruct);
+
+        if (PineValueWeakInterner.TryGetCanonical(newInstance, out var canonical))
+        {
+            return canonical;
+        }
+
+        PineValueWeakInterner.Register(newInstance);
+
+        return newInstance;
     }
 
     /// <summary>
