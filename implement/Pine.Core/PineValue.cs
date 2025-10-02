@@ -106,7 +106,13 @@ public abstract record PineValue : IEquatable<PineValue>
 
         var newInstance = new ListValue(asStruct);
 
-        return PineValueWeakInterner.GetOrAdd(newInstance);
+        if (asStruct.NodesCount > 4 &&
+            (asStruct.BlobsBytesCount + asStruct.NodesCount * 10 > 400))
+        {
+            return PineValueWeakInterner.GetOrAdd(newInstance);
+        }
+
+        return newInstance;
     }
 
     /// <summary>

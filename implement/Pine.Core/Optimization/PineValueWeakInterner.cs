@@ -26,8 +26,7 @@ internal static class PineValueWeakInterner
     private static readonly ConcurrentDictionary<BlobBucketKey, List<WeakReference<PineValue.BlobValue>>> s_blobBuckets = new();
 
     // Probabilistic sweeper configuration
-    private const int RandomSweepDenominator = 100_000;      // ~0.01% chance per new bucket
-    private const int RandomSweepSampleSize = 100_000;       // buckets to sample per sweep
+    private const int RandomSweepDenominator = 10_000;      // ~0.01% chance per new bucket
 
     public static PineValue.ListValue GetOrAdd(PineValue.ListValue candidate)
     {
@@ -163,10 +162,9 @@ internal static class PineValueWeakInterner
         {
             if (Random.Shared.Next(RandomSweepDenominator / 41) is 0)
             {
-                // Occasionally sweep a larger slice
                 Task.Run(() =>
                 {
-                    SweepRandomSlice(buckets, RandomSweepSampleSize);
+                    SweepBuckets(buckets);
                 });
             }
         }
@@ -174,17 +172,11 @@ internal static class PineValueWeakInterner
 
     // --------------- Helpers ---------------
 
-    private static void SweepRandomSlice<TKey, TVal>(
-        ConcurrentDictionary<TKey, List<WeakReference<TVal>>> buckets,
-        int maxTake)
+    private static void SweepBuckets<TKey, TVal>(
+        ConcurrentDictionary<TKey, List<WeakReference<TVal>>> buckets)
         where TKey : notnull
         where TVal : class
     {
-        var count = buckets.Count;
-
-        if (count is 0 || maxTake <= 0)
-            return;
-
         void SweepOne(TKey key)
         {
             if (!buckets.TryGetValue(key, out var bucket))
@@ -223,41 +215,9 @@ internal static class PineValueWeakInterner
             }
         }
 
-        var offset =
-            (int)(Environment.TickCount64 % count);
-
-        var take = Math.Min(maxTake, count);
-
-        var taken = 0;
-
-        // First pass: skip "offset" items, then take
-        var skipped = 0;
-        foreach (var kvp in buckets)
-        {
-            if (skipped < offset)
-            {
-                skipped++;
-                continue;
-            }
-
-            SweepOne(kvp.Key);
-            taken++;
-
-            if (taken >= take)
-                break;
-        }
-
-        if (taken >= take)
-            return;
-
-        // Wrap-around: take remaining from the start
         foreach (var kvp in buckets)
         {
             SweepOne(kvp.Key);
-            taken++;
-
-            if (taken >= take)
-                break;
         }
     }
 }
