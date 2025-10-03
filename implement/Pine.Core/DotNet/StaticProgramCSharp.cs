@@ -371,15 +371,7 @@ public record StaticProgramCSharp(
                             item.Key,
                             declarationSyntaxContext);
 
-                    // expected value expression (refer to CommonReusedValues)
-                    var expectedValueDeclName =
-                        NameValueDeclaration(item.Value, valueHashCache);
-
-                    var expectedValueExpr =
-                        SyntaxFactory.MemberAccessExpression(
-                            SyntaxKind.SimpleMemberAccessExpression,
-                            SyntaxFactory.IdentifierName(CommonValueClassName),
-                            SyntaxFactory.IdentifierName(expectedValueDeclName));
+                    var expectedValueExpr = LiteralExpressionSyntax(item.Value);
 
                     var equalityExpr =
                         SyntaxFactory.BinaryExpression(
