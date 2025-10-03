@@ -11,6 +11,22 @@ using static Core.KernelFunction;
 
 public static class KernelFunctionSpecialized
 {
+    public static int length_as_int(PineValue value)
+    {
+        if (value is PineValue.ListValue listValue)
+        {
+            return listValue.Items.Length;
+        }
+
+        if (value is PineValue.BlobValue blobValue)
+        {
+            return blobValue.Bytes.Length;
+        }
+
+        throw new NotImplementedException(
+            "Unexpected value type: " + value.GetType().FullName);
+    }
+
     public static PineValue skip(PineValue countValue, PineValue value)
     {
         if (SignedIntegerFromValueRelaxed(countValue) is not { } count)

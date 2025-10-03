@@ -307,4 +307,22 @@ public static class PineCSharpSyntaxFactory
                         SyntaxFactory.Argument(pathCollectionExpr)
                     })));
     }
+
+    public static ExpressionSyntax GenericExpressionFromIntegerExpression(
+        ExpressionSyntax intExpr,
+        DeclarationSyntaxContext declarationSyntaxContext)
+    {
+        // Invoke IntegerEncoding.EncodeSignedInteger
+
+        return
+            SyntaxFactory.InvocationExpression(
+                SyntaxFactory.MemberAccessExpression(
+                    SyntaxKind.SimpleMemberAccessExpression,
+                    CompileTypeSyntax.TypeSyntaxFromType(typeof(IntegerEncoding), declarationSyntaxContext),
+                    SyntaxFactory.IdentifierName(nameof(IntegerEncoding.EncodeSignedInteger))))
+            .WithArgumentList(
+                SyntaxFactory.ArgumentList(
+                    SyntaxFactory.SingletonSeparatedList(
+                        SyntaxFactory.Argument(intExpr))));
+    }
 }

@@ -31,12 +31,16 @@ public class KernelFunctionSpecializedSpecificityComparer :
         // More specific gets a higher rank
 
         KernelFunctionSpecializedReturnType.Boolean =>
-        2,
+        30,
+
+        KernelFunctionSpecializedReturnType.Integer =>
+        10,
 
         KernelFunctionSpecializedReturnType.Generic =>
         1,
 
-        _ => 0
+        _ =>
+        0
     };
 
     public int Compare(KernelFunctionSpecializedInfo? x, KernelFunctionSpecializedInfo? y)

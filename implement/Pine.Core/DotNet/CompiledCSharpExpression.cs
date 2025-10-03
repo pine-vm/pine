@@ -16,12 +16,19 @@ public record CompiledCSharpExpression(
         ExpressionSyntax expressionSyntax) =>
         new(expressionSyntax, ValueType.Boolean);
 
+    public static CompiledCSharpExpression Integer(
+        ExpressionSyntax expressionSyntax) =>
+        new(expressionSyntax, ValueType.Integer);
+
     public enum ValueType
     {
         // Plain PineValue
         Generic = 10,
 
         Boolean = 30,
+
+        Integer = 40,
+
     }
 
     public ExpressionSyntax AsGenericValue(
@@ -37,8 +44,14 @@ public record CompiledCSharpExpression(
                 ExpressionSyntax,
                 declarationSyntaxContext),
 
+            ValueType.Integer =>
+            PineCSharpSyntaxFactory.GenericExpressionFromIntegerExpression(
+                ExpressionSyntax,
+                declarationSyntaxContext),
+
             _ =>
-            throw new System.NotImplementedException("Unhandled ValueType " + Type),
+            throw new System.NotImplementedException(
+                "Unhandled ValueType " + Type),
         };
     }
 
@@ -61,6 +74,10 @@ public record CompiledCSharpExpression(
 
             ValueType.Boolean =>
             ExpressionSyntax,
+
+            ValueType.Integer =>
+            SyntaxFactory.LiteralExpression(
+                SyntaxKind.FalseLiteralExpression),
 
             _ =>
             throw new System.NotImplementedException("Unhandled ValueType " + Type),

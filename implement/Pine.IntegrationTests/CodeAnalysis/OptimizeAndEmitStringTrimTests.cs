@@ -137,7 +137,7 @@ public class OptimizeAndEmitStringTrimTests
                         PineValue local_000 =
                             KernelFunctionFused.SkipAndTake(takeCount: 4, skipCountValue: local_param_1_0, argument: local_param_1_1);
 
-                        if (KernelFunction.length(local_000) == CommonReusedValues.Blob_Int_0)
+                        if (KernelFunctionSpecialized.length_as_int(local_000) == 0)
                         {
                             return local_param_1_0;
                         }

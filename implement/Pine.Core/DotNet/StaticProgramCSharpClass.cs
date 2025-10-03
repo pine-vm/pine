@@ -5,6 +5,7 @@ using Pine.Core;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.DotNet;
 using Pine.Core.Internal;
+using Pine.Core.PopularEncodings;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -178,7 +179,7 @@ public record StaticProgramCSharpClass(
                         }
 
                         var argumentExpr =
-                            ExpressionForFunctionParam(
+                            ExpressionsForFunctionParam(
                                 paramPath,
                                 funcApp.Arguments,
                                 SelfFunctionInterfaceDelegate,
@@ -212,7 +213,7 @@ public record StaticProgramCSharpClass(
                 }
 
                 var resultExpression =
-                    CompileToCSharpExpression(
+                    EnumerateExpressions(
                         expr,
                         SelfFunctionInterfaceDelegate,
                         availableFunctions,
@@ -284,7 +285,7 @@ public record StaticProgramCSharpClass(
                 ImmutableDictionary<StaticExpression<DeclQualifiedName>, string> alreadyDeclared)
             {
                 var resultExpression =
-                    CompileToCSharpExpression(
+                    EnumerateExpressions(
                         expr,
                         SelfFunctionInterfaceDelegate,
                         availableFunctions,
@@ -481,7 +482,7 @@ public record StaticProgramCSharpClass(
     private static bool StatementIsExitOrLoop(StatementSyntax statementSyntax) =>
         statementSyntax is ReturnStatementSyntax or ThrowStatementSyntax or ContinueStatementSyntax;
 
-    private static IReadOnlyList<StatementSyntax> ExtractStatements(StatementSyntax statement)
+    private static SyntaxList<StatementSyntax> ExtractStatements(StatementSyntax statement)
     {
         if (statement is BlockSyntax block)
         {
@@ -499,21 +500,30 @@ public record StaticProgramCSharpClass(
         DeclarationSyntaxContext declarationSyntaxContext,
         ImmutableDictionary<StaticExpression<DeclQualifiedName>, string> alreadyDeclared)
     {
+        return
+            EnumerateExpressions(
+                expression,
+                selfFunctionInterface,
+                availableFunctions,
+                availableValueDecls,
+                declarationSyntaxContext,
+                alreadyDeclared)
+            .FirstOrDefault()!;
+    }
+
+    public static IEnumerable<CompiledCSharpExpression> EnumerateExpressions(
+        StaticExpression<DeclQualifiedName> expression,
+        System.Func<IReadOnlyList<int>, ExpressionSyntax?> selfFunctionInterface,
+        IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
+        IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls,
+        DeclarationSyntaxContext declarationSyntaxContext,
+        ImmutableDictionary<StaticExpression<DeclQualifiedName>, string> alreadyDeclared)
+    {
         if (alreadyDeclared.TryGetValue(expression, out var existingVarName))
         {
             return
-                CompiledCSharpExpression.Generic(
-                    SyntaxFactory.IdentifierName(existingVarName));
-        }
-
-        ExpressionSyntax? OverrideValueLiteralExpression(PineValue pineValue)
-        {
-            if (availableValueDecls.TryGetValue(pineValue, out var declName))
-            {
-                return SyntaxFactory.ParseName(declName.FullName);
-            }
-
-            return null;
+                [CompiledCSharpExpression.Generic(
+                    SyntaxFactory.IdentifierName(existingVarName))];
         }
 
         if (StaticExpressionExtension.TryParseAsPathToExpression(
@@ -522,24 +532,18 @@ public record StaticProgramCSharpClass(
         {
             if (selfFunctionInterface(pathToEnv) is { } match)
             {
-                return CompiledCSharpExpression.Generic(match);
+                return [CompiledCSharpExpression.Generic(match)];
+
             }
         }
 
         if (expression is StaticExpression<DeclQualifiedName>.Literal literal)
         {
-            if (OverrideValueLiteralExpression(literal.Value) is { } overriddenExpr)
-            {
-                return CompiledCSharpExpression.Generic(overriddenExpr);
-            }
-
-            var toLiteral =
-                PineCSharpSyntaxFactory.CompileToCSharpLiteralExpression(
-                    literal.Value,
-                    overrideDefaultExpression: OverrideValueLiteralExpression,
+            return
+                EnumerateExpressionsForLiteral(
+                    literal,
+                    availableValueDecls,
                     declarationSyntaxContext);
-
-            return CompiledCSharpExpression.Generic(toLiteral.exprSyntax);
         }
 
         if (expression is StaticExpression<DeclQualifiedName>.List list)
@@ -577,65 +581,25 @@ public record StaticProgramCSharpClass(
                         SyntaxFactory.SingletonSeparatedList(
                             SyntaxFactory.Argument(collectionExprs))));
 
-            return CompiledCSharpExpression.Generic(genericCSharpExpr);
+            return [CompiledCSharpExpression.Generic(genericCSharpExpr)];
         }
 
         if (expression is StaticExpression<DeclQualifiedName>.Conditional conditional)
         {
-            var conditionExpr =
-                CompileToCSharpExpression(
-                    conditional.Condition,
+            return
+                EnumerateExpressionsForConditional(
+                    conditional,
                     selfFunctionInterface,
                     availableFunctions,
                     availableValueDecls,
                     declarationSyntaxContext,
                     alreadyDeclared);
-
-            var trueBranchExpr =
-                CompileToCSharpExpression(
-                    conditional.TrueBranch,
-                    selfFunctionInterface,
-                    availableFunctions,
-                    availableValueDecls,
-                    declarationSyntaxContext,
-                    alreadyDeclared);
-
-            var falseBranchExpr =
-                CompileToCSharpExpression(
-                    conditional.FalseBranch,
-                    selfFunctionInterface,
-                    availableFunctions,
-                    availableValueDecls,
-                    declarationSyntaxContext,
-                    alreadyDeclared);
-
-            if (trueBranchExpr.Type == CompiledCSharpExpression.ValueType.Boolean &&
-                falseBranchExpr.Type == CompiledCSharpExpression.ValueType.Boolean)
-            {
-                // Both branches are boolean, so produce a boolean result.
-
-                var booleanCSharpExpr =
-                    SyntaxFactory.ConditionalExpression(
-                        condition: conditionExpr.AsBooleanValue(declarationSyntaxContext),
-                        whenTrue: trueBranchExpr.AsBooleanValue(declarationSyntaxContext),
-                        whenFalse: falseBranchExpr.AsBooleanValue(declarationSyntaxContext));
-
-                return CompiledCSharpExpression.Boolean(booleanCSharpExpr);
-            }
-
-            var genericCSharpExpr =
-                SyntaxFactory.ConditionalExpression(
-                    condition: conditionExpr.AsBooleanValue(declarationSyntaxContext),
-                    whenTrue: trueBranchExpr.AsGenericValue(declarationSyntaxContext),
-                    whenFalse: falseBranchExpr.AsGenericValue(declarationSyntaxContext));
-
-            return CompiledCSharpExpression.Generic(genericCSharpExpr);
         }
 
         if (expression is StaticExpression<DeclQualifiedName>.KernelApplication kernelApp)
         {
             return
-                CompileKernelAppToCSharpExpression(
+                EnumerateExpressionsForKernelApp(
                     kernelApp,
                     selfFunctionInterface,
                     availableFunctions,
@@ -655,7 +619,7 @@ public record StaticProgramCSharpClass(
             var arguments =
                 funcInterface.ParamsPaths
                 .Select(argumentPath =>
-                ExpressionForFunctionParam(
+                ExpressionsForFunctionParam(
                     argumentPath,
                     funcApp.Arguments,
                     selfFunctionInterface,
@@ -675,7 +639,7 @@ public record StaticProgramCSharpClass(
                             .. arguments.Select(argExpr => SyntaxFactory.Argument(argExpr.AsGenericValue(declarationSyntaxContext)))
                             ])));
 
-            return CompiledCSharpExpression.Generic(genericCSharpExpr);
+            return [CompiledCSharpExpression.Generic(genericCSharpExpr)];
         }
 
         if (expression is StaticExpression<DeclQualifiedName>.CrashingParseAndEval parseAndEval)
@@ -696,7 +660,7 @@ public record StaticProgramCSharpClass(
                         SyntaxFactory.Literal("TODO: Include details from encoded and env subexpressions")),
                     declarationSyntaxContext);
 
-            return CompiledCSharpExpression.Generic(genericCSharpExpr);
+            return [CompiledCSharpExpression.Generic(genericCSharpExpr)];
         }
 
         if (expression is StaticExpression<DeclQualifiedName>.Environment)
@@ -709,7 +673,121 @@ public record StaticProgramCSharpClass(
             "C# code generation for expression type " + expression.GetType() + " is not implemented.");
     }
 
-    public static CompiledCSharpExpression CompileKernelAppToCSharpExpression(
+
+    public static IEnumerable<CompiledCSharpExpression> EnumerateExpressionsForLiteral(
+        StaticExpression<DeclQualifiedName>.Literal literal,
+        IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls,
+        DeclarationSyntaxContext declarationSyntaxContext)
+    {
+        ExpressionSyntax? OverrideValueLiteralExpression(PineValue pineValue)
+        {
+            if (availableValueDecls.TryGetValue(pineValue, out var declName))
+            {
+                return SyntaxFactory.ParseName(declName.FullName);
+            }
+
+            return null;
+        }
+
+        if (IntegerEncoding.ParseSignedIntegerStrict(literal.Value).IsOkOrNullable() is { } integer &&
+            long.MinValue < integer && integer < long.MaxValue &&
+            IntegerEncoding.EncodeSignedInteger(integer) == literal.Value)
+        {
+            yield return
+                CompiledCSharpExpression.Integer(
+                    PineCSharpSyntaxFactory.ExpressionSyntaxForIntegerLiteral((long)integer));
+        }
+
+        if (OverrideValueLiteralExpression(literal.Value) is { } overriddenExpr)
+        {
+            yield return CompiledCSharpExpression.Generic(overriddenExpr);
+
+            yield break;
+        }
+
+        var toLiteral =
+            PineCSharpSyntaxFactory.CompileToCSharpLiteralExpression(
+                literal.Value,
+                overrideDefaultExpression: OverrideValueLiteralExpression,
+                declarationSyntaxContext);
+
+        yield return CompiledCSharpExpression.Generic(toLiteral.exprSyntax);
+    }
+
+
+    public static IEnumerable<CompiledCSharpExpression> EnumerateExpressionsForConditional(
+        StaticExpression<DeclQualifiedName>.Conditional conditional,
+        System.Func<IReadOnlyList<int>, ExpressionSyntax?> selfFunctionInterface,
+        IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
+        IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls,
+        DeclarationSyntaxContext declarationSyntaxContext,
+        ImmutableDictionary<StaticExpression<DeclQualifiedName>, string> alreadyDeclared)
+    {
+        var conditionExpr =
+            CompileToCSharpExpression(
+                conditional.Condition,
+                selfFunctionInterface,
+                availableFunctions,
+                availableValueDecls,
+                declarationSyntaxContext,
+                alreadyDeclared);
+
+        var trueBranchExpr =
+            CompileToCSharpExpression(
+                conditional.TrueBranch,
+                selfFunctionInterface,
+                availableFunctions,
+                availableValueDecls,
+                declarationSyntaxContext,
+                alreadyDeclared);
+
+        var falseBranchExpr =
+            CompileToCSharpExpression(
+                conditional.FalseBranch,
+                selfFunctionInterface,
+                availableFunctions,
+                availableValueDecls,
+                declarationSyntaxContext,
+                alreadyDeclared);
+
+        if (trueBranchExpr.Type is CompiledCSharpExpression.ValueType.Boolean &&
+            falseBranchExpr.Type is CompiledCSharpExpression.ValueType.Boolean)
+        {
+            // Both branches are boolean, so produce a boolean result.
+
+            var booleanCSharpExpr =
+                SyntaxFactory.ConditionalExpression(
+                    condition: conditionExpr.AsBooleanValue(declarationSyntaxContext),
+                    whenTrue: trueBranchExpr.AsBooleanValue(declarationSyntaxContext),
+                    whenFalse: falseBranchExpr.AsBooleanValue(declarationSyntaxContext));
+
+            yield return CompiledCSharpExpression.Boolean(booleanCSharpExpr);
+        }
+
+        if (trueBranchExpr.Type is CompiledCSharpExpression.ValueType.Integer &&
+            falseBranchExpr.Type is CompiledCSharpExpression.ValueType.Integer)
+        {
+            // Both branches are integer, so produce an integer result.
+
+            var integerCSharpExpr =
+                SyntaxFactory.ConditionalExpression(
+                    condition: conditionExpr.AsBooleanValue(declarationSyntaxContext),
+                    whenTrue: trueBranchExpr.ExpressionSyntax,
+                    whenFalse: falseBranchExpr.ExpressionSyntax);
+
+            yield return CompiledCSharpExpression.Integer(integerCSharpExpr);
+        }
+
+        var genericCSharpExpr =
+            SyntaxFactory.ConditionalExpression(
+                condition: conditionExpr.AsBooleanValue(declarationSyntaxContext),
+                whenTrue: trueBranchExpr.AsGenericValue(declarationSyntaxContext),
+                whenFalse: falseBranchExpr.AsGenericValue(declarationSyntaxContext));
+
+        yield return CompiledCSharpExpression.Generic(genericCSharpExpr);
+    }
+
+    public static IEnumerable<CompiledCSharpExpression> EnumerateExpressionsForKernelApp(
         StaticExpression<DeclQualifiedName>.KernelApplication kernelApp,
         System.Func<IReadOnlyList<int>, ExpressionSyntax?> selfFunctionInterface,
         IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
@@ -725,35 +803,76 @@ public record StaticProgramCSharpClass(
             {
                 if (listInput.Items.Count is 2)
                 {
-                    var leftExpr =
-                        CompileToCSharpExpression(
+                    var leftExprs =
+                        EnumerateExpressions(
                             listInput.Items[0],
                             selfFunctionInterface,
                             availableFunctions,
                             availableValueDecls,
                             declarationSyntaxContext,
-                            alreadyDeclared);
+                            alreadyDeclared)
+                        .ToImmutableArray();
 
-                    var rightExpr =
-                        CompileToCSharpExpression(
+                    var rightExprs =
+                        EnumerateExpressions(
                             listInput.Items[1],
                             selfFunctionInterface,
                             availableFunctions,
                             availableValueDecls,
                             declarationSyntaxContext,
-                            alreadyDeclared);
+                            alreadyDeclared)
+                        .ToImmutableArray();
 
-                    if (leftExpr.Type == CompiledCSharpExpression.ValueType.Boolean &&
-                        rightExpr.Type == CompiledCSharpExpression.ValueType.Boolean)
+                    var leftAsBoolean =
+                        leftExprs
+                        .FirstOrDefault(e => e.Type == CompiledCSharpExpression.ValueType.Boolean);
+
+                    var rightAsBoolean =
+                        rightExprs
+                        .FirstOrDefault(e => e.Type == CompiledCSharpExpression.ValueType.Boolean);
+
+                    if (leftAsBoolean is not null &&
+                        rightAsBoolean is not null)
                     {
                         var booleanCSharpExpr =
                             SyntaxFactory.BinaryExpression(
                                 SyntaxKind.EqualsExpression,
-                                leftExpr.AsBooleanValue(declarationSyntaxContext),
-                                rightExpr.AsBooleanValue(declarationSyntaxContext));
+                                leftAsBoolean.ExpressionSyntax,
+                                rightAsBoolean.ExpressionSyntax);
 
-                        return CompiledCSharpExpression.Boolean(booleanCSharpExpr);
+                        yield return CompiledCSharpExpression.Boolean(booleanCSharpExpr);
                     }
+
+                    var leftAsInteger =
+                        leftExprs
+                        .FirstOrDefault(e => e.Type == CompiledCSharpExpression.ValueType.Integer);
+
+                    var rightAsInteger =
+                        rightExprs
+                        .FirstOrDefault(e => e.Type == CompiledCSharpExpression.ValueType.Integer);
+
+                    if (leftAsInteger is not null &&
+                        rightAsInteger is not null)
+                    {
+                        var booleanCSharpExpr =
+                            SyntaxFactory.BinaryExpression(
+                                SyntaxKind.EqualsExpression,
+                                leftAsInteger.ExpressionSyntax,
+                                rightAsInteger.ExpressionSyntax);
+
+                        yield return CompiledCSharpExpression.Boolean(booleanCSharpExpr);
+                    }
+
+                    // Fallback: Compare as generic values.
+                    var leftExpr =
+                        leftExprs
+                        .FirstOrDefault(e => e.Type == CompiledCSharpExpression.ValueType.Generic)
+                        ?? leftExprs.First();
+
+                    var rightExpr =
+                        rightExprs
+                        .FirstOrDefault(e => e.Type == CompiledCSharpExpression.ValueType.Generic)
+                        ?? rightExprs.First();
 
                     {
                         var booleanCSharpExpr =
@@ -764,21 +883,24 @@ public record StaticProgramCSharpClass(
                                 EnsureIsParenthesizedForComposition(
                                     rightExpr.AsGenericValue(declarationSyntaxContext)));
 
-                        return CompiledCSharpExpression.Boolean(booleanCSharpExpr);
+                        yield return CompiledCSharpExpression.Boolean(booleanCSharpExpr);
                     }
                 }
             }
         }
 
-        if (TryCompileKernelFusion(
-            kernelApp,
-            selfFunctionInterface,
-            availableFunctions,
-            availableValueDecls,
-            declarationSyntaxContext,
-            alreadyDeclared) is { } fusedExpression)
+        var resultsFromFusion =
+            TryCompileKernelFusion(
+                kernelApp,
+                selfFunctionInterface,
+                availableFunctions,
+                availableValueDecls,
+                declarationSyntaxContext,
+                alreadyDeclared);
+
+        foreach (var fromFusion in resultsFromFusion)
         {
-            return fusedExpression;
+            yield return fromFusion;
         }
 
         ExpressionSyntax? TryRenderArgument(
@@ -816,31 +938,54 @@ public record StaticProgramCSharpClass(
             }
         }
 
-        if (kernelApp.Input is StaticExpression<DeclQualifiedName>.List argumentsList &&
-            PineKernelFunctions.SpecializedInterfacesFromKernelFunctionName(kernelApp.Function) is { } specializedInterfaces)
+        if (kernelApp.Function is nameof(KernelFunction.length))
         {
-            var isCommutative =
-                kernelApp.Function
-                switch
-                {
-                    nameof(KernelFunction.int_add) => true,
-                    nameof(KernelFunction.int_mul) => true,
-
-                    nameof(KernelFunction.bit_and) => true,
-                    nameof(KernelFunction.bit_or) => true,
-                    nameof(KernelFunction.bit_xor) => true,
-
-                    _ => false,
-                };
-
-            if (TryMatchSpecializedInterface(
-                specializedInterfaces,
-                argumentsList,
-                isCommutative,
-                TryRenderArgument,
-                declarationSyntaxContext) is { } matchedExpression)
+            if (PineKernelFunctions.SpecializedInterfacesFromKernelFunctionName(kernelApp.Function) is { } specializedInterfaces)
             {
-                return matchedExpression;
+                var matches =
+                    EnumerateMatchingSpecializedInterface(
+                    specializedInterfaces,
+                    [kernelApp.Input],
+                    isCommutative: false,
+                    TryRenderArgument,
+                    declarationSyntaxContext);
+
+                foreach (var match in matches)
+                {
+                    yield return match;
+                }
+            }
+        }
+        else if (kernelApp.Input is StaticExpression<DeclQualifiedName>.List argumentsList)
+        {
+            if (PineKernelFunctions.SpecializedInterfacesFromKernelFunctionName(kernelApp.Function) is { } specializedInterfaces)
+            {
+                var isCommutative =
+                    kernelApp.Function
+                    switch
+                    {
+                        nameof(KernelFunction.int_add) => true,
+                        nameof(KernelFunction.int_mul) => true,
+
+                        nameof(KernelFunction.bit_and) => true,
+                        nameof(KernelFunction.bit_or) => true,
+                        nameof(KernelFunction.bit_xor) => true,
+
+                        _ => false,
+                    };
+
+                var matches =
+                    EnumerateMatchingSpecializedInterface(
+                    specializedInterfaces,
+                    argumentsList.Items,
+                    isCommutative,
+                    TryRenderArgument,
+                    declarationSyntaxContext);
+
+                foreach (var match in matches)
+                {
+                    yield return match;
+                }
             }
         }
 
@@ -859,7 +1004,7 @@ public record StaticProgramCSharpClass(
             declarationSyntaxContext)
             is { } specializedInvocation)
         {
-            return CompiledCSharpExpression.Generic(specializedInvocation);
+            yield return CompiledCSharpExpression.Generic(specializedInvocation);
         }
 
         // Generic case: Invoke KernelFunction.ApplyKernelFunctionGeneric
@@ -883,10 +1028,10 @@ public record StaticProgramCSharpClass(
                         SyntaxFactory.Argument(inputExpr.AsGenericValue(declarationSyntaxContext))
                         ])));
 
-        return CompiledCSharpExpression.Generic(genericCSharpExpr);
+        yield return CompiledCSharpExpression.Generic(genericCSharpExpr);
     }
 
-    private static CompiledCSharpExpression? TryCompileKernelFusion(
+    private static IEnumerable<CompiledCSharpExpression> TryCompileKernelFusion(
         StaticExpression<DeclQualifiedName>.KernelApplication kernelApp,
         System.Func<IReadOnlyList<int>, ExpressionSyntax?> selfFunctionInterface,
         IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
@@ -957,7 +1102,7 @@ public record StaticProgramCSharpClass(
                                         .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("argument"))),
                                 })));
 
-                return CompiledCSharpExpression.Generic(genericCSharpExpr);
+                yield return CompiledCSharpExpression.Generic(genericCSharpExpr);
             }
         }
 
@@ -1007,14 +1152,12 @@ public record StaticProgramCSharpClass(
                                         .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("value")))
                                 })));
 
-                return CompiledCSharpExpression.Generic(genericCSharpExpr);
+                yield return CompiledCSharpExpression.Generic(genericCSharpExpr);
             }
         }
-
-        return null;
     }
 
-    public static CompiledCSharpExpression ExpressionForFunctionParam(
+    public static IEnumerable<CompiledCSharpExpression> ExpressionsForFunctionParam(
         IReadOnlyList<int> paramPath,
         StaticExpression<DeclQualifiedName> argumentExpr,
         System.Func<IReadOnlyList<int>, ExpressionSyntax?> selfFunctionInterface,
@@ -1026,7 +1169,7 @@ public record StaticProgramCSharpClass(
         if (StaticExpressionExtension.GetSubexpressionAtPath(argumentExpr, paramPath) is { } subexpr)
         {
             var renderedExpr =
-                CompileToCSharpExpression(
+                EnumerateExpressions(
                     subexpr.subexpr,
                     selfFunctionInterface,
                     availableFunctions,
@@ -1048,23 +1191,23 @@ public record StaticProgramCSharpClass(
             "Failed to find subexpression at path [" + string.Join(',', paramPath) + "] in argument expression.");
     }
 
-    private static CompiledCSharpExpression? TryMatchSpecializedInterface(
+    private static IEnumerable<CompiledCSharpExpression> EnumerateMatchingSpecializedInterface(
         IReadOnlyList<PineKernelFunctions.KernelFunctionSpecializedInfo> specializedInterfaces,
-        StaticExpression<DeclQualifiedName>.List argumentsList,
+        IReadOnlyList<StaticExpression<DeclQualifiedName>> argumentsList,
         bool isCommutative,
         System.Func<StaticExpression<DeclQualifiedName>, PineKernelFunctions.KernelFunctionParameterType, ExpressionSyntax?> tryRenderArgument,
         DeclarationSyntaxContext declarationSyntaxContext)
     {
         IEnumerable<IReadOnlyList<StaticExpression<DeclQualifiedName>>> EnumerateArgumentsPermutations()
         {
-            yield return argumentsList.Items;
+            yield return argumentsList;
 
-            if (isCommutative && argumentsList.Items.Count > 1)
+            if (isCommutative && argumentsList.Count > 1)
             {
-                foreach (var permutation in GetPermutations(argumentsList.Items))
+                foreach (var permutation in GetPermutations(argumentsList))
                 {
                     // Skip the original order, we already tried it
-                    if (permutation.SequenceEqual(argumentsList.Items))
+                    if (permutation.SequenceEqual(argumentsList))
                         continue;
 
                     yield return permutation;
@@ -1082,12 +1225,10 @@ public record StaticProgramCSharpClass(
                     tryRenderArgument,
                     declarationSyntaxContext) is { } matchedExpr)
                 {
-                    return matchedExpr;
+                    yield return matchedExpr;
                 }
             }
         }
-
-        return null;
     }
 
     private static CompiledCSharpExpression? TryMatchSpecializedInterfaceWithArgumentsOrder(
@@ -1131,6 +1272,9 @@ public record StaticProgramCSharpClass(
 
                 PineKernelFunctions.KernelFunctionSpecializedReturnType.Generic =>
                 CompiledCSharpExpression.Generic(csharpExpr),
+
+                PineKernelFunctions.KernelFunctionSpecializedReturnType.Integer =>
+                CompiledCSharpExpression.Integer(csharpExpr),
 
                 _ =>
                 throw new System.NotImplementedException(

@@ -48,11 +48,14 @@ public class PineKernelFunctions
         Generic = 10,
 
         Boolean = 30,
+
+        Integer = 40,
     }
 
     public enum KernelFunctionParameterType
     {
         Generic = 10,
+
         Integer = 40,
 
         // ReadOnlySpan<PineValue>
@@ -227,6 +230,15 @@ public class PineKernelFunctions
 
         if (type == typeof(bool))
             return KernelFunctionSpecializedReturnType.Boolean;
+
+        /*
+         * For a consumer that expects an integer, compilation to C#/.NET will automatically
+         * convert Int32 and Int64 to BigInteger. Since 'return type' only means a producing side,
+         * we can treat both as 'Integer' here.
+         * */
+
+        if (type == typeof(BigInteger) || type == typeof(int) || type == typeof(long))
+            return KernelFunctionSpecializedReturnType.Integer;
 
         return null;
     }
