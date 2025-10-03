@@ -16,7 +16,7 @@ namespace Pine.Core.DotNet;
 public record StaticProgramCSharp(
     IReadOnlyDictionary<DeclQualifiedName, StaticProgramCSharpClass> ModulesClasses,
     ClassDeclarationSyntax CommonValueClass,
-    ClassDeclarationSyntax GlobalAnonymousClass,
+    StaticProgramCSharpClass GlobalAnonymousClass,
     ClassDeclarationSyntax DispatcherClass,
     DeclarationSyntaxContext DeclarationSyntaxContext)
 {
@@ -159,7 +159,7 @@ public record StaticProgramCSharp(
             new StaticProgramCSharp(
                 ModulesClasses: modulesClasses,
                 CommonValueClass: commonValueClass.classDeclaration,
-                GlobalAnonymousClass: globalAnonClassDecl.ClassDeclarationSyntax,
+                GlobalAnonymousClass: globalAnonClassDecl,
                 DispatcherClass: dispatcherClassDecl,
                 DeclarationSyntaxContext: declarationSyntaxContext);
     }

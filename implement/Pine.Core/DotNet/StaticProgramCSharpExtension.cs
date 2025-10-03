@@ -39,7 +39,7 @@ public static class StaticProgramCSharpExtension
         [
             staticProgram.CommonValueClass,
             ..staticProgram.ModulesClasses.Values.Select(mc => mc.ClassDeclarationSyntax),
-            staticProgram.GlobalAnonymousClass,
+            staticProgram.GlobalAnonymousClass.ClassDeclarationSyntax,
             staticProgram.DispatcherClass,
             ];
 
