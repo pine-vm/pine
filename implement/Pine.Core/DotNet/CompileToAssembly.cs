@@ -1,6 +1,5 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -16,7 +15,7 @@ using CompiledDictionary =
 
 public record CompileToAssemblyResult(
     byte[] Assembly,
-    Func<Result<string, CompiledDictionary>> BuildCompiledExpressionsDictionary);
+    Func<CompiledDictionary> BuildCompiledExpressionsDictionary);
 
 
 public class CompileToAssembly
@@ -29,22 +28,25 @@ public class CompileToAssembly
         IReadOnlyList<string> namespacePrefix,
         OptimizationLevel optimizationLevel)
     {
-        IReadOnlyList<ClassDeclarationSyntax> classDeclarations =
-            [
-            staticProgram.CommonValueClass,
-            ..staticProgram.ModulesClasses.Values.Select(mc => mc.ClassDeclarationSyntax),
-            staticProgram.GlobalAnonymousClass,
-            staticProgram.DispatcherClass,
-            ];
+        var csharpFiles =
+            staticProgram.BuildCSharpProjectFiles(namespacePrefix);
+
+        return Compile(csharpFiles, optimizationLevel);
+    }
+
+    public static Result<string, CompileToAssemblyResult> Compile(
+        IReadOnlyDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> csharpFiles,
+        OptimizationLevel optimizationLevel)
+    {
+        SyntaxTree SyntaxTreeFromFile(
+            KeyValuePair<IReadOnlyList<string>, ReadOnlyMemory<byte>> file) =>
+            CSharpSyntaxTree.ParseText(
+                Microsoft.CodeAnalysis.Text.SourceText.From(System.Text.Encoding.UTF8.GetString(file.Value.Span)),
+                options: s_parseOptions)
+            .WithFilePath(string.Join('/', file.Key));
 
         IReadOnlyList<SyntaxTree> syntaxTrees =
-            [
-            ..classDeclarations
-            .Select(cd =>
-            BuildCompilationUnitSyntaxTree(
-                cd,
-                staticProgram.DeclarationSyntaxContext,
-                namespacePrefix)),
+            [.. csharpFiles.Select(SyntaxTreeFromFile)
             ];
 
         var compilation =
@@ -68,66 +70,86 @@ public class CompileToAssembly
 
         if (!compilationResult.Success)
         {
-            return Result<string, CompileToAssemblyResult>.err(
+            return
                 "Compilation failed with " + compilationErrors.Count + " errors:\n" +
-                string.Join("\n", compilationErrors.Select(d => d.ToString())));
+                string.Join("\n", compilationErrors.Select(d => d.ToString()));
         }
 
         var assembly = codeStream.ToArray();
 
-        IReadOnlyList<string>
-            dictionaryFullNameSegments =
-            [
-                ..namespacePrefix,
-                ..staticProgram.DeclarationSyntaxContext.CurrentNamespace is { } commonNamespace
-                ?
-                (IReadOnlyList<string>)[commonNamespace]
-                :
-                [],
-                staticProgram.DispatcherClass.Identifier.Text
-            ];
+        var searchResult =
+            SearchDictionaryBuilderInAssembly(assembly);
 
-        Result<string, CompiledDictionary> BuildDictionary()
         {
-            return
-                BuildDictionaryFromAssembly(
-                    assembly,
-                    dictionaryFullNameSegments);
+            if (searchResult.IsErrOrNull() is { } err)
+            {
+                return
+                    "Failed to find dictionary builder in compiled assembly: " + err;
+            }
+        }
+
+        if (searchResult.IsOkOrNull() is not { } buildDictionary)
+        {
+            throw new NotImplementedException(
+                "Unexpected return type: " + searchResult.GetType().FullName);
         }
 
         return
             new CompileToAssemblyResult(
                 Assembly: assembly,
-                BuildCompiledExpressionsDictionary: BuildDictionary);
+                BuildCompiledExpressionsDictionary: buildDictionary);
     }
 
-
-    public static Result<string, CompiledDictionary> BuildDictionaryFromAssembly(
-        byte[] assemblyBytes,
-        IReadOnlyList<string> dictionaryFullName)
-    {
-        return
-            BuildDictionaryFromAssembly(
-                assemblyBytes,
-                string.Join('.', dictionaryFullName));
-    }
-
-    public static Result<string, CompiledDictionary> BuildDictionaryFromAssembly(
-        byte[] assemblyBytes,
-        string dictionaryFullName)
+    public static Result<string, Func<CompiledDictionary>> SearchDictionaryBuilderInAssembly(
+        byte[] assemblyBytes)
     {
         var loadedAssembly = Assembly.Load(assemblyBytes);
 
-        var compiledType =
-            loadedAssembly.GetType(dictionaryFullName);
+        var candidateContainerTypes =
+            loadedAssembly.GetTypes()
+            .Where(t => t.IsClass && t.IsPublic && t.Name.Contains("Dispatch"))
+            .ToImmutableList();
 
-        if (compiledType is null)
+        var allMatches =
+            candidateContainerTypes
+            .Select(containerType => (containerType, builderMethod: SearchTypeForDispatcherDictionary(containerType)))
+            .Where(m => m.builderMethod is not null)
+            .ToImmutableList();
+
+        if (allMatches.Count is 0)
         {
             return
-                "Did not find type " + dictionaryFullName +
-                " in assembly " + loadedAssembly.FullName;
+                "Did not find any suitable dictionary builder method in assembly " +
+                loadedAssembly.FullName +
+                ". Searched types: " +
+                string.Join(", ", candidateContainerTypes.Select(t => t.FullName));
         }
 
+        if (allMatches.Count is not 1)
+        {
+            return
+                "Ambiguous dictionary builder methods in assembly " +
+                loadedAssembly.FullName + ": " +
+                string.Join(", ", allMatches.Select(m => m.containerType.FullName + "." + m.builderMethod!.Name));
+        }
+
+        var (containerType, builderMethod) = allMatches[0]!;
+
+        CompiledDictionary BuildDictionary()
+        {
+            return
+                (CompiledDictionary?)
+                builderMethod!.Invoke(null, [])!
+                ?? throw new InvalidOperationException(
+                    "The dictionary builder method " + containerType.FullName + "." + builderMethod.Name +
+                    " returned null.");
+        }
+
+        return Result<string, Func<CompiledDictionary>>.ok(BuildDictionary);
+    }
+
+    private static MethodInfo? SearchTypeForDispatcherDictionary(Type containerType)
+    {
         var targetDictionaryType =
             typeof(CompiledDictionary);
 
@@ -146,84 +168,25 @@ public class CompileToAssembly
         }
 
         var matchingDictionaryMembers =
-            compiledType
+            containerType
             .GetMethods(BindingFlags.Public | BindingFlags.Static)
             .Where(DictionaryPredicate)
             .ToArray();
 
         if (matchingDictionaryMembers.Length is 0)
         {
-            return
-                "Did not find matching method in type " + compiledType.FullName;
+            return null;
         }
 
         if (matchingDictionaryMembers.Length is not 1)
         {
-            return
-                "Ambiguous matching methods in type " + compiledType.FullName +
-                ": " + string.Join(", ", matchingDictionaryMembers.Select(m => m.Name));
+            throw new InvalidOperationException(
+                "Ambiguous matching methods in type " + containerType.FullName +
+                ": " + string.Join(", ", matchingDictionaryMembers.Select(m => m.Name)));
         }
 
-        var dictionaryMember = matchingDictionaryMembers[0];
-
-        var originalDictionary =
-            (CompiledDictionary)
-            dictionaryMember.Invoke(null, null)!;
-
-        return Result<string, CompiledDictionary>.ok(originalDictionary);
+        return matchingDictionaryMembers[0];
     }
-
-    public static SyntaxTree BuildCompilationUnitSyntaxTree(
-        ClassDeclarationSyntax classDeclaration,
-        DeclarationSyntaxContext declarationSyntaxContext,
-        IReadOnlyList<string> namespacePrefix,
-        string? fileIdentifier = null)
-    {
-        IReadOnlyList<string> aggregateNamepace =
-            [.. namespacePrefix
-            ,..declarationSyntaxContext.CurrentNamespace is { } currentNs ? currentNs.Split('.'):[]
-            ];
-
-        MemberDeclarationSyntax
-            compilationUnitMember =
-            aggregateNamepace.Count is 0
-            ?
-            classDeclaration
-            :
-            SyntaxFactory.FileScopedNamespaceDeclaration(
-                SyntaxFactory.ParseName(string.Join('.', aggregateNamepace)))
-            .WithMembers([classDeclaration]);
-
-        var compilationUnitSyntax =
-            SyntaxFactory.CompilationUnit()
-            .WithUsings(
-                [.. declarationSyntaxContext.UsingDirectives
-                .OrderBy(ud => ud.ToFullString())
-                ])
-            .WithMembers([compilationUnitMember]);
-
-        var formattedNode =
-            FormatCSharpSyntaxRewriter.FormatSyntaxTree(
-                compilationUnitSyntax.NormalizeWhitespace(eol: "\n"));
-
-        // Use supplied identifier or derive a stable default like "Ns.SubNs.ClassName.g.cs"
-        var defaultFileIdentifier =
-            (aggregateNamepace.Count is 0
-            ?
-            classDeclaration.Identifier.Text
-            :
-            string.Join('.', aggregateNamepace.Append(classDeclaration.Identifier.Text)))
-            + ".g.cs";
-
-        var cuSyntaxTree =
-            CSharpSyntaxTree.Create(
-                formattedNode,
-                options: s_parseOptions,
-                path: fileIdentifier ?? defaultFileIdentifier);
-
-        return cuSyntaxTree;
-    }
-
 
     private static readonly Lazy<IImmutableList<MetadataReference>> s_metadataReferences =
         new(() => ListMetadataReferences().ToImmutableList());

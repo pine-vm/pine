@@ -53,7 +53,7 @@ public record StaticProgramCSharpClass(
         ClassDeclarationSyntax classDeclarationSyntax)
     {
         var syntaxTree =
-            CompileToAssembly.BuildCompilationUnitSyntaxTree(
+            StaticProgramCSharpExtension.BuildCompilationUnitSyntax(
                 classDeclarationSyntax,
                 declarationSyntaxContext: DeclarationSyntaxContext.None,
                 namespacePrefix: []);

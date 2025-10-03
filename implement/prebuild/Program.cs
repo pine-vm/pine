@@ -43,14 +43,18 @@ public class Program
 
         var clock = System.Diagnostics.Stopwatch.StartNew();
 
+        Console.WriteLine("Building .NET bundle C# and assembly...");
+
         Pine.Core.Bundle.BundledPineToDotnet.BuildAndWriteBundleFile(
             parsedEnvironment,
-            DestinationDirectory);
+            DestinationDirectory,
+            logger: Console.WriteLine,
+            writeCSharpFilesArchive: true);
 
         clock.Stop();
 
         Console.WriteLine(
-            "Compiled and wrote .NET bundle assembly.dll in " +
+            "Completed compilation to C# and .NET bundle assembly.dll in " +
             clock.Elapsed.TotalSeconds.ToString("0.00") + " seconds");
     }
 

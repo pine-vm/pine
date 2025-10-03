@@ -87,8 +87,7 @@ public class PineVM : IPineVM
         _precompiledLeaves =
             precompiledLeaves
             ??
-            Core.Bundle.BundledPineToDotnet.LoadBundledTask.Result?.BuildDictionary()
-            .WithDefault(null);
+            Core.Bundle.BundledPineToDotnet.LoadBundledTask.Result?.BuildDictionary();
 
         _reportEnterPrecompiledLeaf = reportEnterPrecompiledLeaf;
         _reportExitPrecompiledLeaf = reportExitPrecompiledLeaf;

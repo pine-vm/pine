@@ -2018,9 +2018,7 @@ public class OptimizeAndEmitIdivTests
             throw new System.Exception("Compilation to assembly failed: " + err.ToString()));
 
         var compiledDictionary =
-            compileToAssemblyResult.BuildCompiledExpressionsDictionary()
-            .Extract(err =>
-            throw new System.Exception("Building compiled expressions dictionary failed: " + err.ToString()));
+            compileToAssemblyResult.BuildCompiledExpressionsDictionary();
 
         var testModule =
             parsedEnv.Modules.Single(m => m.moduleName is "Test");
