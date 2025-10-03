@@ -1346,7 +1346,7 @@ public class PineVM : IPineVM
                     {
                         _reportEnterPrecompiledLeaf?.Invoke(expressionValue, environmentValue);
 
-                        var valueComputedInLeaf = computeLeafDelegate(expressionValue);
+                        var valueComputedInLeaf = computeLeafDelegate(environmentValue);
 
                         _reportExitPrecompiledLeaf?.Invoke(expressionValue, environmentValue, valueComputedInLeaf);
 
