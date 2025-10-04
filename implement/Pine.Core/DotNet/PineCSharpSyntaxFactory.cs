@@ -65,6 +65,20 @@ public static class PineCSharpSyntaxFactory
                 new ValueSyntaxKind.Other());
         }
 
+        if (pineValue == PineVM.PineKernelValues.TrueValue)
+        {
+            return
+                (ExpressionForPineValueBooleanLiteral(true, declarationSyntaxContext),
+                new ValueSyntaxKind.Other());
+        }
+
+        if (pineValue == PineVM.PineKernelValues.FalseValue)
+        {
+            return
+                (ExpressionForPineValueBooleanLiteral(false, declarationSyntaxContext),
+                new ValueSyntaxKind.Other());
+        }
+
         static long? AttemptMapToSignedInteger(PineValue pineValue)
         {
             if (IntegerEncoding.ParseSignedIntegerStrict(pineValue) is Result<string, BigInteger>.Ok okInteger &&
@@ -311,6 +325,21 @@ public static class PineCSharpSyntaxFactory
                         SyntaxFactory.Argument(pathCollectionExpr)
                     })));
     }
+
+    public static ExpressionSyntax ExpressionForPineValueBooleanLiteral(
+        bool value,
+        DeclarationSyntaxContext declarationSyntaxContext) =>
+        SyntaxFactory.MemberAccessExpression(
+            SyntaxKind.SimpleMemberAccessExpression,
+                CompileTypeSyntax.TypeSyntaxFromType(
+                    typeof(PineVM.PineKernelValues),
+                    declarationSyntaxContext),
+                SyntaxFactory.IdentifierName(
+                    value
+                    ?
+                    nameof(PineVM.PineKernelValues.TrueValue)
+                    :
+                    nameof(PineVM.PineKernelValues.FalseValue)));
 
     public static ExpressionSyntax GenericExpressionFromIntegerExpression(
         ExpressionSyntax intExpr,

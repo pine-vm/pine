@@ -65,12 +65,8 @@ public record CompiledCSharpExpression(
             SyntaxFactory.BinaryExpression(
                 SyntaxKind.EqualsExpression,
                 EnsureIsParenthesizedForComposition(ExpressionSyntax),
-                SyntaxFactory.MemberAccessExpression(
-                        SyntaxKind.SimpleMemberAccessExpression,
-                        CompileTypeSyntax.TypeSyntaxFromType(
-                            typeof(PineKernelValues),
-                            declarationSyntaxContext),
-                        SyntaxFactory.IdentifierName(nameof(PineKernelValues.TrueValue)))),
+                EnsureIsParenthesizedForComposition(
+                    PineCSharpSyntaxFactory.ExpressionForPineValueBooleanLiteral(true, declarationSyntaxContext))),
 
             ValueType.Boolean =>
             ExpressionSyntax,

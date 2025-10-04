@@ -162,30 +162,30 @@ public class OptimizeAndEmitStringTrimTests
                 {
                     if (param_1_0 == CommonReusedValues.Blob_Char_space)
                     {
-                        return CommonReusedValues.Bool_True;
+                        return PineKernelValues.TrueValue;
                     }
 
                     if (param_1_0 == CommonReusedValues.Blob_Char_tab)
                     {
-                        return CommonReusedValues.Bool_True;
+                        return PineKernelValues.TrueValue;
                     }
 
                     if (param_1_0 == CommonReusedValues.Blob_Char_newline)
                     {
-                        return CommonReusedValues.Bool_True;
+                        return PineKernelValues.TrueValue;
                     }
 
                     if (param_1_0 == CommonReusedValues.Blob_Char_carriagereturn)
                     {
-                        return CommonReusedValues.Bool_True;
+                        return PineKernelValues.TrueValue;
                     }
 
                     if (param_1_0 == CommonReusedValues.Blob_Char_nobreakspace)
                     {
-                        return CommonReusedValues.Bool_True;
+                        return PineKernelValues.TrueValue;
                     }
 
-                    return CommonReusedValues.Bool_False;
+                    return PineKernelValues.FalseValue;
                 }
             }
 

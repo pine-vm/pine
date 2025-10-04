@@ -551,14 +551,6 @@ public class OptimizeAndEmitIdivTests
             """"
             public static class CommonReusedValues
             {
-                public static readonly PineValue Bool_False =
-                    PineValue.Blob(
-                        [2]);
-
-                public static readonly PineValue Bool_True =
-                    PineValue.Blob(
-                        [4]);
-
                 public static readonly PineValue Blob_Int_neg_1 =
                     IntegerEncoding.EncodeSignedInteger(-1);
 
@@ -634,11 +626,11 @@ public class OptimizeAndEmitIdivTests
 
                 public static readonly PineValue List_3cddd7c0 =
                     PineValue.List(
-                        [Bool_False]);
+                        [PineKernelValues.FalseValue]);
 
                 public static readonly PineValue List_fc40d297 =
                     PineValue.List(
-                        [Bool_True]);
+                        [PineKernelValues.TrueValue]);
 
                 public static readonly PineValue List_49dc21d7 =
                     PineValue.List(

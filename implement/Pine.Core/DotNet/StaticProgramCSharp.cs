@@ -35,12 +35,17 @@ public record StaticProgramCSharp(
         var valuesToReuse =
             PineValue.CollectAllComponentsFromRoots(valuesToReuseRoots);
 
+        var blobsFiltered =
+            valuesToReuse.blobs
+            .Where(b => !ExcludeValueFromDeclarationsEmittedForReuse(b))
+            .ToFrozenSet();
+
         var valueHashCache =
             new ConcurrentPineValueHashCache();
 
         var commonValueClass =
             StaticValueClassDeclaration(
-                blobValues: valuesToReuse.blobs,
+                blobValues: blobsFiltered,
                 listValues: valuesToReuse.lists,
                 className: CommonValueClassName,
                 declarationSyntaxContext,
@@ -253,6 +258,14 @@ public record StaticProgramCSharp(
             .WithMembers(SyntaxFactory.List(memberDeclarations));
 
         return (classDeclaration, availableDecls);
+    }
+
+    public static bool ExcludeValueFromDeclarationsEmittedForReuse(PineValue v)
+    {
+        if (v == PineKernelValues.TrueValue || v == PineKernelValues.FalseValue)
+            return true;
+
+        return false;
     }
 
     public static ClassDeclarationSyntax DispatcherClassDeclaration(
