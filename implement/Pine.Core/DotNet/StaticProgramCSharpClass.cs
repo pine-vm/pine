@@ -333,10 +333,19 @@ public record StaticProgramCSharpClass(
 
             if (StaticExpressionExtension.TryParseAsPathToExpression(
                 expr,
-                StaticExpression<DeclQualifiedName>.EnvironmentInstance) is not null)
+                StaticExpression<DeclQualifiedName>.EnvironmentInstance) is { } pathToEnv)
             {
-                // Don't CSE environment references (they get replaced with parameters).
-                return true;
+                // TODO: Precise condition (will change when we lift the 2-level limit on parameters).
+
+                if (pathToEnv.Count <= 2 &&
+                   selfFunctionInterface(pathToEnv) is { })
+                {
+                    // Don't CSE short environment references (they get replaced with parameters).
+
+                    return true;
+                }
+
+                return false;
             }
 
             return false;

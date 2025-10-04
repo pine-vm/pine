@@ -53,6 +53,11 @@ public class OptimizeAndEmitStringTrimTests
             {
                 public static PineValue trim(PineValue param_1_0)
                 {
+                    PineValue local_000 =
+                        KernelFunction.head(
+                            KernelFunction.head(
+                                KernelFunctionSpecialized.skip(1, param_1_0)));
+
                     return
                         PineValue.List(
                             [
@@ -60,23 +65,12 @@ public class OptimizeAndEmitStringTrimTests
                                 PineValue.List(
                                     [
                                         KernelFunctionSpecialized.skip(
-                                            Global_Anonymous.zzz_anon_449d95bc_da6f86d5(
-                                                CommonReusedValues.Blob_Int_0,
-                                                KernelFunction.head(
-                                                    KernelFunction.head(
-                                                        KernelFunctionSpecialized.skip(1, param_1_0)))),
+                                            Global_Anonymous.zzz_anon_449d95bc_da6f86d5(CommonReusedValues.Blob_Int_0, local_000),
                                             KernelFunctionSpecialized.take(
                                                 Global_Anonymous.zzz_anon_627f403e_dca18c16(
-                                                    KernelFunction.length(
-                                                        KernelFunction.head(
-                                                            KernelFunction.head(
-                                                                KernelFunctionSpecialized.skip(1, param_1_0)))),
-                                                    KernelFunction.head(
-                                                        KernelFunction.head(
-                                                            KernelFunctionSpecialized.skip(1, param_1_0)))),
-                                                KernelFunction.head(
-                                                    KernelFunction.head(
-                                                        KernelFunctionSpecialized.skip(1, param_1_0)))))
+                                                    KernelFunction.length(local_000),
+                                                    local_000),
+                                                local_000))
                                     ])
                             ]);
                 }
