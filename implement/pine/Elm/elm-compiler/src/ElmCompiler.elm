@@ -1060,7 +1060,7 @@ compileElmSyntaxExpression stackBefore elmExpression =
             Ok (LiteralExpression (valueFromString literal))
 
         Elm.Syntax.Expression.CharLiteral char ->
-            Ok (LiteralExpression (Pine.valueFromChar_2025 char))
+            Ok (LiteralExpression (Pine.valueFromChar char))
 
         Elm.Syntax.Expression.Integer integer ->
             Ok (LiteralExpression (Pine.valueFromInt integer))
@@ -2011,7 +2011,7 @@ compileCaseBlockInline stack caseBlockExpr caseBlockCases =
 
 stringAsValue_errorNoMatchingBranch : Pine.Value
 stringAsValue_errorNoMatchingBranch =
-    Pine.computeValueFromString_2025 "Error in case-of block: No matching branch."
+    Pine.computeValueFromString "Error in case-of block: No matching branch."
 
 
 compileElmSyntaxCaseBlockCase :
@@ -2332,7 +2332,7 @@ compileElmSyntaxPattern compilation elmPattern =
                                 )
 
         Elm.Syntax.Pattern.CharPattern char ->
-            compilePatternOnlyEqualsCondition (LiteralExpression (Pine.valueFromChar_2025 char))
+            compilePatternOnlyEqualsCondition (LiteralExpression (Pine.valueFromChar char))
 
         Elm.Syntax.Pattern.IntPattern int ->
             compilePatternOnlyEqualsCondition (LiteralExpression (Pine.valueFromInt int))
@@ -2465,7 +2465,7 @@ elmSyntaxPatternAsConst currentItemPattern =
             Just (valueFromString string)
 
         Elm.Syntax.Pattern.CharPattern char ->
-            Just (Pine.valueFromChar_2025 char)
+            Just (Pine.valueFromChar char)
 
         Elm.Syntax.Pattern.UnitPattern ->
             Just unitValue
@@ -3629,7 +3629,7 @@ pineFunctionForRecordUpdate =
         )
         (Pine.ParseAndEvalExpression
             (Pine.LiteralExpression
-                (Pine.computeValueFromString_2025 "invalid record update - not a record")
+                (Pine.computeValueFromString "invalid record update - not a record")
             )
             recordExpression
         )
@@ -3747,7 +3747,7 @@ recursiveFunctionToUpdateFieldsInRecord =
             )
             (Pine.ParseAndEvalExpression
                 (Pine.LiteralExpression
-                    (Pine.computeValueFromString_2025 "invalid record update - field name not found")
+                    (Pine.computeValueFromString "invalid record update - field name not found")
                 )
                 firstFieldNameLocalExpression
             )
@@ -3787,7 +3787,7 @@ pineFunctionForRecordAccess =
         )
         (Pine.ParseAndEvalExpression
             (Pine.LiteralExpression
-                (Pine.computeValueFromString_2025 "invalid record access - not a record")
+                (Pine.computeValueFromString "invalid record access - not a record")
             )
             fieldNameLocalExpression
         )
@@ -3851,7 +3851,7 @@ recursiveFunctionToLookupFieldInRecord =
         )
         (Pine.ParseAndEvalExpression
             (Pine.LiteralExpression
-                (Pine.computeValueFromString_2025 "invalid record access - field name not found")
+                (Pine.computeValueFromString "invalid record access - field name not found")
             )
             fieldNameLocalExpression
         )
@@ -4950,7 +4950,7 @@ valueFromString : String -> Pine.Value
 valueFromString string =
     Pine.ListValue
         [ elmStringTypeTagNameAsValue
-        , Pine.ListValue [ Pine.computeValueFromString_2025 string ]
+        , Pine.ListValue [ Pine.computeValueFromString string ]
         ]
 
 
@@ -5446,6 +5446,6 @@ responseExpressionFromString str =
     Pine.LiteralExpression
         (Pine.ListValue
             [ Pine.valueFromString "String"
-            , Pine.ListValue [ Pine.computeValueFromString_2025 str ]
+            , Pine.ListValue [ Pine.computeValueFromString str ]
             ]
         )

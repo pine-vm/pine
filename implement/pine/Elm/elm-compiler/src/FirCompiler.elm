@@ -2187,10 +2187,7 @@ parseFunctionRecordFromValueTagged value =
         Pine.ListValue listItems ->
             case listItems of
                 [ functionTag, functionRecord ] ->
-                    if
-                        (functionTag == Pine.stringAsValue_Function_2025)
-                            || (functionTag == Pine.stringAsValue_Function_2024)
-                    then
+                    if functionTag == Pine.stringAsValue_Function then
                         parseFunctionRecordFromValue functionRecord
 
                     else
@@ -2402,10 +2399,10 @@ searchForExpressionReduction expression =
                                     attemptReduceViaEval ()
 
                                 Ok skipCount ->
-                                            Just
-                                                (Pine.ListExpression
-                                                    (List.drop skipCount expressionList)
-                                                )
+                                    Just
+                                        (Pine.ListExpression
+                                            (List.drop skipCount expressionList)
+                                        )
 
                         _ ->
                             attemptReduceViaEval ()
