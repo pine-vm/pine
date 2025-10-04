@@ -85,6 +85,34 @@ public class FormatCSharpSyntaxRewriter(
         }
     }
 
+    public override SyntaxNode? VisitArgument(ArgumentSyntax originalNode)
+    {
+        var node = (ArgumentSyntax)base.VisitArgument(originalNode)!;
+
+        // Check if this is a named argument with a NameColon
+        if (node.NameColon is not null)
+        {
+            // Check if the expression causes line breaks
+            if (!IsSimpleExpression(node.Expression))
+            {
+                // Add line break after the colon
+                // The expression should be at the same indentation level as the argument itself
+                var argumentIndentationTrivia = ComputeIndentationTriviaForNode(originalNode);
+
+                return node
+                    .WithNameColon(
+                        node.NameColon.WithColonToken(
+                            node.NameColon.ColonToken.WithTrailingTrivia()))
+                    .WithExpression(
+                        node.Expression.WithLeadingTrivia(
+                            SyntaxFactory.LineFeed,
+                            argumentIndentationTrivia));
+            }
+        }
+
+        return node;
+    }
+
     public override SyntaxNode? VisitArrowExpressionClause(ArrowExpressionClauseSyntax originalNode)
     {
         var node = (ArrowExpressionClauseSyntax)base.VisitArrowExpressionClause(originalNode)!;
@@ -250,12 +278,81 @@ public class FormatCSharpSyntaxRewriter(
     {
         var node = (CompilationUnitSyntax)base.VisitCompilationUnit(originalNode)!;
 
+        // Format using directives
+        if (node.Usings.Count > 0)
+        {
+            // Separate static and non-static usings
+            var staticUsings =
+                node.Usings
+                .Where(u => u.StaticKeyword.IsKind(SyntaxKind.StaticKeyword))
+                .OrderBy(u => u.Name?.ToString() ?? "")
+                .ToList();
+
+            var nonStaticUsings =
+                node.Usings
+                .Where(u => !u.StaticKeyword.IsKind(SyntaxKind.StaticKeyword))
+                .OrderBy(u => u.Name?.ToString() ?? "")
+                .ToList();
+
+            var formattedUsings = new List<UsingDirectiveSyntax>();
+
+            // Add non-static usings first
+            foreach (var usingDirective in nonStaticUsings)
+            {
+                formattedUsings.Add(usingDirective.WithTrailingTrivia(SyntaxFactory.LineFeed));
+            }
+
+            // Add an empty line before static usings if we have both types
+            if (staticUsings.Count > 0 && nonStaticUsings.Count > 0)
+            {
+                // Add blank line before static usings
+                foreach (var (usingDirective, index) in staticUsings.Select((u, i) => (u, i)))
+                {
+                    if (index is 0)
+                    {
+                        formattedUsings.Add(
+                            usingDirective
+                            .WithLeadingTrivia(SyntaxFactory.LineFeed)
+                            .WithTrailingTrivia(SyntaxFactory.LineFeed));
+                    }
+                    else
+                    {
+                        formattedUsings.Add(usingDirective.WithTrailingTrivia(SyntaxFactory.LineFeed));
+                    }
+                }
+            }
+            else if (staticUsings.Count > 0)
+            {
+                // Only static usings
+                foreach (var usingDirective in staticUsings)
+                {
+                    formattedUsings.Add(usingDirective.WithTrailingTrivia(SyntaxFactory.LineFeed));
+                }
+            }
+
+            node = node.WithUsings([.. formattedUsings]);
+        }
+
+        // Format members (namespace declarations, class declarations, etc.)
         if (node.Members.Count > 0)
         {
             var formattedMembers =
                 node.Members
-                .Select(member =>
-                    member.WithTrailingTrivia(new SyntaxTriviaList(SyntaxFactory.LineFeed, SyntaxFactory.LineFeed)))
+                .Select((member, index) =>
+                {
+                    if (index is 0 && node.Usings.Count is 0)
+                    {
+                        return
+                        member.
+                        WithLeadingTrivia()
+                        .WithTrailingTrivia(SyntaxFactory.LineFeed);
+                    }
+
+                    return
+                    member.
+                    WithLeadingTrivia(SyntaxFactory.LineFeed)
+                    .WithTrailingTrivia(SyntaxFactory.LineFeed);
+                })
                 .ToList();
 
             return node.WithMembers([.. formattedMembers]);
@@ -330,6 +427,40 @@ public class FormatCSharpSyntaxRewriter(
                 }));
 
         return node.WithMembers(newMembers);
+    }
+
+    public override SyntaxNode? VisitFileScopedNamespaceDeclaration(FileScopedNamespaceDeclarationSyntax originalNode)
+    {
+        var node = (FileScopedNamespaceDeclarationSyntax)base.VisitFileScopedNamespaceDeclaration(originalNode)!;
+
+        // Ensure semicolon has only a linefeed as trailing trivia
+        node = node.WithSemicolonToken(node.SemicolonToken.WithTrailingTrivia(SyntaxFactory.LineFeed));
+
+        // Add two empty lines before the first member
+        if (node.Members.Count > 0)
+        {
+            var firstMember = node.Members[0];
+            var indentationTrivia = ComputeIndentationTriviaForNode(firstMember);
+
+            var newMembers =
+                SyntaxFactory.List(
+                    node.Members
+                    .Select((member, i) =>
+                    {
+                        if (i is 0)
+                        {
+                            return member.WithLeadingTrivia(
+                                SyntaxFactory.LineFeed,
+                                indentationTrivia);
+                        }
+
+                        return member;
+                    }));
+
+            return node.WithMembers(newMembers);
+        }
+
+        return node;
     }
 
     public override SyntaxNode? VisitMemberAccessExpression(MemberAccessExpressionSyntax originalNode)

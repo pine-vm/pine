@@ -65,8 +65,10 @@ public class OptimizeAndEmitStringTrimTests
                                 PineValue.List(
                                     [
                                         KernelFunctionFused.TakeAndSkip(
-                                            skipCountValue: Global_Anonymous.zzz_anon_449d95bc_da6f86d5(CommonReusedValues.Blob_Int_0, local_000),
-                                            takeCountValue: Global_Anonymous.zzz_anon_627f403e_dca18c16(
+                                            skipCountValue:
+                                            Global_Anonymous.zzz_anon_449d95bc_da6f86d5(CommonReusedValues.Blob_Int_0, local_000),
+                                            takeCountValue:
+                                            Global_Anonymous.zzz_anon_627f403e_dca18c16(
                                                 KernelFunction.length(local_000),
                                                 local_000),
                                             argument: local_000)
@@ -101,7 +103,8 @@ public class OptimizeAndEmitStringTrimTests
                         if (Global_Anonymous.zzz_anon_d97a2014_dda26649(
                             KernelFunctionFused.SkipAndTake(
                                 takeCount: 4,
-                                skipCountValue: KernelFunctionSpecialized.int_add(-4, local_param_1_0),
+                                skipCountValue:
+                                KernelFunctionSpecialized.int_add(-4, local_param_1_0),
                                 argument: local_param_1_1)) == PineKernelValues.TrueValue)
                         {
                             local_param_1_0 =

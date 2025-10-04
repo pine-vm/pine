@@ -967,12 +967,144 @@ public class FormatCSharpSyntaxRewriterTests
     }
 
 
+    [Fact]
+    public void Formats_file_scoped_namespace_with_two_empty_lines_before_class()
+    {
+        var inputSyntaxText =
+            """
+            namespace MyNamespace;
+            public class MyClass
+            {
+                public int MyField;
+            }
+            """.Trim();
+
+        var expectedFormattedText =
+            """
+            namespace MyNamespace;
+
+            public class MyClass
+            {
+                public int MyField;
+            }
+            """.Trim();
+
+        var formattedSyntaxText = FormatCSharpFile(inputSyntaxText);
+
+        formattedSyntaxText.Should().Be(expectedFormattedText);
+    }
+
+    [Fact]
+    public void Formats_using_directives_with_static_usings_separated()
+    {
+        var inputSyntaxText =
+            """
+            using System;
+            using static System.Math;
+            using System.Collections.Generic;
+            using static System.Console;
+            namespace MyNamespace;
+            public class MyClass
+            {
+            }
+            """.Trim();
+
+        var expectedFormattedText =
+            """
+            using System;
+            using System.Collections.Generic;
+
+            using static System.Console;
+            using static System.Math;
+
+            namespace MyNamespace;
+
+            public class MyClass
+            {
+            }
+            """.Trim();
+
+        var formattedSyntaxText = FormatCSharpFile(inputSyntaxText);
+
+        formattedSyntaxText.Should().Be(expectedFormattedText);
+    }
+
+    [Fact]
+    public void Formats_using_directives_followed_by_namespace_with_two_empty_lines()
+    {
+        var inputSyntaxText =
+            """
+            using System;
+            using System.Linq;
+            namespace MyNamespace
+            {
+                public class MyClass
+                {
+                }
+            }
+            """.Trim();
+
+        var expectedFormattedText =
+            """
+            using System;
+            using System.Linq;
+
+            namespace MyNamespace
+            {
+                public class MyClass
+                {
+                }
+            }
+            """.Trim();
+
+        var formattedSyntaxText = FormatCSharpFile(inputSyntaxText);
+
+        formattedSyntaxText.Should().Be(expectedFormattedText);
+    }
+
+    [Fact]
+    public void Formats_named_argument_with_line_break_after_colon()
+    {
+        var inputSyntaxText =
+            """
+            KernelFunctionFused.TakeLast(
+                takeCountValue: Global_Anonymous.zzz_anon_627f403e_dca18c16(
+                    KernelFunction.length(local_000),
+                    local_000),
+                argument: local_000);
+            """.Trim();
+
+        var expectedFormattedText =
+            """
+            KernelFunctionFused.TakeLast(
+                takeCountValue:
+                Global_Anonymous.zzz_anon_627f403e_dca18c16(
+                    KernelFunction.length(local_000),
+                    local_000),
+                argument: local_000);
+            """.Trim();
+
+        var formattedSyntaxText = FormatCSharpScript(inputSyntaxText);
+
+        formattedSyntaxText.Should().Be(expectedFormattedText);
+    }
+
+
     static string FormatCSharpScript(string inputSyntaxText) =>
         FormatCSharpSyntaxRewriter.FormatSyntaxTree(ParseAsCSharpScript(inputSyntaxText))
+        .GetRoot().ToFullString().TrimEnd();
+
+    static string FormatCSharpFile(string inputSyntaxText) =>
+        FormatCSharpSyntaxRewriter.FormatSyntaxTree(ParseAsCSharpFile(inputSyntaxText))
         .GetRoot().ToFullString().TrimEnd();
 
     static SyntaxTree ParseAsCSharpScript(string inputSyntaxText) =>
         SyntaxFactory.ParseSyntaxTree(
             inputSyntaxText,
             options: new CSharpParseOptions().WithKind(SourceCodeKind.Script));
+
+    static SyntaxTree ParseAsCSharpFile(string inputSyntaxText) =>
+        SyntaxFactory.ParseSyntaxTree(
+            inputSyntaxText,
+            options: new CSharpParseOptions().WithKind(SourceCodeKind.Regular));
 }
