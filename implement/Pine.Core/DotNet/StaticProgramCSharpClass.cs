@@ -595,15 +595,106 @@ public record StaticProgramCSharpClass(
                     SyntaxFactory.IdentifierName(existingVarName))];
         }
 
+        (ExpressionSyntax, IReadOnlyList<int>)? FindNearestParameterForPathInEnv(
+            IReadOnlyList<int> pathInEnv)
+        {
+            // Try each possible prefix of pathInEnv to find a parameter
+
+            for (var len = pathInEnv.Count; len >= 1; len--)
+            {
+                var prefix = pathInEnv.Take(len).ToImmutableArray();
+
+                if (selfFunctionInterface(prefix) is { } paramRef)
+                {
+                    var remainingPath = pathInEnv.Skip(len).ToImmutableArray();
+
+                    return (paramRef, remainingPath);
+                }
+            }
+
+            return null;
+        }
+
+        var pathsFromParametersAndLocals = new List<(ExpressionSyntax paramRef, IReadOnlyList<int> remainingPath)>();
+
         if (StaticExpressionExtension.TryParseAsPathToExpression(
             expression,
-            StaticExpression<DeclQualifiedName>.EnvironmentInstance) is { } pathToEnv)
+            StaticExpression<DeclQualifiedName>.EnvironmentInstance) is { } pathInEnv)
         {
-            if (selfFunctionInterface(pathToEnv) is { } match)
-            {
-                return [CompiledCSharpExpression.Generic(match)];
+            // Try for each possible prefix of pathToEnv to find a parameter
 
+            if (FindNearestParameterForPathInEnv(pathInEnv) is { } paramAndRemainder)
+            {
+                var (paramRef, remainingPath) = paramAndRemainder;
+
+                if (remainingPath.Count is 0)
+                {
+                    return [CompiledCSharpExpression.Generic(paramRef)];
+                }
+
+                // Then cover remainder of path with PineValueExtension.ValueFromPathOrEmptyList
+
+                var fromPathGeneric =
+                    PineCSharpSyntaxFactory.BuildCSharpExpressionToGetItemFromPathOrEmptyList(
+                        paramRef,
+                        remainingPath,
+                        declarationSyntaxContext);
+
+                pathsFromParametersAndLocals.Add((paramRef, remainingPath));
             }
+        }
+
+        {
+            (IReadOnlyList<int> pathInSubexpr, StaticExpression<DeclQualifiedName> subexpr)? lastSubExpr = null;
+
+            foreach (var current in StaticExpressionExtension.InterpretAsPathReversed(expression))
+            {
+                lastSubExpr = current;
+
+                if (alreadyDeclared.TryGetValue(current.subexpr, out var varName))
+                {
+                    pathsFromParametersAndLocals.Add((SyntaxFactory.IdentifierName(varName), current.pathInSubexpr));
+                }
+            }
+
+            if (lastSubExpr.HasValue)
+            {
+                var referencesEnvironment =
+                    StaticExpressionExtension.TryParseAsPathToExpression(
+                        lastSubExpr.Value.subexpr,
+                        StaticExpression<DeclQualifiedName>.EnvironmentInstance) is { };
+
+                if (!referencesEnvironment)
+                {
+                    var subExprCompiled =
+                        CompileToCSharpExpression(
+                            lastSubExpr.Value.subexpr,
+                            selfFunctionInterface,
+                            availableFunctions,
+                            availableValueDecls,
+                            declarationSyntaxContext,
+                            alreadyDeclared);
+
+                    pathsFromParametersAndLocals.Add(
+                        (subExprCompiled.AsGenericValue(declarationSyntaxContext), lastSubExpr.Value.pathInSubexpr));
+                }
+            }
+        }
+
+        if (pathsFromParametersAndLocals.Count is not 0)
+        {
+            var shortest =
+                pathsFromParametersAndLocals
+                .OrderBy(p => p.remainingPath.Count)
+                .First();
+
+            var fromPathGeneric =
+                PineCSharpSyntaxFactory.BuildCSharpExpressionToGetItemFromPathOrEmptyList(
+                    shortest.paramRef,
+                    shortest.remainingPath,
+                    declarationSyntaxContext);
+
+            return [CompiledCSharpExpression.Generic(fromPathGeneric)];
         }
 
         if (expression is StaticExpression<DeclQualifiedName>.Literal literal)

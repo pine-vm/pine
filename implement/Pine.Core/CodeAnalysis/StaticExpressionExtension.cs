@@ -557,4 +557,40 @@ public static class StaticExpressionExtension
 
         return (current, [.. path.Skip(currentIndex)]);
     }
+
+    public static IEnumerable<(IReadOnlyList<int> pathInSubexpr, StaticExpression<TFunctionName> subexpr)>
+        InterpretAsPathReversed<TFunctionName>(StaticExpression<TFunctionName> expression)
+    {
+        var pathSegments = new List<int>();
+
+        var currentExpr = expression;
+
+        while (currentExpr is StaticExpression<TFunctionName>.KernelApplication currentKernelApp)
+        {
+            if (currentKernelApp.Function is not nameof(KernelFunction.head))
+                break;
+
+            var currentOffset = 0;
+
+            currentExpr = currentKernelApp.Input;
+
+            if (currentExpr is StaticExpression<TFunctionName>.KernelApplication inputKernelApp &&
+                inputKernelApp.Function is nameof(KernelFunction.skip) &&
+                inputKernelApp.Input is StaticExpression<TFunctionName>.List skipInputList &&
+                skipInputList.Items.Count is 2)
+            {
+                if (skipInputList.Items[0] is StaticExpression<TFunctionName>.Literal skipCountLiteral &&
+                    KernelFunction.SignedIntegerFromValueRelaxed(skipCountLiteral.Value) is { } skipCount)
+                {
+                    currentOffset = (int)skipCount;
+
+                    currentExpr = skipInputList.Items[1];
+                }
+            }
+
+            pathSegments.Insert(0, currentOffset);
+
+            yield return (pathSegments.ToArray(), currentExpr);
+        }
+    }
 }

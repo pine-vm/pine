@@ -54,9 +54,9 @@ public class OptimizeAndEmitStringTrimTests
                 public static PineValue trim(PineValue param_1_0)
                 {
                     PineValue local_000 =
-                        KernelFunction.head(
-                            KernelFunction.head(
-                                KernelFunctionSpecialized.skip(1, param_1_0)));
+                        PineValueExtension.ValueFromPathOrEmptyList(
+                            param_1_0,
+                            [1, 0]);
 
                     return
                         PineValue.List(

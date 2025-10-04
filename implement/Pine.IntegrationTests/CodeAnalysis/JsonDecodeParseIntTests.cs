@@ -886,10 +886,14 @@ public class JsonDecodeParseIntTests
                                 KernelFunctionSpecialized.int_add(4, param_1_1));
 
                         PineValue local_001 =
-                            KernelFunction.head(local_000);
+                            PineValueExtension.ValueFromPathOrEmptyList(
+                                local_000,
+                                [0]);
 
                         PineValue local_002 =
-                            KernelFunction.head(local_001);
+                            PineValueExtension.ValueFromPathOrEmptyList(
+                                local_001,
+                                [0]);
 
                         if (CommonReusedValues.Blob_Str_Ok == local_002)
                         {
@@ -903,13 +907,14 @@ public class JsonDecodeParseIntTests
                                                     [
                                                         KernelFunctionSpecialized.int_mul(
                                                             -1,
-                                                            KernelFunction.head(
-                                                                KernelFunction.head(
-                                                                    KernelFunctionSpecialized.skip(1, local_001))))
+                                                            PineValueExtension.ValueFromPathOrEmptyList(
+                                                                local_001,
+                                                                [1, 0]))
                                                     ])
                                             ]),
-                                        KernelFunction.head(
-                                            KernelFunctionSpecialized.skip(1, local_000))
+                                        PineValueExtension.ValueFromPathOrEmptyList(
+                                            local_000,
+                                            [1])
                                     ]);
                         }
 
@@ -923,13 +928,14 @@ public class JsonDecodeParseIntTests
                                                 CommonReusedValues.Blob_Str_Err,
                                                 PineValue.List(
                                                     [
-                                                        KernelFunction.head(
-                                                            KernelFunction.head(
-                                                                KernelFunctionSpecialized.skip(1, local_001)))
+                                                        PineValueExtension.ValueFromPathOrEmptyList(
+                                                            local_001,
+                                                            [1, 0])
                                                     ])
                                             ]),
-                                        KernelFunction.head(
-                                            KernelFunctionSpecialized.skip(1, local_000))
+                                        PineValueExtension.ValueFromPathOrEmptyList(
+                                            local_000,
+                                            [1])
                                     ]);
                         }
 

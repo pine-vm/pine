@@ -311,7 +311,7 @@ public record StaticProgramCSharp(
 
 
         // Build methods per distinct origExpr
-        var methodDeclarations = new List<MemberDeclarationSyntax>();
+        var dispatchMethodDeclarations = new List<MemberDeclarationSyntax>();
 
         var mutatedDictName = "dict";
 
@@ -487,7 +487,7 @@ public record StaticProgramCSharp(
                         SyntaxFactory.SingletonSeparatedList(environmentParam)))
                 .WithBody(SyntaxFactory.Block(methodBodyStatements));
 
-            methodDeclarations.Add(methodDecl);
+            dispatchMethodDeclarations.Add(methodDecl);
 
             // dict[key] = Dispatch_xxx;
             var encodedExprValueSyntax = LiteralExpressionSyntax(origExprValue);
@@ -545,7 +545,7 @@ public record StaticProgramCSharp(
             buildDispatcherMethod
         };
 
-        classMembers.AddRange(methodDeclarations);
+        classMembers.AddRange(dispatchMethodDeclarations);
 
         var classDeclaration =
             SyntaxFactory.ClassDeclaration("Dispatcher")
