@@ -1054,7 +1054,7 @@ public record StaticProgramCSharpClass(
             return CompileTypeSyntax.TypeSyntaxFromType(type, declarationSyntaxContext);
         }
 
-        // Variant 1: Fuse take(skip(seq)) where take count is a compile-time integer
+        // Variant: Fuse take(skip(seq)) where take count is a compile-time integer
         if (kernelApp.Function is nameof(KernelFunction.take) &&
             kernelApp.Input is StaticExpression<DeclQualifiedName>.List takeArgsList &&
             takeArgsList.Items.Count is 2 &&
@@ -1115,7 +1115,75 @@ public record StaticProgramCSharpClass(
             }
         }
 
-        // Variant 2: Fuse reverse(take(n, reverse(seq))) => KernelFunctionFused.TakeLast(n, seq)
+        // Variant: Fuse skip(take(seq)) where both counts are generic PineValue
+        /*
+         * public static PineValue TakeAndSkip(
+                PineValue skipCountValue,
+                PineValue takeCountValue,
+                PineValue argument)
+         * */
+
+        if (kernelApp.Function is nameof(KernelFunction.skip) &&
+            kernelApp.Input is StaticExpression<DeclQualifiedName>.List skipArgsList2 &&
+            skipArgsList2.Items.Count is 2 &&
+            skipArgsList2.Items[1] is StaticExpression<DeclQualifiedName>.KernelApplication takeApp2 &&
+            takeApp2.Function is nameof(KernelFunction.take) &&
+            takeApp2.Input is StaticExpression<DeclQualifiedName>.List takeArgsList2 &&
+            takeArgsList2.Items.Count is 2)
+        {
+            var argumentExpr =
+                CompileToCSharpExpression(
+                    takeArgsList2.Items[1],
+                    selfFunctionInterface,
+                    availableFunctions,
+                    availableValueDecls,
+                    declarationSyntaxContext,
+                    alreadyDeclared);
+
+            var takeCountExpr =
+                CompileToCSharpExpression(
+                    takeArgsList2.Items[0],
+                    selfFunctionInterface,
+                    availableFunctions,
+                    availableValueDecls,
+                    declarationSyntaxContext,
+                    alreadyDeclared);
+
+            var skipCountExpr =
+                CompileToCSharpExpression(
+                    skipArgsList2.Items[0],
+                    selfFunctionInterface,
+                    availableFunctions,
+                    availableValueDecls,
+                    declarationSyntaxContext,
+                    alreadyDeclared);
+
+            // Build fully-qualified invocation: Pine.Core.Internal.KernelFunctionFused.TakeAndSkip(skipCountValue: ..., takeCountValue: ..., argument: ...)
+            var genericCSharpExpr =
+                SyntaxFactory.InvocationExpression(
+                    SyntaxFactory.MemberAccessExpression(
+                        SyntaxKind.SimpleMemberAccessExpression,
+                        TypeSyntaxFromType(typeof(KernelFunctionFused)),
+                        SyntaxFactory.IdentifierName(nameof(KernelFunctionFused.TakeAndSkip))))
+                .WithArgumentList(
+                    SyntaxFactory.ArgumentList(
+                        SyntaxFactory.SeparatedList<ArgumentSyntax>(
+                            new SyntaxNodeOrToken[]
+                            {
+                                    SyntaxFactory.Argument(skipCountExpr.AsGenericValue(declarationSyntaxContext))
+                                        .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("skipCountValue"))),
+                                    SyntaxFactory.Token(SyntaxKind.CommaToken),
+                                    SyntaxFactory.Argument(takeCountExpr.AsGenericValue(declarationSyntaxContext))
+                                        .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("takeCountValue"))),
+                                    SyntaxFactory.Token(SyntaxKind.CommaToken),
+                                    SyntaxFactory.Argument(argumentExpr.AsGenericValue(declarationSyntaxContext))
+                                        .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("argument"))),
+                            })));
+
+            yield return CompiledCSharpExpression.Generic(genericCSharpExpr);
+        }
+
+        // Variant: Fuse reverse(take(n, reverse(seq))) => KernelFunctionFused.TakeLast(n, seq)
         if (kernelApp.Function is nameof(KernelFunction.reverse))
         {
             var outerReverseInput = kernelApp.Input;

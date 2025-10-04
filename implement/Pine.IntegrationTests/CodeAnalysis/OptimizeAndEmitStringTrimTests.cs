@@ -64,13 +64,12 @@ public class OptimizeAndEmitStringTrimTests
                                 CommonReusedValues.Blob_Str_String,
                                 PineValue.List(
                                     [
-                                        KernelFunctionSpecialized.skip(
-                                            Global_Anonymous.zzz_anon_449d95bc_da6f86d5(CommonReusedValues.Blob_Int_0, local_000),
-                                            KernelFunctionSpecialized.take(
-                                                Global_Anonymous.zzz_anon_627f403e_dca18c16(
-                                                    KernelFunction.length(local_000),
-                                                    local_000),
-                                                local_000))
+                                        KernelFunctionFused.TakeAndSkip(
+                                            skipCountValue: Global_Anonymous.zzz_anon_449d95bc_da6f86d5(CommonReusedValues.Blob_Int_0, local_000),
+                                            takeCountValue: Global_Anonymous.zzz_anon_627f403e_dca18c16(
+                                                KernelFunction.length(local_000),
+                                                local_000),
+                                            argument: local_000)
                                     ])
                             ]);
                 }
