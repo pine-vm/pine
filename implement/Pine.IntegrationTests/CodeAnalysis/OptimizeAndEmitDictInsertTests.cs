@@ -57,16 +57,16 @@ public class OptimizeAndEmitDictInsertTests
                     PineValue param_1_2)
                 {
                     PineValue local_000 =
+                        Global_Anonymous.zzz_anon_ea679199_b65beb0f(param_1_0, param_1_1, param_1_2);
+
+                    PineValue local_001 =
                         KernelFunction.head(
-                            KernelFunctionSpecialized.skip(
-                                1,
-                                Global_Anonymous.zzz_anon_ea679199_b65beb0f(param_1_0, param_1_1, param_1_2)));
+                            KernelFunctionSpecialized.skip(1, local_000));
 
                     if (CommonReusedValues.Blob_Str_Red == KernelFunction.head(
-                        KernelFunction.head(local_000))
+                        KernelFunction.head(local_001))
                     ?
-                    (CommonReusedValues.Blob_Str_RBNode_elm_builtin == KernelFunction.head(
-                        Global_Anonymous.zzz_anon_ea679199_b65beb0f(param_1_0, param_1_1, param_1_2)))
+                    (CommonReusedValues.Blob_Str_RBNode_elm_builtin == KernelFunction.head(local_000))
                     :
                     false)
                     {
@@ -78,18 +78,18 @@ public class OptimizeAndEmitDictInsertTests
                                         [
                                             CommonReusedValues.List_7222f8d4,
                                             KernelFunction.head(
-                                                KernelFunctionSpecialized.skip(1, local_000)),
+                                                KernelFunctionSpecialized.skip(1, local_001)),
                                             KernelFunction.head(
-                                                KernelFunctionSpecialized.skip(2, local_000)),
+                                                KernelFunctionSpecialized.skip(2, local_001)),
                                             KernelFunction.head(
-                                                KernelFunctionSpecialized.skip(3, local_000)),
+                                                KernelFunctionSpecialized.skip(3, local_001)),
                                             KernelFunction.head(
-                                                KernelFunctionSpecialized.skip(4, local_000))
+                                                KernelFunctionSpecialized.skip(4, local_001))
                                         ])
                                 ]);
                     }
 
-                    return Global_Anonymous.zzz_anon_ea679199_b65beb0f(param_1_0, param_1_1, param_1_2);
+                    return local_000;
                 }
             }
 
@@ -214,28 +214,23 @@ public class OptimizeAndEmitDictInsertTests
 
                     PineValue local_002 =
                         KernelFunction.head(
-                            KernelFunctionSpecialized.skip(
-                                1,
-                                KernelFunction.head(
-                                    KernelFunctionSpecialized.skip(
-                                        3,
-                                        KernelFunction.head(
-                                            KernelFunctionSpecialized.skip(1, param_1_3))))));
+                            KernelFunctionSpecialized.skip(1, param_1_3));
+
+                    PineValue local_003 =
+                        KernelFunction.head(
+                            KernelFunctionSpecialized.skip(3, local_002));
+
+                    PineValue local_004 =
+                        KernelFunction.head(
+                            KernelFunctionSpecialized.skip(1, local_003));
 
                     if (CommonReusedValues.Blob_Str_Red == KernelFunction.head(
-                        KernelFunction.head(local_002))
+                        KernelFunction.head(local_004))
                     ?
-                    (CommonReusedValues.Blob_Str_RBNode_elm_builtin == KernelFunction.head(
-                        KernelFunction.head(
-                            KernelFunctionSpecialized.skip(
-                                3,
-                                KernelFunction.head(
-                                    KernelFunctionSpecialized.skip(1, param_1_3)))))
+                    (CommonReusedValues.Blob_Str_RBNode_elm_builtin == KernelFunction.head(local_003)
                     ?
                     (CommonReusedValues.Blob_Str_Red == KernelFunction.head(
-                        KernelFunction.head(
-                            KernelFunction.head(
-                                KernelFunctionSpecialized.skip(1, param_1_3))))
+                        KernelFunction.head(local_002))
                     ?
                     (CommonReusedValues.Blob_Str_RBNode_elm_builtin == KernelFunction.head(param_1_3))
                     :
@@ -245,10 +240,6 @@ public class OptimizeAndEmitDictInsertTests
                     :
                     false)
                     {
-                        PineValue local_003 =
-                            KernelFunction.head(
-                                KernelFunctionSpecialized.skip(1, param_1_3));
-
                         return
                             PineValue.List(
                                 [
@@ -257,9 +248,9 @@ public class OptimizeAndEmitDictInsertTests
                                         [
                                             CommonReusedValues.List_dafb9d35,
                                             KernelFunction.head(
-                                                KernelFunctionSpecialized.skip(1, local_003)),
+                                                KernelFunctionSpecialized.skip(1, local_002)),
                                             KernelFunction.head(
-                                                KernelFunctionSpecialized.skip(2, local_003)),
+                                                KernelFunctionSpecialized.skip(2, local_002)),
                                             PineValue.List(
                                                 [
                                                     CommonReusedValues.Blob_Str_RBNode_elm_builtin,
@@ -267,13 +258,13 @@ public class OptimizeAndEmitDictInsertTests
                                                         [
                                                             CommonReusedValues.List_7222f8d4,
                                                             KernelFunction.head(
-                                                                KernelFunctionSpecialized.skip(1, local_002)),
+                                                                KernelFunctionSpecialized.skip(1, local_004)),
                                                             KernelFunction.head(
-                                                                KernelFunctionSpecialized.skip(2, local_002)),
+                                                                KernelFunctionSpecialized.skip(2, local_004)),
                                                             KernelFunction.head(
-                                                                KernelFunctionSpecialized.skip(3, local_002)),
+                                                                KernelFunctionSpecialized.skip(3, local_004)),
                                                             KernelFunction.head(
-                                                                KernelFunctionSpecialized.skip(4, local_002))
+                                                                KernelFunctionSpecialized.skip(4, local_004))
                                                         ])
                                                 ]),
                                             PineValue.List(
@@ -285,7 +276,7 @@ public class OptimizeAndEmitDictInsertTests
                                                             param_1_1,
                                                             param_1_2,
                                                             KernelFunction.head(
-                                                                KernelFunctionSpecialized.skip(4, local_003)),
+                                                                KernelFunctionSpecialized.skip(4, local_002)),
                                                             param_1_4
                                                         ])
                                                 ])
@@ -329,21 +320,21 @@ public class OptimizeAndEmitDictInsertTests
                                 KernelFunctionSpecialized.skip(1, param_1_2));
 
                         PineValue local_002 =
-                            Basics.compare(
-                                param_1_0,
-                                KernelFunction.head(
-                                    KernelFunctionSpecialized.skip(1, local_001)));
+                            KernelFunction.head(
+                                KernelFunctionSpecialized.skip(1, local_001));
 
                         PineValue local_003 =
-                            KernelFunction.head(local_002);
+                            Basics.compare(param_1_0, local_002);
 
-                        if (CommonReusedValues.Blob_Str_LT == local_003)
+                        PineValue local_004 =
+                            KernelFunction.head(local_003);
+
+                        if (CommonReusedValues.Blob_Str_LT == local_004)
                         {
                             return
                                 Global_Anonymous.zzz_anon_e6d15ff4_dda26649(
                                     KernelFunction.head(local_001),
-                                    KernelFunction.head(
-                                        KernelFunctionSpecialized.skip(1, local_001)),
+                                    local_002,
                                     KernelFunction.head(
                                         KernelFunctionSpecialized.skip(2, local_001)),
                                     Global_Anonymous.zzz_anon_ea679199_b65beb0f(
@@ -355,7 +346,7 @@ public class OptimizeAndEmitDictInsertTests
                                         KernelFunctionSpecialized.skip(4, local_001)));
                         }
 
-                        if (CommonReusedValues.Blob_Str_EQ == local_003)
+                        if (CommonReusedValues.Blob_Str_EQ == local_004)
                         {
                             return
                                 PineValue.List(
@@ -364,8 +355,7 @@ public class OptimizeAndEmitDictInsertTests
                                         PineValue.List(
                                             [
                                                 KernelFunction.head(local_001),
-                                                KernelFunction.head(
-                                                    KernelFunctionSpecialized.skip(1, local_001)),
+                                                local_002,
                                                 param_1_1,
                                                 KernelFunction.head(
                                                     KernelFunctionSpecialized.skip(3, local_001)),
@@ -375,13 +365,12 @@ public class OptimizeAndEmitDictInsertTests
                                     ]);
                         }
 
-                        if (CommonReusedValues.Blob_Str_GT == local_003)
+                        if (CommonReusedValues.Blob_Str_GT == local_004)
                         {
                             return
                                 Global_Anonymous.zzz_anon_e6d15ff4_dda26649(
                                     KernelFunction.head(local_001),
-                                    KernelFunction.head(
-                                        KernelFunctionSpecialized.skip(1, local_001)),
+                                    local_002,
                                     KernelFunction.head(
                                         KernelFunctionSpecialized.skip(2, local_001)),
                                     KernelFunction.head(
@@ -399,7 +388,6 @@ public class OptimizeAndEmitDictInsertTests
                     throw new ParseExpressionException("TODO: Include details from encoded and env subexpressions");
                 }
             }
-            
 
             """"
             .Trim());

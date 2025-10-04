@@ -1505,6 +1505,27 @@ public record StaticProgramCSharpClass(
         StaticExpression<FuncId> expression,
         System.Func<StaticExpression<FuncId>, bool> ignoreExpr)
     {
+        IReadOnlyList<StaticExpression<FuncId>> currentRoots = [expression];
+
+        while (true)
+        {
+            var collectedThisRound =
+                CollectSubexpressionsToSeparateStep(currentRoots, ignoreExpr)
+                .ToImmutableArray();
+
+            if (collectedThisRound.Length is 0)
+            {
+                return currentRoots.Except([expression]);
+            }
+
+            currentRoots = [.. currentRoots, .. collectedThisRound];
+        }
+    }
+
+    public static IEnumerable<StaticExpression<FuncId>> CollectSubexpressionsToSeparateStep<FuncId>(
+        IReadOnlyList<StaticExpression<FuncId>> rootExpressions,
+        System.Func<StaticExpression<FuncId>, bool> ignoreExpr)
+    {
         /*
          * Primary reason to separate a subexpression into a declaration is CSE (prevent repeated evaluation).
          * 
@@ -1513,9 +1534,26 @@ public record StaticProgramCSharpClass(
 
         var seenOnceUnconditional = new HashSet<StaticExpression<FuncId>>();
 
+        var seenOnceConditional = new HashSet<StaticExpression<FuncId>>();
+
         var collected = new HashSet<StaticExpression<FuncId>>();
 
-        var queue = new Queue<(StaticExpression<FuncId> expr, bool conditional)>([(expression, false)]);
+        var queue = new Queue<(StaticExpression<FuncId> expr, bool conditional)>(capacity: rootExpressions.Count);
+
+        foreach (var rootExpr in rootExpressions)
+        {
+            queue.Enqueue((rootExpr, false));
+        }
+
+        void EnqueueIfNoRoot(StaticExpression<FuncId> expr, bool conditional)
+        {
+            if (rootExpressions.Contains(expr))
+            {
+                return;
+            }
+
+            queue.Enqueue((expr, conditional));
+        }
 
         while (queue.Count > 0)
         {
@@ -1531,7 +1569,8 @@ public record StaticProgramCSharpClass(
                 continue;
             }
 
-            if (seenOnceUnconditional.Contains(current.expr))
+            if (seenOnceUnconditional.Contains(current.expr) ||
+                (seenOnceConditional.Contains(current.expr) && !current.conditional))
             {
                 yield return current.expr;
 
@@ -1540,17 +1579,21 @@ public record StaticProgramCSharpClass(
                 continue;
             }
 
-            if (!current.conditional)
+            if (current.conditional)
+            {
+                seenOnceConditional.Add(current.expr);
+            }
+            else
             {
                 seenOnceUnconditional.Add(current.expr);
             }
 
             if (current.expr is StaticExpression<FuncId>.Conditional conditional)
             {
-                queue.Enqueue((conditional.Condition, current.conditional));
+                EnqueueIfNoRoot(conditional.Condition, current.conditional);
 
-                queue.Enqueue((conditional.TrueBranch, true));
-                queue.Enqueue((conditional.FalseBranch, true));
+                EnqueueIfNoRoot(conditional.TrueBranch, true);
+                EnqueueIfNoRoot(conditional.FalseBranch, true);
 
                 continue;
             }
@@ -1569,7 +1612,7 @@ public record StaticProgramCSharpClass(
             {
                 foreach (var item in list.Items)
                 {
-                    queue.Enqueue((item, current.conditional));
+                    EnqueueIfNoRoot(item, current.conditional);
                 }
 
                 continue;
@@ -1577,22 +1620,22 @@ public record StaticProgramCSharpClass(
 
             if (current.expr is StaticExpression<FuncId>.KernelApplication kernelApp)
             {
-                queue.Enqueue((kernelApp.Input, current.conditional));
+                EnqueueIfNoRoot(kernelApp.Input, current.conditional);
 
                 continue;
             }
 
             if (current.expr is StaticExpression<FuncId>.FunctionApplication funcApp)
             {
-                queue.Enqueue((funcApp.Arguments, current.conditional));
+                EnqueueIfNoRoot(funcApp.Arguments, current.conditional);
 
                 continue;
             }
 
             if (current.expr is StaticExpression<FuncId>.CrashingParseAndEval parseAndEval)
             {
-                queue.Enqueue((parseAndEval.Encoded, current.conditional));
-                queue.Enqueue((parseAndEval.EnvironmentExpr, current.conditional));
+                EnqueueIfNoRoot(parseAndEval.Encoded, current.conditional);
+                EnqueueIfNoRoot(parseAndEval.EnvironmentExpr, current.conditional);
 
                 continue;
             }
