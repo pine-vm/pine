@@ -947,7 +947,7 @@ public class JsonDecodeParseIntTests
                     PineValue local_000 =
                         KernelFunctionFused.SkipAndTake(takeCount: 4, skipCountValue: param_1_1, argument: param_1_0);
 
-                    if (local_000 == CommonReusedValues.Blob_Str_0)
+                    if (local_000 == CommonReusedValues.Blob_Char_digit_0)
                     {
                         return
                             PineValue.List(
@@ -957,7 +957,7 @@ public class JsonDecodeParseIntTests
                                 ]);
                     }
 
-                    if (local_000 == CommonReusedValues.Blob_Str_1)
+                    if (local_000 == CommonReusedValues.Blob_Char_digit_1)
                     {
                         return
                             Test.parseUnsignedIntRec(
@@ -966,7 +966,7 @@ public class JsonDecodeParseIntTests
                                 KernelFunctionSpecialized.int_add(4, param_1_1));
                     }
 
-                    if (local_000 == CommonReusedValues.Blob_Str_2)
+                    if (local_000 == CommonReusedValues.Blob_Char_digit_2)
                     {
                         return
                             Test.parseUnsignedIntRec(
@@ -975,7 +975,7 @@ public class JsonDecodeParseIntTests
                                 KernelFunctionSpecialized.int_add(4, param_1_1));
                     }
 
-                    if (local_000 == CommonReusedValues.Blob_Str_3)
+                    if (local_000 == CommonReusedValues.Blob_Char_digit_3)
                     {
                         return
                             Test.parseUnsignedIntRec(
@@ -984,7 +984,7 @@ public class JsonDecodeParseIntTests
                                 KernelFunctionSpecialized.int_add(4, param_1_1));
                     }
 
-                    if (local_000 == CommonReusedValues.Blob_Str_4)
+                    if (local_000 == CommonReusedValues.Blob_Char_digit_4)
                     {
                         return
                             Test.parseUnsignedIntRec(
@@ -993,7 +993,7 @@ public class JsonDecodeParseIntTests
                                 KernelFunctionSpecialized.int_add(4, param_1_1));
                     }
 
-                    if (local_000 == CommonReusedValues.Blob_Str_5)
+                    if (local_000 == CommonReusedValues.Blob_Char_digit_5)
                     {
                         return
                             Test.parseUnsignedIntRec(
@@ -1002,7 +1002,7 @@ public class JsonDecodeParseIntTests
                                 KernelFunctionSpecialized.int_add(4, param_1_1));
                     }
 
-                    if (local_000 == CommonReusedValues.Blob_Str_6)
+                    if (local_000 == CommonReusedValues.Blob_Char_digit_6)
                     {
                         return
                             Test.parseUnsignedIntRec(
@@ -1011,7 +1011,7 @@ public class JsonDecodeParseIntTests
                                 KernelFunctionSpecialized.int_add(4, param_1_1));
                     }
 
-                    if (local_000 == CommonReusedValues.Blob_Str_7)
+                    if (local_000 == CommonReusedValues.Blob_Char_digit_7)
                     {
                         return
                             Test.parseUnsignedIntRec(
@@ -1020,7 +1020,7 @@ public class JsonDecodeParseIntTests
                                 KernelFunctionSpecialized.int_add(4, param_1_1));
                     }
 
-                    if (local_000 == CommonReusedValues.Blob_Str_8)
+                    if (local_000 == CommonReusedValues.Blob_Char_digit_8)
                     {
                         return
                             Test.parseUnsignedIntRec(
@@ -1029,7 +1029,7 @@ public class JsonDecodeParseIntTests
                                 KernelFunctionSpecialized.int_add(4, param_1_1));
                     }
 
-                    if (local_000 == CommonReusedValues.Blob_Str_9)
+                    if (local_000 == CommonReusedValues.Blob_Char_digit_9)
                     {
                         return
                             Test.parseUnsignedIntRec(
@@ -1063,7 +1063,7 @@ public class JsonDecodeParseIntTests
                         PineValue local_000 =
                             KernelFunctionFused.SkipAndTake(takeCount: 4, skipCountValue: local_param_1_2, argument: local_param_1_1);
 
-                        if (local_000 == CommonReusedValues.Blob_Str_0)
+                        if (local_000 == CommonReusedValues.Blob_Char_digit_0)
                         {
                             local_param_1_0 =
                                 KernelFunctionSpecialized.int_mul(10, local_param_1_0);
@@ -1074,7 +1074,7 @@ public class JsonDecodeParseIntTests
                             continue;
                         }
 
-                        if (local_000 == CommonReusedValues.Blob_Str_1)
+                        if (local_000 == CommonReusedValues.Blob_Char_digit_1)
                         {
                             local_param_1_0 =
                                 KernelFunctionSpecialized.int_add(
@@ -1087,7 +1087,7 @@ public class JsonDecodeParseIntTests
                             continue;
                         }
 
-                        if (local_000 == CommonReusedValues.Blob_Str_2)
+                        if (local_000 == CommonReusedValues.Blob_Char_digit_2)
                         {
                             local_param_1_0 =
                                 KernelFunctionSpecialized.int_add(
@@ -1100,7 +1100,7 @@ public class JsonDecodeParseIntTests
                             continue;
                         }
 
-                        if (local_000 == CommonReusedValues.Blob_Str_3)
+                        if (local_000 == CommonReusedValues.Blob_Char_digit_3)
                         {
                             local_param_1_0 =
                                 KernelFunctionSpecialized.int_add(
@@ -1113,7 +1113,7 @@ public class JsonDecodeParseIntTests
                             continue;
                         }
 
-                        if (local_000 == CommonReusedValues.Blob_Str_4)
+                        if (local_000 == CommonReusedValues.Blob_Char_digit_4)
                         {
                             local_param_1_0 =
                                 KernelFunctionSpecialized.int_add(
@@ -1126,7 +1126,7 @@ public class JsonDecodeParseIntTests
                             continue;
                         }
 
-                        if (local_000 == CommonReusedValues.Blob_Str_5)
+                        if (local_000 == CommonReusedValues.Blob_Char_digit_5)
                         {
                             local_param_1_0 =
                                 KernelFunctionSpecialized.int_add(
@@ -1139,7 +1139,7 @@ public class JsonDecodeParseIntTests
                             continue;
                         }
 
-                        if (local_000 == CommonReusedValues.Blob_Str_6)
+                        if (local_000 == CommonReusedValues.Blob_Char_digit_6)
                         {
                             local_param_1_0 =
                                 KernelFunctionSpecialized.int_add(
@@ -1152,7 +1152,7 @@ public class JsonDecodeParseIntTests
                             continue;
                         }
 
-                        if (local_000 == CommonReusedValues.Blob_Str_7)
+                        if (local_000 == CommonReusedValues.Blob_Char_digit_7)
                         {
                             local_param_1_0 =
                                 KernelFunctionSpecialized.int_add(
@@ -1165,7 +1165,7 @@ public class JsonDecodeParseIntTests
                             continue;
                         }
 
-                        if (local_000 == CommonReusedValues.Blob_Str_8)
+                        if (local_000 == CommonReusedValues.Blob_Char_digit_8)
                         {
                             local_param_1_0 =
                                 KernelFunctionSpecialized.int_add(
@@ -1178,7 +1178,7 @@ public class JsonDecodeParseIntTests
                             continue;
                         }
 
-                        if (local_000 == CommonReusedValues.Blob_Str_9)
+                        if (local_000 == CommonReusedValues.Blob_Char_digit_9)
                         {
                             local_param_1_0 =
                                 KernelFunctionSpecialized.int_add(
@@ -1251,34 +1251,34 @@ public class JsonDecodeParseIntTests
                 public static readonly PineValue Blob_37f21fcb =
                     StringEncoding.ValueFromString("-");
 
-                public static readonly PineValue Blob_Str_0 =
+                public static readonly PineValue Blob_Char_digit_0 =
                     StringEncoding.ValueFromString("0");
 
-                public static readonly PineValue Blob_Str_1 =
+                public static readonly PineValue Blob_Char_digit_1 =
                     StringEncoding.ValueFromString("1");
 
-                public static readonly PineValue Blob_Str_2 =
+                public static readonly PineValue Blob_Char_digit_2 =
                     StringEncoding.ValueFromString("2");
 
-                public static readonly PineValue Blob_Str_3 =
+                public static readonly PineValue Blob_Char_digit_3 =
                     StringEncoding.ValueFromString("3");
 
-                public static readonly PineValue Blob_Str_4 =
+                public static readonly PineValue Blob_Char_digit_4 =
                     StringEncoding.ValueFromString("4");
 
-                public static readonly PineValue Blob_Str_5 =
+                public static readonly PineValue Blob_Char_digit_5 =
                     StringEncoding.ValueFromString("5");
 
-                public static readonly PineValue Blob_Str_6 =
+                public static readonly PineValue Blob_Char_digit_6 =
                     StringEncoding.ValueFromString("6");
 
-                public static readonly PineValue Blob_Str_7 =
+                public static readonly PineValue Blob_Char_digit_7 =
                     StringEncoding.ValueFromString("7");
 
-                public static readonly PineValue Blob_Str_8 =
+                public static readonly PineValue Blob_Char_digit_8 =
                     StringEncoding.ValueFromString("8");
 
-                public static readonly PineValue Blob_Str_9 =
+                public static readonly PineValue Blob_Char_digit_9 =
                     StringEncoding.ValueFromString("9");
 
                 public static readonly PineValue Blob_Str_Ok =
@@ -1426,43 +1426,43 @@ public class JsonDecodeParseIntTests
 
                 public static readonly PineValue List_c7702eda =
                     PineValue.List(
-                        [Blob_Str_0]);
+                        [Blob_Char_digit_0]);
 
                 public static readonly PineValue List_e3413a44 =
                     PineValue.List(
-                        [Blob_Str_1]);
+                        [Blob_Char_digit_1]);
 
                 public static readonly PineValue List_d6a1a968 =
                     PineValue.List(
-                        [Blob_Str_2]);
+                        [Blob_Char_digit_2]);
 
                 public static readonly PineValue List_b93b4b39 =
                     PineValue.List(
-                        [Blob_Str_3]);
+                        [Blob_Char_digit_3]);
 
                 public static readonly PineValue List_53ffebf2 =
                     PineValue.List(
-                        [Blob_Str_4]);
+                        [Blob_Char_digit_4]);
 
                 public static readonly PineValue List_d8088a1d =
                     PineValue.List(
-                        [Blob_Str_5]);
+                        [Blob_Char_digit_5]);
 
                 public static readonly PineValue List_4d45d38a =
                     PineValue.List(
-                        [Blob_Str_6]);
+                        [Blob_Char_digit_6]);
 
                 public static readonly PineValue List_f767fe42 =
                     PineValue.List(
-                        [Blob_Str_7]);
+                        [Blob_Char_digit_7]);
 
                 public static readonly PineValue List_5f13cdae =
                     PineValue.List(
-                        [Blob_Str_8]);
+                        [Blob_Char_digit_8]);
 
                 public static readonly PineValue List_87b3a5b0 =
                     PineValue.List(
-                        [Blob_Str_9]);
+                        [Blob_Char_digit_9]);
 
                 public static readonly PineValue List_fa93aa90 =
                     PineValue.List(
@@ -4064,8 +4064,6 @@ public class JsonDecodeParseIntTests
                     PineValue.List(
                         [Blob_Str_Conditional, List_fd4beee6]);
             }
-
-            
 
             """"
             .Trim());

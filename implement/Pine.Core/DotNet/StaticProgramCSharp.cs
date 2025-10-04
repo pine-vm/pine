@@ -557,18 +557,35 @@ public record StaticProgramCSharp(
 
         if (value is PineValue.BlobValue blob)
         {
-            if (IntegerEncoding.ParseSignedIntegerStrict(blob).IsOkOrNullable() is { } asInt)
+            if (blob.Bytes.Length is 4)
             {
-                if (IntegerEncoding.EncodeSignedInteger(asInt) == blob)
-                {
-                    var intRepr =
-                        asInt < 0
-                        ?
-                        "neg_" + (-asInt).ToString()
-                        :
-                        asInt.ToString();
+                var asInt = System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(blob.Bytes.Span);
 
-                    return $"Blob_Int_{intRepr}";
+                if (UnicodeUtility.IsValidUnicodeScalar(asInt))
+                {
+                    var charRepr = char.ConvertFromUtf32(asInt);
+
+                    if (NameCharInDeclaration(charRepr[0]) is { } charName)
+                    {
+                        return $"Blob_Char_{charName}";
+                    }
+                }
+            }
+
+            {
+                if (IntegerEncoding.ParseSignedIntegerStrict(blob).IsOkOrNullable() is { } asInt)
+                {
+                    if (IntegerEncoding.EncodeSignedInteger(asInt) == blob)
+                    {
+                        var intRepr =
+                            asInt < 0
+                            ?
+                            "neg_" + (-asInt).ToString()
+                            :
+                            asInt.ToString();
+
+                        return $"Blob_Int_{intRepr}";
+                    }
                 }
             }
 
@@ -641,5 +658,64 @@ public record StaticProgramCSharp(
             if (expr is StaticExpression<FuncId>.Literal lit)
                 yield return lit.Value;
         }
+    }
+
+    public static string? NameCharInDeclaration(char c)
+    {
+        if (c is '\'')
+            return "quote";
+
+        if (c is '\"')
+            return "doublequote";
+
+        if (c is '\\')
+            return "backslash";
+
+        if ('0' <= c && c <= '9')
+        {
+            return "digit_" + c;
+        }
+
+        if (c is '_')
+            return "underscore";
+
+        // Distinguish types of white space
+
+        if (char.IsWhiteSpace(c))
+        {
+            if (c is ' ')
+                return "space";
+
+            if (c is '\t')
+                return "tab";
+
+            if (c is '\n')
+                return "newline";
+
+            if (c is '\r')
+                return "carriagereturn";
+
+            if (c is '\v')
+                return "verticaltab";
+
+            if (c is '\f')
+                return "formfeed";
+
+            // Non-breaking space
+
+            if (c is '\u00A0')
+                return "nobreakspace";
+
+            // Other Unicode white space characters
+
+            return "whitespace_" + ((int)c).ToString("x4");
+        }
+
+        if (char.IsAsciiLetter(c))
+        {
+            return "letter_" + c;
+        }
+
+        return null;
     }
 }

@@ -153,27 +153,27 @@ public class OptimizeAndEmitStringTrimTests
 
                 public static PineValue zzz_anon_d97a2014_dda26649(PineValue param_1_0)
                 {
-                    if (param_1_0 == CommonReusedValues.Blob_4ac777a0)
+                    if (param_1_0 == CommonReusedValues.Blob_Char_space)
                     {
                         return CommonReusedValues.Bool_True;
                     }
 
-                    if (param_1_0 == CommonReusedValues.Blob_2a82563d)
+                    if (param_1_0 == CommonReusedValues.Blob_Char_tab)
                     {
                         return CommonReusedValues.Bool_True;
                     }
 
-                    if (param_1_0 == CommonReusedValues.Blob_19caa572)
+                    if (param_1_0 == CommonReusedValues.Blob_Char_newline)
                     {
                         return CommonReusedValues.Bool_True;
                     }
 
-                    if (param_1_0 == CommonReusedValues.Blob_3c2131e8)
+                    if (param_1_0 == CommonReusedValues.Blob_Char_carriagereturn)
                     {
                         return CommonReusedValues.Bool_True;
                     }
 
-                    if (param_1_0 == CommonReusedValues.Blob_f17714cc)
+                    if (param_1_0 == CommonReusedValues.Blob_Char_nobreakspace)
                     {
                         return CommonReusedValues.Bool_True;
                     }
