@@ -888,9 +888,9 @@ public record StaticProgramCSharpClass(
                         var booleanCSharpExpr =
                             SyntaxFactory.BinaryExpression(
                                 SyntaxKind.EqualsExpression,
-                                EnsureIsParenthesizedForComposition(
+                                CompiledCSharpExpression.EnsureIsParenthesizedForComposition(
                                     leftExpr.AsGenericValue(declarationSyntaxContext)),
-                                EnsureIsParenthesizedForComposition(
+                                CompiledCSharpExpression.EnsureIsParenthesizedForComposition(
                                     rightExpr.AsGenericValue(declarationSyntaxContext)));
 
                         yield return CompiledCSharpExpression.Boolean(booleanCSharpExpr);
@@ -1526,37 +1526,5 @@ public record StaticProgramCSharpClass(
         }
 
         return false;
-    }
-
-    public static ExpressionSyntax EnsureIsParenthesizedForComposition(
-        ExpressionSyntax expression)
-    {
-        if (ExpressionNeedsParensForComposition(expression))
-        {
-            return SyntaxFactory.ParenthesizedExpression(expression);
-        }
-
-        return expression;
-    }
-
-    public static bool ExpressionNeedsParensForComposition(
-        ExpressionSyntax expression)
-    {
-        if (expression is IdentifierNameSyntax)
-            return false;
-
-        if (expression is QualifiedNameSyntax)
-            return false;
-
-        if (expression is MemberAccessExpressionSyntax memberAccess)
-            return false;
-
-        if (expression is LiteralExpressionSyntax)
-            return false;
-
-        if (expression is InvocationExpressionSyntax)
-            return false;
-
-        return true;
     }
 }

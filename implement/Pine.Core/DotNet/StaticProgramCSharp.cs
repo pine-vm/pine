@@ -384,8 +384,8 @@ public record StaticProgramCSharp(
                         ? equalityExpr
                         : SyntaxFactory.BinaryExpression(
                             SyntaxKind.LogicalAndExpression,
-                            StaticProgramCSharpClass.EnsureIsParenthesizedForComposition(conditionExpr),
-                            StaticProgramCSharpClass.EnsureIsParenthesizedForComposition(equalityExpr));
+                            CompiledCSharpExpression.EnsureIsParenthesizedForComposition(conditionExpr),
+                            CompiledCSharpExpression.EnsureIsParenthesizedForComposition(equalityExpr));
                 }
 
                 // Default to 'true' when no constraints

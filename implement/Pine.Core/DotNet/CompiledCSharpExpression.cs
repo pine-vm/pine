@@ -64,7 +64,7 @@ public record CompiledCSharpExpression(
             // boolean == PineKernelValues.TrueValue
             SyntaxFactory.BinaryExpression(
                 SyntaxKind.EqualsExpression,
-                ExpressionSyntax,
+                EnsureIsParenthesizedForComposition(ExpressionSyntax),
                 SyntaxFactory.MemberAccessExpression(
                         SyntaxKind.SimpleMemberAccessExpression,
                         CompileTypeSyntax.TypeSyntaxFromType(
@@ -82,5 +82,37 @@ public record CompiledCSharpExpression(
             _ =>
             throw new System.NotImplementedException("Unhandled ValueType " + Type),
         };
+    }
+
+    public static ExpressionSyntax EnsureIsParenthesizedForComposition(
+        ExpressionSyntax expression)
+    {
+        if (ExpressionNeedsParensForComposition(expression))
+        {
+            return SyntaxFactory.ParenthesizedExpression(expression);
+        }
+
+        return expression;
+    }
+
+    public static bool ExpressionNeedsParensForComposition(
+        ExpressionSyntax expression)
+    {
+        if (expression is IdentifierNameSyntax)
+            return false;
+
+        if (expression is QualifiedNameSyntax)
+            return false;
+
+        if (expression is MemberAccessExpressionSyntax memberAccess)
+            return false;
+
+        if (expression is LiteralExpressionSyntax)
+            return false;
+
+        if (expression is InvocationExpressionSyntax)
+            return false;
+
+        return true;
     }
 }
