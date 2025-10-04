@@ -437,7 +437,7 @@ public record StaticProgramCSharpClass(
         if (expression is StaticExpression<DeclQualifiedName>.Conditional conditionalExpr)
         {
             var conditionExpr =
-                CompileToCSharpExpression(
+                BuildConditionExpression(
                     conditionalExpr.Condition,
                     selfFunctionInterface,
                     availableFunctions,
@@ -475,7 +475,7 @@ public record StaticProgramCSharpClass(
 
                 var ifStatementNoElse =
                     SyntaxFactory.IfStatement(
-                        condition: conditionExpr.AsBooleanValue(declarationSyntaxContext),
+                        condition: conditionExpr,
                         statement: trueBranchCompiled.Statement,
                         @else: null);
 
@@ -505,7 +505,7 @@ public record StaticProgramCSharpClass(
 
             var ifStatement =
                 SyntaxFactory.IfStatement(
-                    condition: conditionExpr.AsBooleanValue(declarationSyntaxContext),
+                    condition: conditionExpr,
                     statement: trueBranchCompiled.Statement,
                     @else: SyntaxFactory.ElseClause(falseBranchCompiledNormal.Statement));
 
@@ -898,7 +898,7 @@ public record StaticProgramCSharpClass(
         ImmutableDictionary<StaticExpression<DeclQualifiedName>, string> alreadyDeclared)
     {
         var conditionExpr =
-            CompileToCSharpExpression(
+            BuildConditionExpression(
                 conditional.Condition,
                 selfFunctionInterface,
                 availableFunctions,
@@ -943,7 +943,7 @@ public record StaticProgramCSharpClass(
 
             var booleanCSharpExpr =
                 SyntaxFactory.ConditionalExpression(
-                    condition: conditionExpr.AsBooleanValue(declarationSyntaxContext),
+                    condition: conditionExpr,
                     whenTrue:
                     CompiledCSharpExpression.EnsureIsParenthesizedForComposition(
                         trueBranchExprAsBoolean.ExpressionSyntax),
@@ -969,7 +969,7 @@ public record StaticProgramCSharpClass(
 
             var integerCSharpExpr =
                 SyntaxFactory.ConditionalExpression(
-                    condition: conditionExpr.AsBooleanValue(declarationSyntaxContext),
+                    condition: conditionExpr,
                     whenTrue:
                     CompiledCSharpExpression.EnsureIsParenthesizedForComposition(
                         trueBranchExprAsInteger.ExpressionSyntax),
@@ -994,7 +994,7 @@ public record StaticProgramCSharpClass(
 
         var genericCSharpExpr =
             SyntaxFactory.ConditionalExpression(
-                condition: conditionExpr.AsBooleanValue(declarationSyntaxContext),
+                condition: conditionExpr,
                 whenTrue:
                 CompiledCSharpExpression.EnsureIsParenthesizedForComposition(
                     trueBranchExpr.AsGenericValue(declarationSyntaxContext)),
@@ -1003,6 +1003,67 @@ public record StaticProgramCSharpClass(
                     falseBranchExpr.AsGenericValue(declarationSyntaxContext)));
 
         yield return CompiledCSharpExpression.Generic(genericCSharpExpr);
+    }
+
+    public static ExpressionSyntax BuildConditionExpression(
+        StaticExpression<DeclQualifiedName> condition,
+        System.Func<IReadOnlyList<int>, ExpressionSyntax?> selfFunctionInterface,
+        IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
+        IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls,
+        DeclarationSyntaxContext declarationSyntaxContext,
+        ImmutableDictionary<StaticExpression<DeclQualifiedName>, string> alreadyDeclared)
+    {
+        var conditionAsAndChain = ParseAsAndChain(condition);
+
+        var andChainConjunctsCompiled =
+            conditionAsAndChain
+            .Select(expr =>
+                CompileToCSharpExpression(
+                    expr,
+                    selfFunctionInterface,
+                    availableFunctions,
+                    availableValueDecls,
+                    declarationSyntaxContext,
+                    alreadyDeclared))
+            .ToImmutableArray();
+
+        if (andChainConjunctsCompiled.Length is 0)
+        {
+            return PineCSharpSyntaxFactory.ExpressionSyntaxForBooleanLiteral(true);
+        }
+
+        if (andChainConjunctsCompiled.Length is 1)
+        {
+            return andChainConjunctsCompiled[0].AsBooleanValue(declarationSyntaxContext);
+        }
+
+        // Combine conjuncts with '&&'
+
+        return
+            andChainConjunctsCompiled
+            .Select(e => e.AsBooleanValue(declarationSyntaxContext))
+            .Aggregate((left, right) =>
+                SyntaxFactory.BinaryExpression(
+                    SyntaxKind.LogicalAndExpression,
+                    left: CompiledCSharpExpression.EnsureIsParenthesizedForComposition(left),
+                    right: CompiledCSharpExpression.EnsureIsParenthesizedForComposition(right)));
+    }
+
+    public static IReadOnlyList<StaticExpression<DeclQualifiedName>> ParseAsAndChain(
+        StaticExpression<DeclQualifiedName> expression)
+    {
+        if (expression is StaticExpression<DeclQualifiedName>.Conditional conditionalExpr)
+        {
+            if (conditionalExpr.FalseBranch is StaticExpression<DeclQualifiedName>.Literal falseLiteral &&
+                falseLiteral.Value == PineKernelValues.FalseValue)
+            {
+                var rightChain = ParseAsAndChain(conditionalExpr.TrueBranch);
+
+                return [conditionalExpr.Condition, .. rightChain];
+            }
+        }
+
+        return [expression];
     }
 
     public static IEnumerable<CompiledCSharpExpression> EnumerateExpressionsForKernelApp(

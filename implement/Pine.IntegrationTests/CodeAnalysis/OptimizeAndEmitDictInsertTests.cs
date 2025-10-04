@@ -64,15 +64,11 @@ public class OptimizeAndEmitDictInsertTests
                             local_000,
                             [1]);
 
-                    if (CommonReusedValues.Blob_Str_Red == PineValueExtension.ValueFromPathOrEmptyList(
+                    if ((CommonReusedValues.Blob_Str_Red == PineValueExtension.ValueFromPathOrEmptyList(
                         local_001,
-                        [0, 0])
-                    ?
-                    (CommonReusedValues.Blob_Str_RBNode_elm_builtin == PineValueExtension.ValueFromPathOrEmptyList(
+                        [0, 0])) && (CommonReusedValues.Blob_Str_RBNode_elm_builtin == PineValueExtension.ValueFromPathOrEmptyList(
                         local_000,
-                        [0]))
-                    :
-                    false)
+                        [0])))
                     {
                         return
                             PineValue.List(
@@ -128,30 +124,22 @@ public class OptimizeAndEmitDictInsertTests
                             param_1_4,
                             [1]);
 
-                    if (CommonReusedValues.Blob_Str_Red == PineValueExtension.ValueFromPathOrEmptyList(
+                    if ((CommonReusedValues.Blob_Str_Red == PineValueExtension.ValueFromPathOrEmptyList(
                         local_000,
-                        [0, 0])
-                    ?
-                    (CommonReusedValues.Blob_Str_RBNode_elm_builtin == PineValueExtension.ValueFromPathOrEmptyList(
+                        [0, 0])) && (CommonReusedValues.Blob_Str_RBNode_elm_builtin == PineValueExtension.ValueFromPathOrEmptyList(
                         param_1_4,
-                        [0]))
-                    :
-                    false)
+                        [0])))
                     {
                         PineValue local_001 =
                             PineValueExtension.ValueFromPathOrEmptyList(
                                 param_1_3,
                                 [1]);
 
-                        if (CommonReusedValues.Blob_Str_Red == PineValueExtension.ValueFromPathOrEmptyList(
+                        if ((CommonReusedValues.Blob_Str_Red == PineValueExtension.ValueFromPathOrEmptyList(
                             local_001,
-                            [0, 0])
-                        ?
-                        (CommonReusedValues.Blob_Str_RBNode_elm_builtin == PineValueExtension.ValueFromPathOrEmptyList(
+                            [0, 0])) && (CommonReusedValues.Blob_Str_RBNode_elm_builtin == PineValueExtension.ValueFromPathOrEmptyList(
                             param_1_3,
-                            [0]))
-                        :
-                        false)
+                            [0])))
                         {
                             return
                                 PineValue.List(
@@ -255,27 +243,15 @@ public class OptimizeAndEmitDictInsertTests
                             local_003,
                             [1]);
 
-                    if (CommonReusedValues.Blob_Str_Red == PineValueExtension.ValueFromPathOrEmptyList(
+                    if ((((CommonReusedValues.Blob_Str_Red == PineValueExtension.ValueFromPathOrEmptyList(
                         local_004,
-                        [0, 0])
-                    ?
-                    (CommonReusedValues.Blob_Str_RBNode_elm_builtin == PineValueExtension.ValueFromPathOrEmptyList(
+                        [0, 0])) && (CommonReusedValues.Blob_Str_RBNode_elm_builtin == PineValueExtension.ValueFromPathOrEmptyList(
                         local_003,
-                        [0])
-                    ?
-                    (CommonReusedValues.Blob_Str_Red == PineValueExtension.ValueFromPathOrEmptyList(
+                        [0]))) && (CommonReusedValues.Blob_Str_Red == PineValueExtension.ValueFromPathOrEmptyList(
                         local_002,
-                        [0, 0])
-                    ?
-                    (CommonReusedValues.Blob_Str_RBNode_elm_builtin == PineValueExtension.ValueFromPathOrEmptyList(
+                        [0, 0]))) && (CommonReusedValues.Blob_Str_RBNode_elm_builtin == PineValueExtension.ValueFromPathOrEmptyList(
                         param_1_3,
-                        [0]))
-                    :
-                    false)
-                    :
-                    false)
-                    :
-                    false)
+                        [0])))
                     {
                         return
                             PineValue.List(
@@ -452,7 +428,7 @@ public class OptimizeAndEmitDictInsertTests
                     throw new ParseExpressionException("TODO: Include details from encoded and env subexpressions");
                 }
             }
-
+            
             """"
             .Trim());
 
