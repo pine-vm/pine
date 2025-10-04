@@ -24,6 +24,7 @@ public record StaticProgramCSharpClass(
     {
         IReadOnlyList<MethodDeclarationSyntax> functions =
             [.. declarations
+            .OrderBy(kv => kv.Key)
             .Select(kv =>
             RenderFunctionToMethod(
                 selfFunctionName: className.ContainedDeclName(kv.Key),
