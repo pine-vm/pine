@@ -11,6 +11,20 @@ using static Core.KernelFunction;
 
 public static class KernelFunctionSpecialized
 {
+    public static PineValue equal(
+        PineValue left,
+        PineValue right)
+    {
+        return ValueFromBool(left == right);
+    }
+
+    public static bool equal_as_boolean(
+        PineValue left,
+        PineValue right)
+    {
+        return left == right;
+    }
+
     public static int length_as_int(PineValue value)
     {
         if (value is PineValue.ListValue listValue)

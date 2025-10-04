@@ -375,13 +375,13 @@ public class OptimizeAndEmitIdivTests
 
                     if ((local_000 == PineKernelValues.TrueValue
                     ?
-                    CommonReusedValues.Bool_False
+                    false
                     :
-                    CommonReusedValues.Bool_True) == (local_001 == PineKernelValues.TrueValue
+                    true) == (local_001 == PineKernelValues.TrueValue
                     ?
-                    CommonReusedValues.Bool_False
+                    false
                     :
-                    CommonReusedValues.Bool_True))
+                    true))
                     {
                         return
                             Test.idivHelper(

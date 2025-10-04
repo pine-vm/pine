@@ -5,6 +5,7 @@ using Pine.Core;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.DotNet;
 using Pine.Core.Internal;
+using Pine.Core.PineVM;
 using Pine.Core.PopularEncodings;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -757,6 +758,20 @@ public record StaticProgramCSharpClass(
             return null;
         }
 
+        if (literal.Value == PineKernelValues.TrueValue)
+        {
+            yield return
+                CompiledCSharpExpression.Boolean(
+                    PineCSharpSyntaxFactory.ExpressionSyntaxForBooleanLiteral(true));
+        }
+
+        if (literal.Value == PineKernelValues.FalseValue)
+        {
+            yield return
+                CompiledCSharpExpression.Boolean(
+                    PineCSharpSyntaxFactory.ExpressionSyntaxForBooleanLiteral(false));
+        }
+
         if (IntegerEncoding.ParseSignedIntegerStrict(literal.Value).IsOkOrNullable() is { } integer &&
             long.MinValue < integer && integer < long.MaxValue &&
             IntegerEncoding.EncodeSignedInteger(integer) == literal.Value)
@@ -800,57 +815,101 @@ public record StaticProgramCSharpClass(
                 declarationSyntaxContext,
                 alreadyDeclared);
 
-        var trueBranchExpr =
-            CompileToCSharpExpression(
+        var trueBranchExprs =
+            EnumerateExpressions(
                 conditional.TrueBranch,
                 selfFunctionInterface,
                 availableFunctions,
                 availableValueDecls,
                 declarationSyntaxContext,
-                alreadyDeclared);
+                alreadyDeclared)
+            .ToImmutableArray();
 
-        var falseBranchExpr =
-            CompileToCSharpExpression(
+        var falseBranchExprs =
+            EnumerateExpressions(
                 conditional.FalseBranch,
                 selfFunctionInterface,
                 availableFunctions,
                 availableValueDecls,
                 declarationSyntaxContext,
-                alreadyDeclared);
+                alreadyDeclared)
+            .ToImmutableArray();
 
-        if (trueBranchExpr.Type is CompiledCSharpExpression.ValueType.Boolean &&
-            falseBranchExpr.Type is CompiledCSharpExpression.ValueType.Boolean)
+        // Try to find matching types in branches
+
+        var trueBranchExprAsBoolean =
+            trueBranchExprs
+            .FirstOrDefault(e => e.Type == CompiledCSharpExpression.ValueType.Boolean);
+
+        var falseBranchExprAsBoolean =
+            falseBranchExprs
+            .FirstOrDefault(e => e.Type == CompiledCSharpExpression.ValueType.Boolean);
+
+        if (trueBranchExprAsBoolean is not null &&
+            falseBranchExprAsBoolean is not null)
         {
-            // Both branches are boolean, so produce a boolean result.
+            // Both branches can be boolean, so produce a boolean result.
 
             var booleanCSharpExpr =
                 SyntaxFactory.ConditionalExpression(
                     condition: conditionExpr.AsBooleanValue(declarationSyntaxContext),
-                    whenTrue: trueBranchExpr.AsBooleanValue(declarationSyntaxContext),
-                    whenFalse: falseBranchExpr.AsBooleanValue(declarationSyntaxContext));
+                    whenTrue:
+                    CompiledCSharpExpression.EnsureIsParenthesizedForComposition(
+                        trueBranchExprAsBoolean.ExpressionSyntax),
+                    whenFalse:
+                    CompiledCSharpExpression.EnsureIsParenthesizedForComposition(
+                        falseBranchExprAsBoolean.ExpressionSyntax));
 
             yield return CompiledCSharpExpression.Boolean(booleanCSharpExpr);
         }
 
-        if (trueBranchExpr.Type is CompiledCSharpExpression.ValueType.Integer &&
-            falseBranchExpr.Type is CompiledCSharpExpression.ValueType.Integer)
+        var trueBranchExprAsInteger =
+            trueBranchExprs
+            .FirstOrDefault(e => e.Type == CompiledCSharpExpression.ValueType.Integer);
+
+        var falseBranchExprAsInteger =
+            falseBranchExprs
+            .FirstOrDefault(e => e.Type == CompiledCSharpExpression.ValueType.Integer);
+
+        if (trueBranchExprAsInteger is not null &&
+            falseBranchExprAsInteger is not null)
         {
             // Both branches are integer, so produce an integer result.
 
             var integerCSharpExpr =
                 SyntaxFactory.ConditionalExpression(
                     condition: conditionExpr.AsBooleanValue(declarationSyntaxContext),
-                    whenTrue: trueBranchExpr.ExpressionSyntax,
-                    whenFalse: falseBranchExpr.ExpressionSyntax);
+                    whenTrue:
+                    CompiledCSharpExpression.EnsureIsParenthesizedForComposition(
+                        trueBranchExprAsInteger.ExpressionSyntax),
+                    whenFalse:
+                    CompiledCSharpExpression.EnsureIsParenthesizedForComposition(
+                        falseBranchExprAsInteger.ExpressionSyntax));
 
             yield return CompiledCSharpExpression.Integer(integerCSharpExpr);
         }
 
+        // Fallback: Produce generic result.
+
+        var trueBranchExpr =
+            trueBranchExprs
+            .FirstOrDefault(e => e.Type == CompiledCSharpExpression.ValueType.Generic)
+            ?? trueBranchExprs.First();
+
+        var falseBranchExpr =
+            falseBranchExprs
+            .FirstOrDefault(e => e.Type == CompiledCSharpExpression.ValueType.Generic)
+            ?? falseBranchExprs.First();
+
         var genericCSharpExpr =
             SyntaxFactory.ConditionalExpression(
                 condition: conditionExpr.AsBooleanValue(declarationSyntaxContext),
-                whenTrue: trueBranchExpr.AsGenericValue(declarationSyntaxContext),
-                whenFalse: falseBranchExpr.AsGenericValue(declarationSyntaxContext));
+                whenTrue:
+                CompiledCSharpExpression.EnsureIsParenthesizedForComposition(
+                    trueBranchExpr.AsGenericValue(declarationSyntaxContext)),
+                whenFalse:
+                CompiledCSharpExpression.EnsureIsParenthesizedForComposition(
+                    falseBranchExpr.AsGenericValue(declarationSyntaxContext)));
 
         yield return CompiledCSharpExpression.Generic(genericCSharpExpr);
     }
@@ -905,8 +964,10 @@ public record StaticProgramCSharpClass(
                         var booleanCSharpExpr =
                             SyntaxFactory.BinaryExpression(
                                 SyntaxKind.EqualsExpression,
-                                leftAsBoolean.ExpressionSyntax,
-                                rightAsBoolean.ExpressionSyntax);
+                                CompiledCSharpExpression.EnsureIsParenthesizedForComposition(
+                                    leftAsBoolean.ExpressionSyntax),
+                                CompiledCSharpExpression.EnsureIsParenthesizedForComposition(
+                                    rightAsBoolean.ExpressionSyntax));
 
                         yield return CompiledCSharpExpression.Boolean(booleanCSharpExpr);
                     }
@@ -925,8 +986,10 @@ public record StaticProgramCSharpClass(
                         var booleanCSharpExpr =
                             SyntaxFactory.BinaryExpression(
                                 SyntaxKind.EqualsExpression,
-                                leftAsInteger.ExpressionSyntax,
-                                rightAsInteger.ExpressionSyntax);
+                                CompiledCSharpExpression.EnsureIsParenthesizedForComposition(
+                                    leftAsInteger.ExpressionSyntax),
+                                CompiledCSharpExpression.EnsureIsParenthesizedForComposition(
+                                    rightAsInteger.ExpressionSyntax));
 
                         yield return CompiledCSharpExpression.Boolean(booleanCSharpExpr);
                     }

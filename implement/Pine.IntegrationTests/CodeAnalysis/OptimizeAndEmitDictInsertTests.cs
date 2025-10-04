@@ -62,14 +62,13 @@ public class OptimizeAndEmitDictInsertTests
                                 1,
                                 Global_Anonymous.zzz_anon_ea679199_b65beb0f(param_1_0, param_1_1, param_1_2)));
 
-                    if ((CommonReusedValues.Blob_Str_Red == KernelFunction.head(
+                    if (CommonReusedValues.Blob_Str_Red == KernelFunction.head(
                         KernelFunction.head(local_000))
                     ?
-                    KernelFunction.ValueFromBool(
-                        CommonReusedValues.Blob_Str_RBNode_elm_builtin == KernelFunction.head(
-                            Global_Anonymous.zzz_anon_ea679199_b65beb0f(param_1_0, param_1_1, param_1_2)))
+                    (CommonReusedValues.Blob_Str_RBNode_elm_builtin == KernelFunction.head(
+                        Global_Anonymous.zzz_anon_ea679199_b65beb0f(param_1_0, param_1_1, param_1_2)))
                     :
-                    CommonReusedValues.Bool_False) == PineKernelValues.TrueValue)
+                    false)
                     {
                         return
                             PineValue.List(
@@ -103,12 +102,9 @@ public class OptimizeAndEmitDictInsertTests
                 public static PineValue zzz_anon_c78b4c00_dda26649(PineValue param_1_0)
                 {
                     return
-                        KernelFunction.equal(
-                            PineValue.List(
-                                [
-                                    KernelFunctionSpecialized.take(0, param_1_0),
-                                    CommonReusedValues.List_dda26649
-                                ]));
+                        KernelFunctionSpecialized.equal(
+                            KernelFunctionSpecialized.take(0, param_1_0),
+                            CommonReusedValues.List_dda26649);
                 }
 
 
@@ -123,25 +119,23 @@ public class OptimizeAndEmitDictInsertTests
                         KernelFunction.head(
                             KernelFunctionSpecialized.skip(1, param_1_4));
 
-                    if ((CommonReusedValues.Blob_Str_Red == KernelFunction.head(
+                    if (CommonReusedValues.Blob_Str_Red == KernelFunction.head(
                         KernelFunction.head(local_000))
                     ?
-                    KernelFunction.ValueFromBool(
-                        CommonReusedValues.Blob_Str_RBNode_elm_builtin == KernelFunction.head(param_1_4))
+                    (CommonReusedValues.Blob_Str_RBNode_elm_builtin == KernelFunction.head(param_1_4))
                     :
-                    CommonReusedValues.Bool_False) == PineKernelValues.TrueValue)
+                    false)
                     {
                         PineValue local_001 =
                             KernelFunction.head(
                                 KernelFunctionSpecialized.skip(1, param_1_3));
 
-                        if ((CommonReusedValues.Blob_Str_Red == KernelFunction.head(
+                        if (CommonReusedValues.Blob_Str_Red == KernelFunction.head(
                             KernelFunction.head(local_001))
                         ?
-                        KernelFunction.ValueFromBool(
-                            CommonReusedValues.Blob_Str_RBNode_elm_builtin == KernelFunction.head(param_1_3))
+                        (CommonReusedValues.Blob_Str_RBNode_elm_builtin == KernelFunction.head(param_1_3))
                         :
-                        CommonReusedValues.Bool_False) == PineKernelValues.TrueValue)
+                        false)
                         {
                             return
                                 PineValue.List(
@@ -228,29 +222,28 @@ public class OptimizeAndEmitDictInsertTests
                                         KernelFunction.head(
                                             KernelFunctionSpecialized.skip(1, param_1_3))))));
 
-                    if ((CommonReusedValues.Blob_Str_Red == KernelFunction.head(
+                    if (CommonReusedValues.Blob_Str_Red == KernelFunction.head(
                         KernelFunction.head(local_002))
                     ?
-                    CommonReusedValues.Blob_Str_RBNode_elm_builtin == KernelFunction.head(
+                    (CommonReusedValues.Blob_Str_RBNode_elm_builtin == KernelFunction.head(
                         KernelFunction.head(
                             KernelFunctionSpecialized.skip(
                                 3,
                                 KernelFunction.head(
                                     KernelFunctionSpecialized.skip(1, param_1_3)))))
                     ?
-                    CommonReusedValues.Blob_Str_Red == KernelFunction.head(
+                    (CommonReusedValues.Blob_Str_Red == KernelFunction.head(
                         KernelFunction.head(
                             KernelFunction.head(
                                 KernelFunctionSpecialized.skip(1, param_1_3))))
                     ?
-                    KernelFunction.ValueFromBool(
-                        CommonReusedValues.Blob_Str_RBNode_elm_builtin == KernelFunction.head(param_1_3))
+                    (CommonReusedValues.Blob_Str_RBNode_elm_builtin == KernelFunction.head(param_1_3))
                     :
-                    CommonReusedValues.Bool_False
+                    false)
                     :
-                    CommonReusedValues.Bool_False
+                    false)
                     :
-                    CommonReusedValues.Bool_False) == PineKernelValues.TrueValue)
+                    false)
                     {
                         PineValue local_003 =
                             KernelFunction.head(

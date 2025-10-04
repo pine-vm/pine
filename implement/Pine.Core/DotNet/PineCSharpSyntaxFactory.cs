@@ -14,6 +14,10 @@ namespace Pine.Core.DotNet;
 
 public static class PineCSharpSyntaxFactory
 {
+    public static LiteralExpressionSyntax ExpressionSyntaxForBooleanLiteral(bool value) =>
+        SyntaxFactory.LiteralExpression(
+            value ? SyntaxKind.TrueLiteralExpression : SyntaxKind.FalseLiteralExpression);
+
     public static LiteralExpressionSyntax ExpressionSyntaxForIntegerLiteral(long integer) =>
         SyntaxFactory.LiteralExpression(
             SyntaxKind.NumericLiteralExpression,
