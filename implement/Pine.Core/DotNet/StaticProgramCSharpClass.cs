@@ -138,6 +138,12 @@ public record StaticProgramCSharpClass(
                 functionBody,
                 selfFunctionName);
 
+        // Build initial blocked names (parameters)
+        var initialBlocked =
+            selfFunctionInterface.ParamsPaths
+            .Select(RenderParamRef)
+            .ToImmutableHashSet();
+
         if (hasTailRecursiveCalls)
         {
             // TODO: Expand to cover cases where we have a common reused derivation from params that does not vary between calls.
@@ -226,16 +232,6 @@ public record StaticProgramCSharpClass(
                 return [ResultThrowOrReturn(resultExpression)];
             }
 
-            var loopBodyStatement =
-                CompileToCSharpStatement(
-                    functionBody,
-                    SelfFunctionInterfaceDelegate,
-                    availableFunctions,
-                    availableValueDecls,
-                    declarationSyntaxContext,
-                    statementsFromResult: StatementsFromResult,
-                    alreadyDeclared: ImmutableDictionary<StaticExpression<DeclQualifiedName>, string>.Empty);
-
             var paramDeclarations =
                 selfFunctionInterface.ParamsPaths
                 .Select(paramPath =>
@@ -251,11 +247,27 @@ public record StaticProgramCSharpClass(
                                 SyntaxFactory.IdentifierName(RenderParamRef(paramPath))))))))
                 .ToImmutableArray();
 
+            // Extend blocked with our param locals as well
+            var blockedWithParamLocals =
+                initialBlocked
+                .Union(paramToLocalMap.Values);
+
+            var loopBodyCompiled =
+                CompileToCSharpStatement(
+                    functionBody,
+                    SelfFunctionInterfaceDelegate,
+                    availableFunctions,
+                    availableValueDecls,
+                    declarationSyntaxContext,
+                    statementsFromResult: StatementsFromResult,
+                    alreadyDeclared: ImmutableDictionary<StaticExpression<DeclQualifiedName>, string>.Empty,
+                    blockedDeclarations: blockedWithParamLocals);
+
             // Create while(true) loop
             var whileLoop =
                 SyntaxFactory.WhileStatement(
                     SyntaxFactory.LiteralExpression(SyntaxKind.TrueLiteralExpression),
-                    loopBodyStatement);
+                    loopBodyCompiled.Statement);
 
             IReadOnlyList<StatementSyntax> allStatements =
                 [
@@ -298,7 +310,7 @@ public record StaticProgramCSharpClass(
                 return [ResultThrowOrReturn(resultExpression)];
             }
 
-            return
+            var compiled =
                 CompileToCSharpStatement(
                     functionBody,
                     SelfFunctionInterfaceDelegate,
@@ -306,18 +318,26 @@ public record StaticProgramCSharpClass(
                     availableValueDecls,
                     declarationSyntaxContext,
                     statementsFromResult: StatementsFromResult,
-                    alreadyDeclared: ImmutableDictionary<StaticExpression<DeclQualifiedName>, string>.Empty);
+                    alreadyDeclared: ImmutableDictionary<StaticExpression<DeclQualifiedName>, string>.Empty,
+                    blockedDeclarations: initialBlocked);
+
+            return compiled.Statement;
         }
     }
 
-    public static StatementSyntax CompileToCSharpStatement(
+    public readonly record struct CompiledStatement(
+        StatementSyntax Statement,
+        ImmutableHashSet<string> DeclaredLocals);
+
+    public static CompiledStatement CompileToCSharpStatement(
         StaticExpression<DeclQualifiedName> expression,
         System.Func<IReadOnlyList<int>, ExpressionSyntax?> selfFunctionInterface,
         IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
         IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls,
         DeclarationSyntaxContext declarationSyntaxContext,
         System.Func<StaticExpression<DeclQualifiedName>, ImmutableDictionary<StaticExpression<DeclQualifiedName>, string>, IReadOnlyList<StatementSyntax>> statementsFromResult,
-        ImmutableDictionary<StaticExpression<DeclQualifiedName>, string> alreadyDeclared)
+        ImmutableDictionary<StaticExpression<DeclQualifiedName>, string> alreadyDeclared,
+        IReadOnlySet<string> blockedDeclarations)
     {
         bool IgnoreSubexpressionCollectingForCSE(
             StaticExpression<DeclQualifiedName> expr)
@@ -362,12 +382,29 @@ public record StaticProgramCSharpClass(
         var mutatedDeclared = alreadyDeclared;
 
         var newDeclaredStatements = new List<LocalDeclarationStatementSyntax>();
+        var newlyDeclaredLocals = ImmutableHashSet.CreateBuilder<string>();
+
+        // Helper to find a unique local name that does not collide with any blocked/local names so far
+        string FindFreeLocalName()
+        {
+            for (var i = 0; ; i++)
+            {
+                var candidate = "local_" + i.ToString().PadLeft(3, '0');
+                if (!blockedDeclarations.Contains(candidate) &&
+                    !newlyDeclaredLocals.Contains(candidate))
+                {
+                    return candidate;
+                }
+            }
+        }
 
         for (var i = 0; i < subexprDecls.Length; i++)
         {
             var subexpr = subexprDecls[i];
 
-            var localName = "local_" + mutatedDeclared.Count.ToString().PadLeft(3, '0');
+            var localName = FindFreeLocalName();
+
+            newlyDeclaredLocals.Add(localName);
 
             var statement =
                 SyntaxFactory.LocalDeclarationStatement(
@@ -407,7 +444,10 @@ public record StaticProgramCSharpClass(
                     declarationSyntaxContext,
                     newAlreadyDeclared);
 
-            var trueBranchStatement =
+            // Compile true branch first, using current blocked + newly declared names
+            var blockedAfterPrefix = blockedDeclarations.Union(newlyDeclaredLocals).ToImmutableHashSet();
+
+            var trueBranchCompiled =
                 CompileToCSharpStatement(
                     conditionalExpr.TrueBranch,
                     selfFunctionInterface,
@@ -415,9 +455,43 @@ public record StaticProgramCSharpClass(
                     availableValueDecls,
                     declarationSyntaxContext,
                     statementsFromResult,
-                    newAlreadyDeclared);
+                    newAlreadyDeclared,
+                    blockedAfterPrefix);
 
-            var falseBranchStatement =
+            // If the 'if' block ends with a return/throw/continue, inline false branch into outer scope
+            if (BranchEndsWithExitOrLoop(trueBranchCompiled.Statement))
+            {
+                var falseBranchCompiled =
+                    CompileToCSharpStatement(
+                        conditionalExpr.FalseBranch,
+                        selfFunctionInterface,
+                        availableFunctions,
+                        availableValueDecls,
+                        declarationSyntaxContext,
+                        statementsFromResult,
+                        newAlreadyDeclared,
+                        blockedAfterPrefix.Union(trueBranchCompiled.DeclaredLocals));
+
+                var ifStatementNoElse =
+                    SyntaxFactory.IfStatement(
+                        condition: conditionExpr.AsBooleanValue(declarationSyntaxContext),
+                        statement: trueBranchCompiled.Statement,
+                        @else: null);
+
+                IReadOnlyList<StatementSyntax> allStatementsNoElse =
+                    [
+                        .. newDeclaredStatements,
+                        ifStatementNoElse,
+                        .. ExtractStatements(falseBranchCompiled.Statement)
+                    ];
+
+                var unionLocals = newlyDeclaredLocals.ToImmutable().Union(trueBranchCompiled.DeclaredLocals).Union(falseBranchCompiled.DeclaredLocals);
+
+                return new CompiledStatement(SyntaxFactory.Block(allStatementsNoElse), unionLocals);
+            }
+
+            // Else branch compiled normally; still pass union to keep names globally unique
+            var falseBranchCompiledNormal =
                 CompileToCSharpStatement(
                     conditionalExpr.FalseBranch,
                     selfFunctionInterface,
@@ -425,32 +499,14 @@ public record StaticProgramCSharpClass(
                     availableValueDecls,
                     declarationSyntaxContext,
                     statementsFromResult,
-                    newAlreadyDeclared);
-
-            // If the 'if' block ends with a return/throw, the 'else' is redundant. Emit without 'else' and inline the false branch.
-            if (BranchEndsWithExitOrLoop(trueBranchStatement))
-            {
-                var ifStatementNoElse =
-                    SyntaxFactory.IfStatement(
-                        condition: conditionExpr.AsBooleanValue(declarationSyntaxContext),
-                        statement: trueBranchStatement,
-                        @else: null);
-
-                IReadOnlyList<StatementSyntax> allStatementsNoElse =
-                    [
-                        .. newDeclaredStatements,
-                        ifStatementNoElse,
-                        .. ExtractStatements(falseBranchStatement)
-                    ];
-
-                return SyntaxFactory.Block(allStatementsNoElse);
-            }
+                    newAlreadyDeclared,
+                    blockedAfterPrefix.Union(trueBranchCompiled.DeclaredLocals));
 
             var ifStatement =
                 SyntaxFactory.IfStatement(
                     condition: conditionExpr.AsBooleanValue(declarationSyntaxContext),
-                    statement: trueBranchStatement,
-                    @else: SyntaxFactory.ElseClause(falseBranchStatement));
+                    statement: trueBranchCompiled.Statement,
+                    @else: SyntaxFactory.ElseClause(falseBranchCompiledNormal.Statement));
 
             IReadOnlyList<StatementSyntax> allStatements =
                 [
@@ -458,7 +514,9 @@ public record StaticProgramCSharpClass(
                 ifStatement,
                 ];
 
-            return SyntaxFactory.Block(allStatements);
+            var unionLocalsNormal = newlyDeclaredLocals.ToImmutable().Union(trueBranchCompiled.DeclaredLocals).Union(falseBranchCompiledNormal.DeclaredLocals);
+
+            return new CompiledStatement(SyntaxFactory.Block(allStatements), unionLocalsNormal);
         }
 
         {
@@ -468,7 +526,7 @@ public record StaticProgramCSharpClass(
                 .. statementsFromResult(expression, newAlreadyDeclared)
                 ];
 
-            return SyntaxFactory.Block(allStatements);
+            return new CompiledStatement(SyntaxFactory.Block(allStatements), newlyDeclaredLocals.ToImmutable());
         }
     }
 
