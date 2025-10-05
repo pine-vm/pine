@@ -7,6 +7,13 @@ using System.Collections.Generic;
 
 namespace Pine.Core.DotNet;
 
+/// <summary>
+/// C# syntax rewriter making code more readable for inspection.
+/// It enforces indentation, spacing, and line-breaking conventions across a wide
+/// range of syntax constructs.
+/// </summary>
+/// <param name="indentChar">The character used for indentation (for example, space or tab).</param>
+/// <param name="indentCharsPerLevel">The number of <paramref name="indentChar"/> characters per indentation level.</param>
 public class FormatCSharpSyntaxRewriter(
     char indentChar,
     int indentCharsPerLevel)
@@ -14,6 +21,10 @@ public class FormatCSharpSyntaxRewriter(
 {
     private static readonly FormatCSharpSyntaxRewriter s_instance = new();
 
+    /// <summary>
+    /// Initializes a new instance of <see cref="FormatCSharpSyntaxRewriter"/> with default settings
+    /// (four spaces per indentation level).
+    /// </summary>
     public FormatCSharpSyntaxRewriter()
         : this(
               indentChar: ' ',
@@ -21,6 +32,12 @@ public class FormatCSharpSyntaxRewriter(
     {
     }
 
+    /// <summary>
+    /// Formats the provided <see cref="SyntaxTree"/> and returns a new tree
+    /// with the original <see cref="SyntaxTree.Options"/> preserved.
+    /// </summary>
+    /// <param name="syntaxTree">The input syntax tree to format.</param>
+    /// <returns>A new <see cref="SyntaxTree"/> containing the formatted root.</returns>
     public static SyntaxTree FormatSyntaxTree(SyntaxTree syntaxTree)
     {
         var formattedSyntaxRoot = FormatSyntaxTree(syntaxTree.GetRoot());
@@ -30,10 +47,17 @@ public class FormatCSharpSyntaxRewriter(
         return formattedSyntaxTree;
     }
 
+    /// <summary>
+    /// Formats the provided <see cref="SyntaxNode"/> (or derived type) and returns a new node of the same type.
+    /// </summary>
+    /// <typeparam name="T">A Roslyn syntax node type.</typeparam>
+    /// <param name="syntaxTree">The syntax node to format.</param>
+    /// <returns>The formatted node of type <typeparamref name="T"/>.</returns>
     public static T FormatSyntaxTree<T>(T syntaxTree)
         where T : SyntaxNode =>
         (T)s_instance.Visit(syntaxTree);
 
+    /// <inheritdoc/>
     public override SyntaxNode? VisitArgumentList(ArgumentListSyntax originalNode)
     {
         var node = (ArgumentListSyntax)base.VisitArgumentList(originalNode)!;
@@ -85,6 +109,7 @@ public class FormatCSharpSyntaxRewriter(
         }
     }
 
+    /// <inheritdoc/>
     public override SyntaxNode? VisitArgument(ArgumentSyntax originalNode)
     {
         var node = (ArgumentSyntax)base.VisitArgument(originalNode)!;
@@ -113,6 +138,7 @@ public class FormatCSharpSyntaxRewriter(
         return node;
     }
 
+    /// <inheritdoc/>
     public override SyntaxNode? VisitArrowExpressionClause(ArrowExpressionClauseSyntax originalNode)
     {
         var node = (ArrowExpressionClauseSyntax)base.VisitArrowExpressionClause(originalNode)!;
@@ -124,6 +150,7 @@ public class FormatCSharpSyntaxRewriter(
             .WithArrowToken(node.ArrowToken.WithTrailingTrivia(SyntaxFactory.LineFeed, indentationTrivia));
     }
 
+    /// <inheritdoc/>
     public override SyntaxNode? VisitConditionalExpression(ConditionalExpressionSyntax originalNode)
     {
         var node = (ConditionalExpressionSyntax)base.VisitConditionalExpression(originalNode)!;
@@ -147,6 +174,7 @@ public class FormatCSharpSyntaxRewriter(
             .WithWhenFalse(node.WhenFalse.WithLeadingTrivia(SyntaxFactory.LineFeed, indentationTrivia));
     }
 
+    /// <inheritdoc/>
     public override SyntaxNode? VisitIfStatement(IfStatementSyntax originalNode)
     {
         var node = (IfStatementSyntax)base.VisitIfStatement(originalNode)!;
@@ -175,6 +203,7 @@ public class FormatCSharpSyntaxRewriter(
         return node;
     }
 
+    /// <inheritdoc/>
     public override SyntaxNode? VisitWhileStatement(WhileStatementSyntax originalNode)
     {
         var node = (WhileStatementSyntax)base.VisitWhileStatement(originalNode)!;
@@ -184,6 +213,7 @@ public class FormatCSharpSyntaxRewriter(
             .WithWhileKeyword(node.WhileKeyword.WithTrailingTrivia(SyntaxFactory.Whitespace(" ")));
     }
 
+    /// <inheritdoc/>
     public override SyntaxNode? VisitForStatement(ForStatementSyntax originalNode)
     {
         var node = (ForStatementSyntax)base.VisitForStatement(originalNode)!;
@@ -193,6 +223,7 @@ public class FormatCSharpSyntaxRewriter(
             .WithForKeyword(node.ForKeyword.WithTrailingTrivia(SyntaxFactory.Whitespace(" ")));
     }
 
+    /// <inheritdoc/>
     public override SyntaxNode? VisitForEachStatement(ForEachStatementSyntax originalNode)
     {
         var node = (ForEachStatementSyntax)base.VisitForEachStatement(originalNode)!;
@@ -202,6 +233,7 @@ public class FormatCSharpSyntaxRewriter(
             .WithForEachKeyword(node.ForEachKeyword.WithTrailingTrivia(SyntaxFactory.Whitespace(" ")));
     }
 
+    /// <inheritdoc/>
     public override SyntaxNode? VisitElseClause(ElseClauseSyntax originalNode)
     {
         var node = (ElseClauseSyntax)base.VisitElseClause(originalNode)!;
@@ -228,6 +260,7 @@ public class FormatCSharpSyntaxRewriter(
         return node;
     }
 
+    /// <inheritdoc/>
     public override SyntaxNode? VisitBlock(BlockSyntax originalNode)
     {
         var node = (BlockSyntax)base.VisitBlock(originalNode)!;
@@ -259,7 +292,8 @@ public class FormatCSharpSyntaxRewriter(
                         return
                         statement.WithLeadingTrivia(statementIndentationTrivia)
                         .WithTrailingTrivia(trailingTrivia);
-                    })])
+                    })
+                ])
             .WithCloseBraceToken(
                 node.CloseBraceToken
                 .WithLeadingTrivia(blockIndentationTrivia));
@@ -274,6 +308,7 @@ public class FormatCSharpSyntaxRewriter(
         return formattedNode;
     }
 
+    /// <inheritdoc/>
     public override SyntaxNode? VisitCompilationUnit(CompilationUnitSyntax originalNode)
     {
         var node = (CompilationUnitSyntax)base.VisitCompilationUnit(originalNode)!;
@@ -361,6 +396,7 @@ public class FormatCSharpSyntaxRewriter(
         return node;
     }
 
+    /// <inheritdoc/>
     public override SyntaxNode? VisitSwitchStatement(SwitchStatementSyntax originalNode)
     {
         var node = (SwitchStatementSyntax)base.VisitSwitchStatement(originalNode)!;
@@ -407,6 +443,7 @@ public class FormatCSharpSyntaxRewriter(
         return node.WithSections([.. formattedSections]);
     }
 
+    /// <inheritdoc/>
     public override SyntaxNode? VisitClassDeclaration(ClassDeclarationSyntax originalNode)
     {
         var node = (ClassDeclarationSyntax)base.VisitClassDeclaration(originalNode)!;
@@ -429,6 +466,7 @@ public class FormatCSharpSyntaxRewriter(
         return node.WithMembers(newMembers);
     }
 
+    /// <inheritdoc/>
     public override SyntaxNode? VisitFileScopedNamespaceDeclaration(FileScopedNamespaceDeclarationSyntax originalNode)
     {
         var node = (FileScopedNamespaceDeclarationSyntax)base.VisitFileScopedNamespaceDeclaration(originalNode)!;
@@ -463,6 +501,7 @@ public class FormatCSharpSyntaxRewriter(
         return node;
     }
 
+    /// <inheritdoc/>
     public override SyntaxNode? VisitMemberAccessExpression(MemberAccessExpressionSyntax originalNode)
     {
         var node = (MemberAccessExpressionSyntax)base.VisitMemberAccessExpression(originalNode)!;
@@ -478,6 +517,7 @@ public class FormatCSharpSyntaxRewriter(
                 new SyntaxTriviaList(SyntaxFactory.LineFeed, indentationTrivia)));
     }
 
+    /// <inheritdoc/>
     public override SyntaxNode? VisitCollectionExpression(CollectionExpressionSyntax originalNode)
     {
         var node = (CollectionExpressionSyntax)base.VisitCollectionExpression(originalNode)!;
@@ -533,6 +573,7 @@ public class FormatCSharpSyntaxRewriter(
         }
     }
 
+    /// <inheritdoc/>
     public override SyntaxNode? VisitAssignmentExpression(AssignmentExpressionSyntax originalNode)
     {
         var node = (AssignmentExpressionSyntax)base.VisitAssignmentExpression(originalNode)!;
@@ -554,6 +595,7 @@ public class FormatCSharpSyntaxRewriter(
     }
 
 
+    /// <inheritdoc/>
     public override SyntaxNode? VisitEqualsValueClause(EqualsValueClauseSyntax originalNode)
     {
         var node = (EqualsValueClauseSyntax)base.VisitEqualsValueClause(originalNode)!;
@@ -568,6 +610,7 @@ public class FormatCSharpSyntaxRewriter(
     }
 
 
+    /// <inheritdoc/>
     public override SyntaxNode? VisitReturnStatement(ReturnStatementSyntax originalNode)
     {
         var node = (ReturnStatementSyntax)base.VisitReturnStatement(originalNode)!;
@@ -589,6 +632,97 @@ public class FormatCSharpSyntaxRewriter(
         // Keep simple expressions on the same line
         return node;
     }
+
+    /// <inheritdoc/>
+    public override SyntaxNode? VisitSwitchExpressionArm(SwitchExpressionArmSyntax originalNode)
+    {
+        var node = (SwitchExpressionArmSyntax)base.VisitSwitchExpressionArm(originalNode)!;
+
+        var indentationTrivia = ComputeIndentationTriviaForNode(originalNode);
+
+        var isLastArm =
+            node.Parent is SwitchExpressionSyntax switchExpression &&
+            switchExpression.Arms.Last() == node;
+
+        return
+            node
+            .WithPattern(
+                node.Pattern.WithLeadingTrivia(indentationTrivia))
+            .WithEqualsGreaterThanToken(
+                node.EqualsGreaterThanToken
+                .WithTrailingTrivia(SyntaxFactory.LineFeed))
+            .WithExpression(
+                node.Expression
+                .WithLeadingTrivia(new SyntaxTriviaList(indentationTrivia))
+                .WithTrailingTrivia(isLastArm ? SyntaxTriviaList.Create(SyntaxFactory.LineFeed) : []));
+    }
+
+    /// <inheritdoc/>
+    public override SyntaxNode? VisitSwitchExpression(SwitchExpressionSyntax originalNode)
+    {
+        var node = (SwitchExpressionSyntax)base.VisitSwitchExpression(originalNode)!;
+
+        var braceIndentTrivia = ComputeIndentationTriviaForNode(originalNode.Parent);
+
+        var armsList =
+            Enumerable
+            .Range(0, node.Arms.Count - 1)
+            .Aggregate(
+                seed: node.Arms,
+                func: (aggregate, separatorIndex) =>
+                {
+                    var separatorBefore = aggregate.GetSeparator(separatorIndex);
+
+                    return
+                    aggregate.ReplaceSeparator(
+                    separatorBefore,
+                    separatorBefore.WithTrailingTrivia(SyntaxFactory.LineFeed, SyntaxFactory.LineFeed));
+                });
+
+        return
+            node
+            .WithGoverningExpression(
+                node.GoverningExpression.WithTrailingTrivia(SyntaxFactory.Whitespace(" ")))
+            .WithSwitchKeyword(
+                node.SwitchKeyword.WithTrailingTrivia(SyntaxFactory.LineFeed))
+            .WithOpenBraceToken(
+                node.OpenBraceToken
+                .WithLeadingTrivia(braceIndentTrivia)
+                .WithTrailingTrivia(SyntaxFactory.LineFeed))
+            .WithArms(armsList)
+            .WithCloseBraceToken(
+                node.CloseBraceToken
+                .WithLeadingTrivia(braceIndentTrivia));
+    }
+
+    /// <inheritdoc/>
+    public override SyntaxNode? VisitParameterList(ParameterListSyntax originalNode)
+    {
+        var node = (ParameterListSyntax)base.VisitParameterList(originalNode)!;
+
+        var indentationTrivia = ComputeIndentationTriviaForNode(originalNode, addIndentLevels: 1);
+
+        var addLineBreaks = node.Parameters.Count > 1;
+
+        var paramLeadingTrivia =
+            addLineBreaks
+            ?
+            new SyntaxTriviaList(SyntaxFactory.LineFeed, indentationTrivia)
+            :
+            [];
+
+        var parameters =
+            node.Parameters
+            .Select(parameter =>
+                parameter
+                .WithLeadingTrivia(paramLeadingTrivia)
+                .WithTrailingTrivia())
+            .ToImmutableArray();
+
+        return
+            node.WithParameters(SyntaxFactory.SeparatedList(parameters));
+    }
+
 
     /// <summary>
     /// Determines if an expression will cause line breaks when formatted according to our rules
@@ -634,93 +768,13 @@ public class FormatCSharpSyntaxRewriter(
         return false;
     }
 
-    public override SyntaxNode? VisitSwitchExpressionArm(SwitchExpressionArmSyntax originalNode)
-    {
-        var node = (SwitchExpressionArmSyntax)base.VisitSwitchExpressionArm(originalNode)!;
-
-        var indentationTrivia = ComputeIndentationTriviaForNode(originalNode);
-
-        var isLastArm =
-            node.Parent is SwitchExpressionSyntax switchExpression &&
-            switchExpression.Arms.Last() == node;
-
-        return
-            node
-            .WithPattern(
-                node.Pattern.WithLeadingTrivia(indentationTrivia))
-            .WithEqualsGreaterThanToken(
-                node.EqualsGreaterThanToken
-                .WithTrailingTrivia(SyntaxFactory.LineFeed))
-            .WithExpression(
-                node.Expression
-                .WithLeadingTrivia(new SyntaxTriviaList(indentationTrivia))
-                .WithTrailingTrivia(isLastArm ? SyntaxTriviaList.Create(SyntaxFactory.LineFeed) : []));
-    }
-
-    public override SyntaxNode? VisitSwitchExpression(SwitchExpressionSyntax originalNode)
-    {
-        var node = (SwitchExpressionSyntax)base.VisitSwitchExpression(originalNode)!;
-
-        var braceIndentTrivia = ComputeIndentationTriviaForNode(originalNode.Parent);
-
-        var armsList =
-            Enumerable
-            .Range(0, node.Arms.Count - 1)
-            .Aggregate(
-                seed: node.Arms,
-                func: (aggregate, separatorIndex) =>
-                {
-                    var separatorBefore = aggregate.GetSeparator(separatorIndex);
-
-                    return
-                    aggregate.ReplaceSeparator(
-                    separatorBefore,
-                    separatorBefore.WithTrailingTrivia(SyntaxFactory.LineFeed, SyntaxFactory.LineFeed));
-                });
-
-        return
-            node
-            .WithGoverningExpression(
-                node.GoverningExpression.WithTrailingTrivia(SyntaxFactory.Whitespace(" ")))
-            .WithSwitchKeyword(
-                node.SwitchKeyword.WithTrailingTrivia(SyntaxFactory.LineFeed))
-            .WithOpenBraceToken(
-                node.OpenBraceToken
-                .WithLeadingTrivia(braceIndentTrivia)
-                .WithTrailingTrivia(SyntaxFactory.LineFeed))
-            .WithArms(armsList)
-            .WithCloseBraceToken(
-                node.CloseBraceToken
-                .WithLeadingTrivia(braceIndentTrivia));
-    }
-
-    public override SyntaxNode? VisitParameterList(ParameterListSyntax originalNode)
-    {
-        var node = (ParameterListSyntax)base.VisitParameterList(originalNode)!;
-
-        var indentationTrivia = ComputeIndentationTriviaForNode(originalNode, addIndentLevels: 1);
-
-        var addLineBreaks = node.Parameters.Count > 1;
-
-        var paramLeadingTrivia =
-            addLineBreaks
-            ?
-            new SyntaxTriviaList(SyntaxFactory.LineFeed, indentationTrivia)
-            :
-            [];
-
-        var parameters =
-            node.Parameters
-            .Select(parameter =>
-                parameter
-                .WithLeadingTrivia(paramLeadingTrivia)
-                .WithTrailingTrivia())
-            .ToImmutableArray();
-
-        return
-            node.WithParameters(SyntaxFactory.SeparatedList(parameters));
-    }
-
+    /// <summary>
+    /// Computes indentation trivia for the line containing the specified <paramref name="node"/>,
+    /// optionally adding extra indentation levels.
+    /// </summary>
+    /// <param name="node">The node to compute indentation for. If <c>null</c>, zero indentation is returned.</param>
+    /// <param name="addIndentLevels">Additional indentation levels to add on top of the computed level.</param>
+    /// <returns>A <see cref="SyntaxTrivia"/> representing indentation whitespace.</returns>
     public SyntaxTrivia ComputeIndentationTriviaForNode(SyntaxNode? node, int addIndentLevels = 0) =>
         ComputeIndentationTriviaForNode(
             node,
@@ -728,6 +782,15 @@ public class FormatCSharpSyntaxRewriter(
             indentCharsPerLevel,
             addIndentLevels: addIndentLevels);
 
+    /// <summary>
+    /// Computes indentation trivia for the line containing the specified <paramref name="node"/> using
+    /// the given indentation settings and optional extra levels.
+    /// </summary>
+    /// <param name="node">The node to compute indentation for. If <c>null</c>, zero indentation is returned.</param>
+    /// <param name="indentChar">The indentation character (e.g., space or tab).</param>
+    /// <param name="indentCharsPerLevel">The number of <paramref name="indentChar"/> characters per level.</param>
+    /// <param name="addIndentLevels">Additional indentation levels to add on top of the computed level.</param>
+    /// <returns>A <see cref="SyntaxTrivia"/> representing indentation whitespace.</returns>
     public static SyntaxTrivia ComputeIndentationTriviaForNode(
         SyntaxNode? node, char indentChar, int indentCharsPerLevel, int addIndentLevels)
     {
@@ -740,15 +803,42 @@ public class FormatCSharpSyntaxRewriter(
                 indentCharsPerLevel);
     }
 
+    /// <summary>
+    /// Computes indentation trivia for a given indentation <paramref name="level"/> using the instance's
+    /// configured indentation settings.
+    /// </summary>
+    /// <param name="level">The indentation level.</param>
+    /// <returns>A <see cref="SyntaxTrivia"/> representing indentation whitespace.</returns>
     public SyntaxTrivia ComputeIndentationTriviaForLevel(int level) =>
         IndentationTriviaForLevel(level, indentChar, indentCharsPerLevel);
 
+    /// <summary>
+    /// Creates indentation trivia for a given indentation <paramref name="level"/> using explicit settings.
+    /// </summary>
+    /// <param name="level">The indentation level.</param>
+    /// <param name="indentChar">The indentation character (e.g., space or tab).</param>
+    /// <param name="indentCharsPerLevel">The number of <paramref name="indentChar"/> characters per level.</param>
+    /// <returns>A <see cref="SyntaxTrivia"/> representing indentation whitespace.</returns>
     public static SyntaxTrivia IndentationTriviaForLevel(int level, char indentChar, int indentCharsPerLevel) =>
         SyntaxFactory.Whitespace(IndentationTextForLevel(level, indentChar, indentCharsPerLevel));
 
+    /// <summary>
+    /// Builds an indentation string for a given indentation <paramref name="level"/> using explicit settings.
+    /// </summary>
+    /// <param name="level">The indentation level.</param>
+    /// <param name="indentChar">The indentation character (e.g., space or tab).</param>
+    /// <param name="indentCharsPerLevel">The number of <paramref name="indentChar"/> characters per level.</param>
+    /// <returns>A string containing only indentation characters.</returns>
     public static string IndentationTextForLevel(int level, char indentChar, int indentCharsPerLevel) =>
         new(indentChar, level * indentCharsPerLevel);
 
+    /// <summary>
+    /// Computes the indentation level for the specified <paramref name="node"/> by walking up the parent
+    /// chain and applying <see cref="ParentNodeIncreasesIndentationLevel(SyntaxNode)"/> to each ancestor.
+    /// </summary>
+    /// <param name="node">The node whose indentation level should be computed.</param>
+    /// <param name="currentLevel">The current level used during recursion; callers should use the default.</param>
+    /// <returns>The computed indentation level (non-negative).</returns>
     public static int ComputeIndentationLevel(SyntaxNode? node, int currentLevel = 0)
     {
         if (node is null)
@@ -763,6 +853,12 @@ public class FormatCSharpSyntaxRewriter(
         return ComputeIndentationLevel(parent, currentLevel);
     }
 
+    /// <summary>
+    /// Determines whether the given <paramref name="node"/> increases the indentation level when formatting.
+    /// This is used by <see cref="ComputeIndentationLevel(SyntaxNode?, int)"/> to decide how deep a node should be indented.
+    /// </summary>
+    /// <param name="node">The parent node to evaluate.</param>
+    /// <returns><c>true</c> if the node increases indentation; otherwise, <c>false</c>.</returns>
     public static bool ParentNodeIncreasesIndentationLevel(SyntaxNode node) =>
         node switch
         {
@@ -801,7 +897,7 @@ public class FormatCSharpSyntaxRewriter(
         };
 
     /// <summary>
-    /// Determines if an expression is "simple" for the new formatting rules - 
+    /// Determines if an expression is "simple" for the formatting rules - 
     /// literals, identifiers, and simple member access (like Class.Property).
     /// </summary>
     private static bool IsSimpleExpression(ExpressionSyntax expression)
