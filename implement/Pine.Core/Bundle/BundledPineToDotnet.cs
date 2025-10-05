@@ -133,17 +133,19 @@ public record BundledPineToDotnet(
             new DeclQualifiedName(["Basics"], "remainderBy"),
             new DeclQualifiedName(["Basics"], "modBy"),
 
-            /*
             new DeclQualifiedName(["String"], "trim"),
             new DeclQualifiedName(["String"], "trimLeft"),
             new DeclQualifiedName(["String"], "trimRight"),
+
+            new DeclQualifiedName(["String"], "split"),
+            new DeclQualifiedName(["String"], "padLeft"),
+            new DeclQualifiedName(["String"], "padRight"),
 
             new DeclQualifiedName(["String"], "toInt"),
             new DeclQualifiedName(["String"], "fromInt"),
 
             new DeclQualifiedName(["Dict"], "insert"),
             new DeclQualifiedName(["Dict"], "remove"),
-            */
         }
         .ToFrozenSet();
 
@@ -153,44 +155,108 @@ public record BundledPineToDotnet(
         Action<string> logger,
         bool writeCSharpFilesArchive)
     {
-        var bundleContent = BuildBundleFile(staticProgram);
+        var csharpFiles =
+            BuildBundleCSharpFiles(staticProgram);
 
         var csharpFilesAggregateSize =
-            bundleContent.csharpFiles.Values
+            csharpFiles.Values
             .Sum(fileContent => fileContent.Length);
 
         logger(
             "Compiled static program to " +
-            CommandLineInterface.FormatIntegerForDisplay(bundleContent.csharpFiles.Count) +
+            CommandLineInterface.FormatIntegerForDisplay(csharpFiles.Count) +
             " C# files, totaling " +
             CommandLineInterface.FormatIntegerForDisplay(csharpFilesAggregateSize) +
             " bytes of C# code:");
 
-        var csharpFilesSorted =
-            bundleContent.csharpFiles
-            .OrderBy(kv => kv.Key, EnumerableExtension.Comparer<IReadOnlyList<string>>());
-
-        foreach (var filePathAndContent in csharpFilesSorted)
+        foreach (var fileDescription in DescribeFileTree(csharpFiles))
         {
-            logger(
-                " - " + string.Join('/', filePathAndContent.Key) + ": " +
-                CommandLineInterface.FormatIntegerForDisplay(filePathAndContent.Value.Length) +
-                " bytes");
+            logger(fileDescription);
         }
 
-        logger(
-            "Compiled C# files to " +
-            CommandLineInterface.FormatIntegerForDisplay(bundleContent.assemblyBytes.Length) + " bytes of .NET assembly.");
-
-        WriteBundleFile(bundleContent.assemblyBytes, destinationDirectory);
+        BuildAndWriteBundleFileAssembly(
+            csharpFiles,
+            destinationDirectory,
+            logger);
 
         if (writeCSharpFilesArchive)
         {
-            WriteBundleArchiveFile(bundleContent.csharpFiles, destinationDirectory, logger);
+            WriteBundleArchiveFile(csharpFiles, destinationDirectory, logger);
         }
     }
 
-    public static (FileTree csharpFiles, ReadOnlyMemory<byte> assemblyBytes) BuildBundleFile(
+    private static IEnumerable<string> DescribeFileTree(FileTree files)
+    {
+        var filesSorted =
+            files
+            .OrderBy(kv => kv.Key, EnumerableExtension.Comparer<IReadOnlyList<string>>());
+
+        foreach (var file in filesSorted)
+        {
+            yield return
+                " - " + string.Join('/', file.Key) + ": " +
+                CommandLineInterface.FormatIntegerForDisplay(file.Value.Length) +
+                " bytes";
+        }
+    }
+
+    public static void LoadCSharpFilesFromFileAndBuildBundleFileAssembly(
+        string csharpFilesDirectory,
+        string destinationDirectory,
+        Action<string> logger)
+    {
+        var csharpFiles =
+            FileTreeFromPath(csharpFilesDirectory);
+
+        logger(
+            "Loaded " +
+            CommandLineInterface.FormatIntegerForDisplay(csharpFiles.Count) +
+            " C# files from " + csharpFilesDirectory + ", totaling " +
+            CommandLineInterface.FormatIntegerForDisplay(csharpFiles.Values.Sum(v => v.Length)) +
+            " bytes of C# code:");
+
+        foreach (var fileDescription in DescribeFileTree(csharpFiles))
+        {
+            logger(fileDescription);
+        }
+
+        BuildAndWriteBundleFileAssembly(
+            csharpFiles,
+            destinationDirectory,
+            logger);
+    }
+
+    private static FileTree FileTreeFromPath(string fileSystemPath)
+    {
+        var fileContent = System.IO.File.ReadAllBytes(fileSystemPath);
+
+        if (fileSystemPath.EndsWith(".tar.gz", StringComparison.InvariantCultureIgnoreCase) ||
+           fileSystemPath.EndsWith(".tgz", StringComparison.InvariantCultureIgnoreCase))
+        {
+            return TarGZipArchive.ExtractArchive(fileContent);
+        }
+        else
+        {
+            throw new NotImplementedException("Unsupported file type: " + fileSystemPath);
+        }
+    }
+
+    public static void BuildAndWriteBundleFileAssembly(
+        FileTree csharpFiles,
+        string destinationDirectory,
+        Action<string> logger)
+    {
+        var assemblyBytes =
+            BuildBundleFileAssemblyFromCSharpFiles(csharpFiles);
+
+        logger(
+            "Compiled C# files to " +
+            CommandLineInterface.FormatIntegerForDisplay(assemblyBytes.Length) + " bytes of .NET assembly.");
+
+        WriteBundleFile(assemblyBytes, destinationDirectory);
+    }
+
+    public static FileTree BuildBundleCSharpFiles(
         StaticProgram staticProgram)
     {
         var asCSharp =
@@ -202,14 +268,20 @@ public record BundledPineToDotnet(
             asCSharp.BuildCSharpProjectFiles(
                 namespacePrefix: CompiledNamespacePrefix.Split('.'));
 
+        return csharpFiles;
+    }
+
+    public static ReadOnlyMemory<byte> BuildBundleFileAssemblyFromCSharpFiles(
+        FileTree csharpFiles)
+    {
         var compileToAssemblyResult =
             CompileToAssembly.Compile(
                 csharpFiles,
-                optimizationLevel: Microsoft.CodeAnalysis.OptimizationLevel.Release)
+                optimizationLevel: Microsoft.CodeAnalysis.OptimizationLevel.Debug)
             .Extract(err =>
             throw new Exception("Compilation to assembly failed: " + err));
 
-        return (csharpFiles, compileToAssemblyResult.Assembly);
+        return compileToAssemblyResult.Assembly;
     }
 
     private static void WriteBundleFile(
