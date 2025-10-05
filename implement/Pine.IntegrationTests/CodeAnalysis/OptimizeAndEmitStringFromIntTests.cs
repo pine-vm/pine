@@ -84,7 +84,7 @@ public class OptimizeAndEmitStringFromIntTests
 
                     return
                         KernelFunctionSpecialized.concat(
-                            CommonReusedValues.List_06c9f446,
+                            CommonReusedValues.List_Single_Blob_Char_hyphen,
                             Global_Anonymous.zzz_anon_12af8dcc_650df00b(
                                 KernelFunction.negate(param_1_0)));
                 }
@@ -92,7 +92,7 @@ public class OptimizeAndEmitStringFromIntTests
 
                 public static PineValue zzz_anon_12af8dcc_650df00b(PineValue param_1_0)
                 {
-                    return Global_Anonymous.zzz_anon_632693ae_2f148225(param_1_0, CommonReusedValues.List_dda26649);
+                    return Global_Anonymous.zzz_anon_632693ae_2f148225(param_1_0, PineValue.EmptyList);
                 }
 
 
@@ -172,9 +172,9 @@ public class OptimizeAndEmitStringFromIntTests
                     {
                         if (KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(local_param_1_0, 0))
                         {
-                            if (local_param_1_1 == CommonReusedValues.List_dda26649)
+                            if (local_param_1_1 == PineValue.EmptyList)
                             {
-                                return CommonReusedValues.List_c7702eda;
+                                return CommonReusedValues.List_Single_Blob_Char_digit_0;
                             }
 
                             return local_param_1_1;
@@ -293,7 +293,7 @@ public class OptimizeAndEmitStringFromIntTests
         var fromIntFunctionRecord =
             ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(fromIntDeclValue, parseCache)
             .Extract(err => throw new System.Exception(
-                "Parsing function record for 'idiv' failed: " + err.ToString()));
+                "Parsing function record for 'fromInt' failed: " + err.ToString()));
 
         fromIntFunctionRecord.EnvFunctions.Length.Should().Be(5);
 

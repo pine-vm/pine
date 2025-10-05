@@ -55,7 +55,8 @@ public class PineKernelFunctionsInline
                         environment: compilationEnv,
                         firstArgumentTakenZeroCompiledOk =>
                         CoreSyntaxFactory.PineValueFromBoolExpression(
-                            PineCSharpSyntaxFactory.BuildCSharpExpressionToCheckIsBlob(firstArgumentTakenZeroCompiledOk))));
+                            PineCSharpSyntaxFactory.BuildCSharpExpressionToCheckIsBlob(firstArgumentTakenZeroCompiledOk),
+                            compilationEnv.FunctionEnvironment.DeclarationSyntaxContext)));
             }
 
             if (secondArgument == Expression.LiteralInstance(PineValue.EmptyList))
@@ -71,7 +72,8 @@ public class PineKernelFunctionsInline
                         environment: compilationEnv,
                         firstArgumentTakenZeroCompiledOk =>
                         CoreSyntaxFactory.PineValueFromBoolExpression(
-                            PineCSharpSyntaxFactory.BuildCSharpExpressionToCheckIsList(firstArgumentTakenZeroCompiledOk))));
+                            PineCSharpSyntaxFactory.BuildCSharpExpressionToCheckIsList(firstArgumentTakenZeroCompiledOk),
+                            compilationEnv.FunctionEnvironment.DeclarationSyntaxContext)));
             }
         }
 
@@ -99,7 +101,8 @@ public class PineKernelFunctionsInline
                             SyntaxFactory.BinaryExpression(
                                 SyntaxKind.EqualsExpression,
                                 firstArgCs,
-                                secondArgCs))))));
+                                secondArgCs),
+                            compilationEnv.FunctionEnvironment.DeclarationSyntaxContext)))));
     }
 
     public static Expression? IsKernelAppTakingZeroFrom(Expression expression)

@@ -40,13 +40,18 @@ public record StaticProgramCSharp(
             .Where(b => !ExcludeValueFromDeclarationsEmittedForReuse(b))
             .ToFrozenSet();
 
+        var listsFiltered =
+            valuesToReuse.lists
+            .Where(l => !ExcludeValueFromDeclarationsEmittedForReuse(l))
+            .ToFrozenSet();
+
         var valueHashCache =
             new ConcurrentPineValueHashCache();
 
         var commonValueClass =
             StaticValueClassDeclaration(
                 blobValues: blobsFiltered,
-                listValues: valuesToReuse.lists,
+                listValues: listsFiltered,
                 className: CommonValueClassName,
                 declarationSyntaxContext,
                 valueHashCache);
@@ -263,6 +268,9 @@ public record StaticProgramCSharp(
     public static bool ExcludeValueFromDeclarationsEmittedForReuse(PineValue v)
     {
         if (v == PineKernelValues.TrueValue || v == PineKernelValues.FalseValue)
+            return true;
+
+        if (v == PineValue.EmptyList || v == PineValue.EmptyBlob)
             return true;
 
         return false;
@@ -630,6 +638,17 @@ public record StaticProgramCSharp(
 
         if (value is PineValue.ListValue list)
         {
+            if (list.Items.Length is 0)
+                return "List_Empty";
+
+            if (list.Items.Length is 1)
+            {
+                if (NameValueDeclaration(list.Items.Span[0], valueHashCache) is { } itemName)
+                {
+                    return $"List_Single_{itemName}";
+                }
+            }
+
             var declHash = valueHashCache.GetHash(list);
 
             return $"List_{Convert.ToHexStringLower(declHash.Span)[..8]}";
@@ -691,6 +710,102 @@ public record StaticProgramCSharp(
 
         if (c is '_')
             return "underscore";
+
+        if (c is '-')
+            return "hyphen";
+
+        if (c is '+')
+            return "plus";
+
+        if (c is '.')
+            return "dot";
+
+        if (c is ',')
+            return "comma";
+
+        if (c is ';')
+            return "semicolon";
+
+        if (c is ':')
+            return "colon";
+
+        if (c is '!')
+            return "exclamation";
+
+        if (c is '?')
+            return "question";
+
+        if (c is '@')
+            return "at";
+
+        if (c is '#')
+            return "hash";
+
+        if (c is '€')
+            return "euro";
+
+        if (c is '£')
+            return "pound";
+
+        if (c is '¥')
+            return "yen";
+
+        if (c is '$')
+            return "dollar";
+
+        if (c is '¢')
+            return "cent";
+
+        if (c is '%')
+            return "percent";
+
+        if (c is '^')
+            return "caret";
+
+        if (c is '&')
+            return "ampersand";
+
+        if (c is '*')
+            return "asterisk";
+
+        if (c is '(')
+            return "parenopen";
+
+        if (c is ')')
+            return "parenclose";
+
+        if (c is '[')
+            return "bracketopen";
+
+        if (c is ']')
+            return "bracketclose";
+
+        if (c is '{')
+            return "braceopen";
+
+        if (c is '}')
+            return "braceclose";
+
+        if (c is '<')
+            return "less";
+
+        if (c is '>')
+            return "greater";
+
+        if (c is '=')
+            return "equals";
+
+        if (c is '/')
+            return "slash";
+
+        if (c is '`')
+            return "backtick";
+
+        if (c is '~')
+            return "tilde";
+
+        if (c is '|')
+            return "pipe";
 
         // Distinguish types of white space
 

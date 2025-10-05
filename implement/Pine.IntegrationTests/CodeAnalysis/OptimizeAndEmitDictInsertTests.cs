@@ -108,7 +108,7 @@ public class OptimizeAndEmitDictInsertTests
                     return
                         KernelFunctionSpecialized.equal(
                             KernelFunctionSpecialized.take(0, param_1_0),
-                            CommonReusedValues.List_dda26649);
+                            PineValue.EmptyList);
                 }
 
 
@@ -428,7 +428,7 @@ public class OptimizeAndEmitDictInsertTests
                     throw new ParseExpressionException("TODO: Include details from encoded and env subexpressions");
                 }
             }
-            
+
             """"
             .Trim());
 

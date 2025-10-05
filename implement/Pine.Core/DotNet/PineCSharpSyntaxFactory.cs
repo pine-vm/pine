@@ -65,6 +65,13 @@ public static class PineCSharpSyntaxFactory
                 new ValueSyntaxKind.Other());
         }
 
+        if (pineValue == PineValue.EmptyBlob)
+        {
+            return
+                (PineValueEmptyBlobSyntax(declarationSyntaxContext),
+                new ValueSyntaxKind.Other());
+        }
+
         if (pineValue == PineVM.PineKernelValues.TrueValue)
         {
             return
@@ -232,12 +239,6 @@ public static class PineCSharpSyntaxFactory
     }
 
     public static ExpressionSyntax PineValueFromBoolExpression(
-        ExpressionSyntax expressionSyntax) =>
-        PineValueFromBoolExpression(
-            expressionSyntax,
-            declarationSyntaxContext: DeclarationSyntaxContext.None);
-
-    public static ExpressionSyntax PineValueFromBoolExpression(
         ExpressionSyntax expressionSyntax,
         DeclarationSyntaxContext declarationSyntaxContext) =>
         InvocationExpressionOnPineVMKernelFunctionClass(
@@ -263,6 +264,13 @@ public static class PineCSharpSyntaxFactory
             SyntaxKind.SimpleMemberAccessExpression,
             CompileTypeSyntax.TypeSyntaxFromType(typeof(PineValue), declarationSyntaxContext),
             SyntaxFactory.IdentifierName(nameof(PineValue.EmptyList)));
+
+    public static ExpressionSyntax PineValueEmptyBlobSyntax(
+        DeclarationSyntaxContext declarationSyntaxContext) =>
+        SyntaxFactory.MemberAccessExpression(
+            SyntaxKind.SimpleMemberAccessExpression,
+            CompileTypeSyntax.TypeSyntaxFromType(typeof(PineValue), declarationSyntaxContext),
+            SyntaxFactory.IdentifierName(nameof(PineValue.EmptyBlob)));
 
     public static StatementSyntax ConsoleWriteLineForLiteralString(
         string logEntry,
