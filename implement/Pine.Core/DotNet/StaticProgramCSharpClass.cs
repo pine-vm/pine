@@ -177,6 +177,15 @@ public record StaticProgramCSharpClass(
                 if (expr is StaticExpression<DeclQualifiedName>.FunctionApplication funcApp &&
                     funcApp.FunctionName == selfFunctionName)
                 {
+                    /*
+                     * Parameters for the new instance can depend on parameters of the current instance,
+                     * so we cannot always directly overwrite the locals representing parameters.
+                     * To avoid overwriting too early, we store the new values in temporary locals first,
+                     * then assign them to the parameter locals, then continue the loop.
+                     * */
+
+                    var tempDeclarations = new List<LocalDeclarationStatementSyntax>();
+
                     var assignments = new List<StatementSyntax>();
 
                     foreach (var paramPath in selfFunctionInterface.ParamsPaths)
@@ -205,16 +214,30 @@ public record StaticProgramCSharpClass(
                             continue;
                         }
 
+                        var tempLocalName = localName + "_temp";
+
+                        tempDeclarations.Add(
+                            SyntaxFactory.LocalDeclarationStatement(
+                                SyntaxFactory.VariableDeclaration(
+                                    CompileTypeSyntax.TypeSyntaxFromType(typeof(PineValue), declarationSyntaxContext))
+                                .WithVariables(
+                                    SyntaxFactory.SingletonSeparatedList(
+                                        SyntaxFactory.VariableDeclarator(
+                                            SyntaxFactory.Identifier(tempLocalName))
+                                        .WithInitializer(
+                                            SyntaxFactory.EqualsValueClause(argumentExpr))))));
+
                         assignments.Add(
                             SyntaxFactory.ExpressionStatement(
                                 SyntaxFactory.AssignmentExpression(
                                     SyntaxKind.SimpleAssignmentExpression,
                                     SyntaxFactory.IdentifierName(localName),
-                                    argumentExpr)));
+                                    SyntaxFactory.IdentifierName(tempLocalName))));
                     }
 
                     return
                         [
+                        .. tempDeclarations,
                         .. assignments,
                         SyntaxFactory.ContinueStatement()
                         ];

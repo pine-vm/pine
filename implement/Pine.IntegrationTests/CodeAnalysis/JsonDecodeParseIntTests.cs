@@ -1071,128 +1071,188 @@ public class JsonDecodeParseIntTests
 
                         if (local_000 == CommonReusedValues.Blob_Char_digit_0)
                         {
-                            local_param_1_0 =
+                            PineValue local_param_1_0_temp =
                                 KernelFunctionSpecialized.int_mul(10, local_param_1_0);
 
-                            local_param_1_2 =
+                            PineValue local_param_1_2_temp =
                                 KernelFunctionSpecialized.int_add(4, local_param_1_2);
+
+                            local_param_1_0 =
+                                local_param_1_0_temp;
+
+                            local_param_1_2 =
+                                local_param_1_2_temp;
 
                             continue;
                         }
 
                         if (local_000 == CommonReusedValues.Blob_Char_digit_1)
                         {
-                            local_param_1_0 =
+                            PineValue local_param_1_0_temp =
                                 KernelFunctionSpecialized.int_add(
                                     1,
                                     KernelFunctionSpecialized.int_mul(10, local_param_1_0));
 
-                            local_param_1_2 =
+                            PineValue local_param_1_2_temp =
                                 KernelFunctionSpecialized.int_add(4, local_param_1_2);
+
+                            local_param_1_0 =
+                                local_param_1_0_temp;
+
+                            local_param_1_2 =
+                                local_param_1_2_temp;
 
                             continue;
                         }
 
                         if (local_000 == CommonReusedValues.Blob_Char_digit_2)
                         {
-                            local_param_1_0 =
+                            PineValue local_param_1_0_temp =
                                 KernelFunctionSpecialized.int_add(
                                     2,
                                     KernelFunctionSpecialized.int_mul(10, local_param_1_0));
 
-                            local_param_1_2 =
+                            PineValue local_param_1_2_temp =
                                 KernelFunctionSpecialized.int_add(4, local_param_1_2);
+
+                            local_param_1_0 =
+                                local_param_1_0_temp;
+
+                            local_param_1_2 =
+                                local_param_1_2_temp;
 
                             continue;
                         }
 
                         if (local_000 == CommonReusedValues.Blob_Char_digit_3)
                         {
-                            local_param_1_0 =
+                            PineValue local_param_1_0_temp =
                                 KernelFunctionSpecialized.int_add(
                                     3,
                                     KernelFunctionSpecialized.int_mul(10, local_param_1_0));
 
-                            local_param_1_2 =
+                            PineValue local_param_1_2_temp =
                                 KernelFunctionSpecialized.int_add(4, local_param_1_2);
+
+                            local_param_1_0 =
+                                local_param_1_0_temp;
+
+                            local_param_1_2 =
+                                local_param_1_2_temp;
 
                             continue;
                         }
 
                         if (local_000 == CommonReusedValues.Blob_Char_digit_4)
                         {
-                            local_param_1_0 =
+                            PineValue local_param_1_0_temp =
                                 KernelFunctionSpecialized.int_add(
                                     4,
                                     KernelFunctionSpecialized.int_mul(10, local_param_1_0));
 
-                            local_param_1_2 =
+                            PineValue local_param_1_2_temp =
                                 KernelFunctionSpecialized.int_add(4, local_param_1_2);
+
+                            local_param_1_0 =
+                                local_param_1_0_temp;
+
+                            local_param_1_2 =
+                                local_param_1_2_temp;
 
                             continue;
                         }
 
                         if (local_000 == CommonReusedValues.Blob_Char_digit_5)
                         {
-                            local_param_1_0 =
+                            PineValue local_param_1_0_temp =
                                 KernelFunctionSpecialized.int_add(
                                     5,
                                     KernelFunctionSpecialized.int_mul(10, local_param_1_0));
 
-                            local_param_1_2 =
+                            PineValue local_param_1_2_temp =
                                 KernelFunctionSpecialized.int_add(4, local_param_1_2);
+
+                            local_param_1_0 =
+                                local_param_1_0_temp;
+
+                            local_param_1_2 =
+                                local_param_1_2_temp;
 
                             continue;
                         }
 
                         if (local_000 == CommonReusedValues.Blob_Char_digit_6)
                         {
-                            local_param_1_0 =
+                            PineValue local_param_1_0_temp =
                                 KernelFunctionSpecialized.int_add(
                                     6,
                                     KernelFunctionSpecialized.int_mul(10, local_param_1_0));
 
-                            local_param_1_2 =
+                            PineValue local_param_1_2_temp =
                                 KernelFunctionSpecialized.int_add(4, local_param_1_2);
+
+                            local_param_1_0 =
+                                local_param_1_0_temp;
+
+                            local_param_1_2 =
+                                local_param_1_2_temp;
 
                             continue;
                         }
 
                         if (local_000 == CommonReusedValues.Blob_Char_digit_7)
                         {
-                            local_param_1_0 =
+                            PineValue local_param_1_0_temp =
                                 KernelFunctionSpecialized.int_add(
                                     7,
                                     KernelFunctionSpecialized.int_mul(10, local_param_1_0));
 
-                            local_param_1_2 =
+                            PineValue local_param_1_2_temp =
                                 KernelFunctionSpecialized.int_add(4, local_param_1_2);
+
+                            local_param_1_0 =
+                                local_param_1_0_temp;
+
+                            local_param_1_2 =
+                                local_param_1_2_temp;
 
                             continue;
                         }
 
                         if (local_000 == CommonReusedValues.Blob_Char_digit_8)
                         {
-                            local_param_1_0 =
+                            PineValue local_param_1_0_temp =
                                 KernelFunctionSpecialized.int_add(
                                     8,
                                     KernelFunctionSpecialized.int_mul(10, local_param_1_0));
 
-                            local_param_1_2 =
+                            PineValue local_param_1_2_temp =
                                 KernelFunctionSpecialized.int_add(4, local_param_1_2);
+
+                            local_param_1_0 =
+                                local_param_1_0_temp;
+
+                            local_param_1_2 =
+                                local_param_1_2_temp;
 
                             continue;
                         }
 
                         if (local_000 == CommonReusedValues.Blob_Char_digit_9)
                         {
-                            local_param_1_0 =
+                            PineValue local_param_1_0_temp =
                                 KernelFunctionSpecialized.int_add(
                                     9,
                                     KernelFunctionSpecialized.int_mul(10, local_param_1_0));
 
-                            local_param_1_2 =
+                            PineValue local_param_1_2_temp =
                                 KernelFunctionSpecialized.int_add(4, local_param_1_2);
+
+                            local_param_1_0 =
+                                local_param_1_0_temp;
+
+                            local_param_1_2 =
+                                local_param_1_2_temp;
 
                             continue;
                         }
@@ -1211,6 +1271,7 @@ public class JsonDecodeParseIntTests
                     }
                 }
             }
+            
 
             """".Trim());
 

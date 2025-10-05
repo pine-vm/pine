@@ -105,8 +105,11 @@ public class OptimizeAndEmitStringTrimTests
 
                         if (Global_Anonymous.zzz_anon_d97a2014_dda26649(local_000) == PineKernelValues.TrueValue)
                         {
-                            local_param_1_0 =
+                            PineValue local_param_1_0_temp =
                                 KernelFunctionSpecialized.int_add(4, local_param_1_0);
+
+                            local_param_1_0 =
+                                local_param_1_0_temp;
 
                             continue;
                         }
@@ -147,8 +150,11 @@ public class OptimizeAndEmitStringTrimTests
                                 KernelFunctionSpecialized.int_add(-4, local_param_1_0),
                                 argument: local_param_1_1)) == PineKernelValues.TrueValue)
                         {
-                            local_param_1_0 =
+                            PineValue local_param_1_0_temp =
                                 KernelFunctionSpecialized.int_add(-4, local_param_1_0);
+
+                            local_param_1_0 =
+                                local_param_1_0_temp;
 
                             continue;
                         }
