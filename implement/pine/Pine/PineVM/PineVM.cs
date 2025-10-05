@@ -48,6 +48,8 @@ public class PineVM : IPineVM
 
     private readonly Action<PineValue, PineValue, PineValue?>? _reportExitPrecompiledLeaf;
 
+    public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>? PrecompiledLeavesDefault;
+
     public record EvaluationReport(
         PineValue ExpressionValue,
         Expression Expression,
@@ -86,6 +88,8 @@ public class PineVM : IPineVM
 
         _precompiledLeaves =
             precompiledLeaves
+            ??
+            PrecompiledLeavesDefault
             ??
             Core.Bundle.BundledPineToDotnet.LoadBundledTask.Result?.BuildDictionary();
 

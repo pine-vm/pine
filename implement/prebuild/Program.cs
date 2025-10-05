@@ -30,6 +30,29 @@ public class Program
         Console.WriteLine(
             "Current working directory: " + Environment.CurrentDirectory);
 
+        {
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+
+            Console.WriteLine("Building .NET assembly from CSharp files...");
+
+            var assemblyBytes =
+                Pine.Core.Bundle.BundledPineToDotnet.LoadCSharpFilesFromFileAndBuildBundleFileAssembly(
+                    LastTrainedCSharpArchiveFilePath,
+                    DestinationDirectory,
+                    logger: Console.WriteLine);
+
+            clock.Stop();
+
+            Console.WriteLine(
+                "Completed building .NET bundle assembly.dll in " +
+                clock.Elapsed.TotalSeconds.ToString("0.00") + " seconds");
+
+            Pine.PineVM.PineVM.PrecompiledLeavesDefault =
+                Pine.Core.Bundle.BundledPineToDotnet.LoadFromAssembly(assemblyBytes.ToArray())
+                .Extract(err => throw new Exception("Failed loading from assembly: " + err))
+                .BuildDictionary();
+        }
+
         BuildAndSaveValueDictionary(
             elmCompilers: []);
 
@@ -63,23 +86,6 @@ public class Program
 
             Console.WriteLine(
                 "Completed compilation to C# and .NET bundle assembly.dll in " +
-                clock.Elapsed.TotalSeconds.ToString("0.00") + " seconds");
-        }
-        else
-        {
-            var clock = System.Diagnostics.Stopwatch.StartNew();
-
-            Console.WriteLine("Building .NET assembly from CSharp files...");
-
-            Pine.Core.Bundle.BundledPineToDotnet.LoadCSharpFilesFromFileAndBuildBundleFileAssembly(
-                LastTrainedCSharpArchiveFilePath,
-                DestinationDirectory,
-                logger: Console.WriteLine);
-
-            clock.Stop();
-
-            Console.WriteLine(
-                "Completed building .NET bundle assembly.dll in " +
                 clock.Elapsed.TotalSeconds.ToString("0.00") + " seconds");
         }
     }

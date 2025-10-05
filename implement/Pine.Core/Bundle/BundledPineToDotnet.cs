@@ -200,7 +200,7 @@ public record BundledPineToDotnet(
         }
     }
 
-    public static void LoadCSharpFilesFromFileAndBuildBundleFileAssembly(
+    public static ReadOnlyMemory<byte> LoadCSharpFilesFromFileAndBuildBundleFileAssembly(
         string csharpFilesDirectory,
         string destinationDirectory,
         Action<string> logger)
@@ -220,10 +220,11 @@ public record BundledPineToDotnet(
             logger(fileDescription);
         }
 
-        BuildAndWriteBundleFileAssembly(
-            csharpFiles,
-            destinationDirectory,
-            logger);
+        return
+            BuildAndWriteBundleFileAssembly(
+                csharpFiles,
+                destinationDirectory,
+                logger);
     }
 
     private static FileTree FileTreeFromPath(string fileSystemPath)
@@ -241,7 +242,7 @@ public record BundledPineToDotnet(
         }
     }
 
-    public static void BuildAndWriteBundleFileAssembly(
+    public static ReadOnlyMemory<byte> BuildAndWriteBundleFileAssembly(
         FileTree csharpFiles,
         string destinationDirectory,
         Action<string> logger)
@@ -254,6 +255,8 @@ public record BundledPineToDotnet(
             CommandLineInterface.FormatIntegerForDisplay(assemblyBytes.Length) + " bytes of .NET assembly.");
 
         WriteBundleFile(assemblyBytes, destinationDirectory);
+
+        return assemblyBytes;
     }
 
     public static FileTree BuildBundleCSharpFiles(
