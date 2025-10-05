@@ -293,7 +293,7 @@ public class CodeAnalysis
         PineVMParseCache parseCache)
     {
         var (_, appliedExpr, appliedEnv) =
-            NamesFromCompiledEnv.BuildApplicationFromFunctionRecord(functionRecord, parseCache);
+            NamesFromCompiledEnv.BuildApplicationFromFunctionRecord(functionRecord, arguments: [], parseCache);
 
         return
             ParseAsStaticMonomorphicProgram(

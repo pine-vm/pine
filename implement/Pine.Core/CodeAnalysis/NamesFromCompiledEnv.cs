@@ -75,7 +75,7 @@ public record NamesFromCompiledEnv
                 // Attempt to see if the declaration encodes (or references) a function whose body is directly an environment function.
                 if (ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(decl.Value, parseCache).IsOkOrNull() is { } functionRecord)
                 {
-                    if (BuildApplicationFromFunctionRecord(functionRecord, parseCache) is { } found)
+                    if (BuildApplicationFromFunctionRecord(functionRecord, arguments: [], parseCache) is { } found)
                     {
                         (namedValue, _, envClass) = found;
                     }
@@ -109,6 +109,7 @@ public record NamesFromCompiledEnv
     /// </summary>
     public static (PineValue encodedExpr, Expression expr, PineValueClass envValueClass) BuildApplicationFromFunctionRecord(
         ElmInteractiveEnvironment.FunctionRecord functionRecord,
+        IReadOnlyList<PineValue> arguments,
         PineVMParseCache parseCache)
     {
         var outerEnvClass =
@@ -118,7 +119,12 @@ public record NamesFromCompiledEnv
                      .Select((envFuncValue, index) =>
                      new KeyValuePair<IReadOnlyList<int>, PineValue>(
                          [0, index],
-                         envFuncValue))
+                         envFuncValue)),
+
+                 ..arguments.Select((argValue, argIndex) =>
+                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
+                         [1, argIndex],
+                         argValue)),
                  ]);
 
         if (functionRecord.InnerFunction is Expression.ParseAndEval innerParseAndEval)
