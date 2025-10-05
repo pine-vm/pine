@@ -35,25 +35,25 @@ public static class StaticProgramCSharpExtension
                 ];
         }
 
-        IReadOnlyList<ClassDeclarationSyntax> classDeclarations =
+        IReadOnlyList<(IReadOnlyList<string> namespaces, ClassDeclarationSyntax declSyntax)> classDeclarations =
         [
-            staticProgram.CommonValueClass,
-            ..staticProgram.ModulesClasses.Values.Select(mc => mc.ClassDeclarationSyntax),
-            staticProgram.GlobalAnonymousClass.ClassDeclarationSyntax,
-            staticProgram.DispatcherClass,
+            ([],staticProgram.CommonValueClass),
+            ..staticProgram.ModulesClasses.Select(mc => (mc.Key.Namespaces, mc.Value.ClassDeclarationSyntax)),
+            ([], staticProgram.GlobalAnonymousClass.ClassDeclarationSyntax),
+            ([], staticProgram.DispatcherClass),
             ];
 
         return
             classDeclarations
             .ToFrozenDictionary(
-                cd => FilePathFromClassDeclaration(cd, namespacePrefix),
+                cd => FilePathFromClassDeclaration(cd.declSyntax, [.. namespacePrefix, .. cd.namespaces]),
                 cd =>
                 (ReadOnlyMemory<byte>)
                     Encoding.UTF8.GetBytes(
                         BuildCompilationUnitSyntax(
-                            cd,
+                            cd.declSyntax,
                             staticProgram.DeclarationSyntaxContext,
-                            namespacePrefix).ToFullString())
+                            [.. namespacePrefix, .. cd.namespaces]).ToFullString())
                     .AsMemory(),
                 comparer:
                 EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
