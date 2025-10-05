@@ -141,6 +141,9 @@ public record BundledPineToDotnet(
             new DeclQualifiedName(["String"], "padLeft"),
             new DeclQualifiedName(["String"], "padRight"),
 
+            new DeclQualifiedName(["String"], "contains"),
+            new DeclQualifiedName(["String"], "indexes"),
+
             new DeclQualifiedName(["String"], "toInt"),
             new DeclQualifiedName(["String"], "fromInt"),
 

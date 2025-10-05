@@ -235,10 +235,19 @@ public record StaticProgramCSharpClass(
                                     SyntaxFactory.IdentifierName(tempLocalName))));
                     }
 
+                    // Contain the local declarations in their own scope to avoid name clashes
+
+                    var tempDeclarationsBlock =
+                        SyntaxFactory.Block(
+                            (SyntaxList<StatementSyntax>)
+                            [
+                            .. tempDeclarations,
+                            .. assignments
+                            ]);
+
                     return
                         [
-                        .. tempDeclarations,
-                        .. assignments,
+                        tempDeclarationsBlock,
                         SyntaxFactory.ContinueStatement()
                         ];
                 }

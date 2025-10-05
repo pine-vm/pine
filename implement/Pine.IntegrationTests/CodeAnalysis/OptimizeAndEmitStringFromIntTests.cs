@@ -153,6 +153,9 @@ public class OptimizeAndEmitStringFromIntTests
                             return CommonReusedValues.Blob_Char_digit_9;
                         }
 
+                        {
+                        }
+
                         continue;
                     }
                 }
@@ -183,25 +186,27 @@ public class OptimizeAndEmitStringFromIntTests
                         PineValue local_000 =
                             Basics.idiv(local_param_1_0, CommonReusedValues.Blob_Int_10);
 
-                        PineValue local_param_1_0_temp =
-                            local_000;
+                        {
+                            PineValue local_param_1_0_temp =
+                                local_000;
 
-                        PineValue local_param_1_1_temp =
-                            KernelFunctionSpecialized.concat(
-                                PineValue.List(
-                                    [
-                                        Global_Anonymous.zzz_anon_39fa68f8_2402eeb0(
-                                            KernelFunctionSpecialized.int_add(
-                                                local_param_1_0,
-                                                KernelFunctionSpecialized.int_mul(-10, local_000)))
-                                    ]),
-                                local_param_1_1);
+                            PineValue local_param_1_1_temp =
+                                KernelFunctionSpecialized.concat(
+                                    PineValue.List(
+                                        [
+                                            Global_Anonymous.zzz_anon_39fa68f8_2402eeb0(
+                                                KernelFunctionSpecialized.int_add(
+                                                    local_param_1_0,
+                                                    KernelFunctionSpecialized.int_mul(-10, local_000)))
+                                        ]),
+                                    local_param_1_1);
 
-                        local_param_1_0 =
-                            local_param_1_0_temp;
+                            local_param_1_0 =
+                                local_param_1_0_temp;
 
-                        local_param_1_1 =
-                            local_param_1_1_temp;
+                            local_param_1_1 =
+                                local_param_1_1_temp;
+                        }
 
                         continue;
                     }
@@ -245,19 +250,21 @@ public class OptimizeAndEmitStringFromIntTests
 
                         if (KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(local_param_1_1, local_param_1_0))
                         {
-                            PineValue local_param_1_0_temp =
-                                KernelFunctionSpecialized.int_add(
-                                    local_param_1_0,
-                                    KernelFunctionSpecialized.int_mul(-1, local_param_1_1));
+                            {
+                                PineValue local_param_1_0_temp =
+                                    KernelFunctionSpecialized.int_add(
+                                        local_param_1_0,
+                                        KernelFunctionSpecialized.int_mul(-1, local_param_1_1));
 
-                            PineValue local_param_1_2_temp =
-                                KernelFunctionSpecialized.int_add(1, local_param_1_2);
+                                PineValue local_param_1_2_temp =
+                                    KernelFunctionSpecialized.int_add(1, local_param_1_2);
 
-                            local_param_1_0 =
-                                local_param_1_0_temp;
+                                local_param_1_0 =
+                                    local_param_1_0_temp;
 
-                            local_param_1_2 =
-                                local_param_1_2_temp;
+                                local_param_1_2 =
+                                    local_param_1_2_temp;
+                            }
 
                             continue;
                         }

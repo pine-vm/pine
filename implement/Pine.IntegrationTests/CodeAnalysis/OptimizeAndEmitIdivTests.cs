@@ -453,19 +453,21 @@ public class OptimizeAndEmitIdivTests
 
                         if (KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(local_param_1_1, local_param_1_0))
                         {
-                            PineValue local_param_1_0_temp =
-                                KernelFunctionSpecialized.int_add(
-                                    local_param_1_0,
-                                    KernelFunctionSpecialized.int_mul(-1, local_param_1_1));
+                            {
+                                PineValue local_param_1_0_temp =
+                                    KernelFunctionSpecialized.int_add(
+                                        local_param_1_0,
+                                        KernelFunctionSpecialized.int_mul(-1, local_param_1_1));
 
-                            PineValue local_param_1_2_temp =
-                                KernelFunctionSpecialized.int_add(1, local_param_1_2);
+                                PineValue local_param_1_2_temp =
+                                    KernelFunctionSpecialized.int_add(1, local_param_1_2);
 
-                            local_param_1_0 =
-                                local_param_1_0_temp;
+                                local_param_1_0 =
+                                    local_param_1_0_temp;
 
-                            local_param_1_2 =
-                                local_param_1_2_temp;
+                                local_param_1_2 =
+                                    local_param_1_2_temp;
+                            }
 
                             continue;
                         }
