@@ -643,18 +643,6 @@ json_encode_pineValue_Internal dictionary value =
                               , Json.Encode.list (json_encode_pineValue_Internal dictionary) list
                               )
                             ]
-
-                continueWithoutReference () =
-                    case Pine.stringFromListValue list of
-                        Err _ ->
-                            defaultListEncoding ()
-
-                        Ok asString ->
-                            Json.Encode.object
-                                [ ( "ListAsString"
-                                  , Json.Encode.string asString
-                                  )
-                                ]
             in
             if list == [] then
                 defaultListEncoding ()
@@ -662,12 +650,12 @@ json_encode_pineValue_Internal dictionary value =
             else
                 case Dict.get (pineListValueFastHash list) dictionary.listDict of
                     Nothing ->
-                        continueWithoutReference ()
+                        defaultListEncoding ()
 
                     Just assocList ->
                         case Common.listFind (Tuple.first >> (==) list) assocList of
                             Nothing ->
-                                continueWithoutReference ()
+                                defaultListEncoding ()
 
                             Just ( _, reference ) ->
                                 Json.Encode.object
