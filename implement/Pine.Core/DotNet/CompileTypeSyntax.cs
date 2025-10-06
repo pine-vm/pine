@@ -91,17 +91,43 @@ public static class CompileTypeSyntax
         foreach (var usingDirective in context.UsingDirectives)
         {
             // Check if this is an alias using directive (has an Alias property)
-            if (usingDirective.Alias is not null && usingDirective.Name is not null)
+            if (usingDirective.Alias is { } usingAlias && usingDirective.Name is { } usingName)
             {
-                var aliasTarget = usingDirective.Name.ToFullString().Trim();
+                var usingNameLessGlobal = NameSyntaxLessGlobalAlias(usingName);
+
+                var aliasTarget = usingNameLessGlobal.ToString().Trim();
+
                 if (aliasTarget == fullTypeName)
                 {
-                    return usingDirective.Alias.Name.Identifier.ValueText;
+                    return usingAlias.Name.Identifier.ValueText;
                 }
             }
         }
 
         return null;
+    }
+
+    public static NameSyntax NameSyntaxLessGlobalAlias(NameSyntax nameSyntax)
+    {
+        // Normalize Roslyn's fully-qualified alias targets (e.g., "global::System.Text.StringBuilder")
+
+        if (nameSyntax is QualifiedNameSyntax qualifiedNameSyntax)
+        {
+            if (qualifiedNameSyntax.Left is AliasQualifiedNameSyntax aliasQualifiedNameSyntax)
+            {
+                return
+                    SyntaxFactory.QualifiedName(
+                        NameSyntaxLessGlobalAlias(aliasQualifiedNameSyntax.Name),
+                        qualifiedNameSyntax.Right);
+            }
+
+            return
+                SyntaxFactory.QualifiedName(
+                    NameSyntaxLessGlobalAlias(qualifiedNameSyntax.Left),
+                    qualifiedNameSyntax.Right);
+        }
+
+        return nameSyntax;
     }
 
     public static IEnumerable<string> NamespaceSegmentsResultingFromDeclaringTypes(Type type) =>

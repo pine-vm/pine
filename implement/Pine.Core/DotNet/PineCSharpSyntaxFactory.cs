@@ -366,4 +366,41 @@ public static class PineCSharpSyntaxFactory
                     SyntaxFactory.SingletonSeparatedList(
                         SyntaxFactory.Argument(intExpr))));
     }
+
+    public static NameSyntax QualifiedNameSyntaxFromSegments(
+        NameSyntax left,
+        IReadOnlyList<SimpleNameSyntax> segments)
+    {
+        if (segments.Count is 0)
+            throw new ArgumentException("At least one segment is required", nameof(segments));
+
+        var name = left;
+
+        for (var i = 0; i < segments.Count; ++i)
+        {
+            name =
+                SyntaxFactory.QualifiedName(
+                    name,
+                    segments[i]);
+        }
+
+        return (QualifiedNameSyntax)name;
+    }
+
+    public static IReadOnlyList<SimpleNameSyntax> QualifiedNameSegments(NameSyntax name)
+    {
+        var segments = new List<SimpleNameSyntax>();
+
+        while (name is QualifiedNameSyntax qualifiedName)
+        {
+            segments.Add(qualifiedName.Right);
+
+            name = qualifiedName.Left;
+        }
+
+        segments.Add((SimpleNameSyntax)name);
+        segments.Reverse();
+
+        return segments;
+    }
 }

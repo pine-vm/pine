@@ -99,9 +99,29 @@ public class CompilePineToDotNetTests
 
         var context = new DeclarationSyntaxContext([usingAlias]);
 
-        var syntax = CompileTypeSyntax.TypeSyntaxFromType(
-            typeof(Dictionary<string, int>),
-            context);
+        var syntax =
+            CompileTypeSyntax.TypeSyntaxFromType(
+                typeof(Dictionary<string, int>),
+                context);
+
+        syntax.ToFullString().Should().Be("MyDict<System.String,System.Int32>");
+    }
+
+    [Fact]
+    public void Test_TypeSyntaxFromType_with_using_alias_with_global_prefix()
+    {
+        // Create a using alias: using MyDict = global::System.Collections.Generic.Dictionary<string, int>;
+        var usingAlias =
+            SyntaxFactory.UsingDirective(
+                alias: SyntaxFactory.NameEquals(SyntaxFactory.IdentifierName("MyDict")),
+                name: SyntaxFactory.ParseName("global::System.Collections.Generic.Dictionary"));
+
+        var context = new DeclarationSyntaxContext([usingAlias]);
+
+        var syntax =
+            CompileTypeSyntax.TypeSyntaxFromType(
+                typeof(Dictionary<string, int>),
+                context);
 
         syntax.ToFullString().Should().Be("MyDict<System.String,System.Int32>");
     }
@@ -114,9 +134,10 @@ public class CompilePineToDotNetTests
                 UsingDirectives: [],
                 CurrentNamespace: "Pine.Core");
 
-        var syntax = CompileTypeSyntax.TypeSyntaxFromType(
-            typeof(PineValue),
-            context);
+        var syntax =
+            CompileTypeSyntax.TypeSyntaxFromType(
+                typeof(PineValue),
+                context);
 
         syntax.ToFullString().Should().Be("PineValue");
     }
@@ -145,9 +166,10 @@ public class CompilePineToDotNetTests
                 UsingDirectives: [],
                 CurrentNamespace: "SomeOther.Namespace");
 
-        var syntax = CompileTypeSyntax.TypeSyntaxFromType(
-            typeof(PineValue),
-            context);
+        var syntax =
+            CompileTypeSyntax.TypeSyntaxFromType(
+                typeof(PineValue),
+                context);
 
         syntax.ToFullString().Should().Be("Pine.Core.PineValue");
     }
@@ -164,9 +186,10 @@ public class CompilePineToDotNetTests
                 UsingDirectives: [usingDirective],
                 CurrentNamespace: "DifferentNamespace");
 
-        var syntax = CompileTypeSyntax.TypeSyntaxFromType(
-            typeof(PineValue),
-            context);
+        var syntax =
+            CompileTypeSyntax.TypeSyntaxFromType(
+                typeof(PineValue),
+                context);
 
         syntax.ToFullString().Should().Be("PineValue");
     }
@@ -179,9 +202,10 @@ public class CompilePineToDotNetTests
                 UsingDirectives: [],
                 CurrentNamespace: "Pine.Core");
 
-        var syntax = CompileTypeSyntax.TypeSyntaxFromType(
-            typeof(Result<string, PineValue>),
-            context);
+        var syntax =
+            CompileTypeSyntax.TypeSyntaxFromType(
+                typeof(Result<string, PineValue>),
+                context);
 
         syntax.ToFullString().Should().Be("Result<System.String,PineValue>");
     }

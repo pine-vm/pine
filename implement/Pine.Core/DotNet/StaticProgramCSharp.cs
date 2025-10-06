@@ -24,6 +24,59 @@ public record StaticProgramCSharp(
 
     private const string GlobalAnonFunctionsClassName = "Global_Anonymous";
 
+    public static DeclarationSyntaxContext DeclarationSyntaxContextDefault()
+    {
+        UsingDirectiveSyntax UsingAliasForType(Type type, string alias)
+        {
+            // Also prepend the ::global prefix to avoid conflicts with local aliases
+
+            var generalTypeName =
+                (NameSyntax)CompileTypeSyntax.TypeSyntaxFromType(type, DeclarationSyntaxContext.None);
+
+            var segments =
+                PineCSharpSyntaxFactory.QualifiedNameSegments(generalTypeName);
+
+            var nameWithGlobal =
+                PineCSharpSyntaxFactory.QualifiedNameSyntaxFromSegments(
+                    SyntaxFactory.AliasQualifiedName(
+                        SyntaxFactory.IdentifierName("global"),
+                        segments[0]),
+                    [.. segments.Skip(1)]);
+
+            return
+                SyntaxFactory.UsingDirective(
+                    alias: SyntaxFactory.NameEquals(SyntaxFactory.IdentifierName(alias)),
+                    name: nameWithGlobal);
+        }
+
+        UsingDirectiveSyntax UsingAliasForTypeDefault(Type type)
+        {
+            return
+                UsingAliasForType(type, "Pine_" + type.Name);
+        }
+
+        return new DeclarationSyntaxContext(
+            UsingDirectives:
+            [
+                UsingAliasForTypeDefault(typeof(PineValue)),
+                UsingAliasForTypeDefault(typeof(KernelFunction)),
+                UsingAliasForTypeDefault(typeof(PineKernelValues)),
+                UsingAliasForTypeDefault(typeof(PineValueExtension)),
+                UsingAliasForTypeDefault(typeof(Internal.KernelFunctionFused)),
+                UsingAliasForTypeDefault(typeof(Internal.KernelFunctionSpecialized)),
+
+                UsingAliasForTypeDefault(typeof(IntegerEncoding)),
+                UsingAliasForTypeDefault(typeof(StringEncoding)),
+                UsingAliasForTypeDefault(typeof(ExpressionEncoding)),
+                UsingAliasForTypeDefault(typeof(ParseExpressionException)),
+            ],
+            CurrentNamespace: null);
+    }
+
+    public static StaticProgramCSharp FromStaticProgram(
+        StaticProgram staticProgram) =>
+        FromStaticProgram(staticProgram, DeclarationSyntaxContextDefault());
+
     public static StaticProgramCSharp FromStaticProgram(
         StaticProgram staticProgram,
         DeclarationSyntaxContext declarationSyntaxContext)
@@ -697,7 +750,7 @@ public record StaticProgramCSharp(
         if (c is '\'')
             return "quote";
 
-        if (c is '\"')
+        if (c is '"')
             return "doublequote";
 
         if (c is '\\')

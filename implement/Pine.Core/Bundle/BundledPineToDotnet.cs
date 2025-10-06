@@ -115,6 +115,13 @@ public record BundledPineToDotnet(
                 parseCache: parseCache)
             .Extract(err => throw new Exception("Failed parsing as static program: " + err));
 
+        foreach (var decl in declsFailed)
+        {
+            logger(
+                "Warning: Declaration failed to parse and was not included in the bundle: " +
+                decl.Key.FullName + ": " + decl.Value);
+        }
+
         BuildAndWriteBundleFile(
             staticProgram,
             destinationDirectory: destinationDirectory,
@@ -266,9 +273,7 @@ public record BundledPineToDotnet(
         StaticProgram staticProgram)
     {
         var asCSharp =
-            StaticProgramCSharp.FromStaticProgram(
-                staticProgram,
-                DeclarationSyntaxContext.None);
+            StaticProgramCSharp.FromStaticProgram(staticProgram);
 
         var csharpFiles =
             asCSharp.BuildCSharpProjectFiles(
