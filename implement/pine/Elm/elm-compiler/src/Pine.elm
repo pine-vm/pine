@@ -4,6 +4,7 @@ module Pine exposing
     , KernelFunction
     , PathDescription(..)
     , Value(..)
+    , applyKernelFunction
     , bigIntFromBlobValue
     , bigIntFromUnsignedBlobValue
     , bigIntFromValue
@@ -15,7 +16,6 @@ module Pine exposing
     , emptyEvalEnvironment
     , encodeExpressionAsValue
     , environmentExpr
-    , environmentFromDeclarations
     , evalEnvironmentFromList
     , evaluateExpression
     , falseValue
@@ -27,7 +27,6 @@ module Pine exposing
     , stringAsValue_Function
     , stringAsValue_List
     , stringAsValue_Literal
-    , stringFromListValue
     , stringFromValue
     , trueValue
     , valueFromBigInt
@@ -40,7 +39,6 @@ module Pine exposing
 
 import BigInt
 import Bitwise
-import Dict
 import Hex
 
 
@@ -82,12 +80,6 @@ type PathDescription a
     | DescribePathEnd a
 
 
-environmentFromDeclarations : List ( String, Value ) -> Value
-environmentFromDeclarations declarations =
-    ListValue
-        (List.map valueFromContextExpansionWithName declarations)
-
-
 evalEnvironmentFromList : List Value -> EvalEnvironment
 evalEnvironmentFromList list =
     EvalEnvironment (ListValue list)
@@ -120,21 +112,10 @@ evaluateExpression context expression =
                     Ok value
 
         KernelApplicationExpression functionName inputExpr ->
-            case evaluateExpression context inputExpr of
-                Err error ->
-                    Err
-                        (DescribePathNode
-                            ("Failed to evaluate argument for kernel function " ++ functionName ++ ": ")
-                            error
-                        )
-
-                Ok input ->
-                    case parseKernelFunctionFromName functionName of
-                        Err error ->
-                            Err (DescribePathEnd error)
-
-                        Ok kernelFunction ->
-                            Ok (kernelFunction input)
+            evaluateExpressionKernelApplication
+                context
+                functionName
+                inputExpr
 
         ConditionalExpression condition falseBranch trueBranch ->
             case evaluateExpression context condition of
@@ -196,66 +177,83 @@ evaluateListExpression completedItems context remainingItems =
                         followingItems
 
 
-valueFromContextExpansionWithName : ( String, Value ) -> Value
-valueFromContextExpansionWithName ( declName, declValue ) =
-    ListValue [ computeValueFromString declName, declValue ]
+evaluateExpressionKernelApplication : EvalEnvironment -> String -> Expression -> Result (PathDescription String) Value
+evaluateExpressionKernelApplication context functionName inputExpr =
+    case evaluateExpression context inputExpr of
+        Err error ->
+            Err
+                (DescribePathNode
+                    ("Failed to evaluate argument for kernel function " ++ functionName ++ ": ")
+                    error
+                )
+
+        Ok input ->
+            applyKernelFunction
+                functionName
+                input
 
 
-kernelFunctions : Dict.Dict String KernelFunction
-kernelFunctions =
-    Dict.fromList
-        [ ( "equal"
-          , kernelFunction_equal
-          )
-        , ( "negate"
-          , kernelFunction_negate
-          )
-        , ( "length"
-          , kernelFunction_length
-          )
-        , ( "skip"
-          , kernelFunction_skip
-          )
-        , ( "take"
-          , kernelFunction_take
-          )
-        , ( "reverse"
-          , kernelFunction_reverse
-          )
-        , ( "concat"
-          , kernelFunction_concat
-          )
-        , ( "head"
-          , kernelFunction_head
-          )
-        , ( "int_add"
-          , kernelFunction_int_add
-          )
-        , ( "int_mul"
-          , kernelFunction_int_mul
-          )
-        , ( "int_is_sorted_asc"
-          , kernelFunction_int_is_sorted_asc
-          )
-        , ( "bit_and"
-          , kernelFunction_bit_and
-          )
-        , ( "bit_or"
-          , kernelFunction_bit_or
-          )
-        , ( "bit_xor"
-          , kernelFunction_bit_xor
-          )
-        , ( "bit_not"
-          , kernelFunction_bit_not
-          )
-        , ( "bit_shift_left"
-          , kernelFunction_bit_shift_left
-          )
-        , ( "bit_shift_right"
-          , kernelFunction_bit_shift_right
-          )
-        ]
+applyKernelFunction : String -> Value -> Result (PathDescription String) Value
+applyKernelFunction functionName input =
+    case functionName of
+        "equal" ->
+            Ok (kernelFunction_equal input)
+
+        "negate" ->
+            Ok (kernelFunction_negate input)
+
+        "length" ->
+            Ok (kernelFunction_length input)
+
+        "skip" ->
+            Ok (kernelFunction_skip input)
+
+        "take" ->
+            Ok (kernelFunction_take input)
+
+        "reverse" ->
+            Ok (kernelFunction_reverse input)
+
+        "concat" ->
+            Ok (kernelFunction_concat input)
+
+        "head" ->
+            Ok (kernelFunction_head input)
+
+        "int_add" ->
+            Ok (kernelFunction_int_add input)
+
+        "int_mul" ->
+            Ok (kernelFunction_int_mul input)
+
+        "int_is_sorted_asc" ->
+            Ok (kernelFunction_int_is_sorted_asc input)
+
+        "bit_and" ->
+            Ok (kernelFunction_bit_and input)
+
+        "bit_or" ->
+            Ok (kernelFunction_bit_or input)
+
+        "bit_xor" ->
+            Ok (kernelFunction_bit_xor input)
+
+        "bit_not" ->
+            Ok (kernelFunction_bit_not input)
+
+        "bit_shift_left" ->
+            Ok (kernelFunction_bit_shift_left input)
+
+        "bit_shift_right" ->
+            Ok (kernelFunction_bit_shift_right input)
+
+        _ ->
+            Err
+                (DescribePathEnd
+                    ("Unknown kernel function: "
+                        ++ functionName
+                    )
+                )
 
 
 kernelFunction_equal : KernelFunction
@@ -430,9 +428,6 @@ kernelFunction_int_add value =
 kernelFunction_int_add_list : BigInt.BigInt -> List Value -> Value
 kernelFunction_int_add_list aggregate list =
     case list of
-        [] ->
-            valueFromBigInt aggregate
-
         nextValue :: rest ->
             case bigIntFromValue nextValue of
                 Ok nextInt ->
@@ -440,6 +435,9 @@ kernelFunction_int_add_list aggregate list =
 
                 Err _ ->
                     listValue_Empty
+
+        _ ->
+            valueFromBigInt aggregate
 
 
 kernelFunction_int_mul : Value -> Value
@@ -455,9 +453,6 @@ kernelFunction_int_mul value =
 kernelFunction_int_mul_list : BigInt.BigInt -> List Value -> Value
 kernelFunction_int_mul_list aggregate list =
     case list of
-        [] ->
-            valueFromBigInt aggregate
-
         nextValue :: rest ->
             case bigIntFromValue nextValue of
                 Ok nextInt ->
@@ -465,6 +460,9 @@ kernelFunction_int_mul_list aggregate list =
 
                 Err _ ->
                     listValue_Empty
+
+        _ ->
+            valueFromBigInt aggregate
 
 
 kernelFunction_int_is_sorted_asc : Value -> Value
@@ -523,7 +521,7 @@ kernelFunction_bit_and_recursive blob arguments =
                 _ ->
                     listValue_Empty
 
-        [] ->
+        _ ->
             BlobValue blob
 
 
@@ -544,7 +542,7 @@ kernelFunction_bit_or_recursive blob arguments =
                 _ ->
                     listValue_Empty
 
-        [] ->
+        _ ->
             BlobValue blob
 
 
@@ -564,7 +562,7 @@ kernelFunction_bit_xor_recursive blob arguments =
         next :: rest ->
             case next of
                 BlobValue nextBlob ->
-                    kernelFunction_bit_and_recursive
+                    kernelFunction_bit_xor_recursive
                         (bit_xor_tuple
                             []
                             (List.reverse blob)
@@ -575,7 +573,7 @@ kernelFunction_bit_xor_recursive blob arguments =
                 _ ->
                     listValue_Empty
 
-        [] ->
+        _ ->
             BlobValue blob
 
 
@@ -584,15 +582,22 @@ kernelFunction_bit_not value =
     case value of
         BlobValue bytes ->
             BlobValue
-                (List.map
-                    (\byte ->
-                        modBy 0x0100 (Bitwise.complement byte)
-                    )
-                    bytes
-                )
+                (kernelFunction_bit_not_bytes [] bytes)
 
         _ ->
             listValue_Empty
+
+
+kernelFunction_bit_not_bytes : List Int -> List Int -> List Int
+kernelFunction_bit_not_bytes reversedBytes remainingBytes =
+    case remainingBytes of
+        byte :: rest ->
+            kernelFunction_bit_not_bytes
+                ((255 - byte) :: reversedBytes)
+                rest
+
+        _ ->
+            List.reverse reversedBytes
 
 
 kernelFunction_bit_shift_left : Value -> Value
@@ -889,7 +894,12 @@ describeExpression depthLimit expression =
                         "..."
 
                     else
-                        String.join "," (List.map (describeExpression (depthLimit - 1)) list)
+                        String.join ","
+                            (describeExpressionList
+                                []
+                                (depthLimit - 1)
+                                list
+                            )
                             ++ "]"
                    )
 
@@ -927,11 +937,27 @@ describeExpression depthLimit expression =
                 ++ ")"
 
 
+describeExpressionList : List String -> Int -> List Expression -> List String
+describeExpressionList acc depthLimit expressions =
+    case expressions of
+        expr :: rest ->
+            describeExpressionList
+                (describeExpression depthLimit expr :: acc)
+                depthLimit
+                rest
+
+        [] ->
+            List.reverse acc
+
+
 describeValue : Int -> Value -> String
 describeValue maxDepth value =
     case value of
         BlobValue blob ->
-            "BlobValue [" ++ String.fromInt (List.length blob) ++ "] 0x" ++ hexadecimalRepresentationFromBlobValue blob
+            "BlobValue ["
+                ++ String.fromInt (List.length blob)
+                ++ "] 0x"
+                ++ hexadecimalStringFromBlobValue [] blob
 
         ListValue list ->
             let
@@ -942,7 +968,12 @@ describeValue maxDepth value =
                                 "..."
 
                             else
-                                String.join ", " (List.map (describeValue (maxDepth - 1)) list)
+                                String.join ", "
+                                    (describeValueList
+                                        []
+                                        (maxDepth - 1)
+                                        list
+                                    )
                            )
                         ++ "]"
             in
@@ -956,6 +987,19 @@ describeValue maxDepth value =
                         "\"" ++ string ++ "\""
                 , standard
                 ]
+
+
+describeValueList : List String -> Int -> List Value -> List String
+describeValueList acc maxDepth values =
+    case values of
+        value :: rest ->
+            describeValueList
+                (describeValue maxDepth value :: acc)
+                maxDepth
+                rest
+
+        _ ->
+            List.reverse acc
 
 
 displayStringFromPineError : PathDescription String -> String
@@ -1024,10 +1068,22 @@ computeValueFromString string =
     let
         charsBytes : List (List Int)
         charsBytes =
-            List.map blobBytesFromChar (String.toList string)
+            blobBytesFromChars [] (String.toList string)
     in
     BlobValue
         (List.concat charsBytes)
+
+
+blobBytesFromChars : List (List Int) -> List Char -> List (List Int)
+blobBytesFromChars acc remaining =
+    case remaining of
+        [] ->
+            List.reverse acc
+
+        char :: rest ->
+            blobBytesFromChars
+                (blobBytesFromChar char :: acc)
+                rest
 
 
 valueFromChar : Char -> Value
@@ -1077,11 +1133,11 @@ stringFromValue value =
 
     else
         case value of
-            ListValue charsValues ->
-                stringFromListValue charsValues
-
             BlobValue bytes ->
                 stringFromUtf32Bytes [] bytes
+
+            ListValue _ ->
+                Err "Only a BlobValue can encode a string."
 
 
 stringFromUtf32Bytes : List Char -> List Int -> Result String String
@@ -1108,45 +1164,6 @@ stringFromUtf32Bytes chars bytes =
                     ++ String.fromInt (List.length lessBytes)
                     ++ " bytes left"
                 )
-
-
-stringFromListValue : List Value -> Result String String
-stringFromListValue values =
-    let
-        continueRecursive : List Value -> List Char -> Result String (List Char)
-        continueRecursive remaining processed =
-            case remaining of
-                [] ->
-                    Ok processed
-
-                charValue :: rest ->
-                    case charValue of
-                        BlobValue intValueBytes ->
-                            case intValueBytes of
-                                [ b1 ] ->
-                                    continueRecursive rest (Char.fromCode b1 :: processed)
-
-                                [ b1, b2 ] ->
-                                    continueRecursive rest (Char.fromCode ((b1 * 256) + b2) :: processed)
-
-                                [ b1, b2, b3 ] ->
-                                    continueRecursive rest (Char.fromCode ((b1 * 65536) + (b2 * 256) + b3) :: processed)
-
-                                _ ->
-                                    Err
-                                        ("Failed to map to char - unsupported number of bytes: "
-                                            ++ String.fromInt (List.length intValueBytes)
-                                        )
-
-                        _ ->
-                            Err "Failed to map to char - not a BlobValue"
-    in
-    case continueRecursive values [] of
-        Err err ->
-            Err ("Failed to map list items to chars: " ++ err)
-
-        Ok chars ->
-            Ok (String.fromList (List.reverse chars))
 
 
 valueFromBigInt : BigInt.BigInt -> Value
@@ -1338,10 +1355,16 @@ bigIntFromUnsignedBlobValueContinue aggregate intValueBytes =
             aggregate
 
 
-hexadecimalRepresentationFromBlobValue : List Int -> String
-hexadecimalRepresentationFromBlobValue bytes =
-    String.join ""
-        (List.map (\byte -> String.padLeft 2 '0' (Hex.toString byte)) bytes)
+hexadecimalStringFromBlobValue : List String -> List Int -> String
+hexadecimalStringFromBlobValue acc bytes =
+    case bytes of
+        byte :: rest ->
+            hexadecimalStringFromBlobValue
+                (String.padLeft 2 '0' (Hex.toString byte) :: acc)
+                rest
+
+        _ ->
+            String.concat (List.reverse acc)
 
 
 encodeExpressionAsValue : Expression -> Value
@@ -1565,23 +1588,6 @@ parseKernelApplicationExpression arguments =
                 )
 
 
-parseKernelFunctionFromName : String -> Result String KernelFunction
-parseKernelFunctionFromName functionName =
-    case Dict.get functionName kernelFunctions of
-        Nothing ->
-            Err
-                ("Did not find kernel function '"
-                    ++ functionName
-                    ++ "'. There are "
-                    ++ String.fromInt (Dict.size kernelFunctions)
-                    ++ " kernel functions available: "
-                    ++ String.join ", " (Dict.keys kernelFunctions)
-                )
-
-        Just kernelFunction ->
-            Ok kernelFunction
-
-
 parseConditionalExpression : List Value -> Result String ( Expression, Expression, Expression )
 parseConditionalExpression arguments =
     case arguments of
@@ -1668,6 +1674,11 @@ countListValueContent ( nodeCount, byteCount ) items =
 encodeUnionToPineValue : Value -> Value -> Value
 encodeUnionToPineValue tagNameValue unionTagValue =
     ListValue [ tagNameValue, unionTagValue ]
+
+
+valueFromContextExpansionWithName : ( String, Value ) -> Value
+valueFromContextExpansionWithName ( declName, declValue ) =
+    ListValue [ computeValueFromString declName, declValue ]
 
 
 environmentExpr : Expression
