@@ -133,26 +133,32 @@ public static class KernelFunction
             "Unexpected value type: " + value.GetType().FullName);
     }
 
-    public static PineValue negate(PineValue value) =>
-        value switch
+    public static PineValue negate(PineValue value)
+    {
+        if (value is not PineValue.BlobValue blobValue)
+            return PineValue.EmptyList;
+
+        if (blobValue.Bytes.Length is 0)
+            return PineValue.EmptyList;
+
+        if (blobValue.Bytes.Span[0] is 2)
         {
-            PineValue.BlobValue blobValue
-            when 0 < blobValue.Bytes.Length =>
-            blobValue.Bytes.Span[0] switch
-            {
-                4 =>
-                PineValue.Blob([2, .. blobValue.Bytes.Span[1..]]),
+            if (blobValue.Bytes.Length is 1)
+                return PineKernelValues.TrueValue;
 
-                2 =>
-                PineValue.Blob([4, .. blobValue.Bytes.Span[1..]]),
+            return PineValue.Blob([4, .. blobValue.Bytes.Span[1..]]);
+        }
 
-                _ =>
-                PineValue.EmptyList
-            },
+        if (blobValue.Bytes.Span[0] is 4)
+        {
+            if (blobValue.Bytes.Length is 1)
+                return PineKernelValues.FalseValue;
 
-            _ =>
-            PineValue.EmptyList
-        };
+            return PineValue.Blob([2, .. blobValue.Bytes.Span[1..]]);
+        }
+
+        return PineValue.EmptyList;
+    }
 
     /// <summary>
     /// For a list, returns the number of elements. For a blob, returns the number of bytes.
