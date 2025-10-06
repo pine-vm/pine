@@ -196,7 +196,7 @@ public record StaticProgramCSharpClass(
                         }
 
                         var argumentExpr =
-                            ExpressionsForFunctionParam(
+                            ExpressionsForFunctionArgument(
                                 paramPath,
                                 funcApp.Arguments,
                                 SelfFunctionInterfaceDelegate,
@@ -811,7 +811,7 @@ public record StaticProgramCSharpClass(
             var arguments =
                 funcInterface.ParamsPaths
                 .Select(argumentPath =>
-                ExpressionsForFunctionParam(
+                ExpressionsForFunctionArgument(
                     argumentPath,
                     funcApp.Arguments,
                     selfFunctionInterface,
@@ -1540,7 +1540,7 @@ public record StaticProgramCSharpClass(
         }
     }
 
-    public static IEnumerable<CompiledCSharpExpression> ExpressionsForFunctionParam(
+    public static IEnumerable<CompiledCSharpExpression> ExpressionsForFunctionArgument(
         IReadOnlyList<int> paramPath,
         StaticExpression<DeclQualifiedName> argumentExpr,
         System.Func<IReadOnlyList<int>, ExpressionSyntax?> selfFunctionInterface,
@@ -1565,9 +1565,14 @@ public record StaticProgramCSharpClass(
                 return renderedExpr;
             }
 
-            throw new System.NotImplementedException(
-                "Path remaining after extracting subexpression at path [" +
-                string.Join(',', paramPath) + "]: [" + string.Join(',', subexpr.pathRemaining) + "]");
+            var withRemainingPathExpr =
+                PineCSharpSyntaxFactory.BuildCSharpExpressionToGetItemFromPathOrEmptyList(
+                    renderedExpr.AsGenericValue(declarationSyntaxContext),
+                    subexpr.pathRemaining,
+                    declarationSyntaxContext);
+
+            return
+                [CompiledCSharpExpression.Generic(withRemainingPathExpr)];
         }
 
         throw new System.NotImplementedException(
