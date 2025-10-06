@@ -349,18 +349,14 @@ public class OptimizeAndEmitDictInsertTests
                             return CommonReusedValues.List_af0e3cad;
                         }
 
-                        if (KernelFunction.negate(
-                            KernelFunction.ValueFromBool(
-                                KernelFunctionSpecialized.length_as_int(local_param_1_0) == 0)) == PineKernelValues.TrueValue)
+                        if (!(KernelFunctionSpecialized.length_as_int(local_param_1_0) == 0))
                         {
                             if (local_param_1_1 == PineValue.EmptyList)
                             {
                                 return CommonReusedValues.List_50724673;
                             }
 
-                            if (KernelFunction.negate(
-                                KernelFunction.ValueFromBool(
-                                    KernelFunctionSpecialized.length_as_int(local_param_1_1) == 0)) == PineKernelValues.TrueValue)
+                            if (!(KernelFunctionSpecialized.length_as_int(local_param_1_1) == 0))
                             {
                                 PineValue local_000 =
                                     Basics.compare(

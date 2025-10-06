@@ -1204,6 +1204,37 @@ public record StaticProgramCSharpClass(
             }
         }
 
+        if (kernelApp.Function is nameof(KernelFunction.negate))
+        {
+            if (kernelApp.Input is StaticExpression<DeclQualifiedName> inputExpr)
+            {
+                var inputSequences =
+                    EnumerateExpressions(
+                        inputExpr,
+                        selfFunctionInterface,
+                        availableFunctions,
+                        availableValueDecls,
+                        declarationSyntaxContext,
+                        alreadyDeclared);
+
+                foreach (var inputSequence in inputSequences)
+                {
+                    if (inputSequence.Type is CompiledCSharpExpression.ValueType.Boolean)
+                    {
+                        var booleanCSharpExpr =
+                             SyntaxFactory.PrefixUnaryExpression(
+                                 SyntaxKind.LogicalNotExpression,
+                                 CompiledCSharpExpression.EnsureIsParenthesizedForComposition(
+                                     inputSequence.ExpressionSyntax));
+
+                        yield return CompiledCSharpExpression.Boolean(booleanCSharpExpr);
+
+                        break;
+                    }
+                }
+            }
+        }
+
         var resultsFromFusion =
             TryCompileKernelFusion(
                 kernelApp,
@@ -1304,46 +1335,48 @@ public record StaticProgramCSharpClass(
             }
         }
 
-        var inputExpr =
-            CompileToCSharpExpression(
-                kernelApp.Input,
-                selfFunctionInterface,
-                availableFunctions,
-                availableValueDecls,
-                declarationSyntaxContext,
-                alreadyDeclared);
-
-        if (PineKernelFunctions.CompileKernelFunctionGenericInvocation(
-            kernelApp.Function,
-            inputExpr.AsGenericValue(declarationSyntaxContext),
-            declarationSyntaxContext)
-            is { } specializedInvocation)
         {
-            yield return CompiledCSharpExpression.Generic(specializedInvocation);
-        }
+            var inputExpr =
+                CompileToCSharpExpression(
+                    kernelApp.Input,
+                    selfFunctionInterface,
+                    availableFunctions,
+                    availableValueDecls,
+                    declarationSyntaxContext,
+                    alreadyDeclared);
 
-        // Generic case: Invoke KernelFunction.ApplyKernelFunctionGeneric
+            if (PineKernelFunctions.CompileKernelFunctionGenericInvocation(
+                kernelApp.Function,
+                inputExpr.AsGenericValue(declarationSyntaxContext),
+                declarationSyntaxContext)
+                is { } specializedInvocation)
+            {
+                yield return CompiledCSharpExpression.Generic(specializedInvocation);
+            }
 
-        var genericCSharpExpr =
-            SyntaxFactory.InvocationExpression(
-                SyntaxFactory.MemberAccessExpression(
-                    SyntaxKind.SimpleMemberAccessExpression,
-                    CompileTypeSyntax.TypeSyntaxFromType(
-                        typeof(KernelFunction),
-                        declarationSyntaxContext),
-                    SyntaxFactory.IdentifierName(nameof(KernelFunction.ApplyKernelFunctionGeneric))))
-            .WithArgumentList(
-                SyntaxFactory.ArgumentList(
-                    SyntaxFactory.SeparatedList(
-                        [
-                        SyntaxFactory.Argument(
+            // Generic case: Invoke KernelFunction.ApplyKernelFunctionGeneric
+
+            var genericCSharpExpr =
+                SyntaxFactory.InvocationExpression(
+                    SyntaxFactory.MemberAccessExpression(
+                        SyntaxKind.SimpleMemberAccessExpression,
+                        CompileTypeSyntax.TypeSyntaxFromType(
+                            typeof(KernelFunction),
+                            declarationSyntaxContext),
+                        SyntaxFactory.IdentifierName(nameof(KernelFunction.ApplyKernelFunctionGeneric))))
+                .WithArgumentList(
+                    SyntaxFactory.ArgumentList(
+                        SyntaxFactory.SeparatedList(
+                            [
+                            SyntaxFactory.Argument(
                             SyntaxFactory.LiteralExpression(
                                 SyntaxKind.StringLiteralExpression,
                                 SyntaxFactory.Literal(kernelApp.Function))),
                         SyntaxFactory.Argument(inputExpr.AsGenericValue(declarationSyntaxContext))
-                        ])));
+                            ])));
 
-        yield return CompiledCSharpExpression.Generic(genericCSharpExpr);
+            yield return CompiledCSharpExpression.Generic(genericCSharpExpr);
+        }
     }
 
     private static IEnumerable<CompiledCSharpExpression> TryCompileKernelFusion(
