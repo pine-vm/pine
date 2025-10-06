@@ -156,6 +156,14 @@ public record BundledPineToDotnet(
 
             new DeclQualifiedName(["Dict"], "insert"),
             new DeclQualifiedName(["Dict"], "remove"),
+
+            new DeclQualifiedName(["Json","Decode"], "parseJsonStringToValue"),
+
+            new DeclQualifiedName(["Pine"], "stringFromValue"),
+            new DeclQualifiedName(["Pine"], "applyKernelFunction"),
+            new DeclQualifiedName(["Pine"], "evaluateExpression"),
+            new DeclQualifiedName(["Pine"], "encodeExpressionAsValue"),
+            new DeclQualifiedName(["Pine"], "parseExpressionFromValue"),
         }
         .ToFrozenSet();
 
