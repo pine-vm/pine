@@ -138,13 +138,6 @@ public class OptimizeAndEmitStringTrimTests
                             return CommonReusedValues.Blob_Int_0;
                         }
 
-                        PineValue local_000 =
-                            PineValue.List(
-                                [
-                                    KernelFunctionSpecialized.int_add(-4, local_param_1_0),
-                                    local_param_1_1
-                                ]);
-
                         if (Global_Anonymous.zzz_anon_d97a2014_dda26649(
                             KernelFunctionFused.SkipAndTake(
                                 takeCount: 4,

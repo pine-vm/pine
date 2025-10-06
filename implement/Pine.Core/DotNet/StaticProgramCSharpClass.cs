@@ -4,7 +4,6 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Pine.Core;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.DotNet;
-using Pine.Core.Internal;
 using Pine.Core.PineVM;
 using Pine.Core.PopularEncodings;
 using System.Collections.Generic;
@@ -414,6 +413,24 @@ public record StaticProgramCSharpClass(
 
         var mutatedDeclared = alreadyDeclared;
 
+        // The current approach to common subexpression elimination has a drawback:
+        // We collect subexpressions for common subexpression elimination (CSE) and declare them as locals up-front
+        // in 'newDeclaredStatements'. Later, while enumerating expressions, we sometimes replace these generic
+        // subexpressions with more specialized forms (e.g., via kernel function specialization or parameter mapping).
+        // As a consequence, some of the CSE locals are never referenced by the emitted statements anymore and become
+        // superfluous.
+        //
+        // Workaround implemented here:
+        // - Still declare potential CSE locals first and extend 'alreadyDeclared' so downstream compilation can reuse them.
+        // - After the branches/statements are emitted, analyze the actual identifier usage in those statements and
+        //   filter 'newDeclaredStatements' to only those locals that are actually referenced. We also compute the
+        //   transitive closure of dependencies between locals to ensure we keep any prerequisite locals.
+        // - Finally, we prepend only the filtered declarations before the emitted statements.
+
+        // TODO: For a precise solution: Figure out which subexpressions will be needed in the final emitted statements first.
+        // This is necessary also because we are seeing the oposite problem: Some subexpressions are now computed multiple times
+        // because they did not get their entries in CSE.
+
         var newDeclaredStatements = new List<LocalDeclarationStatementSyntax>();
         var newlyDeclaredLocals = ImmutableHashSet.CreateBuilder<string>();
 
@@ -491,40 +508,7 @@ public record StaticProgramCSharpClass(
                     newAlreadyDeclared,
                     blockedAfterPrefix);
 
-            // If the 'if' block ends with a return/throw/continue, inline false branch into outer scope
-            if (BranchEndsWithExitOrLoop(trueBranchCompiled.Statement))
-            {
-                var falseBranchCompiled =
-                    CompileToCSharpStatement(
-                        conditionalExpr.FalseBranch,
-                        selfFunctionInterface,
-                        availableFunctions,
-                        availableValueDecls,
-                        declarationSyntaxContext,
-                        statementsFromResult,
-                        newAlreadyDeclared,
-                        blockedAfterPrefix.Union(trueBranchCompiled.DeclaredLocals));
-
-                var ifStatementNoElse =
-                    SyntaxFactory.IfStatement(
-                        condition: conditionExpr,
-                        statement: trueBranchCompiled.Statement,
-                        @else: null);
-
-                IReadOnlyList<StatementSyntax> allStatementsNoElse =
-                    [
-                        .. newDeclaredStatements,
-                        ifStatementNoElse,
-                        .. ExtractStatements(falseBranchCompiled.Statement)
-                    ];
-
-                var unionLocals = newlyDeclaredLocals.ToImmutable().Union(trueBranchCompiled.DeclaredLocals).Union(falseBranchCompiled.DeclaredLocals);
-
-                return new CompiledStatement(SyntaxFactory.Block(allStatementsNoElse), unionLocals);
-            }
-
-            // Else branch compiled normally; still pass union to keep names globally unique
-            var falseBranchCompiledNormal =
+            var falseBranchCompiled =
                 CompileToCSharpStatement(
                     conditionalExpr.FalseBranch,
                     selfFunctionInterface,
@@ -535,31 +519,69 @@ public record StaticProgramCSharpClass(
                     newAlreadyDeclared,
                     blockedAfterPrefix.Union(trueBranchCompiled.DeclaredLocals));
 
+            var filtered =
+                FilteredLocalsResult.FilterDeclarationsByUsage(
+                    newDeclaredStatements,
+                    [trueBranchCompiled.Statement, falseBranchCompiled.Statement],
+                    newlyDeclaredLocals.ToImmutable());
+
+            var unionLocals =
+                filtered.KeptLocalNames
+                .Union(trueBranchCompiled.DeclaredLocals)
+                .Union(falseBranchCompiled.DeclaredLocals);
+
+            // If the 'if' block ends with a return/throw/continue, inline false branch into outer scope
+            if (BranchEndsWithExitOrLoop(trueBranchCompiled.Statement))
+            {
+                var ifStatementNoElse =
+                    SyntaxFactory.IfStatement(
+                        condition: conditionExpr,
+                        statement: trueBranchCompiled.Statement,
+                        @else: null);
+
+                IReadOnlyList<StatementSyntax> allStatementsNoElse =
+                    [
+                        .. filtered.Declarations,
+                        ifStatementNoElse,
+                        .. ExtractStatements(falseBranchCompiled.Statement)
+                    ];
+
+                return new CompiledStatement(SyntaxFactory.Block(allStatementsNoElse), unionLocals);
+            }
+
+            // Else branch compiled normally; still pass union to keep names globally unique
+
             var ifStatement =
                 SyntaxFactory.IfStatement(
                     condition: conditionExpr,
                     statement: trueBranchCompiled.Statement,
-                    @else: SyntaxFactory.ElseClause(falseBranchCompiledNormal.Statement));
+                    @else: SyntaxFactory.ElseClause(falseBranchCompiled.Statement));
 
             IReadOnlyList<StatementSyntax> allStatements =
                 [
-                .. newDeclaredStatements,
+                .. filtered.Declarations,
                 ifStatement,
                 ];
 
-            var unionLocalsNormal = newlyDeclaredLocals.ToImmutable().Union(trueBranchCompiled.DeclaredLocals).Union(falseBranchCompiledNormal.DeclaredLocals);
-
-            return new CompiledStatement(SyntaxFactory.Block(allStatements), unionLocalsNormal);
+            return new CompiledStatement(SyntaxFactory.Block(allStatements), unionLocals);
         }
 
         {
+            var resultStatements = statementsFromResult(expression, newAlreadyDeclared);
+
+            var filtered =
+                FilteredLocalsResult.FilterDeclarationsByUsage(
+                    newDeclaredStatements,
+                    resultStatements,
+                    newlyDeclaredLocals.ToImmutable());
+
             IReadOnlyList<StatementSyntax> allStatements =
                 [
-                .. newDeclaredStatements,
-                .. statementsFromResult(expression, newAlreadyDeclared)
+                .. filtered.Declarations,
+                .. resultStatements
                 ];
 
-            return new CompiledStatement(SyntaxFactory.Block(allStatements), newlyDeclaredLocals.ToImmutable());
+            return new CompiledStatement(SyntaxFactory.Block(allStatements), filtered.KeptLocalNames);
         }
     }
 

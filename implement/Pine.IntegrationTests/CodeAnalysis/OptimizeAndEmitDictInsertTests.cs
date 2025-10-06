@@ -112,10 +112,6 @@ public class OptimizeAndEmitDictInsertTests
                     PineValue param_1_0,
                     PineValue param_1_1)
                 {
-                    PineValue local_000 =
-                        PineValue.List(
-                            [param_1_0, param_1_1]);
-
                     if (param_1_0 == param_1_1)
                     {
                         return CommonReusedValues.List_ac855cb8;
@@ -158,25 +154,6 @@ public class OptimizeAndEmitDictInsertTests
                             PineValueExtension.ValueFromPathOrEmptyList(
                                 param_1_1,
                                 [1]);
-
-                        PineValue local_005 =
-                            PineValue.List(
-                                [
-                                    KernelFunctionSpecialized.int_mul(
-                                        PineValueExtension.ValueFromPathOrEmptyList(
-                                            local_003,
-                                            [0]),
-                                        PineValueExtension.ValueFromPathOrEmptyList(
-                                            local_004,
-                                            [1])),
-                                    KernelFunctionSpecialized.int_mul(
-                                        PineValueExtension.ValueFromPathOrEmptyList(
-                                            local_004,
-                                            [0]),
-                                        PineValueExtension.ValueFromPathOrEmptyList(
-                                            local_003,
-                                            [1]))
-                                ]);
 
                         if (KernelFunctionSpecialized.int_mul(
                             PineValueExtension.ValueFromPathOrEmptyList(
@@ -221,29 +198,16 @@ public class OptimizeAndEmitDictInsertTests
                         param_1_0,
                         [0]))
                     {
-                        PineValue local_006 =
+                        PineValue local_005 =
                             PineValueExtension.ValueFromPathOrEmptyList(
                                 param_1_0,
                                 [1]);
 
-                        PineValue local_007 =
-                            PineValue.List(
-                                [
-                                    PineValueExtension.ValueFromPathOrEmptyList(
-                                        local_006,
-                                        [0]),
-                                    KernelFunctionSpecialized.int_mul(
-                                        PineValueExtension.ValueFromPathOrEmptyList(
-                                            local_006,
-                                            [1]),
-                                        param_1_1)
-                                ]);
-
                         if (PineValueExtension.ValueFromPathOrEmptyList(
-                            local_006,
+                            local_005,
                             [0]) == KernelFunctionSpecialized.int_mul(
                             PineValueExtension.ValueFromPathOrEmptyList(
-                                local_006,
+                                local_005,
                                 [1]),
                             param_1_1))
                         {
@@ -252,11 +216,11 @@ public class OptimizeAndEmitDictInsertTests
 
                         if (KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(
                             PineValueExtension.ValueFromPathOrEmptyList(
-                                local_006,
+                                local_005,
                                 [0]),
                             KernelFunctionSpecialized.int_mul(
                                 PineValueExtension.ValueFromPathOrEmptyList(
-                                    local_006,
+                                    local_005,
                                     [1]),
                                 param_1_1)))
                         {
@@ -268,30 +232,17 @@ public class OptimizeAndEmitDictInsertTests
 
                     if (local_002 == PineKernelValues.TrueValue)
                     {
-                        PineValue local_008 =
+                        PineValue local_006 =
                             PineValueExtension.ValueFromPathOrEmptyList(
                                 param_1_1,
                                 [1]);
 
-                        PineValue local_009 =
-                            PineValue.List(
-                                [
-                                    KernelFunctionSpecialized.int_mul(
-                                        param_1_0,
-                                        PineValueExtension.ValueFromPathOrEmptyList(
-                                            local_008,
-                                            [1])),
-                                    PineValueExtension.ValueFromPathOrEmptyList(
-                                        local_008,
-                                        [0])
-                                ]);
-
                         if (KernelFunctionSpecialized.int_mul(
                             param_1_0,
                             PineValueExtension.ValueFromPathOrEmptyList(
-                                local_008,
+                                local_006,
                                 [1])) == PineValueExtension.ValueFromPathOrEmptyList(
-                            local_008,
+                            local_006,
                             [0]))
                         {
                             return CommonReusedValues.List_ac855cb8;
@@ -301,10 +252,10 @@ public class OptimizeAndEmitDictInsertTests
                             KernelFunctionSpecialized.int_mul(
                                 param_1_0,
                                 PineValueExtension.ValueFromPathOrEmptyList(
-                                    local_008,
+                                    local_006,
                                     [1])),
                             PineValueExtension.ValueFromPathOrEmptyList(
-                                local_008,
+                                local_006,
                                 [0])))
                         {
                             return CommonReusedValues.List_af0e3cad;
