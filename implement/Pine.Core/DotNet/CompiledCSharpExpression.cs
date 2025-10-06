@@ -108,6 +108,15 @@ public record CompiledCSharpExpression(
         if (expression is InvocationExpressionSyntax)
             return false;
 
+        if (expression is ParenthesizedExpressionSyntax)
+            return false;
+
+        if (expression is ThrowExpressionSyntax)
+        {
+            // https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/language-specification/grammar#a3-syntactic-grammar
+            return false;
+        }
+
         return true;
     }
 }
