@@ -348,6 +348,9 @@ public abstract record PineValue : IEquatable<PineValue>
         /// <inheritdoc/>
         public override string ToString()
         {
+            if (Items.Length is 0)
+                return nameof(EmptyList);
+
             return
                 ToString(
                     itemsCount: Items.Length,
@@ -524,6 +527,9 @@ public abstract record PineValue : IEquatable<PineValue>
         /// <inheritdoc/>
         public override string ToString()
         {
+            if (Bytes.Length is 0)
+                return nameof(EmptyBlob);
+
             return
                 nameof(BlobValue) +
                 " { BytesCount = " + CommandLineInterface.FormatIntegerForDisplay(Bytes.Length) + " }";

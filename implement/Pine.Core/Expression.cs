@@ -35,6 +35,12 @@ public abstract record Expression
     public static readonly Expression EnvironmentInstance = new Environment();
 
     /// <summary>
+    /// A <see cref="List"/> expression containing zero items.
+    /// </summary>
+    public static readonly List EmptyList = new([]);
+
+
+    /// <summary>
     /// For a given expression, checks if an equivalent instance is available in the cache of reused instances.
     /// Returns the reused instance if available, otherwise returns the input expression.
     /// </summary>
@@ -68,6 +74,9 @@ public abstract record Expression
     /// </summary>
     public static List ListInstance(IReadOnlyList<Expression> items)
     {
+        if (items.Count is 0)
+            return EmptyList;
+
         var listKey = new List.ListStruct(items);
 
         if (ReusedInstances.Instance.ListExpressions is { } reusedListExpressions)
@@ -117,6 +126,31 @@ public abstract record Expression
         /// Always returns false, as a <see cref="Literal"/> expression does not contain any subexpressions.
         /// </summary>
         public override bool ReferencesEnvironment { get; } = false;
+
+        /// <inheritdoc/>
+        public override string ToString()
+        {
+            string? valueInterpretationString = null;
+
+            if (Value is PineValue.BlobValue blobValue && 0 < blobValue.Bytes.Length)
+            {
+                if (KernelFunction.SignedIntegerFromValueRelaxed(Value) is { } intValue)
+                {
+                    valueInterpretationString = "int " + intValue;
+                }
+
+                if (PopularEncodings.StringEncoding.StringFromBlobValue(blobValue.Bytes).IsOkOrNull() is { } strValue)
+                {
+                    valueInterpretationString = "string \"" + strValue + "\"";
+                }
+            }
+
+            return
+                nameof(Literal) +
+                " { Value = " + Value.ToString() +
+                (valueInterpretationString is not null ? " (" + valueInterpretationString + ")" : "") +
+                " }";
+        }
     }
 
     /// <summary>
@@ -189,6 +223,32 @@ public abstract record Expression
         public override int GetHashCode() =>
             _slimHashCode;
 
+        /// <inheritdoc/>
+        public override string ToString()
+        {
+            return
+                ToShortString(
+                    itemsCount: Items.Count,
+                    subexpressionCount: SubexpressionCount,
+                    referencesEnvironment: ReferencesEnvironment);
+        }
+
+        internal static string ToShortString(
+            int itemsCount,
+            int subexpressionCount,
+            bool referencesEnvironment)
+        {
+            if (itemsCount is 0)
+                return nameof(EmptyList);
+
+            return
+                nameof(List) +
+                " { ItemsCount = " + CommandLineInterface.FormatIntegerForDisplay(itemsCount) +
+                ", SubexpressionCount = " + CommandLineInterface.FormatIntegerForDisplay(subexpressionCount) +
+                ", ReferencesEnvironment = " + referencesEnvironment +
+                " }";
+        }
+
         internal readonly record struct ListStruct
         {
             public IReadOnlyList<Expression> Items { get; }
@@ -202,6 +262,7 @@ public abstract record Expression
                 SlimHashCode = ComputeHashCode(items);
             }
 
+            /// <inheritdoc/>
             public override int GetHashCode()
             {
                 return SlimHashCode;
@@ -217,6 +278,24 @@ public abstract record Expression
                 }
 
                 return hashCode.ToHashCode();
+            }
+
+            /// <inheritdoc/>
+            public bool Equals(ListStruct other)
+            {
+                if (other.SlimHashCode != SlimHashCode)
+                    return false;
+
+                if (other.Items.Count != Items.Count)
+                    return false;
+
+                for (var i = 0; i < Items.Count; ++i)
+                {
+                    if (!other.Items[i].Equals(Items[i]))
+                        return false;
+                }
+
+                return true;
             }
         }
     }
