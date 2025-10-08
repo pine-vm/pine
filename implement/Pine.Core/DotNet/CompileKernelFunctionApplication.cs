@@ -17,7 +17,7 @@ public class CompileKernelFunctionApplication
         IReadOnlyList<PineKernelFunctions.KernelFunctionSpecializedInfo> specializedInterfaces,
         IReadOnlyList<StaticExpression<DeclQualifiedName>> argumentsList,
         bool isCommutative,
-        System.Func<StaticExpression<DeclQualifiedName>, PineKernelFunctions.KernelFunctionParameterType, ExpressionSyntax?> tryRenderArgument,
+        Func<StaticExpression<DeclQualifiedName>, PineKernelFunctions.KernelFunctionParameterType, ExpressionSyntax?> tryRenderArgument,
         DeclarationSyntaxContext declarationSyntaxContext)
     {
         IEnumerable<IReadOnlyList<StaticExpression<DeclQualifiedName>>> EnumerateArgumentsPermutations()
@@ -56,7 +56,7 @@ public class CompileKernelFunctionApplication
     private static CompiledCSharpExpression? TryMatchSpecializedInterfaceWithArgumentsOrder(
         PineKernelFunctions.KernelFunctionSpecializedInfo specializedInterface,
         IReadOnlyList<StaticExpression<DeclQualifiedName>> arguments,
-        System.Func<StaticExpression<DeclQualifiedName>, PineKernelFunctions.KernelFunctionParameterType, ExpressionSyntax?> tryRenderArgument,
+        Func<StaticExpression<DeclQualifiedName>, PineKernelFunctions.KernelFunctionParameterType, ExpressionSyntax?> tryRenderArgument,
         DeclarationSyntaxContext declarationSyntaxContext)
     {
         if (specializedInterface.ParameterTypes.Count != arguments.Count)
@@ -99,21 +99,21 @@ public class CompileKernelFunctionApplication
                 CompiledCSharpExpression.Integer(csharpExpr),
 
                 _ =>
-                throw new System.NotImplementedException(
+                throw new NotImplementedException(
                     "Unknown specialized return type " + specializedInterface.ReturnType)
             };
     }
 
     public static IEnumerable<CompiledCSharpExpression> TryCompileKernelFusion(
         StaticExpression<DeclQualifiedName>.KernelApplication kernelApp,
-        System.Func<IReadOnlyList<int>, ExpressionSyntax?> selfFunctionInterface,
+        Func<IReadOnlyList<int>, ExpressionSyntax?> selfFunctionInterface,
         IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
         IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls,
         DeclarationSyntaxContext declarationSyntaxContext,
         ImmutableDictionary<StaticExpression<DeclQualifiedName>, string> alreadyDeclared)
     {
 
-        TypeSyntax TypeSyntaxFromType(System.Type type)
+        TypeSyntax TypeSyntaxFromType(Type type)
         {
             return CompileTypeSyntax.TypeSyntaxFromType(type, declarationSyntaxContext);
         }

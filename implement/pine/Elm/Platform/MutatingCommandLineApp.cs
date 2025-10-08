@@ -8,6 +8,8 @@ using System.Linq;
 
 using ElmInteractiveEnvironment = Pine.Core.CodeAnalysis.ElmInteractiveEnvironment;
 
+using FunctionRecord = Pine.Core.CodeAnalysis.FunctionRecord;
+
 namespace Pine.Elm.Platform;
 
 /// <summary>
@@ -142,8 +144,8 @@ type Command state
 /// Configuration of an Elm command-line interface (CLI) app.
 /// </summary>
 public record CommandLineAppConfig(
-    ElmInteractiveEnvironment.FunctionRecord InitFromEnvironment,
-    ElmInteractiveEnvironment.FunctionRecord SubscriptionsFromState)
+    FunctionRecord InitFromEnvironment,
+    FunctionRecord SubscriptionsFromState)
 {
     private static readonly Core.CodeAnalysis.PineVMParseCache s_parseCache = new();
 
@@ -206,13 +208,13 @@ public record CommandLineAppConfig(
             .First(field => field.fieldName is "subscriptions").fieldValue;
 
         var initFunctionRecord =
-            ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(
+            FunctionRecord.ParseFunctionRecordTagged(
                 runRootInitFunctionValue,
                 s_parseCache)
             .Extract(err => throw new Exception("Failed parsing init function: " + err));
 
         var subscriptionsFunctionRecord =
-            ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(
+            FunctionRecord.ParseFunctionRecordTagged(
                 runRootSubscriptionsFunctionValue,
                 s_parseCache)
             .Extract(err => throw new Exception("Failed parsing subscriptions function: " + err));
@@ -303,7 +305,7 @@ public record CommandLineAppConfig(
         }
 
         var functionRecord =
-            ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(
+            FunctionRecord.ParseFunctionRecordTagged(
                 functionRecordValue,
                 s_parseCache)
             .Extract(err => throw new Exception("Failed parsing stdIn function record: " + err));

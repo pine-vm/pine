@@ -73,7 +73,7 @@ public record NamesFromCompiledEnv
                 var envClass = PineValueClass.Create([]);
 
                 // Attempt to see if the declaration encodes (or references) a function whose body is directly an environment function.
-                if (ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(decl.Value, parseCache).IsOkOrNull() is { } functionRecord)
+                if (FunctionRecord.ParseFunctionRecordTagged(decl.Value, parseCache).IsOkOrNull() is { } functionRecord)
                 {
                     if (BuildApplicationFromFunctionRecord(functionRecord, arguments: [], parseCache) is { } found)
                     {
@@ -108,7 +108,7 @@ public record NamesFromCompiledEnv
     /// Build a function application from a function record.
     /// </summary>
     public static (PineValue encodedExpr, Expression expr, PineValueClass envValueClass) BuildApplicationFromFunctionRecord(
-        ElmInteractiveEnvironment.FunctionRecord functionRecord,
+        FunctionRecord functionRecord,
         IReadOnlyList<PineValue> arguments,
         PineVMParseCache parseCache)
     {

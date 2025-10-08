@@ -40,7 +40,7 @@ public static class CompileModuleToCSharp
         var functions =
             parsedModule.FunctionDeclarations
             .SelectMany(function => BuildCSharpMethodsFromElmFunction(
-                ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(
+                FunctionRecord.ParseFunctionRecordTagged(
                     function.Value,
                     parseCache)
                 .Extract(err => throw new Exception(err)),
@@ -87,7 +87,7 @@ public static class CompileModuleToCSharp
 
     public static IEnumerable<MethodDeclarationSyntax>
         BuildCSharpMethodsFromElmFunction(
-        ElmInteractiveEnvironment.FunctionRecord functionRecord,
+        FunctionRecord functionRecord,
         string functionName,
         PineVMParseCache parseCache,
         DeclarationSyntaxContext declarationSyntaxContext)
@@ -266,7 +266,7 @@ public static class CompileModuleToCSharp
 
     private static MethodDeclarationSyntax
         BuildCSharpMethodFromElmFunctionUnpackedParams(
-        ElmInteractiveEnvironment.FunctionRecord functionRecord,
+        FunctionRecord functionRecord,
         string functionName,
         ProcedureInterface procedureInterface,
         PineVMParseCache parseCache,
@@ -545,7 +545,7 @@ public static class CompileModuleToCSharp
     }
 
     private static ProcedureInterface UnpackedParams(
-        ElmInteractiveEnvironment.FunctionRecord functionRecord)
+        FunctionRecord functionRecord)
     {
         IReadOnlyList<ReadOnlyMemory<int>> paramPaths =
             [.. UnpackedParamsFiltered(functionRecord.InnerFunction)];

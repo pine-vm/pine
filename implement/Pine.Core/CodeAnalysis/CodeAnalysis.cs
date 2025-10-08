@@ -28,7 +28,7 @@ public class CodeAnalysis
         var namesFromCompiledEnv =
             NamesFromCompiledEnv.FromCompiledEnvironment(parsedEnvironment, parseCache);
 
-        var includedFunctionRecords = new Dictionary<DeclQualifiedName, ElmInteractiveEnvironment.FunctionRecord>();
+        var includedFunctionRecords = new Dictionary<DeclQualifiedName, FunctionRecord>();
 
         foreach (var parsedModule in parsedEnvironment.Modules)
         {
@@ -42,7 +42,7 @@ public class CodeAnalysis
                     continue;
 
                 var functionRecordResult =
-                    ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(decl.Value, parseCache);
+                    FunctionRecord.ParseFunctionRecordTagged(decl.Value, parseCache);
 
                 if (functionRecordResult.IsErrOrNull() is { } err)
                 {
@@ -69,7 +69,7 @@ public class CodeAnalysis
 
     public static (StaticProgram staticProgram, IReadOnlyDictionary<DeclQualifiedName, string> declsFailed)
         ParseAsStaticMonomorphicProgram(
-        IReadOnlyDictionary<DeclQualifiedName, ElmInteractiveEnvironment.FunctionRecord> rootDecls,
+        IReadOnlyDictionary<DeclQualifiedName, FunctionRecord> rootDecls,
         Func<PineValue, PineValueClass, DeclQualifiedName?> nameForDecl,
         PineVMParseCache parseCache)
     {
@@ -288,7 +288,7 @@ public class CodeAnalysis
 
     public static Result<string, ParsedFromSingleRoot>
         ParseAsStaticMonomorphicProgram(
-        ElmInteractiveEnvironment.FunctionRecord functionRecord,
+        FunctionRecord functionRecord,
         Func<PineValue, PineValueClass, bool> dontInline,
         PineVMParseCache parseCache)
     {
@@ -533,7 +533,7 @@ public class CodeAnalysis
                 return true;
             }
 
-            if (ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(value, parseCache).IsOkOrNull() is { } asFunctionRecord)
+            if (FunctionRecord.ParseFunctionRecordTagged(value, parseCache).IsOkOrNull() is { } asFunctionRecord)
             {
                 /*
                  * Adapt to how the assignment of names currently works:
@@ -658,7 +658,9 @@ public class CodeAnalysis
                         childExpr).expr;
 
                 var inlinedExprReduced =
-                    ReducePineExpression.ReduceExpressionBottomUp(inlinedExpr, parseCache);
+                    ReducePineExpression.ReduceExpressionBottomUp(
+                        inlinedExpr,
+                        parseCache);
 
                 return
                 InlineParseAndEvalUsingLiteralFunctionRecursive(
@@ -678,7 +680,7 @@ public class CodeAnalysis
         PineValueClass envValueClass,
         PineVMParseCache parseCache)
     {
-        if (Core.CodeAnalysis.CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(expression) is
+        if (TryParseExpressionAsIndexPathFromEnv(expression) is
             ExprMappedToParentEnv.PathInParentEnv asPath)
         {
             if (envValueClass.TryGetValue(asPath.Path) is { } valueFromEnvClass)
@@ -939,7 +941,7 @@ public class CodeAnalysis
         PineVMParseCache parseCache)
     {
         if (parseAndEval.Encoded.ReferencesEnvironment &&
-            Core.CodeAnalysis.CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(parseAndEval.Encoded) is
+            TryParseExpressionAsIndexPathFromEnv(parseAndEval.Encoded) is
             ExprMappedToParentEnv.PathInParentEnv pathInParentEnv)
         {
             // Try get function value from the environment class:

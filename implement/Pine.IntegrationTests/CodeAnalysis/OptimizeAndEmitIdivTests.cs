@@ -2024,7 +2024,7 @@ public class OptimizeAndEmitIdivTests
             testModule.moduleContent.FunctionDeclarations["idiv"];
 
         var idivFunctionRecord =
-            ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(idivDeclValue, parseCache)
+            FunctionRecord.ParseFunctionRecordTagged(idivDeclValue, parseCache)
             .Extract(err => throw new System.Exception(
                 "Parsing function record for 'idiv' failed: " + err.ToString()));
 

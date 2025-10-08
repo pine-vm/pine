@@ -218,7 +218,7 @@ public sealed class PersistentProcessLive : IAsyncDisposable
             pathToStateInReturnValue: new ReadOnlyMemory<int>([0]));
 
     public static PineValue BuildDatabaseFunctionLogEntry(
-        ElmInteractiveEnvironment.FunctionRecord appliedFunction,
+        FunctionRecord appliedFunction,
         ReadOnlyMemory<int> pathToStateInReturnValue)
     {
         var parametersRemaining =
@@ -237,7 +237,7 @@ public sealed class PersistentProcessLive : IAsyncDisposable
                 appliedFunction.InnerFunction);
 
         return
-            ElmInteractiveEnvironment.EncodeFunctionRecordInValueTagged(
+            FunctionRecord.EncodeFunctionRecordInValueTagged(
                 functionRecord:
                 appliedFunction
                 with
@@ -253,7 +253,7 @@ public sealed class PersistentProcessLive : IAsyncDisposable
         PineVMParseCache pineVMParseCache)
     {
         var parseAsFunctionRecord =
-            ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(
+            FunctionRecord.ParseFunctionRecordTagged(
                 applyFunctionOnLiteralAndState.Function,
                 parseCache: pineVMParseCache);
 

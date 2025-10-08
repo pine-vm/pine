@@ -218,7 +218,7 @@ type alias LoadDependencyStruct =
 
     public record WebServiceConfig(
         WebServiceEventResponse Init,
-        ElmInteractiveEnvironment.FunctionRecord Subscriptions,
+        FunctionRecord Subscriptions,
         ElmTimeJsonAdapter.Parsed JsonAdapter)
     {
         public static ApplyFunctionInput
@@ -267,7 +267,7 @@ type alias LoadDependencyStruct =
             }
 
             var httpRequestFunctionRecord =
-                ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(
+                FunctionRecord.ParseFunctionRecordTagged(
                     httpRequestFieldValue,
                     s_parseCache)
                 .Extract(err => throw new Exception("Failed parsing httpRequest function record: " + err));
@@ -2349,8 +2349,8 @@ type alias LoadDependencyStruct =
         }
 
         var subscriptionsFunctionRecord =
-            ElmInteractiveEnvironment
-            .ParseFunctionRecordFromValueTagged(subscriptionsField, s_parseCache)
+            FunctionRecord
+            .ParseFunctionRecordTagged(subscriptionsField, s_parseCache)
             .Extract(err => throw new Exception("Failed parsing subscriptions function: " + err));
 
         return new WebServiceConfig(

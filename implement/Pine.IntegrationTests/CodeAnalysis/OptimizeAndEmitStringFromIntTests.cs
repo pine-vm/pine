@@ -298,7 +298,7 @@ public class OptimizeAndEmitStringFromIntTests
             stringModule.moduleContent.FunctionDeclarations["fromInt"];
 
         var fromIntFunctionRecord =
-            ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(fromIntDeclValue, parseCache)
+            FunctionRecord.ParseFunctionRecordTagged(fromIntDeclValue, parseCache)
             .Extract(err => throw new System.Exception(
                 "Parsing function record for 'fromInt' failed: " + err.ToString()));
 

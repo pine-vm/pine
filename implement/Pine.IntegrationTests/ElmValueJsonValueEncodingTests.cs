@@ -345,9 +345,10 @@ public class ElmValueJsonValueEncodingTests
         }
 
         var parseEncodeFunctionResult =
-            ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(
+            FunctionRecord.ParseFunctionRecordTagged(
                 encodeFunctionValue,
                 parseCache);
+
         {
             if (parseEncodeFunctionResult.IsErrOrNull() is { } err)
             {

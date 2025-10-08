@@ -12,6 +12,8 @@ using System.Threading.Tasks;
 
 using ElmInteractiveEnvironment = Pine.Core.CodeAnalysis.ElmInteractiveEnvironment;
 
+using FunctionRecord = Pine.Core.CodeAnalysis.FunctionRecord;
+
 namespace Pine.Elm;
 
 public class ElmCompiler
@@ -87,28 +89,28 @@ public class ElmCompiler
 
     public PineValue CompilerEnvironment { get; }
 
-    public ElmInteractiveEnvironment.FunctionRecord CompileParsedInteractiveSubmission { get; }
+    public FunctionRecord CompileParsedInteractiveSubmission { get; }
 
-    public ElmInteractiveEnvironment.FunctionRecord ExpandElmInteractiveEnvironmentWithModules { get; }
+    public FunctionRecord ExpandElmInteractiveEnvironmentWithModules { get; }
 
-    public ElmInteractiveEnvironment.FunctionRecord ParseElmModuleSyntax { get; }
+    public FunctionRecord ParseElmModuleSyntax { get; }
 
-    public ElmInteractiveEnvironment.FunctionRecord? ParseInteractiveSubmission { get; }
+    public FunctionRecord? ParseInteractiveSubmission { get; }
 
     public LanguageServiceInterfaceStruct? LanguageServiceInterface { get; }
 
     public record LanguageServiceInterfaceStruct(
-        ElmInteractiveEnvironment.FunctionRecord InitState,
-        ElmInteractiveEnvironment.FunctionRecord HandleRequestInCurrentWorkspace);
+        FunctionRecord InitState,
+        FunctionRecord HandleRequestInCurrentWorkspace);
 
     private static readonly Core.CodeAnalysis.PineVMParseCache s_parseCache = new();
 
     private ElmCompiler(
         PineValue compilerEnvironment,
-        ElmInteractiveEnvironment.FunctionRecord compileParsedInteractiveSubmission,
-        ElmInteractiveEnvironment.FunctionRecord expandElmInteractiveEnvironmentWithModules,
-        ElmInteractiveEnvironment.FunctionRecord parseElmModuleSyntax,
-        ElmInteractiveEnvironment.FunctionRecord? parseInteractiveSubmission,
+        FunctionRecord compileParsedInteractiveSubmission,
+        FunctionRecord expandElmInteractiveEnvironmentWithModules,
+        FunctionRecord parseElmModuleSyntax,
+        FunctionRecord? parseInteractiveSubmission,
         LanguageServiceInterfaceStruct? languageServiceInterface)
     {
         CompilerEnvironment = compilerEnvironment;

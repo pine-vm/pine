@@ -9,11 +9,11 @@ public record FunctionRecordValueAndParsed
 {
     public PineValue Value { private init; get; }
 
-    public ElmInteractiveEnvironment.FunctionRecord Parsed { private init; get; }
+    public FunctionRecord Parsed { private init; get; }
 
     private FunctionRecordValueAndParsed(
         PineValue value,
-        ElmInteractiveEnvironment.FunctionRecord parsed)
+        FunctionRecord parsed)
     {
         Value = value;
         Parsed = parsed;
@@ -41,7 +41,7 @@ public record FunctionRecordValueAndParsed
         PineVMParseCache parseCache)
     {
         var parseUpdateResult =
-            ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(
+            FunctionRecord.ParseFunctionRecordTagged(
                 value,
                 parseCache);
 

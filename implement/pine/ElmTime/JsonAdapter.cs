@@ -25,7 +25,7 @@ public class ElmTimeJsonAdapter
 
     public record ExposedFunction(
         ExposedFunctionDescription Description,
-        ElmInteractiveEnvironment.FunctionRecord Handler);
+        FunctionRecord Handler);
 
     public record ExposedFunctionDescription(
         ExposedFunctionDescriptionReturnType ReturnType,
@@ -87,7 +87,7 @@ public class ElmTimeJsonAdapter
         /*
          * jsonEncodeAppState : Backend.Main.State -> Json.Encode.Value
          * */
-        ElmInteractiveEnvironment.FunctionRecord JsonEncodeAppState,
+        FunctionRecord JsonEncodeAppState,
         /*
          * jsonDecodeAppState : Json.Decode.Decoder Backend.Main.State
          * */
@@ -101,17 +101,17 @@ public class ElmTimeJsonAdapter
         /*
          * Backend.MigrateState.migrate : PreviousBackendState -> ( Backend.Main.State, Platform.WebService.Commands Backend.Main.State )
          * */
-        ElmInteractiveEnvironment.FunctionRecord? Migrate,
+        FunctionRecord? Migrate,
         /*
          * https://package.elm-lang.org/packages/elm/json/latest/Json-Decode#decodeValue
          * Decoder a -> Value -> Result Error a
          * */
-        ElmInteractiveEnvironment.FunctionRecord JsonDecodeDecodeValue,
+        FunctionRecord JsonDecodeDecodeValue,
         /*
          * https://package.elm-lang.org/packages/elm/json/latest/Json-Decode#decodeString
          * decodeString : Decoder a -> String -> Result Error a
          * */
-        ElmInteractiveEnvironment.FunctionRecord JsonDecodeDecodeString,
+        FunctionRecord JsonDecodeDecodeString,
         /*
          * https://package.elm-lang.org/packages/elm/json/latest/Json-Decode#value
          * value : Decoder Value
@@ -121,7 +121,7 @@ public class ElmTimeJsonAdapter
          * https://package.elm-lang.org/packages/elm/json/latest/Json-Encode#encode
          * encode : Int -> Value -> String
          * */
-        ElmInteractiveEnvironment.FunctionRecord JsonEncodeEncode,
+        FunctionRecord JsonEncodeEncode,
         IReadOnlyList<KeyValuePair<string, ExposedFunction>> ExposedFunctions)
     {
         public static Result<string, Parsed> ParseFromCompiled(
@@ -198,7 +198,7 @@ public class ElmTimeJsonAdapter
             }
 
             var parseJsonEncodeAppStateResult =
-                ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(
+                FunctionRecord.ParseFunctionRecordTagged(
                     jsonEncodeAppStateValue,
                     parseCache);
 
@@ -238,7 +238,7 @@ public class ElmTimeJsonAdapter
             }
 
             var parseDecodeValueFunctionResult =
-                ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(
+                FunctionRecord.ParseFunctionRecordTagged(
                     decodeValueFunctionValue,
                     parseCache);
             {
@@ -265,7 +265,7 @@ public class ElmTimeJsonAdapter
             }
 
             var parseDecodeStringFunctionResult =
-                ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(
+                FunctionRecord.ParseFunctionRecordTagged(
                     decodeStringFunctionValue,
                     parseCache);
 
@@ -314,7 +314,7 @@ public class ElmTimeJsonAdapter
             }
 
             var parseJsonEncodeFunctionResult =
-                ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(
+                FunctionRecord.ParseFunctionRecordTagged(
                     jsonEncodeFunctionValue,
                     parseCache);
             {
@@ -349,7 +349,7 @@ public class ElmTimeJsonAdapter
                 ?
                 null
                 :
-                ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(
+                FunctionRecord.ParseFunctionRecordTagged(
                     migrateFunctionValue,
                     parseCache)
                 .Extract(err => throw new System.Exception("Failed to parse migrate function: " + err));
@@ -515,7 +515,7 @@ public class ElmTimeJsonAdapter
             }
 
             var parseHandlerResult =
-                ElmInteractiveEnvironment.ParseFunctionRecordFromValueTagged(
+                FunctionRecord.ParseFunctionRecordTagged(
                     exposedFunctionHandlerValue,
                     parseCache);
             {
