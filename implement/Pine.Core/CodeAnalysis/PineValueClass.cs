@@ -423,8 +423,7 @@ public record PineValueClass
     /// <returns>A new <see cref="PineValueClass"/> containing only items under the given path.</returns>
     public PineValueClass PartUnderPath(IReadOnlyList<int> path)
     {
-        return Create(
-            [..
+        var filteredUnderPath =
             ParsedItems
             .SelectMany(item =>
             {
@@ -434,7 +433,14 @@ public record PineValueClass
                 }
 
                 return [new KeyValuePair<IReadOnlyList<int>, PineValue>([.. item.Key.Skip(path.Count)], item.Value)];
-            })]);
+            }).ToList();
+
+        if (TryGetValue(path) is { } valueAtPath)
+        {
+            filteredUnderPath.Add(new KeyValuePair<IReadOnlyList<int>, PineValue>([], valueAtPath));
+        }
+
+        return Create(filteredUnderPath);
     }
 
     /// <summary>
