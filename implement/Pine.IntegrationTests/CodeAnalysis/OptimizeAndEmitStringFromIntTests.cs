@@ -83,8 +83,9 @@ public class OptimizeAndEmitStringFromIntTests
                     }
 
                     return
-                        KernelFunctionSpecialized.concat(
-                            CommonReusedValues.List_Single_Blob_Char_hyphen,
+                        KernelFunctionFused.ListPrependItem(
+                            itemToPrepend: CommonReusedValues.Blob_Char_hyphen,
+                            suffix:
                             Global_Anonymous.zzz_anon_12af8dcc_650df00b(
                                 KernelFunction.negate(param_1_0)));
                 }
@@ -191,15 +192,13 @@ public class OptimizeAndEmitStringFromIntTests
                                 local_000;
 
                             PineValue local_param_1_1_temp =
-                                KernelFunctionSpecialized.concat(
-                                    PineValue.List(
-                                        [
-                                            Global_Anonymous.zzz_anon_39fa68f8_2402eeb0(
-                                                KernelFunctionSpecialized.int_add(
-                                                    local_param_1_0,
-                                                    KernelFunctionSpecialized.int_mul(-10, local_000)))
-                                        ]),
-                                    local_param_1_1);
+                                KernelFunctionFused.ListPrependItem(
+                                    itemToPrepend:
+                                    Global_Anonymous.zzz_anon_39fa68f8_2402eeb0(
+                                        KernelFunctionSpecialized.int_add(
+                                            local_param_1_0,
+                                            KernelFunctionSpecialized.int_mul(-10, local_000))),
+                                    suffix: local_param_1_1);
 
                             local_param_1_0 =
                                 local_param_1_0_temp;

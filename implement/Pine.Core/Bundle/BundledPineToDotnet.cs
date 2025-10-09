@@ -154,10 +154,19 @@ public record BundledPineToDotnet(
             new DeclQualifiedName(["String"], "toInt"),
             new DeclQualifiedName(["String"], "fromInt"),
 
+            new DeclQualifiedName(["Dict"], "size"),
             new DeclQualifiedName(["Dict"], "insert"),
             new DeclQualifiedName(["Dict"], "remove"),
 
             new DeclQualifiedName(["Json","Decode"], "parseJsonStringToValue"),
+
+            new DeclQualifiedName(["Bitwise"], "and"),
+            new DeclQualifiedName(["Bitwise"], "complement"),
+            new DeclQualifiedName(["Bitwise"], "or"),
+            new DeclQualifiedName(["Bitwise"], "xor"),
+            new DeclQualifiedName(["Bitwise"], "shiftLeftBy"),
+            new DeclQualifiedName(["Bitwise"], "shiftRightBy"),
+            new DeclQualifiedName(["Bitwise"], "shiftRightZfBy"),
 
             new DeclQualifiedName(["Pine"], "stringFromValue"),
             new DeclQualifiedName(["Pine"], "applyKernelFunction"),

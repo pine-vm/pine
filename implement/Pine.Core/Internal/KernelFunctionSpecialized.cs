@@ -229,6 +229,16 @@ public static class KernelFunctionSpecialized
                 return valueA;
             }
 
+            if (blobA.Bytes.Length is 0)
+            {
+                return valueB;
+            }
+
+            if (blobB.Bytes.Length is 0)
+            {
+                return valueA;
+            }
+
             return PineValue.Blob(BytesConversions.Concat(blobA.Bytes.Span, blobB.Bytes.Span));
         }
 
