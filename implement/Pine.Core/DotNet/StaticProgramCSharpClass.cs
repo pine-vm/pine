@@ -522,7 +522,7 @@ public record StaticProgramCSharpClass(
             var filtered =
                 FilteredLocalsResult.FilterDeclarationsByUsage(
                     newDeclaredStatements,
-                    [trueBranchCompiled.Statement, falseBranchCompiled.Statement],
+                    [conditionExpr, trueBranchCompiled.Statement, falseBranchCompiled.Statement],
                     newlyDeclaredLocals.ToImmutable());
 
             var unionLocals =

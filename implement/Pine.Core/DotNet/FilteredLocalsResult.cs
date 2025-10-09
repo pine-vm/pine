@@ -1,4 +1,5 @@
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -32,15 +33,14 @@ public readonly record struct FilteredLocalsResult(
     /// correct program semantics.</remarks>
     /// <param name="declarations">The list of local variable declarations to analyze for usage and dependencies. Each declaration is expected to
     /// contain a single variable.</param>
-    /// <param name="subsequentStatements">The statements that follow the declarations and may reference the declared local variables. Usage is determined
-    /// based on references found in these statements.</param>
+    /// <param name="usagesRoots">Entry points to search for usages that may reference the declared local variables.</param>
     /// <param name="candidateNames">The set of local variable names that are eligible for filtering. Only declarations with names in this set are
     /// considered.</param>
     /// <returns>A FilteredLocalsResult containing the filtered list of declarations that are used directly or as dependencies,
     /// preserving their original order, and the set of all used local names.</returns>
     public static FilteredLocalsResult FilterDeclarationsByUsage(
         IReadOnlyList<LocalDeclarationStatementSyntax> declarations,
-        IReadOnlyList<StatementSyntax> subsequentStatements,
+        IReadOnlyList<CSharpSyntaxNode> usagesRoots,
         ImmutableHashSet<string> candidateNames)
     {
         // Map local name -> dependencies (other local names) from its initializer
@@ -74,23 +74,24 @@ public readonly record struct FilteredLocalsResult(
         }
 
         // Collect initially used names from subsequent statements
-        var used = new HashSet<string>();
-        foreach (var stmt in subsequentStatements)
-        {
-            foreach (var id in EnumerateReferencedIdentifiers(stmt))
-            {
-                if (candidateNames.Contains(id))
-                {
-                    used.Add(id);
-                }
-            }
-        }
+
+        var allReferencedIdentifiers =
+            usagesRoots
+            .SelectMany(EnumerateReferencedIdentifiers)
+            .ToImmutableHashSet();
+
+        var mutatedUsed =
+            allReferencedIdentifiers
+            .Intersect(candidateNames)
+            .ToHashSet();
 
         // Expand transitively to include dependencies
-        var queue = new Queue<string>(used);
+        var queue = new Queue<string>(mutatedUsed);
+
         while (queue.Count > 0)
         {
             var current = queue.Dequeue();
+
             if (!nameToDeps.TryGetValue(current, out var deps))
             {
                 continue;
@@ -98,7 +99,7 @@ public readonly record struct FilteredLocalsResult(
 
             foreach (var dep in deps)
             {
-                if (used.Add(dep))
+                if (mutatedUsed.Add(dep))
                 {
                     queue.Enqueue(dep);
                 }
@@ -110,10 +111,10 @@ public readonly record struct FilteredLocalsResult(
             declarations.Where(d =>
             {
                 var variable = d.Declaration.Variables.FirstOrDefault();
-                return variable is not null && used.Contains(variable.Identifier.ValueText);
+                return variable is not null && mutatedUsed.Contains(variable.Identifier.ValueText);
             }).ToImmutableArray();
 
-        return new FilteredLocalsResult(filteredDecls, [.. used]);
+        return new FilteredLocalsResult(filteredDecls, [.. mutatedUsed]);
     }
 
     /// <summary>
@@ -122,7 +123,8 @@ public readonly record struct FilteredLocalsResult(
     /// </summary>
     private static IEnumerable<string> EnumerateReferencedIdentifiers(SyntaxNode syntaxNode)
     {
-        return syntaxNode
+        return
+            syntaxNode
             .DescendantNodesAndSelf()
             .OfType<IdentifierNameSyntax>()
             .Select(identifier => identifier.Identifier.ValueText);
