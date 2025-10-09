@@ -257,7 +257,7 @@ public enum StackInstructionKind
 
     Blob_Trim_Leading_Zeros,
 
-    Starts_With_Const,
+    Starts_With_Const_At_Offset_Var,
 }
 
 /// <summary>
@@ -498,8 +498,8 @@ public record StackInstruction(
     public static StackInstruction Blob_Trim_Leading_Zeros(int minRemainingCount) =>
         new(StackInstructionKind.Blob_Trim_Leading_Zeros, TakeCount: minRemainingCount);
 
-    public static StackInstruction Starts_With_Const(PineValue startValue) =>
-        new(StackInstructionKind.Starts_With_Const, Literal: startValue);
+    public static StackInstruction Starts_With_Const_At_Offset_Var(PineValue startValue) =>
+        new(StackInstructionKind.Starts_With_Const_At_Offset_Var, Literal: startValue);
 
 
     public override string ToString()
@@ -1028,13 +1028,14 @@ public record StackInstruction(
                     PushCount: 1,
                     []),
 
-            StackInstructionKind.Starts_With_Const =>
+            StackInstructionKind.Starts_With_Const_At_Offset_Var =>
                 new InstructionDetails(
-                    PopCount: 1,
+                    PopCount: 2,
                     PushCount: 1,
                     [literalDisplayString(instruction.Literal
-                    ?? throw new Exception(
-                        "Missing Literal for IsBlobStartingWithConst instruction"))]),
+                        ??
+                        throw new Exception("Missing Literal for Starts_With_Const_At_Offset_Var instruction"))
+                    ]),
 
             var otherKind =>
             throw new NotImplementedException(

@@ -702,17 +702,47 @@ public class PineIRCompiler
     {
         if (KernelApplication_Equal_TryParse_Starting_With(input, parseCache) is { } startingWith)
         {
-            var afterExpr =
-                CompileExpressionTransitive(
-                    startingWith.expr,
-                    context,
-                    prior,
-                    parseCache);
+            if (startingWith.expr is Expression.KernelApplication startingWithKernelApp &&
+                startingWithKernelApp.Function is nameof(KernelFunction.skip) &&
+                startingWithKernelApp.Input is Expression.List skipList &&
+                skipList.Items.Count is 2)
+            {
+                var afterSliced =
+                    CompileExpressionTransitive(
+                        skipList.Items[1],
+                        context,
+                        prior,
+                        parseCache);
 
-            return
-                afterExpr
-                .AppendInstruction(
-                    StackInstruction.Starts_With_Const(startingWith.start));
+                var afterSkipCount =
+                    CompileExpressionTransitive(
+                        skipList.Items[0],
+                        context,
+                        afterSliced,
+                        parseCache);
+
+                return
+                    afterSkipCount
+                    .AppendInstruction(
+                        StackInstruction.Starts_With_Const_At_Offset_Var(startingWith.start));
+
+            }
+
+            {
+                var afterSliced =
+                    CompileExpressionTransitive(
+                        startingWith.expr,
+                        context,
+                        prior,
+                        parseCache);
+
+                return
+                    afterSliced
+                    .AppendInstruction(
+                        StackInstruction.Push_Literal(IntegerEncoding.EncodeSignedInteger(0)))
+                    .AppendInstruction(
+                        StackInstruction.Starts_With_Const_At_Offset_Var(startingWith.start));
+            }
         }
 
         if (input is Expression.List listExpr)
@@ -1679,7 +1709,10 @@ public class PineIRCompiler
                     prior,
                     parseCache)
                 .AppendInstruction(
-                    StackInstruction.Starts_With_Const(PineValue.BlobSingleByte(isIntegerWithSign.sign)));
+                    StackInstruction.Push_Literal(
+                        IntegerEncoding.EncodeSignedInteger(0)))
+                .AppendInstruction(
+                    StackInstruction.Starts_With_Const_At_Offset_Var(PineValue.BlobSingleByte(isIntegerWithSign.sign)));
         }
 
         if (input is Expression.List listExpr)

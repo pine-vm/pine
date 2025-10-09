@@ -2694,54 +2694,76 @@ public class PineVM : IPineVM
                             continue;
                         }
 
-                    case StackInstructionKind.Starts_With_Const:
+                    case StackInstructionKind.Starts_With_Const_At_Offset_Var:
                         {
                             var prefixValue =
                                 currentInstruction.Literal
                                 ??
                                 throw new Exception("Invalid operation form: Missing prefix value");
 
-                            var value = currentFrame.PopTopmostFromStack();
+                            var skipCountValue = currentFrame.PopTopmostFromStack();
+
+                            var slicedValue = currentFrame.PopTopmostFromStack();
 
                             var resultValue = PineKernelValues.FalseValue;
 
-                            if (prefixValue is PineValue.BlobValue prefixBlob)
+                            if (KernelFunction.SignedIntegerFromValueRelaxed(skipCountValue) is { } skipCount)
                             {
-                                if (value is PineValue.BlobValue valueBlob)
+                                if (prefixValue is PineValue.BlobValue prefixBlob)
                                 {
-                                    var valueBytes = valueBlob.Bytes.Span;
-
-                                    if (valueBytes.Length >= prefixBlob.Bytes.Length &&
-                                        valueBytes[..prefixBlob.Bytes.Length].SequenceEqual(prefixBlob.Bytes.Span))
+                                    if (slicedValue is PineValue.BlobValue slicedValueBlob)
                                     {
-                                        resultValue = PineKernelValues.TrueValue;
+                                        var sliceLength = slicedValueBlob.Bytes.Length - skipCount;
+
+                                        if (sliceLength >= prefixBlob.Bytes.Length)
+                                        {
+                                            var valueBytes = slicedValueBlob.Bytes.Span;
+
+                                            if (valueBytes
+                                                .Slice(start: (int)skipCount, length: prefixBlob.Bytes.Length)
+                                                .SequenceEqual(prefixBlob.Bytes.Span))
+                                            {
+                                                resultValue = PineKernelValues.TrueValue;
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if (prefixValue is PineValue.ListValue prefixList)
+                                {
+                                    if (slicedValue is PineValue.ListValue slicedValueList)
+                                    {
+                                        var sliceLength = slicedValueList.Items.Length - skipCount;
+
+                                        if (sliceLength >= prefixList.Items.Length)
+                                        {
+                                            var allItemsMatch = true;
+
+                                            for (var i = 0; i < prefixList.Items.Length; i++)
+                                            {
+                                                if (slicedValueList.Items.Span[i] != prefixList.Items.Span[i])
+                                                {
+                                                    allItemsMatch = false;
+                                                    break;
+                                                }
+                                            }
+
+                                            if (allItemsMatch)
+                                            {
+                                                resultValue = PineKernelValues.TrueValue;
+                                            }
+                                        }
                                     }
                                 }
                             }
-
-                            if (prefixValue is PineValue.ListValue prefixList)
+                            else
                             {
-                                if (value is PineValue.ListValue valueList)
-                                {
-                                    if (valueList.Items.Length >= prefixList.Items.Length)
-                                    {
-                                        var allItemsMatch = true;
-
-                                        for (var i = 0; i < prefixList.Items.Length; i++)
-                                        {
-                                            if (valueList.Items.Span[i] != prefixList.Items.Span[i])
-                                            {
-                                                allItemsMatch = false;
-                                                break;
-                                            }
-                                        }
-
-                                        if (allItemsMatch)
-                                        {
-                                            resultValue = PineKernelValues.TrueValue;
-                                        }
-                                    }
-                                }
+                                resultValue =
+                                    prefixValue == PineValue.EmptyList
+                                    ?
+                                    PineKernelValues.TrueValue
+                                    :
+                                    PineKernelValues.FalseValue;
                             }
 
                             currentFrame.PushInstructionResult(resultValue);

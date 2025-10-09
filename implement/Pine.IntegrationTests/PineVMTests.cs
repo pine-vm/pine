@@ -2427,7 +2427,10 @@ public class PineVMTests
                     [
                         StackInstruction.Push_Environment,
 
-                        StackInstruction.Starts_With_Const(
+                        StackInstruction.Push_Literal(
+                            IntegerEncoding.EncodeSignedInteger(0)),
+
+                        StackInstruction.Starts_With_Const_At_Offset_Var(
                             PineValue.BlobSingleByte(4)),
 
                         StackInstruction.Return,
@@ -2454,7 +2457,10 @@ public class PineVMTests
                     [
                         StackInstruction.Push_Environment,
 
-                        StackInstruction.Starts_With_Const(
+                        StackInstruction.Push_Literal(
+                            IntegerEncoding.EncodeSignedInteger(0)),
+
+                        StackInstruction.Starts_With_Const_At_Offset_Var(
                             PineValue.BlobSingleByte(2)),
 
                         StackInstruction.Return,
@@ -2489,7 +2495,10 @@ public class PineVMTests
                     [
                         StackInstruction.Push_Environment,
 
-                        StackInstruction.Starts_With_Const(
+                        StackInstruction.Push_Literal(
+                            IntegerEncoding.EncodeSignedInteger(0)),
+
+                        StackInstruction.Starts_With_Const_At_Offset_Var(
                             PineValue.EmptyBlob),
 
                         StackInstruction.Return,
