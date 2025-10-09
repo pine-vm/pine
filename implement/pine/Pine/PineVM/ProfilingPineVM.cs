@@ -1,11 +1,11 @@
-using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Collections.Immutable;
-using System.Linq;
 using Pine.Core;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.PineVM;
 using Pine.Core.PopularEncodings;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Collections.Immutable;
+using System.Linq;
 using ExpressionUsageRecord = System.Collections.Generic.Dictionary<Pine.Core.PineValue, Pine.PineVM.ExpressionEnvUsageRecord>;
 
 namespace Pine.PineVM;
@@ -87,9 +87,11 @@ public class ProfilingPineVM
     {
         ConcurrentDictionary<Expression, CodeAnalysis.ExprAnalysis> exprAnalysisMutatedCache = new();
 
-        var analysisVM = new PineVM(
-            evalCache: analysisEvalCache?.EvalCache,
-            overrideInvocations: overrideInvocations);
+        var analysisVM =
+            new PineVM(
+                evalCache: analysisEvalCache?.EvalCache,
+                overrideInvocations: overrideInvocations,
+                precompiledLeaves: ImmutableDictionary<PineValue, System.Func<PineValue, PineValue?>>.Empty);
 
         PineVM =
             new PineVM(
