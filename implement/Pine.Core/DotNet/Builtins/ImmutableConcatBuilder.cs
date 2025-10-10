@@ -114,9 +114,16 @@ public abstract record ImmutableConcatBuilder
 
             var currentIndex = 0;
 
-            void FlattenItem(ImmutableConcatBuilder item)
+            // Use an explicit stack to avoid deep recursion when the tree degenerates into a chain.
+            var stack = new Stack<(ImmutableConcatBuilder Builder, int NextChildIndex)>();
+
+            stack.Push((this, 0));
+
+            while (stack.Count > 0)
             {
-                switch (item)
+                var (builder, nextChildIndex) = stack.Pop();
+
+                switch (builder)
                 {
                     case Leaf leaf:
                         {
@@ -130,9 +137,10 @@ public abstract record ImmutableConcatBuilder
 
                     case Node node:
                         {
-                            foreach (var child in node.Items)
+                            if (nextChildIndex < node.Items.Count)
                             {
-                                FlattenItem(child);
+                                stack.Push((node, nextChildIndex + 1));
+                                stack.Push((node.Items[nextChildIndex], 0));
                             }
 
                             break;
@@ -140,13 +148,8 @@ public abstract record ImmutableConcatBuilder
 
                     default:
                         throw new System.NotImplementedException(
-                            "Unrecognized ImmutableConcatBuilder variant: " + item.GetType().FullName);
+                            "Unrecognized ImmutableConcatBuilder variant: " + builder.GetType().FullName);
                 }
-            }
-
-            foreach (var item in Items)
-            {
-                FlattenItem(item);
             }
 
             return Internal.KernelFunctionSpecialized.concat(flattenedItems);
