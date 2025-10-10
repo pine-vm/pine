@@ -192,7 +192,7 @@ public record StaticProgramCSharpClass(
                         // Since the current version does not return any type info along with the expression, evaluate first.
 
                         return
-                        PineCSharpSyntaxFactory.EvaluateMutatingConcatBuilderSyntax(
+                        PineCSharpSyntaxFactory.EvaluateImmutableConcatBuilderSyntax(
                             SyntaxFactory.IdentifierName(localName));
                     }
 
@@ -329,16 +329,16 @@ public record StaticProgramCSharpClass(
                                     .AsGenericValue(declarationSyntaxContext))
                                 .ToImmutableArray();
 
-                            var builderInvocation =
+                            var updatedBuilderExpr =
                                 mutation.Kind switch
                                 {
                                     StaticExpressionExtension.ConcatBuilderMutationKind.Append =>
-                                        PineCSharpSyntaxFactory.AppendItemsToMutatingConcatBuilderSyntax(
+                                        PineCSharpSyntaxFactory.AppendItemsToImmutableConcatBuilderSyntax(
                                             SyntaxFactory.IdentifierName(localName),
                                             appendedItemsCompiled),
 
                                     StaticExpressionExtension.ConcatBuilderMutationKind.Prepend =>
-                                        PineCSharpSyntaxFactory.PrependItemsToMutatingConcatBuilderSyntax(
+                                        PineCSharpSyntaxFactory.PrependItemsToImmutableConcatBuilderSyntax(
                                             SyntaxFactory.IdentifierName(localName),
                                             appendedItemsCompiled),
 
@@ -347,7 +347,12 @@ public record StaticProgramCSharpClass(
                                             "Unknown concat builder mutation kind: " + mutation.Kind)
                                 };
 
-                            mutatingUpdates.Add(SyntaxFactory.ExpressionStatement(builderInvocation));
+                            mutatingUpdates.Add(
+                                SyntaxFactory.ExpressionStatement(
+                                    SyntaxFactory.AssignmentExpression(
+                                        SyntaxKind.SimpleAssignmentExpression,
+                                        SyntaxFactory.IdentifierName(localName),
+                                        updatedBuilderExpr)));
                         }
                         else if (paramsAsSliceBuilders.Contains(paramPath))
                         {
@@ -487,7 +492,7 @@ public record StaticProgramCSharpClass(
                         throw new System.Exception("Internal error: Missing local for param path.");
 
                     var evaluated =
-                        PineCSharpSyntaxFactory.EvaluateMutatingConcatBuilderSyntax(
+                        PineCSharpSyntaxFactory.EvaluateImmutableConcatBuilderSyntax(
                             SyntaxFactory.IdentifierName(localName));
 
                     return [ResultThrowOrReturn(evaluated)];
@@ -529,13 +534,13 @@ public record StaticProgramCSharpClass(
                 if (paramsAsConcatBuilders.Contains(paramPath))
                 {
                     var initExpr =
-                        PineCSharpSyntaxFactory.CreateMutatingConcatBuilderSyntax(
+                        PineCSharpSyntaxFactory.CreateImmutableConcatBuilderSyntax(
                             SyntaxFactory.CollectionExpression(
                                 SyntaxFactory.SeparatedList<CollectionElementSyntax>(
                                     [SyntaxFactory.ExpressionElement(origParamRef)])),
                             declarationSyntaxContext);
 
-                    return (typeof(Core.DotNet.Builtins.MutatingConcatBuilder), initExpr);
+                    return (typeof(Core.DotNet.Builtins.ImmutableConcatBuilder), initExpr);
                 }
 
                 if (paramsAsSliceBuilders.Contains(paramPath))
@@ -1217,9 +1222,9 @@ public record StaticProgramCSharpClass(
                     SyntaxFactory.IdentifierName(existingVar.identifier))
                 ],
 
-                LocalType.MutatingConcatBuilder =>
+                LocalType.ImmutableConcatBuilder =>
                 [CompiledCSharpExpression.Generic(
-                    PineCSharpSyntaxFactory.EvaluateMutatingConcatBuilderSyntax(
+                    PineCSharpSyntaxFactory.EvaluateImmutableConcatBuilderSyntax(
                         SyntaxFactory.IdentifierName(existingVar.identifier)))
                 ],
 

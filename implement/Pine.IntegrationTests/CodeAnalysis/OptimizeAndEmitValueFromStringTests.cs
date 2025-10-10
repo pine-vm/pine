@@ -193,8 +193,8 @@ public class OptimizeAndEmitValueFromStringTests
                     PineValue param_1_0,
                     PineValue param_1_1)
                 {
-                    MutatingConcatBuilder local_param_1_0 =
-                        MutatingConcatBuilder.Create(
+                    ImmutableConcatBuilder local_param_1_0 =
+                        ImmutableConcatBuilder.Create(
                             [param_1_0]);
 
                     ImmutableSliceBuilder local_param_1_1 =
@@ -212,14 +212,15 @@ public class OptimizeAndEmitValueFromStringTests
                         if (!(local_param_1_1.GetLength() == 0))
                         {
                             {
-                                local_param_1_0.PrependItems(
-                                    [
-                                        PineValue.List(
-                                            [
-                                                Test.blobBytesFromChar(
-                                                    local_param_1_1.GetHead())
-                                            ])
-                                    ]);
+                                local_param_1_0 =
+                                    local_param_1_0.PrependItems(
+                                        [
+                                            PineValue.List(
+                                                [
+                                                    Test.blobBytesFromChar(
+                                                        local_param_1_1.GetHead())
+                                                ])
+                                        ]);
 
                                 local_param_1_1 =
                                     local_param_1_1.Skip(CommonReusedValues.Blob_Int_1);
@@ -269,8 +270,8 @@ public class OptimizeAndEmitValueFromStringTests
                     PineValue local_param_1_0 =
                         param_1_0;
 
-                    MutatingConcatBuilder local_param_1_1 =
-                        MutatingConcatBuilder.Create(
+                    ImmutableConcatBuilder local_param_1_1 =
+                        ImmutableConcatBuilder.Create(
                             [param_1_1]);
 
                     PineValue local_param_1_2 =
@@ -290,11 +291,12 @@ public class OptimizeAndEmitValueFromStringTests
                             PineValue local_param_1_0_temp =
                                 KernelFunctionSpecialized.int_add(4, local_param_1_0);
 
-                            local_param_1_1.AppendItems(
-                                [
-                                    PineValue.List(
-                                        [local_000])
-                                ]);
+                            local_param_1_1 =
+                                local_param_1_1.AppendItems(
+                                    [
+                                        PineValue.List(
+                                            [local_000])
+                                    ]);
 
                             local_param_1_0 =
                                 local_param_1_0_temp;

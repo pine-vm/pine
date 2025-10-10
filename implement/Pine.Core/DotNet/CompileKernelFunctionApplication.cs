@@ -107,7 +107,7 @@ public class CompileKernelFunctionApplication
     public static IEnumerable<CompiledCSharpExpression> TryCompileKernelFusion(
         StaticExpression<DeclQualifiedName>.KernelApplication kernelApp,
         Func<IReadOnlyList<int>, ExpressionSyntax?> selfFunctionInterface,
-        System.Func<StaticExpression<DeclQualifiedName>, CompiledCSharpExpression?> generalOverride,
+        Func<StaticExpression<DeclQualifiedName>, CompiledCSharpExpression?> generalOverride,
         IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
         IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls,
         DeclarationSyntaxContext declarationSyntaxContext,

@@ -8,9 +8,9 @@ public enum LocalType
     Evaluated = 10,
 
     /// <summary>
-    /// <see cref="Builtins.MutatingConcatBuilder"/>
+    /// <see cref="Builtins.ImmutableConcatBuilder"/>
     /// </summary>
-    MutatingConcatBuilder = 20,
+    ImmutableConcatBuilder = 20,
 
     /// <summary>
     /// <see cref="Builtins.ImmutableSliceBuilder"/>

@@ -277,6 +277,24 @@ public static class PineCSharpSyntaxFactory
                     SyntaxFactory.Argument(seedItemsCollectionSyntax))));
 
     /// <summary>
+    /// Invoke <see cref="Builtins.ImmutableConcatBuilder.Create(IEnumerable{PineValue})"/>
+    /// </summary>
+    public static InvocationExpressionSyntax CreateImmutableConcatBuilderSyntax(
+        ExpressionSyntax seedItemsCollectionSyntax,
+        DeclarationSyntaxContext declarationSyntaxContext) =>
+        SyntaxFactory.InvocationExpression(
+            SyntaxFactory.MemberAccessExpression(
+                SyntaxKind.SimpleMemberAccessExpression,
+                CompileTypeSyntax.TypeSyntaxFromType(
+                    typeof(Builtins.ImmutableConcatBuilder),
+                    declarationSyntaxContext),
+                SyntaxFactory.IdentifierName(nameof(Builtins.ImmutableConcatBuilder.Create))))
+        .WithArgumentList(
+            SyntaxFactory.ArgumentList(
+                SyntaxFactory.SingletonSeparatedList(
+                    SyntaxFactory.Argument(seedItemsCollectionSyntax))));
+
+    /// <summary>
     /// Invoke <see cref="Builtins.MutatingConcatBuilder.Evaluate"/>
     /// </summary>
     public static InvocationExpressionSyntax EvaluateMutatingConcatBuilderSyntax(
@@ -288,6 +306,20 @@ public static class PineCSharpSyntaxFactory
                     SyntaxKind.SimpleMemberAccessExpression,
                     builderSyntax,
                     SyntaxFactory.IdentifierName(nameof(Builtins.MutatingConcatBuilder.Evaluate))));
+    }
+
+    /// <summary>
+    /// Invoke <see cref="Builtins.ImmutableConcatBuilder.Evaluate"/>
+    /// </summary>
+    public static InvocationExpressionSyntax EvaluateImmutableConcatBuilderSyntax(
+        ExpressionSyntax builderSyntax)
+    {
+        return
+            SyntaxFactory.InvocationExpression(
+                SyntaxFactory.MemberAccessExpression(
+                    SyntaxKind.SimpleMemberAccessExpression,
+                    builderSyntax,
+                    SyntaxFactory.IdentifierName(nameof(Builtins.ImmutableConcatBuilder.Evaluate))));
     }
 
     /// <summary>
@@ -311,6 +343,26 @@ public static class PineCSharpSyntaxFactory
     }
 
     /// <summary>
+    /// Invoke <see cref="Builtins.ImmutableConcatBuilder.AppendItems(IEnumerable{PineValue})"/>
+    /// </summary>
+    public static InvocationExpressionSyntax AppendItemsToImmutableConcatBuilderSyntax(
+        ExpressionSyntax builderSyntax,
+        IReadOnlyList<ExpressionSyntax> itemsSyntaxes)
+    {
+        return
+            SyntaxFactory.InvocationExpression(
+                SyntaxFactory.MemberAccessExpression(
+                    SyntaxKind.SimpleMemberAccessExpression,
+                    builderSyntax,
+                    SyntaxFactory.IdentifierName(nameof(Builtins.ImmutableConcatBuilder.AppendItems))))
+            .WithArgumentList(
+                SyntaxFactory.ArgumentList(
+                    SyntaxFactory.SingletonSeparatedList(
+                        SyntaxFactory.Argument(SyntaxFactory.CollectionExpression(
+                            [.. itemsSyntaxes.Select(SyntaxFactory.ExpressionElement)])))));
+    }
+
+    /// <summary>
     /// Invoke <see cref="Builtins.MutatingConcatBuilder.PrependItems(IEnumerable{PineValue})"/>
     /// </summary>
     public static InvocationExpressionSyntax PrependItemsToMutatingConcatBuilderSyntax(
@@ -323,6 +375,26 @@ public static class PineCSharpSyntaxFactory
                     SyntaxKind.SimpleMemberAccessExpression,
                     builderSyntax,
                     SyntaxFactory.IdentifierName(nameof(Builtins.MutatingConcatBuilder.PrependItems))))
+            .WithArgumentList(
+                SyntaxFactory.ArgumentList(
+                    SyntaxFactory.SingletonSeparatedList(
+                        SyntaxFactory.Argument(SyntaxFactory.CollectionExpression(
+                            [.. itemsSyntaxes.Select(SyntaxFactory.ExpressionElement)])))));
+    }
+
+    /// <summary>
+    /// Invoke <see cref="Builtins.ImmutableConcatBuilder.PrependItems(IEnumerable{PineValue})"/>
+    /// </summary>
+    public static InvocationExpressionSyntax PrependItemsToImmutableConcatBuilderSyntax(
+        ExpressionSyntax builderSyntax,
+        IReadOnlyList<ExpressionSyntax> itemsSyntaxes)
+    {
+        return
+            SyntaxFactory.InvocationExpression(
+                SyntaxFactory.MemberAccessExpression(
+                    SyntaxKind.SimpleMemberAccessExpression,
+                    builderSyntax,
+                    SyntaxFactory.IdentifierName(nameof(Builtins.ImmutableConcatBuilder.PrependItems))))
             .WithArgumentList(
                 SyntaxFactory.ArgumentList(
                     SyntaxFactory.SingletonSeparatedList(
