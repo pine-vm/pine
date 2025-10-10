@@ -311,6 +311,26 @@ public static class PineCSharpSyntaxFactory
     }
 
     /// <summary>
+    /// Invoke <see cref="Builtins.MutatingConcatBuilder.PrependItems(IEnumerable{PineValue})"/>
+    /// </summary>
+    public static InvocationExpressionSyntax PrependItemsToMutatingConcatBuilderSyntax(
+        ExpressionSyntax builderSyntax,
+        IReadOnlyList<ExpressionSyntax> itemsSyntaxes)
+    {
+        return
+            SyntaxFactory.InvocationExpression(
+                SyntaxFactory.MemberAccessExpression(
+                    SyntaxKind.SimpleMemberAccessExpression,
+                    builderSyntax,
+                    SyntaxFactory.IdentifierName(nameof(Builtins.MutatingConcatBuilder.PrependItems))))
+            .WithArgumentList(
+                SyntaxFactory.ArgumentList(
+                    SyntaxFactory.SingletonSeparatedList(
+                        SyntaxFactory.Argument(SyntaxFactory.CollectionExpression(
+                            [.. itemsSyntaxes.Select(SyntaxFactory.ExpressionElement)])))));
+    }
+
+    /// <summary>
     /// Invoke <see cref="Builtins.ImmutableSliceBuilder.Create(PineValue)"/>
     /// </summary>
     public static InvocationExpressionSyntax CreateImmutableSliceBuilderSyntax(

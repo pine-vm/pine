@@ -19,6 +19,7 @@ public static class StaticExpressionExtension
     /// Derives the implicit parameter list for a function from its body.
     /// </summary>
     /// <param name="functionBody">The static expression representing the function body.</param>
+    /// <param name="ignoreDeterminedByEnv">Mapping of environment paths that produce predetermined values and should be ignored.</param>
     /// <returns>
     /// A list of distinct paths to the environment expression used anywhere in <paramref name="functionBody"/>.
     /// </returns>
@@ -559,33 +560,77 @@ public static class StaticExpressionExtension
     }
 
     /// <summary>
-    /// If the argument at <paramref name="paramPath"/> within the given function application is a
-    /// concatenation of the same parameter path with additional items, return those appended items.
+    /// Distinguishes whether a concat builder mutation appends or prepends items relative to the tracked parameter.
     /// </summary>
+    public enum ConcatBuilderMutationKind
+    {
+        /// <summary>
+        /// Items are appended after the tracked parameter segment.
+        /// </summary>
+        Append = 10,
+
+        /// <summary>
+        /// Items are inserted before the tracked parameter segment.
+        /// </summary>
+        Prepend = 20,
+    }
+
+    /// <summary>
+    /// Describes how a concat builder parameter is mutated within a function application.
+    /// </summary>
+    /// <typeparam name="TFunctionName">Type of user-defined function identifiers.</typeparam>
+    public readonly record struct ConcatBuilderMutation<TFunctionName>
+    {
+        /// <summary>
+        /// Creates a new mutation description.
+        /// </summary>
+        /// <param name="kind">Whether the mutation appends or prepends segments.</param>
+        /// <param name="items">The sequence of expressions participating in the mutation.</param>
+        public ConcatBuilderMutation(
+            ConcatBuilderMutationKind kind,
+            IReadOnlyList<StaticExpression<TFunctionName>> items)
+        {
+            Kind = kind;
+            Items = items;
+        }
+
+        /// <summary>
+        /// Whether items are appended or prepended relative to the tracked parameter.
+        /// </summary>
+        public ConcatBuilderMutationKind Kind { get; }
+
+        /// <summary>
+        /// The sequence of expressions contributing additional concat segments.
+        /// </summary>
+        public IReadOnlyList<StaticExpression<TFunctionName>> Items { get; }
+    }
+
+    /// <summary>
+    /// Parse the argument at <paramref name="paramPath"/> within <paramref name="funcAppExpr"/> as a concatenation
+    /// involving the same parameter path and return the associated builder mutation, if any.
+    /// </summary>
+    /// <typeparam name="TFunctionName">Type of user-defined function identifiers.</typeparam>
     /// <param name="funcAppExpr">The function application expression whose arguments are inspected.</param>
     /// <param name="paramPath">The path (list indices) to locate within <paramref name="funcAppExpr"/> arguments.</param>
     /// <returns>
-    /// The sequence of expressions appended after the recursive reference to <paramref name="paramPath"/>,
-    /// or <c>null</c> if the shape does not match <c>concat [ path-to-env(paramPath), ...items ]</c> exactly.
+    /// A <see cref="ConcatBuilderMutation{TFunctionName}"/> describing whether items are appended or prepended relative to
+    /// <paramref name="paramPath"/>, or <c>null</c> if the expression does not match the expected
+    /// <see cref="KernelFunction.concat"/> shape.
     /// </returns>
-    /// <remarks>
-    /// This recognizes an expression of the form <c>concat [ P, x1, x2, ... ]</c> where <c>P</c> is an encoded path to the
-    /// environment that is equal to <paramref name="paramPath"/>. If the argument located at <paramref name="paramPath"/>
-    /// cannot be fully resolved within the arguments list, or does not have this <see cref="KernelFunction.concat"/> shape,
-    /// the method returns <c>null</c>.
-    /// </remarks>
-    public static IReadOnlyList<StaticExpression<DeclQualifiedName>>?
-        ParseParamPathAsAppendItemsInFunctionApplication(
-        StaticExpression<DeclQualifiedName>.FunctionApplication funcAppExpr,
+    public static ConcatBuilderMutation<TFunctionName>?
+        ParseParamPathAsConcatBuilderMutationInFunctionApplication<TFunctionName>(
+        StaticExpression<TFunctionName>.FunctionApplication funcAppExpr,
         IReadOnlyList<int> paramPath)
     {
         var (subexpr, pathRemaining) =
             GetSubexpressionAtPath(funcAppExpr.Arguments, paramPath);
 
         if (pathRemaining.Count is not 0)
+        {
             return null;
+        }
 
-        if (subexpr is not StaticExpression<DeclQualifiedName>.KernelApplication kernelApp)
+        if (subexpr is not StaticExpression<TFunctionName>.KernelApplication kernelApp)
         {
             return null;
         }
@@ -595,7 +640,7 @@ public static class StaticExpressionExtension
             return null;
         }
 
-        if (kernelApp.Input is not StaticExpression<DeclQualifiedName>.List concatInputList)
+        if (kernelApp.Input is not StaticExpression<TFunctionName>.List concatInputList)
         {
             return null;
         }
@@ -607,21 +652,63 @@ public static class StaticExpressionExtension
 
         var firstItem = concatInputList.Items[0];
 
-        // First item must be a recursive reference to the same parameter path
-
         if (TryParseAsPathToExpression(
             firstItem,
-            StaticExpression<DeclQualifiedName>.EnvironmentInstance) is not { } firstItemPath)
+            StaticExpression<TFunctionName>.EnvironmentInstance) is { } firstItemPath &&
+            IntPathEqualityComparer.Instance.Equals(firstItemPath, paramPath))
         {
-            return null;
+            if (concatInputList.Items.Count <= 1)
+            {
+                return null;
+            }
+
+            return new ConcatBuilderMutation<TFunctionName>(
+                ConcatBuilderMutationKind.Append,
+                [.. concatInputList.Items.Skip(1)]);
         }
 
-        if (!IntPathEqualityComparer.Instance.Equals(firstItemPath, paramPath))
+        var lastItem = concatInputList.Items[^1];
+
+        if (TryParseAsPathToExpression(
+            lastItem,
+            StaticExpression<TFunctionName>.EnvironmentInstance) is { } lastItemPath &&
+            IntPathEqualityComparer.Instance.Equals(lastItemPath, paramPath))
         {
-            return null;
+            if (concatInputList.Items.Count <= 1)
+            {
+                return null;
+            }
+
+            return new ConcatBuilderMutation<TFunctionName>(
+                ConcatBuilderMutationKind.Prepend,
+                [.. concatInputList.Items.Take(concatInputList.Items.Count - 1)]);
         }
 
-        return [.. concatInputList.Items.Skip(1)];
+        return null;
+    }
+
+    /// <summary>
+    /// If the argument at <paramref name="paramPath"/> within the given function application is a
+    /// concatenation of the same parameter path with additional items appended after it, return those items.
+    /// </summary>
+    /// <param name="funcAppExpr">The function application expression whose arguments are inspected.</param>
+    /// <param name="paramPath">The path (list indices) to locate within <paramref name="funcAppExpr"/> arguments.</param>
+    /// <returns>
+    /// The sequence of expressions appended after the recursive reference to <paramref name="paramPath"/>,
+    /// or <c>null</c> if the shape does not match <c>concat [ path-to-env(paramPath), ...items ]</c> exactly.
+    /// </returns>
+    public static IReadOnlyList<StaticExpression<DeclQualifiedName>>?
+        ParseParamPathAsAppendItemsInFunctionApplication(
+        StaticExpression<DeclQualifiedName>.FunctionApplication funcAppExpr,
+        IReadOnlyList<int> paramPath)
+    {
+        if (ParseParamPathAsConcatBuilderMutationInFunctionApplication(funcAppExpr, paramPath)
+            is { Kind: ConcatBuilderMutationKind.Append, Items: { } items })
+        {
+            return items;
+        }
+
+        return null;
     }
 
     /// <summary>

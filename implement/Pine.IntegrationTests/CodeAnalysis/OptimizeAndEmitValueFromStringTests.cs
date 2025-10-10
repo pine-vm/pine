@@ -193,8 +193,9 @@ public class OptimizeAndEmitValueFromStringTests
                     PineValue param_1_0,
                     PineValue param_1_1)
                 {
-                    PineValue local_param_1_0 =
-                        param_1_0;
+                    MutatingConcatBuilder local_param_1_0 =
+                        MutatingConcatBuilder.Create(
+                            [param_1_0]);
 
                     ImmutableSliceBuilder local_param_1_1 =
                         ImmutableSliceBuilder.Create(param_1_1);
@@ -203,21 +204,22 @@ public class OptimizeAndEmitValueFromStringTests
                     {
                         if (local_param_1_1.IsEmptyList())
                         {
-                            return KernelFunction.reverse(local_param_1_0);
+                            return
+                                KernelFunction.reverse(
+                                    local_param_1_0.Evaluate());
                         }
 
                         if (!(local_param_1_1.GetLength() == 0))
                         {
                             {
-                                PineValue local_param_1_0_temp =
-                                    KernelFunctionFused.ListPrependItem(
-                                        itemToPrepend:
-                                        Test.blobBytesFromChar(
-                                            local_param_1_1.GetHead()),
-                                        suffix: local_param_1_0);
-
-                                local_param_1_0 =
-                                    local_param_1_0_temp;
+                                local_param_1_0.PrependItems(
+                                    [
+                                        PineValue.List(
+                                            [
+                                                Test.blobBytesFromChar(
+                                                    local_param_1_1.GetHead())
+                                            ])
+                                    ]);
 
                                 local_param_1_1 =
                                     local_param_1_1.Skip(CommonReusedValues.Blob_Int_1);

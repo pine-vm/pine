@@ -303,13 +303,12 @@ public record StaticProgramCSharpClass(
                     {
                         if (paramsAsConcatBuilders.Contains(paramPath))
                         {
-                            if (StaticExpressionExtension.ParseParamPathAsAppendItemsInFunctionApplication(
-                                funcApp,
-                                paramPath) is not { } appendedItemsExprs)
-                            {
-                                throw new System.Exception(
-                                    "Internal error: Failed to parse append item expression for concatenation builder parameter.");
-                            }
+                            var mutation =
+                                StaticExpressionExtension.ParseParamPathAsConcatBuilderMutationInFunctionApplication(
+                                    funcApp,
+                                    paramPath)
+                                ?? throw new System.Exception(
+                                    "Internal error: Failed to parse concat builder mutation for parameter.");
 
                             if (!paramToLocalMap.TryGetValue(paramPath, out var localName))
                             {
@@ -317,7 +316,7 @@ public record StaticProgramCSharpClass(
                             }
 
                             var appendedItemsCompiled =
-                                appendedItemsExprs
+                                mutation.Items
                                 .Select(appendedItemExpr =>
                                     EnumerateExpressions(
                                         appendedItemExpr,
@@ -330,12 +329,25 @@ public record StaticProgramCSharpClass(
                                     .AsGenericValue(declarationSyntaxContext))
                                 .ToImmutableArray();
 
-                            var appendStatement =
-                                PineCSharpSyntaxFactory.AppendItemsToMutatingConcatBuilderSyntax(
-                                    SyntaxFactory.IdentifierName(localName),
-                                    appendedItemsCompiled);
+                            var builderInvocation =
+                                mutation.Kind switch
+                                {
+                                    StaticExpressionExtension.ConcatBuilderMutationKind.Append =>
+                                        PineCSharpSyntaxFactory.AppendItemsToMutatingConcatBuilderSyntax(
+                                            SyntaxFactory.IdentifierName(localName),
+                                            appendedItemsCompiled),
 
-                            mutatingUpdates.Add(SyntaxFactory.ExpressionStatement(appendStatement));
+                                    StaticExpressionExtension.ConcatBuilderMutationKind.Prepend =>
+                                        PineCSharpSyntaxFactory.PrependItemsToMutatingConcatBuilderSyntax(
+                                            SyntaxFactory.IdentifierName(localName),
+                                            appendedItemsCompiled),
+
+                                    _ =>
+                                        throw new System.NotImplementedException(
+                                            "Unknown concat builder mutation kind: " + mutation.Kind)
+                                };
+
+                            mutatingUpdates.Add(SyntaxFactory.ExpressionStatement(builderInvocation));
                         }
                         else if (paramsAsSliceBuilders.Contains(paramPath))
                         {
@@ -649,7 +661,7 @@ public record StaticProgramCSharpClass(
         DeclQualifiedName selfFunctionName,
         IReadOnlyList<int> paramPath,
         bool isTailPosition,
-        ref bool sawAppend)
+        ref bool sawConcatBuilderMutation)
     {
         switch (expr)
         {
@@ -666,7 +678,7 @@ public record StaticProgramCSharpClass(
                     // Any mention of the param inside list construction disqualifies.
                     foreach (var item in list.Items)
                     {
-                        if (!IsGoodForConcatBuilderCandidate(item, selfFunctionName, paramPath, false, ref sawAppend))
+                        if (!IsGoodForConcatBuilderCandidate(item, selfFunctionName, paramPath, false, ref sawConcatBuilderMutation))
                             return false;
                     }
 
@@ -686,17 +698,32 @@ public record StaticProgramCSharpClass(
                             selfFunctionName,
                             paramPath,
                             isTailPosition,
-                            ref sawAppend) &&
+                            ref sawConcatBuilderMutation) &&
                             IsGoodForConcatBuilderCandidate(
                                 cond.FalseBranch,
                                 selfFunctionName,
                                 paramPath,
                                 isTailPosition,
-                                ref sawAppend);
+                                ref sawConcatBuilderMutation);
                 }
 
             case StaticExpression<DeclQualifiedName>.KernelApplication kernelApp:
                 {
+                    {
+                        // Check for special case: the param appears directly inside an invocation of 'reverse'.
+
+                        if (kernelApp.Function is nameof(KernelFunction.reverse) &&
+                            StaticExpressionExtension.TryParseAsPathToExpression(
+                                kernelApp.Input,
+                                StaticExpression<DeclQualifiedName>.EnvironmentInstance) is { } reverseEnvPath)
+                        {
+                            if (reverseEnvPath.SequenceEqual(paramPath))
+                            {
+                                return true;
+                            }
+                        }
+                    }
+
                     // Any mention in kernel is disallowed (we cannot read the builder).
                     return !StaticExpressionExtension.MentionsEnvPath(kernelApp.Input, paramPath);
                 }
@@ -705,23 +732,21 @@ public record StaticProgramCSharpClass(
                 {
                     if (isTailPosition && funcApp.FunctionName == selfFunctionName)
                     {
-                        // Tail self call must be concat(param, [x]) for this param.
-
-                        var appended =
-                            StaticExpressionExtension.ParseParamPathAsAppendItemsInFunctionApplication(
+                        var mutation =
+                            StaticExpressionExtension.ParseParamPathAsConcatBuilderMutationInFunctionApplication(
                                 funcApp,
                                 paramPath);
 
-                        if (appended is null)
+                        if (mutation is not { } concatMutation)
                             return false;
 
-                        for (var i = 0; i < appended.Count; i++)
+                        for (var i = 0; i < concatMutation.Items.Count; i++)
                         {
-                            if (!IsGoodForConcatBuilderCandidate(appended[i], selfFunctionName, paramPath, false, ref sawAppend))
+                            if (!IsGoodForConcatBuilderCandidate(concatMutation.Items[i], selfFunctionName, paramPath, false, ref sawConcatBuilderMutation))
                                 return false;
                         }
 
-                        sawAppend = true;
+                        sawConcatBuilderMutation = true;
                         return true;
                     }
 
@@ -750,7 +775,7 @@ public record StaticProgramCSharpClass(
     {
         foreach (var path in selfFunctionInterface.ParamsPaths)
         {
-            var sawAppend = false;
+            var sawConcatBuilderMutation = false;
 
             var ok =
                 IsGoodForConcatBuilderCandidate(
@@ -758,9 +783,9 @@ public record StaticProgramCSharpClass(
                     selfFunctionName,
                     path,
                     isTailPosition: true,
-                    ref sawAppend);
+                    ref sawConcatBuilderMutation);
 
-            if (ok && sawAppend)
+            if (ok && sawConcatBuilderMutation)
             {
                 yield return path;
             }

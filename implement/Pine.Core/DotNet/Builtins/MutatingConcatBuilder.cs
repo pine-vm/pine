@@ -47,6 +47,22 @@ public class MutatingConcatBuilder
     }
 
     /// <summary>
+    /// Inserts the specified item at the beginning of the collection.
+    /// </summary>
+    public void PrependItem(PineValue value)
+    {
+        _values.Insert(0, value);
+    }
+
+    /// <summary>
+    /// Inserts the specified collection of values at the beginning of the current list.
+    /// </summary>
+    public void PrependItems(IEnumerable<PineValue> values)
+    {
+        _values.InsertRange(0, values);
+    }
+
+    /// <summary>
     /// Evaluates this builder into a single <see cref="PineValue"/> by applying all <see cref="KernelFunction.concat"/> operations."/>
     /// </summary>
     public PineValue Evaluate()
