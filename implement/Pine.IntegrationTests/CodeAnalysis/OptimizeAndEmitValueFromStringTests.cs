@@ -1,0 +1,275 @@
+using AwesomeAssertions;
+using Pine.Core;
+using Pine.Core.CodeAnalysis;
+using Pine.Core.DotNet;
+using Pine.Elm;
+using System.Text;
+using Xunit;
+
+namespace Pine.IntegrationTests.CodeAnalysis;
+
+public class OptimizeAndEmitValueFromStringTests
+{
+    [Fact]
+    public void Parse_and_emit_optimized_Pine_computeValueFromString()
+    {
+        var elmJsonFile =
+             """
+            {
+                "type": "application",
+                "source-directories": [
+                    "src"
+                ],
+                "elm-version": "0.19.1",
+                "dependencies": {
+                    "direct": {
+                        "elm/core": "1.0.5"
+                    },
+                    "indirect": {
+                    }
+                },
+                "test-dependencies": {
+                    "direct": {
+                    },
+                    "indirect": {
+                    }
+                }
+            }
+            """;
+
+        var elmModuleText =
+            """
+            module Test exposing (..)
+
+
+            type Value
+                = BlobValue (List Int)
+                | ListValue (List Value)
+
+
+            computeValueFromString : String -> Value
+            computeValueFromString string =
+                let
+                    charsBytes : List (List Int)
+                    charsBytes =
+                        blobBytesFromChars [] (String.toList string)
+                in
+                BlobValue
+                    (List.concat charsBytes)
+
+
+            blobBytesFromChars : List (List Int) -> List Char -> List (List Int)
+            blobBytesFromChars acc remaining =
+                case remaining of
+                    [] ->
+                        List.reverse acc
+
+                    char :: rest ->
+                        blobBytesFromChars
+                            (blobBytesFromChar char :: acc)
+                            rest
+
+
+            valueFromChar : Char -> Value
+            valueFromChar char =
+                BlobValue (blobBytesFromChar char)
+
+
+            blobBytesFromChar : Char -> List Int
+            blobBytesFromChar char =
+                let
+                    charCode : Int
+                    charCode =
+                        Char.toCode char
+                in
+                [ modBy 0x0100 (charCode // 0x01000000)
+                , modBy 0x0100 (charCode // 0x00010000)
+                , modBy 0x0100 (charCode // 0x0100)
+                , modBy 0x0100 charCode
+                ]
+            
+            
+            """;
+
+        var appCodeTree =
+            BlobTreeWithStringPath.EmptyTree
+            .SetNodeAtPathSorted(
+                ["elm.json"],
+                BlobTreeWithStringPath.Blob(Encoding.UTF8.GetBytes(elmJsonFile)))
+            .SetNodeAtPathSorted(
+                ["src", "Test.elm"],
+                BlobTreeWithStringPath.Blob(Encoding.UTF8.GetBytes(elmModuleText)));
+
+        var compiledEnv =
+            ElmCompiler.CompileInteractiveEnvironment(
+                appCodeTree,
+                rootFilePaths: [["src", "Test.elm"]],
+                skipLowering: true,
+                skipFilteringForSourceDirs: false)
+            .Extract(err => throw new System.Exception(err));
+
+        var parseCache = new PineVMParseCache();
+
+        var parsedEnv =
+            ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnv)
+            .Extract(err => throw new System.Exception("Failed parsing interactive environment: " + err));
+
+        var staticProgram =
+            CodeAnalysisTestHelper.ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
+                parsedEnv,
+                includeDeclaration:
+                declName =>
+                {
+                    return declName == new DeclQualifiedName(["Test"], "computeValueFromString");
+                },
+                parseCache);
+
+        var wholeProgramText = StaticExpressionDisplay.RenderStaticProgram(staticProgram);
+
+        var asCSharp =
+            StaticProgramCSharp.FromStaticProgram(
+                staticProgram,
+                CodeAnalysisTestHelper.DeclarationSyntaxContext);
+
+        var moduleTest = asCSharp.ModulesClasses[new DeclQualifiedName([], "Test")];
+
+        var moduleTestCSharpText =
+            moduleTest.RenderToString();
+
+        var moduleGlobalAnonymousText =
+            asCSharp.GlobalAnonymousClass.RenderToString();
+
+        moduleTestCSharpText.Trim().Should().Be(
+            """"
+            public static class Test
+            {
+                public static PineValue blobBytesFromChar(PineValue param_1_0)
+                {
+                    PineValue local_000 =
+                        KernelFunctionFused.CanonicalIntegerFromUnsigned(signIsPositive: true, unsignedValue: param_1_0);
+
+                    PineValue local_001 =
+                        IntegerEncoding.EncodeSignedInteger(
+                            KernelFunctionSpecialized.length_as_int(local_000));
+
+                    PineValue local_002 =
+                        KernelFunction.ValueFromBool(
+                            KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(2, local_001));
+
+                    return
+                        PineValue.List(
+                            [
+                                Basics.modBy(
+                                    CommonReusedValues.Blob_Int_256,
+                                    Basics.idiv(local_000, CommonReusedValues.Blob_Int_16777216)),
+                                Basics.modBy(
+                                    CommonReusedValues.Blob_Int_256,
+                                    local_002 == PineKernelValues.TrueValue
+                                    ?
+                                    (KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(4, local_001)
+                                    ?
+                                    KernelFunctionFused.SkipLast(skipCount: 2, value: local_000)
+                                    :
+                                    CommonReusedValues.Blob_Int_0)
+                                    :
+                                    PineValue.EmptyList),
+                                Basics.modBy(
+                                    CommonReusedValues.Blob_Int_256,
+                                    local_002 == PineKernelValues.TrueValue
+                                    ?
+                                    (KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(3, local_001)
+                                    ?
+                                    KernelFunctionFused.SkipLast(skipCount: 1, value: local_000)
+                                    :
+                                    CommonReusedValues.Blob_Int_0)
+                                    :
+                                    PineValue.EmptyList),
+                                Basics.modBy(CommonReusedValues.Blob_Int_256, local_000)
+                            ]);
+                }
+
+
+                public static PineValue blobBytesFromChars(
+                    PineValue param_1_0,
+                    PineValue param_1_1)
+                {
+                    PineValue local_param_1_0 =
+                        param_1_0;
+
+                    PineValue local_param_1_1 =
+                        param_1_1;
+
+                    while (true)
+                    {
+                        if (local_param_1_1 == PineValue.EmptyList)
+                        {
+                            return KernelFunction.reverse(local_param_1_0);
+                        }
+
+                        if (!(KernelFunctionSpecialized.length_as_int(local_param_1_1) == 0))
+                        {
+                            {
+                                PineValue local_param_1_0_temp =
+                                    KernelFunctionFused.ListPrependItem(
+                                        itemToPrepend:
+                                        Test.blobBytesFromChar(
+                                            PineValueExtension.ValueFromPathOrEmptyList(
+                                                local_param_1_1,
+                                                [0])),
+                                        suffix: local_param_1_0);
+
+                                PineValue local_param_1_1_temp =
+                                    KernelFunctionSpecialized.skip(1, local_param_1_1);
+
+                                local_param_1_0 =
+                                    local_param_1_0_temp;
+
+                                local_param_1_1 =
+                                    local_param_1_1_temp;
+                            }
+
+                            continue;
+                        }
+
+                        throw new ParseExpressionException("TODO: Include details from encoded and env subexpressions");
+                    }
+                }
+
+
+                public static PineValue computeValueFromString(PineValue param_1_0)
+                {
+                    return
+                        PineValue.List(
+                            [
+                                CommonReusedValues.Blob_Str_BlobValue,
+                                PineValue.List(
+                                    [
+                                        KernelFunction.concat(
+                                            Test.blobBytesFromChars(
+                                                PineValue.EmptyList,
+                                                String.toListRecursive(
+                                                    CommonReusedValues.Blob_Int_0,
+                                                    PineValue.EmptyList,
+                                                    PineValueExtension.ValueFromPathOrEmptyList(
+                                                        param_1_0,
+                                                        [1, 0]))))
+                                    ])
+                            ]);
+                }
+            }
+
+            """".Trim());
+
+
+        var compileToAssemblyResult =
+            CompileToAssembly.Compile(
+                asCSharp,
+                namespacePrefix: [],
+                optimizationLevel: Microsoft.CodeAnalysis.OptimizationLevel.Debug)
+            .Extract(err =>
+            throw new System.Exception("Compilation to assembly failed: " + err.ToString()));
+
+        var compiledDictionary =
+            compileToAssemblyResult.BuildCompiledExpressionsDictionary();
+    }
+}
