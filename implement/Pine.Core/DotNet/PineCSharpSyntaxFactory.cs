@@ -258,6 +258,58 @@ public static class PineCSharpSyntaxFactory
                 CompileTypeSyntax.TypeSyntaxFromType(typeof(KernelFunction), declarationSyntaxContext),
                 SyntaxFactory.IdentifierName(memberIdentifierName)));
 
+    /// <summary>
+    /// Invoke <see cref="Builtins.MutatingConcatBuilder.Create(IEnumerable{PineValue})"/>
+    /// </summary>
+    public static InvocationExpressionSyntax CreateMutatingConcatBuilderSyntax(
+        ExpressionSyntax seedItemsCollectionSyntax,
+        DeclarationSyntaxContext declarationSyntaxContext) =>
+        SyntaxFactory.InvocationExpression(
+            SyntaxFactory.MemberAccessExpression(
+                SyntaxKind.SimpleMemberAccessExpression,
+                CompileTypeSyntax.TypeSyntaxFromType(
+                    typeof(Builtins.MutatingConcatBuilder),
+                    declarationSyntaxContext),
+                SyntaxFactory.IdentifierName(nameof(Builtins.MutatingConcatBuilder.Create))))
+        .WithArgumentList(
+            SyntaxFactory.ArgumentList(
+                SyntaxFactory.SingletonSeparatedList(
+                    SyntaxFactory.Argument(seedItemsCollectionSyntax))));
+
+    /// <summary>
+    /// Invoke <see cref="Builtins.MutatingConcatBuilder.Evaluate"/>
+    /// </summary>
+    public static InvocationExpressionSyntax EvaluateMutatingConcatBuilderSyntax(
+        ExpressionSyntax builderSyntax)
+    {
+        return
+            SyntaxFactory.InvocationExpression(
+                SyntaxFactory.MemberAccessExpression(
+                    SyntaxKind.SimpleMemberAccessExpression,
+                    builderSyntax,
+                    SyntaxFactory.IdentifierName(nameof(Builtins.MutatingConcatBuilder.Evaluate))));
+    }
+
+    /// <summary>
+    /// Invoke <see cref="Builtins.MutatingConcatBuilder.AppendItem"/>
+    /// </summary>
+    public static InvocationExpressionSyntax AppendItemsToMutatingConcatBuilderSyntax(
+        ExpressionSyntax builderSyntax,
+        IReadOnlyList<ExpressionSyntax> itemsSyntaxes)
+    {
+        return
+            SyntaxFactory.InvocationExpression(
+                SyntaxFactory.MemberAccessExpression(
+                    SyntaxKind.SimpleMemberAccessExpression,
+                    builderSyntax,
+                    SyntaxFactory.IdentifierName(nameof(Builtins.MutatingConcatBuilder.AppendItems))))
+            .WithArgumentList(
+                SyntaxFactory.ArgumentList(
+                    SyntaxFactory.SingletonSeparatedList(
+                        SyntaxFactory.Argument(SyntaxFactory.CollectionExpression(
+                            [.. itemsSyntaxes.Select(SyntaxFactory.ExpressionElement)])))));
+    }
+
     public static ExpressionSyntax PineValueEmptyListSyntax(
         DeclarationSyntaxContext declarationSyntaxContext) =>
         SyntaxFactory.MemberAccessExpression(

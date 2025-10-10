@@ -55,22 +55,26 @@ public record StaticProgramCSharp(
                 UsingAliasForType(type, "Pine_" + type.Name);
         }
 
-        return new DeclarationSyntaxContext(
-            UsingDirectives:
-            [
-                UsingAliasForTypeDefault(typeof(PineValue)),
-                UsingAliasForTypeDefault(typeof(KernelFunction)),
-                UsingAliasForTypeDefault(typeof(PineKernelValues)),
-                UsingAliasForTypeDefault(typeof(PineValueExtension)),
-                UsingAliasForTypeDefault(typeof(Internal.KernelFunctionFused)),
-                UsingAliasForTypeDefault(typeof(Internal.KernelFunctionSpecialized)),
+        return
+            new DeclarationSyntaxContext(
+                UsingDirectives:
+                [
+                    UsingAliasForTypeDefault(typeof(PineValue)),
+                    UsingAliasForTypeDefault(typeof(KernelFunction)),
+                    UsingAliasForTypeDefault(typeof(PineKernelValues)),
+                    UsingAliasForTypeDefault(typeof(PineValueExtension)),
+                    UsingAliasForTypeDefault(typeof(Internal.KernelFunctionFused)),
+                    UsingAliasForTypeDefault(typeof(Internal.KernelFunctionSpecialized)),
 
-                UsingAliasForTypeDefault(typeof(IntegerEncoding)),
-                UsingAliasForTypeDefault(typeof(StringEncoding)),
-                UsingAliasForTypeDefault(typeof(ExpressionEncoding)),
-                UsingAliasForTypeDefault(typeof(ParseExpressionException)),
-            ],
-            CurrentNamespace: null);
+                    UsingAliasForTypeDefault(typeof(IntegerEncoding)),
+                    UsingAliasForTypeDefault(typeof(StringEncoding)),
+                    UsingAliasForTypeDefault(typeof(ExpressionEncoding)),
+                    UsingAliasForTypeDefault(typeof(ParseExpressionException)),
+
+                    UsingAliasForTypeDefault(typeof(Builtins.ImmutableConcatBuilder)),
+                    UsingAliasForTypeDefault(typeof(Builtins.MutatingConcatBuilder)),
+                ],
+                CurrentNamespace: null);
     }
 
     public static StaticProgramCSharp FromStaticProgram(

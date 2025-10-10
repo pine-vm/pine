@@ -110,7 +110,7 @@ public class CompileKernelFunctionApplication
         IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
         IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls,
         DeclarationSyntaxContext declarationSyntaxContext,
-        ImmutableDictionary<StaticExpression<DeclQualifiedName>, string> alreadyDeclared)
+        ImmutableDictionary<StaticExpression<DeclQualifiedName>, (string identifier, LocalType ltype)> alreadyDeclared)
     {
         TypeSyntax TypeSyntaxFromType(Type type)
         {

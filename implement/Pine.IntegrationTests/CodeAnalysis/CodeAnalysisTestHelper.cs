@@ -27,6 +27,8 @@ public class CodeAnalysisTestHelper
             typeof(IntegerEncoding),
             typeof(StringEncoding),
             typeof(ParseExpressionException),
+            typeof(Core.DotNet.Builtins.ImmutableConcatBuilder),
+            typeof(Core.DotNet.Builtins.MutatingConcatBuilder),
         };
 
         IReadOnlyList<UsingDirectiveSyntax> usingDirectives =

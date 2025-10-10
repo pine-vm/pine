@@ -135,8 +135,9 @@ public class OptimizeAndEmitStringToListTests
                     PineValue local_param_1_0 =
                         param_1_0;
 
-                    PineValue local_param_1_1 =
-                        param_1_1;
+                    MutatingConcatBuilder local_param_1_1 =
+                        MutatingConcatBuilder.Create(
+                            [param_1_1]);
 
                     PineValue local_param_1_2 =
                         param_1_2;
@@ -148,21 +149,21 @@ public class OptimizeAndEmitStringToListTests
 
                         if (KernelFunctionSpecialized.length_as_int(local_000) == 0)
                         {
-                            return local_param_1_1;
+                            return local_param_1_1.Evaluate();
                         }
 
                         {
                             PineValue local_param_1_0_temp =
                                 KernelFunctionSpecialized.int_add(4, local_param_1_0);
 
-                            PineValue local_param_1_1_temp =
-                                KernelFunctionFused.ListAppendItem(prefix: local_param_1_1, itemToAppend: local_000);
+                            local_param_1_1.AppendItems(
+                                [
+                                    PineValue.List(
+                                        [local_000])
+                                ]);
 
                             local_param_1_0 =
                                 local_param_1_0_temp;
-
-                            local_param_1_1 =
-                                local_param_1_1_temp;
                         }
 
                         continue;
@@ -180,5 +181,16 @@ public class OptimizeAndEmitStringToListTests
 
             """"
             .Trim());
+
+        var compileToAssemblyResult =
+            CompileToAssembly.Compile(
+                asCSharp,
+                namespacePrefix: [],
+                optimizationLevel: Microsoft.CodeAnalysis.OptimizationLevel.Debug)
+            .Extract(err =>
+            throw new System.Exception("Compilation to assembly failed: " + err.ToString()));
+
+        var compiledDictionary =
+            compileToAssemblyResult.BuildCompiledExpressionsDictionary();
     }
 }

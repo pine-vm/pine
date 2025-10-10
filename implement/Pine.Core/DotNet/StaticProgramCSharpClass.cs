@@ -12,6 +12,8 @@ using System.Linq;
 
 namespace Pine.Pine.PineVM;
 
+using LocalDeclarations = ImmutableDictionary<StaticExpression<DeclQualifiedName>, (string identifier, LocalType ltype)>;
+
 public record StaticProgramCSharpClass(
     ClassDeclarationSyntax ClassDeclarationSyntax)
 {
@@ -134,9 +136,10 @@ public record StaticProgramCSharpClass(
         DeclarationSyntaxContext declarationSyntaxContext)
     {
         var hasTailRecursiveCalls =
-            ContainsFunctionApplicationAsTailCall(
-                functionBody,
-                selfFunctionName);
+            functionBody
+            .EnumerateTailCalls()
+            .Where(funcApp => funcApp.FunctionName == selfFunctionName)
+            .Any();
 
         // Build initial blocked names (parameters)
         var initialBlocked =
@@ -150,6 +153,14 @@ public record StaticProgramCSharpClass(
 
             // Map all params to locals that we can update in place.
 
+            var paramsAsConcatBuilders =
+                new HashSet<IReadOnlyList<int>>(
+                    ComputeParamsAsConcatBuilders(
+                        functionBody,
+                        selfFunctionName,
+                        selfFunctionInterface),
+                    IntPathEqualityComparer.Instance);
+
             var paramToLocalMap =
                 selfFunctionInterface.ParamsPaths
                 .ToImmutableDictionary(
@@ -161,6 +172,22 @@ public record StaticProgramCSharpClass(
             {
                 if (paramToLocalMap.TryGetValue(path, out var localName))
                 {
+                    if (paramsAsConcatBuilders.Contains(path))
+                    {
+                        /*
+                         * CSE collection asks for subexpressions, so return instead of throwing exception.
+                         * 
+                        throw new System.NotImplementedException(
+                            "Handling of parameters as ConcatBuilder not implemented yet.");
+                        */
+
+                        // Since the current version does not return any type info along with the expression, evaluate first.
+
+                        return
+                        PineCSharpSyntaxFactory.EvaluateMutatingConcatBuilderSyntax(
+                            SyntaxFactory.IdentifierName(localName));
+                    }
+
                     return SyntaxFactory.IdentifierName(localName);
                 }
 
@@ -169,7 +196,7 @@ public record StaticProgramCSharpClass(
 
             IReadOnlyList<StatementSyntax> StatementsFromResult(
                 StaticExpression<DeclQualifiedName> expr,
-                ImmutableDictionary<StaticExpression<DeclQualifiedName>, string> alreadyDeclared)
+                LocalDeclarations alreadyDeclared)
             {
                 // Check if the result is a tail call to self.
 
@@ -185,53 +212,93 @@ public record StaticProgramCSharpClass(
 
                     var tempDeclarations = new List<LocalDeclarationStatementSyntax>();
 
+                    var mutatingUpdates = new List<StatementSyntax>();
+
                     var assignments = new List<StatementSyntax>();
 
                     foreach (var paramPath in selfFunctionInterface.ParamsPaths)
                     {
-                        if (!paramToLocalMap.TryGetValue(paramPath, out var localName))
+                        if (paramsAsConcatBuilders.Contains(paramPath))
                         {
-                            throw new System.Exception("Internal error: Missing local for param path.");
-                        }
+                            if (StaticExpressionExtension.ParseParamPathAsAppendItemsInFunctionApplication(
+                                funcApp,
+                                paramPath) is not { } appendedItemsExprs)
+                            {
+                                throw new System.Exception(
+                                    "Internal error: Failed to parse append item expression for concatenation builder parameter.");
+                            }
 
-                        var argumentExpr =
-                            ExpressionsForFunctionArgument(
-                                paramPath,
-                                funcApp.Arguments,
-                                SelfFunctionInterfaceDelegate,
-                                availableFunctions,
-                                availableValueDecls,
-                                declarationSyntaxContext,
-                                alreadyDeclared)
-                            .AsGenericValue(declarationSyntaxContext);
+                            if (!paramToLocalMap.TryGetValue(paramPath, out var localName))
+                            {
+                                throw new System.Exception("Internal error: Missing local for param path.");
+                            }
 
-                        // Do not emit redundant assignments if the argument is the same as the current local value.
+                            var appendedItemsCompiled =
+                                appendedItemsExprs
+                                .Select(appendedItemExpr =>
+                                    EnumerateExpressions(
+                                        appendedItemExpr,
+                                        SelfFunctionInterfaceDelegate,
+                                        availableFunctions,
+                                        availableValueDecls,
+                                        declarationSyntaxContext,
+                                        alreadyDeclared)
+                                    .AsGenericValue(declarationSyntaxContext))
+                                .ToImmutableArray();
 
-                        if (argumentExpr is IdentifierNameSyntax idName &&
-                            idName.Identifier.Text == localName)
-                        {
-                            continue;
-                        }
-
-                        var tempLocalName = localName + "_temp";
-
-                        tempDeclarations.Add(
-                            SyntaxFactory.LocalDeclarationStatement(
-                                SyntaxFactory.VariableDeclaration(
-                                    CompileTypeSyntax.TypeSyntaxFromType(typeof(PineValue), declarationSyntaxContext))
-                                .WithVariables(
-                                    SyntaxFactory.SingletonSeparatedList(
-                                        SyntaxFactory.VariableDeclarator(
-                                            SyntaxFactory.Identifier(tempLocalName))
-                                        .WithInitializer(
-                                            SyntaxFactory.EqualsValueClause(argumentExpr))))));
-
-                        assignments.Add(
-                            SyntaxFactory.ExpressionStatement(
-                                SyntaxFactory.AssignmentExpression(
-                                    SyntaxKind.SimpleAssignmentExpression,
+                            var appendStatement =
+                                PineCSharpSyntaxFactory.AppendItemsToMutatingConcatBuilderSyntax(
                                     SyntaxFactory.IdentifierName(localName),
-                                    SyntaxFactory.IdentifierName(tempLocalName))));
+                                    appendedItemsCompiled);
+
+                            mutatingUpdates.Add(SyntaxFactory.ExpressionStatement(appendStatement));
+                        }
+                        else
+                        {
+                            if (!paramToLocalMap.TryGetValue(paramPath, out var localName))
+                            {
+                                throw new System.Exception("Internal error: Missing local for param path.");
+                            }
+
+                            var argumentExpr =
+                                ExpressionsForFunctionArgument(
+                                    paramPath,
+                                    funcApp.Arguments,
+                                    SelfFunctionInterfaceDelegate,
+                                    availableFunctions,
+                                    availableValueDecls,
+                                    declarationSyntaxContext,
+                                    alreadyDeclared)
+                                .AsGenericValue(declarationSyntaxContext);
+
+                            // Do not emit redundant assignments if the argument is the same as the current local value.
+
+                            if (argumentExpr is IdentifierNameSyntax idName &&
+                                idName.Identifier.Text == localName)
+                            {
+                                continue;
+                            }
+
+                            var tempLocalName = localName + "_temp";
+
+                            tempDeclarations.Add(
+                                SyntaxFactory.LocalDeclarationStatement(
+                                    SyntaxFactory.VariableDeclaration(
+                                        CompileTypeSyntax.TypeSyntaxFromType(typeof(PineValue), declarationSyntaxContext))
+                                    .WithVariables(
+                                        SyntaxFactory.SingletonSeparatedList(
+                                            SyntaxFactory.VariableDeclarator(
+                                                SyntaxFactory.Identifier(tempLocalName))
+                                            .WithInitializer(
+                                                SyntaxFactory.EqualsValueClause(argumentExpr))))));
+
+                            assignments.Add(
+                                SyntaxFactory.ExpressionStatement(
+                                    SyntaxFactory.AssignmentExpression(
+                                        SyntaxKind.SimpleAssignmentExpression,
+                                        SyntaxFactory.IdentifierName(localName),
+                                        SyntaxFactory.IdentifierName(tempLocalName))));
+                        }
                     }
 
                     // Contain the local declarations in their own scope to avoid name clashes
@@ -241,6 +308,7 @@ public record StaticProgramCSharpClass(
                             (SyntaxList<StatementSyntax>)
                             [
                             .. tempDeclarations,
+                            .. mutatingUpdates,
                             .. assignments
                             ]);
 
@@ -249,6 +317,22 @@ public record StaticProgramCSharpClass(
                         tempDeclarationsBlock,
                         SyntaxFactory.ContinueStatement()
                         ];
+                }
+
+                // Special-case: returning a builder param — evaluate then return.
+                if (StaticExpressionExtension.TryParseAsPathToExpression(
+                    expr,
+                    StaticExpression<DeclQualifiedName>.EnvironmentInstance) is { } retPath
+                    && paramsAsConcatBuilders.Contains(retPath))
+                {
+                    if (!paramToLocalMap.TryGetValue(retPath, out var localName))
+                        throw new System.Exception("Internal error: Missing local for param path.");
+
+                    var evaluated =
+                        PineCSharpSyntaxFactory.EvaluateMutatingConcatBuilderSyntax(
+                            SyntaxFactory.IdentifierName(localName));
+
+                    return [ResultThrowOrReturn(evaluated)];
                 }
 
                 var resultExpression =
@@ -264,19 +348,47 @@ public record StaticProgramCSharpClass(
                 return [ResultThrowOrReturn(resultExpression)];
             }
 
+            (System.Type declType, ExpressionSyntax initExpr) ParamDeclarationInitExpr(IReadOnlyList<int> paramPath)
+            {
+                var origParamRef = SyntaxFactory.IdentifierName(RenderParamRef(paramPath));
+
+                if (paramsAsConcatBuilders.Contains(paramPath))
+                {
+                    var initExpr =
+                        PineCSharpSyntaxFactory.CreateMutatingConcatBuilderSyntax(
+                            SyntaxFactory.CollectionExpression(
+                                SyntaxFactory.SeparatedList<CollectionElementSyntax>(
+                                    [SyntaxFactory.ExpressionElement(origParamRef)])),
+                            declarationSyntaxContext);
+
+                    return (typeof(Core.DotNet.Builtins.MutatingConcatBuilder), initExpr);
+                }
+
+                return (typeof(PineValue), origParamRef);
+            }
+
+            LocalDeclarationStatementSyntax ParamDeclarationStatement(IReadOnlyList<int> paramPath)
+            {
+                var localName = paramToLocalMap[paramPath];
+
+                var (declType, initExpr) = ParamDeclarationInitExpr(paramPath);
+
+                return
+                    SyntaxFactory.LocalDeclarationStatement(
+                        SyntaxFactory.VariableDeclaration(
+                            CompileTypeSyntax.TypeSyntaxFromType(declType, declarationSyntaxContext))
+                    .WithVariables(
+                        SyntaxFactory.SingletonSeparatedList(
+                            SyntaxFactory.VariableDeclarator(
+                                SyntaxFactory.Identifier(localName))
+                            .WithInitializer(
+                                SyntaxFactory.EqualsValueClause(
+                                    initExpr)))));
+            }
+
             var paramDeclarations =
                 selfFunctionInterface.ParamsPaths
-                .Select(paramPath =>
-                    SyntaxFactory.LocalDeclarationStatement(
-                SyntaxFactory.VariableDeclaration(
-                    CompileTypeSyntax.TypeSyntaxFromType(typeof(PineValue), declarationSyntaxContext))
-                .WithVariables(
-                    SyntaxFactory.SingletonSeparatedList(
-                        SyntaxFactory.VariableDeclarator(
-                            SyntaxFactory.Identifier(paramToLocalMap[paramPath]))
-                        .WithInitializer(
-                            SyntaxFactory.EqualsValueClause(
-                                SyntaxFactory.IdentifierName(RenderParamRef(paramPath))))))))
+                .Select(ParamDeclarationStatement)
                 .ToImmutableArray();
 
             // Extend blocked with our param locals as well
@@ -292,7 +404,7 @@ public record StaticProgramCSharpClass(
                     availableValueDecls,
                     declarationSyntaxContext,
                     statementsFromResult: StatementsFromResult,
-                    alreadyDeclared: ImmutableDictionary<StaticExpression<DeclQualifiedName>, string>.Empty,
+                    alreadyDeclared: LocalDeclarations.Empty,
                     blockedDeclarations: blockedWithParamLocals);
 
             // Create while(true) loop
@@ -327,7 +439,7 @@ public record StaticProgramCSharpClass(
 
             IReadOnlyList<StatementSyntax> StatementsFromResult(
                 StaticExpression<DeclQualifiedName> expr,
-                ImmutableDictionary<StaticExpression<DeclQualifiedName>, string> alreadyDeclared)
+                LocalDeclarations alreadyDeclared)
             {
                 var resultExpression =
                     EnumerateExpressions(
@@ -350,10 +462,133 @@ public record StaticProgramCSharpClass(
                     availableValueDecls,
                     declarationSyntaxContext,
                     statementsFromResult: StatementsFromResult,
-                    alreadyDeclared: ImmutableDictionary<StaticExpression<DeclQualifiedName>, string>.Empty,
+                    alreadyDeclared: LocalDeclarations.Empty,
                     blockedDeclarations: initialBlocked);
 
             return compiled.Statement;
+        }
+    }
+
+    private static bool IsGoodForConcatBuilderCandidate(
+        StaticExpression<DeclQualifiedName> expr,
+        DeclQualifiedName selfFunctionName,
+        IReadOnlyList<int> paramPath,
+        bool isTailPosition,
+        ref bool sawAppend)
+    {
+        switch (expr)
+        {
+            case StaticExpression<DeclQualifiedName>.Literal:
+                return true;
+
+            case StaticExpression<DeclQualifiedName>.Environment:
+                // Only allow returning the parameter as a tail leaf.
+                return isTailPosition && paramPath.Count is 0;
+
+            case StaticExpression<DeclQualifiedName>.List list:
+                {
+                    // List itself is only a tail leaf if it's the whole expression.
+                    // Any mention of the param inside list construction disqualifies.
+                    foreach (var item in list.Items)
+                    {
+                        if (!IsGoodForConcatBuilderCandidate(item, selfFunctionName, paramPath, false, ref sawAppend))
+                            return false;
+                    }
+
+                    return true;
+                }
+
+            case StaticExpression<DeclQualifiedName>.Conditional cond:
+                {
+                    // Condition must never mention the param path.
+                    if (StaticExpressionExtension.MentionsEnvPath(cond.Condition, paramPath))
+                        return false;
+
+                    // Both branches are in tail position relative to the function.
+                    return
+                        IsGoodForConcatBuilderCandidate(
+                            cond.TrueBranch,
+                            selfFunctionName,
+                            paramPath,
+                            isTailPosition,
+                            ref sawAppend) &&
+                            IsGoodForConcatBuilderCandidate(
+                                cond.FalseBranch,
+                                selfFunctionName,
+                                paramPath,
+                                isTailPosition,
+                                ref sawAppend);
+                }
+
+            case StaticExpression<DeclQualifiedName>.KernelApplication k:
+                {
+                    // Any mention in kernel is disallowed (we cannot read the builder).
+                    return !StaticExpressionExtension.MentionsEnvPath(k.Input, paramPath);
+                }
+
+            case StaticExpression<DeclQualifiedName>.FunctionApplication funcApp:
+                {
+                    if (isTailPosition && funcApp.FunctionName == selfFunctionName)
+                    {
+                        // Tail self call must be concat(param, [x]) for this param.
+
+                        var appended =
+                            StaticExpressionExtension.ParseParamPathAsAppendItemsInFunctionApplication(
+                                funcApp,
+                                paramPath);
+
+                        if (appended is null)
+                            return false;
+
+                        for (var i = 0; i < appended.Count; i++)
+                        {
+                            if (!IsGoodForConcatBuilderCandidate(appended[i], selfFunctionName, paramPath, false, ref sawAppend))
+                                return false;
+                        }
+
+                        sawAppend = true;
+                        return true;
+                    }
+
+                    // Any non-tail function application (or call to other function) that mentions the param is disallowed.
+                    return !StaticExpressionExtension.MentionsEnvPath(funcApp, paramPath);
+                }
+
+            case StaticExpression<DeclQualifiedName>.CrashingParseAndEval crashing:
+                {
+                    return
+                        !StaticExpressionExtension.MentionsEnvPath(crashing.Encoded, paramPath) &&
+                        !StaticExpressionExtension.MentionsEnvPath(crashing.EnvironmentExpr, paramPath);
+                }
+
+            default:
+                throw new System.NotImplementedException(
+                    "Internal error: Unknown expression type in IsGoodForConcatBuilderCandidate: " +
+                    expr.GetType().FullName);
+        }
+    }
+
+    private static IEnumerable<IReadOnlyList<int>> ComputeParamsAsConcatBuilders(
+        StaticExpression<DeclQualifiedName> functionBody,
+        DeclQualifiedName selfFunctionName,
+        StaticFunctionInterface selfFunctionInterface)
+    {
+        foreach (var path in selfFunctionInterface.ParamsPaths)
+        {
+            var sawAppend = false;
+
+            var ok =
+                IsGoodForConcatBuilderCandidate(
+                    functionBody,
+                    selfFunctionName,
+                    path,
+                    isTailPosition: true,
+                    ref sawAppend);
+
+            if (ok && sawAppend)
+            {
+                yield return path;
+            }
         }
     }
 
@@ -367,8 +602,8 @@ public record StaticProgramCSharpClass(
         IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
         IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls,
         DeclarationSyntaxContext declarationSyntaxContext,
-        System.Func<StaticExpression<DeclQualifiedName>, ImmutableDictionary<StaticExpression<DeclQualifiedName>, string>, IReadOnlyList<StatementSyntax>> statementsFromResult,
-        ImmutableDictionary<StaticExpression<DeclQualifiedName>, string> alreadyDeclared,
+        System.Func<StaticExpression<DeclQualifiedName>, LocalDeclarations, IReadOnlyList<StatementSyntax>> statementsFromResult,
+        LocalDeclarations alreadyDeclared,
         IReadOnlySet<string> blockedDeclarations)
     {
         bool IgnoreSubexpressionCollectingForCSE(
@@ -478,7 +713,7 @@ public record StaticProgramCSharpClass(
             newDeclaredStatements.Add(statement);
 
             mutatedDeclared =
-                mutatedDeclared.SetItem(subexpr, localName);
+                mutatedDeclared.SetItem(subexpr, (localName, LocalType.Evaluated));
         }
 
         var newAlreadyDeclared = mutatedDeclared;
@@ -621,7 +856,7 @@ public record StaticProgramCSharpClass(
         IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
         IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls,
         DeclarationSyntaxContext declarationSyntaxContext,
-        ImmutableDictionary<StaticExpression<DeclQualifiedName>, string> alreadyDeclared)
+        LocalDeclarations alreadyDeclared)
     {
         return
             EnumerateExpressions(
@@ -640,13 +875,27 @@ public record StaticProgramCSharpClass(
         IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
         IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls,
         DeclarationSyntaxContext declarationSyntaxContext,
-        ImmutableDictionary<StaticExpression<DeclQualifiedName>, string> alreadyDeclared)
+        LocalDeclarations alreadyDeclared)
     {
-        if (alreadyDeclared.TryGetValue(expression, out var existingVarName))
+        if (alreadyDeclared.TryGetValue(expression, out var existingVar))
         {
-            return
+            return existingVar.ltype switch
+            {
+                LocalType.Evaluated =>
                 [CompiledCSharpExpression.Generic(
-                    SyntaxFactory.IdentifierName(existingVarName))];
+                    SyntaxFactory.IdentifierName(existingVar.identifier))
+                ],
+
+                LocalType.MutatingConcatBuilder =>
+                [CompiledCSharpExpression.Generic(
+                    PineCSharpSyntaxFactory.EvaluateMutatingConcatBuilderSyntax(
+                        SyntaxFactory.IdentifierName(existingVar.identifier)))
+                ],
+
+                _ =>
+                throw new System.NotImplementedException(
+                    "Internal error: Unknown local type: " + existingVar.ltype),
+            };
         }
 
         (ExpressionSyntax, IReadOnlyList<int>)? FindNearestParameterForPathInEnv(
@@ -669,7 +918,8 @@ public record StaticProgramCSharpClass(
             return null;
         }
 
-        var pathsFromParametersAndLocals = new List<(ExpressionSyntax paramRef, IReadOnlyList<int> remainingPath)>();
+        var pathsFromParametersAndLocals =
+            new List<(ExpressionSyntax paramRef, IReadOnlyList<int> remainingPath)>();
 
         if (StaticExpressionExtension.TryParseAsPathToExpression(
             expression,
@@ -705,9 +955,14 @@ public record StaticProgramCSharpClass(
             {
                 lastSubExpr = current;
 
-                if (alreadyDeclared.TryGetValue(current.subexpr, out var varName))
+                if (alreadyDeclared.TryGetValue(current.subexpr, out var typelLocal))
                 {
-                    pathsFromParametersAndLocals.Add((SyntaxFactory.IdentifierName(varName), current.pathInSubexpr));
+                    if (typelLocal.ltype == LocalType.Evaluated)
+                    {
+                        pathsFromParametersAndLocals.Add(
+                            (SyntaxFactory.IdentifierName(typelLocal.identifier),
+                            current.pathInSubexpr));
+                    }
                 }
             }
 
@@ -730,7 +985,8 @@ public record StaticProgramCSharpClass(
                             alreadyDeclared);
 
                     pathsFromParametersAndLocals.Add(
-                        (subExprCompiled.AsGenericValue(declarationSyntaxContext), lastSubExpr.Value.pathInSubexpr));
+                        (subExprCompiled.AsGenericValue(declarationSyntaxContext),
+                        lastSubExpr.Value.pathInSubexpr));
                 }
             }
         }
@@ -949,7 +1205,7 @@ public record StaticProgramCSharpClass(
         IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
         IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls,
         DeclarationSyntaxContext declarationSyntaxContext,
-        ImmutableDictionary<StaticExpression<DeclQualifiedName>, string> alreadyDeclared)
+        LocalDeclarations alreadyDeclared)
     {
         var conditionExpr =
             BuildConditionExpression(
@@ -1065,7 +1321,7 @@ public record StaticProgramCSharpClass(
         IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
         IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls,
         DeclarationSyntaxContext declarationSyntaxContext,
-        ImmutableDictionary<StaticExpression<DeclQualifiedName>, string> alreadyDeclared)
+        LocalDeclarations alreadyDeclared)
     {
         var conditionAsAndChain = ParseAsAndChain(condition);
 
@@ -1126,7 +1382,7 @@ public record StaticProgramCSharpClass(
         IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
         IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls,
         DeclarationSyntaxContext declarationSyntaxContext,
-        ImmutableDictionary<StaticExpression<DeclQualifiedName>, string> alreadyDeclared)
+        LocalDeclarations alreadyDeclared)
     {
         if (kernelApp.Function is nameof(KernelFunction.equal))
         {
@@ -1408,7 +1664,7 @@ public record StaticProgramCSharpClass(
         IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
         IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls,
         DeclarationSyntaxContext declarationSyntaxContext,
-        ImmutableDictionary<StaticExpression<DeclQualifiedName>, string> alreadyDeclared)
+        LocalDeclarations alreadyDeclared)
     {
         if (StaticExpressionExtension.GetSubexpressionAtPath(argumentExpr, paramPath) is { } subexpr)
         {
@@ -1419,7 +1675,7 @@ public record StaticProgramCSharpClass(
                     availableFunctions,
                     availableValueDecls,
                     declarationSyntaxContext,
-                    alreadyDeclared: alreadyDeclared);
+                    alreadyDeclared);
 
             if (subexpr.pathRemaining.Count is 0)
             {
@@ -1610,24 +1866,5 @@ public record StaticProgramCSharpClass(
     private static string RenderParamRef(IReadOnlyList<int> path)
     {
         return "param" + string.Concat(path.Select(i => "_" + i));
-    }
-
-    private static bool ContainsFunctionApplicationAsTailCall(
-        StaticExpression<DeclQualifiedName> expression,
-        DeclQualifiedName functionName)
-    {
-        if (expression is StaticExpression<DeclQualifiedName>.FunctionApplication funcApp)
-        {
-            return funcApp.FunctionName == functionName;
-        }
-
-        if (expression is StaticExpression<DeclQualifiedName>.Conditional conditional)
-        {
-            return
-                ContainsFunctionApplicationAsTailCall(conditional.TrueBranch, functionName) ||
-                ContainsFunctionApplicationAsTailCall(conditional.FalseBranch, functionName);
-        }
-
-        return false;
     }
 }

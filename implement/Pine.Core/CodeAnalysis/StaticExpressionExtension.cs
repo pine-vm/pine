@@ -558,6 +558,148 @@ public static class StaticExpressionExtension
         return (current, [.. path.Skip(currentIndex)]);
     }
 
+    /// <summary>
+    /// If the argument at <paramref name="paramPath"/> within the given function application is a
+    /// concatenation of the same parameter path with additional items, return those appended items.
+    /// </summary>
+    /// <param name="funcAppExpr">The function application expression whose arguments are inspected.</param>
+    /// <param name="paramPath">The path (list indices) to locate within <paramref name="funcAppExpr"/> arguments.</param>
+    /// <returns>
+    /// The sequence of expressions appended after the recursive reference to <paramref name="paramPath"/>,
+    /// or <c>null</c> if the shape does not match <c>concat [ path-to-env(paramPath), ...items ]</c> exactly.
+    /// </returns>
+    /// <remarks>
+    /// This recognizes an expression of the form <c>concat [ P, x1, x2, ... ]</c> where <c>P</c> is an encoded path to the
+    /// environment that is equal to <paramref name="paramPath"/>. If the argument located at <paramref name="paramPath"/>
+    /// cannot be fully resolved within the arguments list, or does not have this <see cref="KernelFunction.concat"/> shape,
+    /// the method returns <c>null</c>.
+    /// </remarks>
+    public static IReadOnlyList<StaticExpression<DeclQualifiedName>>?
+        ParseParamPathAsAppendItemsInFunctionApplication(
+        StaticExpression<DeclQualifiedName>.FunctionApplication funcAppExpr,
+        IReadOnlyList<int> paramPath)
+    {
+        var (subexpr, pathRemaining) =
+            GetSubexpressionAtPath(funcAppExpr.Arguments, paramPath);
+
+        if (pathRemaining.Count is not 0)
+            return null;
+
+        if (subexpr is not StaticExpression<DeclQualifiedName>.KernelApplication kernelApp)
+        {
+            return null;
+        }
+
+        if (kernelApp.Function is not nameof(KernelFunction.concat))
+        {
+            return null;
+        }
+
+        if (kernelApp.Input is not StaticExpression<DeclQualifiedName>.List concatInputList)
+        {
+            return null;
+        }
+
+        if (concatInputList.Items.Count is 0)
+        {
+            return null;
+        }
+
+        var firstItem = concatInputList.Items[0];
+
+        // First item must be a recursive reference to the same parameter path
+
+        if (TryParseAsPathToExpression(
+            firstItem,
+            StaticExpression<DeclQualifiedName>.EnvironmentInstance) is not { } firstItemPath)
+        {
+            return null;
+        }
+
+        if (!IntPathEqualityComparer.Instance.Equals(firstItemPath, paramPath))
+        {
+            return null;
+        }
+
+        return [.. concatInputList.Items.Skip(1)];
+    }
+
+    /// <summary>
+    /// Determines whether the expression contains any occurrence of the given environment path.
+    /// </summary>
+    /// <param name="expr">The expression to search.</param>
+    /// <param name="path">The environment path to look for.</param>
+    /// <returns><see langword="true"/> if the path is mentioned anywhere within <paramref name="expr"/>; otherwise <see langword="false"/>.</returns>
+    public static bool MentionsEnvPath(
+        StaticExpression<DeclQualifiedName> expr,
+        IReadOnlyList<int> path)
+    {
+        if (TryParseAsPathToExpression(
+            expr,
+            StaticExpression<DeclQualifiedName>.EnvironmentInstance) is { } currentEnvPath)
+        {
+            if (currentEnvPath.Count < path.Count)
+                return false;
+
+            for (var i = 0; i < path.Count; i++)
+            {
+                if (currentEnvPath[i] != path[i])
+                    return false;
+            }
+
+            return true;
+        }
+
+        switch (expr)
+        {
+            case StaticExpression<DeclQualifiedName>.Literal:
+            case StaticExpression<DeclQualifiedName>.Environment:
+                return false;
+
+            case StaticExpression<DeclQualifiedName>.List list:
+
+                foreach (var item in list.Items)
+                {
+                    if (MentionsEnvPath(item, path))
+                        return true;
+                }
+
+                return false;
+
+            case StaticExpression<DeclQualifiedName>.Conditional cond:
+                return MentionsEnvPath(cond.Condition, path)
+                    || MentionsEnvPath(cond.TrueBranch, path)
+                    || MentionsEnvPath(cond.FalseBranch, path);
+
+            case StaticExpression<DeclQualifiedName>.KernelApplication k:
+                return MentionsEnvPath(k.Input, path);
+
+            case StaticExpression<DeclQualifiedName>.FunctionApplication f:
+                return MentionsEnvPath(f.Arguments, path);
+
+            case StaticExpression<DeclQualifiedName>.CrashingParseAndEval parseAndEval:
+                return
+                    MentionsEnvPath(parseAndEval.Encoded, path) ||
+                    MentionsEnvPath(parseAndEval.EnvironmentExpr, path);
+
+            default:
+                throw new NotImplementedException(
+                    "Internal error: Unknown expression type in MentionsEnvPath: " +
+                    expr.GetType().FullName);
+        }
+    }
+
+    /// <summary>
+    /// Iteratively peels a chain of <see cref="KernelFunction.head"/> (and optional <see cref="KernelFunction.skip"/>)
+    /// applications and yields the progressively decoded subexpression together with the path built so far.
+    /// </summary>
+    /// <typeparam name="TFunctionName">Type of user-defined function identifiers.</typeparam>
+    /// <param name="expression">The expression to interpret as a path.</param>
+    /// <returns>
+    /// A sequence of pairs where <c>pathInSubexpr</c> is the path collected so far and <c>subexpr</c> is the remaining
+    /// inner expression after removing the corresponding outer applications. The path is in the reverse order compared to
+    /// <see cref="TryParseAsPathToExpression{TFunctionName}(StaticExpression{TFunctionName}, StaticExpression{TFunctionName})"/>.
+    /// </returns>
     public static IEnumerable<(IReadOnlyList<int> pathInSubexpr, StaticExpression<TFunctionName> subexpr)>
         InterpretAsPathReversed<TFunctionName>(StaticExpression<TFunctionName> expression)
     {
@@ -592,5 +734,58 @@ public static class StaticExpressionExtension
 
             yield return (pathSegments.ToArray(), currentExpr);
         }
+    }
+
+    /// <summary>
+    /// Enumerates function applications that appear in tail position of the given expression.
+    /// Includes the root itself when it is a function application and both branches of conditionals.
+    /// </summary>
+    /// <typeparam name="TFunctionName">Type of user-defined function identifiers.</typeparam>
+    /// <param name="expression">The expression to analyze for tail calls.</param>
+    /// <returns>An enumeration of function applications in tail position.</returns>
+    public static IEnumerable<StaticExpression<TFunctionName>.FunctionApplication> EnumerateTailCalls<TFunctionName>(
+        this StaticExpression<TFunctionName> expression)
+    {
+        if (expression is StaticExpression<TFunctionName>.FunctionApplication funcApp)
+        {
+            yield return funcApp;
+        }
+
+        if (expression is StaticExpression<TFunctionName>.Conditional conditional)
+        {
+            foreach (var fromTrue in EnumerateTailCalls(conditional.TrueBranch))
+            {
+                yield return fromTrue;
+            }
+
+            foreach (var fromFalse in EnumerateTailCalls(conditional.FalseBranch))
+            {
+                yield return fromFalse;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Transforms all tail-position expressions within the expression using the provided mapping function.
+    /// Non-tail nodes are left unchanged.
+    /// </summary>
+    /// <typeparam name="TFunctionName">Type of user-defined function identifiers.</typeparam>
+    /// <param name="expression">The root expression whose tail calls should be transformed.</param>
+    /// <param name="mapTail">A mapping function applied to each tail-position <see cref="StaticExpression{TFunctionName}.FunctionApplication"/>.</param>
+    /// <returns>The expression with tail calls transformed by <paramref name="mapTail"/>.</returns>
+    public static StaticExpression<TFunctionName> TransformTails<TFunctionName>(
+        this StaticExpression<TFunctionName> expression,
+        Func<StaticExpression<TFunctionName>, StaticExpression<TFunctionName>> mapTail)
+    {
+        if (expression is StaticExpression<TFunctionName>.Conditional conditional)
+        {
+            return
+                StaticExpression<TFunctionName>.ConditionalInstance(
+                    condition: conditional.Condition,
+                    trueBranch: TransformTails(conditional.TrueBranch, mapTail),
+                    falseBranch: TransformTails(conditional.FalseBranch, mapTail));
+        }
+
+        return mapTail(expression);
     }
 }
