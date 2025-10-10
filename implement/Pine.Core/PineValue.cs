@@ -106,7 +106,17 @@ public abstract record PineValue : IEquatable<PineValue>
 
         var newInstance = new ListValue(asStruct);
 
-        return PineValueWeakInterner.GetOrAdd(newInstance);
+        /*
+         * For instances exceeding this threshold, try to reuse an existing instance.
+         * Reusing existing instances will reduce the cost of equality checks,
+         * because reference equality will allow for early termination.
+         * */
+        if (newInstance.NodesCount * 30 + newInstance.BlobsBytesCount > 400)
+        {
+            return PineValueWeakInterner.GetOrAdd(newInstance);
+        }
+
+        return newInstance;
     }
 
     /// <summary>
