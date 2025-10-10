@@ -107,6 +107,7 @@ public class CompileKernelFunctionApplication
     public static IEnumerable<CompiledCSharpExpression> TryCompileKernelFusion(
         StaticExpression<DeclQualifiedName>.KernelApplication kernelApp,
         Func<IReadOnlyList<int>, ExpressionSyntax?> selfFunctionInterface,
+        System.Func<StaticExpression<DeclQualifiedName>, CompiledCSharpExpression?> generalOverride,
         IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
         IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls,
         DeclarationSyntaxContext declarationSyntaxContext,
@@ -135,6 +136,7 @@ public class CompileKernelFunctionApplication
                         StaticProgramCSharpClass.CompileToCSharpExpression(
                             skipArgsList.Items[1],
                             selfFunctionInterface,
+                            generalOverride,
                             availableFunctions,
                             availableValueDecls,
                             declarationSyntaxContext,
@@ -144,6 +146,7 @@ public class CompileKernelFunctionApplication
                         StaticProgramCSharpClass.CompileToCSharpExpression(
                             skipArgsList.Items[0],
                             selfFunctionInterface,
+                            generalOverride,
                             availableFunctions,
                             availableValueDecls,
                             declarationSyntaxContext,
@@ -200,6 +203,7 @@ public class CompileKernelFunctionApplication
                 StaticProgramCSharpClass.CompileToCSharpExpression(
                     takeArgsList2.Items[1],
                     selfFunctionInterface,
+                    generalOverride,
                     availableFunctions,
                     availableValueDecls,
                     declarationSyntaxContext,
@@ -209,6 +213,7 @@ public class CompileKernelFunctionApplication
                 StaticProgramCSharpClass.CompileToCSharpExpression(
                     takeArgsList2.Items[0],
                     selfFunctionInterface,
+                    generalOverride,
                     availableFunctions,
                     availableValueDecls,
                     declarationSyntaxContext,
@@ -218,6 +223,7 @@ public class CompileKernelFunctionApplication
                 StaticProgramCSharpClass.CompileToCSharpExpression(
                     skipArgsList2.Items[0],
                     selfFunctionInterface,
+                    generalOverride,
                     availableFunctions,
                     availableValueDecls,
                     declarationSyntaxContext,
@@ -269,6 +275,7 @@ public class CompileKernelFunctionApplication
                         StaticProgramCSharpClass.CompileToCSharpExpression(
                             innerReverseApp.Input,
                             selfFunctionInterface,
+                            generalOverride,
                             availableFunctions,
                             availableValueDecls,
                             declarationSyntaxContext,
@@ -322,6 +329,7 @@ public class CompileKernelFunctionApplication
                         StaticProgramCSharpClass.CompileToCSharpExpression(
                             innerReverseApp.Input,
                             selfFunctionInterface,
+                            generalOverride,
                             availableFunctions,
                             availableValueDecls,
                             declarationSyntaxContext,
@@ -371,6 +379,7 @@ public class CompileKernelFunctionApplication
                     StaticProgramCSharpClass.CompileToCSharpExpression(
                         concatArgsList.Items[0],
                         selfFunctionInterface,
+                        generalOverride,
                         availableFunctions,
                         availableValueDecls,
                         declarationSyntaxContext,
@@ -380,6 +389,7 @@ public class CompileKernelFunctionApplication
                     StaticProgramCSharpClass.CompileToCSharpExpression(
                         itemToAppendList.Items[0],
                         selfFunctionInterface,
+                        generalOverride,
                         availableFunctions,
                         availableValueDecls,
                         declarationSyntaxContext,
@@ -425,6 +435,7 @@ public class CompileKernelFunctionApplication
                     StaticProgramCSharpClass.CompileToCSharpExpression(
                         itemToPrepend,
                         selfFunctionInterface,
+                        generalOverride,
                         availableFunctions,
                         availableValueDecls,
                         declarationSyntaxContext,
@@ -434,6 +445,7 @@ public class CompileKernelFunctionApplication
                     StaticProgramCSharpClass.CompileToCSharpExpression(
                         suffix,
                         selfFunctionInterface,
+                        generalOverride,
                         availableFunctions,
                         availableValueDecls,
                         declarationSyntaxContext,
@@ -474,6 +486,7 @@ public class CompileKernelFunctionApplication
                     StaticProgramCSharpClass.CompileToCSharpExpression(
                         suffix,
                         selfFunctionInterface,
+                        generalOverride,
                         availableFunctions,
                         availableValueDecls,
                         declarationSyntaxContext,
@@ -557,6 +570,7 @@ public class CompileKernelFunctionApplication
                     StaticProgramCSharpClass.CompileToCSharpExpression(
                         concatList.Items[1],
                         selfFunctionInterface,
+                        generalOverride,
                         availableFunctions,
                         availableValueDecls,
                         declarationSyntaxContext,

@@ -72,6 +72,7 @@ public record StaticProgramCSharp(
                     UsingAliasForTypeDefault(typeof(ParseExpressionException)),
 
                     UsingAliasForTypeDefault(typeof(Builtins.ImmutableConcatBuilder)),
+                    UsingAliasForTypeDefault(typeof(Builtins.ImmutableSliceBuilder)),
                     UsingAliasForTypeDefault(typeof(Builtins.MutatingConcatBuilder)),
                 ],
                 CurrentNamespace: null);

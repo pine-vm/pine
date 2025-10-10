@@ -788,4 +788,47 @@ public static class StaticExpressionExtension
 
         return mapTail(expression);
     }
+
+    /// <summary>
+    /// Attempts to parse the expression as an equality comparison with an empty Pine list.
+    /// </summary>
+    /// <param name="expr">The expression to parse.</param>
+    /// <returns>
+    /// The expression being compared to the empty list if the pattern matches 
+    /// <c>equal([comparand, []])</c> or <c>equal([[], comparand])</c>; 
+    /// otherwise <see langword="null"/>.
+    /// </returns>
+    public static StaticExpression<TFunctionName>? TryParseAsEqualPineValueEmptyList<TFunctionName>(
+        this StaticExpression<TFunctionName> expr)
+    {
+        return expr.TryParseAsEqualPineValue(PineValue.EmptyList);
+    }
+
+    /// <summary>
+    /// Attempts to parse the expression as an equality comparison with the given <paramref name="comparand"/>
+    /// </summary>
+    public static StaticExpression<TFunctionName>? TryParseAsEqualPineValue<TFunctionName>(
+        this StaticExpression<TFunctionName> expr,
+        PineValue comparand)
+    {
+        if (expr is not StaticExpression<TFunctionName>.KernelApplication kernelApp)
+            return null;
+
+        if (kernelApp.Function is not nameof(KernelFunction.equal))
+            return null;
+
+        if (kernelApp.Input is not StaticExpression<TFunctionName>.List inputList ||
+            inputList.Items.Count is not 2)
+            return null;
+
+        if (inputList.Items[0] is StaticExpression<TFunctionName>.Literal leftLiteral &&
+            leftLiteral.Value == comparand)
+            return inputList.Items[1];
+
+        if (inputList.Items[1] is StaticExpression<TFunctionName>.Literal rightLiteral &&
+            rightLiteral.Value == comparand)
+            return inputList.Items[0];
+
+        return null;
+    }
 }

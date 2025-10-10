@@ -310,6 +310,72 @@ public static class PineCSharpSyntaxFactory
                             [.. itemsSyntaxes.Select(SyntaxFactory.ExpressionElement)])))));
     }
 
+    /// <summary>
+    /// Invoke <see cref="Builtins.ImmutableSliceBuilder.Create(PineValue)"/>
+    /// </summary>
+    public static InvocationExpressionSyntax CreateImmutableSliceBuilderSyntax(
+        ExpressionSyntax originalValueSyntax,
+        DeclarationSyntaxContext declarationSyntaxContext) =>
+        SyntaxFactory.InvocationExpression(
+            SyntaxFactory.MemberAccessExpression(
+                SyntaxKind.SimpleMemberAccessExpression,
+                CompileTypeSyntax.TypeSyntaxFromType(
+                    typeof(Builtins.ImmutableSliceBuilder),
+                    declarationSyntaxContext),
+                SyntaxFactory.IdentifierName(nameof(Builtins.ImmutableSliceBuilder.Create))))
+        .WithArgumentList(
+            SyntaxFactory.ArgumentList(
+                SyntaxFactory.SingletonSeparatedList(
+                    SyntaxFactory.Argument(originalValueSyntax))));
+
+    /// <summary>
+    /// Invoke <see cref="Builtins.ImmutableSliceBuilder.Evaluate"/>
+    /// </summary>
+    public static InvocationExpressionSyntax EvaluateImmutableSliceBuilderSyntax(
+        ExpressionSyntax builderSyntax) =>
+        SyntaxFactory.InvocationExpression(
+            SyntaxFactory.MemberAccessExpression(
+                SyntaxKind.SimpleMemberAccessExpression,
+                builderSyntax,
+                SyntaxFactory.IdentifierName(nameof(Builtins.ImmutableSliceBuilder.Evaluate))))
+        .WithArgumentList(SyntaxFactory.ArgumentList());
+
+    /// <summary>
+    /// Invoke <see cref="Builtins.ImmutableSliceBuilder.GetLength"/>
+    /// </summary>
+    public static InvocationExpressionSyntax ImmutableSliceBuilderGetLengthSyntax(
+        ExpressionSyntax builderSyntax) =>
+        SyntaxFactory.InvocationExpression(
+            SyntaxFactory.MemberAccessExpression(
+                SyntaxKind.SimpleMemberAccessExpression,
+                builderSyntax,
+                SyntaxFactory.IdentifierName(nameof(Builtins.ImmutableSliceBuilder.GetLength))))
+        .WithArgumentList(SyntaxFactory.ArgumentList());
+
+    /// <summary>
+    /// Invoke <see cref="Builtins.ImmutableSliceBuilder.IsEmptyList"/>
+    /// </summary>
+    public static InvocationExpressionSyntax ImmutableSliceBuilderIsEmptyListSyntax(
+        ExpressionSyntax builderSyntax) =>
+        SyntaxFactory.InvocationExpression(
+            SyntaxFactory.MemberAccessExpression(
+                SyntaxKind.SimpleMemberAccessExpression,
+                builderSyntax,
+                SyntaxFactory.IdentifierName(nameof(Builtins.ImmutableSliceBuilder.IsEmptyList))))
+        .WithArgumentList(SyntaxFactory.ArgumentList());
+
+    /// <summary>
+    /// Invoke <see cref="Builtins.ImmutableSliceBuilder.GetHead"/>
+    /// </summary>
+    public static InvocationExpressionSyntax ImmutableSliceBuilderGetHeadSyntax(
+        ExpressionSyntax builderSyntax) =>
+        SyntaxFactory.InvocationExpression(
+            SyntaxFactory.MemberAccessExpression(
+                SyntaxKind.SimpleMemberAccessExpression,
+                builderSyntax,
+                SyntaxFactory.IdentifierName(nameof(Builtins.ImmutableSliceBuilder.GetHead))))
+        .WithArgumentList(SyntaxFactory.ArgumentList());
+
     public static ExpressionSyntax PineValueEmptyListSyntax(
         DeclarationSyntaxContext declarationSyntaxContext) =>
         SyntaxFactory.MemberAccessExpression(

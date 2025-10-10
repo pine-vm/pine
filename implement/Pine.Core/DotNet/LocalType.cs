@@ -11,4 +11,9 @@ public enum LocalType
     /// <see cref="Builtins.MutatingConcatBuilder"/>
     /// </summary>
     MutatingConcatBuilder = 20,
+
+    /// <summary>
+    /// <see cref="Builtins.ImmutableSliceBuilder"/>
+    /// </summary>
+    ImmutableSliceBuilder = 30,
 }

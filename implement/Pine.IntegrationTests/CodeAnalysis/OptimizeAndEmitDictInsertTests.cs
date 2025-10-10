@@ -282,17 +282,17 @@ public class OptimizeAndEmitDictInsertTests
                     PineValue param_1_0,
                     PineValue param_1_1)
                 {
-                    PineValue local_param_1_0 =
-                        param_1_0;
+                    ImmutableSliceBuilder local_param_1_0 =
+                        ImmutableSliceBuilder.Create(param_1_0);
 
-                    PineValue local_param_1_1 =
-                        param_1_1;
+                    ImmutableSliceBuilder local_param_1_1 =
+                        ImmutableSliceBuilder.Create(param_1_1);
 
                     while (true)
                     {
-                        if (local_param_1_0 == PineValue.EmptyList)
+                        if (local_param_1_0.IsEmptyList())
                         {
-                            if (local_param_1_1 == PineValue.EmptyList)
+                            if (local_param_1_1.IsEmptyList())
                             {
                                 return CommonReusedValues.List_ac855cb8;
                             }
@@ -300,38 +300,32 @@ public class OptimizeAndEmitDictInsertTests
                             return CommonReusedValues.List_af0e3cad;
                         }
 
-                        if (!(KernelFunctionSpecialized.length_as_int(local_param_1_0) == 0))
+                        if (!(local_param_1_0.GetLength() == 0))
                         {
-                            if (local_param_1_1 == PineValue.EmptyList)
+                            if (local_param_1_1.IsEmptyList())
                             {
                                 return CommonReusedValues.List_50724673;
                             }
 
-                            if (!(KernelFunctionSpecialized.length_as_int(local_param_1_1) == 0))
+                            if (!(local_param_1_1.GetLength() == 0))
                             {
                                 PineValue local_000 =
                                     Basics.compare(
                                         PineValueExtension.ValueFromPathOrEmptyList(
-                                            local_param_1_0,
+                                            local_param_1_0.Evaluate(),
                                             [0]),
                                         PineValueExtension.ValueFromPathOrEmptyList(
-                                            local_param_1_1,
+                                            local_param_1_1.Evaluate(),
                                             [0]));
 
                                 if (local_000 == CommonReusedValues.List_ac855cb8)
                                 {
                                     {
-                                        PineValue local_param_1_0_temp =
-                                            KernelFunctionSpecialized.skip(1, local_param_1_0);
-
-                                        PineValue local_param_1_1_temp =
-                                            KernelFunctionSpecialized.skip(1, local_param_1_1);
-
                                         local_param_1_0 =
-                                            local_param_1_0_temp;
+                                            local_param_1_0.Skip(CommonReusedValues.Blob_Int_1);
 
                                         local_param_1_1 =
-                                            local_param_1_1_temp;
+                                            local_param_1_1.Skip(CommonReusedValues.Blob_Int_1);
                                     }
 
                                     continue;

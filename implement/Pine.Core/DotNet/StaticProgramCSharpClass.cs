@@ -161,6 +161,14 @@ public record StaticProgramCSharpClass(
                         selfFunctionInterface),
                     IntPathEqualityComparer.Instance);
 
+            var paramsAsSliceBuilders =
+                new HashSet<IReadOnlyList<int>>(
+                    ComputeParamsAsImmutableSliceBuilders(
+                        functionBody,
+                        selfFunctionName,
+                        selfFunctionInterface),
+                    IntPathEqualityComparer.Instance);
+
             var paramToLocalMap =
                 selfFunctionInterface.ParamsPaths
                 .ToImmutableDictionary(
@@ -188,7 +196,82 @@ public record StaticProgramCSharpClass(
                             SyntaxFactory.IdentifierName(localName));
                     }
 
+                    if (paramsAsSliceBuilders.Contains(path))
+                    {
+                        return
+                        PineCSharpSyntaxFactory.EvaluateImmutableSliceBuilderSyntax(
+                            SyntaxFactory.IdentifierName(localName));
+                    }
+
                     return SyntaxFactory.IdentifierName(localName);
+                }
+
+                return null;
+            }
+
+            CompiledCSharpExpression? GeneralOverride(StaticExpression<DeclQualifiedName> expr)
+            {
+                if (expr is StaticExpression<DeclQualifiedName>.KernelApplication kernelApp)
+                {
+                    if (kernelApp.Function is nameof(KernelFunction.length))
+                    {
+                        if (StaticExpressionExtension.TryParseAsPathToExpression(
+                            kernelApp.Input,
+                            StaticExpression<DeclQualifiedName>.EnvironmentInstance) is { } pathInEnv)
+                        {
+                            if (paramsAsSliceBuilders.Contains(pathInEnv))
+                            {
+                                if (!paramToLocalMap.TryGetValue(pathInEnv, out var localName))
+                                    throw new System.Exception("Internal error: Missing local for param path.");
+
+                                var lengthExpr =
+                                    PineCSharpSyntaxFactory.ImmutableSliceBuilderGetLengthSyntax(
+                                        SyntaxFactory.IdentifierName(localName));
+
+                                return CompiledCSharpExpression.Integer(lengthExpr);
+                            }
+                        }
+                    }
+
+                    if (kernelApp.Function is nameof(KernelFunction.head))
+                    {
+                        if (StaticExpressionExtension.TryParseAsPathToExpression(
+                            kernelApp.Input,
+                            StaticExpression<DeclQualifiedName>.EnvironmentInstance) is { } pathInEnv)
+                        {
+                            if (paramsAsSliceBuilders.Contains(pathInEnv))
+                            {
+                                if (!paramToLocalMap.TryGetValue(pathInEnv, out var localName))
+                                    throw new System.Exception("Internal error: Missing local for param path.");
+
+                                var headExpr =
+                                    PineCSharpSyntaxFactory.ImmutableSliceBuilderGetHeadSyntax(
+                                        SyntaxFactory.IdentifierName(localName));
+
+                                return CompiledCSharpExpression.Generic(headExpr);
+                            }
+                        }
+                    }
+                }
+
+                if (StaticExpressionExtension.TryParseAsEqualPineValueEmptyList(expr) is { } checkEqualEmptyList)
+                {
+                    if (StaticExpressionExtension.TryParseAsPathToExpression(
+                        checkEqualEmptyList,
+                        StaticExpression<DeclQualifiedName>.EnvironmentInstance) is { } pathInEnv)
+                    {
+                        if (paramsAsSliceBuilders.Contains(pathInEnv))
+                        {
+                            if (!paramToLocalMap.TryGetValue(pathInEnv, out var localName))
+                                throw new System.Exception("Internal error: Missing local for param path.");
+
+                            var isEmptyExpr =
+                                PineCSharpSyntaxFactory.ImmutableSliceBuilderIsEmptyListSyntax(
+                                    SyntaxFactory.IdentifierName(localName));
+
+                            return CompiledCSharpExpression.Boolean(isEmptyExpr);
+                        }
+                    }
                 }
 
                 return null;
@@ -239,6 +322,7 @@ public record StaticProgramCSharpClass(
                                     EnumerateExpressions(
                                         appendedItemExpr,
                                         SelfFunctionInterfaceDelegate,
+                                        GeneralOverride,
                                         availableFunctions,
                                         availableValueDecls,
                                         declarationSyntaxContext,
@@ -253,6 +337,67 @@ public record StaticProgramCSharpClass(
 
                             mutatingUpdates.Add(SyntaxFactory.ExpressionStatement(appendStatement));
                         }
+                        else if (paramsAsSliceBuilders.Contains(paramPath))
+                        {
+                            if (!paramToLocalMap.TryGetValue(paramPath, out var localName))
+                            {
+                                throw new System.Exception("Internal error: Missing local for param path.");
+                            }
+
+                            if (TryParseParamPathAsSliceOperationsInFunctionApplication(
+                                funcApp,
+                                paramPath) is not { } sliceOperations)
+                            {
+                                throw new System.Exception(
+                                    "Internal error: Failed to parse slice operations for parameter.");
+                            }
+
+                            if (sliceOperations.Length is 0)
+                            {
+                                continue;
+                            }
+
+                            ExpressionSyntax updatedBuilderExpr = SyntaxFactory.IdentifierName(localName);
+
+                            foreach (var sliceOperation in sliceOperations)
+                            {
+                                var countArgument =
+                                    EnumerateExpressions(
+                                        sliceOperation.CountExpression,
+                                        SelfFunctionInterfaceDelegate,
+                                        GeneralOverride,
+                                        availableFunctions,
+                                        availableValueDecls,
+                                        declarationSyntaxContext,
+                                        alreadyDeclared)
+                                    .AsGenericValue(declarationSyntaxContext);
+
+                                var invocationTarget = updatedBuilderExpr;
+
+                                var methodName =
+                                    sliceOperation.Kind is SliceOperationKind.Skip
+                                    ? nameof(global::Pine.Core.DotNet.Builtins.ImmutableSliceBuilder.Skip)
+                                    : nameof(global::Pine.Core.DotNet.Builtins.ImmutableSliceBuilder.Take);
+
+                                updatedBuilderExpr =
+                                    SyntaxFactory.InvocationExpression(
+                                        SyntaxFactory.MemberAccessExpression(
+                                            SyntaxKind.SimpleMemberAccessExpression,
+                                            invocationTarget,
+                                            SyntaxFactory.IdentifierName(methodName)))
+                                    .WithArgumentList(
+                                        SyntaxFactory.ArgumentList(
+                                            SyntaxFactory.SingletonSeparatedList(
+                                                SyntaxFactory.Argument(countArgument))));
+                            }
+
+                            assignments.Add(
+                                SyntaxFactory.ExpressionStatement(
+                                    SyntaxFactory.AssignmentExpression(
+                                        SyntaxKind.SimpleAssignmentExpression,
+                                        SyntaxFactory.IdentifierName(localName),
+                                        updatedBuilderExpr)));
+                        }
                         else
                         {
                             if (!paramToLocalMap.TryGetValue(paramPath, out var localName))
@@ -265,6 +410,7 @@ public record StaticProgramCSharpClass(
                                     paramPath,
                                     funcApp.Arguments,
                                     SelfFunctionInterfaceDelegate,
+                                    GeneralOverride,
                                     availableFunctions,
                                     availableValueDecls,
                                     declarationSyntaxContext,
@@ -335,10 +481,26 @@ public record StaticProgramCSharpClass(
                     return [ResultThrowOrReturn(evaluated)];
                 }
 
+                if (StaticExpressionExtension.TryParseAsPathToExpression(
+                    expr,
+                    StaticExpression<DeclQualifiedName>.EnvironmentInstance) is { } retPathSlice
+                    && paramsAsSliceBuilders.Contains(retPathSlice))
+                {
+                    if (!paramToLocalMap.TryGetValue(retPathSlice, out var localName))
+                        throw new System.Exception("Internal error: Missing local for param path.");
+
+                    var evaluated =
+                        PineCSharpSyntaxFactory.EvaluateImmutableSliceBuilderSyntax(
+                            SyntaxFactory.IdentifierName(localName));
+
+                    return [ResultThrowOrReturn(evaluated)];
+                }
+
                 var resultExpression =
                     EnumerateExpressions(
                         expr,
                         SelfFunctionInterfaceDelegate,
+                        GeneralOverride,
                         availableFunctions,
                         availableValueDecls,
                         declarationSyntaxContext,
@@ -362,6 +524,16 @@ public record StaticProgramCSharpClass(
                             declarationSyntaxContext);
 
                     return (typeof(Core.DotNet.Builtins.MutatingConcatBuilder), initExpr);
+                }
+
+                if (paramsAsSliceBuilders.Contains(paramPath))
+                {
+                    var initExpr =
+                        PineCSharpSyntaxFactory.CreateImmutableSliceBuilderSyntax(
+                            origParamRef,
+                            declarationSyntaxContext);
+
+                    return (typeof(Core.DotNet.Builtins.ImmutableSliceBuilder), initExpr);
                 }
 
                 return (typeof(PineValue), origParamRef);
@@ -400,6 +572,7 @@ public record StaticProgramCSharpClass(
                 CompileToCSharpStatement(
                     functionBody,
                     SelfFunctionInterfaceDelegate,
+                    GeneralOverride,
                     availableFunctions,
                     availableValueDecls,
                     declarationSyntaxContext,
@@ -445,6 +618,7 @@ public record StaticProgramCSharpClass(
                     EnumerateExpressions(
                         expr,
                         SelfFunctionInterfaceDelegate,
+                        generalOverride: _ => null,
                         availableFunctions,
                         availableValueDecls,
                         declarationSyntaxContext,
@@ -458,6 +632,7 @@ public record StaticProgramCSharpClass(
                 CompileToCSharpStatement(
                     functionBody,
                     SelfFunctionInterfaceDelegate,
+                    generalOverride: _ => null,
                     availableFunctions,
                     availableValueDecls,
                     declarationSyntaxContext,
@@ -520,10 +695,10 @@ public record StaticProgramCSharpClass(
                                 ref sawAppend);
                 }
 
-            case StaticExpression<DeclQualifiedName>.KernelApplication k:
+            case StaticExpression<DeclQualifiedName>.KernelApplication kernelApp:
                 {
                     // Any mention in kernel is disallowed (we cannot read the builder).
-                    return !StaticExpressionExtension.MentionsEnvPath(k.Input, paramPath);
+                    return !StaticExpressionExtension.MentionsEnvPath(kernelApp.Input, paramPath);
                 }
 
             case StaticExpression<DeclQualifiedName>.FunctionApplication funcApp:
@@ -592,6 +767,124 @@ public record StaticProgramCSharpClass(
         }
     }
 
+    private enum SliceOperationKind
+    {
+        Skip = 10,
+        Take = 20,
+    }
+
+    private readonly record struct ImmutableSliceOperation(
+        SliceOperationKind Kind,
+        StaticExpression<DeclQualifiedName> CountExpression);
+
+    private static IEnumerable<IReadOnlyList<int>> ComputeParamsAsImmutableSliceBuilders(
+        StaticExpression<DeclQualifiedName> functionBody,
+        DeclQualifiedName selfFunctionName,
+        StaticFunctionInterface selfFunctionInterface)
+    {
+        foreach (var path in selfFunctionInterface.ParamsPaths)
+        {
+            var ok = true;
+            var sawSliceOperation = false;
+
+            foreach (var tailCall in functionBody.EnumerateTailCalls())
+            {
+                if (tailCall.FunctionName != selfFunctionName)
+                {
+                    continue;
+                }
+
+                if (TryParseParamPathAsSliceOperationsInFunctionApplication(
+                    tailCall,
+                    path) is not { } operations)
+                {
+                    ok = false;
+                    break;
+                }
+
+                if (operations.Length > 0)
+                {
+                    sawSliceOperation = true;
+                }
+            }
+
+            if (ok && sawSliceOperation)
+            {
+                yield return path;
+            }
+        }
+    }
+
+    private static ImmutableArray<ImmutableSliceOperation>?
+        TryParseParamPathAsSliceOperationsInFunctionApplication(
+        StaticExpression<DeclQualifiedName>.FunctionApplication funcAppExpr,
+        IReadOnlyList<int> paramPath)
+    {
+        var (subexpr, pathRemaining) =
+            StaticExpressionExtension.GetSubexpressionAtPath(funcAppExpr.Arguments, paramPath);
+
+        if (pathRemaining.Count is not 0)
+        {
+            return null;
+        }
+
+        var builder = new List<ImmutableSliceOperation>();
+
+        if (!TryParseImmutableSliceOperationsRecursive(subexpr, paramPath, builder))
+        {
+            return null;
+        }
+
+        return builder.ToImmutableArray();
+    }
+
+    private static bool TryParseImmutableSliceOperationsRecursive(
+        StaticExpression<DeclQualifiedName> expr,
+        IReadOnlyList<int> paramPath,
+        List<ImmutableSliceOperation> operations)
+    {
+        if (StaticExpressionExtension.TryParseAsPathToExpression(
+            expr,
+            StaticExpression<DeclQualifiedName>.EnvironmentInstance) is { } exprPath)
+        {
+            return IntPathEqualityComparer.Instance.Equals(exprPath, paramPath);
+        }
+
+        if (expr is StaticExpression<DeclQualifiedName>.KernelApplication kernelApp &&
+            kernelApp.Input is StaticExpression<DeclQualifiedName>.List argsList &&
+            argsList.Items.Count is 2)
+        {
+            var kind = kernelApp.Function switch
+            {
+                nameof(KernelFunction.skip) => SliceOperationKind.Skip,
+                nameof(KernelFunction.take) => SliceOperationKind.Take,
+                _ => (SliceOperationKind?)null,
+            };
+
+            if (kind is null)
+            {
+                return false;
+            }
+
+            var checkpoint = operations.Count;
+
+            if (!TryParseImmutableSliceOperationsRecursive(argsList.Items[1], paramPath, operations))
+            {
+                if (operations.Count > checkpoint)
+                {
+                    operations.RemoveRange(checkpoint, operations.Count - checkpoint);
+                }
+
+                return false;
+            }
+
+            operations.Add(new ImmutableSliceOperation(kind.Value, argsList.Items[0]));
+            return true;
+        }
+
+        return false;
+    }
+
     public readonly record struct CompiledStatement(
         StatementSyntax Statement,
         ImmutableHashSet<string> DeclaredLocals);
@@ -599,6 +892,7 @@ public record StaticProgramCSharpClass(
     public static CompiledStatement CompileToCSharpStatement(
         StaticExpression<DeclQualifiedName> expression,
         System.Func<IReadOnlyList<int>, ExpressionSyntax?> selfFunctionInterface,
+        System.Func<StaticExpression<DeclQualifiedName>, CompiledCSharpExpression?> generalOverride,
         IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
         IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls,
         DeclarationSyntaxContext declarationSyntaxContext,
@@ -704,6 +998,7 @@ public record StaticProgramCSharpClass(
                                 CompileToCSharpExpression(
                                     subexpr,
                                     selfFunctionInterface,
+                                    generalOverride: _ => null,
                                     availableFunctions,
                                     availableValueDecls,
                                     declarationSyntaxContext,
@@ -724,6 +1019,7 @@ public record StaticProgramCSharpClass(
                 BuildConditionExpression(
                     conditionalExpr.Condition,
                     selfFunctionInterface,
+                    generalOverride: generalOverride,
                     availableFunctions,
                     availableValueDecls,
                     declarationSyntaxContext,
@@ -736,6 +1032,7 @@ public record StaticProgramCSharpClass(
                 CompileToCSharpStatement(
                     conditionalExpr.TrueBranch,
                     selfFunctionInterface,
+                    generalOverride: generalOverride,
                     availableFunctions,
                     availableValueDecls,
                     declarationSyntaxContext,
@@ -747,6 +1044,7 @@ public record StaticProgramCSharpClass(
                 CompileToCSharpStatement(
                     conditionalExpr.FalseBranch,
                     selfFunctionInterface,
+                    generalOverride: generalOverride,
                     availableFunctions,
                     availableValueDecls,
                     declarationSyntaxContext,
@@ -853,6 +1151,7 @@ public record StaticProgramCSharpClass(
     public static CompiledCSharpExpression CompileToCSharpExpression(
         StaticExpression<DeclQualifiedName> expression,
         System.Func<IReadOnlyList<int>, ExpressionSyntax?> selfFunctionInterface,
+        System.Func<StaticExpression<DeclQualifiedName>, CompiledCSharpExpression?> generalOverride,
         IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
         IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls,
         DeclarationSyntaxContext declarationSyntaxContext,
@@ -862,6 +1161,7 @@ public record StaticProgramCSharpClass(
             EnumerateExpressions(
                 expression,
                 selfFunctionInterface,
+                generalOverride,
                 availableFunctions,
                 availableValueDecls,
                 declarationSyntaxContext,
@@ -872,11 +1172,17 @@ public record StaticProgramCSharpClass(
     public static IEnumerable<CompiledCSharpExpression> EnumerateExpressions(
         StaticExpression<DeclQualifiedName> expression,
         System.Func<IReadOnlyList<int>, ExpressionSyntax?> selfFunctionInterface,
+        System.Func<StaticExpression<DeclQualifiedName>, CompiledCSharpExpression?> generalOverride,
         IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
         IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls,
         DeclarationSyntaxContext declarationSyntaxContext,
         LocalDeclarations alreadyDeclared)
     {
+        if (generalOverride(expression) is { } overridden)
+        {
+            return [overridden];
+        }
+
         if (alreadyDeclared.TryGetValue(expression, out var existingVar))
         {
             return existingVar.ltype switch
@@ -889,6 +1195,12 @@ public record StaticProgramCSharpClass(
                 LocalType.MutatingConcatBuilder =>
                 [CompiledCSharpExpression.Generic(
                     PineCSharpSyntaxFactory.EvaluateMutatingConcatBuilderSyntax(
+                        SyntaxFactory.IdentifierName(existingVar.identifier)))
+                ],
+
+                LocalType.ImmutableSliceBuilder =>
+                [CompiledCSharpExpression.Generic(
+                    PineCSharpSyntaxFactory.EvaluateImmutableSliceBuilderSyntax(
                         SyntaxFactory.IdentifierName(existingVar.identifier)))
                 ],
 
@@ -979,6 +1291,7 @@ public record StaticProgramCSharpClass(
                         CompileToCSharpExpression(
                             lastSubExpr.Value.subexpr,
                             selfFunctionInterface,
+                            generalOverride,
                             availableFunctions,
                             availableValueDecls,
                             declarationSyntaxContext,
@@ -1024,6 +1337,7 @@ public record StaticProgramCSharpClass(
                 CompileToCSharpExpression(
                     item,
                     selfFunctionInterface,
+                    generalOverride,
                     availableFunctions,
                     availableValueDecls,
                     declarationSyntaxContext,
@@ -1060,6 +1374,7 @@ public record StaticProgramCSharpClass(
                 EnumerateExpressionsForConditional(
                     conditional,
                     selfFunctionInterface,
+                    generalOverride,
                     availableFunctions,
                     availableValueDecls,
                     declarationSyntaxContext,
@@ -1072,6 +1387,7 @@ public record StaticProgramCSharpClass(
                 EnumerateExpressionsForKernelApp(
                     kernelApp,
                     selfFunctionInterface,
+                    generalOverride,
                     availableFunctions,
                     availableValueDecls,
                     declarationSyntaxContext,
@@ -1083,7 +1399,7 @@ public record StaticProgramCSharpClass(
             if (!availableFunctions.TryGetValue(funcApp.FunctionName, out var funcInterface))
             {
                 throw new System.Exception(
-                    "Function application references unknown function '" + funcApp.FunctionName + "'.");
+                    "Function application references unknown function '" + funcApp.FunctionName + ".");
             }
 
             var arguments =
@@ -1093,6 +1409,7 @@ public record StaticProgramCSharpClass(
                     argumentPath,
                     funcApp.Arguments,
                     selfFunctionInterface,
+                    generalOverride,
                     availableFunctions,
                     availableValueDecls,
                     declarationSyntaxContext,
@@ -1118,6 +1435,7 @@ public record StaticProgramCSharpClass(
                 CompileToCSharpExpression(
                     parseAndEval.Encoded,
                     selfFunctionInterface,
+                    generalOverride,
                     availableFunctions,
                     availableValueDecls,
                     declarationSyntaxContext,
@@ -1202,6 +1520,7 @@ public record StaticProgramCSharpClass(
     public static IEnumerable<CompiledCSharpExpression> EnumerateExpressionsForConditional(
         StaticExpression<DeclQualifiedName>.Conditional conditional,
         System.Func<IReadOnlyList<int>, ExpressionSyntax?> selfFunctionInterface,
+        System.Func<StaticExpression<DeclQualifiedName>, CompiledCSharpExpression?> generalOverride,
         IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
         IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls,
         DeclarationSyntaxContext declarationSyntaxContext,
@@ -1211,6 +1530,7 @@ public record StaticProgramCSharpClass(
             BuildConditionExpression(
                 conditional.Condition,
                 selfFunctionInterface,
+                generalOverride,
                 availableFunctions,
                 availableValueDecls,
                 declarationSyntaxContext,
@@ -1220,6 +1540,7 @@ public record StaticProgramCSharpClass(
             EnumerateExpressions(
                 conditional.TrueBranch,
                 selfFunctionInterface,
+                generalOverride,
                 availableFunctions,
                 availableValueDecls,
                 declarationSyntaxContext,
@@ -1230,6 +1551,7 @@ public record StaticProgramCSharpClass(
             EnumerateExpressions(
                 conditional.FalseBranch,
                 selfFunctionInterface,
+                generalOverride,
                 availableFunctions,
                 availableValueDecls,
                 declarationSyntaxContext,
@@ -1318,11 +1640,17 @@ public record StaticProgramCSharpClass(
     public static ExpressionSyntax BuildConditionExpression(
         StaticExpression<DeclQualifiedName> condition,
         System.Func<IReadOnlyList<int>, ExpressionSyntax?> selfFunctionInterface,
+        System.Func<StaticExpression<DeclQualifiedName>, CompiledCSharpExpression?> generalOverride,
         IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
         IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls,
         DeclarationSyntaxContext declarationSyntaxContext,
         LocalDeclarations alreadyDeclared)
     {
+        if (generalOverride(condition) is { } overridden)
+        {
+            return overridden.AsBooleanValue(declarationSyntaxContext);
+        }
+
         var conditionAsAndChain = ParseAsAndChain(condition);
 
         var andChainConjunctsCompiled =
@@ -1331,6 +1659,7 @@ public record StaticProgramCSharpClass(
                 CompileToCSharpExpression(
                     expr,
                     selfFunctionInterface,
+                    generalOverride,
                     availableFunctions,
                     availableValueDecls,
                     declarationSyntaxContext,
@@ -1379,6 +1708,7 @@ public record StaticProgramCSharpClass(
     public static IEnumerable<CompiledCSharpExpression> EnumerateExpressionsForKernelApp(
         StaticExpression<DeclQualifiedName>.KernelApplication kernelApp,
         System.Func<IReadOnlyList<int>, ExpressionSyntax?> selfFunctionInterface,
+        System.Func<StaticExpression<DeclQualifiedName>, CompiledCSharpExpression?> generalOverride,
         IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
         IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls,
         DeclarationSyntaxContext declarationSyntaxContext,
@@ -1396,6 +1726,7 @@ public record StaticProgramCSharpClass(
                         EnumerateExpressions(
                             listInput.Items[0],
                             selfFunctionInterface,
+                            generalOverride,
                             availableFunctions,
                             availableValueDecls,
                             declarationSyntaxContext,
@@ -1406,6 +1737,7 @@ public record StaticProgramCSharpClass(
                         EnumerateExpressions(
                             listInput.Items[1],
                             selfFunctionInterface,
+                            generalOverride,
                             availableFunctions,
                             availableValueDecls,
                             declarationSyntaxContext,
@@ -1490,6 +1822,7 @@ public record StaticProgramCSharpClass(
                     EnumerateExpressions(
                         inputExpr,
                         selfFunctionInterface,
+                        generalOverride,
                         availableFunctions,
                         availableValueDecls,
                         declarationSyntaxContext,
@@ -1517,6 +1850,7 @@ public record StaticProgramCSharpClass(
             CompileKernelFunctionApplication.TryCompileKernelFusion(
                 kernelApp,
                 selfFunctionInterface,
+                generalOverride,
                 availableFunctions,
                 availableValueDecls,
                 declarationSyntaxContext,
@@ -1538,6 +1872,7 @@ public record StaticProgramCSharpClass(
                         CompileToCSharpExpression(
                             argumentExpr,
                             selfFunctionInterface,
+                            generalOverride,
                             availableFunctions,
                             availableValueDecls,
                             declarationSyntaxContext,
@@ -1618,6 +1953,7 @@ public record StaticProgramCSharpClass(
                 CompileToCSharpExpression(
                     kernelApp.Input,
                     selfFunctionInterface,
+                    generalOverride,
                     availableFunctions,
                     availableValueDecls,
                     declarationSyntaxContext,
@@ -1661,6 +1997,7 @@ public record StaticProgramCSharpClass(
         IReadOnlyList<int> paramPath,
         StaticExpression<DeclQualifiedName> argumentExpr,
         System.Func<IReadOnlyList<int>, ExpressionSyntax?> selfFunctionInterface,
+        System.Func<StaticExpression<DeclQualifiedName>, CompiledCSharpExpression?> generalOverride,
         IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
         IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls,
         DeclarationSyntaxContext declarationSyntaxContext,
@@ -1672,6 +2009,7 @@ public record StaticProgramCSharpClass(
                 EnumerateExpressions(
                     subexpr.subexpr,
                     selfFunctionInterface,
+                    generalOverride,
                     availableFunctions,
                     availableValueDecls,
                     declarationSyntaxContext,

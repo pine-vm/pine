@@ -28,6 +28,7 @@ public class CodeAnalysisTestHelper
             typeof(StringEncoding),
             typeof(ParseExpressionException),
             typeof(Core.DotNet.Builtins.ImmutableConcatBuilder),
+            typeof(Core.DotNet.Builtins.ImmutableSliceBuilder),
             typeof(Core.DotNet.Builtins.MutatingConcatBuilder),
         };
 
