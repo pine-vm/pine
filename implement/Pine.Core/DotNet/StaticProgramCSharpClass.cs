@@ -281,6 +281,16 @@ public record StaticProgramCSharpClass(
                 StaticExpression<DeclQualifiedName> expr,
                 LocalDeclarations alreadyDeclared)
             {
+                var exprEmitEnv =
+                    new ExpressionEmitEnv(
+                        new FunctionEmitEnv(
+                            availableFunctions,
+                            availableValueDecls,
+                            declarationSyntaxContext,
+                            SelfFunctionInterfaceDelegate,
+                            GeneralOverride),
+                        alreadyDeclared);
+
                 // Check if the result is a tail call to self.
 
                 if (expr is StaticExpression<DeclQualifiedName>.FunctionApplication funcApp &&
@@ -320,12 +330,7 @@ public record StaticProgramCSharpClass(
                                 .Select(appendedItemExpr =>
                                     EnumerateExpressions(
                                         appendedItemExpr,
-                                        SelfFunctionInterfaceDelegate,
-                                        GeneralOverride,
-                                        availableFunctions,
-                                        availableValueDecls,
-                                        declarationSyntaxContext,
-                                        alreadyDeclared)
+                                        exprEmitEnv)
                                     .AsGenericValue(declarationSyntaxContext))
                                 .ToImmutableArray();
 
@@ -381,20 +386,24 @@ public record StaticProgramCSharpClass(
                                 var countArgument =
                                     EnumerateExpressions(
                                         sliceOperation.CountExpression,
-                                        SelfFunctionInterfaceDelegate,
-                                        GeneralOverride,
-                                        availableFunctions,
-                                        availableValueDecls,
-                                        declarationSyntaxContext,
-                                        alreadyDeclared)
+                                        exprEmitEnv)
                                     .AsGenericValue(declarationSyntaxContext);
 
                                 var invocationTarget = updatedBuilderExpr;
 
                                 var methodName =
-                                    sliceOperation.Kind is SliceOperationKind.Skip
-                                    ? nameof(global::Pine.Core.DotNet.Builtins.ImmutableSliceBuilder.Skip)
-                                    : nameof(global::Pine.Core.DotNet.Builtins.ImmutableSliceBuilder.Take);
+                                    sliceOperation.Kind switch
+                                    {
+                                        SliceOperationKind.Skip =>
+                                        nameof(Core.DotNet.Builtins.ImmutableSliceBuilder.Skip),
+
+                                        SliceOperationKind.Take =>
+                                        nameof(Core.DotNet.Builtins.ImmutableSliceBuilder.Take),
+
+                                        _
+                                        => throw new System.NotImplementedException(
+                                            "Unknown slice operation kind: " + sliceOperation.Kind)
+                                    };
 
                                 updatedBuilderExpr =
                                     SyntaxFactory.InvocationExpression(
@@ -426,12 +435,7 @@ public record StaticProgramCSharpClass(
                                 ExpressionsForFunctionArgument(
                                     paramPath,
                                     funcApp.Arguments,
-                                    SelfFunctionInterfaceDelegate,
-                                    GeneralOverride,
-                                    availableFunctions,
-                                    availableValueDecls,
-                                    declarationSyntaxContext,
-                                    alreadyDeclared)
+                                    exprEmitEnv)
                                 .AsGenericValue(declarationSyntaxContext);
 
                             // Do not emit redundant assignments if the argument is the same as the current local value.
@@ -516,12 +520,7 @@ public record StaticProgramCSharpClass(
                 var resultExpression =
                     EnumerateExpressions(
                         expr,
-                        SelfFunctionInterfaceDelegate,
-                        GeneralOverride,
-                        availableFunctions,
-                        availableValueDecls,
-                        declarationSyntaxContext,
-                        alreadyDeclared)
+                        exprEmitEnv)
                     .AsGenericValue(declarationSyntaxContext);
 
                 return [ResultThrowOrReturn(resultExpression)];
@@ -588,13 +587,15 @@ public record StaticProgramCSharpClass(
             var loopBodyCompiled =
                 CompileToCSharpStatement(
                     functionBody,
-                    SelfFunctionInterfaceDelegate,
-                    GeneralOverride,
-                    availableFunctions,
-                    availableValueDecls,
-                    declarationSyntaxContext,
+                    new ExpressionEmitEnv(
+                        new FunctionEmitEnv(
+                            availableFunctions,
+                            availableValueDecls,
+                            declarationSyntaxContext,
+                            SelfFunctionInterfaceDelegate,
+                            GeneralOverride),
+                        LocalDeclarations.Empty),
                     statementsFromResult: StatementsFromResult,
-                    alreadyDeclared: LocalDeclarations.Empty,
                     blockedDeclarations: blockedWithParamLocals);
 
             // Create while(true) loop
@@ -631,15 +632,20 @@ public record StaticProgramCSharpClass(
                 StaticExpression<DeclQualifiedName> expr,
                 LocalDeclarations alreadyDeclared)
             {
+                var exprEmitEnv =
+                    new ExpressionEmitEnv(
+                        new FunctionEmitEnv(
+                            availableFunctions,
+                            availableValueDecls,
+                            declarationSyntaxContext,
+                            SelfFunctionInterfaceDelegate,
+                            GeneralOverride: _ => null),
+                        alreadyDeclared);
+
                 var resultExpression =
                     EnumerateExpressions(
                         expr,
-                        SelfFunctionInterfaceDelegate,
-                        generalOverride: _ => null,
-                        availableFunctions,
-                        availableValueDecls,
-                        declarationSyntaxContext,
-                        alreadyDeclared)
+                        exprEmitEnv)
                     .AsGenericValue(declarationSyntaxContext);
 
                 return [ResultThrowOrReturn(resultExpression)];
@@ -648,13 +654,15 @@ public record StaticProgramCSharpClass(
             var compiled =
                 CompileToCSharpStatement(
                     functionBody,
-                    SelfFunctionInterfaceDelegate,
-                    generalOverride: _ => null,
-                    availableFunctions,
-                    availableValueDecls,
-                    declarationSyntaxContext,
+                    new ExpressionEmitEnv(
+                        new FunctionEmitEnv(
+                            availableFunctions,
+                            availableValueDecls,
+                            declarationSyntaxContext,
+                            SelfFunctionInterfaceDelegate,
+                            GeneralOverride: _ => null),
+                        LocalDeclarations.Empty),
                     statementsFromResult: StatementsFromResult,
-                    alreadyDeclared: LocalDeclarations.Empty,
                     blockedDeclarations: initialBlocked);
 
             return compiled.Statement;
@@ -921,13 +929,8 @@ public record StaticProgramCSharpClass(
 
     public static CompiledStatement CompileToCSharpStatement(
         StaticExpression<DeclQualifiedName> expression,
-        System.Func<IReadOnlyList<int>, ExpressionSyntax?> selfFunctionInterface,
-        System.Func<StaticExpression<DeclQualifiedName>, CompiledCSharpExpression?> generalOverride,
-        IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
-        IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls,
-        DeclarationSyntaxContext declarationSyntaxContext,
+        ExpressionEmitEnv emitEnv,
         System.Func<StaticExpression<DeclQualifiedName>, LocalDeclarations, IReadOnlyList<StatementSyntax>> statementsFromResult,
-        LocalDeclarations alreadyDeclared,
         IReadOnlySet<string> blockedDeclarations)
     {
         bool IgnoreSubexpressionCollectingForCSE(
@@ -938,7 +941,7 @@ public record StaticProgramCSharpClass(
                 return true;
             }
 
-            if (alreadyDeclared.ContainsKey(expr))
+            if (emitEnv.AlreadyDeclared.ContainsKey(expr))
             {
                 return true;
             }
@@ -950,7 +953,7 @@ public record StaticProgramCSharpClass(
                 // TODO: Precise condition (will change when we lift the 2-level limit on parameters).
 
                 if (pathToEnv.Count <= 2 &&
-                   selfFunctionInterface(pathToEnv) is { })
+                   emitEnv.FunctionEnv.SelfFunctionInterface(pathToEnv) is { })
                 {
                     // Don't CSE short environment references (they get replaced with parameters).
 
@@ -970,7 +973,7 @@ public record StaticProgramCSharpClass(
             .OrderBy(expr => expr.SubexpressionCount)
             .ToImmutableArray();
 
-        var mutatedDeclared = alreadyDeclared;
+        var mutatedDeclared = emitEnv.AlreadyDeclared;
 
         // The current approach to common subexpression elimination has a drawback:
         // We collect subexpressions for common subexpression elimination (CSE) and declare them as locals up-front
@@ -1018,7 +1021,7 @@ public record StaticProgramCSharpClass(
             var statement =
                 SyntaxFactory.LocalDeclarationStatement(
                 SyntaxFactory.VariableDeclaration(
-                    CompileTypeSyntax.TypeSyntaxFromType(typeof(PineValue), declarationSyntaxContext))
+                    CompileTypeSyntax.TypeSyntaxFromType(typeof(PineValue), emitEnv.FunctionEnv.DeclarationSyntaxContext))
                 .WithVariables(
                     SyntaxFactory.SingletonSeparatedList(
                         SyntaxFactory.VariableDeclarator(
@@ -1027,13 +1030,8 @@ public record StaticProgramCSharpClass(
                             SyntaxFactory.EqualsValueClause(
                                 CompileToCSharpExpression(
                                     subexpr,
-                                    selfFunctionInterface,
-                                    generalOverride: _ => null,
-                                    availableFunctions,
-                                    availableValueDecls,
-                                    declarationSyntaxContext,
-                                    mutatedDeclared)
-                                .AsGenericValue(declarationSyntaxContext))))));
+                                    emitEnv.AddAlreadyDeclared(mutatedDeclared))
+                                .AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))))));
 
             newDeclaredStatements.Add(statement);
 
@@ -1041,19 +1039,15 @@ public record StaticProgramCSharpClass(
                 mutatedDeclared.SetItem(subexpr, (localName, LocalType.Evaluated));
         }
 
-        var newAlreadyDeclared = mutatedDeclared;
+        var newEmitEnv =
+            emitEnv.AddAlreadyDeclared(mutatedDeclared);
 
         if (expression is StaticExpression<DeclQualifiedName>.Conditional conditionalExpr)
         {
             var conditionExpr =
                 BuildConditionExpression(
                     conditionalExpr.Condition,
-                    selfFunctionInterface,
-                    generalOverride: generalOverride,
-                    availableFunctions,
-                    availableValueDecls,
-                    declarationSyntaxContext,
-                    newAlreadyDeclared);
+                    newEmitEnv);
 
             // Compile true branch first, using current blocked + newly declared names
             var blockedAfterPrefix = blockedDeclarations.Union(newlyDeclaredLocals).ToImmutableHashSet();
@@ -1061,25 +1055,15 @@ public record StaticProgramCSharpClass(
             var trueBranchCompiled =
                 CompileToCSharpStatement(
                     conditionalExpr.TrueBranch,
-                    selfFunctionInterface,
-                    generalOverride: generalOverride,
-                    availableFunctions,
-                    availableValueDecls,
-                    declarationSyntaxContext,
+                    newEmitEnv,
                     statementsFromResult,
-                    newAlreadyDeclared,
                     blockedAfterPrefix);
 
             var falseBranchCompiled =
                 CompileToCSharpStatement(
                     conditionalExpr.FalseBranch,
-                    selfFunctionInterface,
-                    generalOverride: generalOverride,
-                    availableFunctions,
-                    availableValueDecls,
-                    declarationSyntaxContext,
+                    newEmitEnv,
                     statementsFromResult,
-                    newAlreadyDeclared,
                     blockedAfterPrefix.Union(trueBranchCompiled.DeclaredLocals));
 
             var filtered =
@@ -1130,7 +1114,7 @@ public record StaticProgramCSharpClass(
         }
 
         {
-            var resultStatements = statementsFromResult(expression, newAlreadyDeclared);
+            var resultStatements = statementsFromResult(expression, newEmitEnv.AlreadyDeclared);
 
             var filtered =
                 FilteredLocalsResult.FilterDeclarationsByUsage(
@@ -1180,40 +1164,25 @@ public record StaticProgramCSharpClass(
 
     public static CompiledCSharpExpression CompileToCSharpExpression(
         StaticExpression<DeclQualifiedName> expression,
-        System.Func<IReadOnlyList<int>, ExpressionSyntax?> selfFunctionInterface,
-        System.Func<StaticExpression<DeclQualifiedName>, CompiledCSharpExpression?> generalOverride,
-        IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
-        IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls,
-        DeclarationSyntaxContext declarationSyntaxContext,
-        LocalDeclarations alreadyDeclared)
+        ExpressionEmitEnv emitEnv)
     {
         return
             EnumerateExpressions(
                 expression,
-                selfFunctionInterface,
-                generalOverride,
-                availableFunctions,
-                availableValueDecls,
-                declarationSyntaxContext,
-                alreadyDeclared)
+                emitEnv)
             .FirstOrDefault()!;
     }
 
     public static IEnumerable<CompiledCSharpExpression> EnumerateExpressions(
         StaticExpression<DeclQualifiedName> expression,
-        System.Func<IReadOnlyList<int>, ExpressionSyntax?> selfFunctionInterface,
-        System.Func<StaticExpression<DeclQualifiedName>, CompiledCSharpExpression?> generalOverride,
-        IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
-        IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls,
-        DeclarationSyntaxContext declarationSyntaxContext,
-        LocalDeclarations alreadyDeclared)
+        ExpressionEmitEnv emitEnv)
     {
-        if (generalOverride(expression) is { } overridden)
+        if (emitEnv.FunctionEnv.GeneralOverride(expression) is { } overridden)
         {
             return [overridden];
         }
 
-        if (alreadyDeclared.TryGetValue(expression, out var existingVar))
+        if (emitEnv.AlreadyDeclared.TryGetValue(expression, out var existingVar))
         {
             return existingVar.ltype switch
             {
@@ -1249,7 +1218,7 @@ public record StaticProgramCSharpClass(
             {
                 var prefix = pathInEnv.Take(len).ToImmutableArray();
 
-                if (selfFunctionInterface(prefix) is { } paramRef)
+                if (emitEnv.FunctionEnv.SelfFunctionInterface(prefix) is { } paramRef)
                 {
                     var remainingPath = pathInEnv.Skip(len).ToImmutableArray();
 
@@ -1284,7 +1253,7 @@ public record StaticProgramCSharpClass(
                     PineCSharpSyntaxFactory.BuildCSharpExpressionToGetItemFromPathOrEmptyList(
                         paramRef,
                         remainingPath,
-                        declarationSyntaxContext);
+                        emitEnv.FunctionEnv.DeclarationSyntaxContext);
 
                 pathsFromParametersAndLocals.Add((paramRef, remainingPath));
             }
@@ -1297,7 +1266,7 @@ public record StaticProgramCSharpClass(
             {
                 lastSubExpr = current;
 
-                if (alreadyDeclared.TryGetValue(current.subexpr, out var typelLocal))
+                if (emitEnv.AlreadyDeclared.TryGetValue(current.subexpr, out var typelLocal))
                 {
                     if (typelLocal.ltype == LocalType.Evaluated)
                     {
@@ -1320,15 +1289,10 @@ public record StaticProgramCSharpClass(
                     var subExprCompiled =
                         CompileToCSharpExpression(
                             lastSubExpr.Value.subexpr,
-                            selfFunctionInterface,
-                            generalOverride,
-                            availableFunctions,
-                            availableValueDecls,
-                            declarationSyntaxContext,
-                            alreadyDeclared);
+                            emitEnv);
 
                     pathsFromParametersAndLocals.Add(
-                        (subExprCompiled.AsGenericValue(declarationSyntaxContext),
+                        (subExprCompiled.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext),
                         lastSubExpr.Value.pathInSubexpr));
                 }
             }
@@ -1345,7 +1309,7 @@ public record StaticProgramCSharpClass(
                 PineCSharpSyntaxFactory.BuildCSharpExpressionToGetItemFromPathOrEmptyList(
                     shortest.paramRef,
                     shortest.remainingPath,
-                    declarationSyntaxContext);
+                    emitEnv.FunctionEnv.DeclarationSyntaxContext);
 
             return [CompiledCSharpExpression.Generic(fromPathGeneric)];
         }
@@ -1355,8 +1319,8 @@ public record StaticProgramCSharpClass(
             return
                 EnumerateExpressionsForLiteral(
                     literal,
-                    availableValueDecls,
-                    declarationSyntaxContext);
+                    emitEnv.FunctionEnv.AvailableValueDeclarations,
+                    emitEnv.FunctionEnv.DeclarationSyntaxContext);
         }
 
         if (expression is StaticExpression<DeclQualifiedName>.List list)
@@ -1366,19 +1330,14 @@ public record StaticProgramCSharpClass(
                 .Select(item =>
                 CompileToCSharpExpression(
                     item,
-                    selfFunctionInterface,
-                    generalOverride,
-                    availableFunctions,
-                    availableValueDecls,
-                    declarationSyntaxContext,
-                    alreadyDeclared))
+                    emitEnv))
                 .ToImmutableArray();
 
             var collectionExprs =
                 SyntaxFactory.CollectionExpression(
                     SyntaxFactory.SeparatedList<CollectionElementSyntax>(
                         itemExprs
-                        .Select(itemExpr => SyntaxFactory.ExpressionElement(itemExpr.AsGenericValue(declarationSyntaxContext)))));
+                        .Select(itemExpr => SyntaxFactory.ExpressionElement(itemExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext)))));
 
             // Invoke PineValue.List( ... )
 
@@ -1388,7 +1347,7 @@ public record StaticProgramCSharpClass(
                         SyntaxKind.SimpleMemberAccessExpression,
                         CompileTypeSyntax.TypeSyntaxFromType(
                             typeof(PineValue),
-                            declarationSyntaxContext),
+                            emitEnv.FunctionEnv.DeclarationSyntaxContext),
                         SyntaxFactory.IdentifierName(nameof(PineValue.List))))
                 .WithArgumentList(
                     SyntaxFactory.ArgumentList(
@@ -1403,12 +1362,7 @@ public record StaticProgramCSharpClass(
             return
                 EnumerateExpressionsForConditional(
                     conditional,
-                    selfFunctionInterface,
-                    generalOverride,
-                    availableFunctions,
-                    availableValueDecls,
-                    declarationSyntaxContext,
-                    alreadyDeclared);
+                    emitEnv);
         }
 
         if (expression is StaticExpression<DeclQualifiedName>.KernelApplication kernelApp)
@@ -1416,17 +1370,12 @@ public record StaticProgramCSharpClass(
             return
                 EnumerateExpressionsForKernelApp(
                     kernelApp,
-                    selfFunctionInterface,
-                    generalOverride,
-                    availableFunctions,
-                    availableValueDecls,
-                    declarationSyntaxContext,
-                    alreadyDeclared);
+                    emitEnv);
         }
 
         if (expression is StaticExpression<DeclQualifiedName>.FunctionApplication funcApp)
         {
-            if (!availableFunctions.TryGetValue(funcApp.FunctionName, out var funcInterface))
+            if (!emitEnv.FunctionEnv.AvailableFunctions.TryGetValue(funcApp.FunctionName, out var funcInterface))
             {
                 throw new System.Exception(
                     "Function application references unknown function '" + funcApp.FunctionName + ".");
@@ -1438,12 +1387,7 @@ public record StaticProgramCSharpClass(
                 ExpressionsForFunctionArgument(
                     argumentPath,
                     funcApp.Arguments,
-                    selfFunctionInterface,
-                    generalOverride,
-                    availableFunctions,
-                    availableValueDecls,
-                    declarationSyntaxContext,
-                    alreadyDeclared))
+                    emitEnv))
                 .ToImmutableArray();
 
             var genericCSharpExpr =
@@ -1453,7 +1397,8 @@ public record StaticProgramCSharpClass(
                     SyntaxFactory.ArgumentList(
                         SyntaxFactory.SeparatedList(
                             [
-                            .. arguments.Select(argExpr => SyntaxFactory.Argument(argExpr.AsGenericValue(declarationSyntaxContext)))
+                            .. arguments.Select(argExpr =>
+                            SyntaxFactory.Argument(argExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext)))
                             ])));
 
             return [CompiledCSharpExpression.Generic(genericCSharpExpr)];
@@ -1464,19 +1409,14 @@ public record StaticProgramCSharpClass(
             var renderedEncodedExpr =
                 CompileToCSharpExpression(
                     parseAndEval.Encoded,
-                    selfFunctionInterface,
-                    generalOverride,
-                    availableFunctions,
-                    availableValueDecls,
-                    declarationSyntaxContext,
-                    alreadyDeclared);
+                    emitEnv);
 
             var genericCSharpExpr =
                 PineCSharpSyntaxFactory.ThrowParseExpressionException(
                     SyntaxFactory.LiteralExpression(
                         SyntaxKind.StringLiteralExpression,
                         SyntaxFactory.Literal("TODO: Include details from encoded and env subexpressions")),
-                    declarationSyntaxContext);
+                    emitEnv.FunctionEnv.DeclarationSyntaxContext);
 
             return [CompiledCSharpExpression.Generic(genericCSharpExpr)];
         }
@@ -1549,43 +1489,23 @@ public record StaticProgramCSharpClass(
 
     public static IEnumerable<CompiledCSharpExpression> EnumerateExpressionsForConditional(
         StaticExpression<DeclQualifiedName>.Conditional conditional,
-        System.Func<IReadOnlyList<int>, ExpressionSyntax?> selfFunctionInterface,
-        System.Func<StaticExpression<DeclQualifiedName>, CompiledCSharpExpression?> generalOverride,
-        IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
-        IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls,
-        DeclarationSyntaxContext declarationSyntaxContext,
-        LocalDeclarations alreadyDeclared)
+        ExpressionEmitEnv emitEnv)
     {
         var conditionExpr =
             BuildConditionExpression(
                 conditional.Condition,
-                selfFunctionInterface,
-                generalOverride,
-                availableFunctions,
-                availableValueDecls,
-                declarationSyntaxContext,
-                alreadyDeclared);
+                emitEnv);
 
         var trueBranchExprs =
             EnumerateExpressions(
                 conditional.TrueBranch,
-                selfFunctionInterface,
-                generalOverride,
-                availableFunctions,
-                availableValueDecls,
-                declarationSyntaxContext,
-                alreadyDeclared)
+                emitEnv)
             .ToImmutableArray();
 
         var falseBranchExprs =
             EnumerateExpressions(
                 conditional.FalseBranch,
-                selfFunctionInterface,
-                generalOverride,
-                availableFunctions,
-                availableValueDecls,
-                declarationSyntaxContext,
-                alreadyDeclared)
+                emitEnv)
             .ToImmutableArray();
 
         // Try to find matching types in branches
@@ -1659,26 +1579,21 @@ public record StaticProgramCSharpClass(
                 condition: conditionExpr,
                 whenTrue:
                 CompiledCSharpExpression.EnsureIsParenthesizedForComposition(
-                    trueBranchExpr.AsGenericValue(declarationSyntaxContext)),
+                    trueBranchExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext)),
                 whenFalse:
                 CompiledCSharpExpression.EnsureIsParenthesizedForComposition(
-                    falseBranchExpr.AsGenericValue(declarationSyntaxContext)));
+                    falseBranchExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext)));
 
         yield return CompiledCSharpExpression.Generic(genericCSharpExpr);
     }
 
     public static ExpressionSyntax BuildConditionExpression(
         StaticExpression<DeclQualifiedName> condition,
-        System.Func<IReadOnlyList<int>, ExpressionSyntax?> selfFunctionInterface,
-        System.Func<StaticExpression<DeclQualifiedName>, CompiledCSharpExpression?> generalOverride,
-        IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
-        IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls,
-        DeclarationSyntaxContext declarationSyntaxContext,
-        LocalDeclarations alreadyDeclared)
+        ExpressionEmitEnv emitEnv)
     {
-        if (generalOverride(condition) is { } overridden)
+        if (emitEnv.FunctionEnv.GeneralOverride(condition) is { } overridden)
         {
-            return overridden.AsBooleanValue(declarationSyntaxContext);
+            return overridden.AsBooleanValue(emitEnv.FunctionEnv.DeclarationSyntaxContext);
         }
 
         var conditionAsAndChain = ParseAsAndChain(condition);
@@ -1688,12 +1603,7 @@ public record StaticProgramCSharpClass(
             .Select(expr =>
                 CompileToCSharpExpression(
                     expr,
-                    selfFunctionInterface,
-                    generalOverride,
-                    availableFunctions,
-                    availableValueDecls,
-                    declarationSyntaxContext,
-                    alreadyDeclared))
+                    emitEnv))
             .ToImmutableArray();
 
         if (andChainConjunctsCompiled.Length is 0)
@@ -1703,14 +1613,14 @@ public record StaticProgramCSharpClass(
 
         if (andChainConjunctsCompiled.Length is 1)
         {
-            return andChainConjunctsCompiled[0].AsBooleanValue(declarationSyntaxContext);
+            return andChainConjunctsCompiled[0].AsBooleanValue(emitEnv.FunctionEnv.DeclarationSyntaxContext);
         }
 
         // Combine conjuncts with '&&'
 
         return
             andChainConjunctsCompiled
-            .Select(e => e.AsBooleanValue(declarationSyntaxContext))
+            .Select(e => e.AsBooleanValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
             .Aggregate((left, right) =>
                 SyntaxFactory.BinaryExpression(
                     SyntaxKind.LogicalAndExpression,
@@ -1737,12 +1647,7 @@ public record StaticProgramCSharpClass(
 
     public static IEnumerable<CompiledCSharpExpression> EnumerateExpressionsForKernelApp(
         StaticExpression<DeclQualifiedName>.KernelApplication kernelApp,
-        System.Func<IReadOnlyList<int>, ExpressionSyntax?> selfFunctionInterface,
-        System.Func<StaticExpression<DeclQualifiedName>, CompiledCSharpExpression?> generalOverride,
-        IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
-        IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls,
-        DeclarationSyntaxContext declarationSyntaxContext,
-        LocalDeclarations alreadyDeclared)
+        ExpressionEmitEnv emitEnv)
     {
         if (kernelApp.Function is nameof(KernelFunction.equal))
         {
@@ -1755,23 +1660,13 @@ public record StaticProgramCSharpClass(
                     var leftExprs =
                         EnumerateExpressions(
                             listInput.Items[0],
-                            selfFunctionInterface,
-                            generalOverride,
-                            availableFunctions,
-                            availableValueDecls,
-                            declarationSyntaxContext,
-                            alreadyDeclared)
+                            emitEnv)
                         .ToImmutableArray();
 
                     var rightExprs =
                         EnumerateExpressions(
                             listInput.Items[1],
-                            selfFunctionInterface,
-                            generalOverride,
-                            availableFunctions,
-                            availableValueDecls,
-                            declarationSyntaxContext,
-                            alreadyDeclared)
+                            emitEnv)
                         .ToImmutableArray();
 
                     var leftAsBoolean =
@@ -1834,9 +1729,9 @@ public record StaticProgramCSharpClass(
                             SyntaxFactory.BinaryExpression(
                                 SyntaxKind.EqualsExpression,
                                 CompiledCSharpExpression.EnsureIsParenthesizedForComposition(
-                                    leftExpr.AsGenericValue(declarationSyntaxContext)),
+                                    leftExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext)),
                                 CompiledCSharpExpression.EnsureIsParenthesizedForComposition(
-                                    rightExpr.AsGenericValue(declarationSyntaxContext)));
+                                    rightExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext)));
 
                         yield return CompiledCSharpExpression.Boolean(booleanCSharpExpr);
                     }
@@ -1851,12 +1746,7 @@ public record StaticProgramCSharpClass(
                 var inputSequences =
                     EnumerateExpressions(
                         inputExpr,
-                        selfFunctionInterface,
-                        generalOverride,
-                        availableFunctions,
-                        availableValueDecls,
-                        declarationSyntaxContext,
-                        alreadyDeclared);
+                        emitEnv);
 
                 foreach (var inputSequence in inputSequences)
                 {
@@ -1879,12 +1769,7 @@ public record StaticProgramCSharpClass(
         var resultsFromFusion =
             CompileKernelFunctionApplication.TryCompileKernelFusion(
                 kernelApp,
-                selfFunctionInterface,
-                generalOverride,
-                availableFunctions,
-                availableValueDecls,
-                declarationSyntaxContext,
-                alreadyDeclared);
+                emitEnv);
 
         foreach (var fromFusion in resultsFromFusion)
         {
@@ -1901,13 +1786,8 @@ public record StaticProgramCSharpClass(
                     return
                         CompileToCSharpExpression(
                             argumentExpr,
-                            selfFunctionInterface,
-                            generalOverride,
-                            availableFunctions,
-                            availableValueDecls,
-                            declarationSyntaxContext,
-                            alreadyDeclared)
-                        .AsGenericValue(declarationSyntaxContext);
+                            emitEnv)
+                        .AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext);
 
                 case PineKernelFunctions.KernelFunctionParameterType.Integer:
                     {
@@ -1937,7 +1817,7 @@ public record StaticProgramCSharpClass(
                         [kernelApp.Input],
                         isCommutative: false,
                         TryRenderArgument,
-                        declarationSyntaxContext);
+                        emitEnv.FunctionEnv.DeclarationSyntaxContext);
 
                 foreach (var match in matches)
                 {
@@ -1969,7 +1849,7 @@ public record StaticProgramCSharpClass(
                         argumentsList.Items,
                         isCommutative,
                         TryRenderArgument,
-                        declarationSyntaxContext);
+                        emitEnv.FunctionEnv.DeclarationSyntaxContext);
 
                 foreach (var match in matches)
                 {
@@ -1982,17 +1862,12 @@ public record StaticProgramCSharpClass(
             var inputExpr =
                 CompileToCSharpExpression(
                     kernelApp.Input,
-                    selfFunctionInterface,
-                    generalOverride,
-                    availableFunctions,
-                    availableValueDecls,
-                    declarationSyntaxContext,
-                    alreadyDeclared);
+                    emitEnv);
 
             if (PineKernelFunctions.CompileKernelFunctionGenericInvocation(
                 kernelApp.Function,
-                inputExpr.AsGenericValue(declarationSyntaxContext),
-                declarationSyntaxContext)
+                inputExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext),
+                emitEnv.FunctionEnv.DeclarationSyntaxContext)
                 is { } specializedInvocation)
             {
                 yield return CompiledCSharpExpression.Generic(specializedInvocation);
@@ -2006,7 +1881,7 @@ public record StaticProgramCSharpClass(
                         SyntaxKind.SimpleMemberAccessExpression,
                         CompileTypeSyntax.TypeSyntaxFromType(
                             typeof(KernelFunction),
-                            declarationSyntaxContext),
+                            emitEnv.FunctionEnv.DeclarationSyntaxContext),
                         SyntaxFactory.IdentifierName(nameof(KernelFunction.ApplyKernelFunctionGeneric))))
                 .WithArgumentList(
                     SyntaxFactory.ArgumentList(
@@ -2016,7 +1891,7 @@ public record StaticProgramCSharpClass(
                             SyntaxFactory.LiteralExpression(
                                 SyntaxKind.StringLiteralExpression,
                                 SyntaxFactory.Literal(kernelApp.Function))),
-                        SyntaxFactory.Argument(inputExpr.AsGenericValue(declarationSyntaxContext))
+                        SyntaxFactory.Argument(inputExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
                             ])));
 
             yield return CompiledCSharpExpression.Generic(genericCSharpExpr);
@@ -2026,24 +1901,14 @@ public record StaticProgramCSharpClass(
     public static IEnumerable<CompiledCSharpExpression> ExpressionsForFunctionArgument(
         IReadOnlyList<int> paramPath,
         StaticExpression<DeclQualifiedName> argumentExpr,
-        System.Func<IReadOnlyList<int>, ExpressionSyntax?> selfFunctionInterface,
-        System.Func<StaticExpression<DeclQualifiedName>, CompiledCSharpExpression?> generalOverride,
-        IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
-        IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls,
-        DeclarationSyntaxContext declarationSyntaxContext,
-        LocalDeclarations alreadyDeclared)
+        ExpressionEmitEnv emitEnv)
     {
         if (StaticExpressionExtension.GetSubexpressionAtPath(argumentExpr, paramPath) is { } subexpr)
         {
             var renderedExpr =
                 EnumerateExpressions(
                     subexpr.subexpr,
-                    selfFunctionInterface,
-                    generalOverride,
-                    availableFunctions,
-                    availableValueDecls,
-                    declarationSyntaxContext,
-                    alreadyDeclared);
+                    emitEnv);
 
             if (subexpr.pathRemaining.Count is 0)
             {
@@ -2052,9 +1917,9 @@ public record StaticProgramCSharpClass(
 
             var withRemainingPathExpr =
                 PineCSharpSyntaxFactory.BuildCSharpExpressionToGetItemFromPathOrEmptyList(
-                    renderedExpr.AsGenericValue(declarationSyntaxContext),
+                    renderedExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext),
                     subexpr.pathRemaining,
-                    declarationSyntaxContext);
+                    emitEnv.FunctionEnv.DeclarationSyntaxContext);
 
             return
                 [CompiledCSharpExpression.Generic(withRemainingPathExpr)];

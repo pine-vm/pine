@@ -311,12 +311,8 @@ public class OptimizeAndEmitDictInsertTests
                             {
                                 PineValue local_000 =
                                     Basics.compare(
-                                        PineValueExtension.ValueFromPathOrEmptyList(
-                                            local_param_1_0.Evaluate(),
-                                            [0]),
-                                        PineValueExtension.ValueFromPathOrEmptyList(
-                                            local_param_1_1.Evaluate(),
-                                            [0]));
+                                        local_param_1_0.GetHead(),
+                                        local_param_1_1.GetHead());
 
                                 if (local_000 == CommonReusedValues.List_ac855cb8)
                                 {

@@ -6,7 +6,6 @@ using Pine.Core.Internal;
 using Pine.Pine.PineVM;
 using System;
 using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.Linq;
 
 namespace Pine.Core.DotNet;
@@ -106,16 +105,11 @@ public class CompileKernelFunctionApplication
 
     public static IEnumerable<CompiledCSharpExpression> TryCompileKernelFusion(
         StaticExpression<DeclQualifiedName>.KernelApplication kernelApp,
-        Func<IReadOnlyList<int>, ExpressionSyntax?> selfFunctionInterface,
-        Func<StaticExpression<DeclQualifiedName>, CompiledCSharpExpression?> generalOverride,
-        IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> availableFunctions,
-        IReadOnlyDictionary<PineValue, DeclQualifiedName> availableValueDecls,
-        DeclarationSyntaxContext declarationSyntaxContext,
-        ImmutableDictionary<StaticExpression<DeclQualifiedName>, (string identifier, LocalType ltype)> alreadyDeclared)
+        ExpressionEmitEnv emitEnv)
     {
         TypeSyntax TypeSyntaxFromType(Type type)
         {
-            return CompileTypeSyntax.TypeSyntaxFromType(type, declarationSyntaxContext);
+            return CompileTypeSyntax.TypeSyntaxFromType(type, emitEnv.FunctionEnv.DeclarationSyntaxContext);
         }
 
         {
@@ -135,22 +129,12 @@ public class CompileKernelFunctionApplication
                     var argumentExpr =
                         StaticProgramCSharpClass.CompileToCSharpExpression(
                             skipArgsList.Items[1],
-                            selfFunctionInterface,
-                            generalOverride,
-                            availableFunctions,
-                            availableValueDecls,
-                            declarationSyntaxContext,
-                            alreadyDeclared);
+                            emitEnv);
 
                     var skipCountExpr =
                         StaticProgramCSharpClass.CompileToCSharpExpression(
                             skipArgsList.Items[0],
-                            selfFunctionInterface,
-                            generalOverride,
-                            availableFunctions,
-                            availableValueDecls,
-                            declarationSyntaxContext,
-                            alreadyDeclared);
+                            emitEnv);
 
                     // Build fully-qualified invocation: Pine.Core.Internal.KernelFunctionFused.SkipAndTake(argument: ..., skipCountValue: ..., takeCount: ...)
                     var genericCSharpExpr =
@@ -169,12 +153,12 @@ public class CompileKernelFunctionApplication
 
                                     SyntaxFactory.Token(SyntaxKind.CommaToken),
 
-                                    SyntaxFactory.Argument(skipCountExpr.AsGenericValue(declarationSyntaxContext))
+                                    SyntaxFactory.Argument(skipCountExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
                                         .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("skipCountValue"))),
 
                                     SyntaxFactory.Token(SyntaxKind.CommaToken),
 
-                                    SyntaxFactory.Argument(argumentExpr.AsGenericValue(declarationSyntaxContext))
+                                    SyntaxFactory.Argument(argumentExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
                                         .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("argument"))),
                                     })));
 
@@ -202,32 +186,17 @@ public class CompileKernelFunctionApplication
             var argumentExpr =
                 StaticProgramCSharpClass.CompileToCSharpExpression(
                     takeArgsList2.Items[1],
-                    selfFunctionInterface,
-                    generalOverride,
-                    availableFunctions,
-                    availableValueDecls,
-                    declarationSyntaxContext,
-                    alreadyDeclared);
+                    emitEnv);
 
             var takeCountExpr =
                 StaticProgramCSharpClass.CompileToCSharpExpression(
                     takeArgsList2.Items[0],
-                    selfFunctionInterface,
-                    generalOverride,
-                    availableFunctions,
-                    availableValueDecls,
-                    declarationSyntaxContext,
-                    alreadyDeclared);
+                    emitEnv);
 
             var skipCountExpr =
                 StaticProgramCSharpClass.CompileToCSharpExpression(
                     skipArgsList2.Items[0],
-                    selfFunctionInterface,
-                    generalOverride,
-                    availableFunctions,
-                    availableValueDecls,
-                    declarationSyntaxContext,
-                    alreadyDeclared);
+                    emitEnv);
 
             // Build fully-qualified invocation: Pine.Core.Internal.KernelFunctionFused.TakeAndSkip(skipCountValue: ..., takeCountValue: ..., argument: ...)
             var genericCSharpExpr =
@@ -241,14 +210,18 @@ public class CompileKernelFunctionApplication
                         SyntaxFactory.SeparatedList<ArgumentSyntax>(
                             new SyntaxNodeOrToken[]
                             {
-                                    SyntaxFactory.Argument(skipCountExpr.AsGenericValue(declarationSyntaxContext))
-                                        .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("skipCountValue"))),
-                                    SyntaxFactory.Token(SyntaxKind.CommaToken),
-                                    SyntaxFactory.Argument(takeCountExpr.AsGenericValue(declarationSyntaxContext))
-                                        .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("takeCountValue"))),
-                                    SyntaxFactory.Token(SyntaxKind.CommaToken),
-                                    SyntaxFactory.Argument(argumentExpr.AsGenericValue(declarationSyntaxContext))
-                                        .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("argument"))),
+                                SyntaxFactory.Argument(skipCountExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
+                                .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("skipCountValue"))),
+
+                                SyntaxFactory.Token(SyntaxKind.CommaToken),
+
+                                SyntaxFactory.Argument(takeCountExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
+                                .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("takeCountValue"))),
+
+                                SyntaxFactory.Token(SyntaxKind.CommaToken),
+
+                                SyntaxFactory.Argument(argumentExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
+                                .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("argument"))),
                             })));
 
             yield return CompiledCSharpExpression.Generic(genericCSharpExpr);
@@ -274,12 +247,7 @@ public class CompileKernelFunctionApplication
                     var seqExpr =
                         StaticProgramCSharpClass.CompileToCSharpExpression(
                             innerReverseApp.Input,
-                            selfFunctionInterface,
-                            generalOverride,
-                            availableFunctions,
-                            availableValueDecls,
-                            declarationSyntaxContext,
-                            alreadyDeclared);
+                            emitEnv);
 
                     // Build fully-qualified invocation: Pine.Core.Internal.KernelFunctionFused.TakeLast(takeCount: n, value: seq)
                     var genericCSharpExpr =
@@ -298,7 +266,7 @@ public class CompileKernelFunctionApplication
 
                                     SyntaxFactory.Token(SyntaxKind.CommaToken),
 
-                                    SyntaxFactory.Argument(seqExpr.AsGenericValue(declarationSyntaxContext))
+                                    SyntaxFactory.Argument(seqExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
                                         .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("value")))
                                     })));
 
@@ -328,12 +296,7 @@ public class CompileKernelFunctionApplication
                     var seqExpr =
                         StaticProgramCSharpClass.CompileToCSharpExpression(
                             innerReverseApp.Input,
-                            selfFunctionInterface,
-                            generalOverride,
-                            availableFunctions,
-                            availableValueDecls,
-                            declarationSyntaxContext,
-                            alreadyDeclared);
+                            emitEnv);
 
                     // Build fully-qualified invocation: Pine.Core.Internal.KernelFunctionFused.SkipLast(skipCount: n, value: seq)
                     var genericCSharpExpr =
@@ -352,7 +315,7 @@ public class CompileKernelFunctionApplication
 
                                         SyntaxFactory.Token(SyntaxKind.CommaToken),
 
-                                        SyntaxFactory.Argument(seqExpr.AsGenericValue(declarationSyntaxContext))
+                                        SyntaxFactory.Argument(seqExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
                                         .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("value")))
                                     })));
 
@@ -378,22 +341,12 @@ public class CompileKernelFunctionApplication
                 var prefixExpr =
                     StaticProgramCSharpClass.CompileToCSharpExpression(
                         concatArgsList.Items[0],
-                        selfFunctionInterface,
-                        generalOverride,
-                        availableFunctions,
-                        availableValueDecls,
-                        declarationSyntaxContext,
-                        alreadyDeclared);
+                        emitEnv);
 
                 var itemToAppendExpr =
                     StaticProgramCSharpClass.CompileToCSharpExpression(
                         itemToAppendList.Items[0],
-                        selfFunctionInterface,
-                        generalOverride,
-                        availableFunctions,
-                        availableValueDecls,
-                        declarationSyntaxContext,
-                        alreadyDeclared);
+                        emitEnv);
 
                 // Build fully-qualified invocation: Pine.Core.Internal.KernelFunctionFused.ListAppendItem(prefix: ..., itemToAppend: ...)
                 var genericCSharpExpr =
@@ -407,12 +360,12 @@ public class CompileKernelFunctionApplication
                             SyntaxFactory.SeparatedList<ArgumentSyntax>(
                                 new SyntaxNodeOrToken[]
                                 {
-                                    SyntaxFactory.Argument(prefixExpr.AsGenericValue(declarationSyntaxContext))
+                                    SyntaxFactory.Argument(prefixExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
                                         .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("prefix"))),
 
                                     SyntaxFactory.Token(SyntaxKind.CommaToken),
 
-                                    SyntaxFactory.Argument(itemToAppendExpr.AsGenericValue(declarationSyntaxContext))
+                                    SyntaxFactory.Argument(itemToAppendExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
                                         .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("itemToAppend"))),
                                 })));
 
@@ -434,22 +387,12 @@ public class CompileKernelFunctionApplication
                 var itemToPrependExpr =
                     StaticProgramCSharpClass.CompileToCSharpExpression(
                         itemToPrepend,
-                        selfFunctionInterface,
-                        generalOverride,
-                        availableFunctions,
-                        availableValueDecls,
-                        declarationSyntaxContext,
-                        alreadyDeclared);
+                        emitEnv);
 
                 var suffixExpr =
                     StaticProgramCSharpClass.CompileToCSharpExpression(
                         suffix,
-                        selfFunctionInterface,
-                        generalOverride,
-                        availableFunctions,
-                        availableValueDecls,
-                        declarationSyntaxContext,
-                        alreadyDeclared);
+                        emitEnv);
 
                 // Build fully-qualified invocation: Pine.Core.Internal.KernelFunctionFused.ListPrependItem(itemToPrepend: ..., suffix: ...)
                 return
@@ -463,13 +406,13 @@ public class CompileKernelFunctionApplication
                             SyntaxFactory.SeparatedList<ArgumentSyntax>(
                                 new SyntaxNodeOrToken[]
                                 {
-                                    SyntaxFactory.Argument(itemToPrependExpr.AsGenericValue(declarationSyntaxContext))
-                                        .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("itemToPrepend"))),
+                                    SyntaxFactory.Argument(itemToPrependExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
+                                    .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("itemToPrepend"))),
 
                                     SyntaxFactory.Token(SyntaxKind.CommaToken),
 
-                                    SyntaxFactory.Argument(suffixExpr.AsGenericValue(declarationSyntaxContext))
-                                        .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("suffix"))),
+                                    SyntaxFactory.Argument(suffixExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
+                                    .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("suffix"))),
                                 })));
             }
 
@@ -485,12 +428,7 @@ public class CompileKernelFunctionApplication
                 var suffixExpr =
                     StaticProgramCSharpClass.CompileToCSharpExpression(
                         suffix,
-                        selfFunctionInterface,
-                        generalOverride,
-                        availableFunctions,
-                        availableValueDecls,
-                        declarationSyntaxContext,
-                        alreadyDeclared);
+                        emitEnv);
 
                 // Build fully-qualified invocation: Pine.Core.Internal.KernelFunctionFused.BlobPrependByte(byteToPrepend: ..., suffix: ...)
                 return
@@ -505,12 +443,12 @@ public class CompileKernelFunctionApplication
                                 new SyntaxNodeOrToken[]
                                 {
                                     SyntaxFactory.Argument(PineCSharpSyntaxFactory.ExpressionSyntaxForIntegerLiteral(byteToPrepend))
-                                        .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("byteToPrepend"))),
+                                    .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("byteToPrepend"))),
 
                                     SyntaxFactory.Token(SyntaxKind.CommaToken),
 
-                                    SyntaxFactory.Argument(suffixExpr.AsGenericValue(declarationSyntaxContext))
-                                        .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("suffix"))),
+                                    SyntaxFactory.Argument(suffixExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
+                                    .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("suffix"))),
                                 })));
             }
 
@@ -569,12 +507,7 @@ public class CompileKernelFunctionApplication
                 var argumentExpr =
                     StaticProgramCSharpClass.CompileToCSharpExpression(
                         concatList.Items[1],
-                        selfFunctionInterface,
-                        generalOverride,
-                        availableFunctions,
-                        availableValueDecls,
-                        declarationSyntaxContext,
-                        alreadyDeclared);
+                        emitEnv);
 
                 if (prefixBlob.Bytes.Span[0] is 2)
                 {
@@ -582,8 +515,8 @@ public class CompileKernelFunctionApplication
                         CompiledCSharpExpression.Generic(
                             CanonicalIntegerFromUnsignedSyntax(
                                 signIsPositive: false,
-                                argumentExpr.AsGenericValue(declarationSyntaxContext),
-                                declarationSyntaxContext));
+                                argumentExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext),
+                                emitEnv.FunctionEnv.DeclarationSyntaxContext));
                 }
 
                 if (prefixBlob.Bytes.Span[0] is 4)
@@ -592,8 +525,8 @@ public class CompileKernelFunctionApplication
                         CompiledCSharpExpression.Generic(
                             CanonicalIntegerFromUnsignedSyntax(
                                 signIsPositive: true,
-                                argumentExpr.AsGenericValue(declarationSyntaxContext),
-                                declarationSyntaxContext));
+                                argumentExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext),
+                                emitEnv.FunctionEnv.DeclarationSyntaxContext));
                 }
             }
 
