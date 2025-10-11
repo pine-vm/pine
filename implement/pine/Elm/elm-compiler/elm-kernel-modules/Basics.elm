@@ -203,7 +203,10 @@ add a b =
 
 sub : number -> number -> number
 sub a b =
-    Pine_kernel.int_add [ a, Pine_kernel.negate b ]
+    Pine_kernel.int_add
+        [ a
+        , Pine_kernel.int_mul [ -1, b ]
+        ]
 
 
 mul : number -> number -> number
@@ -217,21 +220,21 @@ mul a b =
                 newDenominator =
                     Pine_kernel.int_mul [ denomA, denomB ]
             in
-            simplifyFraction (Elm_Float newNumerator newDenominator)
+            canonicalFloat ( newNumerator, newDenominator )
 
         ( Elm_Float numA denomA, intB ) ->
             let
                 newNumerator =
                     Pine_kernel.int_mul [ numA, intB ]
             in
-            simplifyFraction (Elm_Float newNumerator denomA)
+            canonicalFloat ( newNumerator, denomA )
 
         ( intA, Elm_Float numB denomB ) ->
             let
                 newNumerator =
                     Pine_kernel.int_mul [ intA, numB ]
             in
-            simplifyFraction (Elm_Float newNumerator denomB)
+            canonicalFloat ( newNumerator, denomB )
 
         _ ->
             Pine_kernel.int_mul [ a, b ]
@@ -319,8 +322,8 @@ idivHelper dividend divisor quotient =
         quotient
 
 
-simplifyFraction : Float -> number
-simplifyFraction (Elm_Float numerator denominator) =
+canonicalFloat : ( Int, Int ) -> number
+canonicalFloat ( numerator, denominator ) =
     let
         gcdValue =
             gcd (abs numerator) (abs denominator)
@@ -645,23 +648,37 @@ compareStrings offset stringA stringB =
 
 modBy : Int -> Int -> Int
 modBy divisor dividend =
-    let
-        remainder =
-            remainderBy divisor dividend
-    in
-    if Pine_kernel.int_is_sorted_asc [ 0, remainder ] then
-        remainder
+    if Pine_kernel.equal [ divisor, 1 ] then
+        0
 
     else
-        Pine_kernel.int_add [ remainder, divisor ]
+        let
+            remainder =
+                remainderBy divisor dividend
+        in
+        if Pine_kernel.int_is_sorted_asc [ 0, remainder ] then
+            remainder
+
+        else
+            Pine_kernel.int_add [ remainder, divisor ]
 
 
 remainderBy : Int -> Int -> Int
 remainderBy divisor dividend =
-    Pine_kernel.int_add
-        [ dividend
-        , Pine_kernel.negate (Pine_kernel.int_mul [ divisor, idiv dividend divisor ])
-        ]
+    if Pine_kernel.equal [ divisor, 1 ] then
+        0
+
+    else
+        Pine_kernel.int_add
+            [ dividend
+            , Pine_kernel.int_mul
+                [ -1
+                , Pine_kernel.int_mul
+                    [ divisor
+                    , idiv dividend divisor
+                    ]
+                ]
+            ]
 
 
 {-| Negate a number.
@@ -677,10 +694,12 @@ negate : number -> number
 negate n =
     case n of
         Elm_Float numerator denominator ->
-            Elm_Float (Pine_kernel.negate numerator) denominator
+            Elm_Float
+                (Pine_kernel.int_mul [ -1, numerator ])
+                denominator
 
         _ ->
-            Pine_kernel.negate n
+            Pine_kernel.int_mul [ -1, n ]
 
 
 {-| Get the [absolute value][abs] of a number.
@@ -702,7 +721,7 @@ abs n =
         n
 
     else
-        Pine_kernel.negate n
+        Pine_kernel.int_mul [ -1, n ]
 
 
 {-| Clamps a number within a given range. With the expression
@@ -751,8 +770,10 @@ floor number =
                 ratioFloor numerator denom
 
             else
-                Pine_kernel.negate
-                    (ratioFloor (Pine_kernel.negate numerator) denom)
+                Pine_kernel.int_mul
+                    [ -1
+                    , ratioFloor (Pine_kernel.int_mul [ -1, numerator ]) denom
+                    ]
 
         _ ->
             number

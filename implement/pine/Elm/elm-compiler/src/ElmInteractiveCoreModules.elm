@@ -5,20 +5,69 @@ elmCoreModulesTexts : List String
 elmCoreModulesTexts =
     [ """
 module Basics exposing
-  ( Int, Float
-  , (+), (-), (*), (/), (//), (^)
-  , toFloat, round, floor, ceiling, truncate
-  , (==), (/=)
-  , (<), (>), (<=), (>=), max, min, compare, Order(..)
-  , Bool(..), not, (&&), (||), xor
-  , (++)
-  , modBy, remainderBy, negate, abs, clamp, sqrt, logBase, e
-  , pi, cos, sin, tan, acos, asin, atan, atan2
-  , degrees, radians, turns
-  , toPolar, fromPolar
-  , isNaN, isInfinite
-  , identity, always, (<|), (|>), (<<), (>>), Never, never
-  )
+    ( (&&)
+    , (*)
+    , (+)
+    , (++)
+    , (-)
+    , (/)
+    , (//)
+    , (/=)
+    , (<)
+    , (<<)
+    , (<=)
+    , (<|)
+    , (==)
+    , (>)
+    , (>=)
+    , (>>)
+    , (^)
+    , (|>)
+    , (||)
+    , Bool(..)
+    , Float
+    , Int
+    , Never
+    , Order(..)
+    , abs
+    , acos
+    , always
+    , asin
+    , atan
+    , atan2
+    , ceiling
+    , clamp
+    , compare
+    , compareList
+    , compareStrings
+    , cos
+    , degrees
+    , e
+    , floor
+    , fromPolar
+    , identity
+    , isInfinite
+    , isNaN
+    , logBase
+    , max
+    , min
+    , modBy
+    , negate
+    , never
+    , not
+    , pi
+    , radians
+    , remainderBy
+    , round
+    , sin
+    , sqrt
+    , tan
+    , toFloat
+    , toPolar
+    , truncate
+    , turns
+    , xor
+    )
 
 
 infix right 0 (<|) = apL
@@ -27,41 +76,44 @@ infix right 2 (||) = or
 infix right 3 (&&) = and
 infix non   4 (==) = eq
 infix non   4 (/=) = neq
-infix non   4 (<)  = lt
-infix non   4 (>)  = gt
+infix non   4 (<) = lt
+infix non   4 (>) = gt
 infix non   4 (<=) = le
 infix non   4 (>=) = ge
 infix right 5 (++) = append
-infix left  6 (+)  = add
-infix left  6 (-)  = sub
-infix left  7 (*)  = mul
+infix left  6 (+) = add
+infix left  6 (-) = sub
+infix left  7 (*) = mul
 infix left  7 (//) = idiv
-infix right 8 (^)  = pow
+infix right 8 (^) = pow
 infix left  9 (<<) = composeL
 infix right 9 (>>) = composeR
 
 
-type Bool = True | False
+type Bool
+    = True
+    | False
 
 
 type String
     = String Int
-
-    -- We need another tag to prevent the compiler from assuming that the condition for tag 'String' is always true.
+      -- We need another tag to prevent the compiler from assuming that the condition for tag 'String' is always true.
     | AnyOtherKind_String
 
 
 type Elm_Float
     = Elm_Float Int Int
-
-    -- We need another tag to prevent the compiler from assuming that the condition for tag 'String' is always true.
+      -- We need another tag to prevent the compiler from assuming that the condition for tag 'String' is always true.
     | AnyOtherKind_Float
 
 
 {-| Represents the relative ordering of two things.
 The relations are less than, equal to, and greater than.
 -}
-type Order = LT | EQ | GT
+type Order
+    = LT
+    | EQ
+    | GT
 
 
 eq : a -> a -> Bool
@@ -116,34 +168,33 @@ listsEqualRecursive listA listB =
     if Pine_kernel.equal [ listA, [] ] then
         True
 
+    else if eq (Pine_kernel.head listA) (Pine_kernel.head listB) then
+        listsEqualRecursive
+            (Pine_kernel.skip [ 1, listA ])
+            (Pine_kernel.skip [ 1, listB ])
+
     else
-        if eq (Pine_kernel.head listA) (Pine_kernel.head listB) then
-            listsEqualRecursive
-                (Pine_kernel.skip [ 1, listA ])
-                (Pine_kernel.skip [ 1, listB ])
-
-        else
-            False
+        False
 
 
-dictToList : Dict k v -> List (k,v)
+dictToList : Dict k v -> List ( k, v )
 dictToList dict =
-  case dict of
-    RBEmpty_elm_builtin ->
-      []
+    case dict of
+        RBEmpty_elm_builtin ->
+            []
 
-    RBNode_elm_builtin _ key value left right ->
-      Pine_kernel.concat [ dictToList left, [ (key, value) ], dictToList right ]
+        RBNode_elm_builtin _ key value left right ->
+            Pine_kernel.concat [ dictToList left, [ ( key, value ) ], dictToList right ]
 
 
 dictKeys : Dict k v -> List k
 dictKeys dict =
-  case dict of
-    RBEmpty_elm_builtin ->
-      []
+    case dict of
+        RBEmpty_elm_builtin ->
+            []
 
-    RBNode_elm_builtin _ key value left right ->
-      Pine_kernel.concat [ dictKeys left, [ key ], dictKeys right ]
+        RBNode_elm_builtin _ key value left right ->
+            Pine_kernel.concat [ dictKeys left, [ key ], dictKeys right ]
 
 
 neq : a -> a -> Bool
@@ -158,7 +209,10 @@ add a b =
 
 sub : number -> number -> number
 sub a b =
-    Pine_kernel.int_add [ a, Pine_kernel.negate b ]
+    Pine_kernel.int_add
+        [ a
+        , Pine_kernel.int_mul [ -1, b ]
+        ]
 
 
 mul : number -> number -> number
@@ -172,23 +226,21 @@ mul a b =
                 newDenominator =
                     Pine_kernel.int_mul [ denomA, denomB ]
             in
-            simplifyFraction (Elm_Float newNumerator newDenominator)
+            canonicalFloat ( newNumerator, newDenominator )
 
         ( Elm_Float numA denomA, intB ) ->
             let
                 newNumerator =
                     Pine_kernel.int_mul [ numA, intB ]
             in
-            simplifyFraction (Elm_Float newNumerator denomA)
-
+            canonicalFloat ( newNumerator, denomA )
 
         ( intA, Elm_Float numB denomB ) ->
             let
                 newNumerator =
                     Pine_kernel.int_mul [ intA, numB ]
             in
-            simplifyFraction (Elm_Float newNumerator denomB)
-
+            canonicalFloat ( newNumerator, denomB )
 
         _ ->
             Pine_kernel.int_mul [ a, b ]
@@ -276,8 +328,8 @@ idivHelper dividend divisor quotient =
         quotient
 
 
-simplifyFraction : Float -> number
-simplifyFraction (Elm_Float numerator denominator) =
+canonicalFloat : ( Int, Int ) -> number
+canonicalFloat ( numerator, denominator ) =
     let
         gcdValue =
             gcd (abs numerator) (abs denominator)
@@ -326,6 +378,7 @@ and : Bool -> Bool -> Bool
 and a b =
     if a then
         b
+
     else
         False
 
@@ -334,16 +387,19 @@ or : Bool -> Bool -> Bool
 or a b =
     if a then
         True
+
     else
         b
 
 
 append : appendable -> appendable -> appendable
 append a b =
-    case (a, b) of
-    (String stringA, String stringB) ->
-        String (Pine_kernel.concat [ stringA, stringB ])
-    _ -> Pine_kernel.concat [ a, b ]
+    case ( a, b ) of
+        ( String stringA, String stringB ) ->
+            String (Pine_kernel.concat [ stringA, stringB ])
+
+        _ ->
+            Pine_kernel.concat [ a, b ]
 
 
 lt : comparable -> comparable -> Bool
@@ -377,21 +433,33 @@ ge a b =
 {-| Find the smaller of two comparables.
 
     min 42 12345678 == 42
+
     min "abc" "xyz" == "abc"
+
 -}
 min : comparable -> comparable -> comparable
 min x y =
-    if lt x y then x else y
+    if lt x y then
+        x
+
+    else
+        y
 
 
 {-| Find the larger of two comparables.
 
     max 42 12345678 == 12345678
+
     max "abc" "xyz" == "xyz"
+
 -}
 max : comparable -> comparable -> comparable
 max x y =
-    if gt x y then x else y
+    if gt x y then
+        x
+
+    else
+        y
 
 
 apR : a -> (a -> b) -> b
@@ -434,8 +502,11 @@ not bool =
 are also the only values that work as `Dict` keys or `Set` members.
 
     compare 3 4 == LT
+
     compare 4 4 == EQ
+
     compare 5 4 == GT
+
 -}
 compare : comparable -> comparable -> Order
 compare a b =
@@ -480,7 +551,6 @@ compare a b =
 
                 else
                     GT
-
 
             ( intA, Elm_Float numB denomB ) ->
                 let
@@ -584,9 +654,14 @@ compareStrings offset stringA stringB =
 
 modBy : Int -> Int -> Int
 modBy divisor dividend =
-    let
-        remainder = remainderBy divisor dividend
-    in
+    if Pine_kernel.equal [ divisor, 1 ] then
+        0
+
+    else
+        let
+            remainder =
+                remainderBy divisor dividend
+        in
         if Pine_kernel.int_is_sorted_asc [ 0, remainder ] then
             remainder
 
@@ -596,43 +671,63 @@ modBy divisor dividend =
 
 remainderBy : Int -> Int -> Int
 remainderBy divisor dividend =
-    Pine_kernel.int_add
-        [ dividend
-        , Pine_kernel.negate (Pine_kernel.int_mul [ divisor, (idiv dividend divisor)])
-        ]
+    if Pine_kernel.equal [ divisor, 1 ] then
+        0
+
+    else
+        Pine_kernel.int_add
+            [ dividend
+            , Pine_kernel.int_mul
+                [ -1
+                , Pine_kernel.int_mul
+                    [ divisor
+                    , idiv dividend divisor
+                    ]
+                ]
+            ]
 
 
 {-| Negate a number.
 
     negate 42 == -42
+
     negate -42 == 42
+
     negate 0 == 0
+
 -}
 negate : number -> number
 negate n =
     case n of
         Elm_Float numerator denominator ->
-            Elm_Float (Pine_kernel.negate numerator) denominator
+            Elm_Float
+                (Pine_kernel.int_mul [ -1, numerator ])
+                denominator
 
         _ ->
-            Pine_kernel.negate n
+            Pine_kernel.int_mul [ -1, n ]
 
 
 {-| Get the [absolute value][abs] of a number.
 
-    abs 16   == 16
-    abs -4   == 4
+    abs 16 == 16
+
+    abs -4 == 4
+
     abs -8.5 == 8.5
+
     abs 3.14 == 3.14
 
 [abs]: https://en.wikipedia.org/wiki/Absolute_value
+
 -}
 abs : number -> number
 abs n =
     if Pine_kernel.int_is_sorted_asc [ 0, n ] then
         n
+
     else
-        Pine_kernel.negate n
+        Pine_kernel.int_mul [ -1, n ]
 
 
 {-| Clamps a number within a given range. With the expression
@@ -641,15 +736,18 @@ abs n =
     100     if x < 100
      x      if 100 <= x < 200
     200     if 200 <= x
+
 -}
 clamp : number -> number -> number -> number
 clamp low high number =
-  if lt number low then
-    low
-  else if gt number high then
-    high
-  else
-    number
+    if lt number low then
+        low
+
+    else if gt number high then
+        high
+
+    else
+        number
 
 
 isPineList a =
@@ -678,8 +776,10 @@ floor number =
                 ratioFloor numerator denom
 
             else
-                Pine_kernel.negate
-                    (ratioFloor (Pine_kernel.negate numerator) denom)
+                Pine_kernel.int_mul
+                    [ -1
+                    , ratioFloor (Pine_kernel.int_mul [ -1, numerator ]) denom
+                    ]
 
         _ ->
             number
@@ -688,7 +788,7 @@ floor number =
 ratioFloor : Int -> Int -> Int
 ratioFloor numerator denom =
     let
-        (multiplier, denomProd) =
+        ( multiplier, denomProd ) =
             findMultiplierToDecimal 1 denom
     in
     idiv
@@ -696,7 +796,7 @@ ratioFloor numerator denom =
         denomProd
 
 
-findMultiplierToDecimal : Int -> Int -> (Int, Int, Int)
+findMultiplierToDecimal : Int -> Int -> ( Int, Int, Int )
 findMultiplierToDecimal factor denom =
     let
         denomProd =
@@ -706,7 +806,7 @@ findMultiplierToDecimal factor denom =
             findLowerPowerOfTen denomProd
     in
     if Pine_kernel.equal [ pow 10 lowerPowerOfTen, denomProd ] then
-        (factor, denomProd)
+        ( factor, denomProd )
 
     else
         findMultiplierToDecimal

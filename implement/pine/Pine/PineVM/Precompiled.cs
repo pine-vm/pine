@@ -800,27 +800,6 @@ public class Precompiled
         }
 
         {
-            var computeValueFromString_2025Expr =
-                popularExpressionDictionary["Pine.computeValueFromString_2025.body"];
-
-            var envClass =
-                PineValueClass.Create(
-                    [
-                    new KeyValuePair<IReadOnlyList<int>, PineValue>(
-                        [0],
-                        popularValueDictionary["Pine.computeValueFromString_2025.aggregate-env"]),
-                    ]);
-
-            yield return
-                new KeyValuePair<Expression, IReadOnlyList<PrecompiledEntry>>(
-                    computeValueFromString_2025Expr,
-                    [new PrecompiledEntry(
-                        envClass,
-                        PineComputeValueFromString_2025)]);
-        }
-
-
-        {
             var countOffsetsInStringEnvClass =
                 PineValueClass.Create(
                     [
@@ -3227,64 +3206,6 @@ public class Precompiled
         }
 
         throw new ParseExpressionException("Error in case-of block: No matching branch.");
-    }
-
-    static PrecompiledResult.FinalValue? PineComputeValueFromString_2025(
-        PineValue environment,
-        PineVMParseCache parseCache)
-    {
-        /*
-        computeValueFromString_2025 : String -> Value
-        computeValueFromString_2025 string =
-            let
-                charsBytes : List (List Int)
-                charsBytes =
-                    List.map blobBytesFromChar (String.toList string)
-            in
-            BlobValue
-                (List.concat charsBytes)
-
-
-        blobBytesFromChar : Char -> List Int
-        blobBytesFromChar char =
-            let
-                charCode : Int
-                charCode =
-                    Char.toCode char
-            in
-            [ modBy 0x0100 (charCode // 0x01000000)
-            , modBy 0x0100 (charCode // 0x00010000)
-            , modBy 0x0100 (charCode // 0x0100)
-            , modBy 0x0100 charCode
-            ]
-        */
-
-        var argStringCharsBlobValue =
-            environment.ValueFromPathOrEmptyList([1, 0, 1, 0]);
-
-        if (argStringCharsBlobValue is not PineValue.BlobValue charsBlob)
-        {
-            return null;
-        }
-
-        var blobValueIntegers = new PineValue[charsBlob.Bytes.Length];
-
-        for (var j = 0; j < charsBlob.Bytes.Length; ++j)
-        {
-            blobValueIntegers[j] = PineValue.Blob([4, charsBlob.Bytes.Span[j]]);
-        }
-
-        var blobValue =
-            PineValue.List(
-                [
-                Tag_BlobValue_Value,
-                PineValue.List([PineValue.List(blobValueIntegers)])
-                ]);
-
-        return
-            new PrecompiledResult.FinalValue(
-                blobValue,
-                StackFrameCount: 3 + charsBlob.Bytes.Length);
     }
 
     static PrecompiledResult.FinalValue? ElmKernelParser_countOffsetsInString(

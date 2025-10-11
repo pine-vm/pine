@@ -2745,47 +2745,74 @@ searchCompileElmSyntaxOperatorOptimized stack operator leftExpr rightExpr =
                                         (Ok
                                             (ConditionalExpression
                                                 (KernelApplicationExpression
-                                                    "equal"
+                                                    "int_is_sorted_asc"
                                                     (ListExpression
-                                                        [ KernelApplicationExpression "length" leftExprCompiled
-                                                        , LiteralExpression (Pine.valueFromInt 2)
+                                                        [ LiteralExpression (Pine.valueFromInt 2)
+                                                        , KernelApplicationExpression "length" leftExprCompiled
                                                         ]
                                                     )
                                                 )
+                                                (LiteralExpression Pine.listValue_Empty)
                                                 (ConditionalExpression
                                                     (KernelApplicationExpression
-                                                        "equal"
+                                                        "int_is_sorted_asc"
                                                         (ListExpression
-                                                            [ KernelApplicationExpression "length" leftExprCompiled
-                                                            , LiteralExpression (Pine.valueFromInt 1)
+                                                            [ LiteralExpression (Pine.valueFromInt 3)
+                                                            , KernelApplicationExpression "length" leftExprCompiled
                                                             ]
                                                         )
                                                     )
-                                                    (ConditionalExpression
+                                                    (LiteralExpression (Pine.valueFromInt 0))
+                                                    (KernelApplicationExpression
+                                                        "reverse"
                                                         (KernelApplicationExpression
-                                                            "equal"
+                                                            "skip"
                                                             (ListExpression
-                                                                [ KernelApplicationExpression "length" leftExprCompiled
-                                                                , LiteralExpression (Pine.valueFromInt 0)
+                                                                [ LiteralExpression (Pine.valueFromInt 1)
+                                                                , KernelApplicationExpression "reverse" leftExprCompiled
                                                                 ]
                                                             )
                                                         )
+                                                    )
+                                                )
+                                            )
+                                        )
+
+                                0x00010000 ->
+                                    Just
+                                        (Ok
+                                            (ConditionalExpression
+                                                (KernelApplicationExpression
+                                                    "int_is_sorted_asc"
+                                                    (ListExpression
+                                                        [ LiteralExpression (Pine.valueFromInt 2)
+                                                        , KernelApplicationExpression "length" leftExprCompiled
+                                                        ]
+                                                    )
+                                                )
+                                                (LiteralExpression Pine.listValue_Empty)
+                                                (ConditionalExpression
+                                                    (KernelApplicationExpression
+                                                        "int_is_sorted_asc"
+                                                        (ListExpression
+                                                            [ LiteralExpression (Pine.valueFromInt 4)
+                                                            , KernelApplicationExpression "length" leftExprCompiled
+                                                            ]
+                                                        )
+                                                    )
+                                                    (LiteralExpression (Pine.valueFromInt 0))
+                                                    (KernelApplicationExpression
+                                                        "reverse"
                                                         (KernelApplicationExpression
-                                                            "reverse"
-                                                            (KernelApplicationExpression
-                                                                "skip"
-                                                                (ListExpression
-                                                                    [ LiteralExpression (Pine.valueFromInt 1)
-                                                                    , KernelApplicationExpression "reverse" leftExprCompiled
-                                                                    ]
-                                                                )
+                                                            "skip"
+                                                            (ListExpression
+                                                                [ LiteralExpression (Pine.valueFromInt 2)
+                                                                , KernelApplicationExpression "reverse" leftExprCompiled
+                                                                ]
                                                             )
                                                         )
-                                                        (LiteralExpression Pine.listValue_Empty)
                                                     )
-                                                    (LiteralExpression Pine.listValue_Empty)
                                                 )
-                                                (LiteralExpression (Pine.valueFromInt 0))
                                             )
                                         )
 
