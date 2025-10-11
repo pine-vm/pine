@@ -64,15 +64,14 @@ public static class PineValueHashTree
             return fromCache;
         }
 
-        var hash =
-            ComputeHashAndDependencies(pineValue, delegateGetHashOfComponent).hash;
+        var result =
+            ComputeHashIterative(
+                pineValue,
+                delegateGetHashOfComponent,
+                includeDependencies: false,
+                captureRootSerialization: false);
 
-        if (ReusedInstances.Instance.ReusedInstance(pineValue) is { } reusedInstance)
-        {
-            s_cachedHashes.TryAdd(reusedInstance, hash);
-        }
-
-        return hash;
+        return result.RootHash;
     }
 
 
@@ -95,10 +94,14 @@ public static class PineValueHashTree
         PineValue pineValue,
         Func<PineValue, ReadOnlyMemory<byte>?>? delegateGetHashOfComponent = null)
     {
-        var (serialRepresentation, dependencies) =
-            ComputeHashTreeNodeSerialRepresentation(pineValue, delegateGetHashOfComponent);
+        var result =
+            ComputeHashIterative(
+                pineValue,
+                delegateGetHashOfComponent,
+                includeDependencies: true,
+                captureRootSerialization: false);
 
-        return (hash: SHA256.HashData(serialRepresentation.Span), dependencies);
+        return (result.RootHash, result.RootDependencies);
     }
 
     /// <summary>
@@ -121,58 +124,267 @@ public static class PineValueHashTree
         PineValue pineValue,
         Func<PineValue, ReadOnlyMemory<byte>?>? delegateGetHashOfComponent = null)
     {
-        switch (pineValue)
+        var result =
+            ComputeHashIterative(
+                pineValue,
+                delegateGetHashOfComponent,
+                includeDependencies: true,
+                captureRootSerialization: true);
+
+        return (result.RootSerialization, result.RootDependencies);
+    }
+
+    private static HashComputationResult ComputeHashIterative(
+        PineValue root,
+        Func<PineValue, ReadOnlyMemory<byte>?>? delegateGetHashOfComponent,
+        bool includeDependencies,
+        bool captureRootSerialization)
+    {
+        var computedHashes = new Dictionary<PineValue, ReadOnlyMemory<byte>>();
+
+        var stack = new Stack<(PineValue Node, bool ChildrenScheduled)>();
+        stack.Push((root, false));
+
+        var rootSerialization = ReadOnlyMemory<byte>.Empty;
+        var rootSerializationInitialized = !captureRootSerialization;
+
+        IReadOnlyCollection<PineValue> rootDependencies = [];
+        var rootDependenciesInitialized = !includeDependencies;
+
+        while (stack.Count > 0)
         {
-            case PineValue.BlobValue blobValue:
+            var (node, childrenScheduled) = stack.Pop();
+
+            if (childrenScheduled)
+            {
+                if (computedHashes.ContainsKey(node))
                 {
-                    var blobPrefix = "blob "u8;
-
-                    var countEncoded = CountEncoding((uint)blobValue.Bytes.Length);
-
-                    var serialRepresentationLength =
-                        blobPrefix.Length + countEncoded.Length + 1 + blobValue.Bytes.Length;
-
-                    var serialRepresentation = new byte[serialRepresentationLength];
-
-                    blobPrefix.CopyTo(serialRepresentation);
-                    countEncoded.CopyTo(serialRepresentation.AsMemory()[blobPrefix.Length..]);
-
-                    serialRepresentation[blobPrefix.Length + countEncoded.Length] = 0;
-
-                    blobValue.Bytes.CopyTo(
-                        serialRepresentation.AsMemory()[(blobPrefix.Length + countEncoded.Length + 1)..]);
-
-                    return (serialRepresentation, []);
+                    continue;
                 }
 
-            case PineValue.ListValue listValue:
+                ReadOnlyMemory<byte> serialization;
+                ReadOnlyMemory<byte> hash;
+
+                switch (node)
                 {
-                    var elementsSpan = listValue.Items.Span;
+                    case PineValue.BlobValue blobValue:
+                        serialization = SerializeBlobValue(blobValue);
+                        hash = SHA256.HashData(serialization.Span);
+                        break;
 
-                    var elementsHashes = new ReadOnlyMemory<byte>[elementsSpan.Length];
+                    case PineValue.ListValue listValue:
+                        {
+                            var itemsSpan = listValue.Items.Span;
 
-                    for (var i = 0; i < elementsSpan.Length; i++)
+                            var elementHashes = new ReadOnlyMemory<byte>[itemsSpan.Length];
+
+                            for (var i = 0; i < itemsSpan.Length; i++)
+                            {
+                                var child = itemsSpan[i];
+
+                                if (!computedHashes.TryGetValue(child, out var childHash))
+                                {
+                                    throw new InvalidOperationException("Missing hash for child value.");
+                                }
+
+                                elementHashes[i] = childHash;
+                            }
+
+                            serialization = SerializeListValue(elementHashes);
+                            hash = SHA256.HashData(serialization.Span);
+
+                            if (includeDependencies && ReferenceEquals(node, root))
+                            {
+                                rootDependencies = listValue.Items.ToArray();
+                                rootDependenciesInitialized = true;
+                            }
+
+                            break;
+                        }
+
+                    default:
+                        throw new NotImplementedException(
+                            "Not implemented for value type: " + node.GetType().FullName);
+                }
+
+                computedHashes[node] = hash;
+
+                if (ReferenceEquals(node, root) && captureRootSerialization && !rootSerializationInitialized)
+                {
+                    rootSerialization = serialization;
+                    rootSerializationInitialized = true;
+                }
+
+                TryCacheComputedHash(node, hash);
+
+                continue;
+            }
+
+            if (computedHashes.ContainsKey(node))
+            {
+                continue;
+            }
+
+            if (!ReferenceEquals(node, root) &&
+                delegateGetHashOfComponent?.Invoke(node) is { } delegatedHash)
+            {
+                computedHashes[node] = delegatedHash;
+                continue;
+            }
+
+            if (!ReferenceEquals(node, root) &&
+                s_cachedHashes.TryGetValue(node, out var cachedHash))
+            {
+                computedHashes[node] = cachedHash;
+                continue;
+            }
+
+            switch (node)
+            {
+                case PineValue.BlobValue:
+                    stack.Push((node, true));
+                    break;
+
+                case PineValue.ListValue listValue:
+                    stack.Push((node, true));
+
+                    var itemsSpan = listValue.Items.Span;
+
+                    for (var i = itemsSpan.Length - 1; i >= 0; i--)
                     {
-                        var element = elementsSpan[i];
-
-                        var elementHash =
-                            delegateGetHashOfComponent?.Invoke(element) ??
-                            ComputeHash(element, delegateGetHashOfComponent);
-
-                        elementsHashes[i] = elementHash;
+                        stack.Push((itemsSpan[i], false));
                     }
 
-                    var prefix = System.Text.Encoding.ASCII.GetBytes("list " + elementsHashes.Length + "\0");
+                    break;
 
-                    return
-                        (serialRepresentation: BytesConversions.Concat([(ReadOnlyMemory<byte>)prefix, .. elementsHashes]),
-                            dependencies: listValue.Items.ToArray());
-                }
+                default:
+                    throw new NotImplementedException(
+                        "Not implemented for value type: " + node.GetType().FullName);
+            }
+        }
 
-            default:
-                throw new NotImplementedException("Not implemented for value type: " + pineValue.GetType().FullName);
+        if (!computedHashes.TryGetValue(root, out var rootHash))
+        {
+            throw new InvalidOperationException("Failed to compute hash for root value.");
+        }
+
+        if (!rootDependenciesInitialized)
+        {
+            rootDependencies = root is PineValue.ListValue listValue
+                ? listValue.Items.ToArray()
+                : [];
+            rootDependenciesInitialized = true;
+        }
+
+        if (!includeDependencies)
+        {
+            rootDependencies = [];
+        }
+
+        if (captureRootSerialization && !rootSerializationInitialized)
+        {
+            switch (root)
+            {
+                case PineValue.BlobValue blobValue:
+                    rootSerialization = SerializeBlobValue(blobValue);
+                    break;
+
+                case PineValue.ListValue listValue:
+                    {
+                        var itemsSpan = listValue.Items.Span;
+                        var elementHashes = new ReadOnlyMemory<byte>[itemsSpan.Length];
+
+                        for (var i = 0; i < itemsSpan.Length; i++)
+                        {
+                            var child = itemsSpan[i];
+
+                            if (!computedHashes.TryGetValue(child, out var childHash))
+                            {
+                                throw new InvalidOperationException("Missing hash for child value.");
+                            }
+
+                            elementHashes[i] = childHash;
+                        }
+
+                        rootSerialization = SerializeListValue(elementHashes);
+                        break;
+                    }
+
+                default:
+                    throw new NotImplementedException(
+                        "Not implemented for value type: " + root.GetType().FullName);
+            }
+
+            rootSerializationInitialized = true;
+        }
+
+        return new HashComputationResult(
+            rootHash,
+            rootSerializationInitialized ? rootSerialization : ReadOnlyMemory<byte>.Empty,
+            rootDependencies);
+    }
+
+    private static ReadOnlyMemory<byte> SerializeBlobValue(PineValue.BlobValue blobValue)
+    {
+        var blobPrefix = "blob "u8;
+        var countEncoded = CountEncoding((uint)blobValue.Bytes.Length);
+
+        var totalLength = blobPrefix.Length + countEncoded.Length + 1 + blobValue.Bytes.Length;
+        var buffer = new byte[totalLength];
+
+        blobPrefix.CopyTo(buffer);
+        countEncoded.CopyTo(buffer.AsMemory(blobPrefix.Length));
+
+        buffer[blobPrefix.Length + countEncoded.Length] = 0;
+        blobValue.Bytes.CopyTo(buffer.AsMemory(blobPrefix.Length + countEncoded.Length + 1));
+
+        return buffer;
+    }
+
+    private static ReadOnlyMemory<byte> SerializeListValue(ReadOnlyMemory<byte>[] elementHashes)
+    {
+        var listPrefix = "list "u8;
+        var countEncoded = CountEncoding((uint)elementHashes.Length);
+
+        var prefixLength = listPrefix.Length + countEncoded.Length + 1;
+
+        var totalLength = prefixLength;
+
+        for (var i = 0; i < elementHashes.Length; i++)
+        {
+            totalLength += elementHashes[i].Length;
+        }
+
+        var buffer = new byte[totalLength];
+
+        listPrefix.CopyTo(buffer);
+        countEncoded.CopyTo(buffer.AsMemory(listPrefix.Length));
+        buffer[listPrefix.Length + countEncoded.Length] = 0;
+
+        var offset = prefixLength;
+
+        for (var i = 0; i < elementHashes.Length; i++)
+        {
+            var elementHash = elementHashes[i];
+            elementHash.CopyTo(buffer.AsMemory(offset));
+            offset += elementHash.Length;
+        }
+
+        return buffer;
+    }
+
+    private static void TryCacheComputedHash(PineValue pineValue, ReadOnlyMemory<byte> hash)
+    {
+        if (ReusedInstances.Instance.ReusedInstance(pineValue) is { } reusedInstance)
+        {
+            s_cachedHashes.TryAdd(reusedInstance, hash);
         }
     }
+
+    private readonly record struct HashComputationResult(
+        ReadOnlyMemory<byte> RootHash,
+        ReadOnlyMemory<byte> RootSerialization,
+        IReadOnlyCollection<PineValue> RootDependencies);
 
     private static ReadOnlyMemory<byte> CountEncoding(uint count) =>
         count < s_preencodedCounts.Length
