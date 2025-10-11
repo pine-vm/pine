@@ -1260,24 +1260,11 @@ public class InteractiveSessionPine : IInteractiveSession
 
         readonly ConcurrentDictionary<Expression, ReadOnlyMemory<byte>> encodedExprCache = new();
 
-        readonly ConcurrentDictionary<PineValue, ReadOnlyMemory<byte>> valueHashCache = new();
+        readonly ConcurrentPineValueHashCache valueHashCache = new();
 
         public ReadOnlyMemory<byte> ComputeHash(PineValue pineValue)
         {
-            {
-                if (valueHashCache.TryGetValue(pineValue, out var hash))
-                {
-                    return hash;
-                }
-            }
-
-            {
-                var hash = PineValueHashTree.ComputeHash(pineValue, other => ComputeHash(other));
-
-                valueHashCache[pineValue] = hash;
-
-                return hash;
-            }
+            return valueHashCache.GetHash(pineValue);
         }
     }
 }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 
 namespace Pine.Core.Addressing;
 
@@ -28,16 +29,49 @@ public class ConcurrentPineValueHashCache
         PineValue pineValue,
         Func<PineValue, bool> shouldCache)
     {
-        if (shouldCache(pineValue))
+        if (_valueHashCache.TryGetValue(pineValue, out var cached))
         {
-            return
-                _valueHashCache.GetOrAdd(
-                    pineValue,
-                    valueFactory: v => PineValueHashTree.ComputeHash(v, other => GetHash(other, shouldCache)));
+            return cached;
         }
-        else
+
+        var freshlyComputed = new Dictionary<PineValue, ReadOnlyMemory<byte>>();
+
+        ReadOnlyMemory<byte>? TryGetCached(PineValue value)
         {
-            return PineValueHashTree.ComputeHash(pineValue, other => GetHash(other, shouldCache));
+            if (_valueHashCache.TryGetValue(value, out var fromGlobal))
+            {
+                return fromGlobal;
+            }
+
+            if (freshlyComputed.TryGetValue(value, out var fromLocal))
+            {
+                return fromLocal;
+            }
+
+            return null;
         }
+
+        void RecordComputed(PineValue value, ReadOnlyMemory<byte> hash)
+        {
+            if (!shouldCache(value))
+            {
+                return;
+            }
+
+            freshlyComputed[value] = hash;
+        }
+
+        var hash =
+            PineValueHashTree.ComputeHash(
+                pineValue,
+                delegateGetHashOfComponent: TryGetCached,
+                reportComputedHash: RecordComputed);
+
+        foreach (var kvp in freshlyComputed)
+        {
+            _valueHashCache.TryAdd(kvp.Key, kvp.Value);
+        }
+
+        return hash;
     }
 }
