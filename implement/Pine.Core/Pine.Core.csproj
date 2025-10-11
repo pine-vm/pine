@@ -3,14 +3,14 @@
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
     <Nullable>enable</Nullable>
-    <AssemblyVersion>0.4.17</AssemblyVersion>
-    <FileVersion>0.4.17</FileVersion>
+    <AssemblyVersion>0.4.18</AssemblyVersion>
+    <FileVersion>0.4.18</FileVersion>
     <GenerateEmbeddedFilesManifest>true</GenerateEmbeddedFilesManifest>
   </PropertyGroup>
 
   <PropertyGroup>
     <PackageId>Pine.Core</PackageId>
-    <Version>0.4.17</Version>
+    <Version>0.4.18</Version>
     <Description>Elm DevTools and runtime</Description>
     <PackageTags>Functional;Elm;Runtime;Compiler;VM;DBMS</PackageTags>
     <RepositoryUrl>https://github.com/pine-vm/pine.git</RepositoryUrl>
