@@ -45,7 +45,7 @@
     <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="9.0.9" />
     <PackageReference Include="ReadLine" Version="2.0.1" />
     <PackageReference Include="SharpCompress" Version="0.40.0" />
-    <PackageReference Include="StreamJsonRpc" Version="2.22.11" />
+    <PackageReference Include="StreamJsonRpc" Version="2.22.23" />
     <PackageReference Include="TupleAsJsonArray" Version="1.0.2" />
   </ItemGroup>
 
