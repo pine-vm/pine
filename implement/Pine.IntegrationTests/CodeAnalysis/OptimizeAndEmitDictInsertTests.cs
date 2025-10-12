@@ -318,10 +318,10 @@ public class OptimizeAndEmitDictInsertTests
                                 {
                                     {
                                         local_param_1_0 =
-                                            local_param_1_0.Skip(CommonReusedValues.Blob_Int_1);
+                                            local_param_1_0.Skip(1);
 
                                         local_param_1_1 =
-                                            local_param_1_1.Skip(CommonReusedValues.Blob_Int_1);
+                                            local_param_1_1.Skip(1);
                                     }
 
                                     continue;

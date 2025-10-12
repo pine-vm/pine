@@ -204,9 +204,7 @@ public class OptimizeAndEmitValueFromStringTests
                     {
                         if (local_param_1_1.IsEmptyList())
                         {
-                            return
-                                KernelFunction.reverse(
-                                    local_param_1_0.Evaluate());
+                            return local_param_1_0.EvaluateReverse();
                         }
 
                         if (!(local_param_1_1.GetLength() == 0))
@@ -223,7 +221,7 @@ public class OptimizeAndEmitValueFromStringTests
                                         ]);
 
                                 local_param_1_1 =
-                                    local_param_1_1.Skip(CommonReusedValues.Blob_Int_1);
+                                    local_param_1_1.Skip(1);
                             }
 
                             continue;

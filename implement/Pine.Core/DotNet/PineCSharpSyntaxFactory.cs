@@ -323,6 +323,20 @@ public static class PineCSharpSyntaxFactory
     }
 
     /// <summary>
+    /// Invoke <see cref="Builtins.ImmutableConcatBuilder.EvaluateReverse"/>
+    /// </summary>
+    public static InvocationExpressionSyntax EvaluateImmutableConcatBuilderReverseSyntax(
+        ExpressionSyntax builderSyntax)
+    {
+        return
+            SyntaxFactory.InvocationExpression(
+                SyntaxFactory.MemberAccessExpression(
+                    SyntaxKind.SimpleMemberAccessExpression,
+                    builderSyntax,
+                    SyntaxFactory.IdentifierName(nameof(Builtins.ImmutableConcatBuilder.EvaluateReverse))));
+    }
+
+    /// <summary>
     /// Invoke <see cref="Builtins.MutatingConcatBuilder.AppendItem"/>
     /// </summary>
     public static InvocationExpressionSyntax AppendItemsToMutatingConcatBuilderSyntax(

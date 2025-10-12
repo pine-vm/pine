@@ -274,6 +274,30 @@ public record StaticProgramCSharpClass(
                     }
                 }
 
+                if (expr is StaticExpression<DeclQualifiedName>.KernelApplication reverseKernelApp)
+                {
+                    if (reverseKernelApp.Function is nameof(KernelFunction.reverse))
+                    {
+                        // Check if the input is a reference to a concat builder (either parameter or local)
+                        if (StaticExpressionExtension.TryParseAsPathToExpression(
+                            reverseKernelApp.Input,
+                            StaticExpression<DeclQualifiedName>.EnvironmentInstance) is { } pathInEnv)
+                        {
+                            if (paramsAsConcatBuilders.Contains(pathInEnv))
+                            {
+                                if (!paramToLocalMap.TryGetValue(pathInEnv, out var localName))
+                                    throw new System.Exception("Internal error: Missing local for param path.");
+
+                                var evaluateReverseExpr =
+                                    PineCSharpSyntaxFactory.EvaluateImmutableConcatBuilderReverseSyntax(
+                                        SyntaxFactory.IdentifierName(localName));
+
+                                return CompiledCSharpExpression.Generic(evaluateReverseExpr);
+                            }
+                        }
+                    }
+                }
+
                 return null;
             }
 
@@ -383,11 +407,26 @@ public record StaticProgramCSharpClass(
 
                             foreach (var sliceOperation in sliceOperations)
                             {
-                                var countArgument =
-                                    EnumerateExpressions(
-                                        sliceOperation.CountExpression,
-                                        exprEmitEnv)
-                                    .AsGenericValue(declarationSyntaxContext);
+                                // Check if count is a compile-time constant integer
+                                ExpressionSyntax countArgument;
+
+                                if (sliceOperation.CountExpression is StaticExpression<DeclQualifiedName>.Literal literal &&
+                                    KernelFunction.SignedIntegerFromValueRelaxed(literal.Value) is { } intValue &&
+                                    intValue >= int.MinValue &&
+                                    intValue <= int.MaxValue)
+                                {
+                                    // Use int overload with compile-time constant
+                                    countArgument = PineCSharpSyntaxFactory.ExpressionSyntaxForIntegerLiteral((long)intValue);
+                                }
+                                else
+                                {
+                                    // Use PineValue overload for non-constant expressions
+                                    countArgument =
+                                        EnumerateExpressions(
+                                            sliceOperation.CountExpression,
+                                            exprEmitEnv)
+                                        .AsGenericValue(declarationSyntaxContext);
+                                }
 
                                 var invocationTarget = updatedBuilderExpr;
 
@@ -1180,6 +1219,22 @@ public record StaticProgramCSharpClass(
         if (emitEnv.FunctionEnv.GeneralOverride(expression) is { } overridden)
         {
             return [overridden];
+        }
+
+        // Check for reverse(concat_builder) pattern with local concat builders
+        if (expression is StaticExpression<DeclQualifiedName>.KernelApplication reverseKernelApp &&
+            reverseKernelApp.Function is nameof(KernelFunction.reverse))
+        {
+            // Check if the input is a concat builder local
+            if (emitEnv.AlreadyDeclared.TryGetValue(reverseKernelApp.Input, out var builderLocal) &&
+                builderLocal.ltype is LocalType.ImmutableConcatBuilder)
+            {
+                var evaluateReverseExpr =
+                    PineCSharpSyntaxFactory.EvaluateImmutableConcatBuilderReverseSyntax(
+                        SyntaxFactory.IdentifierName(builderLocal.identifier));
+
+                return [CompiledCSharpExpression.Generic(evaluateReverseExpr)];
+            }
         }
 
         if (emitEnv.AlreadyDeclared.TryGetValue(expression, out var existingVar))
