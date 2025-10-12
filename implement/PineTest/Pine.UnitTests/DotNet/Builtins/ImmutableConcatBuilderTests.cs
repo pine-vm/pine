@@ -455,4 +455,136 @@ public class ImmutableConcatBuilderTests
         result.Should().Be(expected);
         builder.AggregateItemsCount.Should().Be(1);
     }
+
+    [Fact]
+    public void EvaluateReverse_with_single_item_returns_that_item()
+    {
+        var item = PineValue.List([PineValue.Blob([1])]);
+        var builder = ImmutableConcatBuilder.Create([item]);
+
+        var result = builder.EvaluateReverse();
+        var expected = KernelFunction.concat(PineValue.List([item]));
+
+        result.Should().Be(expected);
+    }
+
+    [Fact]
+    public void EvaluateReverse_with_multiple_items_reverses_order()
+    {
+        var list1 = PineValue.List([PineValue.Blob([1])]);
+        var list2 = PineValue.List([PineValue.Blob([2])]);
+        var list3 = PineValue.List([PineValue.Blob([3])]);
+
+        var builder =
+            ImmutableConcatBuilder.Create([list1, list2, list3]);
+
+        var result = builder.EvaluateReverse();
+
+        var expected = KernelFunction.concat(PineValue.List([list3, list2, list1]));
+
+        result.Should().Be(expected);
+    }
+
+    [Fact]
+    public void EvaluateReverse_with_append_reverses_order()
+    {
+        var list1 = PineValue.List([PineValue.Blob([1])]);
+        var list2 = PineValue.List([PineValue.Blob([2])]);
+        var list3 = PineValue.List([PineValue.Blob([3])]);
+
+        var builder =
+            ImmutableConcatBuilder.Create([list1])
+            .AppendItem(list2)
+            .AppendItem(list3);
+
+        var result = builder.EvaluateReverse();
+
+        var expected = KernelFunction.concat(PineValue.List([list3, list2, list1]));
+
+        result.Should().Be(expected);
+    }
+
+    [Fact]
+    public void EvaluateReverse_with_prepend_reverses_order()
+    {
+        var list1 = PineValue.List([PineValue.Blob([3])]);
+        var list2 = PineValue.List([PineValue.Blob([2])]);
+        var list3 = PineValue.List([PineValue.Blob([1])]);
+
+        var builder =
+            ImmutableConcatBuilder.Create([list1])
+            .PrependItem(list2)
+            .PrependItem(list3);
+
+        var result = builder.EvaluateReverse();
+        var expected = KernelFunction.concat(PineValue.List([list1, list2, list3]));
+
+        result.Should().Be(expected);
+    }
+
+    [Fact]
+    public void EvaluateReverse_with_mixed_operations_reverses_order()
+    {
+        var list1 = PineValue.List([PineValue.Blob([2])]);
+        var list2 = PineValue.List([PineValue.Blob([1])]);
+        var list3 = PineValue.List([PineValue.Blob([3])]);
+
+        var builder =
+            ImmutableConcatBuilder.Create([list1])
+            .PrependItem(list2)
+            .AppendItem(list3);
+
+        var result = builder.EvaluateReverse();
+        var expected = KernelFunction.concat(PineValue.List([list3, list1, list2]));
+
+        result.Should().Be(expected);
+    }
+
+    [Fact]
+    public void EvaluateReverse_with_empty_list_returns_empty()
+    {
+        var builder = ImmutableConcatBuilder.Create([]);
+
+        var result = builder.EvaluateReverse();
+        var expected = KernelFunction.concat(PineValue.EmptyList);
+
+        result.Should().Be(expected);
+    }
+
+    [Fact]
+    public void EvaluateReverse_with_nested_nodes_reverses_correctly()
+    {
+        var list1 = PineValue.List([PineValue.Blob([1])]);
+        var list2 = PineValue.List([PineValue.Blob([2])]);
+        var list3 = PineValue.List([PineValue.Blob([3])]);
+        var list4 = PineValue.List([PineValue.Blob([4])]);
+
+        var builder =
+            ImmutableConcatBuilder.Create([list1, list2])
+            .AppendItems([list3, list4]);
+
+        var result = builder.EvaluateReverse();
+        var expected = KernelFunction.concat(PineValue.List([list4, list3, list2, list1]));
+
+        result.Should().Be(expected);
+    }
+
+    [Fact]
+    public void EvaluateReverse_matches_reverse_of_evaluate()
+    {
+        var list1 = PineValue.List([PineValue.Blob([1])]);
+        var list2 = PineValue.List([PineValue.Blob([2])]);
+        var list3 = PineValue.List([PineValue.Blob([3])]);
+
+        var builder =
+            ImmutableConcatBuilder.Create([list1])
+            .AppendItem(list2)
+            .PrependItem(list3);
+
+        var evaluateReverse = builder.EvaluateReverse();
+        var evaluate = builder.Evaluate();
+        var reverseOfEvaluate = KernelFunction.reverse(evaluate);
+
+        evaluateReverse.Should().Be(reverseOfEvaluate);
+    }
 }

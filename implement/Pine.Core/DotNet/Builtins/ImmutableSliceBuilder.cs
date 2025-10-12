@@ -252,7 +252,7 @@ public record ImmutableSliceBuilder(
     }
 
     /// <summary>
-    /// Gets the first element from the slice result.
+    /// Application of <see cref="KernelFunction.head(PineValue)"/> on the value from <see cref="Evaluate"/>
     /// </summary>
     /// <returns>
     /// For list values: the first element of the slice, or <see cref="PineValue.EmptyList"/> if empty.
@@ -264,17 +264,69 @@ public record ImmutableSliceBuilder(
     /// </remarks>
     public PineValue GetHead()
     {
-        if (FinalValue is { } finalValue)
+        return GetElementAt(0);
+    }
+
+    /// <summary>
+    /// Fused application of the kernel functions <see cref="KernelFunction.skip(PineValue)"/> and
+    /// <see cref="KernelFunction.head(PineValue)"/> on the value from <see cref="Evaluate"/>
+    /// </summary>
+    /// <param name="index">The zero-based index of the element to retrieve from the slice.</param>
+    /// <returns>
+    /// For list values: the element at the specified index, or <see cref="PineValue.EmptyList"/> if index is out of bounds.
+    /// For blob values: a single-byte blob containing the byte at the specified index, or <see cref="PineValue.EmptyBlob"/> if index is out of bounds.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// This method is a generalized form of <see cref="GetHead"/>, where <c>GetHead()</c> is equivalent to <c>GetElementAt(0)</c>.
+    /// </para>
+    /// <para>
+    /// This method is optimized to avoid materializing the entire slice when only a single element is needed.
+    /// If a final value has been cached, it retrieves the element from that cached value. Otherwise, it directly
+    /// accesses the element from the original value using the accumulated skip offset plus the requested index.
+    /// </para>
+    /// </remarks>
+    public PineValue GetElementAt(int index)
+    {
+        index =
+            index < 0 ? 0 : index;
+
+        // Check if index is beyond the take count (if set)
+        if (TakeCount is { } takeCount && index >= takeCount)
         {
-            return KernelFunction.head(finalValue);
+            return Original switch
+            {
+                PineValue.ListValue =>
+                PineValue.EmptyList,
+
+                PineValue.BlobValue =>
+                PineValue.EmptyBlob,
+
+                _ =>
+                throw new System.NotImplementedException(
+                    "Unexpected source type: " + Original.GetType())
+            };
         }
 
-        // Optimize: instead of materializing the slice with take(1,...), directly get the element
+        if (FinalValue is { } finalValue)
+        {
+            return
+                KernelFunction.head(
+                    Internal.KernelFunctionFused.SkipAndTake(
+                        takeCount: 1,
+                        skipCount: index,
+                        finalValue));
+        }
+
+        // Optimize: instead of materializing the slice, directly get the element at the index
+        // The actual index in the original is SkipCount + index
+        var actualSkipCount = checked(SkipCount + index);
+
         return
             KernelFunction.head(
                 Internal.KernelFunctionFused.SkipAndTake(
                     takeCount: 1,
-                    skipCount: SkipCount,
+                    skipCount: actualSkipCount,
                     Original));
     }
 
@@ -311,7 +363,7 @@ public record ImmutableSliceBuilder(
 
             return
                 Internal.KernelFunctionSpecialized.skip(
-                    (System.Numerics.BigInteger)skipCount,
+                    skipCount,
                     Original);
         }
 

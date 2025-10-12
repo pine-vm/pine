@@ -984,4 +984,313 @@ public class ImmutableSliceBuilderTests
 
         result.Should().Be(expected);
     }
+
+    [Fact]
+    public void GetElementAt_returns_element_at_index()
+    {
+        var original =
+            PineValue.List(
+                [
+                PineValue.Blob([10]),
+                PineValue.Blob([20]),
+                PineValue.Blob([30]),
+                PineValue.Blob([40])
+                ]);
+
+        var builder = ImmutableSliceBuilder.Create(original);
+
+        builder.GetElementAt(0).Should().Be(PineValue.Blob([10]));
+        builder.GetElementAt(1).Should().Be(PineValue.Blob([20]));
+        builder.GetElementAt(2).Should().Be(PineValue.Blob([30]));
+        builder.GetElementAt(3).Should().Be(PineValue.Blob([40]));
+    }
+
+    [Fact]
+    public void GetElementAt_with_skip_operation()
+    {
+        var original =
+            PineValue.List(
+                [
+                PineValue.Blob([10]),
+                PineValue.Blob([20]),
+                PineValue.Blob([30]),
+                PineValue.Blob([40]),
+                PineValue.Blob([50])
+                ]);
+
+        var builder =
+            ImmutableSliceBuilder.Create(original)
+            .Skip(2);
+
+        // After skip(2), the slice is [30, 40, 50]
+        builder.GetElementAt(0).Should().Be(PineValue.Blob([30]));
+        builder.GetElementAt(1).Should().Be(PineValue.Blob([40]));
+        builder.GetElementAt(2).Should().Be(PineValue.Blob([50]));
+    }
+
+    [Fact]
+    public void GetElementAt_with_take_operation()
+    {
+        var original =
+            PineValue.List(
+                [
+                PineValue.Blob([10]),
+                PineValue.Blob([20]),
+                PineValue.Blob([30]),
+                PineValue.Blob([40]),
+                PineValue.Blob([50])
+                ]);
+
+        var builder =
+            ImmutableSliceBuilder.Create(original)
+            .Take(3);
+
+        // After take(3), the slice is [10, 20, 30]
+        builder.GetElementAt(0).Should().Be(PineValue.Blob([10]));
+        builder.GetElementAt(1).Should().Be(PineValue.Blob([20]));
+        builder.GetElementAt(2).Should().Be(PineValue.Blob([30]));
+    }
+
+    [Fact]
+    public void GetElementAt_with_skip_and_take()
+    {
+        var original =
+            PineValue.List(
+                [
+                PineValue.Blob([10]),
+                PineValue.Blob([20]),
+                PineValue.Blob([30]),
+                PineValue.Blob([40]),
+                PineValue.Blob([50]),
+                PineValue.Blob([60])
+                ]);
+
+        var builder =
+            ImmutableSliceBuilder.Create(original)
+            .Skip(1)
+            .Take(3);
+
+        // After skip(1).take(3), the slice is [20, 30, 40]
+        builder.GetElementAt(0).Should().Be(PineValue.Blob([20]));
+        builder.GetElementAt(1).Should().Be(PineValue.Blob([30]));
+        builder.GetElementAt(2).Should().Be(PineValue.Blob([40]));
+    }
+
+    [Fact]
+    public void GetElementAt_out_of_bounds_returns_empty_list()
+    {
+        var original =
+            PineValue.List(
+                [
+                PineValue.Blob([10]),
+                PineValue.Blob([20]),
+                PineValue.Blob([30])
+                ]);
+
+        var builder = ImmutableSliceBuilder.Create(original);
+
+        builder.GetElementAt(10).Should().Be(PineValue.EmptyList);
+        builder.GetElementAt(100).Should().Be(PineValue.EmptyList);
+    }
+
+    [Fact]
+    public void GetElementAt_negative_index()
+    {
+        var original =
+            PineValue.List(
+                [
+                PineValue.Blob([10]),
+                PineValue.Blob([20]),
+                PineValue.Blob([30])
+                ]);
+
+        var builder = ImmutableSliceBuilder.Create(original);
+
+        builder.GetElementAt(-1).Should().Be(PineValue.Blob([10]));
+        builder.GetElementAt(-10).Should().Be(PineValue.Blob([10]));
+    }
+
+    [Fact]
+    public void GetElementAt_on_empty_slice_returns_empty_list()
+    {
+        var original =
+            PineValue.List(
+                [
+                PineValue.Blob([10]),
+                PineValue.Blob([20])
+                ]);
+
+        var builder =
+            ImmutableSliceBuilder.Create(original)
+            .Skip(10);
+
+        builder.GetElementAt(0).Should().Be(PineValue.EmptyList);
+        builder.GetElementAt(1).Should().Be(PineValue.EmptyList);
+    }
+
+    [Fact]
+    public void GetElementAt_with_blob_value()
+    {
+        var original = PineValue.Blob([10, 20, 30, 40, 50]);
+
+        var builder = ImmutableSliceBuilder.Create(original);
+
+        builder.GetElementAt(0).Should().Be(PineValue.Blob([10]));
+        builder.GetElementAt(1).Should().Be(PineValue.Blob([20]));
+        builder.GetElementAt(2).Should().Be(PineValue.Blob([30]));
+        builder.GetElementAt(3).Should().Be(PineValue.Blob([40]));
+        builder.GetElementAt(4).Should().Be(PineValue.Blob([50]));
+    }
+
+    [Fact]
+    public void GetElementAt_with_blob_value_and_skip()
+    {
+        var original = PineValue.Blob([10, 20, 30, 40, 50]);
+
+        var builder =
+            ImmutableSliceBuilder.Create(original)
+            .Skip(2);
+
+        // After skip(2), the slice is [30, 40, 50]
+        builder.GetElementAt(0).Should().Be(PineValue.Blob([30]));
+        builder.GetElementAt(1).Should().Be(PineValue.Blob([40]));
+        builder.GetElementAt(2).Should().Be(PineValue.Blob([50]));
+    }
+
+    [Fact]
+    public void GetElementAt_blob_out_of_bounds_returns_empty_blob()
+    {
+        var original = PineValue.Blob([10, 20, 30]);
+
+        var builder = ImmutableSliceBuilder.Create(original);
+
+        builder.GetElementAt(10).Should().Be(PineValue.EmptyBlob);
+    }
+
+    [Fact]
+    public void GetElementAt_blob_negative_index()
+    {
+        var original = PineValue.Blob([10, 20, 30]);
+
+        var builder = ImmutableSliceBuilder.Create(original);
+
+        builder.GetElementAt(-1).Should().Be(PineValue.BlobSingleByte(10));
+    }
+
+    [Fact]
+    public void GetElementAt_uses_cached_final_value()
+    {
+        var original =
+            PineValue.List(
+                [
+                PineValue.Blob([10]),
+                PineValue.Blob([20]),
+                PineValue.Blob([30])
+                ]);
+
+        var takeValue = PineValue.List([PineValue.Blob([1])]); // Invalid
+
+        var builder =
+            ImmutableSliceBuilder.Create(original)
+            .Take(takeValue);
+
+        // FinalValue is cached as EmptyList due to invalid take value
+        var elementAt0 = builder.GetElementAt(0);
+        var elementAt1 = builder.GetElementAt(1);
+
+        elementAt0.Should().Be(PineValue.EmptyList);
+        elementAt1.Should().Be(PineValue.EmptyList);
+    }
+
+    [Fact]
+    public void GetElementAt_is_equivalent_to_GetHead_for_index_zero()
+    {
+        var original =
+            PineValue.List(
+                [
+                PineValue.Blob([10]),
+                PineValue.Blob([20]),
+                PineValue.Blob([30])
+                ]);
+
+        var builder =
+            ImmutableSliceBuilder.Create(original)
+            .Skip(1);
+
+        var head = builder.GetHead();
+        var elementAt0 = builder.GetElementAt(0);
+
+        elementAt0.Should().Be(head);
+    }
+
+    [Fact]
+    public void GetElementAt_with_multiple_skip_operations()
+    {
+        var original =
+            PineValue.List(
+                [.. Enumerable.Range(0, 20).Select(i => PineValue.Blob([(byte)i]))
+                ]);
+
+        var builder =
+            ImmutableSliceBuilder.Create(original)
+            .Skip(3)
+            .Skip(2)
+            .Skip(1);
+
+        // Total skip is 6, so slice starts at element 6
+        builder.GetElementAt(0).Should().Be(PineValue.Blob([6]));
+        builder.GetElementAt(1).Should().Be(PineValue.Blob([7]));
+        builder.GetElementAt(2).Should().Be(PineValue.Blob([8]));
+    }
+
+    [Fact]
+    public void GetElementAt_respects_take_limit()
+    {
+        var original =
+            PineValue.List(
+                [
+                PineValue.Blob([10]),
+                PineValue.Blob([20]),
+                PineValue.Blob([30]),
+                PineValue.Blob([40]),
+                PineValue.Blob([50])
+                ]);
+
+        var builder =
+            ImmutableSliceBuilder.Create(original)
+            .Skip(1)
+            .Take(2);
+
+        // After skip(1).take(2), the slice is [20, 30]
+        builder.GetElementAt(0).Should().Be(PineValue.Blob([20]));
+        builder.GetElementAt(1).Should().Be(PineValue.Blob([30]));
+
+        // Index 2 is beyond the take limit
+        builder.GetElementAt(2).Should().Be(PineValue.EmptyList);
+    }
+
+    [Fact]
+    public void GetElementAt_with_complex_chaining()
+    {
+        var original =
+            PineValue.List(
+                [.. Enumerable.Range(1, 30).Select(i => PineValue.Blob([(byte)i]))
+                ]);
+
+        var builder =
+            ImmutableSliceBuilder.Create(original)
+            .Skip(5)
+            .Take(20)
+            .Skip(3)
+            .Take(10);
+
+        // Skip 5, then skip 3 more = skip 8
+        // Take 20, then take 10 = take 10
+        // So the slice is elements [8..17] (0-indexed), which are values 9..18
+
+        builder.GetElementAt(0).Should().Be(PineValue.Blob([9]));
+        builder.GetElementAt(1).Should().Be(PineValue.Blob([10]));
+        builder.GetElementAt(9).Should().Be(PineValue.Blob([18]));
+        builder.GetElementAt(10).Should().Be(PineValue.EmptyList);
+    }
 }

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -19,6 +20,12 @@ public abstract record ImmutableConcatBuilder
     /// Evaluates this builder into a single <see cref="PineValue"/> by applying the recorded concatenations.
     /// </summary>
     public abstract PineValue Evaluate();
+
+    /// <summary>
+    /// Evaluates this builder by reversing the order of items, then applying concatenations.
+    /// Equivalent to Evaluate() followed by reverse(), but more efficient.
+    /// </summary>
+    public abstract PineValue EvaluateReverse();
 
     /// <summary>
     /// Returns a new builder that appends the specified sequence of items to the end.
@@ -73,6 +80,14 @@ public abstract record ImmutableConcatBuilder
         public override PineValue Evaluate()
         {
             return Internal.KernelFunctionSpecialized.concat(Values.ToArray());
+        }
+
+        /// <inheritdoc/>
+        public override PineValue EvaluateReverse()
+        {
+            var reversed = Values.ToArray();
+            Array.Reverse(reversed);
+            return Internal.KernelFunctionSpecialized.concat(reversed);
         }
     }
 
@@ -141,6 +156,61 @@ public abstract record ImmutableConcatBuilder
                             {
                                 stack.Push((node, nextChildIndex + 1));
                                 stack.Push((node.Items[nextChildIndex], 0));
+                            }
+
+                            break;
+                        }
+
+                    default:
+                        throw new System.NotImplementedException(
+                            "Unrecognized ImmutableConcatBuilder variant: " + builder.GetType().FullName);
+                }
+            }
+
+            return Internal.KernelFunctionSpecialized.concat(flattenedItems);
+        }
+
+        /// <inheritdoc/>
+        public override PineValue EvaluateReverse()
+        {
+            var flattenedItems = new PineValue[AggregateItemsCount];
+
+            var currentIndex = 0;
+
+            // Use an explicit stack to avoid deep recursion when the tree degenerates into a chain.
+            var stack = new Stack<(ImmutableConcatBuilder Builder, int NextChildIndex)>();
+
+            stack.Push((this, Items.Count - 1));
+
+            while (stack.Count > 0)
+            {
+                var (builder, nextChildIndex) = stack.Pop();
+
+                switch (builder)
+                {
+                    case Leaf leaf:
+                        {
+                            for (var i = leaf.Values.Count - 1; i >= 0; i--)
+                            {
+                                flattenedItems[currentIndex++] = leaf.Values[i];
+                            }
+
+                            break;
+                        }
+
+                    case Node node:
+                        {
+                            if (nextChildIndex >= 0)
+                            {
+                                stack.Push((node, nextChildIndex - 1));
+
+                                var childBuilder = node.Items[nextChildIndex];
+                                var childStartIndex = childBuilder switch
+                                {
+                                    Node childNode => childNode.Items.Count - 1,
+                                    _ => 0
+                                };
+                                stack.Push((childBuilder, childStartIndex));
                             }
 
                             break;
