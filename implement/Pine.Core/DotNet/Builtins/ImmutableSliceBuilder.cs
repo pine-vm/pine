@@ -26,19 +26,19 @@ namespace Pine.Core.DotNet.Builtins;
 public record ImmutableSliceBuilder(
     PineValue Original,
     int SkipCount,
-    int TakeCount,
+    int? TakeCount,
     PineValue? FinalValue)
 {
     /// <summary>
     /// Creates a new <see cref="ImmutableSliceBuilder"/> initialized to slice the entire original value.
     /// </summary>
     /// <param name="original">The source <see cref="PineValue"/> to slice.</param>
-    /// <returns>A new builder with skip count of 0 and take count of <see cref="int.MaxValue"/>.</returns>
+    /// <returns>A new builder with skip count of 0 and no take limit.</returns>
     public static ImmutableSliceBuilder Create(PineValue original) =>
         new(
             Original: original,
             SkipCount: 0,
-            TakeCount: int.MaxValue,
+            TakeCount: null,
             FinalValue: null);
 
     /// <summary>
@@ -50,12 +50,32 @@ public record ImmutableSliceBuilder(
     /// Multiple skip operations are accumulated, so calling <c>Skip(5).Skip(3)</c> 
     /// will skip a total of 8 elements from the original value.
     /// </remarks>
-    public ImmutableSliceBuilder Skip(int count) =>
-        new(
+    public ImmutableSliceBuilder Skip(int count)
+    {
+        if (count <= 0)
+        {
+            return this;
+        }
+
+        var newSkipCount = checked(SkipCount + count);
+
+        var newTakeCount = TakeCount;
+
+        if (newTakeCount is { } currentTake)
+        {
+            var reduction = count <= currentTake ? count : currentTake;
+
+            var adjusted = currentTake - reduction;
+
+            newTakeCount = adjusted <= 0 ? 0 : adjusted;
+        }
+
+        return new(
             Original,
-            SkipCount: SkipCount + count,
-            TakeCount: TakeCount,
+            SkipCount: newSkipCount,
+            TakeCount: newTakeCount,
             FinalValue);
+    }
 
     /// <summary>
     /// Apply <see cref="KernelFunction.take(PineValue)"/> on the value resulting from the previous operations.
@@ -66,12 +86,21 @@ public record ImmutableSliceBuilder(
     /// Multiple take operations use the most restrictive limit, so calling <c>Take(10).Take(5)</c>
     /// will take at most 5 elements.
     /// </remarks>
-    public ImmutableSliceBuilder Take(int count) =>
-        new(
+    public ImmutableSliceBuilder Take(int count)
+    {
+        if (count < 0)
+        {
+            count = 0;
+        }
+
+        var newTakeCount = TakeCount is { } currentTake ? (currentTake < count ? currentTake : count) : count;
+
+        return new(
             Original,
             SkipCount: SkipCount,
-            TakeCount: TakeCount < count ? TakeCount : count,
+            TakeCount: newTakeCount,
             FinalValue);
+    }
 
     /// <summary>
     /// Apply <see cref="KernelFunction.skip(PineValue)"/> on the value resulting from the previous operations,
@@ -157,7 +186,12 @@ public record ImmutableSliceBuilder(
             return 0;
         }
 
-        return TakeCount < remaining ? TakeCount : remaining;
+        if (TakeCount is not { } takeCount)
+        {
+            return remaining;
+        }
+
+        return takeCount < remaining ? takeCount : remaining;
     }
 
     /// <summary>
@@ -266,9 +300,24 @@ public record ImmutableSliceBuilder(
             return FinalValue;
         }
 
+        if (TakeCount is not { } takeCount)
+        {
+            var skipCount = SkipCount < 0 ? 0 : SkipCount;
+
+            if (skipCount == 0)
+            {
+                return Original;
+            }
+
+            return
+                Internal.KernelFunctionSpecialized.skip(
+                    (System.Numerics.BigInteger)skipCount,
+                    Original);
+        }
+
         return
             Internal.KernelFunctionFused.SkipAndTake(
-                takeCount: TakeCount,
+                takeCount: takeCount,
                 skipCount: SkipCount,
                 Original);
     }

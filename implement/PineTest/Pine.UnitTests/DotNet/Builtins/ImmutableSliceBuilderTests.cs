@@ -39,7 +39,7 @@ public class ImmutableSliceBuilderTests
         var builder = ImmutableSliceBuilder.Create(original);
 
         builder.SkipCount.Should().Be(0);
-        builder.TakeCount.Should().Be(int.MaxValue);
+        builder.TakeCount.Should().BeNull();
         builder.FinalValue.Should().BeNull();
         builder.Original.Should().Be(original);
     }
@@ -188,6 +188,64 @@ public class ImmutableSliceBuilderTests
         var expected = KernelTake(takeCount: 2, original);
 
         result.Should().Be(expected);
+    }
+
+    [Fact]
+    public void Skip_after_take_lowers_effective_take()
+    {
+        var original =
+            PineValue.List(
+                [
+                PineValue.Blob([1]),
+                PineValue.Blob([2]),
+                PineValue.Blob([3]),
+                PineValue.Blob([4])
+                ]);
+
+        var builder =
+            ImmutableSliceBuilder.Create(original)
+            .Take(3)
+            .Skip(1);
+
+        builder.SkipCount.Should().Be(1);
+        builder.TakeCount.Should().Be(2);
+
+        var result = builder.Evaluate();
+
+        var afterTake = KernelTake(takeCount: 3, original);
+        var expected = KernelSkip(skipCount: 1, afterTake);
+
+        result.Should().Be(expected);
+        builder.GetLength().Should().Be(2);
+    }
+
+    [Fact]
+    public void Skip_after_take_exceeding_available_returns_empty()
+    {
+        var original =
+            PineValue.List(
+                [
+                PineValue.Blob([1]),
+                PineValue.Blob([2]),
+                PineValue.Blob([3])
+                ]);
+
+        var builder =
+            ImmutableSliceBuilder.Create(original)
+            .Take(2)
+            .Skip(5);
+
+        builder.SkipCount.Should().Be(5);
+        builder.TakeCount.Should().Be(0);
+
+        var result = builder.Evaluate();
+
+        var afterTake = KernelTake(takeCount: 2, original);
+        var expected = KernelSkip(skipCount: 5, afterTake);
+
+        result.Should().Be(expected);
+        builder.GetLength().Should().Be(0);
+        builder.IsEmptyList().Should().BeTrue();
     }
 
     [Fact]
@@ -680,7 +738,7 @@ public class ImmutableSliceBuilderTests
         var original = ImmutableSliceBuilder.Create(original_value);
         var modified = original.Take(2);
 
-        original.TakeCount.Should().Be(int.MaxValue);
+        original.TakeCount.Should().BeNull();
         modified.TakeCount.Should().Be(2);
 
         var originalResult = original.Evaluate();
