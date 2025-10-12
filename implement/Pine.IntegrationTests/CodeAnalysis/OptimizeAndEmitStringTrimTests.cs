@@ -1,7 +1,6 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.DotNet;
-using Pine.Core.Elm;
 using Xunit;
 
 namespace Pine.IntegrationTests.CodeAnalysis;
@@ -11,20 +10,11 @@ public class OptimizeAndEmitStringTrimTests
     [Fact]
     public void Parse_and_emit_optimized_String_trim()
     {
-        var compiledEnv =
-            BundledElmEnvironments.BundledElmCompilerCompiledEnvValue()
-            ??
-            throw new System.Exception("Failed to load Elm compiler from bundle.");
-
         var parseCache = new PineVMParseCache();
 
-        var parsedEnv =
-            ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnv)
-            .Extract(err => throw new System.Exception("Failed parsing interactive environment: " + err));
-
-        var staticProgram =
-            CodeAnalysisTestHelper.ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
-                parsedEnv,
+        var (parsedEnv, staticProgram) =
+            CodeAnalysisTestHelper.StaticProgramFromElmModules(
+                [],
                 includeDeclaration:
                 declName =>
                 {

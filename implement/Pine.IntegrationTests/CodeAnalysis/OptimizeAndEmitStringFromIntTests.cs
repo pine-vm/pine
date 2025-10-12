@@ -14,20 +14,11 @@ public class OptimizeAndEmitStringFromIntTests
     [Fact]
     public void Parse_and_emit_optimized_String_fromInt()
     {
-        var compiledEnv =
-            BundledElmEnvironments.BundledElmCompilerCompiledEnvValue()
-            ??
-            throw new System.Exception("Failed to load Elm compiler from bundle.");
-
         var parseCache = new PineVMParseCache();
 
-        var parsedEnv =
-            ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnv)
-            .Extract(err => throw new System.Exception("Failed parsing interactive environment: " + err));
-
-        var staticProgram =
-            CodeAnalysisTestHelper.ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
-                parsedEnv,
+        var (parsedEnv, staticProgram) =
+            CodeAnalysisTestHelper.StaticProgramFromElmModules(
+                [],
                 includeDeclaration:
                 declName =>
                 {
