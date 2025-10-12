@@ -140,9 +140,9 @@ public class ReducePineExpressionTests
             ]));
 
         var dummyClass = PineValueClass.CreateEquals(PineValue.EmptyList);
-        var bounds = ReducePineExpression.TryInferListLengthLowerBounds(skip, dummyClass, s_parseCache).ToArray();
+        var bounds = ReducePineExpression.EnumerateInferListLengthBounds(skip, dummyClass, s_parseCache).ToArray();
 
-        bounds.Should().Contain(3);
+        bounds.Select(b => b.lower).Should().Contain(3);
     }
 
     [Fact]
