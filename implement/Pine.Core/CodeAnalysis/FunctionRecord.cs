@@ -34,8 +34,8 @@ public record FunctionRecord(
     }
 
     /// <summary>
-    /// Inverse of <see cref="ParseFunctionRecordTagged"/>.
     /// Wraps the function record encoding with the "Function" tag.
+    /// Inverse of <see cref="ParseFunctionRecordTagged(PineValue, PineVMParseCache)"/>.
     /// </summary>
     /// <param name="functionRecord">Function record to encode.</param>
     /// <returns>Tagged <see cref="PineValue"/> representation.</returns>
@@ -191,11 +191,9 @@ public record FunctionRecord(
     }
 
     /// <summary>
-    /// Inverse of <see cref="ParseFunctionRecord"/>.
-    /// Serializes a <see cref="FunctionRecord"/> into its list representation.
+    /// Serializes a <see cref="FunctionRecord"/> into its value representation.
+    /// Inverse of <see cref="ParseFunctionRecord(PineValue, PineVMParseCache)"/>.
     /// </summary>
-    /// <param name="functionRecord">The function record to encode.</param>
-    /// <returns>Encoded list value.</returns>
     public static PineValue EncodeFunctionRecordInValue(
         FunctionRecord functionRecord)
     {
