@@ -29,20 +29,16 @@ import Elm.Syntax.Module
 import Elm.Syntax.Node
 import Elm.Syntax.Range
 import Elm.Syntax.TypeAnnotation
-import Set
 
 
 type alias StateShimConfig =
     { jsonConverterDeclarationsConfigs : List ( String, StateShimConfigJsonConverterConfig )
     , jsonConverterDeclarations : Dict.Dict String StateShimConfigJsonConverter
     , appStateType : StateShimConfigSupportingType
-    , initAppShimStateExpression : String
-    , appStateLessShimExpression : String
     , exposedFunctions : Dict.Dict String ExposedFunctionConfig
     , supportingModules : List String
     , rootModuleSupportingFunctions : List String
     , modulesToImport : List (List String)
-    , appStateWithPlatformShimTypeAnnotationFromAppStateAnnotation : String -> String
     }
 
 
@@ -53,7 +49,6 @@ type alias RootModuleConfig =
     , modulesToImport : List (List String)
     , supportingJsonConverterFunctions : Dict.Dict String ( List String, String )
     , otherSupportingFunctions : List String
-    , appStateWithPlatformShimTypeAnnotationFromAppStateAnnotation : String -> String
     }
 
 
@@ -247,8 +242,6 @@ loweredForAppInStateManagementShim sourceDirs stateShimConfig config sourceFiles
                         , otherSupportingFunctions =
                             exposedFunctionsRootModuleSupportingFunction
                                 :: stateShimConfig.rootModuleSupportingFunctions
-                        , appStateWithPlatformShimTypeAnnotationFromAppStateAnnotation =
-                            stateShimConfig.appStateWithPlatformShimTypeAnnotationFromAppStateAnnotation
                         }
             in
             Ok

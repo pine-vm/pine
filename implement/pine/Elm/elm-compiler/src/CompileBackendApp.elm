@@ -285,16 +285,12 @@ loweredForBackendApp appDeclaration config sourceFiles =
                                                             { typeAnnotation = appStateType.stateTypeAnnotation
                                                             , dependencies = appStateType.dependencies
                                                             }
-                                                        , initAppShimStateExpression = ""
-                                                        , appStateLessShimExpression = ""
                                                         , exposedFunctions = exposedFunctions
                                                         , supportingModules =
                                                             []
                                                         , rootModuleSupportingFunctions = rootModuleSupportingFunctions
                                                         , modulesToImport =
                                                             modulesToImportMigrate ++ modulesToImportExposeFunctionsToAdmin
-                                                        , appStateWithPlatformShimTypeAnnotationFromAppStateAnnotation =
-                                                            identity
                                                         }
                                                 in
                                                 loweredForAppInStateManagementShim
