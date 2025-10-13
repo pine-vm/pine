@@ -87,18 +87,11 @@ public class CodeAnalysis
         Dictionary<DeclQualifiedName, string> declsFailures = [];
 
 
-        bool DontInline(PineValue expr, PineValueClass envClass)
-        {
-            return nameForDecl(expr, envClass) is not null;
-        }
-
-
         foreach (var rootDecl in rootDecls)
         {
             var parseRootResult =
                 ParseAsStaticMonomorphicProgram(
                     rootDecl.Value,
-                    DontInline,
                     parseCache);
 
             if (parseRootResult.IsErrOrNull() is { } err)
@@ -124,9 +117,12 @@ public class CodeAnalysis
                 {
                     if (!existing.body.Equals(entry.Value.body))
                     {
+                        var keyName = nameForDecl(entry.Key.EncodedExpr, entry.Key.EnvClass);
+
                         throw new Exception(
                             "Conflict: Two different function bodies for the same function identifier: " +
-                            entry.Key + "\nExisting body:\n" + existing.body + "\nNew body:\n" + entry.Value.body);
+                            entry.Key + " (" + keyName?.FullName + ")\nExisting body:\n" +
+                            existing.body + "\nNew body:\n" + entry.Value.body);
                     }
                 }
                 else
@@ -289,7 +285,6 @@ public class CodeAnalysis
     public static Result<string, ParsedFromSingleRoot>
         ParseAsStaticMonomorphicProgram(
         FunctionRecord functionRecord,
-        Func<PineValue, PineValueClass, bool> dontInline,
         PineVMParseCache parseCache)
     {
         var (_, appliedExpr, appliedEnv) =
@@ -299,7 +294,6 @@ public class CodeAnalysis
             ParseAsStaticMonomorphicProgram(
                 rootExpression: appliedExpr,
                 rootEnvValueClass: appliedEnv,
-                dontInline: dontInline,
                 parseCache: parseCache);
     }
 
@@ -311,7 +305,6 @@ public class CodeAnalysis
         ParseAsStaticMonomorphicProgram(
         Expression rootExpression,
         PineValueClass rootEnvValueClass,
-        Func<PineValue, PineValueClass, bool> dontInline,
         PineVMParseCache parseCache)
     {
         var observedSetInitial =
@@ -332,7 +325,6 @@ public class CodeAnalysis
                 InlineParseAndEvalUsingLiteralFunctionRecursive(
                     current.expr,
                     current.envValueClass,
-                    dontInline,
                     parseCache);
 
             observedSetInitial.Add((current.expr, currentExprInlined, current.envValueClass));
@@ -581,28 +573,29 @@ public class CodeAnalysis
     static Expression InlineParseAndEvalUsingLiteralFunctionRecursive(
         Expression expression,
         PineValueClass envConstraint,
-        Func<PineValue, PineValueClass, bool> dontInline,
         PineVMParseCache parseCache)
     {
         return
             InlineParseAndEvalUsingLiteralFunctionRecursive(
                 expression,
                 envConstraint,
-                dontInline,
                 parseCache,
-                alreadyInlined: []);
+                alreadyInlined: [])
+            .expr;
     }
 
-    static Expression InlineParseAndEvalUsingLiteralFunctionRecursive(
+    static (Expression expr, ImmutableHashSet<Expression> skippedForRecursion) InlineParseAndEvalUsingLiteralFunctionRecursive(
         Expression expression,
         PineValueClass envValueClass,
-        Func<PineValue, PineValueClass, bool> dontInline,
         PineVMParseCache parseCache,
         ImmutableHashSet<Expression> alreadyInlined)
     {
+        var skippedForRecursion = new HashSet<Expression>();
+
         var reducedExpression =
             ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
-            findReplacement: expr =>
+            findReplacement:
+            expr =>
             {
                 if (expr is not Expression.ParseAndEval parseAndEval)
                 {
@@ -632,14 +625,12 @@ public class CodeAnalysis
                     return null;
                 }
 
-                if (dontInline(childExprValue, childEnvValueClass))
-                {
-                    return null;
-                }
-
                 if (alreadyInlined.Contains(childExpr))
                 {
                     // Prevent infinite recursion on self-referential parse&eval expressions.
+
+                    skippedForRecursion.Add(childExpr);
+
                     return null;
                 }
 
@@ -662,17 +653,26 @@ public class CodeAnalysis
                         inlinedExpr,
                         parseCache);
 
-                return
-                InlineParseAndEvalUsingLiteralFunctionRecursive(
-                    expression: inlinedExprReduced,
-                    envValueClass: childEnvValueClass,
-                    dontInline: dontInline,
-                    parseCache: parseCache,
-                    alreadyInlined: alreadyInlined.Add(childExpr));
+                var recursionResult =
+                    InlineParseAndEvalUsingLiteralFunctionRecursive(
+                        expression: inlinedExprReduced,
+                        envValueClass: childEnvValueClass,
+                        parseCache: parseCache,
+                        alreadyInlined: alreadyInlined.Add(childExpr));
+
+                if (recursionResult.skippedForRecursion.Contains(childExpr))
+                {
+                    return null;
+                }
+
+                skippedForRecursion.UnionWith(recursionResult.skippedForRecursion);
+
+                return recursionResult.expr;
             },
             expression).expr;
 
-        return reducedExpression;
+        return
+            (reducedExpression, skippedForRecursion.ToImmutableHashSet());
     }
 
     static Result<string, StaticExpressionGen> ParseAsStaticExpression(
