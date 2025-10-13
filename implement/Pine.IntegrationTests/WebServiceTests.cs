@@ -549,7 +549,7 @@ public class WebServiceTests
                     var requestRecord = await Asp.AsInterfaceHttpRequestAsync(context.Request);
 
                     var requestRecordSerialFormat =
-                    new ElmTime.Platform.WebService.InterfaceToHost.HttpRequest(
+                    new TestAppInterface.HttpProxyWebApp.HttpRequest(
                         method: requestRecord.Method,
                         uri: requestRecord.Uri,
                         bodyAsBase64:
@@ -561,7 +561,7 @@ public class WebServiceTests
                             null),
                         headers:
                         [..requestRecord.Headers
-                        .Select(h => new ElmTime.Platform.WebService.InterfaceToHost.HttpHeader(
+                        .Select(h => new TestAppInterface.HttpProxyWebApp.HttpHeader(
                             name: h.Name,
                             values: [..h.Values]))
                         ]);
@@ -611,7 +611,7 @@ public class WebServiceTests
             ((int)response.StatusCode).Should().Be(200, "Response.status code, " + responseContentString);
 
             var echoRequestStructure =
-                System.Text.Json.JsonSerializer.Deserialize<ElmTime.Platform.WebService.InterfaceToHost.HttpRequest>(
+                System.Text.Json.JsonSerializer.Deserialize<TestAppInterface.HttpProxyWebApp.HttpRequest>(
                     responseContentString)!;
 
             echoRequestStructure.bodyAsBase64.WithDefault("").ToLowerInvariant()
@@ -651,7 +651,7 @@ public class WebServiceTests
                 await response.Content.ReadAsStringAsync();
 
             var echoRequestStructure =
-                System.Text.Json.JsonSerializer.Deserialize<ElmTime.Platform.WebService.InterfaceToHost.HttpRequest>(
+                System.Text.Json.JsonSerializer.Deserialize<TestAppInterface.HttpProxyWebApp.HttpRequest>(
                     responseContentString)!;
 
             var observedContentType =

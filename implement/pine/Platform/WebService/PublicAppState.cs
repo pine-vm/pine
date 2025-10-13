@@ -262,6 +262,6 @@ public class PublicAppState(
 public record ServerAndElmAppConfig(
     WebServiceConfigJson? ServerConfig,
     Func<WebServiceInterface.HttpRequestEventStruct, Task<WebServiceInterface.HttpResponse>> ProcessHttpRequestAsync,
-    InterfaceToHost.BackendEventResponseStruct? InitOrMigrateCmds,
+    IReadOnlyList<WebServiceInterface.Command> InitOrMigrateCmds,
     bool? DisableLetsEncrypt,
     bool DisableHttps);

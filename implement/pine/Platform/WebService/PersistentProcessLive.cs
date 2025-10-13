@@ -560,7 +560,7 @@ public sealed class PersistentProcessLive : IAsyncDisposable
 
     public record RestoreFromCompositionEventSequenceResult(
         PersistentProcessLive process,
-        InterfaceToHost.BackendEventResponseStruct? initOrMigrateCmds);
+        IReadOnlyList<WebServiceInterface.Command> initOrMigrateCmds);
 
     public static Result<string, RestoreFromCompositionEventSequenceResult>
         RestoreFromCompositionEventSequence(
@@ -681,7 +681,7 @@ public sealed class PersistentProcessLive : IAsyncDisposable
     private record PersistentProcessLiveRepresentationDuringRestore(
         string? LastCompositionLogRecordHashBase16,
         ProcessAppConfig? LastAppConfig,
-        InterfaceToHost.BackendEventResponseStruct? InitOrMigrateCmds,
+        IReadOnlyList<WebServiceInterface.Command> InitOrMigrateCmds,
         PineValue? LastAppState);
 
     private static Result<string, PersistentProcessLiveRepresentationDuringRestore> ApplyCompositionEvent(
