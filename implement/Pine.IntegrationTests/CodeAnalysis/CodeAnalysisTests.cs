@@ -3,11 +3,9 @@ using Pine.Core;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.PopularEncodings;
-using Pine.Elm;
 using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using Xunit;
 
 namespace Pine.IntegrationTests.CodeAnalysis;
@@ -17,31 +15,6 @@ public class CodeAnalysisTests
     [Fact]
     public void Parse_Fibonacci()
     {
-        var elmJsonFile =
-            """
-            {
-                "type": "application",
-                "source-directories": [
-                    "src"
-                ],
-                "elm-version": "0.19.1",
-                "dependencies": {
-                    "direct": {
-                        "elm/core": "1.0.5"
-                    },
-                    "indirect": {
-                    }
-                },
-                "test-dependencies": {
-                    "direct": {
-                        "elm-explorations/test": "2.2.0"
-                    },
-                    "indirect": {
-                    }
-                }
-            }
-            """;
-
         var elmModuleText =
             """
             module Test exposing (..)
@@ -59,35 +32,11 @@ public class CodeAnalysisTests
 
             """;
 
-        var appCodeTree =
-            BlobTreeWithStringPath.EmptyTree
-            .SetNodeAtPathSorted(
-                ["elm.json"],
-                BlobTreeWithStringPath.Blob(Encoding.UTF8.GetBytes(elmJsonFile)))
-            .SetNodeAtPathSorted(
-                ["src", "Test.elm"],
-                BlobTreeWithStringPath.Blob(Encoding.UTF8.GetBytes(elmModuleText)));
-
-        var compiledEnv =
-            ElmCompiler.CompileInteractiveEnvironment(
-                appCodeTree,
-                rootFilePaths: [["src", "Test.elm"]],
-                skipLowering: true,
-                skipFilteringForSourceDirs: false)
-            .Extract(err => throw new System.Exception(err));
-
         var parseCache = new PineVMParseCache();
 
-        var parsedEnv =
-            ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnv)
-            .Extract(err => throw new System.Exception("Failed parsing interactive environment: " + err));
-
-        var namesFromCompiledEnv =
-            NamesFromCompiledEnv.FromCompiledEnvironment(parsedEnv, parseCache);
-
-        var staticProgram =
-            CodeAnalysisTestHelper.ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
-                parsedEnv,
+        var (parsedEnv, staticProgram) =
+            CodeAnalysisTestHelper.StaticProgramFromElmModules(
+                [elmModuleText],
                 includeDeclaration:
                 declName =>
                 {
@@ -130,31 +79,6 @@ public class CodeAnalysisTests
     [Fact]
     public void Parse_Factorial()
     {
-        var elmJsonFile =
-            """
-            {
-                "type": "application",
-                "source-directories": [
-                    "src"
-                ],
-                "elm-version": "0.19.1",
-                "dependencies": {
-                    "direct": {
-                        "elm/core": "1.0.5"
-                    },
-                    "indirect": {
-                    }
-                },
-                "test-dependencies": {
-                    "direct": {
-                        "elm-explorations/test": "2.2.0"
-                    },
-                    "indirect": {
-                    }
-                }
-            }
-            """;
-
         var elmModuleText =
             """
             module Test exposing (..)
@@ -172,45 +96,11 @@ public class CodeAnalysisTests
 
             """;
 
-        var appCodeTree =
-            BlobTreeWithStringPath.EmptyTree
-            .SetNodeAtPathSorted(
-                ["elm.json"],
-                BlobTreeWithStringPath.Blob(Encoding.UTF8.GetBytes(elmJsonFile)))
-            .SetNodeAtPathSorted(
-                ["src", "Test.elm"],
-                BlobTreeWithStringPath.Blob(Encoding.UTF8.GetBytes(elmModuleText)));
-
-        var compiledEnv =
-            ElmCompiler.CompileInteractiveEnvironment(
-                appCodeTree,
-                rootFilePaths: [["src", "Test.elm"]],
-                skipLowering: true,
-                skipFilteringForSourceDirs: false)
-            .Extract(err => throw new System.Exception(err));
-
         var parseCache = new PineVMParseCache();
 
-        var compiledDecl =
-            ElmInteractiveEnvironment.ParseFunctionFromElmModule(
-                compiledEnv,
-                moduleName: "Test",
-                declarationName: "factorial",
-                parseCache: parseCache)
-            .Extract(err => throw new System.Exception(err));
-
-        compiledDecl.Should().NotBeNull();
-
-        var parsedEnv =
-            ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnv)
-            .Extract(err => throw new System.Exception("Failed parsing interactive environment: " + err));
-
-        var namesFromCompiledEnv =
-            NamesFromCompiledEnv.FromCompiledEnvironment(parsedEnv, parseCache);
-
-        var staticProgram =
-            CodeAnalysisTestHelper.ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
-                parsedEnv,
+        var (parsedEnv, staticProgram) =
+            CodeAnalysisTestHelper.StaticProgramFromElmModules(
+                [elmModuleText],
                 includeDeclaration:
                 declName =>
                 {
@@ -247,31 +137,6 @@ public class CodeAnalysisTests
     [Fact]
     public void Parse_Test_dictToShuffledList()
     {
-        var elmJsonFile =
-            """
-            {
-                "type": "application",
-                "source-directories": [
-                    "src"
-                ],
-                "elm-version": "0.19.1",
-                "dependencies": {
-                    "direct": {
-                        "elm/core": "1.0.5"
-                    },
-                    "indirect": {
-                    }
-                },
-                "test-dependencies": {
-                    "direct": {
-                        "elm-explorations/test": "2.2.0"
-                    },
-                    "indirect": {
-                    }
-                }
-            }
-            """;
-
         /*
          * Use a form that us unlikely to occur also in the standard libraries,
          * to avoid code analysis picking up the name of the same function in the standard library.
@@ -291,35 +156,11 @@ public class CodeAnalysisTests
                         Pine_kernel.concat [ dictToShuffledList left, dictToShuffledList right, [ ( key, value ) ] ]
             """;
 
-        var appCodeTree =
-            BlobTreeWithStringPath.EmptyTree
-            .SetNodeAtPathSorted(
-                ["elm.json"],
-                BlobTreeWithStringPath.Blob(Encoding.UTF8.GetBytes(elmJsonFile)))
-            .SetNodeAtPathSorted(
-                ["src", "Test.elm"],
-                BlobTreeWithStringPath.Blob(Encoding.UTF8.GetBytes(elmModuleText)));
-
-        var compiledEnv =
-            ElmCompiler.CompileInteractiveEnvironment(
-                appCodeTree,
-                rootFilePaths: [["src", "Test.elm"]],
-                skipLowering: true,
-                skipFilteringForSourceDirs: false)
-            .Extract(err => throw new System.Exception(err));
-
         var parseCache = new PineVMParseCache();
 
-        var parsedEnv =
-            ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnv)
-            .Extract(err => throw new System.Exception("Failed parsing interactive environment: " + err));
-
-        var namesFromCompiledEnv =
-            NamesFromCompiledEnv.FromCompiledEnvironment(parsedEnv, parseCache);
-
-        var staticProgram =
-            CodeAnalysisTestHelper.ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
-                parsedEnv,
+        var (parsedEnv, staticProgram) =
+            CodeAnalysisTestHelper.StaticProgramFromElmModules(
+                [elmModuleText],
                 includeDeclaration:
                 declName =>
                 {
@@ -367,31 +208,6 @@ public class CodeAnalysisTests
     [Fact]
     public void Parse_Test_convert0OrMore_base3()
     {
-        var elmJsonFile =
-            """
-            {
-                "type": "application",
-                "source-directories": [
-                    "src"
-                ],
-                "elm-version": "0.19.1",
-                "dependencies": {
-                    "direct": {
-                        "elm/core": "1.0.5"
-                    },
-                    "indirect": {
-                    }
-                },
-                "test-dependencies": {
-                    "direct": {
-                        "elm-explorations/test": "2.2.0"
-                    },
-                    "indirect": {
-                    }
-                }
-            }
-            """;
-
         /*
          * Use a form that us unlikely to occur also in the standard libraries,
          * to avoid code analysis picking up the name of the same function in the standard library.
@@ -427,32 +243,11 @@ public class CodeAnalysisTests
                             ( 0, -1 )
             """;
 
-        var appCodeTree =
-            BlobTreeWithStringPath.EmptyTree
-            .SetNodeAtPathSorted(
-                ["elm.json"],
-                BlobTreeWithStringPath.Blob(Encoding.UTF8.GetBytes(elmJsonFile)))
-            .SetNodeAtPathSorted(
-                ["src", "Test.elm"],
-                BlobTreeWithStringPath.Blob(Encoding.UTF8.GetBytes(elmModuleText)));
-
-        var compiledEnv =
-            ElmCompiler.CompileInteractiveEnvironment(
-                appCodeTree,
-                rootFilePaths: [["src", "Test.elm"]],
-                skipLowering: true,
-                skipFilteringForSourceDirs: false)
-            .Extract(err => throw new System.Exception(err));
-
         var parseCache = new PineVMParseCache();
 
-        var parsedEnv =
-            ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnv)
-            .Extract(err => throw new System.Exception("Failed parsing interactive environment: " + err));
-
-        var staticProgram =
-            CodeAnalysisTestHelper.ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
-                parsedEnv,
+        var (parsedEnv, staticProgram) =
+            CodeAnalysisTestHelper.StaticProgramFromElmModules(
+                [elmModuleText],
                 includeDeclaration:
                 declName =>
                 {
@@ -954,31 +749,6 @@ public class CodeAnalysisTests
     [Fact]
     public void Parse_Test_idiv()
     {
-        var elmJsonFile =
-            """
-            {
-                "type": "application",
-                "source-directories": [
-                    "src"
-                ],
-                "elm-version": "0.19.1",
-                "dependencies": {
-                    "direct": {
-                        "elm/core": "1.0.5"
-                    },
-                    "indirect": {
-                    }
-                },
-                "test-dependencies": {
-                    "direct": {
-                        "elm-explorations/test": "2.2.0"
-                    },
-                    "indirect": {
-                    }
-                }
-            }
-            """;
-
         /*
          * Using a modified form of idiv to avoid matching compiled value from Elm core library.
          * */
@@ -1069,32 +839,11 @@ public class CodeAnalysisTests
                     quotient
             """;
 
-        var appCodeTree =
-            BlobTreeWithStringPath.EmptyTree
-            .SetNodeAtPathSorted(
-                ["elm.json"],
-                BlobTreeWithStringPath.Blob(Encoding.UTF8.GetBytes(elmJsonFile)))
-            .SetNodeAtPathSorted(
-                ["src", "Test.elm"],
-                BlobTreeWithStringPath.Blob(Encoding.UTF8.GetBytes(elmModuleText)));
-
-        var compiledEnv =
-            ElmCompiler.CompileInteractiveEnvironment(
-                appCodeTree,
-                rootFilePaths: [["src", "Test.elm"]],
-                skipLowering: true,
-                skipFilteringForSourceDirs: false)
-            .Extract(err => throw new System.Exception(err));
-
         var parseCache = new PineVMParseCache();
 
-        var parsedEnv =
-            ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnv)
-            .Extract(err => throw new System.Exception("Failed parsing interactive environment: " + err));
-
-        var staticProgram =
-            CodeAnalysisTestHelper.ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
-                parsedEnv,
+        var (parsedEnv, staticProgram) =
+            CodeAnalysisTestHelper.StaticProgramFromElmModules(
+                [elmModuleText],
                 includeDeclaration:
                 declName =>
                 {
@@ -1984,31 +1733,6 @@ public class CodeAnalysisTests
     [Fact]
     public void Parse_Test_hexStringToInt()
     {
-        var elmJsonFile =
-            """
-            {
-                "type": "application",
-                "source-directories": [
-                    "src"
-                ],
-                "elm-version": "0.19.1",
-                "dependencies": {
-                    "direct": {
-                        "elm/core": "1.0.5"
-                    },
-                    "indirect": {
-                    }
-                },
-                "test-dependencies": {
-                    "direct": {
-                        "elm-explorations/test": "2.2.0"
-                    },
-                    "indirect": {
-                    }
-                }
-            }
-            """;
-
         var elmModuleText =
             """
             module Test exposing (..)
@@ -2115,32 +1839,11 @@ public class CodeAnalysisTests
                         15
             """;
 
-        var appCodeTree =
-            BlobTreeWithStringPath.EmptyTree
-            .SetNodeAtPathSorted(
-                ["elm.json"],
-                BlobTreeWithStringPath.Blob(Encoding.UTF8.GetBytes(elmJsonFile)))
-            .SetNodeAtPathSorted(
-                ["src", "Test.elm"],
-                BlobTreeWithStringPath.Blob(Encoding.UTF8.GetBytes(elmModuleText)));
-
-        var compiledEnv =
-            ElmCompiler.CompileInteractiveEnvironment(
-                appCodeTree,
-                rootFilePaths: [["src", "Test.elm"]],
-                skipLowering: true,
-                skipFilteringForSourceDirs: false)
-            .Extract(err => throw new System.Exception(err));
-
         var parseCache = new PineVMParseCache();
 
-        var parsedEnv =
-            ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnv)
-            .Extract(err => throw new System.Exception("Failed parsing interactive environment: " + err));
-
-        var staticProgram =
-            CodeAnalysisTestHelper.ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
-                parsedEnv,
+        var (parsedEnv, staticProgram) =
+            CodeAnalysisTestHelper.StaticProgramFromElmModules(
+                [elmModuleText],
                 includeDeclaration:
                 declName =>
                 {
@@ -2374,31 +2077,6 @@ public class CodeAnalysisTests
     [Fact]
     public void Parse_Test_apply_function_from_other_module()
     {
-        var elmJsonFile =
-            """
-            {
-                "type": "application",
-                "source-directories": [
-                    "src"
-                ],
-                "elm-version": "0.19.1",
-                "dependencies": {
-                    "direct": {
-                        "elm/core": "1.0.5"
-                    },
-                    "indirect": {
-                    }
-                },
-                "test-dependencies": {
-                    "direct": {
-                        "elm-explorations/test": "2.2.0"
-                    },
-                    "indirect": {
-                    }
-                }
-            }
-            """;
-
         var elmModuleTestListText =
             """
             module TestList exposing (..)
@@ -2434,35 +2112,11 @@ public class CodeAnalysisTests
 
             """;
 
-        var appCodeTree =
-            BlobTreeWithStringPath.EmptyTree
-            .SetNodeAtPathSorted(
-                ["elm.json"],
-                BlobTreeWithStringPath.Blob(Encoding.UTF8.GetBytes(elmJsonFile)))
-            .SetNodeAtPathSorted(
-                ["src", "TestList.elm"],
-                BlobTreeWithStringPath.Blob(Encoding.UTF8.GetBytes(elmModuleTestListText)))
-            .SetNodeAtPathSorted(
-                ["src", "Test.elm"],
-                BlobTreeWithStringPath.Blob(Encoding.UTF8.GetBytes(elmModuleTestText)));
-
-        var compiledEnv =
-            ElmCompiler.CompileInteractiveEnvironment(
-                appCodeTree,
-                rootFilePaths: [["src", "Test.elm"]],
-                skipLowering: true,
-                skipFilteringForSourceDirs: false)
-            .Extract(err => throw new System.Exception(err));
-
         var parseCache = new PineVMParseCache();
 
-        var parsedEnv =
-            ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnv)
-            .Extract(err => throw new System.Exception("Failed parsing interactive environment: " + err));
-
-        var staticProgram =
-            CodeAnalysisTestHelper.ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
-                parsedEnv,
+        var (parsedEnv, staticProgram) =
+            CodeAnalysisTestHelper.StaticProgramFromElmModules(
+                [elmModuleTestListText, elmModuleTestText],
                 includeDeclaration:
                 declName =>
                 {
