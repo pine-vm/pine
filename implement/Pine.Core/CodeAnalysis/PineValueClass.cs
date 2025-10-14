@@ -115,12 +115,22 @@ public record PineValueClass
         return CodeAnalysis.ValueFromPathInValue(parentValue, [.. path.TakeLast(1)]);
     }
 
-    /// <summary>
     /// <inheritdoc />
-    /// </summary>
     public override int GetHashCode()
     {
         return HashBase16.GetHashCode();
+    }
+
+    /// <inheritdoc />
+    public override string ToString()
+    {
+        if (ParsedItems.Count is 0)
+            return "ValueClass<empty>";
+
+        var itemsString = string.Join(", ", ParsedItems.Select(kv => $"[{string.Join(", ", kv.Key)}] = {kv.Value}"));
+
+        return
+            $"ValueClass<Hash={HashBase16[..8]}, Items={{ {itemsString} }}>";
     }
 
     /// <summary>
