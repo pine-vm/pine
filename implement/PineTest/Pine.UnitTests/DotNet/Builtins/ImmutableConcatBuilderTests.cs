@@ -587,4 +587,140 @@ public class ImmutableConcatBuilderTests
 
         evaluateReverse.Should().Be(reverseOfEvaluate);
     }
+
+    [Fact]
+    public void IsList_returns_true_when_concatenating_lists()
+    {
+        var list1 = PineValue.List([PineValue.Blob([1])]);
+        var list2 = PineValue.List([PineValue.Blob([2])]);
+
+        var builder = ImmutableConcatBuilder.Create([list1, list2]);
+
+        VerifyConsistencyOfDerivedProperties(builder);
+    }
+
+    [Fact]
+    public void IsList_returns_true_when_any_item_is_list()
+    {
+        var blob1 = PineValue.Blob([1, 2, 3]);
+        var list1 = PineValue.List([PineValue.Blob([4])]);
+        var blob2 = PineValue.Blob([5, 6]);
+
+        var builder = ImmutableConcatBuilder.Create([blob1, list1, blob2]);
+
+        VerifyConsistencyOfDerivedProperties(builder);
+    }
+
+    [Fact]
+    public void IsList_returns_false_when_all_items_are_blobs()
+    {
+        var blob1 = PineValue.Blob([1, 2, 3]);
+        var blob2 = PineValue.Blob([4, 5]);
+        var blob3 = PineValue.Blob([6, 7, 8, 9]);
+
+        var builder = ImmutableConcatBuilder.Create([blob1, blob2, blob3]);
+
+        VerifyConsistencyOfDerivedProperties(builder);
+    }
+
+    [Fact]
+    public void IsList_returns_false_for_empty_builder()
+    {
+        var builder = ImmutableConcatBuilder.Create([]);
+
+        VerifyConsistencyOfDerivedProperties(builder);
+    }
+
+    [Fact]
+    public void IsBlob_returns_true_when_concatenating_blobs()
+    {
+        var blob1 = PineValue.Blob([1, 2, 3]);
+        var blob2 = PineValue.Blob([4, 5]);
+        var blob3 = PineValue.Blob([6, 7, 8, 9]);
+
+        var builder = ImmutableConcatBuilder.Create([blob1, blob2, blob3]);
+
+        VerifyConsistencyOfDerivedProperties(builder);
+    }
+
+    [Fact]
+    public void IsBlob_returns_false_when_any_item_is_list()
+    {
+        var blob1 = PineValue.Blob([1, 2, 3]);
+        var list1 = PineValue.List([PineValue.Blob([4])]);
+        var blob2 = PineValue.Blob([5, 6]);
+
+        var builder = ImmutableConcatBuilder.Create([blob1, list1, blob2]);
+
+        VerifyConsistencyOfDerivedProperties(builder);
+    }
+
+    [Fact]
+    public void IsBlob_returns_true_for_empty_builder()
+    {
+        var builder = ImmutableConcatBuilder.Create([]);
+
+        VerifyConsistencyOfDerivedProperties(builder);
+    }
+
+    [Fact]
+    public void IsList_and_IsBlob_work_with_nested_nodes()
+    {
+        var blob1 = PineValue.Blob([1, 2, 3]);
+        var blob2 = PineValue.Blob([4, 5]);
+
+        var builder = ImmutableConcatBuilder.Create([blob1])
+            .AppendItem(blob2);
+
+        // Both items are blobs
+        VerifyConsistencyOfDerivedProperties(builder);
+
+        var list1 = PineValue.List([PineValue.Blob([6])]);
+        var builderWithList = builder.AppendItem(list1);
+
+        // Now one item is a list
+        VerifyConsistencyOfDerivedProperties(builderWithList);
+    }
+
+    [Fact]
+    public void IsList_returns_true_for_nested_nodes_with_list()
+    {
+        var list1 = PineValue.List([PineValue.Blob([1])]);
+        var list2 = PineValue.List([PineValue.Blob([2])]);
+        var list3 = PineValue.List([PineValue.Blob([3])]);
+
+        var builder = ImmutableConcatBuilder.Create([list1])
+            .AppendItem(list2)
+            .PrependItem(list3);
+
+        VerifyConsistencyOfDerivedProperties(builder);
+    }
+
+    [Fact]
+    public void IsBlob_returns_true_for_nested_nodes_with_blobs()
+    {
+        var blob1 = PineValue.Blob([1]);
+        var blob2 = PineValue.Blob([2]);
+        var blob3 = PineValue.Blob([3]);
+
+        var builder = ImmutableConcatBuilder.Create([blob1])
+            .AppendItem(blob2)
+            .PrependItem(blob3);
+
+        VerifyConsistencyOfDerivedProperties(builder);
+    }
+
+    private static void VerifyConsistencyOfDerivedProperties(ImmutableConcatBuilder builder)
+    {
+        var isList = builder.IsList();
+        var isBlob = builder.IsBlob();
+        var evaluated = builder.Evaluate();
+
+        // Verify IsList and IsBlob are mutually exclusive
+        (isList != isBlob).Should().BeTrue();
+
+        // Verify the type checks match the evaluated result
+        (evaluated is PineValue.ListValue).Should().Be(isList);
+        (evaluated is PineValue.BlobValue).Should().Be(isBlob);
+    }
 }

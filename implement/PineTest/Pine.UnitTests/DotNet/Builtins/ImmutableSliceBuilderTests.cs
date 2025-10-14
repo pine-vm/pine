@@ -1221,6 +1221,8 @@ public class ImmutableSliceBuilderTests
         var elementAt0 = builder.GetElementAt(0);
 
         elementAt0.Should().Be(head);
+
+        VerifyConsistencyOfDerivedProperties(builder);
     }
 
     [Fact]
@@ -1241,6 +1243,8 @@ public class ImmutableSliceBuilderTests
         builder.GetElementAt(0).Should().Be(PineValue.Blob([6]));
         builder.GetElementAt(1).Should().Be(PineValue.Blob([7]));
         builder.GetElementAt(2).Should().Be(PineValue.Blob([8]));
+
+        VerifyConsistencyOfDerivedProperties(builder);
     }
 
     [Fact]
@@ -1267,6 +1271,8 @@ public class ImmutableSliceBuilderTests
 
         // Index 2 is beyond the take limit
         builder.GetElementAt(2).Should().Be(PineValue.EmptyList);
+
+        VerifyConsistencyOfDerivedProperties(builder);
     }
 
     [Fact]
@@ -1292,5 +1298,166 @@ public class ImmutableSliceBuilderTests
         builder.GetElementAt(1).Should().Be(PineValue.Blob([10]));
         builder.GetElementAt(9).Should().Be(PineValue.Blob([18]));
         builder.GetElementAt(10).Should().Be(PineValue.EmptyList);
+
+        VerifyConsistencyOfDerivedProperties(builder);
+    }
+
+    [Fact]
+    public void IsList_returns_true_for_list_original()
+    {
+        var original =
+            PineValue.List(
+                [
+                PineValue.Blob([1]),
+                PineValue.Blob([2]),
+                PineValue.Blob([3])
+                ]);
+
+        var builder = ImmutableSliceBuilder.Create(original);
+
+        VerifyConsistencyOfDerivedProperties(builder);
+    }
+
+    [Fact]
+    public void IsList_returns_false_for_blob_original()
+    {
+        var original = PineValue.Blob([1, 2, 3]);
+
+        var builder = ImmutableSliceBuilder.Create(original);
+
+        VerifyConsistencyOfDerivedProperties(builder);
+    }
+
+    [Fact]
+    public void IsList_returns_true_for_list_after_skip_and_take()
+    {
+        var original =
+            PineValue.List(
+                [
+                PineValue.Blob([1]),
+                PineValue.Blob([2]),
+                PineValue.Blob([3])
+                ]);
+
+        var builder =
+            ImmutableSliceBuilder.Create(original)
+            .Skip(1)
+            .Take(1);
+
+        VerifyConsistencyOfDerivedProperties(builder);
+    }
+
+    [Fact]
+    public void IsList_respects_final_value_when_cached()
+    {
+        var original =
+            PineValue.List(
+                [
+                PineValue.Blob([1]),
+                PineValue.Blob([2])
+                ]);
+
+        var builder =
+            ImmutableSliceBuilder.Create(original)
+            .Skip(10);
+
+        // Skip(10) on a 2-element list should result in empty list (final value cached)
+        VerifyConsistencyOfDerivedProperties(builder);
+    }
+
+    [Fact]
+    public void IsBlob_returns_true_for_blob_original()
+    {
+        var original = PineValue.Blob([1, 2, 3]);
+
+        var builder = ImmutableSliceBuilder.Create(original);
+
+        VerifyConsistencyOfDerivedProperties(builder);
+    }
+
+    [Fact]
+    public void IsBlob_returns_false_for_list_original()
+    {
+        var original =
+            PineValue.List(
+                [
+                PineValue.Blob([1]),
+                PineValue.Blob([2]),
+                PineValue.Blob([3])
+                ]);
+
+        var builder = ImmutableSliceBuilder.Create(original);
+
+        VerifyConsistencyOfDerivedProperties(builder);
+    }
+
+    [Fact]
+    public void IsBlob_returns_true_for_blob_after_skip_and_take()
+    {
+        var original = PineValue.Blob([1, 2, 3, 4, 5]);
+
+        var builder =
+            ImmutableSliceBuilder.Create(original)
+            .Skip(1)
+            .Take(3);
+
+        VerifyConsistencyOfDerivedProperties(builder);
+    }
+
+    [Fact]
+    public void IsBlob_respects_final_value_when_cached()
+    {
+        var original = PineValue.Blob([1, 2, 3]);
+
+        var builder =
+            ImmutableSliceBuilder.Create(original)
+            .Skip(10);
+
+        VerifyConsistencyOfDerivedProperties(builder);
+    }
+
+    [Fact]
+    public void IsList_and_IsBlob_are_mutually_exclusive()
+    {
+        var listOriginal = PineValue.List([PineValue.Blob([1])]);
+        var blobOriginal = PineValue.Blob([1, 2, 3]);
+
+        var listBuilder = ImmutableSliceBuilder.Create(listOriginal);
+        var blobBuilder = ImmutableSliceBuilder.Create(blobOriginal);
+
+        VerifyConsistencyOfDerivedProperties(listBuilder);
+        VerifyConsistencyOfDerivedProperties(blobBuilder);
+    }
+
+    static void VerifyConsistencyOfDerivedProperties(ImmutableSliceBuilder builder)
+    {
+        var isList = builder.IsList();
+        var isBlob = builder.IsBlob();
+
+        var length = builder.GetLength();
+
+        // An ImmutableSliceBuilder should be either a list or a blob, but not both or neither
+        (isList ^ isBlob).Should().BeTrue("An ImmutableSliceBuilder must be either a list or a blob.");
+
+        var evaluated = builder.Evaluate();
+
+        switch (evaluated)
+        {
+            case PineValue.ListValue:
+                isList.Should().BeTrue("Evaluated value is a list, so IsList should be true.");
+                isBlob.Should().BeFalse("Evaluated value is a list, so IsBlob should be false.");
+                length.Should().Be(((PineValue.ListValue)evaluated).Items.Length, "Length should match the number of items in the list.");
+                break;
+
+            case PineValue.BlobValue:
+                isBlob.Should().BeTrue("Evaluated value is a blob, so IsBlob should be true.");
+                isList.Should().BeFalse("Evaluated value is a blob, so IsList should be false.");
+                length.Should().Be(((PineValue.BlobValue)evaluated).Bytes.Length, "Length should match the number of bytes in the blob.");
+                break;
+
+            default:
+                throw new System.NotImplementedException(
+                    "Unexpected PineValue type from Evaluate: " + evaluated.GetType().FullName);
+        }
     }
 }

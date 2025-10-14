@@ -28,6 +28,16 @@ public abstract record ImmutableConcatBuilder
     public abstract PineValue EvaluateReverse();
 
     /// <summary>
+    /// Predict whether the result from <see cref="Evaluate"/> would be a <see cref="PineValue.ListValue"/> value without fully evaluating.
+    /// </summary>
+    public abstract bool IsList();
+
+    /// <summary>
+    /// Predict whether the result from <see cref="Evaluate"/> would be a <see cref="PineValue.BlobValue"/> value without fully evaluating.
+    /// </summary>
+    public abstract bool IsBlob();
+
+    /// <summary>
     /// Returns a new builder that appends the specified sequence of items to the end.
     /// </summary>
     public ImmutableConcatBuilder AppendItems(IEnumerable<PineValue> values)
@@ -88,6 +98,30 @@ public abstract record ImmutableConcatBuilder
             var reversed = Values.ToArray();
             Array.Reverse(reversed);
             return Internal.KernelFunctionSpecialized.concat(reversed);
+        }
+
+        /// <inheritdoc/>
+        public override bool IsList()
+        {
+            // concat() returns a list if the first element is a list, or if empty
+            if (Values.Count == 0)
+            {
+                return true; // Empty concat returns EmptyList
+            }
+
+            return Values[0] is PineValue.ListValue;
+        }
+
+        /// <inheritdoc/>
+        public override bool IsBlob()
+        {
+            // concat() returns a blob if the first element is a blob
+            if (Values.Count == 0)
+            {
+                return false; // Empty concat returns EmptyList, not a blob
+            }
+
+            return Values[0] is PineValue.BlobValue;
         }
     }
 
@@ -223,6 +257,34 @@ public abstract record ImmutableConcatBuilder
             }
 
             return Internal.KernelFunctionSpecialized.concat(flattenedItems);
+        }
+
+        /// <inheritdoc/>
+        public override bool IsList()
+        {
+            // The result type of concat depends on the first value in the flattened sequence
+            // If no items, concat returns EmptyList
+            if (Items.Count == 0)
+            {
+                return true;
+            }
+
+            // Find the first builder's result type
+            return Items[0].IsList();
+        }
+
+        /// <inheritdoc/>
+        public override bool IsBlob()
+        {
+            // The result type of concat depends on the first value in the flattened sequence
+            // If no items, concat returns EmptyList (not a blob)
+            if (Items.Count == 0)
+            {
+                return false;
+            }
+
+            // Find the first builder's result type
+            return Items[0].IsBlob();
         }
     }
 

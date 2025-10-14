@@ -195,17 +195,8 @@ public record ImmutableSliceBuilder(
     }
 
     /// <summary>
-    /// Gets the length of the slice result without fully evaluating it.
+    /// Predict the length from <see cref="KernelFunction.length(PineValue)"/> used on the value from <see cref="Evaluate"/>.
     /// </summary>
-    /// <returns>The number of elements that would be in the resulting slice.</returns>
-    /// <remarks>
-    /// This method efficiently computes the result length based on the original value's length
-    /// and the accumulated skip/take operations, without materializing the actual slice.
-    /// If a final value has already been cached, returns its length instead.
-    /// </remarks>
-    /// <exception cref="System.NotImplementedException">
-    /// Thrown if the original value is neither a <see cref="PineValue.ListValue"/> nor a <see cref="PineValue.BlobValue"/>.
-    /// </exception>
     public int GetLength()
     {
         if (FinalValue is { } finalValue)
@@ -228,17 +219,9 @@ public record ImmutableSliceBuilder(
     }
 
     /// <summary>
-    /// Checks whether the slice result would be an empty list without fully evaluating it.
+    /// Checks whether the result from <see cref="Evaluate"/> would be an empty <see cref="PineValue.ListValue"/> without fully evaluating it.
     /// </summary>
     /// <returns><see langword="true"/> if the slice result would be empty; otherwise, <see langword="false"/>.</returns>
-    /// <remarks>
-    /// This method provides an efficient early-exit check for empty results. It returns <see langword="true"/> if:
-    /// <list type="bullet">
-    /// <item><description>A final value has been cached and it equals <see cref="PineValue.EmptyList"/>, or</description></item>
-    /// <item><description>The original is a list and the computed result length is zero.</description></item>
-    /// </list>
-    /// For blob values, this method returns <see langword="false"/> even if the result would be empty.
-    /// </remarks>
     public bool IsEmptyList()
     {
         if (FinalValue is { } finalValue)
@@ -249,6 +232,32 @@ public record ImmutableSliceBuilder(
         return
             Original is PineValue.ListValue listValue &&
             ComputeResultLengthFromOriginalLength(listValue.Items.Length) == 0;
+    }
+
+    /// <summary>
+    /// Predict whether the result from <see cref="Evaluate"/> would be a <see cref="PineValue.ListValue"/> value without fully evaluating.
+    /// </summary>
+    public bool IsList()
+    {
+        if (FinalValue is { } finalValue)
+        {
+            return finalValue is PineValue.ListValue;
+        }
+
+        return Original is PineValue.ListValue;
+    }
+
+    /// <summary>
+    /// Predict whether the result from <see cref="Evaluate"/> would be a <see cref="PineValue.BlobValue"/> value without fully evaluating.
+    /// </summary>
+    public bool IsBlob()
+    {
+        if (FinalValue is { } finalValue)
+        {
+            return finalValue is PineValue.BlobValue;
+        }
+
+        return Original is PineValue.BlobValue;
     }
 
     /// <summary>
