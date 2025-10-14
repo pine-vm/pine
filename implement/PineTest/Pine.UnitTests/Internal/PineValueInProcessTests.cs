@@ -1,0 +1,933 @@
+using AwesomeAssertions;
+using Pine.Core;
+using Pine.Core.Internal;
+using Pine.Core.PopularEncodings;
+using System.Collections.Generic;
+using System.Linq;
+using System.Numerics;
+using Xunit;
+
+namespace Pine.UnitTests.Internal;
+
+public class PineValueInProcessTests
+{
+    [Fact]
+    public void Create_initializes_with_evaluated_value()
+    {
+        var value = PineValue.List([PineValue.Blob([1, 2, 3])]);
+        var inProcess = PineValueInProcess.Create(value);
+
+        var result = inProcess.Evaluate();
+
+        result.Should().Be(value);
+    }
+
+    [Fact]
+    public void CreateList_initializes_without_immediate_evaluation()
+    {
+        var items = new List<PineValue>
+        {
+            PineValue.Blob([1]),
+            PineValue.Blob([2]),
+            PineValue.Blob([3])
+        };
+
+        var inProcess = PineValueInProcess.CreateList(items);
+
+        var result = inProcess.Evaluate();
+
+        var expected = PineValue.List([.. items]);
+
+        result.Should().Be(expected);
+    }
+
+    [Fact]
+    public void CreateList_with_empty_list()
+    {
+        var items = new List<PineValue>();
+        var inProcess = PineValueInProcess.CreateList(items);
+
+        var result = inProcess.Evaluate();
+
+        result.Should().Be(PineValue.EmptyList);
+    }
+
+    [Fact]
+    public void Evaluate_caches_result()
+    {
+        var items = new List<PineValue> { PineValue.Blob([1]) };
+        var inProcess = PineValueInProcess.CreateList(items);
+
+        var result1 = inProcess.Evaluate();
+        var result2 = inProcess.Evaluate();
+
+        // Same reference indicates caching
+        ReferenceEquals(result1, result2).Should().BeTrue();
+    }
+
+    [Fact]
+    public void AsInteger_parses_integer_from_blob()
+    {
+        var integerValue = IntegerEncoding.EncodeSignedInteger(42);
+        var inProcess = PineValueInProcess.Create(integerValue);
+
+        var result = inProcess.AsInteger();
+
+        result.Should().Be(new BigInteger(42));
+    }
+
+    [Fact]
+    public void AsInteger_returns_null_for_non_integer_values()
+    {
+        var listValue = PineValue.List([PineValue.Blob([1])]);
+        var inProcess = PineValueInProcess.Create(listValue);
+
+        var result = inProcess.AsInteger();
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public void AsInteger_caches_parsed_value()
+    {
+        var integerValue = IntegerEncoding.EncodeSignedInteger(100);
+        var inProcess = PineValueInProcess.Create(integerValue);
+
+        var result1 = inProcess.AsInteger();
+        var result2 = inProcess.AsInteger();
+
+        result1.Should().Be(result2);
+    }
+
+    [Fact]
+    public void IsList_returns_true_for_list_value()
+    {
+        var listValue = PineValue.List([PineValue.Blob([1])]);
+        var inProcess = PineValueInProcess.Create(listValue);
+
+        VerifyConsistencyOfDerivedProperties(inProcess);
+    }
+
+    [Fact]
+    public void IsList_returns_false_for_blob_value()
+    {
+        var blobValue = PineValue.Blob([1, 2, 3]);
+        var inProcess = PineValueInProcess.Create(blobValue);
+
+        VerifyConsistencyOfDerivedProperties(inProcess);
+    }
+
+    [Fact]
+    public void IsList_returns_true_for_CreateList()
+    {
+        var items = new List<PineValue> { PineValue.Blob([1]) };
+        var inProcess = PineValueInProcess.CreateList(items);
+
+        VerifyConsistencyOfDerivedProperties(inProcess);
+    }
+
+    [Fact]
+    public void IsBlob_returns_true_for_blob_value()
+    {
+        var blobValue = PineValue.Blob([1, 2, 3]);
+        var inProcess = PineValueInProcess.Create(blobValue);
+
+        VerifyConsistencyOfDerivedProperties(inProcess);
+    }
+
+    [Fact]
+    public void IsBlob_returns_false_for_list_value()
+    {
+        var listValue = PineValue.List([PineValue.Blob([1])]);
+        var inProcess = PineValueInProcess.Create(listValue);
+
+        VerifyConsistencyOfDerivedProperties(inProcess);
+    }
+
+    [Fact]
+    public void IsBlob_returns_false_for_CreateList()
+    {
+        var items = new List<PineValue> { PineValue.Blob([1]) };
+        var inProcess = PineValueInProcess.CreateList(items);
+
+        VerifyConsistencyOfDerivedProperties(inProcess);
+    }
+
+    [Fact]
+    public void IsList_and_IsBlob_are_mutually_exclusive()
+    {
+        var listValue = PineValue.List([PineValue.Blob([1])]);
+        var blobValue = PineValue.Blob([1, 2, 3]);
+
+        var listInProcess = PineValueInProcess.Create(listValue);
+        var blobInProcess = PineValueInProcess.Create(blobValue);
+
+        VerifyConsistencyOfDerivedProperties(listInProcess);
+        VerifyConsistencyOfDerivedProperties(blobInProcess);
+    }
+
+    [Fact]
+    public void GetLength_returns_correct_length_for_list()
+    {
+        var items = new List<PineValue>
+        {
+            PineValue.Blob([1]),
+            PineValue.Blob([2]),
+            PineValue.Blob([3])
+        };
+        var inProcess = PineValueInProcess.CreateList(items);
+
+        var length = inProcess.GetLength();
+
+        length.Should().Be(3);
+        VerifyConsistencyOfDerivedProperties(inProcess);
+    }
+
+    [Fact]
+    public void GetLength_returns_correct_length_for_blob()
+    {
+        var blobValue = PineValue.Blob([1, 2, 3, 4, 5]);
+        var inProcess = PineValueInProcess.Create(blobValue);
+
+        var length = inProcess.GetLength();
+
+        length.Should().Be(5);
+        VerifyConsistencyOfDerivedProperties(inProcess);
+    }
+
+    [Fact]
+    public void GetLength_returns_zero_for_empty_list()
+    {
+        var inProcess = PineValueInProcess.CreateList([]);
+
+        var length = inProcess.GetLength();
+
+        length.Should().Be(0);
+    }
+
+    [Fact]
+    public void GetLength_returns_zero_for_empty_blob()
+    {
+        var inProcess = PineValueInProcess.Create(PineValue.EmptyBlob);
+
+        var length = inProcess.GetLength();
+
+        length.Should().Be(0);
+    }
+
+    [Fact]
+    public void Skip_with_zero_returns_same_value()
+    {
+        var original = PineValueInProcess.Create(
+            PineValue.List([PineValue.Blob([1]), PineValue.Blob([2])]));
+
+        var result = PineValueInProcess.Skip(0, original);
+
+        // Should return the same reference for zero skip
+        ReferenceEquals(result, original).Should().BeTrue();
+    }
+
+    [Fact]
+    public void Skip_with_negative_count_returns_same_value()
+    {
+        var original = PineValueInProcess.Create(
+            PineValue.List([PineValue.Blob([1]), PineValue.Blob([2])]));
+
+        var result = PineValueInProcess.Skip(-5, original);
+
+        ReferenceEquals(result, original).Should().BeTrue();
+    }
+
+    [Fact]
+    public void Skip_on_list_produces_correct_result()
+    {
+        var originalValue = PineValue.List([
+            PineValue.Blob([1]),
+            PineValue.Blob([2]),
+            PineValue.Blob([3]),
+            PineValue.Blob([4])
+        ]);
+        var original = PineValueInProcess.Create(originalValue);
+
+        var result = PineValueInProcess.Skip(2, original);
+        var evaluated = result.Evaluate();
+
+        var expected = KernelFunction.skip(
+            PineValue.List([IntegerEncoding.EncodeSignedInteger(2), originalValue]));
+
+        evaluated.Should().Be(expected);
+        VerifyConsistencyOfDerivedProperties(result);
+    }
+
+    [Fact]
+    public void Skip_on_blob_produces_correct_result()
+    {
+        var originalValue = PineValue.Blob([10, 20, 30, 40, 50]);
+        var original = PineValueInProcess.Create(originalValue);
+
+        var result = PineValueInProcess.Skip(2, original);
+        var evaluated = result.Evaluate();
+
+        var expected = KernelFunction.skip(
+            PineValue.List([IntegerEncoding.EncodeSignedInteger(2), originalValue]));
+
+        evaluated.Should().Be(expected);
+        VerifyConsistencyOfDerivedProperties(result);
+    }
+
+    [Fact]
+    public void Skip_chaining_accumulates_correctly()
+    {
+        var originalValue = PineValue.List([
+            PineValue.Blob([1]),
+            PineValue.Blob([2]),
+            PineValue.Blob([3]),
+            PineValue.Blob([4]),
+            PineValue.Blob([5])
+        ]);
+        var original = PineValueInProcess.Create(originalValue);
+
+        var result = PineValueInProcess.Skip(1, original);
+        result = PineValueInProcess.Skip(2, result);
+        var evaluated = result.Evaluate();
+
+        var expected = KernelFunction.skip(
+            PineValue.List([IntegerEncoding.EncodeSignedInteger(3), originalValue]));
+
+        evaluated.Should().Be(expected);
+        VerifyConsistencyOfDerivedProperties(result);
+    }
+
+    [Fact]
+    public void Take_on_list_produces_correct_result()
+    {
+        var originalValue = PineValue.List([
+            PineValue.Blob([1]),
+            PineValue.Blob([2]),
+            PineValue.Blob([3]),
+            PineValue.Blob([4])
+        ]);
+        var original = PineValueInProcess.Create(originalValue);
+
+        var result = PineValueInProcess.Take(2, original);
+        var evaluated = result.Evaluate();
+
+        var expected = KernelFunction.take(
+            PineValue.List([IntegerEncoding.EncodeSignedInteger(2), originalValue]));
+
+        evaluated.Should().Be(expected);
+        VerifyConsistencyOfDerivedProperties(result);
+    }
+
+    [Fact]
+    public void Take_on_blob_produces_correct_result()
+    {
+        var originalValue = PineValue.Blob([10, 20, 30, 40, 50]);
+        var original = PineValueInProcess.Create(originalValue);
+
+        var result = PineValueInProcess.Take(3, original);
+        var evaluated = result.Evaluate();
+
+        var expected = KernelFunction.take(
+            PineValue.List([IntegerEncoding.EncodeSignedInteger(3), originalValue]));
+
+        evaluated.Should().Be(expected);
+        VerifyConsistencyOfDerivedProperties(result);
+    }
+
+    [Fact]
+    public void Take_with_zero_produces_empty()
+    {
+        var originalValue = PineValue.List([PineValue.Blob([1]), PineValue.Blob([2])]);
+        var original = PineValueInProcess.Create(originalValue);
+
+        var result = PineValueInProcess.Take(0, original);
+        var evaluated = result.Evaluate();
+
+        var expected = KernelFunction.take(
+            PineValue.List([IntegerEncoding.EncodeSignedInteger(0), originalValue]));
+
+        evaluated.Should().Be(expected);
+    }
+
+    [Fact]
+    public void Combined_skip_and_take_produces_correct_slice()
+    {
+        var originalValue = PineValue.List([
+            PineValue.Blob([1]),
+            PineValue.Blob([2]),
+            PineValue.Blob([3]),
+            PineValue.Blob([4]),
+            PineValue.Blob([5])
+        ]);
+        var original = PineValueInProcess.Create(originalValue);
+
+        var result = PineValueInProcess.Skip(1, original);
+        result = PineValueInProcess.Take(3, result);
+        var evaluated = result.Evaluate();
+
+        var afterSkip = KernelFunction.skip(
+            PineValue.List([IntegerEncoding.EncodeSignedInteger(1), originalValue]));
+        var expected = KernelFunction.take(
+            PineValue.List([IntegerEncoding.EncodeSignedInteger(3), afterSkip]));
+
+        evaluated.Should().Be(expected);
+        VerifyConsistencyOfDerivedProperties(result);
+    }
+
+    [Fact]
+    public void ConcatBinary_with_two_evaluated_values()
+    {
+        var left = PineValueInProcess.Create(PineValue.Blob([1, 2, 3]));
+        var right = PineValueInProcess.Create(PineValue.Blob([4, 5]));
+
+        var result = PineValueInProcess.ConcatBinary(left, right);
+        var evaluated = result.Evaluate();
+
+        var expected = KernelFunction.concat(
+            PineValue.List([PineValue.Blob([1, 2, 3]), PineValue.Blob([4, 5])]));
+
+        evaluated.Should().Be(expected);
+        VerifyConsistencyOfDerivedProperties(result);
+    }
+
+    [Fact]
+    public void ConcatBinary_with_lists()
+    {
+        var leftValue = PineValue.List([PineValue.Blob([1])]);
+        var rightValue = PineValue.List([PineValue.Blob([2])]);
+        var left = PineValueInProcess.Create(leftValue);
+        var right = PineValueInProcess.Create(rightValue);
+
+        var result = PineValueInProcess.ConcatBinary(left, right);
+        var evaluated = result.Evaluate();
+
+        var expected = KernelFunction.concat(PineValue.List([leftValue, rightValue]));
+
+        evaluated.Should().Be(expected);
+        VerifyConsistencyOfDerivedProperties(result);
+    }
+
+    [Fact]
+    public void ConcatBinary_chaining_multiple_operations()
+    {
+        var value1 = PineValueInProcess.Create(PineValue.Blob([1, 2]));
+        var value2 = PineValueInProcess.Create(PineValue.Blob([3, 4]));
+        var value3 = PineValueInProcess.Create(PineValue.Blob([5, 6]));
+
+        var result = PineValueInProcess.ConcatBinary(value1, value2);
+        result = PineValueInProcess.ConcatBinary(result, value3);
+        var evaluated = result.Evaluate();
+
+        var expected = KernelFunction.concat(
+            PineValue.List([
+                PineValue.Blob([1, 2]),
+                PineValue.Blob([3, 4]),
+                PineValue.Blob([5, 6])
+            ]));
+
+        evaluated.Should().Be(expected);
+        VerifyConsistencyOfDerivedProperties(result);
+    }
+
+    [Fact]
+    public void ConcatBinary_with_empty_blobs()
+    {
+        var left = PineValueInProcess.Create(PineValue.EmptyBlob);
+        var right = PineValueInProcess.Create(PineValue.Blob([1, 2]));
+
+        var result = PineValueInProcess.ConcatBinary(left, right);
+        var evaluated = result.Evaluate();
+
+        var expected = KernelFunction.concat(
+            PineValue.List([PineValue.EmptyBlob, PineValue.Blob([1, 2])]));
+
+        evaluated.Should().Be(expected);
+    }
+
+    [Fact]
+    public void Equal_with_same_reference_returns_true()
+    {
+        var value = PineValueInProcess.Create(PineValue.Blob([1, 2, 3]));
+
+        var result = PineValueInProcess.Equal(value, value);
+
+        result.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Equal_with_same_evaluated_value_returns_true()
+    {
+        var pineValue = PineValue.Blob([1, 2, 3]);
+        var value1 = PineValueInProcess.Create(pineValue);
+        var value2 = PineValueInProcess.Create(pineValue);
+
+        var result = PineValueInProcess.Equal(value1, value2);
+
+        result.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Equal_with_different_values_returns_false()
+    {
+        var value1 = PineValueInProcess.Create(PineValue.Blob([1, 2, 3]));
+        var value2 = PineValueInProcess.Create(PineValue.Blob([4, 5, 6]));
+
+        var result = PineValueInProcess.Equal(value1, value2);
+
+        result.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Equal_with_list_and_blob_returns_false()
+    {
+        var listValue =
+            PineValueInProcess.Create(
+                PineValue.List([PineValue.Blob([1])]));
+
+        var blobValue = PineValueInProcess.Create(PineValue.Blob([1]));
+
+        var result = PineValueInProcess.Equal(listValue, blobValue);
+
+        result.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Equal_with_same_list_items()
+    {
+        var items = new List<PineValue>
+        {
+            PineValue.Blob([1]),
+            PineValue.Blob([2])
+        };
+
+        var value1 = PineValueInProcess.CreateList(items);
+        var value2 = PineValueInProcess.CreateList(items);
+
+        var result = PineValueInProcess.Equal(value1, value2);
+
+        result.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Equal_with_different_list_items()
+    {
+        var items1 = new List<PineValue> { PineValue.Blob([1]) };
+        var items2 = new List<PineValue> { PineValue.Blob([2]) };
+
+        var value1 = PineValueInProcess.CreateList(items1);
+        var value2 = PineValueInProcess.CreateList(items2);
+
+        var result = PineValueInProcess.Equal(value1, value2);
+
+        result.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Equal_with_unevaluated_and_evaluated_equivalent_values()
+    {
+        var items = new List<PineValue> { PineValue.Blob([1]), PineValue.Blob([2]) };
+
+        var unevaluated = PineValueInProcess.CreateList(items);
+        var evaluated = PineValueInProcess.Create(PineValue.List([.. items]));
+
+        var result = PineValueInProcess.Equal(unevaluated, evaluated);
+
+        result.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Complex_combination_of_operations_produces_correct_result()
+    {
+        // Create a complex scenario: skip, take, concat
+        var originalValue =
+            PineValue.List(
+                [
+                PineValue.Blob([1]),
+                PineValue.Blob([2]),
+                PineValue.Blob([3]),
+                PineValue.Blob([4]),
+                PineValue.Blob([5])
+                ]);
+
+        var original = PineValueInProcess.Create(originalValue);
+
+        var skipped = PineValueInProcess.Skip(1, original);
+        var taken = PineValueInProcess.Take(3, skipped);
+
+        var additionalValue =
+            PineValueInProcess.Create(
+                PineValue.List([PineValue.Blob([6])]));
+
+        var concatenated =
+            PineValueInProcess.ConcatBinary(taken, additionalValue);
+
+        var evaluated = concatenated.Evaluate();
+
+        var afterSkip =
+            KernelFunction.skip(
+                PineValue.List([IntegerEncoding.EncodeSignedInteger(1), originalValue]));
+
+        var afterTake =
+            KernelFunction.take(
+                PineValue.List([IntegerEncoding.EncodeSignedInteger(3), afterSkip]));
+
+        var expected =
+            KernelFunction.concat(
+                PineValue.List([afterTake, PineValue.List([PineValue.Blob([6])])]));
+
+        evaluated.Should().Be(expected);
+
+        VerifyConsistencyOfDerivedProperties(concatenated);
+    }
+
+    [Fact]
+    public void Large_list_operations()
+    {
+        var items =
+            Enumerable.Range(0, 1000)
+            .Select(i => PineValue.Blob([(byte)(i % 256)]))
+            .ToList();
+
+        var inProcess = PineValueInProcess.CreateList(items);
+
+        var skipped = PineValueInProcess.Skip(100, inProcess);
+        var taken = PineValueInProcess.Take(500, skipped);
+
+        var length = taken.GetLength();
+        length.Should().Be(500);
+
+        VerifyConsistencyOfDerivedProperties(taken);
+
+        var evaluated = taken.Evaluate();
+        var originalValue = PineValue.List([.. items]);
+
+        var afterSkip =
+            KernelFunction.skip(
+                PineValue.List([IntegerEncoding.EncodeSignedInteger(100), originalValue]));
+
+        var expected =
+            KernelFunction.take(
+                PineValue.List([IntegerEncoding.EncodeSignedInteger(500), afterSkip]));
+
+        evaluated.Should().Be(expected);
+    }
+
+    [Fact]
+    public void Integer_value_is_blob()
+    {
+        var integerValue = IntegerEncoding.EncodeSignedInteger(42);
+        var inProcess = PineValueInProcess.Create(integerValue);
+
+        VerifyConsistencyOfDerivedProperties(inProcess);
+    }
+
+    [Fact]
+    public void Empty_list_has_zero_length()
+    {
+        var inProcess = PineValueInProcess.Create(PineValue.EmptyList);
+
+        var length = inProcess.GetLength();
+
+        length.Should().Be(0);
+
+        VerifyConsistencyOfDerivedProperties(inProcess);
+    }
+
+    [Fact]
+    public void Skip_beyond_length_produces_empty()
+    {
+        var originalValue = PineValue.List([PineValue.Blob([1]), PineValue.Blob([2])]);
+        var original = PineValueInProcess.Create(originalValue);
+
+        var result = PineValueInProcess.Skip(10, original);
+        var evaluated = result.Evaluate();
+
+        var expected = KernelFunction.skip(
+            PineValue.List([IntegerEncoding.EncodeSignedInteger(10), originalValue]));
+
+        evaluated.Should().Be(expected);
+    }
+
+    [Fact]
+    public void Take_more_than_available_returns_all()
+    {
+        var originalValue =
+            PineValue.List(
+                [
+                PineValue.Blob([1]),
+                PineValue.Blob([2]),
+                PineValue.Blob([3])
+                ]);
+
+        var original = PineValueInProcess.Create(originalValue);
+
+        var result = PineValueInProcess.Take(100, original);
+        var evaluated = result.Evaluate();
+
+        var expected = KernelFunction.take(
+            PineValue.List([IntegerEncoding.EncodeSignedInteger(100), originalValue]));
+
+        evaluated.Should().Be(expected);
+    }
+
+    [Fact]
+    public void Nested_list_structure()
+    {
+        var nestedValue =
+            PineValue.List(
+                [
+                PineValue.List([PineValue.Blob([1])]),
+                PineValue.List([PineValue.Blob([2])]),
+                PineValue.List([PineValue.Blob([3])])
+                ]);
+
+        var inProcess = PineValueInProcess.Create(nestedValue);
+
+        VerifyConsistencyOfDerivedProperties(inProcess);
+
+        var length = inProcess.GetLength();
+        length.Should().Be(3);
+    }
+
+    [Fact]
+    public void ConcatBinary_preserves_type_information()
+    {
+        // Concat of two blobs should result in a blob
+        var blob1 = PineValueInProcess.Create(PineValue.Blob([1, 2]));
+        var blob2 = PineValueInProcess.Create(PineValue.Blob([3, 4]));
+
+        var result = PineValueInProcess.ConcatBinary(blob1, blob2);
+
+        VerifyConsistencyOfDerivedProperties(result);
+
+        // Concat with at least one list should result in a list
+        var list1 = PineValueInProcess.Create(PineValue.List([PineValue.Blob([1])]));
+        var blob3 = PineValueInProcess.Create(PineValue.Blob([2]));
+
+        var result2 = PineValueInProcess.ConcatBinary(list1, blob3);
+
+        VerifyConsistencyOfDerivedProperties(result2);
+    }
+
+    [Fact]
+    public void GetLength_matches_evaluated_length()
+    {
+        var testCases = new[]
+        {
+            PineValue.EmptyList,
+            PineValue.EmptyBlob,
+            PineValue.List([PineValue.Blob([1])]),
+            PineValue.List([PineValue.Blob([1]), PineValue.Blob([2]), PineValue.Blob([3])]),
+            PineValue.Blob([1, 2, 3, 4, 5]),
+            IntegerEncoding.EncodeSignedInteger(0),
+            IntegerEncoding.EncodeSignedInteger(255),
+            IntegerEncoding.EncodeSignedInteger(0x1_00),
+            IntegerEncoding.EncodeSignedInteger(0x1_00_00),
+
+            IntegerEncoding.EncodeSignedInteger(-0x100),
+            IntegerEncoding.EncodeSignedInteger(-0x1_00_00),
+            IntegerEncoding.EncodeSignedInteger(-100),
+        };
+
+        foreach (var testCase in testCases)
+        {
+            var inProcess = PineValueInProcess.Create(testCase);
+
+            VerifyConsistencyOfDerivedProperties(inProcess);
+
+            var length = inProcess.GetLength();
+            var evaluated = inProcess.Evaluate();
+            var expectedLength = KernelFunctionSpecialized.length_as_int(evaluated);
+
+            length.Should().Be(expectedLength);
+        }
+    }
+
+    [Fact]
+    public void Skip_and_take_with_CreateList()
+    {
+        var items = new List<PineValue>
+        {
+            PineValue.Blob([1]),
+            PineValue.Blob([2]),
+            PineValue.Blob([3]),
+            PineValue.Blob([4]),
+            PineValue.Blob([5])
+        };
+
+        var inProcess = PineValueInProcess.CreateList(items);
+
+        var result = PineValueInProcess.Skip(1, inProcess);
+
+        result = PineValueInProcess.Take(3, result);
+
+        VerifyConsistencyOfDerivedProperties(result);
+
+        var evaluated = result.Evaluate();
+        var originalValue = PineValue.List([.. items]);
+
+        var afterSkip = KernelFunction.skip(
+            PineValue.List([IntegerEncoding.EncodeSignedInteger(1), originalValue]));
+
+        var expected = KernelFunction.take(
+            PineValue.List([IntegerEncoding.EncodeSignedInteger(3), afterSkip]));
+
+        evaluated.Should().Be(expected);
+    }
+
+    [Fact]
+    public void Multiple_concat_operations_maintain_consistency()
+    {
+        var value1 = PineValueInProcess.Create(PineValue.Blob([1]));
+        var value2 = PineValueInProcess.Create(PineValue.Blob([2]));
+        var value3 = PineValueInProcess.Create(PineValue.Blob([3]));
+        var value4 = PineValueInProcess.Create(PineValue.Blob([4]));
+
+        var concat1 = PineValueInProcess.ConcatBinary(value1, value2);
+        var concat2 = PineValueInProcess.ConcatBinary(value3, value4);
+        var finalConcat = PineValueInProcess.ConcatBinary(concat1, concat2);
+
+        VerifyConsistencyOfDerivedProperties(finalConcat);
+
+        var evaluated = finalConcat.Evaluate();
+
+        var expected = KernelFunction.concat(
+            PineValue.List([
+                PineValue.Blob([1]),
+                PineValue.Blob([2]),
+                PineValue.Blob([3]),
+                PineValue.Blob([4])
+            ]));
+
+        evaluated.Should().Be(expected);
+    }
+
+    [Fact]
+    public void AsInteger_works_without_evaluation()
+    {
+        var items = new List<PineValue> { IntegerEncoding.EncodeSignedInteger(42) };
+        var inProcess = PineValueInProcess.CreateList(items);
+
+        // This should not be an integer
+        var result = inProcess.AsInteger();
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public void Equal_handles_different_internal_representations()
+    {
+        // Two ways to create the same value
+        var items = new List<PineValue>
+        {
+            PineValue.Blob([1]),
+            PineValue.Blob([2])
+        };
+
+        var fromList = PineValueInProcess.CreateList(items);
+        var fromEvaluated = PineValueInProcess.Create(PineValue.List([.. items]));
+
+        var result = PineValueInProcess.Equal(fromList, fromEvaluated);
+
+        result.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Skip_on_slice_builder_reuses_builder()
+    {
+        var originalValue = PineValue.List([
+            PineValue.Blob([1]),
+            PineValue.Blob([2]),
+            PineValue.Blob([3])
+        ]);
+        var original = PineValueInProcess.Create(originalValue);
+
+        var skipped1 = PineValueInProcess.Skip(1, original);
+        var skipped2 = PineValueInProcess.Skip(1, skipped1);
+
+        VerifyConsistencyOfDerivedProperties(skipped2);
+
+        var evaluated = skipped2.Evaluate();
+
+        var expected =
+            KernelFunction.skip(
+                PineValue.List([IntegerEncoding.EncodeSignedInteger(2), originalValue]));
+
+        evaluated.Should().Be(expected);
+    }
+
+    [Fact]
+    public void Take_on_slice_builder_reuses_builder()
+    {
+        var originalValue =
+            PineValue.List(
+                [
+                PineValue.Blob([1]),
+                PineValue.Blob([2]),
+                PineValue.Blob([3]),
+                PineValue.Blob([4])
+                ]);
+
+        var original = PineValueInProcess.Create(originalValue);
+
+        var taken1 = PineValueInProcess.Take(3, original);
+        var taken2 = PineValueInProcess.Take(2, taken1);
+
+        VerifyConsistencyOfDerivedProperties(taken2);
+
+        var evaluated = taken2.Evaluate();
+
+        var afterTake1 = KernelFunction.take(
+            PineValue.List([IntegerEncoding.EncodeSignedInteger(3), originalValue]));
+
+        var expected = KernelFunction.take(
+            PineValue.List([IntegerEncoding.EncodeSignedInteger(2), afterTake1]));
+
+        evaluated.Should().Be(expected);
+    }
+
+    private static void VerifyConsistencyOfDerivedProperties(PineValueInProcess inProcess)
+    {
+        var isList = inProcess.IsList();
+        var isBlob = inProcess.IsBlob();
+        var length = inProcess.GetLength();
+        var evaluated = inProcess.Evaluate();
+
+        // IsList and IsBlob should be mutually exclusive
+        (isList ^ isBlob).Should().BeTrue(
+            "A PineValueInProcess must be either a list or a blob.");
+
+        // Verify the type checks match the evaluated result
+        switch (evaluated)
+        {
+            case PineValue.ListValue listValue:
+                isList.Should().BeTrue(
+                    "Evaluated value is a list, so IsList should be true.");
+                isBlob.Should().BeFalse(
+                    "Evaluated value is a list, so IsBlob should be false.");
+                length.Should().Be(listValue.Items.Length,
+                    "Length should match the number of items in the list.");
+                break;
+
+            case PineValue.BlobValue blobValue:
+                isBlob.Should().BeTrue(
+                    "Evaluated value is a blob, so IsBlob should be true.");
+                isList.Should().BeFalse(
+                    "Evaluated value is a blob, so IsList should be false.");
+                length.Should().Be(blobValue.Bytes.Length,
+                    "Length should match the number of bytes in the blob.");
+                break;
+
+            default:
+                throw new System.NotImplementedException(
+                    "Unexpected PineValue type: " + evaluated.GetType().FullName);
+        }
+
+        // Verify that GetLength matches the kernel function's length
+        var expectedLength = KernelFunctionSpecialized.length_as_int(evaluated);
+
+        length.Should().Be(expectedLength,
+            "GetLength should match KernelFunctionSpecialized.length_as_int");
+    }
+}
