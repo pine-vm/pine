@@ -63,14 +63,14 @@ public class CodeAnalysis
         return
             ParseAsStaticMonomorphicProgram(
                 includedFunctionRecords,
-                namesFromCompiledEnv.NameFromDecl,
+                namesFromCompiledEnv.NamesForDecl,
                 parseCache);
     }
 
     public static (StaticProgram staticProgram, IReadOnlyDictionary<DeclQualifiedName, string> declsFailed)
         ParseAsStaticMonomorphicProgram(
         IReadOnlyDictionary<DeclQualifiedName, FunctionRecord> rootDecls,
-        Func<PineValue, PineValueClass, DeclQualifiedName?> nameForDecl,
+        Func<PineValue, PineValueClass, IReadOnlyList<DeclQualifiedName>?> namesForDecl,
         PineVMParseCache parseCache)
     {
         /*
@@ -117,11 +117,12 @@ public class CodeAnalysis
                 {
                     if (!existing.body.Equals(entry.Value.body))
                     {
-                        var keyName = nameForDecl(entry.Key.EncodedExpr, entry.Key.EnvClass);
+                        var keyNames = namesForDecl(entry.Key.EncodedExpr, entry.Key.EnvClass);
 
                         throw new Exception(
                             "Conflict: Two different function bodies for the same function identifier: " +
-                            entry.Key + " (" + keyName?.FullName + ")\nExisting body:\n" +
+                            entry.Key + " (" + string.Join(", ", keyNames?.Select(keyName => keyName.FullName) ?? []) +
+                            ")\nExisting body:\n" +
                             existing.body + "\nNew body:\n" + entry.Value.body);
                     }
                 }
@@ -169,9 +170,12 @@ public class CodeAnalysis
         {
             var functionIdentifier = ReduceFunctionIdentifier(functionIdentifierOrig);
 
-            if (nameForDecl(functionIdentifier.EncodedExpr, functionIdentifier.EnvClass) is { } direct)
+            if (namesForDecl(functionIdentifier.EncodedExpr, functionIdentifier.EnvClass) is { } direct)
             {
-                return direct;
+                if (direct.Count is 1)
+                {
+                    return direct[0];
+                }
             }
 
             return

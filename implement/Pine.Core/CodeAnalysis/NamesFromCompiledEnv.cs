@@ -1,4 +1,5 @@
 using Pine.Core.PopularEncodings;
+using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -15,7 +16,7 @@ namespace Pine.Core.CodeAnalysis;
 /// </para>
 /// <para>
 /// Typical usage: Construct an instance once for a compiled Elm interactive environment value and then call
-/// <see cref="NameFromDecl"/> repeatedly to resolve human-readable names while analyzing other structures
+/// <see cref="NamesForDecl"/> repeatedly to resolve human-readable names while analyzing other structures
 /// (e.g., expressions referencing environment entries).
 /// </para>
 /// </summary>
@@ -171,33 +172,100 @@ public record NamesFromCompiledEnv
     private readonly FrozenDictionary<PineValue, ImmutableList<(DeclQualifiedName declName, PineValueClass envClass)>> _namesFromCompiledEnv;
 
     /// <summary>
-    /// Attempts to retrieve the fully qualified declaration name associated with the supplied <paramref name="pineValue"/>,
-    /// considering only those mappings whose <see cref="PineValueClass"/> satisfies <paramref name="envClass"/>.
+    /// Resolves the declaration names whose encoded value matches <paramref name="pineValue"/> under the
+    /// provided <paramref name="envClass"/> constraint.
     /// </summary>
-    /// <param name="pineValue">The value to resolve (e.g., a function declaration value or referenced env function).</param>
-    /// <param name="envClass">Constraint describing the expected environment shape when the value is used.</param>
+    /// <param name="pineValue">The encoded expression or value from the compiled environment.</param>
+    /// <param name="envClass">The environment class describing the paths already satisfied by the caller.</param>
     /// <returns>
-    /// The first (most specific) matching fully qualified name if a match is found; otherwise <c>null</c>.
-    /// Specificity is determined via <see cref="PineValueClassSpecificityComparer"/>.
+    /// Ordered declaration names that match the supplied value; returns <see langword="null"/> when the
+    /// value is not indexed.
     /// </returns>
-    public DeclQualifiedName? NameFromDecl(
+    public IReadOnlyList<DeclQualifiedName>? NamesForDecl(
         PineValue pineValue,
         PineValueClass envClass)
     {
         if (_namesFromCompiledEnv.TryGetValue(pineValue, out var declsClasses))
         {
-            var matchingClasses =
-                declsClasses
-                .Where(declClass => declClass.envClass.SatisfiedByConstraint(envClass))
-                .OrderBy(keySelector: kvp => kvp.envClass, PineValueClassSpecificityComparer.Instance)
-                .ToArray();
+            var matchesNames = new List<DeclQualifiedName>();
 
-            if (matchingClasses.Length > 0)
+            foreach (var (declName, declClass) in declsClasses)
             {
-                return matchingClasses[0].declName;
+                if (RemainderAfterSatisfyingConstraint(declClass, envClass) is not { } remainderClass)
+                {
+                    continue;
+                }
+
+                if (remainderClass.ParsedItems.Count is 0)
+                {
+                    matchesNames.Add(declName);
+                }
+                else
+                {
+                    var expandedDeclName =
+                        new DeclQualifiedName(
+                            Namespaces: declName.Namespaces,
+                            DeclName: string.Concat(declName.DeclName, "_", remainderClass.HashBase16.AsSpan(0, 8)));
+
+                    matchesNames.Add(expandedDeclName);
+                }
             }
+
+            return matchesNames;
         }
 
         return null;
+    }
+
+    private static PineValueClass? RemainderAfterSatisfyingConstraint(
+        PineValueClass constraint,
+        PineValueClass valueClass)
+    {
+        if (valueClass == constraint)
+        {
+            // Redundant specialized fast path to reduce runtime expenses.
+            return PineValueClass.Empty;
+        }
+
+        if (!constraint.SatisfiedByConstraint(valueClass))
+        {
+            return null;
+        }
+
+        bool PathIsAlreadyCovered(IReadOnlyList<int> path)
+        {
+            foreach (var constraintItem in constraint.ParsedItems)
+            {
+                if (constraintItem.Key.Count < path.Count)
+                {
+                    continue;
+                }
+
+                var foundMismatch = false;
+
+                for (var i = 0; i < path.Count; i++)
+                {
+                    if (constraintItem.Key[i] != path[i])
+                    {
+                        foundMismatch = true;
+                        break;
+                    }
+                }
+
+                if (!foundMismatch)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        var remainingItems =
+            valueClass.ParsedItems
+            .Where(vcItem => !PathIsAlreadyCovered(vcItem.Key))
+            .ToArray();
+
+        return PineValueClass.Create(remainingItems);
     }
 }
