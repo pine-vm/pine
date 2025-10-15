@@ -723,4 +723,174 @@ public class ImmutableConcatBuilderTests
         (evaluated is PineValue.ListValue).Should().Be(isList);
         (evaluated is PineValue.BlobValue).Should().Be(isBlob);
     }
+
+    [Fact]
+    public void Small_appends_are_consolidated_into_single_leaf()
+    {
+        // Start with a small leaf
+        var list1 = PineValue.List([PineValue.Blob([1])]);
+        var builder = ImmutableConcatBuilder.Create([list1]);
+
+        // Append multiple small items that should be consolidated
+        for (var i = 2; i <= 10; i++)
+        {
+            var item = PineValue.List([PineValue.Blob([(byte)i])]);
+            builder = builder.AppendItem(item);
+        }
+
+        // Verify the result is correct
+        var result = builder.Evaluate();
+
+        PineValue[] expectedItems =
+            [
+            .. Enumerable.Range(1, 10)
+            .Select(i => PineValue.List([PineValue.Blob([(byte)i])]))
+            ];
+
+        var expected = KernelFunction.concat(PineValue.List(expectedItems));
+
+        result.Should().Be(expected);
+        builder.AggregateItemsCount.Should().Be(10);
+
+        // Verify consolidation: the builder should be a single Leaf, not a deeply nested Node
+        builder.Should().BeOfType<ImmutableConcatBuilder.Leaf>();
+    }
+
+    [Fact]
+    public void Small_prepends_are_consolidated_into_single_leaf()
+    {
+        // Start with a small leaf
+        var list1 = PineValue.List([PineValue.Blob([10])]);
+        var builder = ImmutableConcatBuilder.Create([list1]);
+
+        // Prepend multiple small items that should be consolidated
+        for (var i = 9; i >= 1; i--)
+        {
+            var item = PineValue.List([PineValue.Blob([(byte)i])]);
+            builder = builder.PrependItem(item);
+        }
+
+        // Verify the result is correct
+        var result = builder.Evaluate();
+
+        PineValue[] expectedItems =
+            [
+            .. Enumerable.Range(1, 10)
+            .Select(i => PineValue.List([PineValue.Blob([(byte)i])]))
+            ];
+
+        var expected = KernelFunction.concat(PineValue.List(expectedItems));
+
+        result.Should().Be(expected);
+        builder.AggregateItemsCount.Should().Be(10);
+
+        // Verify consolidation: the builder should be a single Leaf, not a deeply nested Node
+        builder.Should().BeOfType<ImmutableConcatBuilder.Leaf>();
+    }
+
+    [Fact]
+    public void Large_appends_are_not_consolidated()
+    {
+        // Start with a leaf that already has many items
+        PineValue[] initialItems =
+            [
+            .. Enumerable.Range(1, 32)
+            .Select(i => PineValue.List([PineValue.Blob([(byte)i])]))
+            ];
+
+        var builder = ImmutableConcatBuilder.Create(initialItems);
+
+        // Append one more item - this should NOT be consolidated because we're at the threshold
+        var newItem = PineValue.List([PineValue.Blob([33])]);
+        var newBuilder = builder.AppendItem(newItem);
+
+        // Verify the result is correct
+        var result = newBuilder.Evaluate();
+
+        PineValue[] expectedItems =
+            [
+            .. Enumerable.Range(1, 33)
+            .Select(i => PineValue.List([PineValue.Blob([(byte)i])]))
+            ];
+
+        var expected = KernelFunction.concat(PineValue.List(expectedItems));
+
+        result.Should().Be(expected);
+        newBuilder.AggregateItemsCount.Should().Be(33);
+
+        // Verify NO consolidation: the builder should be a Node, not a Leaf
+        newBuilder.Should().BeOfType<ImmutableConcatBuilder.Node>();
+    }
+
+    [Fact]
+    public void Consolidation_works_with_nested_nodes()
+    {
+        // Create a builder with multiple operations that creates a Node
+        var list1 = PineValue.List([PineValue.Blob([1])]);
+        var list2 = PineValue.List([PineValue.Blob([2])]);
+        var list3 = PineValue.List([PineValue.Blob([3])]);
+
+        // First create a node by doing operations that can't be consolidated
+        PineValue[] largeItems =
+            [
+            .. Enumerable.Range(1, 33)
+            .Select(i => PineValue.List([PineValue.Blob([(byte)i])]))
+            ];
+
+        var builder =
+            ImmutableConcatBuilder.Create(largeItems)
+            .AppendItems([list1, list2]);
+
+        // Now append a small item - it should consolidate with the last leaf in the node
+        var newBuilder = builder.AppendItem(list3);
+
+        // Verify the result is correct
+        var result = newBuilder.Evaluate();
+
+        var allItemsList = new List<PineValue>(largeItems)
+        {
+            list1,
+            list2,
+            list3
+        };
+
+        PineValue[] allItems = [.. allItemsList];
+        var expected = KernelFunction.concat(PineValue.List(allItems));
+
+        result.Should().Be(expected);
+        newBuilder.AggregateItemsCount.Should().Be(36);
+
+        // Verify it's still a Node (we consolidated the last leaf but the structure remains a Node)
+        newBuilder.Should().BeOfType<ImmutableConcatBuilder.Node>();
+
+        // The last child should be a consolidated leaf with 3 items (list1, list2, list3)
+        var node = (ImmutableConcatBuilder.Node)newBuilder;
+        var lastChild = node.Items[node.Items.Count - 1];
+        lastChild.Should().BeOfType<ImmutableConcatBuilder.Leaf>();
+        lastChild.AggregateItemsCount.Should().Be(3);
+    }
+
+    [Fact]
+    public void Empty_append_returns_same_builder()
+    {
+        var list1 = PineValue.List([PineValue.Blob([1])]);
+        var builder = ImmutableConcatBuilder.Create([list1]);
+
+        var newBuilder = builder.AppendItems([]);
+
+        // Should return the same builder instance
+        newBuilder.Should().BeSameAs(builder);
+    }
+
+    [Fact]
+    public void Empty_prepend_returns_same_builder()
+    {
+        var list1 = PineValue.List([PineValue.Blob([1])]);
+        var builder = ImmutableConcatBuilder.Create([list1]);
+
+        var newBuilder = builder.PrependItems([]);
+
+        // Should return the same builder instance
+        newBuilder.Should().BeSameAs(builder);
+    }
 }

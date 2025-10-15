@@ -12,6 +12,14 @@ namespace Pine.Core.DotNet.Builtins;
 public abstract record ImmutableConcatBuilder
 {
     /// <summary>
+    /// Maximum number of items in a leaf node that can be consolidated during append/prepend operations.
+    /// When appending or prepending to a builder, if the end or start node is a leaf with fewer items
+    /// than this threshold, the items will be merged into a single leaf to reduce tree depth.
+    /// This is similar to the ConsString optimization in V8.
+    /// </summary>
+    private const int MaxLeafSizeForConsolidation = 32;
+
+    /// <summary>
     /// Gets the total number of items contained across all leaves of this builder.
     /// </summary>
     public abstract int AggregateItemsCount { get; }
@@ -42,7 +50,71 @@ public abstract record ImmutableConcatBuilder
     /// </summary>
     public ImmutableConcatBuilder AppendItems(IEnumerable<PineValue> values)
     {
-        return new Node([this, new Leaf([.. values])]);
+        var newItems = values as IReadOnlyList<PineValue> ?? [.. values];
+
+        // If there are no new items, return this builder unchanged
+        if (newItems.Count is 0)
+        {
+            return this;
+        }
+
+        // Try to consolidate with the rightmost leaf if it's small enough
+        if (this is Node node && node.Items.Count > 0)
+        {
+            var lastChild = node.Items[node.Items.Count - 1];
+
+            if (lastChild is Leaf lastLeaf &&
+                lastLeaf.Values.Count + newItems.Count <= MaxLeafSizeForConsolidation)
+            {
+                // Consolidate: merge the new items into the last leaf
+                var consolidatedValues = new PineValue[lastLeaf.Values.Count + newItems.Count];
+
+                for (var i = 0; i < lastLeaf.Values.Count; i++)
+                {
+                    consolidatedValues[i] = lastLeaf.Values[i];
+                }
+
+                for (var i = 0; i < newItems.Count; i++)
+                {
+                    consolidatedValues[lastLeaf.Values.Count + i] = newItems[i];
+                }
+
+                var consolidatedLeaf = new Leaf(consolidatedValues);
+
+                // Create a new node with the consolidated leaf replacing the last child
+                var newNodeItems = new ImmutableConcatBuilder[node.Items.Count];
+
+                for (var i = 0; i < node.Items.Count - 1; i++)
+                {
+                    newNodeItems[i] = node.Items[i];
+                }
+
+                newNodeItems[node.Items.Count - 1] = consolidatedLeaf;
+
+                return new Node(newNodeItems);
+            }
+        }
+        else if (this is Leaf thisLeaf &&
+                 thisLeaf.Values.Count + newItems.Count <= MaxLeafSizeForConsolidation)
+        {
+            // Consolidate: merge the new items into the current leaf
+            var consolidatedValues = new PineValue[thisLeaf.Values.Count + newItems.Count];
+
+            for (var i = 0; i < thisLeaf.Values.Count; i++)
+            {
+                consolidatedValues[i] = thisLeaf.Values[i];
+            }
+
+            for (var i = 0; i < newItems.Count; i++)
+            {
+                consolidatedValues[thisLeaf.Values.Count + i] = newItems[i];
+            }
+
+            return new Leaf(consolidatedValues);
+        }
+
+        // No consolidation possible, create a new node
+        return new Node([this, new Leaf(newItems)]);
     }
 
     /// <summary>
@@ -58,7 +130,70 @@ public abstract record ImmutableConcatBuilder
     /// </summary>
     public ImmutableConcatBuilder PrependItems(IEnumerable<PineValue> values)
     {
-        return new Node([new Leaf([.. values]), this]);
+        var newItems = values as IReadOnlyList<PineValue> ?? [.. values];
+
+        // If there are no new items, return this builder unchanged
+        if (newItems.Count is 0)
+        {
+            return this;
+        }
+
+        // Try to consolidate with the leftmost leaf if it's small enough
+        if (this is Node node && node.Items.Count > 0)
+        {
+            var firstChild = node.Items[0];
+
+            if (firstChild is Leaf firstLeaf &&
+                firstLeaf.Values.Count + newItems.Count <= MaxLeafSizeForConsolidation)
+            {
+                // Consolidate: merge the new items into the first leaf
+                var consolidatedValues = new PineValue[newItems.Count + firstLeaf.Values.Count];
+
+                for (var i = 0; i < newItems.Count; i++)
+                {
+                    consolidatedValues[i] = newItems[i];
+                }
+
+                for (var i = 0; i < firstLeaf.Values.Count; i++)
+                {
+                    consolidatedValues[newItems.Count + i] = firstLeaf.Values[i];
+                }
+
+                var consolidatedLeaf = new Leaf(consolidatedValues);
+
+                // Create a new node with the consolidated leaf replacing the first child
+                var newNodeItems = new ImmutableConcatBuilder[node.Items.Count];
+                newNodeItems[0] = consolidatedLeaf;
+
+                for (var i = 1; i < node.Items.Count; i++)
+                {
+                    newNodeItems[i] = node.Items[i];
+                }
+
+                return new Node(newNodeItems);
+            }
+        }
+        else if (this is Leaf thisLeaf &&
+                 thisLeaf.Values.Count + newItems.Count <= MaxLeafSizeForConsolidation)
+        {
+            // Consolidate: merge the new items into the current leaf
+            var consolidatedValues = new PineValue[newItems.Count + thisLeaf.Values.Count];
+
+            for (var i = 0; i < newItems.Count; i++)
+            {
+                consolidatedValues[i] = newItems[i];
+            }
+
+            for (var i = 0; i < thisLeaf.Values.Count; i++)
+            {
+                consolidatedValues[newItems.Count + i] = thisLeaf.Values[i];
+            }
+
+            return new Leaf(consolidatedValues);
+        }
+
+        // No consolidation possible, create a new node
+        return new Node([new Leaf(newItems), this]);
     }
 
     /// <summary>
@@ -104,7 +239,7 @@ public abstract record ImmutableConcatBuilder
         public override bool IsList()
         {
             // concat() returns a list if the first element is a list, or if empty
-            if (Values.Count == 0)
+            if (Values.Count is 0)
             {
                 return true; // Empty concat returns EmptyList
             }
@@ -116,7 +251,7 @@ public abstract record ImmutableConcatBuilder
         public override bool IsBlob()
         {
             // concat() returns a blob if the first element is a blob
-            if (Values.Count == 0)
+            if (Values.Count is 0)
             {
                 return false; // Empty concat returns EmptyList, not a blob
             }
@@ -264,7 +399,7 @@ public abstract record ImmutableConcatBuilder
         {
             // The result type of concat depends on the first value in the flattened sequence
             // If no items, concat returns EmptyList
-            if (Items.Count == 0)
+            if (Items.Count is 0)
             {
                 return true;
             }
@@ -278,7 +413,7 @@ public abstract record ImmutableConcatBuilder
         {
             // The result type of concat depends on the first value in the flattened sequence
             // If no items, concat returns EmptyList (not a blob)
-            if (Items.Count == 0)
+            if (Items.Count is 0)
             {
                 return false;
             }
