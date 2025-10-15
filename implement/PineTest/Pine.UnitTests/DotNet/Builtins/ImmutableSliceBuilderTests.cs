@@ -1429,6 +1429,472 @@ public class ImmutableSliceBuilderTests
         VerifyConsistencyOfDerivedProperties(blobBuilder);
     }
 
+    [Fact]
+    public void TakeLast_with_int_takes_from_end()
+    {
+        var original =
+            PineValue.List(
+                [
+                PineValue.Blob([1]),
+                PineValue.Blob([2]),
+                PineValue.Blob([3]),
+                PineValue.Blob([4]),
+                PineValue.Blob([5])
+                ]);
+
+        var builder =
+            ImmutableSliceBuilder.Create(original)
+            .TakeLast(2);
+
+        var result = builder.Evaluate();
+
+        // TakeLast(2) should give us [4, 5]
+        var expected =
+            PineValue.List(
+                [
+                PineValue.Blob([4]),
+                PineValue.Blob([5])
+                ]);
+
+        result.Should().Be(expected);
+        builder.GetLength().Should().Be(2);
+    }
+
+    [Fact]
+    public void TakeLast_more_than_available_returns_all()
+    {
+        var original =
+            PineValue.List(
+                [
+                PineValue.Blob([1]),
+                PineValue.Blob([2]),
+                PineValue.Blob([3])
+                ]);
+
+        var builder =
+            ImmutableSliceBuilder.Create(original)
+            .TakeLast(10);
+
+        var result = builder.Evaluate();
+
+        result.Should().Be(original);
+    }
+
+    [Fact]
+    public void TakeLast_zero_returns_empty()
+    {
+        var original =
+            PineValue.List(
+                [
+                PineValue.Blob([1]),
+                PineValue.Blob([2]),
+                PineValue.Blob([3])
+                ]);
+
+        var builder =
+            ImmutableSliceBuilder.Create(original)
+            .TakeLast(0);
+
+        var result = builder.Evaluate();
+
+        result.Should().Be(PineValue.EmptyList);
+        builder.GetLength().Should().Be(0);
+    }
+
+    [Fact]
+    public void TakeLast_with_negative_count_treats_as_zero()
+    {
+        var original =
+            PineValue.List(
+                [
+                PineValue.Blob([1]),
+                PineValue.Blob([2]),
+                PineValue.Blob([3])
+                ]);
+
+        var builder =
+            ImmutableSliceBuilder.Create(original)
+            .TakeLast(-5);
+
+        var result = builder.Evaluate();
+
+        result.Should().Be(PineValue.EmptyList);
+    }
+
+    [Fact]
+    public void TakeLast_after_skip_takes_from_end_of_remaining()
+    {
+        var original =
+            PineValue.List(
+                [
+                PineValue.Blob([1]),
+                PineValue.Blob([2]),
+                PineValue.Blob([3]),
+                PineValue.Blob([4]),
+                PineValue.Blob([5])
+                ]);
+
+        var builder =
+            ImmutableSliceBuilder.Create(original)
+            .Skip(1)
+            .TakeLast(2);
+
+        var result = builder.Evaluate();
+
+        // After skip(1), we have [2, 3, 4, 5]
+        // TakeLast(2) should give us [4, 5]
+        var expected =
+            PineValue.List(
+                [
+                PineValue.Blob([4]),
+                PineValue.Blob([5])
+                ]);
+
+        result.Should().Be(expected);
+        builder.GetLength().Should().Be(2);
+    }
+
+    [Fact]
+    public void TakeLast_after_take_takes_from_end_of_limited_range()
+    {
+        var original =
+            PineValue.List(
+                [
+                PineValue.Blob([1]),
+                PineValue.Blob([2]),
+                PineValue.Blob([3]),
+                PineValue.Blob([4]),
+                PineValue.Blob([5])
+                ]);
+
+        var builder =
+            ImmutableSliceBuilder.Create(original)
+            .Take(4)
+            .TakeLast(2);
+
+        var result = builder.Evaluate();
+
+        // After take(4), we have [1, 2, 3, 4]
+        // TakeLast(2) should give us [3, 4]
+        var expected =
+            PineValue.List(
+                [
+                PineValue.Blob([3]),
+                PineValue.Blob([4])
+                ]);
+
+        result.Should().Be(expected);
+        builder.GetLength().Should().Be(2);
+    }
+
+    [Fact]
+    public void TakeLast_with_blob_value()
+    {
+        var original = PineValue.Blob([1, 2, 3, 4, 5]);
+
+        var builder =
+            ImmutableSliceBuilder.Create(original)
+            .TakeLast(3);
+
+        var result = builder.Evaluate();
+
+        // TakeLast(3) should give us [3, 4, 5]
+        var expected = PineValue.Blob([3, 4, 5]);
+
+        result.Should().Be(expected);
+        builder.GetLength().Should().Be(3);
+    }
+
+    [Fact]
+    public void TakeLast_with_PineValue_parses_integer()
+    {
+        var original =
+            PineValue.List(
+                [
+                PineValue.Blob([1]),
+                PineValue.Blob([2]),
+                PineValue.Blob([3]),
+                PineValue.Blob([4]),
+                PineValue.Blob([5])
+                ]);
+
+        var takeValue = IntegerEncoding.EncodeSignedInteger(3);
+        var builder =
+            ImmutableSliceBuilder.Create(original)
+            .TakeLast(takeValue);
+
+        var result = builder.Evaluate();
+
+        // TakeLast(3) should give us [3, 4, 5]
+        var expected =
+            PineValue.List(
+                [
+                PineValue.Blob([3]),
+                PineValue.Blob([4]),
+                PineValue.Blob([5])
+                ]);
+
+        result.Should().Be(expected);
+    }
+
+    [Fact]
+    public void TakeLast_with_negative_PineValue_treats_as_zero()
+    {
+        var original =
+            PineValue.List(
+                [
+                PineValue.Blob([1]),
+                PineValue.Blob([2]),
+                PineValue.Blob([3])
+                ]);
+
+        var takeValue = IntegerEncoding.EncodeSignedInteger(-1);
+        var builder =
+            ImmutableSliceBuilder.Create(original)
+            .TakeLast(takeValue);
+
+        var result = builder.Evaluate();
+
+        result.Should().Be(PineValue.EmptyList);
+    }
+
+    [Fact]
+    public void TakeLast_with_invalid_PineValue_returns_empty_list()
+    {
+        var original =
+            PineValue.List(
+                [
+                PineValue.Blob([1]),
+                PineValue.Blob([2]),
+                PineValue.Blob([3])
+                ]);
+
+        var takeValue = PineValue.List([PineValue.Blob([1])]); // Invalid for integer
+
+        var builder =
+            ImmutableSliceBuilder.Create(original)
+            .TakeLast(takeValue);
+
+        builder.FinalValue.Should().Be(PineValue.EmptyList);
+
+        var result = builder.Evaluate();
+
+        result.Should().Be(PineValue.EmptyList);
+    }
+
+    [Fact]
+    public void TakeLast_complex_chaining()
+    {
+        var original =
+            PineValue.List(
+                [.. Enumerable.Range(1, 20).Select(i => PineValue.Blob([(byte)i]))
+                ]);
+
+        var builder =
+            ImmutableSliceBuilder.Create(original)
+            .Skip(5)
+            .Take(10)
+            .TakeLast(3);
+
+        // Skip 5: [6..20]
+        // Take 10: [6..15]
+        // TakeLast 3: [13, 14, 15]
+
+        var result = builder.Evaluate();
+
+        var expected =
+            PineValue.List(
+                [
+                PineValue.Blob([13]),
+                PineValue.Blob([14]),
+                PineValue.Blob([15])
+                ]);
+
+        result.Should().Be(expected);
+        builder.GetLength().Should().Be(3);
+    }
+
+    [Fact]
+    public void TakeLast_on_empty_list_returns_empty()
+    {
+        var original = PineValue.EmptyList;
+
+        var builder =
+            ImmutableSliceBuilder.Create(original)
+            .TakeLast(5);
+
+        var result = builder.Evaluate();
+
+        result.Should().Be(PineValue.EmptyList);
+    }
+
+    [Fact]
+    public void TakeLast_on_empty_blob_returns_empty_blob()
+    {
+        var original = PineValue.EmptyBlob;
+
+        var builder =
+            ImmutableSliceBuilder.Create(original)
+            .TakeLast(5);
+
+        var result = builder.Evaluate();
+
+        result.Should().Be(PineValue.EmptyBlob);
+    }
+
+    [Fact]
+    public void TakeLast_exact_length_returns_all()
+    {
+        var original =
+            PineValue.List(
+                [
+                PineValue.Blob([1]),
+                PineValue.Blob([2]),
+                PineValue.Blob([3])
+                ]);
+
+        var builder =
+            ImmutableSliceBuilder.Create(original)
+            .TakeLast(3);
+
+        var result = builder.Evaluate();
+
+        result.Should().Be(original);
+    }
+
+    [Fact]
+    public void TakeLast_with_blob_zero_returns_empty_blob()
+    {
+        var original = PineValue.Blob([1, 2, 3]);
+
+        var builder =
+            ImmutableSliceBuilder.Create(original)
+            .TakeLast(0);
+
+        var result = builder.Evaluate();
+
+        result.Should().Be(PineValue.EmptyBlob);
+    }
+
+    [Fact]
+    public void TakeLast_is_immutable()
+    {
+        var original_value =
+            PineValue.List(
+                [
+                PineValue.Blob([1]),
+                PineValue.Blob([2]),
+                PineValue.Blob([3]),
+                PineValue.Blob([4])
+                ]);
+
+        var original = ImmutableSliceBuilder.Create(original_value);
+        var modified = original.TakeLast(2);
+
+        // Original should be unchanged
+        var originalResult = original.Evaluate();
+        originalResult.Should().Be(original_value);
+
+        // Modified should have the last 2 elements
+        var modifiedResult = modified.Evaluate();
+        var expectedModified =
+            PineValue.List(
+                [
+                PineValue.Blob([3]),
+                PineValue.Blob([4])
+                ]);
+
+        modifiedResult.Should().Be(expectedModified);
+    }
+
+    [Fact]
+    public void TakeLast_multiple_times_uses_most_restrictive()
+    {
+        var original =
+            PineValue.List(
+                [.. Enumerable.Range(1, 10).Select(i => PineValue.Blob([(byte)i]))
+                ]);
+
+        var builder =
+            ImmutableSliceBuilder.Create(original)
+            .TakeLast(7)
+            .TakeLast(3);
+
+        var result = builder.Evaluate();
+
+        // First TakeLast(7): [4..10]
+        // Second TakeLast(3) on that: [8, 9, 10]
+
+        var expected =
+            PineValue.List(
+                [
+                PineValue.Blob([8]),
+                PineValue.Blob([9]),
+                PineValue.Blob([10])
+                ]);
+
+        result.Should().Be(expected);
+        builder.GetLength().Should().Be(3);
+    }
+
+    [Fact]
+    public void TakeLast_with_large_list()
+    {
+        var items =
+            Enumerable.Range(0, 1000)
+            .Select(i => PineValue.Blob([(byte)(i % 256)]))
+            .ToArray();
+
+        var original = PineValue.List(items);
+
+        var builder =
+            ImmutableSliceBuilder.Create(original)
+            .TakeLast(100);
+
+        builder.GetLength().Should().Be(100);
+
+        var result = builder.Evaluate();
+
+        // Should have the last 100 elements
+        var expected = PineValue.List(items[^100..]);
+
+        result.Should().Be(expected);
+    }
+
+    [Fact]
+    public void TakeLast_combined_with_skip_and_take()
+    {
+        var original =
+            PineValue.List(
+                [.. Enumerable.Range(1, 15).Select(i => PineValue.Blob([(byte)i]))
+                ]);
+
+        var builder =
+            ImmutableSliceBuilder.Create(original)
+            .Skip(2)
+            .Take(10)
+            .TakeLast(5);
+
+        // Skip 2: [3..15]
+        // Take 10: [3..12]
+        // TakeLast 5: [8, 9, 10, 11, 12]
+
+        var result = builder.Evaluate();
+
+        var expected =
+            PineValue.List(
+                [
+                PineValue.Blob([8]),
+                PineValue.Blob([9]),
+                PineValue.Blob([10]),
+                PineValue.Blob([11]),
+                PineValue.Blob([12])
+                ]);
+
+        result.Should().Be(expected);
+        builder.GetLength().Should().Be(5);
+    }
+
     static void VerifyConsistencyOfDerivedProperties(ImmutableSliceBuilder builder)
     {
         var isList = builder.IsList();

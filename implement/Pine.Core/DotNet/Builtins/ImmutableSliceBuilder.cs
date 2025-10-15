@@ -167,6 +167,100 @@ public record ImmutableSliceBuilder(
     }
 
     /// <summary>
+    /// Take elements from the end of the value resulting from the previous operations.
+    /// </summary>
+    /// <param name="count">The number of elements to take from the end.</param>
+    /// <returns>A new builder configured to take <paramref name="count"/> elements from the end.</returns>
+    /// <remarks>
+    /// <para>
+    /// This operation is equivalent to applying reverse, then take, then reverse again,
+    /// but is implemented more efficiently by calculating the appropriate skip amount.
+    /// </para>
+    /// <para>
+    /// For example, on a sequence of [1, 2, 3, 4, 5], calling TakeLast(2) will result in [4, 5].
+    /// </para>
+    /// <para>
+    /// Negative counts are treated as zero. If the count exceeds the available elements,
+    /// all remaining elements are returned.
+    /// </para>
+    /// </remarks>
+    public ImmutableSliceBuilder TakeLast(int count)
+    {
+        if (count < 0)
+        {
+            count = 0;
+        }
+
+        var currentLength = GetLength();
+
+        if (currentLength <= count)
+        {
+            // Taking more or equal than what's available - return as is
+            return this;
+        }
+
+        if (count is 0)
+        {
+            // TakeLast(0) should return empty
+            PineValue emptyFinalValue = Original switch
+            {
+                PineValue.ListValue =>
+                PineValue.EmptyList,
+
+                PineValue.BlobValue =>
+                PineValue.EmptyBlob,
+
+                _ =>
+                throw new System.NotImplementedException(
+                    "Unexpected original type: " + Original.GetType().FullName)
+            };
+
+            return new(
+                Original,
+                SkipCount,
+                TakeCount: 0,
+                FinalValue: emptyFinalValue);
+        }
+
+        // To take the last N elements, we need to skip (length - N) elements
+        var skipAmount = currentLength - count;
+
+        return Skip(skipAmount).Take(count);
+    }
+
+    /// <summary>
+    /// Take elements from the end of the value resulting from the previous operations,
+    /// trying to parse the count from a <see cref="PineValue"/>.
+    /// </summary>
+    /// <param name="takeCountValue">A <see cref="PineValue"/> representing the number of elements to take from the end.</param>
+    /// <returns>
+    /// A new builder with updated operations, or a builder with <see cref="PineValue.EmptyList"/>
+    /// as the final value if <paramref name="takeCountValue"/> cannot be converted to an integer.
+    /// </returns>
+    /// <remarks>
+    /// Negative take counts are treated as zero. If the value cannot be parsed as an integer,
+    /// the result is set to an empty list.
+    /// </remarks>
+    public ImmutableSliceBuilder TakeLast(PineValue takeCountValue)
+    {
+        if (KernelFunction.SignedIntegerFromValueRelaxed(takeCountValue) is not { } takeCount)
+        {
+            return new(
+                Original,
+                SkipCount,
+                TakeCount: 0,
+                FinalValue: PineValue.EmptyList);
+        }
+
+        if (takeCount < 0)
+        {
+            takeCount = 0;
+        }
+
+        return TakeLast((int)takeCount);
+    }
+
+    /// <summary>
     /// Computes the length of the resulting slice based on the original value's length and all skip/take operations.
     /// </summary>
     /// <param name="originalLength">The length of the original value.</param>
@@ -177,7 +271,8 @@ public record ImmutableSliceBuilder(
     /// </remarks>
     private int ComputeResultLengthFromOriginalLength(int originalLength)
     {
-        var skip = SkipCount < 0 ? 0 : SkipCount;
+        var skip =
+            SkipCount < 0 ? 0 : SkipCount;
 
         var remaining = originalLength - skip;
 
@@ -231,7 +326,7 @@ public record ImmutableSliceBuilder(
 
         return
             Original is PineValue.ListValue listValue &&
-            ComputeResultLengthFromOriginalLength(listValue.Items.Length) == 0;
+            ComputeResultLengthFromOriginalLength(listValue.Items.Length) is 0;
     }
 
     /// <summary>
@@ -363,9 +458,10 @@ public record ImmutableSliceBuilder(
 
         if (TakeCount is not { } takeCount)
         {
-            var skipCount = SkipCount < 0 ? 0 : SkipCount;
+            var skipCount =
+                SkipCount < 0 ? 0 : SkipCount;
 
-            if (skipCount == 0)
+            if (skipCount is 0)
             {
                 return Original;
             }

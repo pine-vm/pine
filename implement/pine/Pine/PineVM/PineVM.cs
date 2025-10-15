@@ -252,8 +252,8 @@ public class PineVM : IPineVM
         Expression Expression,
         StackFrameInstructions Instructions,
         PineValue EnvironmentValue,
-        Memory<PineValue> StackValues,
-        Memory<PineValue> LocalsValues,
+        Memory<PineValueInProcess> StackValues,
+        Memory<PineValueInProcess> LocalsValues,
         StackFrameProfilingBaseline ProfilingBaseline,
         ApplyStepwise? Specialization)
     {
@@ -273,10 +273,10 @@ public class PineVM : IPineVM
                 return;
             }
 
-            PushInstructionResult(frameReturnValue);
+            PushInstructionResult(PineValueInProcess.Create(frameReturnValue));
         }
 
-        public void PushInstructionResult(PineValue value)
+        public void PushInstructionResult(PineValueInProcess value)
         {
             if (value is null)
             {
@@ -289,7 +289,7 @@ public class PineVM : IPineVM
             ++InstructionPointer;
         }
 
-        public void LocalSet(int localIndex, PineValue value)
+        public void LocalSet(int localIndex, PineValueInProcess value)
         {
             if (value is null)
             {
@@ -310,10 +310,10 @@ public class PineVM : IPineVM
                     "LocalGet called with null value");
             }
 
-            return value;
+            return value.Evaluate();
         }
 
-        public PineValue PopTopmostFromStack()
+        public PineValueInProcess PopTopmostFromStack()
         {
             if (StackPointer <= 0)
                 throw new InvalidOperationException("ConsumeSingleFromStack called with empty stack");
@@ -322,7 +322,7 @@ public class PineVM : IPineVM
             return StackValues.Span[StackPointer];
         }
 
-        public PineValue PeekTopmostFromStack()
+        public PineValueInProcess PeekTopmostFromStack()
         {
             if (StackPointer <= 0)
                 throw new InvalidOperationException("PeekTopmostFromStack called with empty stack");
@@ -432,8 +432,8 @@ public class PineVM : IPineVM
             expression,
             instructions,
             EnvironmentValue: environment,
-            StackValues: new PineValue[instructions.MaxStackUsage],
-            LocalsValues: new PineValue[instructions.MaxLocalIndex + 1],
+            StackValues: new PineValueInProcess[instructions.MaxStackUsage],
+            LocalsValues: new PineValueInProcess[instructions.MaxLocalIndex + 1],
             ProfilingBaseline: profilingBaseline,
             Specialization: null);
     }
@@ -1263,7 +1263,7 @@ public class PineVM : IPineVM
 
                         stackFrameCount += finalValue.StackFrameCount;
 
-                        currentFrame.PushInstructionResult(finalValue.Value);
+                        currentFrame.PushInstructionResult(PineValueInProcess.Create(finalValue.Value));
 
                         reportFunctionApplication?.Invoke(
                             new EvaluationReport(
@@ -1284,7 +1284,7 @@ public class PineVM : IPineVM
                                 expressionValue: continueParseAndEval.ExpressionValue,
                                 environmentValue: continueParseAndEval.EnvironmentValue) is { } fromCacheOrDelegate)
                             {
-                                currentFrame.PushInstructionResult(fromCacheOrDelegate);
+                                currentFrame.PushInstructionResult(PineValueInProcess.Create(fromCacheOrDelegate));
 
                                 return null;
                             }
@@ -1295,7 +1295,8 @@ public class PineVM : IPineVM
                             {
                                 return
                                     "Failed to parse expression from value: " + contParseErr +
-                                    " - expressionValue is " + DescribeValueForErrorMessage(expressionValue) +
+                                    " - expressionValue is " +
+                                    (expressionValue is null ? "null" : DescribeValueForErrorMessage(expressionValue)) +
                                     " - environmentValue is " + DescribeValueForErrorMessage(environmentValue);
                             }
 
@@ -1356,7 +1357,7 @@ public class PineVM : IPineVM
 
                         if (valueComputedInLeaf is { } computedValue)
                         {
-                            currentFrame.PushInstructionResult(computedValue);
+                            currentFrame.PushInstructionResult(PineValueInProcess.Create(computedValue));
 
                             return null;
                         }
@@ -1580,16 +1581,17 @@ public class PineVM : IPineVM
                     case StackInstructionKind.Push_Literal:
                         {
                             currentFrame.PushInstructionResult(
-                                currentInstruction.Literal
-                                ??
-                                throw new Exception("Invalid operation form: Missing literal value"));
+                                PineValueInProcess.Create(
+                                    currentInstruction.Literal
+                                    ??
+                                    throw new Exception("Invalid operation form: Missing literal value")));
 
                             continue;
                         }
 
                     case StackInstructionKind.Push_Environment:
                         {
-                            currentFrame.PushInstructionResult(currentFrame.EnvironmentValue);
+                            currentFrame.PushInstructionResult(PineValueInProcess.Create(currentFrame.EnvironmentValue));
 
                             continue;
                         }
@@ -1599,26 +1601,30 @@ public class PineVM : IPineVM
                             var right = currentFrame.PopTopmostFromStack();
                             var left = currentFrame.PopTopmostFromStack();
 
-                            var areEqual = left == right;
+                            var areEqual =
+                                PineValueInProcess.AreEqual(left, right);
 
                             currentFrame.PushInstructionResult(
-                                areEqual ? PineKernelValues.TrueValue : PineKernelValues.FalseValue);
+                                PineValueInProcess.CreateBool(areEqual));
 
                             continue;
                         }
 
                     case StackInstructionKind.Equal_Binary_Const:
                         {
-                            var right = currentInstruction.Literal
+                            var right =
+                                currentInstruction.Literal
                                 ??
                                 throw new Exception("Invalid operation form: Missing literal value");
 
-                            var left = currentFrame.PopTopmostFromStack();
+                            var left =
+                                currentFrame.PopTopmostFromStack();
 
-                            var areEqual = left == right;
+                            var areEqual =
+                                PineValueInProcess.AreEqual(left, right);
 
                             currentFrame.PushInstructionResult(
-                                areEqual ? PineKernelValues.TrueValue : PineKernelValues.FalseValue);
+                                PineValueInProcess.CreateBool(areEqual));
 
                             continue;
                         }
@@ -1628,37 +1634,40 @@ public class PineVM : IPineVM
                             var right = currentFrame.PopTopmostFromStack();
                             var left = currentFrame.PopTopmostFromStack();
 
-                            var areEqual = left == right;
+                            var areEqual =
+                                PineValueInProcess.AreEqual(left, right);
 
                             currentFrame.PushInstructionResult(
-                                areEqual ? PineKernelValues.FalseValue : PineKernelValues.TrueValue);
+                                PineValueInProcess.CreateBool(!areEqual));
 
                             continue;
                         }
 
                     case StackInstructionKind.Not_Equal_Binary_Const:
                         {
-                            var right = currentInstruction.Literal
+                            var right =
+                                currentInstruction.Literal
                                 ??
                                 throw new Exception("Invalid operation form: Missing literal value");
 
                             var left = currentFrame.PopTopmostFromStack();
 
-                            var areEqual = left == right;
+                            var areEqual =
+                                PineValueInProcess.AreEqual(left, right);
 
                             currentFrame.PushInstructionResult(
-                                areEqual ? PineKernelValues.FalseValue : PineKernelValues.TrueValue);
+                                PineValueInProcess.CreateBool(!areEqual));
 
                             continue;
                         }
 
                     case StackInstructionKind.Length:
                         {
-                            var listValue = currentFrame.PopTopmostFromStack();
+                            var sourceValue = currentFrame.PopTopmostFromStack();
 
-                            var lengthValue = KernelFunction.length(listValue);
+                            var length = sourceValue.GetLength();
 
-                            currentFrame.PushInstructionResult(lengthValue);
+                            currentFrame.PushInstructionResult(PineValueInProcess.CreateInteger(length));
 
                             continue;
                         }
@@ -1667,19 +1676,7 @@ public class PineVM : IPineVM
                         {
                             var topmostValue = currentFrame.PopTopmostFromStack();
 
-                            var lengthValue =
-                                topmostValue switch
-                                {
-                                    PineValue.ListValue listValue =>
-                                    listValue.Items.Length,
-
-                                    PineValue.BlobValue blobValue =>
-                                    blobValue.Bytes.Length,
-
-                                    _ =>
-                                    throw new Exception(
-                                        "Unexpected value type for length operation: " + topmostValue.GetType().FullName)
-                                };
+                            var length = topmostValue.GetLength();
 
                             var testedLength =
                                 currentInstruction.IntegerLiteral
@@ -1687,10 +1684,10 @@ public class PineVM : IPineVM
                                 throw new Exception(
                                     "Invalid operation form: Missing integer literal value for length comparison");
 
-                            var areEqual = lengthValue == testedLength;
+                            var areEqual = length == testedLength;
 
                             currentFrame.PushInstructionResult(
-                                areEqual ? PineKernelValues.TrueValue : PineKernelValues.FalseValue);
+                                PineValueInProcess.Create(areEqual ? PineKernelValues.TrueValue : PineKernelValues.FalseValue));
 
                             continue;
                         }
@@ -1708,20 +1705,9 @@ public class PineVM : IPineVM
                             var prevValue = currentFrame.PopTopmostFromStack();
 
                             var fromIndexValue =
-                                prevValue switch
-                                {
-                                    PineValue.ListValue listValue =>
-                                    listValue.Items.Length <= indexClamped
-                                    ?
-                                    PineValue.EmptyList
-                                    :
-                                    listValue.Items.Span[indexClamped],
+                                prevValue.GetElementAt(index);
 
-                                    _ =>
-                                    PineValue.EmptyList
-                                };
-
-                            currentFrame.PushInstructionResult(fromIndexValue);
+                            currentFrame.PushInstructionResult(PineValueInProcess.Create(fromIndexValue));
 
                             continue;
                         }
@@ -1734,7 +1720,7 @@ public class PineVM : IPineVM
 
                             PineValue resultValue = PineValue.EmptyList;
 
-                            if (KernelFunction.SignedIntegerFromValueRelaxed(indexValue) is { } skipCount)
+                            if (indexValue.AsInteger() is { } skipCount)
                             {
                                 var skipCountInt = (int)skipCount;
 
@@ -1742,21 +1728,10 @@ public class PineVM : IPineVM
                                     skipCountInt < 0 ? 0 : skipCountInt;
 
                                 resultValue =
-                                    prevValue switch
-                                    {
-                                        PineValue.ListValue listValue =>
-                                        listValue.Items.Length <= skipCountClamped
-                                        ?
-                                        PineValue.EmptyList
-                                        :
-                                        listValue.Items.Span[skipCountClamped],
-
-                                        _ =>
-                                        PineValue.EmptyList
-                                    };
+                                    prevValue.GetElementAt((int)skipCount);
                             }
 
-                            currentFrame.PushInstructionResult(resultValue);
+                            currentFrame.PushInstructionResult(PineValueInProcess.Create(resultValue));
 
                             continue;
                         }
@@ -1765,9 +1740,9 @@ public class PineVM : IPineVM
                         {
                             var prevValue = currentFrame.PopTopmostFromStack();
 
-                            var headValue = KernelFunction.head(prevValue);
+                            var headValue = prevValue.GetElementAt(0);
 
-                            currentFrame.PushInstructionResult(headValue);
+                            currentFrame.PushInstructionResult(PineValueInProcess.Create(headValue));
 
                             continue;
                         }
@@ -1779,7 +1754,13 @@ public class PineVM : IPineVM
                             var prevValue = currentFrame.PopTopmostFromStack();
 
                             var resultValue =
-                                KernelFunctionSpecialized.skip(skipCountValue, prevValue);
+                                PineValueInProcess.EmptyList;
+
+                            if (skipCountValue.AsInteger() is { } skipCount)
+                            {
+                                resultValue =
+                                    PineValueInProcess.Skip((int)skipCount, prevValue);
+                            }
 
                             currentFrame.PushInstructionResult(resultValue);
 
@@ -1795,7 +1776,8 @@ public class PineVM : IPineVM
 
                             var prevValue = currentFrame.PopTopmostFromStack();
 
-                            var resultValue = KernelFunctionSpecialized.skip(skipCount, prevValue);
+                            var resultValue =
+                                PineValueInProcess.Skip(skipCount, prevValue);
 
                             currentFrame.PushInstructionResult(resultValue);
 
@@ -1809,7 +1791,13 @@ public class PineVM : IPineVM
                             var prevValue = currentFrame.PopTopmostFromStack();
 
                             var resultValue =
-                                KernelFunctionSpecialized.take(takeCountValue, prevValue);
+                                PineValueInProcess.EmptyList;
+
+                            if (takeCountValue.AsInteger() is { } takeCount)
+                            {
+                                resultValue =
+                                    PineValueInProcess.Take((int)takeCount, prevValue);
+                            }
 
                             currentFrame.PushInstructionResult(resultValue);
 
@@ -1825,8 +1813,8 @@ public class PineVM : IPineVM
 
                             var prevValue = currentFrame.PopTopmostFromStack();
 
-                            PineValue resultValue = resultValue =
-                                KernelFunctionSpecialized.take(takeCount, prevValue);
+                            var resultValue =
+                                PineValueInProcess.Take(takeCount, prevValue);
 
                             currentFrame.PushInstructionResult(resultValue);
 
@@ -1843,7 +1831,7 @@ public class PineVM : IPineVM
                             var prevValue = currentFrame.PopTopmostFromStack();
 
                             var resultValue =
-                                KernelFunctionFused.TakeLast(takeCount: takeCount, prevValue);
+                                PineValueInProcess.TakeLast(takeCount, prevValue);
 
                             currentFrame.PushInstructionResult(resultValue);
 
@@ -1861,10 +1849,11 @@ public class PineVM : IPineVM
 
                             for (var i = 0; i < itemsCount; ++i)
                             {
-                                items[itemsCount - i - 1] = currentFrame.PopTopmostFromStack();
+                                items[itemsCount - i - 1] = currentFrame.PopTopmostFromStack().Evaluate();
                             }
 
-                            currentFrame.PushInstructionResult(PineValue.List(items));
+                            currentFrame.PushInstructionResult(
+                                PineValueInProcess.CreateList(items));
 
                             continue;
                         }
@@ -1874,7 +1863,10 @@ public class PineVM : IPineVM
                             var right = currentFrame.PopTopmostFromStack();
                             var left = currentFrame.PopTopmostFromStack();
 
-                            currentFrame.PushInstructionResult(KernelFunctionSpecialized.concat(left, right));
+                            var resultValue =
+                                PineValueInProcess.ConcatBinary(left, right);
+
+                            currentFrame.PushInstructionResult(resultValue);
 
                             continue;
                         }
@@ -1884,17 +1876,13 @@ public class PineVM : IPineVM
                             var right = currentFrame.PopTopmostFromStack();
                             var left = currentFrame.PopTopmostFromStack();
 
-                            var resultValue = PineValue.EmptyList;
+                            var resultValue = PineValueInProcess.EmptyList;
 
-                            if (right is PineValue.ListValue rightList)
+                            if (right.IsList())
                             {
-                                var elements = new PineValue[rightList.Items.Length + 1];
-
-                                elements[0] = left;
-
-                                rightList.Items.Span.CopyTo(elements.AsSpan(1));
-
-                                resultValue = PineValue.List(elements);
+                                resultValue =
+                                    PineValueInProcess.ConcatBinary(
+                                        PineValueInProcess.CreateList([left.Evaluate()]), right);
                             }
 
                             currentFrame.PushInstructionResult(resultValue);
@@ -1904,11 +1892,11 @@ public class PineVM : IPineVM
 
                     case StackInstructionKind.Concat_Generic:
                         {
-                            var listValue = currentFrame.PopTopmostFromStack();
+                            var listValue = currentFrame.PopTopmostFromStack().Evaluate();
 
                             var concatenated = KernelFunction.concat(listValue);
 
-                            currentFrame.PushInstructionResult(concatenated);
+                            currentFrame.PushInstructionResult(PineValueInProcess.Create(concatenated));
 
                             continue;
                         }
@@ -1920,15 +1908,17 @@ public class PineVM : IPineVM
 
                             var prevValue = currentFrame.PopTopmostFromStack();
 
-                            PineValue resultValue = PineValue.EmptyList;
+                            var resultValue = PineValueInProcess.EmptyList;
 
-                            if (KernelFunction.SignedIntegerFromValueRelaxed(takeCountValue) is { } takeCount)
+                            if (takeCountValue.AsInteger() is { } takeCount)
                             {
-                                resultValue =
-                                    KernelFunctionFused.SkipAndTake(
-                                        takeCount: (int)takeCount,
-                                        skipCountValue: skipCountValue,
-                                        prevValue);
+                                if (skipCountValue.AsInteger() is { } skipCount)
+                                {
+                                    resultValue =
+                                        PineValueInProcess.Take(
+                                            (int)takeCount,
+                                            PineValueInProcess.Skip((int)skipCount, prevValue));
+                                }
                             }
 
                             currentFrame.PushInstructionResult(resultValue);
@@ -1948,10 +1938,15 @@ public class PineVM : IPineVM
                             var prevValue = currentFrame.PopTopmostFromStack();
 
                             var resultValue =
-                                KernelFunctionFused.SkipAndTake(
-                                    takeCount: takeCount,
-                                    skipCountValue: skipCountValue,
-                                    prevValue);
+                                PineValueInProcess.EmptyList;
+
+                            if (skipCountValue.AsInteger() is { } skipCount)
+                            {
+                                resultValue =
+                                    PineValueInProcess.Take(
+                                        takeCount,
+                                        PineValueInProcess.Skip((int)skipCount, prevValue));
+                            }
 
                             currentFrame.PushInstructionResult(resultValue);
 
@@ -1960,11 +1955,11 @@ public class PineVM : IPineVM
 
                     case StackInstructionKind.Reverse:
                         {
-                            var listValue = currentFrame.PopTopmostFromStack();
+                            var listValue = currentFrame.PopTopmostFromStack().Evaluate();
 
                             var reversed = KernelFunction.reverse(listValue);
 
-                            currentFrame.PushInstructionResult(reversed);
+                            currentFrame.PushInstructionResult(PineValueInProcess.Create(reversed));
 
                             continue;
                         }
@@ -1992,7 +1987,7 @@ public class PineVM : IPineVM
                                     ??
                                     throw new Exception("Invalid operation form: Missing local index"));
 
-                            currentFrame.PushInstructionResult(value);
+                            currentFrame.PushInstructionResult(PineValueInProcess.Create(value));
 
                             continue;
                         }
@@ -2002,7 +1997,16 @@ public class PineVM : IPineVM
                             var right = currentFrame.PopTopmostFromStack();
                             var left = currentFrame.PopTopmostFromStack();
 
-                            var resultValue = KernelFunctionSpecialized.int_add(left, right);
+                            var resultValue = PineValueInProcess.EmptyList;
+
+                            if (left.AsInteger() is { } leftInt)
+                            {
+                                if (right.AsInteger() is { } rightInt)
+                                {
+                                    resultValue =
+                                        PineValueInProcess.CreateInteger(leftInt + rightInt);
+                                }
+                            }
 
                             currentFrame.PushInstructionResult(resultValue);
 
@@ -2018,11 +2022,12 @@ public class PineVM : IPineVM
 
                             var leftValue = currentFrame.PopTopmostFromStack();
 
-                            PineValue resultValue = PineValue.EmptyList;
+                            var resultValue = PineValueInProcess.EmptyList;
 
-                            if (KernelFunction.SignedIntegerFromValueRelaxed(leftValue) is { } leftInt)
+                            if (leftValue.AsInteger() is { } leftInt)
                             {
-                                resultValue = IntegerEncoding.EncodeSignedInteger(leftInt + rightInt);
+                                resultValue =
+                                    PineValueInProcess.CreateInteger(leftInt + rightInt);
                             }
 
                             currentFrame.PushInstructionResult(resultValue);
@@ -2037,13 +2042,13 @@ public class PineVM : IPineVM
                                 ??
                                 throw new Exception("Invalid operation form: Missing literal value");
 
-                            var leftValue = currentFrame.PopTopmostFromStack();
+                            var leftValue = currentFrame.PopTopmostFromStack().Evaluate();
 
-                            PineValue resultValue = PineValue.EmptyList;
+                            var resultValue = PineValueInProcess.EmptyList;
 
                             if (KernelFunction.UnsignedIntegerFromValueRelaxed(leftValue) is { } leftInt)
                             {
-                                resultValue = IntegerEncoding.EncodeSignedInteger(leftInt + rightInt);
+                                resultValue = PineValueInProcess.CreateInteger(leftInt + rightInt);
                             }
 
                             currentFrame.PushInstructionResult(resultValue);
@@ -2056,12 +2061,16 @@ public class PineVM : IPineVM
                             var right = currentFrame.PopTopmostFromStack();
                             var left = currentFrame.PopTopmostFromStack();
 
-                            PineValue resultValue = PineValue.EmptyList;
+                            var resultValue =
+                                PineValueInProcess.EmptyList;
 
-                            if (KernelFunction.SignedIntegerFromValueRelaxed(left) is { } leftInt &&
-                                KernelFunction.SignedIntegerFromValueRelaxed(right) is { } rightInt)
+                            if (left.AsInteger() is { } leftInt)
                             {
-                                resultValue = IntegerEncoding.EncodeSignedInteger(leftInt - rightInt);
+                                if (right.AsInteger() is { } rightInt)
+                                {
+                                    resultValue =
+                                        PineValueInProcess.CreateInteger(leftInt - rightInt);
+                                }
                             }
 
                             currentFrame.PushInstructionResult(resultValue);
@@ -2074,12 +2083,15 @@ public class PineVM : IPineVM
                             var right = currentFrame.PopTopmostFromStack();
                             var left = currentFrame.PopTopmostFromStack();
 
-                            PineValue resultValue = PineValue.EmptyList;
+                            var resultValue = PineValueInProcess.EmptyList;
 
-                            if (KernelFunction.SignedIntegerFromValueRelaxed(left) is { } leftInt &&
-                                KernelFunction.SignedIntegerFromValueRelaxed(right) is { } rightInt)
+                            if (left.AsInteger() is { } leftInt)
                             {
-                                resultValue = IntegerEncoding.EncodeSignedInteger(leftInt * rightInt);
+                                if (right.AsInteger() is { } rightInt)
+                                {
+                                    resultValue =
+                                        PineValueInProcess.CreateInteger(leftInt * rightInt);
+                                }
                             }
 
                             currentFrame.PushInstructionResult(resultValue);
@@ -2095,11 +2107,12 @@ public class PineVM : IPineVM
 
                             var left = currentFrame.PopTopmostFromStack();
 
-                            PineValue resultValue = PineValue.EmptyList;
+                            var resultValue = PineValueInProcess.EmptyList;
 
-                            if (KernelFunction.SignedIntegerFromValueRelaxed(left) is { } leftInt)
+                            if (left.AsInteger() is { } leftInt)
                             {
-                                resultValue = IntegerEncoding.EncodeSignedInteger(leftInt * right);
+                                resultValue =
+                                    PineValueInProcess.CreateInteger(leftInt * right);
                             }
 
                             currentFrame.PushInstructionResult(resultValue);
@@ -2112,15 +2125,15 @@ public class PineVM : IPineVM
                             var right = currentFrame.PopTopmostFromStack();
                             var left = currentFrame.PopTopmostFromStack();
 
-                            PineValue resultValue = PineValue.EmptyList;
+                            var resultValue = PineValueInProcess.EmptyList;
 
-                            if (KernelFunction.SignedIntegerFromValueRelaxed(left) is { } leftInt &&
-                                KernelFunction.SignedIntegerFromValueRelaxed(right) is { } rightInt)
+                            if (left.AsInteger() is { } leftInt)
                             {
-                                resultValue =
-                                    leftInt < rightInt ?
-                                    PineKernelValues.TrueValue :
-                                    PineKernelValues.FalseValue;
+                                if (right.AsInteger() is { } rightInt)
+                                {
+                                    resultValue =
+                                        PineValueInProcess.CreateBool(leftInt < rightInt);
+                                }
                             }
 
                             currentFrame.PushInstructionResult(resultValue);
@@ -2133,15 +2146,13 @@ public class PineVM : IPineVM
                             var right = currentFrame.PopTopmostFromStack();
                             var left = currentFrame.PopTopmostFromStack();
 
-                            PineValue resultValue = PineValue.EmptyList;
+                            var resultValue = PineValueInProcess.EmptyList;
 
-                            if (KernelFunction.SignedIntegerFromValueRelaxed(left) is { } leftInt &&
-                                KernelFunction.SignedIntegerFromValueRelaxed(right) is { } rightInt)
+                            if (left.AsInteger() is { } leftInt &&
+                                right.AsInteger() is { } rightInt)
                             {
                                 resultValue =
-                                    leftInt <= rightInt ?
-                                    PineKernelValues.TrueValue :
-                                    PineKernelValues.FalseValue;
+                                    PineValueInProcess.CreateBool(leftInt <= rightInt);
                             }
 
                             currentFrame.PushInstructionResult(resultValue);
@@ -2151,20 +2162,19 @@ public class PineVM : IPineVM
 
                     case StackInstructionKind.Int_Less_Than_Const:
                         {
-                            var right = currentInstruction.IntegerLiteral
+                            var right =
+                                currentInstruction.IntegerLiteral
                                 ??
                                 throw new Exception("Invalid operation form: Missing literal value");
 
                             var left = currentFrame.PopTopmostFromStack();
 
-                            PineValue resultValue = PineValue.EmptyList;
+                            var resultValue = PineValueInProcess.EmptyList;
 
-                            if (KernelFunction.SignedIntegerFromValueRelaxed(left) is { } leftInt)
+                            if (left.AsInteger() is { } leftInt)
                             {
                                 resultValue =
-                                    leftInt < right ?
-                                    PineKernelValues.TrueValue :
-                                    PineKernelValues.FalseValue;
+                                    PineValueInProcess.CreateBool(leftInt < right);
                             }
 
                             currentFrame.PushInstructionResult(resultValue);
@@ -2174,20 +2184,20 @@ public class PineVM : IPineVM
 
                     case StackInstructionKind.Int_Less_Than_Or_Equal_Const:
                         {
-                            var right = currentInstruction.IntegerLiteral
+                            var right =
+                                currentInstruction.IntegerLiteral
                                 ??
                                 throw new Exception("Invalid operation form: Missing literal value");
 
-                            var left = currentFrame.PopTopmostFromStack();
+                            var left =
+                                currentFrame.PopTopmostFromStack();
 
-                            PineValue resultValue = PineValue.EmptyList;
+                            var resultValue = PineValueInProcess.EmptyList;
 
-                            if (KernelFunction.SignedIntegerFromValueRelaxed(left) is { } leftInt)
+                            if (left.AsInteger() is { } leftInt)
                             {
                                 resultValue =
-                                    leftInt <= right ?
-                                    PineKernelValues.TrueValue :
-                                    PineKernelValues.FalseValue;
+                                    PineValueInProcess.CreateBool(leftInt <= right);
                             }
 
                             currentFrame.PushInstructionResult(resultValue);
@@ -2197,20 +2207,20 @@ public class PineVM : IPineVM
 
                     case StackInstructionKind.Int_Unsigned_Less_Than_Or_Equal_Const:
                         {
-                            var right = currentInstruction.IntegerLiteral
+                            var right =
+                                currentInstruction.IntegerLiteral
                                 ??
                                 throw new Exception("Invalid operation form: Missing literal value");
 
-                            var left = currentFrame.PopTopmostFromStack();
+                            var left =
+                                currentFrame.PopTopmostFromStack().Evaluate();
 
-                            PineValue resultValue = PineValue.EmptyList;
+                            var resultValue = PineValueInProcess.EmptyList;
 
                             if (KernelFunction.UnsignedIntegerFromValueRelaxed(left) is { } leftInt)
                             {
                                 resultValue =
-                                    leftInt <= right ?
-                                    PineKernelValues.TrueValue :
-                                    PineKernelValues.FalseValue;
+                                    PineValueInProcess.CreateBool(leftInt <= right);
                             }
 
                             currentFrame.PushInstructionResult(resultValue);
@@ -2227,14 +2237,12 @@ public class PineVM : IPineVM
 
                             var left = currentFrame.PopTopmostFromStack();
 
-                            PineValue resultValue = PineValue.EmptyList;
+                            var resultValue = PineValueInProcess.EmptyList;
 
-                            if (KernelFunction.SignedIntegerFromValueRelaxed(left) is { } leftInt)
+                            if (left.AsInteger() is { } leftInt)
                             {
                                 resultValue =
-                                    leftInt >= right ?
-                                    PineKernelValues.TrueValue :
-                                    PineKernelValues.FalseValue;
+                                    PineValueInProcess.CreateBool(leftInt >= right);
                             }
 
                             currentFrame.PushInstructionResult(resultValue);
@@ -2249,16 +2257,14 @@ public class PineVM : IPineVM
                                 ??
                                 throw new Exception("Invalid operation form: Missing literal value");
 
-                            var left = currentFrame.PopTopmostFromStack();
+                            var left = currentFrame.PopTopmostFromStack().Evaluate();
 
-                            PineValue resultValue = PineValue.EmptyList;
+                            var resultValue = PineValueInProcess.EmptyList;
 
                             if (KernelFunction.UnsignedIntegerFromValueRelaxed(left) is { } leftInt)
                             {
                                 resultValue =
-                                    leftInt >= right ?
-                                    PineKernelValues.TrueValue :
-                                    PineKernelValues.FalseValue;
+                                    PineValueInProcess.CreateBool(leftInt >= right);
                             }
 
                             currentFrame.PushInstructionResult(resultValue);
@@ -2268,11 +2274,11 @@ public class PineVM : IPineVM
 
                     case StackInstructionKind.Negate:
                         {
-                            var value = currentFrame.PopTopmostFromStack();
+                            var value = currentFrame.PopTopmostFromStack().Evaluate();
 
                             var resultValue = KernelFunction.negate(value);
 
-                            currentFrame.PushInstructionResult(resultValue);
+                            currentFrame.PushInstructionResult(PineValueInProcess.Create(resultValue));
 
                             continue;
                         }
@@ -2280,7 +2286,7 @@ public class PineVM : IPineVM
                     case StackInstructionKind.Return:
                         {
                             var frameReturnValue =
-                                currentFrame.PopTopmostFromStack();
+                                currentFrame.PopTopmostFromStack().Evaluate();
 
                             var returnOverall =
                                 returnFromStackFrame(frameReturnValue);
@@ -2295,33 +2301,33 @@ public class PineVM : IPineVM
 
                     case StackInstructionKind.Skip_Generic:
                         {
-                            var genericValue = currentFrame.PopTopmostFromStack();
+                            var genericValue = currentFrame.PopTopmostFromStack().Evaluate();
 
                             var resultValue = KernelFunction.skip(genericValue);
 
-                            currentFrame.PushInstructionResult(resultValue);
+                            currentFrame.PushInstructionResult(PineValueInProcess.Create(resultValue));
 
                             continue;
                         }
 
                     case StackInstructionKind.Take_Generic:
                         {
-                            var genericValue = currentFrame.PopTopmostFromStack();
+                            var genericValue = currentFrame.PopTopmostFromStack().Evaluate();
 
                             var resultValue = KernelFunction.take(genericValue);
 
-                            currentFrame.PushInstructionResult(resultValue);
+                            currentFrame.PushInstructionResult(PineValueInProcess.Create(resultValue));
 
                             continue;
                         }
 
                     case StackInstructionKind.Int_Is_Sorted_Asc_Generic:
                         {
-                            var listValue = currentFrame.PopTopmostFromStack();
+                            var listValue = currentFrame.PopTopmostFromStack().Evaluate();
 
                             var isSorted = KernelFunction.int_is_sorted_asc(listValue);
 
-                            currentFrame.PushInstructionResult(isSorted);
+                            currentFrame.PushInstructionResult(PineValueInProcess.Create(isSorted));
 
                             continue;
                         }
@@ -2346,16 +2352,16 @@ public class PineVM : IPineVM
                                 }
                             }
 
-                            var expressionValue = currentFrame.PopTopmostFromStack();
+                            var expressionValue = currentFrame.PopTopmostFromStack().Evaluate();
 
-                            var environmentValue = currentFrame.PopTopmostFromStack();
+                            var environmentValue = currentFrame.PopTopmostFromStack().Evaluate();
 
                             {
                                 if (InvocationCachedResultOrOverride(
                                     expressionValue: expressionValue,
                                     environmentValue: environmentValue) is { } fromCacheOrDelegate)
                                 {
-                                    currentFrame.PushInstructionResult(fromCacheOrDelegate);
+                                    currentFrame.PushInstructionResult(PineValueInProcess.Create(fromCacheOrDelegate));
 
                                     continue;
                                 }
@@ -2419,7 +2425,7 @@ public class PineVM : IPineVM
                         {
                             var conditionValue = currentFrame.PopTopmostFromStack();
 
-                            if (conditionValue == PineKernelValues.TrueValue)
+                            if (PineValueInProcess.AreEqual(conditionValue, PineKernelValues.TrueValue))
                             {
                                 var jumpOffset =
                                     currentInstruction.JumpOffset
@@ -2444,13 +2450,13 @@ public class PineVM : IPineVM
 
                     case StackInstructionKind.Bit_And_Binary:
                         {
-                            var right = currentFrame.PopTopmostFromStack();
-                            var left = currentFrame.PopTopmostFromStack();
+                            var right = currentFrame.PopTopmostFromStack().Evaluate();
+                            var left = currentFrame.PopTopmostFromStack().Evaluate();
 
                             var resultValue =
                                 KernelFunctionSpecialized.bit_and(left, right);
 
-                            currentFrame.PushInstructionResult(resultValue);
+                            currentFrame.PushInstructionResult(PineValueInProcess.Create(resultValue));
 
                             continue;
                         }
@@ -2461,73 +2467,74 @@ public class PineVM : IPineVM
                                 ??
                                 throw new Exception("Invalid operation form: Missing literal value");
 
-                            var left = currentFrame.PopTopmostFromStack();
+                            var left = currentFrame.PopTopmostFromStack().Evaluate();
 
                             var resultValue =
                                 KernelFunctionSpecialized.bit_and(left, right);
 
-                            currentFrame.PushInstructionResult(resultValue);
+                            currentFrame.PushInstructionResult(PineValueInProcess.Create(resultValue));
 
                             continue;
                         }
 
                     case StackInstructionKind.Bit_Or_Binary:
                         {
-                            var right = currentFrame.PopTopmostFromStack();
-                            var left = currentFrame.PopTopmostFromStack();
+                            var right = currentFrame.PopTopmostFromStack().Evaluate();
+                            var left = currentFrame.PopTopmostFromStack().Evaluate();
 
                             var resultValue =
                                 KernelFunctionSpecialized.bit_or(left, right);
 
-                            currentFrame.PushInstructionResult(resultValue);
+                            currentFrame.PushInstructionResult(PineValueInProcess.Create(resultValue));
 
                             continue;
                         }
 
                     case StackInstructionKind.Bit_Or_Const:
                         {
-                            var right = currentInstruction.Literal
+                            var right =
+                                currentInstruction.Literal
                                 ??
                                 throw new Exception("Invalid operation form: Missing literal value");
 
-                            var left = currentFrame.PopTopmostFromStack();
+                            var left = currentFrame.PopTopmostFromStack().Evaluate();
 
                             var resultValue =
                                 KernelFunctionSpecialized.bit_or(left, right);
 
-                            currentFrame.PushInstructionResult(resultValue);
+                            currentFrame.PushInstructionResult(PineValueInProcess.Create(resultValue));
 
                             continue;
                         }
 
                     case StackInstructionKind.Bit_Xor_Binary:
                         {
-                            var right = currentFrame.PopTopmostFromStack();
-                            var left = currentFrame.PopTopmostFromStack();
+                            var right = currentFrame.PopTopmostFromStack().Evaluate();
+                            var left = currentFrame.PopTopmostFromStack().Evaluate();
 
                             var resultValue =
                                 KernelFunctionSpecialized.bit_xor(left, right);
 
-                            currentFrame.PushInstructionResult(resultValue);
+                            currentFrame.PushInstructionResult(PineValueInProcess.Create(resultValue));
 
                             continue;
                         }
 
                     case StackInstructionKind.Bit_Not:
                         {
-                            var value = currentFrame.PopTopmostFromStack();
+                            var value = currentFrame.PopTopmostFromStack().Evaluate();
 
                             var resultValue = KernelFunction.bit_not(value);
 
-                            currentFrame.PushInstructionResult(resultValue);
+                            currentFrame.PushInstructionResult(PineValueInProcess.Create(resultValue));
 
                             continue;
                         }
 
                     case StackInstructionKind.Bit_Shift_Left_Binary:
                         {
-                            var shiftValue = currentFrame.PopTopmostFromStack();
-                            var value = currentFrame.PopTopmostFromStack();
+                            var shiftValue = currentFrame.PopTopmostFromStack().Evaluate();
+                            var value = currentFrame.PopTopmostFromStack().Evaluate();
 
                             PineValue resultValue = PineValue.EmptyList;
 
@@ -2537,7 +2544,7 @@ public class PineVM : IPineVM
                                     KernelFunctionSpecialized.bit_shift_left(shiftCount, value);
                             }
 
-                            currentFrame.PushInstructionResult(resultValue);
+                            currentFrame.PushInstructionResult(PineValueInProcess.Create(resultValue));
 
                             continue;
                         }
@@ -2549,12 +2556,12 @@ public class PineVM : IPineVM
                                 ??
                                 throw new Exception("Invalid operation form: Missing literal value");
 
-                            var value = currentFrame.PopTopmostFromStack();
+                            var value = currentFrame.PopTopmostFromStack().Evaluate();
 
                             var resultValue =
                                 KernelFunctionSpecialized.bit_shift_left(shiftCount, value);
 
-                            currentFrame.PushInstructionResult(resultValue);
+                            currentFrame.PushInstructionResult(PineValueInProcess.Create(resultValue));
 
                             continue;
                         }
@@ -2562,14 +2569,16 @@ public class PineVM : IPineVM
                     case StackInstructionKind.Bit_Shift_Right_Binary:
                         {
                             var shiftValue = currentFrame.PopTopmostFromStack();
-                            var value = currentFrame.PopTopmostFromStack();
 
-                            PineValue resultValue = PineValue.EmptyList;
+                            var prevValue = currentFrame.PopTopmostFromStack().Evaluate();
 
-                            if (KernelFunction.SignedIntegerFromValueRelaxed(shiftValue) is { } shiftCount)
+                            var resultValue = PineValueInProcess.EmptyList;
+
+                            if (shiftValue.AsInteger() is { } shiftCount)
                             {
                                 resultValue =
-                                    KernelFunctionSpecialized.bit_shift_right(shiftCount, value);
+                                    PineValueInProcess.Create(
+                                        KernelFunctionSpecialized.bit_shift_right(shiftCount, prevValue));
                             }
 
                             currentFrame.PushInstructionResult(resultValue);
@@ -2584,34 +2593,34 @@ public class PineVM : IPineVM
                                 ??
                                 throw new Exception("Invalid operation form: Missing literal value");
 
-                            var value = currentFrame.PopTopmostFromStack();
+                            var value = currentFrame.PopTopmostFromStack().Evaluate();
 
                             var resultValue =
                                 KernelFunctionSpecialized.bit_shift_right(shiftCount, value);
 
-                            currentFrame.PushInstructionResult(resultValue);
+                            currentFrame.PushInstructionResult(PineValueInProcess.Create(resultValue));
 
                             continue;
                         }
 
                     case StackInstructionKind.Int_Add_Generic:
                         {
-                            var listValue = currentFrame.PopTopmostFromStack();
+                            var listValue = currentFrame.PopTopmostFromStack().Evaluate();
 
                             var sumValue = KernelFunction.int_add(listValue);
 
-                            currentFrame.PushInstructionResult(sumValue);
+                            currentFrame.PushInstructionResult(PineValueInProcess.Create(sumValue));
 
                             continue;
                         }
 
                     case StackInstructionKind.Int_Mul_Generic:
                         {
-                            var listValue = currentFrame.PopTopmostFromStack();
+                            var listValue = currentFrame.PopTopmostFromStack().Evaluate();
 
                             var productValue = KernelFunction.int_mul(listValue);
 
-                            currentFrame.PushInstructionResult(productValue);
+                            currentFrame.PushInstructionResult(PineValueInProcess.Create(productValue));
 
                             continue;
                         }
@@ -2627,8 +2636,8 @@ public class PineVM : IPineVM
 
                     case StackInstructionKind.Logical_And_Binary:
                         {
-                            var right = currentFrame.PopTopmostFromStack();
-                            var left = currentFrame.PopTopmostFromStack();
+                            var right = currentFrame.PopTopmostFromStack().Evaluate();
+                            var left = currentFrame.PopTopmostFromStack().Evaluate();
 
                             var resultValue = PineKernelValues.FalseValue;
 
@@ -2637,7 +2646,7 @@ public class PineVM : IPineVM
                                 resultValue = PineKernelValues.TrueValue;
                             }
 
-                            currentFrame.PushInstructionResult(resultValue);
+                            currentFrame.PushInstructionResult(PineValueInProcess.Create(resultValue));
 
                             continue;
                         }
@@ -2649,7 +2658,7 @@ public class PineVM : IPineVM
                                 ??
                                 throw new Exception("Invalid operation form: Missing min remaining count");
 
-                            var blobValue = currentFrame.PopTopmostFromStack();
+                            var blobValue = currentFrame.PopTopmostFromStack().Evaluate();
 
                             PineValue resultValue = PineValue.EmptyList;
 
@@ -2689,7 +2698,7 @@ public class PineVM : IPineVM
                                 }
                             }
 
-                            currentFrame.PushInstructionResult(resultValue);
+                            currentFrame.PushInstructionResult(PineValueInProcess.Create(resultValue));
 
                             continue;
                         }
@@ -2701,9 +2710,9 @@ public class PineVM : IPineVM
                                 ??
                                 throw new Exception("Invalid operation form: Missing prefix value");
 
-                            var skipCountValue = currentFrame.PopTopmostFromStack();
+                            var skipCountValue = currentFrame.PopTopmostFromStack().Evaluate();
 
-                            var slicedValue = currentFrame.PopTopmostFromStack();
+                            var slicedValue = currentFrame.PopTopmostFromStack().Evaluate();
 
                             var resultValue = PineKernelValues.FalseValue;
 
@@ -2766,7 +2775,7 @@ public class PineVM : IPineVM
                                     PineKernelValues.FalseValue;
                             }
 
-                            currentFrame.PushInstructionResult(resultValue);
+                            currentFrame.PushInstructionResult(PineValueInProcess.Create(resultValue));
 
                             continue;
                         }

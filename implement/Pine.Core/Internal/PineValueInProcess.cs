@@ -1,4 +1,5 @@
 using Pine.Core.DotNet.Builtins;
+using Pine.Core.PineVM;
 using Pine.Core.PopularEncodings;
 using System.Collections.Generic;
 using System.Numerics;
@@ -31,6 +32,13 @@ public class PineValueInProcess
     /// </summary>
     private IReadOnlyList<PineValue>? _list;
 
+    public static readonly PineValueInProcess EmptyList = Create(PineValue.EmptyList);
+
+    public static readonly PineValueInProcess KernelTrueValue = Create(PineKernelValues.TrueValue);
+
+    public static readonly PineValueInProcess KernelFalseValue = Create(PineKernelValues.FalseValue);
+
+
     /// <summary>
     /// Create an in-process representation from an already evaluated <see cref="PineValue"/>.
     /// </summary>
@@ -38,6 +46,27 @@ public class PineValueInProcess
     /// <returns>A new <see cref="PineValueInProcess"/> wrapping <paramref name="evaluated"/>.</returns>
     public static PineValueInProcess Create(PineValue evaluated)
     {
+        {
+            if (evaluated == PineValue.EmptyList && EmptyList is { } reusedInst)
+            {
+                return reusedInst;
+            }
+        }
+
+        {
+            if (evaluated == PineKernelValues.TrueValue && KernelTrueValue is { } reusedInst)
+            {
+                return reusedInst;
+            }
+        }
+
+        {
+            if (evaluated == PineKernelValues.FalseValue && KernelFalseValue is { } reusedInst)
+            {
+                return reusedInst;
+            }
+        }
+
         return new PineValueInProcess
         {
             _evaluated = evaluated,
@@ -60,9 +89,31 @@ public class PineValueInProcess
         };
     }
 
+    public static PineValueInProcess CreateInteger(BigInteger integer)
+    {
+        return new PineValueInProcess
+        {
+            _integer = integer,
+        };
+    }
+
+    public static PineValueInProcess CreateBool(bool boolean)
+    {
+        return boolean ? KernelTrueValue : KernelFalseValue;
+    }
+
     private PineValueInProcess()
     {
     }
+
+    /// <summary>
+    /// Gets the evaluated <see cref="PineValue"/> if it has already been computed, without triggering evaluation.
+    /// </summary>
+    /// <remarks>
+    /// This property returns null if the value has not yet been evaluated. Use <see cref="Evaluate"/> to force evaluation.
+    /// </remarks>
+    /// <returns>The cached <see cref="PineValue"/> or null if not yet evaluated.</returns>
+    public PineValue? EvaluatedOrNull => _evaluated;
 
     /// <summary>
     /// Materializes this instance into a concrete <see cref="PineValue"/>.
@@ -265,6 +316,30 @@ public class PineValueInProcess
     }
 
     /// <summary>
+    /// Analog to a combination of kernel functions as follows:
+    /// <see cref="KernelFunction.reverse(PineValue)"/>,
+    /// <see cref="KernelFunction.take(PineValue)"/>,
+    /// <see cref="KernelFunction.reverse(PineValue)"/>
+    /// </summary>
+    public static PineValueInProcess TakeLast(int takeCount, PineValueInProcess source)
+    {
+        if (source._sliceBuilder is { } sliceBuilder)
+        {
+            return new PineValueInProcess
+            {
+                _sliceBuilder = sliceBuilder.TakeLast(takeCount),
+            };
+        }
+
+        var evaluated = source.Evaluate();
+
+        return new PineValueInProcess
+        {
+            _sliceBuilder = ImmutableSliceBuilder.Create(evaluated).TakeLast(takeCount),
+        };
+    }
+
+    /// <summary>
     /// Concatenates the binary content of two PineValueInProcess instances into a single value.
     /// </summary>
     /// <remarks>This method preserves any deferred or incremental evaluation present in the input values,
@@ -316,9 +391,66 @@ public class PineValueInProcess
     }
 
     /// <summary>
+    /// Fused application of the kernel functions <see cref="KernelFunction.skip(PineValue)"/> and
+    /// <see cref="KernelFunction.head(PineValue)"/> on the value from <see cref="Evaluate"/>
+    /// </summary>
+    /// <param name="index">The zero-based index of the element to retrieve.</param>
+    /// <returns>
+    /// For list values: the element at the specified index, or <see cref="PineValue.EmptyList"/> if index is out of bounds.
+    /// For blob values: a single-byte blob containing the byte at the specified index, or <see cref="PineValue.EmptyBlob"/> if index is out of bounds.
+    /// </returns>
+    /// <remarks>
+    /// This method is optimized to avoid fully evaluating the value when possible, especially for slice builders.
+    /// </remarks>
+    public PineValue GetElementAt(int index)
+    {
+        index =
+            index < 0 ? 0 : index;
+
+        if (_sliceBuilder is { } sliceBuilder)
+        {
+            return sliceBuilder.GetElementAt(index);
+        }
+
+        if (_list is { } list)
+        {
+            if (list.Count <= index)
+            {
+                return PineValue.EmptyList;
+            }
+
+            return list[index];
+        }
+
+        var evaluated = Evaluate();
+
+        if (evaluated is PineValue.ListValue listValue)
+        {
+            if (listValue.Items.Length <= index)
+            {
+                return PineValue.EmptyList;
+            }
+
+            return listValue.Items.Span[index];
+        }
+
+        if (evaluated is PineValue.BlobValue blobValue)
+        {
+            if (blobValue.Bytes.Length <= index)
+            {
+                return PineValue.EmptyBlob;
+            }
+            return PineValue.BlobSingleByte(blobValue.Bytes.Span[index]);
+        }
+
+        throw new System.InvalidOperationException(
+            "Unsupported value type for GetElementAt: " + evaluated.GetType().FullName);
+    }
+
+    /// <summary>
     /// Predicts whether two <see cref="PineValueInProcess"/> instances would evaluate to equal <see cref="PineValue"/> instances.
     /// </summary>
-    public static bool Equal(PineValueInProcess a, PineValueInProcess b)
+    public static bool AreEqual(PineValueInProcess a, PineValueInProcess b)
     {
         if (ReferenceEquals(a, b))
         {
@@ -409,6 +541,38 @@ public class PineValueInProcess
         return aEval.Equals(bEval);
     }
 
+    /// <summary>
+    /// Predicts whether a <see cref="PineValueInProcess"/> instance would evaluate to be equal to a given <see cref="PineValue"/>.
+    /// </summary>
+    public static bool AreEqual(PineValueInProcess inProcess, PineValue pineValue)
+    {
+        if (inProcess._evaluated is { } evaluated)
+        {
+            return evaluated.Equals(pineValue);
+        }
+
+        if (inProcess.IsBlob() != (pineValue is PineValue.BlobValue))
+        {
+            return false;
+        }
+
+        if (inProcess._list is { } list)
+        {
+            if (pineValue is PineValue.ListValue listValue)
+            {
+                return AreListItemsEqual(list, listValue);
+            }
+            else
+            {
+                return false;
+            }
+        }
+
+        var eval = inProcess.Evaluate();
+
+        return eval.Equals(pineValue);
+    }
+
     private static bool AreListItemsEqual(IReadOnlyList<PineValue> left, IReadOnlyList<PineValue> right)
     {
         if (ReferenceEquals(left, right))
@@ -450,5 +614,32 @@ public class PineValueInProcess
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// The infix equality operators are intentionally disabled to avoid accidental use of expensive comparisons.
+    /// Use <see cref="AreEqual(PineValueInProcess, PineValueInProcess)"/> instead.
+    /// </summary>
+    public static bool operator ==(PineValueInProcess? left, PineValueInProcess? right) =>
+        throw new System.InvalidOperationException("Use PineValueInProcess.AreEqual(...) instead of '=='.");
+
+    /// <summary>
+    /// The infix inequality operator is intentionally disabled to avoid accidental use of expensive comparisons.
+    /// Use <see cref="AreEqual(PineValueInProcess, PineValueInProcess)"/> instead.
+    /// </summary>
+    public static bool operator !=(PineValueInProcess? left, PineValueInProcess? right) =>
+        throw new System.InvalidOperationException("Use PineValueInProcess.AreEqual(...) instead of '!='.");
+
+    /// <inheritdoc/>
+    public override bool Equals(object? obj)
+    {
+        throw new System.InvalidOperationException(
+            "Use the static Equal method instead of instance Equals");
+    }
+
+    /// <inheritdoc/>
+    public override int GetHashCode()
+    {
+        return base.GetHashCode();
     }
 }
