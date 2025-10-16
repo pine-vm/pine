@@ -616,6 +616,20 @@ public class PineValueInProcess
         return true;
     }
 
+    public static PineValue? ValueFromPathOrNull(
+        PineValueInProcess root,
+        System.ReadOnlySpan<int> path)
+    {
+        if (path.Length is 0)
+        {
+            return root.Evaluate();
+        }
+
+        var first = root.GetElementAt(path[0]);
+
+        return PineValueExtension.ValueFromPathOrNull(first, path[1..]);
+    }
+
     /// <summary>
     /// The infix equality operators are intentionally disabled to avoid accidental use of expensive comparisons.
     /// Use <see cref="AreEqual(PineValueInProcess, PineValueInProcess)"/> instead.

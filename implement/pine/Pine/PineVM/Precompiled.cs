@@ -80,7 +80,7 @@ public class Precompiled
 
     public static Func<PrecompiledResult>? SelectPrecompiled(
         Expression expression,
-        PineValue environment,
+        PineValueInProcess environment,
         PineVMParseCache parseCache)
     {
         if (PrecompiledDict?.TryGetValue(expression, out var envItems) ?? false)
@@ -103,9 +103,11 @@ public class Precompiled
             {
                 var envItem = envItems[i];
 
-                if (envItem.EnvConstraint.SatisfiedByValue(environment))
+                var environmentValue = environment.Evaluate();
+
+                if (envItem.EnvConstraint.SatisfiedByValue(environmentValue))
                 {
-                    return envItem.PrecompiledDelegate.Invoke(environment, parseCache);
+                    return envItem.PrecompiledDelegate.Invoke(environmentValue, parseCache);
                 }
             }
         }

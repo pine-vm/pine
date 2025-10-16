@@ -37,4 +37,26 @@ public static class PineValueExtension
 
         return currentNode;
     }
+
+    public static PineValue? ValueFromPathOrNull(
+        this PineValue environment,
+        ReadOnlySpan<int> path)
+    {
+        var currentNode = environment;
+
+        for (var i = 0; i < path.Length; i++)
+        {
+            if (currentNode is not PineValue.ListValue listValue)
+                return null;
+
+            var skipCount = path[i];
+
+            if (skipCount >= listValue.Items.Length)
+                return null;
+
+            currentNode = listValue.Items.Span[skipCount < 0 ? 0 : skipCount];
+        }
+
+        return currentNode;
+    }
 }

@@ -251,7 +251,7 @@ public class PineVM : IPineVM
         PineValue? ExpressionValue,
         Expression Expression,
         StackFrameInstructions Instructions,
-        PineValue EnvironmentValue,
+        PineValueInProcess EnvironmentValue,
         Memory<PineValueInProcess> StackValues,
         Memory<PineValueInProcess> LocalsValues,
         StackFrameProfilingBaseline ProfilingBaseline,
@@ -374,7 +374,7 @@ public class PineVM : IPineVM
         StackFrameInstructions Generic,
         IReadOnlyList<(IReadOnlyList<EnvConstraintItem> constraint, StackFrameInstructions instructions)> Specialized)
     {
-        public StackFrameInstructions SelectInstructionsForEnvironment(PineValue environment)
+        public StackFrameInstructions SelectInstructionsForEnvironment(PineValueInProcess environment)
         {
             for (var i = 0; i < Specialized.Count; i++)
             {
@@ -386,7 +386,7 @@ public class PineVM : IPineVM
                 {
                     var constraintItem = specialization.constraint[specializationIndex];
 
-                    if (Core.CodeAnalysis.CodeAnalysis.ValueFromPathInValue(environment, constraintItem.Path.Span) is not { } pathValue)
+                    if (PineValueInProcess.ValueFromPathOrNull(environment, constraintItem.Path.Span) is not { } pathValue)
                     {
                         foundMismatch = true;
                         break;
@@ -420,7 +420,7 @@ public class PineVM : IPineVM
     StackFrame StackFrameFromExpression(
         PineValue? expressionValue,
         Expression expression,
-        PineValue environment,
+        PineValueInProcess environment,
         StackFrameProfilingBaseline profilingBaseline)
     {
         var compilation = GetExpressionCompilation(expression);
@@ -1247,7 +1247,7 @@ public class PineVM : IPineVM
         string? InvokePrecompiledOrBuildStackFrame(
             PineValue? expressionValue,
             Expression expression,
-            PineValue environmentValue,
+            PineValueInProcess environmentValue,
             bool replaceCurrentFrame)
         {
             var currentFrame = stack.Peek();
@@ -1269,7 +1269,7 @@ public class PineVM : IPineVM
                             new EvaluationReport(
                                 ExpressionValue: expressionValue,
                                 expression,
-                                environmentValue,
+                                environmentValue.Evaluate(),
                                 InstructionCount: 0,
                                 LoopIterationCount: 0,
                                 InvocationCount: finalValue.StackFrameCount,
@@ -1282,7 +1282,7 @@ public class PineVM : IPineVM
                         {
                             if (InvocationCachedResultOrOverride(
                                 expressionValue: continueParseAndEval.ExpressionValue,
-                                environmentValue: continueParseAndEval.EnvironmentValue) is { } fromCacheOrDelegate)
+                                environmentValue: PineValueInProcess.Create(continueParseAndEval.EnvironmentValue)) is { } fromCacheOrDelegate)
                             {
                                 currentFrame.PushInstructionResult(PineValueInProcess.Create(fromCacheOrDelegate));
 
@@ -1297,7 +1297,7 @@ public class PineVM : IPineVM
                                     "Failed to parse expression from value: " + contParseErr +
                                     " - expressionValue is " +
                                     (expressionValue is null ? "null" : DescribeValueForErrorMessage(expressionValue)) +
-                                    " - environmentValue is " + DescribeValueForErrorMessage(environmentValue);
+                                    " - environmentValue is " + DescribeValueForErrorMessage(environmentValue.Evaluate());
                             }
 
                             if (contParseResult.IsOkOrNull() is not { } contParseOk)
@@ -1310,7 +1310,7 @@ public class PineVM : IPineVM
                                 InvokePrecompiledOrBuildStackFrame(
                                     expressionValue: continueParseAndEval.ExpressionValue,
                                     expression: contParseOk,
-                                    environmentValue: continueParseAndEval.EnvironmentValue,
+                                    environmentValue: PineValueInProcess.Create(continueParseAndEval.EnvironmentValue),
                                     replaceCurrentFrame: replaceCurrentFrame);
                         }
 
@@ -1331,7 +1331,7 @@ public class PineVM : IPineVM
                                         BeginStackFrameCount: stackFrameCount),
                                     Specialization: specialization.Stepwise);
 
-                            pushStackFrame(
+                            PushStackFrame(
                                 newFrame,
                                 replaceCurrentFrame: false);
 
@@ -1349,11 +1349,13 @@ public class PineVM : IPineVM
                 {
                     if (_precompiledLeaves.TryGetValue(expressionValue, out var computeLeafDelegate))
                     {
-                        _reportEnterPrecompiledLeaf?.Invoke(expressionValue, environmentValue);
+                        var envValue = environmentValue.Evaluate();
 
-                        var valueComputedInLeaf = computeLeafDelegate(environmentValue);
+                        _reportEnterPrecompiledLeaf?.Invoke(expressionValue, envValue);
 
-                        _reportExitPrecompiledLeaf?.Invoke(expressionValue, environmentValue, valueComputedInLeaf);
+                        var valueComputedInLeaf = computeLeafDelegate(envValue);
+
+                        _reportExitPrecompiledLeaf?.Invoke(expressionValue, envValue, valueComputedInLeaf);
 
                         if (valueComputedInLeaf is { } computedValue)
                         {
@@ -1364,7 +1366,7 @@ public class PineVM : IPineVM
                     }
                 }
 
-                buildAndPushStackFrame
+                BuildAndPushStackFrame
                 (
                     expressionValue: expressionValue,
                     expression: expression,
@@ -1376,10 +1378,10 @@ public class PineVM : IPineVM
             }
         }
 
-        void buildAndPushStackFrame(
+        void BuildAndPushStackFrame(
             PineValue? expressionValue,
             Expression expression,
-            PineValue environmentValue,
+            PineValueInProcess environmentValue,
             bool replaceCurrentFrame)
         {
             var newFrameProfilingBaseline =
@@ -1399,10 +1401,10 @@ public class PineVM : IPineVM
                     environment: environmentValue,
                     profilingBaseline: newFrameProfilingBaseline);
 
-            pushStackFrame(newFrame, replaceCurrentFrame: replaceCurrentFrame);
+            PushStackFrame(newFrame, replaceCurrentFrame: replaceCurrentFrame);
         }
 
-        void pushStackFrame(
+        void PushStackFrame(
             StackFrame newFrame,
             bool replaceCurrentFrame)
         {
@@ -1418,7 +1420,7 @@ public class PineVM : IPineVM
             ++stackFrameCount;
         }
 
-        EvaluationReport? returnFromStackFrame(PineValue frameReturnValue)
+        EvaluationReport? ReturnFromStackFrame(PineValue frameReturnValue)
         {
             var currentFrame = stack.Peek();
 
@@ -1441,7 +1443,7 @@ public class PineVM : IPineVM
                     if (instructionCountSinceLastCacheEntry + parseAndEvalCountSinceLastCacheEntry * 100 > 700)
                     {
                         if (evalCache.TryAdd(
-                            new EvalCacheEntryKey(currentFrameExprValue, currentFrame.EnvironmentValue),
+                            new EvalCacheEntryKey(currentFrameExprValue, currentFrame.EnvironmentValue.Evaluate()),
                             frameReturnValue))
                         {
                             lastCacheEntryInstructionCount = instructionCount;
@@ -1454,7 +1456,7 @@ public class PineVM : IPineVM
                     new EvaluationReport(
                         ExpressionValue: currentFrameExprValue,
                         currentFrame.Expression,
-                        currentFrame.EnvironmentValue,
+                        currentFrame.EnvironmentValue.Evaluate(),
                         InstructionCount: frameTotalInstructionCount,
                         LoopIterationCount: currentFrame.LoopIterationCount,
                         InvocationCount: frameParseAndEvalCount,
@@ -1501,18 +1503,18 @@ public class PineVM : IPineVM
             return stackTrace;
         }
 
-        buildAndPushStackFrame(
+        BuildAndPushStackFrame(
             expressionValue: null,
             rootExpression,
-            rootEnvironment,
+            PineValueInProcess.Create(rootEnvironment),
             replaceCurrentFrame: false);
 
-        static ExecutionErrorReport buildErrorReport(StackFrame stackFrame)
+        static ExecutionErrorReport BuildErrorReport(StackFrame stackFrame)
         {
             return
                 new(
                     FrameExpression: stackFrame.Expression,
-                    EnvironmentValue: stackFrame.EnvironmentValue,
+                    EnvironmentValue: stackFrame.EnvironmentValue.Evaluate(),
                     Instructions: stackFrame.Instructions,
                     FrameInstructionPointer: stackFrame.InstructionPointer);
         }
@@ -1534,7 +1536,7 @@ public class PineVM : IPineVM
                     if (stepResult is ApplyStepwise.StepResult.Complete complete)
                     {
                         var returnOverall =
-                            returnFromStackFrame(complete.PineValue);
+                            ReturnFromStackFrame(complete.PineValue);
 
                         if (returnOverall is not null)
                         {
@@ -1549,7 +1551,7 @@ public class PineVM : IPineVM
                         if (InvokePrecompiledOrBuildStackFrame(
                             expressionValue: null,
                             expression: cont.Expression,
-                            environmentValue: cont.EnvironmentValue,
+                            environmentValue: PineValueInProcess.Create(cont.EnvironmentValue),
                             replaceCurrentFrame: false) is { } error)
                         {
                             return error;
@@ -1591,7 +1593,7 @@ public class PineVM : IPineVM
 
                     case StackInstructionKind.Push_Environment:
                         {
-                            currentFrame.PushInstructionResult(PineValueInProcess.Create(currentFrame.EnvironmentValue));
+                            currentFrame.PushInstructionResult(currentFrame.EnvironmentValue);
 
                             continue;
                         }
@@ -2289,7 +2291,7 @@ public class PineVM : IPineVM
                                 currentFrame.PopTopmostFromStack().Evaluate();
 
                             var returnOverall =
-                                returnFromStackFrame(frameReturnValue);
+                                ReturnFromStackFrame(frameReturnValue);
 
                             if (returnOverall is not null)
                             {
@@ -2354,9 +2356,25 @@ public class PineVM : IPineVM
 
                             var expressionValue = currentFrame.PopTopmostFromStack().Evaluate();
 
-                            var environmentValue = currentFrame.PopTopmostFromStack().Evaluate();
+                            var environmentValue = currentFrame.PopTopmostFromStack();
 
+                            var followingInstruction =
+                                currentFrame.Instructions.Instructions[currentFrame.InstructionPointer + 1];
+
+                            var replaceCurrentFrame =
+                                followingInstruction.Kind is StackInstructionKind.Return;
+
+                            var isTailCallRecursion =
+                                currentFrame.ExpressionValue == expressionValue &&
+                                replaceCurrentFrame;
+
+                            if (!isTailCallRecursion)
                             {
+                                /*
+                                 * 2025-10-15: Disabled looking into the cache for tail-call recursion,
+                                 * so that we do not force evaluation/materialization of in-process value representations.
+                                 * */
+
                                 if (InvocationCachedResultOrOverride(
                                     expressionValue: expressionValue,
                                     environmentValue: environmentValue) is { } fromCacheOrDelegate)
@@ -2374,7 +2392,7 @@ public class PineVM : IPineVM
                                 return
                                     "Failed to parse expression from value: " + parseErr +
                                     " - expressionValue is " + DescribeValueForErrorMessage(expressionValue) +
-                                    " - environmentValue is " + DescribeValueForErrorMessage(environmentValue);
+                                    " - environmentValue is " + DescribeValueForErrorMessage(environmentValue.Evaluate());
                             }
 
                             if (parseResult.IsOkOrNull() is not { } parseOk)
@@ -2382,12 +2400,6 @@ public class PineVM : IPineVM
                                 throw new NotImplementedException(
                                     "Unexpected result type: " + parseResult.GetType().FullName);
                             }
-
-                            var followingInstruction =
-                                currentFrame.Instructions.Instructions[currentFrame.InstructionPointer + 1];
-
-                            var replaceCurrentFrame =
-                                followingInstruction.Kind is StackInstructionKind.Return;
 
                             {
                                 if (InvokePrecompiledOrBuildStackFrame(
@@ -2787,7 +2799,7 @@ public class PineVM : IPineVM
             }
             catch (Exception e)
             {
-                var errorReport = buildErrorReport(currentFrame);
+                var errorReport = BuildErrorReport(currentFrame);
 
                 throw new InvalidIntermediateCodeException(
                     e.Message,
@@ -2923,10 +2935,9 @@ public class PineVM : IPineVM
                 environment,
                 stackPrevValues: stackPrevValues);
 
-
         if (InvocationCachedResultOrOverride(
             expressionValue: expressionValue,
-            environmentValue: environmentValue) is { } fromCacheOrDelegate)
+            environmentValue: PineValueInProcess.Create(environmentValue)) is { } fromCacheOrDelegate)
         {
             return fromCacheOrDelegate;
         }
@@ -2963,11 +2974,11 @@ public class PineVM : IPineVM
 
     private PineValue? InvocationCachedResultOrOverride(
         PineValue expressionValue,
-        PineValue environmentValue)
+        PineValueInProcess environmentValue)
     {
         if (EvalCache is { } evalCache)
         {
-            var cacheKey = new EvalCacheEntryKey(ExprValue: expressionValue, EnvValue: environmentValue);
+            var cacheKey = new EvalCacheEntryKey(ExprValue: expressionValue, EnvValue: environmentValue.Evaluate());
 
             if (evalCache.TryGetValue(cacheKey, out var fromCache))
             {
@@ -2979,11 +2990,12 @@ public class PineVM : IPineVM
         {
             var result =
             overrideValue(
-                (expr, envVal) => EvaluateExpressionDefaultLessStack(
+                (expr, envVal) =>
+                EvaluateExpressionDefaultLessStack(
                     expr,
                     envVal,
                     stackPrevValues: ReadOnlyMemory<PineValue>.Empty),
-                environmentValue);
+                environmentValue.Evaluate());
 
             return
                 result
