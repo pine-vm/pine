@@ -159,6 +159,7 @@ public record BundledPineToDotnet(
             new DeclQualifiedName(["Dict"], "remove"),
 
             new DeclQualifiedName(["Json","Decode"], "parseJsonStringToValue"),
+            new DeclQualifiedName(["Json","Encode"], "encode"),
 
             new DeclQualifiedName(["Bitwise"], "and"),
             new DeclQualifiedName(["Bitwise"], "complement"),
