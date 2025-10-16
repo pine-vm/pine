@@ -1709,7 +1709,7 @@ public class PineVM : IPineVM
                             var fromIndexValue =
                                 prevValue.GetElementAt(index);
 
-                            currentFrame.PushInstructionResult(PineValueInProcess.Create(fromIndexValue));
+                            currentFrame.PushInstructionResult(fromIndexValue);
 
                             continue;
                         }
@@ -1720,7 +1720,7 @@ public class PineVM : IPineVM
 
                             var prevValue = currentFrame.PopTopmostFromStack();
 
-                            PineValue resultValue = PineValue.EmptyList;
+                            PineValueInProcess resultValue = PineValueInProcess.EmptyList;
 
                             if (indexValue.AsInteger() is { } skipCount)
                             {
@@ -1733,7 +1733,7 @@ public class PineVM : IPineVM
                                     prevValue.GetElementAt((int)skipCount);
                             }
 
-                            currentFrame.PushInstructionResult(PineValueInProcess.Create(resultValue));
+                            currentFrame.PushInstructionResult(resultValue);
 
                             continue;
                         }
@@ -1744,7 +1744,7 @@ public class PineVM : IPineVM
 
                             var headValue = prevValue.GetElementAt(0);
 
-                            currentFrame.PushInstructionResult(PineValueInProcess.Create(headValue));
+                            currentFrame.PushInstructionResult(headValue);
 
                             continue;
                         }
@@ -1847,11 +1847,11 @@ public class PineVM : IPineVM
                                 ??
                                 throw new Exception("Invalid operation form: Missing take count");
 
-                            var items = new PineValue[itemsCount];
+                            var items = new PineValueInProcess[itemsCount];
 
                             for (var i = 0; i < itemsCount; ++i)
                             {
-                                items[itemsCount - i - 1] = currentFrame.PopTopmostFromStack().Evaluate();
+                                items[itemsCount - i - 1] = currentFrame.PopTopmostFromStack();
                             }
 
                             currentFrame.PushInstructionResult(
@@ -1884,7 +1884,7 @@ public class PineVM : IPineVM
                             {
                                 resultValue =
                                     PineValueInProcess.ConcatBinary(
-                                        PineValueInProcess.CreateList([left.Evaluate()]), right);
+                                        PineValueInProcess.CreateList([left]), right);
                             }
 
                             currentFrame.PushInstructionResult(resultValue);

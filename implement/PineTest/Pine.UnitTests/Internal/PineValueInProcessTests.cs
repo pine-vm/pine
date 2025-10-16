@@ -25,18 +25,18 @@ public class PineValueInProcessTests
     [Fact]
     public void CreateList_initializes_without_immediate_evaluation()
     {
-        var items = new List<PineValue>
+        var items = new List<PineValueInProcess>
         {
-            PineValue.Blob([1]),
-            PineValue.Blob([2]),
-            PineValue.Blob([3])
+            PineValueInProcess.Create(PineValue.Blob([1])),
+            PineValueInProcess.Create(PineValue.Blob([2])),
+            PineValueInProcess.Create(PineValue.Blob([3]))
         };
 
         var inProcess = PineValueInProcess.CreateList(items);
 
         var result = inProcess.Evaluate();
 
-        var expected = PineValue.List([.. items]);
+        var expected = PineValue.List([PineValue.Blob([1]), PineValue.Blob([2]), PineValue.Blob([3])]);
 
         result.Should().Be(expected);
     }
@@ -44,7 +44,7 @@ public class PineValueInProcessTests
     [Fact]
     public void CreateList_with_empty_list()
     {
-        var items = new List<PineValue>();
+        var items = new List<PineValueInProcess>();
         var inProcess = PineValueInProcess.CreateList(items);
 
         var result = inProcess.Evaluate();
@@ -55,7 +55,7 @@ public class PineValueInProcessTests
     [Fact]
     public void Evaluate_caches_result()
     {
-        var items = new List<PineValue> { PineValue.Blob([1]) };
+        var items = new List<PineValueInProcess> { PineValueInProcess.Create(PineValue.Blob([1])) };
         var inProcess = PineValueInProcess.CreateList(items);
 
         var result1 = inProcess.Evaluate();
@@ -120,7 +120,7 @@ public class PineValueInProcessTests
     [Fact]
     public void IsList_returns_true_for_CreateList()
     {
-        var items = new List<PineValue> { PineValue.Blob([1]) };
+        var items = new List<PineValueInProcess> { PineValueInProcess.Create(PineValue.Blob([1])) };
         var inProcess = PineValueInProcess.CreateList(items);
 
         VerifyConsistencyOfDerivedProperties(inProcess);
@@ -147,7 +147,7 @@ public class PineValueInProcessTests
     [Fact]
     public void IsBlob_returns_false_for_CreateList()
     {
-        var items = new List<PineValue> { PineValue.Blob([1]) };
+        var items = new List<PineValueInProcess> { PineValueInProcess.Create(PineValue.Blob([1])) };
         var inProcess = PineValueInProcess.CreateList(items);
 
         VerifyConsistencyOfDerivedProperties(inProcess);
@@ -169,11 +169,11 @@ public class PineValueInProcessTests
     [Fact]
     public void GetLength_returns_correct_length_for_list()
     {
-        var items = new List<PineValue>
+        var items = new List<PineValueInProcess>
         {
-            PineValue.Blob([1]),
-            PineValue.Blob([2]),
-            PineValue.Blob([3])
+            PineValueInProcess.Create(PineValue.Blob([1])),
+            PineValueInProcess.Create(PineValue.Blob([2])),
+            PineValueInProcess.Create(PineValue.Blob([3]))
         };
         var inProcess = PineValueInProcess.CreateList(items);
 
@@ -495,10 +495,10 @@ public class PineValueInProcessTests
     [Fact]
     public void Equal_with_same_list_items()
     {
-        var items = new List<PineValue>
+        var items = new List<PineValueInProcess>
         {
-            PineValue.Blob([1]),
-            PineValue.Blob([2])
+            PineValueInProcess.Create(PineValue.Blob([1])),
+            PineValueInProcess.Create(PineValue.Blob([2]))
         };
 
         var value1 = PineValueInProcess.CreateList(items);
@@ -512,8 +512,8 @@ public class PineValueInProcessTests
     [Fact]
     public void Equal_with_different_list_items()
     {
-        var items1 = new List<PineValue> { PineValue.Blob([1]) };
-        var items2 = new List<PineValue> { PineValue.Blob([2]) };
+        var items1 = new List<PineValueInProcess> { PineValueInProcess.Create(PineValue.Blob([1])) };
+        var items2 = new List<PineValueInProcess> { PineValueInProcess.Create(PineValue.Blob([2])) };
 
         var value1 = PineValueInProcess.CreateList(items1);
         var value2 = PineValueInProcess.CreateList(items2);
@@ -526,10 +526,14 @@ public class PineValueInProcessTests
     [Fact]
     public void Equal_with_unevaluated_and_evaluated_equivalent_values()
     {
-        var items = new List<PineValue> { PineValue.Blob([1]), PineValue.Blob([2]) };
+        var items = new List<PineValueInProcess>
+        {
+            PineValueInProcess.Create(PineValue.Blob([1])),
+            PineValueInProcess.Create(PineValue.Blob([2]))
+        };
 
         var unevaluated = PineValueInProcess.CreateList(items);
-        var evaluated = PineValueInProcess.Create(PineValue.List([.. items]));
+        var evaluated = PineValueInProcess.Create(PineValue.List([PineValue.Blob([1]), PineValue.Blob([2])]));
 
         var result = PineValueInProcess.AreEqual(unevaluated, evaluated);
 
@@ -586,7 +590,7 @@ public class PineValueInProcessTests
     {
         var items =
             Enumerable.Range(0, 1000)
-            .Select(i => PineValue.Blob([(byte)(i % 256)]))
+            .Select(i => PineValueInProcess.Create(PineValue.Blob([(byte)(i % 256)])))
             .ToList();
 
         var inProcess = PineValueInProcess.CreateList(items);
@@ -600,7 +604,8 @@ public class PineValueInProcessTests
         VerifyConsistencyOfDerivedProperties(taken);
 
         var evaluated = taken.Evaluate();
-        var originalValue = PineValue.List([.. items]);
+        var originalValue = PineValue.List(
+            Enumerable.Range(0, 1000).Select(i => PineValue.Blob([(byte)(i % 256)])).ToArray());
 
         var afterSkip =
             KernelFunction.skip(
@@ -747,13 +752,13 @@ public class PineValueInProcessTests
     [Fact]
     public void Skip_and_take_with_CreateList()
     {
-        var items = new List<PineValue>
+        var items = new List<PineValueInProcess>
         {
-            PineValue.Blob([1]),
-            PineValue.Blob([2]),
-            PineValue.Blob([3]),
-            PineValue.Blob([4]),
-            PineValue.Blob([5])
+            PineValueInProcess.Create(PineValue.Blob([1])),
+            PineValueInProcess.Create(PineValue.Blob([2])),
+            PineValueInProcess.Create(PineValue.Blob([3])),
+            PineValueInProcess.Create(PineValue.Blob([4])),
+            PineValueInProcess.Create(PineValue.Blob([5]))
         };
 
         var inProcess = PineValueInProcess.CreateList(items);
@@ -765,7 +770,13 @@ public class PineValueInProcessTests
         VerifyConsistencyOfDerivedProperties(result);
 
         var evaluated = result.Evaluate();
-        var originalValue = PineValue.List([.. items]);
+        var originalValue = PineValue.List([
+            PineValue.Blob([1]),
+            PineValue.Blob([2]),
+            PineValue.Blob([3]),
+            PineValue.Blob([4]),
+            PineValue.Blob([5])
+        ]);
 
         var afterSkip = KernelFunction.skip(
             PineValue.List([IntegerEncoding.EncodeSignedInteger(1), originalValue]));
@@ -806,7 +817,7 @@ public class PineValueInProcessTests
     [Fact]
     public void AsInteger_works_without_evaluation()
     {
-        var items = new List<PineValue> { IntegerEncoding.EncodeSignedInteger(42) };
+        var items = new List<PineValueInProcess> { PineValueInProcess.Create(IntegerEncoding.EncodeSignedInteger(42)) };
         var inProcess = PineValueInProcess.CreateList(items);
 
         // This should not be an integer
@@ -819,14 +830,14 @@ public class PineValueInProcessTests
     public void Equal_handles_different_internal_representations()
     {
         // Two ways to create the same value
-        var items = new List<PineValue>
+        var items = new List<PineValueInProcess>
         {
-            PineValue.Blob([1]),
-            PineValue.Blob([2])
+            PineValueInProcess.Create(PineValue.Blob([1])),
+            PineValueInProcess.Create(PineValue.Blob([2]))
         };
 
         var fromList = PineValueInProcess.CreateList(items);
-        var fromEvaluated = PineValueInProcess.Create(PineValue.List([.. items]));
+        var fromEvaluated = PineValueInProcess.Create(PineValue.List([PineValue.Blob([1]), PineValue.Blob([2])]));
 
         var result = PineValueInProcess.AreEqual(fromList, fromEvaluated);
 
@@ -903,9 +914,9 @@ public class PineValueInProcessTests
         var element2 = inProcess.GetElementAt(2);
         var element4 = inProcess.GetElementAt(4);
 
-        element0.Should().Be(PineValue.Blob([10]));
-        element2.Should().Be(PineValue.Blob([30]));
-        element4.Should().Be(PineValue.Blob([50]));
+        element0.Evaluate().Should().Be(PineValue.Blob([10]));
+        element2.Evaluate().Should().Be(PineValue.Blob([30]));
+        element4.Evaluate().Should().Be(PineValue.Blob([50]));
     }
 
     [Fact]
@@ -918,21 +929,24 @@ public class PineValueInProcessTests
         var element2 = inProcess.GetElementAt(2);
         var element4 = inProcess.GetElementAt(4);
 
-        element0.Should().Be(PineValue.Blob([10]));
-        element2.Should().Be(PineValue.Blob([30]));
-        element4.Should().Be(PineValue.Blob([50]));
+        element0.Evaluate().Should().Be(PineValue.Blob([10]));
+        element2.Evaluate().Should().Be(PineValue.Blob([30]));
+        element4.Evaluate().Should().Be(PineValue.Blob([50]));
     }
 
     [Fact]
     public void GetElementAt_with_skip_operation()
     {
-        var originalValue = PineValue.List([
-            PineValue.Blob([10]),
-            PineValue.Blob([20]),
-            PineValue.Blob([30]),
-            PineValue.Blob([40]),
-            PineValue.Blob([50])
-        ]);
+        var originalValue =
+            PineValue.List(
+                [
+                PineValue.Blob([10]),
+                PineValue.Blob([20]),
+                PineValue.Blob([30]),
+                PineValue.Blob([40]),
+                PineValue.Blob([50])
+                ]);
+
         var inProcess = PineValueInProcess.Create(originalValue);
         var skipped = PineValueInProcess.Skip(2, inProcess);
 
@@ -941,21 +955,24 @@ public class PineValueInProcessTests
         var element1 = skipped.GetElementAt(1);
         var element2 = skipped.GetElementAt(2);
 
-        element0.Should().Be(PineValue.Blob([30]));
-        element1.Should().Be(PineValue.Blob([40]));
-        element2.Should().Be(PineValue.Blob([50]));
+        element0.Evaluate().Should().Be(PineValue.Blob([30]));
+        element1.Evaluate().Should().Be(PineValue.Blob([40]));
+        element2.Evaluate().Should().Be(PineValue.Blob([50]));
     }
 
     [Fact]
     public void GetElementAt_with_take_operation()
     {
-        var originalValue = PineValue.List([
-            PineValue.Blob([10]),
-            PineValue.Blob([20]),
-            PineValue.Blob([30]),
-            PineValue.Blob([40]),
-            PineValue.Blob([50])
-        ]);
+        var originalValue =
+            PineValue.List(
+                [
+                PineValue.Blob([10]),
+                PineValue.Blob([20]),
+                PineValue.Blob([30]),
+                PineValue.Blob([40]),
+                PineValue.Blob([50])
+                ]);
+
         var inProcess = PineValueInProcess.Create(originalValue);
         var taken = PineValueInProcess.Take(3, inProcess);
 
@@ -964,22 +981,25 @@ public class PineValueInProcessTests
         var element1 = taken.GetElementAt(1);
         var element2 = taken.GetElementAt(2);
 
-        element0.Should().Be(PineValue.Blob([10]));
-        element1.Should().Be(PineValue.Blob([20]));
-        element2.Should().Be(PineValue.Blob([30]));
+        element0.Evaluate().Should().Be(PineValue.Blob([10]));
+        element1.Evaluate().Should().Be(PineValue.Blob([20]));
+        element2.Evaluate().Should().Be(PineValue.Blob([30]));
     }
 
     [Fact]
     public void GetElementAt_with_skip_and_take()
     {
-        var originalValue = PineValue.List([
-            PineValue.Blob([10]),
-            PineValue.Blob([20]),
-            PineValue.Blob([30]),
-            PineValue.Blob([40]),
-            PineValue.Blob([50]),
-            PineValue.Blob([60])
-        ]);
+        var originalValue =
+            PineValue.List(
+                [
+                PineValue.Blob([10]),
+                PineValue.Blob([20]),
+                PineValue.Blob([30]),
+                PineValue.Blob([40]),
+                PineValue.Blob([50]),
+                PineValue.Blob([60])
+                ]);
+
         var inProcess = PineValueInProcess.Create(originalValue);
         var skipped = PineValueInProcess.Skip(1, inProcess);
         var taken = PineValueInProcess.Take(3, skipped);
@@ -989,17 +1009,19 @@ public class PineValueInProcessTests
         var element1 = taken.GetElementAt(1);
         var element2 = taken.GetElementAt(2);
 
-        element0.Should().Be(PineValue.Blob([20]));
-        element1.Should().Be(PineValue.Blob([30]));
-        element2.Should().Be(PineValue.Blob([40]));
+        element0.Evaluate().Should().Be(PineValue.Blob([20]));
+        element1.Evaluate().Should().Be(PineValue.Blob([30]));
+        element2.Evaluate().Should().Be(PineValue.Blob([40]));
     }
 
     [Fact]
     public void GetElementAt_with_multiple_chained_skips()
     {
-        var originalValue = PineValue.List(
-            [.. Enumerable.Range(0, 20).Select(i => PineValue.Blob([(byte)i]))
-            ]);
+        var originalValue =
+            PineValue.List(
+                [.. Enumerable.Range(0, 20).Select(i => PineValue.Blob([(byte)i]))
+                ]);
+
         var inProcess = PineValueInProcess.Create(originalValue);
         var skipped = PineValueInProcess.Skip(3, inProcess);
         skipped = PineValueInProcess.Skip(2, skipped);
@@ -1010,23 +1032,26 @@ public class PineValueInProcessTests
         var element1 = skipped.GetElementAt(1);
         var element2 = skipped.GetElementAt(2);
 
-        element0.Should().Be(PineValue.Blob([6]));
-        element1.Should().Be(PineValue.Blob([7]));
-        element2.Should().Be(PineValue.Blob([8]));
+        element0.Evaluate().Should().Be(PineValue.Blob([6]));
+        element1.Evaluate().Should().Be(PineValue.Blob([7]));
+        element2.Evaluate().Should().Be(PineValue.Blob([8]));
     }
 
     [Fact]
     public void GetElementAt_out_of_bounds_returns_empty()
     {
-        var originalValue = PineValue.List([
-            PineValue.Blob([10]),
-            PineValue.Blob([20])
-        ]);
+        var originalValue =
+            PineValue.List(
+                [
+                PineValue.Blob([10]),
+                PineValue.Blob([20])
+                ]);
+
         var inProcess = PineValueInProcess.Create(originalValue);
 
         var element10 = inProcess.GetElementAt(10);
 
-        element10.Should().Be(PineValue.EmptyList);
+        PineValueInProcess.AreEqual(element10, PineValue.EmptyList).Should().BeTrue();
     }
 
     [Fact]
@@ -1037,7 +1062,7 @@ public class PineValueInProcessTests
 
         var element10 = inProcess.GetElementAt(10);
 
-        element10.Should().Be(PineValue.EmptyBlob);
+        element10.Evaluate().Should().Be(PineValue.EmptyBlob);
     }
 
     [Fact]
@@ -1052,7 +1077,7 @@ public class PineValueInProcessTests
 
         var element = inProcess.GetElementAt(-5);
 
-        element.Should().Be(PineValue.Blob([10]));
+        element.Evaluate().Should().Be(PineValue.Blob([10]));
     }
 
     [Fact]
@@ -1069,8 +1094,11 @@ public class PineValueInProcessTests
     [Fact]
     public void AreEqual_with_PineValue_same_list_returns_true()
     {
-        var pineValue = PineValue.List([PineValue.Blob([1]), PineValue.Blob([2])]);
-        var inProcess = PineValueInProcess.Create(pineValue);
+        var pineValue =
+            PineValue.List([PineValue.Blob([1]), PineValue.Blob([2])]);
+
+        var inProcess =
+            PineValueInProcess.Create(pineValue);
 
         var result = PineValueInProcess.AreEqual(inProcess, pineValue);
 
@@ -1080,7 +1108,10 @@ public class PineValueInProcessTests
     [Fact]
     public void AreEqual_with_PineValue_different_blobs_returns_false()
     {
-        var inProcess = PineValueInProcess.Create(PineValue.Blob([1, 2, 3]));
+        var inProcess =
+            PineValueInProcess.Create(
+                PineValue.Blob([1, 2, 3]));
+
         var pineValue = PineValue.Blob([4, 5, 6]);
 
         var result = PineValueInProcess.AreEqual(inProcess, pineValue);
@@ -1091,8 +1122,10 @@ public class PineValueInProcessTests
     [Fact]
     public void AreEqual_with_PineValue_list_vs_blob_returns_false()
     {
-        var inProcess = PineValueInProcess.Create(
-            PineValue.List([PineValue.Blob([1])]));
+        var inProcess =
+            PineValueInProcess.Create(
+                PineValue.List([PineValue.Blob([1])]));
+
         var pineValue = PineValue.Blob([1]);
 
         var result = PineValueInProcess.AreEqual(inProcess, pineValue);
@@ -1103,9 +1136,13 @@ public class PineValueInProcessTests
     [Fact]
     public void AreEqual_with_PineValue_unevaluated_list_matches()
     {
-        var items = new List<PineValue> { PineValue.Blob([1]), PineValue.Blob([2]) };
+        var items = new List<PineValueInProcess>
+        {
+            PineValueInProcess.Create(PineValue.Blob([1])),
+            PineValueInProcess.Create(PineValue.Blob([2]))
+        };
         var inProcess = PineValueInProcess.CreateList(items);
-        var pineValue = PineValue.List([.. items]);
+        var pineValue = PineValue.List([PineValue.Blob([1]), PineValue.Blob([2])]);
 
         var result = PineValueInProcess.AreEqual(inProcess, pineValue);
 
@@ -1115,7 +1152,7 @@ public class PineValueInProcessTests
     [Fact]
     public void AreEqual_with_PineValue_unevaluated_list_different_items()
     {
-        var items1 = new List<PineValue> { PineValue.Blob([1]) };
+        var items1 = new List<PineValueInProcess> { PineValueInProcess.Create(PineValue.Blob([1])) };
         var inProcess = PineValueInProcess.CreateList(items1);
         var pineValue = PineValue.List([PineValue.Blob([2])]);
 
@@ -1127,7 +1164,12 @@ public class PineValueInProcessTests
     [Fact]
     public void AreEqual_with_PineValue_unevaluated_list_different_length()
     {
-        var items1 = new List<PineValue> { PineValue.Blob([1]), PineValue.Blob([2]) };
+        var items1 = new List<PineValueInProcess>
+        {
+            PineValueInProcess.Create(PineValue.Blob([1])),
+            PineValueInProcess.Create(PineValue.Blob([2]))
+        };
+
         var inProcess = PineValueInProcess.CreateList(items1);
         var pineValue = PineValue.List([PineValue.Blob([1])]);
 
@@ -1163,6 +1205,143 @@ public class PineValueInProcessTests
         System.Func<bool> action = () => instanceA == instanceB;
 
         action.Should().Throw<System.InvalidOperationException>();
+    }
+
+    [Fact]
+    public void Nested_list_construction_without_evaluating_parent()
+    {
+        // Test that we can build nested lists without computing hash codes for intermediate values
+        var innerItem1 = PineValueInProcess.Create(PineValue.Blob([1, 2, 3]));
+        var innerItem2 = PineValueInProcess.Create(PineValue.Blob([4, 5, 6]));
+
+        var innerList = PineValueInProcess.CreateList([innerItem1, innerItem2]);
+
+        // Create a list containing the inner list without evaluating it
+        var outerList = PineValueInProcess.CreateList([innerList]);
+
+        // Verify that the inner list has not been evaluated yet
+        innerList.EvaluatedOrNull.Should().BeNull("Inner list should not be evaluated yet");
+
+        // Now evaluate the outer list
+        var evaluated = outerList.Evaluate();
+
+        // Verify the structure is correct
+        var expected =
+            PineValue.List(
+                [
+                PineValue.List(
+                    [
+                    PineValue.Blob([1, 2, 3]),
+                    PineValue.Blob([4, 5, 6])
+                    ])
+                ]);
+
+        evaluated.Should().Be(expected);
+    }
+
+    [Fact]
+    public void Deeply_nested_list_construction()
+    {
+        // Test multiple levels of nesting
+        var leaf1 = PineValueInProcess.Create(PineValue.Blob([1]));
+        var leaf2 = PineValueInProcess.Create(PineValue.Blob([2]));
+        var leaf3 = PineValueInProcess.Create(PineValue.Blob([3]));
+
+        var level1a = PineValueInProcess.CreateList([leaf1, leaf2]);
+        var level1b = PineValueInProcess.CreateList([leaf3]);
+
+        var level2 = PineValueInProcess.CreateList([level1a, level1b]);
+
+        var level3 = PineValueInProcess.CreateList([level2]);
+
+        // None of the intermediate lists should be evaluated
+        level1a.EvaluatedOrNull.Should().BeNull();
+        level1b.EvaluatedOrNull.Should().BeNull();
+        level2.EvaluatedOrNull.Should().BeNull();
+
+        // Evaluate only the top-level list
+        var evaluated = level3.Evaluate();
+
+        var expected =
+            PineValue.List(
+                [
+                PineValue.List(
+                    [
+                    PineValue.List([PineValue.Blob([1]), PineValue.Blob([2])]),
+                    PineValue.List([PineValue.Blob([3])])
+                    ])
+                ]);
+
+        evaluated.Should().Be(expected);
+    }
+
+    [Fact]
+    public void Nested_list_with_operations()
+    {
+        // Test that operations like Skip/Take work with nested lists
+        var innerItem1 = PineValueInProcess.Create(PineValue.Blob([1]));
+        var innerItem2 = PineValueInProcess.Create(PineValue.Blob([2]));
+        var innerItem3 = PineValueInProcess.Create(PineValue.Blob([3]));
+
+        var innerList = PineValueInProcess.CreateList([innerItem1, innerItem2, innerItem3]);
+
+        var outerList = PineValueInProcess.CreateList([innerList]);
+
+        // Get the first element (which is the inner list)
+        var firstElement = outerList.GetElementAt(0);
+
+        // The first element should be the evaluated inner list
+        var expectedInner =
+            PineValue.List(
+                [
+                PineValue.Blob([1]),
+                PineValue.Blob([2]),
+                PineValue.Blob([3])
+                ]);
+
+        firstElement.Evaluate().Should().Be(expectedInner);
+    }
+
+    [Fact]
+    public void GetElementAt_returns_PineValueInProcess_without_forcing_evaluation()
+    {
+        // Test that GetElementAt returns PineValueInProcess without evaluating the element
+        var innerItem1 = PineValueInProcess.Create(PineValue.Blob([1, 2, 3]));
+        var innerItem2 = PineValueInProcess.Create(PineValue.Blob([4, 5, 6]));
+
+        var list = PineValueInProcess.CreateList([innerItem1, innerItem2]);
+
+        // Get the first element - should not trigger evaluation
+        var firstElement = list.GetElementAt(0);
+
+        // Verify the element hasn't been evaluated yet
+        firstElement.EvaluatedOrNull.Should().NotBeNull("Item was already evaluated when created");
+
+        // But when we do evaluate it, we get the right value
+        firstElement.Evaluate().Should().Be(PineValue.Blob([1, 2, 3]));
+    }
+
+    [Fact]
+    public void GetElementAt_on_nested_lists_defers_evaluation()
+    {
+        // Test that getting an element from a nested list doesn't force evaluation of the inner list
+        var innerItem1 = PineValueInProcess.Create(PineValue.Blob([1]));
+        var innerItem2 = PineValueInProcess.Create(PineValue.Blob([2]));
+
+        var innerList = PineValueInProcess.CreateList([innerItem1, innerItem2]);
+
+        var outerList = PineValueInProcess.CreateList([innerList]);
+
+        // Get the first element (the inner list) - should not trigger evaluation of the inner list
+        var retrievedInnerList = outerList.GetElementAt(0);
+
+        // The inner list should not have been evaluated yet
+        retrievedInnerList.EvaluatedOrNull.Should().BeNull("Inner list should not be evaluated until needed");
+
+        // Verify the structure is correct when we do evaluate
+        var evaluated = retrievedInnerList.Evaluate();
+        var expected = PineValue.List([PineValue.Blob([1]), PineValue.Blob([2])]);
+        evaluated.Should().Be(expected);
     }
 
     private static void VerifyConsistencyOfDerivedProperties(PineValueInProcess inProcess)

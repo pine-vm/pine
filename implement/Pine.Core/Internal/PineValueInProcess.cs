@@ -2,6 +2,7 @@ using Pine.Core.DotNet.Builtins;
 using Pine.Core.PineVM;
 using Pine.Core.PopularEncodings;
 using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 
 namespace Pine.Core.Internal;
@@ -30,12 +31,21 @@ public class PineValueInProcess
     /// <summary>
     /// Track a list without involving the general <see cref="PineValue.ListValue"/> system.
     /// </summary>
-    private IReadOnlyList<PineValue>? _list;
+    private IReadOnlyList<PineValueInProcess>? _list;
 
+    /// <summary>
+    /// The value of the empty list, <see cref="PineValue.EmptyList"/>.
+    /// </summary>
     public static readonly PineValueInProcess EmptyList = Create(PineValue.EmptyList);
 
+    /// <summary>
+    /// The kernel boolean true value, <see cref="PineKernelValues.TrueValue"/>.
+    /// </summary>
     public static readonly PineValueInProcess KernelTrueValue = Create(PineKernelValues.TrueValue);
 
+    /// <summary>
+    /// The kernel boolean false value, <see cref="PineKernelValues.FalseValue"/>.
+    /// </summary>
     public static readonly PineValueInProcess KernelFalseValue = Create(PineKernelValues.FalseValue);
 
 
@@ -81,7 +91,7 @@ public class PineValueInProcess
     /// This avoids computing aggregate derivations (hash codes, counts, etc.) until they are actually needed via <see cref="Evaluate"/>.
     /// </remarks>
     /// <returns>A new <see cref="PineValueInProcess"/> representing the list.</returns>
-    public static PineValueInProcess CreateList(IReadOnlyList<PineValue> list)
+    public static PineValueInProcess CreateList(IReadOnlyList<PineValueInProcess> list)
     {
         return new PineValueInProcess
         {
@@ -150,7 +160,7 @@ public class PineValueInProcess
 
         if (_list is not null)
         {
-            _evaluated = PineValue.List([.. _list]);
+            _evaluated = PineValue.List([.. _list.Select(item => item.Evaluate())]);
             return _evaluated;
         }
 
@@ -396,27 +406,28 @@ public class PineValueInProcess
     /// </summary>
     /// <param name="index">The zero-based index of the element to retrieve.</param>
     /// <returns>
-    /// For list values: the element at the specified index, or <see cref="PineValue.EmptyList"/> if index is out of bounds.
-    /// For blob values: a single-byte blob containing the byte at the specified index, or <see cref="PineValue.EmptyBlob"/> if index is out of bounds.
+    /// For list values: the element at the specified index, or <see cref="EmptyList"/> if index is out of bounds.
+    /// For blob values: a single-byte blob containing the byte at the specified index, or <see cref="PineValueInProcess"/> wrapping <see cref="PineValue.EmptyBlob"/> if index is out of bounds.
     /// </returns>
     /// <remarks>
-    /// This method is optimized to avoid fully evaluating the value when possible, especially for slice builders.
+    /// This method is optimized to avoid fully evaluating the value when possible, especially for lists and slice builders.
+    /// Returns a <see cref="PineValueInProcess"/> to defer evaluation until needed.
     /// </remarks>
-    public PineValue GetElementAt(int index)
+    public PineValueInProcess GetElementAt(int index)
     {
         index =
             index < 0 ? 0 : index;
 
         if (_sliceBuilder is { } sliceBuilder)
         {
-            return sliceBuilder.GetElementAt(index);
+            return Create(sliceBuilder.GetElementAt(index));
         }
 
         if (_list is { } list)
         {
             if (list.Count <= index)
             {
-                return PineValue.EmptyList;
+                return EmptyList;
             }
 
             return list[index];
@@ -428,19 +439,19 @@ public class PineValueInProcess
         {
             if (listValue.Items.Length <= index)
             {
-                return PineValue.EmptyList;
+                return EmptyList;
             }
 
-            return listValue.Items.Span[index];
+            return Create(listValue.Items.Span[index]);
         }
 
         if (evaluated is PineValue.BlobValue blobValue)
         {
             if (blobValue.Bytes.Length <= index)
             {
-                return PineValue.EmptyBlob;
+                return Create(PineValue.EmptyBlob);
             }
-            return PineValue.BlobSingleByte(blobValue.Bytes.Span[index]);
+            return Create(PineValue.BlobSingleByte(blobValue.Bytes.Span[index]));
         }
 
         throw new System.InvalidOperationException(
@@ -573,6 +584,29 @@ public class PineValueInProcess
         return eval.Equals(pineValue);
     }
 
+    private static bool AreListItemsEqual(IReadOnlyList<PineValueInProcess> left, IReadOnlyList<PineValueInProcess> right)
+    {
+        if (ReferenceEquals(left, right))
+        {
+            return true;
+        }
+
+        if (left.Count != right.Count)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < left.Count; i++)
+        {
+            if (!AreEqual(left[i], right[i]))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     private static bool AreListItemsEqual(IReadOnlyList<PineValue> left, IReadOnlyList<PineValue> right)
     {
         if (ReferenceEquals(left, right))
@@ -596,7 +630,7 @@ public class PineValueInProcess
         return true;
     }
 
-    private static bool AreListItemsEqual(IReadOnlyList<PineValue> left, PineValue.ListValue right)
+    private static bool AreListItemsEqual(IReadOnlyList<PineValueInProcess> left, PineValue.ListValue right)
     {
         var rightSpan = right.Items.Span;
 
@@ -607,7 +641,7 @@ public class PineValueInProcess
 
         for (var i = 0; i < rightSpan.Length; i++)
         {
-            if (!left[i].Equals(rightSpan[i]))
+            if (!AreEqual(left[i], rightSpan[i]))
             {
                 return false;
             }
@@ -627,7 +661,7 @@ public class PineValueInProcess
 
         var first = root.GetElementAt(path[0]);
 
-        return PineValueExtension.ValueFromPathOrNull(first, path[1..]);
+        return PineValueExtension.ValueFromPathOrNull(first.Evaluate(), path[1..]);
     }
 
     /// <summary>
