@@ -11,7 +11,7 @@ namespace Pine.Core;
 
 
 /// <summary>
-/// Pine kernel functions: the minimal primitive operations of the Pine expression language.
+/// Pine kernel functions: the primitive operations of the Pine expression language.
 /// Pine’s value model has only two forms: blobs (byte sequences) and lists (heterogeneous sequences).
 /// All primitives are invoked by name with a single <see cref="PineValue"/> argument that may be a list
 /// encoding multiple logical parameters (e.g. <c>[ count, sequence ]</c> for <c>skip</c>/<c>take</c>).
@@ -165,20 +165,23 @@ public static class KernelFunction
     /// </summary>
     /// <param name="value">The input value, which can be a list or a blob.</param>
     /// <returns>A PineValue representing the length as a signed integer.</returns>
-    public static PineValue length(PineValue value) =>
-        IntegerEncoding.EncodeSignedInteger(
-            value switch
-            {
-                PineValue.BlobValue blobValue =>
-                blobValue.Bytes.Length,
+    public static PineValue length(PineValue value)
+    {
+        return
+            IntegerEncoding.EncodeSignedInteger(
+                value switch
+                {
+                    PineValue.ListValue listValue =>
+                    listValue.Items.Length,
 
-                PineValue.ListValue listValue =>
-                listValue.Items.Length,
+                    PineValue.BlobValue blobValue =>
+                    blobValue.Bytes.Length,
 
-                _ =>
-                throw new NotImplementedException(
-                    "Unexpected value type: " + value.GetType().FullName)
-            });
+                    _ =>
+                    throw new NotImplementedException(
+                        "Unexpected value type: " + value.GetType().FullName)
+                });
+    }
 
     /// <summary>
     /// For a list or blob, returns a new sequence with the first 'count' elements/bytes removed.
@@ -186,29 +189,25 @@ public static class KernelFunction
     /// </summary>
     /// <param name="value">A list containing the count and the sequence (list or blob).</param>
     /// <returns>A new sequence with the specified number of elements/bytes removed from the beginning, or an empty list on error.</returns>
-    public static PineValue skip(PineValue value) =>
-        value switch
+    public static PineValue skip(PineValue value)
+    {
+        if (value is not PineValue.ListValue listValue)
         {
-            PineValue.ListValue listValue =>
-            listValue.Items.Length is 2
-            ?
-            SignedIntegerFromValueRelaxed(listValue.Items.Span[0]) switch
-            {
-                { } count =>
-                Internal.KernelFunctionSpecialized.skip(count, listValue.Items.Span[1]),
+            return PineValue.EmptyList;
+        }
 
-                _ =>
-                PineValue.EmptyList
-            }
-            :
-            PineValue.EmptyList,
+        if (listValue.Items.Length is not 2)
+        {
+            return PineValue.EmptyList;
+        }
 
-            PineValue.BlobValue =>
-            PineValue.EmptyList,
+        if (SignedIntegerFromValueRelaxed(listValue.Items.Span[0]) is not { } count)
+        {
+            return PineValue.EmptyList;
+        }
 
-            _ =>
-            throw new NotImplementedException()
-        };
+        return Internal.KernelFunctionSpecialized.skip(count, listValue.Items.Span[1]);
+    }
 
     /// <summary>
     /// For a list or blob, returns a new sequence with the first 'count' elements/bytes.
@@ -263,6 +262,13 @@ public static class KernelFunction
         {
             if (blobValue.Bytes.Length <= 1)
                 return value;
+
+            if (blobValue.Bytes.Length is 2)
+            {
+                return PineValue.ReusedBlobTupleFromBytes(
+                    blobValue.Bytes.Span[1],
+                    blobValue.Bytes.Span[0]);
+            }
 
             var reversed = blobValue.Bytes.ToArray();
 
