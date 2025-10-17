@@ -26,7 +26,10 @@ public class CodeAnalysis
         PineVMParseCache parseCache)
     {
         var namesFromCompiledEnv =
-            NamesFromCompiledEnv.FromCompiledEnvironment(parsedEnvironment, parseCache);
+            NamesFromCompiledEnv.FromCompiledEnvironment(
+                parsedEnvironment,
+                parseCache,
+                prioritizeName: includeDeclaration);
 
         var includedFunctionRecords = new Dictionary<DeclQualifiedName, FunctionRecord>();
 

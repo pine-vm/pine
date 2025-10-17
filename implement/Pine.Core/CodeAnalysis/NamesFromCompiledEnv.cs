@@ -34,9 +34,9 @@ public record NamesFromCompiledEnv
     {
         var parsedEnv =
             ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnvValue)
-            .Extract(err => throw new System.Exception("Failed parsing interactive environment: " + err));
+            .Extract(err => throw new Exception("Failed parsing interactive environment: " + err));
 
-        return FromCompiledEnvironment(parsedEnv, parseCache);
+        return FromCompiledEnvironment(parsedEnv, parseCache, prioritizeName: _ => false);
     }
 
     /// <summary>
@@ -44,17 +44,23 @@ public record NamesFromCompiledEnv
     /// </summary>
     /// <param name="parsedEnv">The parsed interactive environment produced by the Elm interactive compiler.</param>
     /// <param name="parseCache">Cache used to avoid repeated parsing of embedded expressions/functions.</param>
+    /// <param name="prioritizeName">
+    /// Predicate to prioritize specific declaration names when multiple declarations resolve to the same encoded value.
+    /// Names for which this returns <see langword="true"/> are ordered first in the result.
+    /// </param>
     /// <returns>A new <see cref="NamesFromCompiledEnv"/> instance for querying declaration names.</returns>
     public static NamesFromCompiledEnv FromCompiledEnvironment(
         ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedEnv,
-        PineVMParseCache parseCache)
+        PineVMParseCache parseCache,
+        Func<DeclQualifiedName, bool> prioritizeName)
     {
-        return new NamesFromCompiledEnv(parsedEnv, parseCache);
+        return new NamesFromCompiledEnv(parsedEnv, parseCache, prioritizeName);
     }
 
     private NamesFromCompiledEnv(
         ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedEnv,
-        PineVMParseCache parseCache)
+        PineVMParseCache parseCache,
+        Func<DeclQualifiedName, bool> prioritizeName)
     {
         ParsedEnv = parsedEnv;
 
@@ -96,7 +102,8 @@ public record NamesFromCompiledEnv
                 {
                     var filteredList =
                         encodedExprGroup
-                        .OrderBy(item => item.origValue is PineValue.ListValue origList ? origList.NodesCount : 0)
+                        .OrderByDescending(item => prioritizeName(item.declName))
+                        .ThenBy(item => item.origValue is PineValue.ListValue origList ? origList.NodesCount : 0)
                         .DistinctBy(item => item.application.envValueClass)
                         .Select(item => (item.declName, item.application.envValueClass))
                         .ToImmutableList();
