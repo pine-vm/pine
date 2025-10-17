@@ -1486,61 +1486,6 @@ float float =
     FloatValue (String.fromFloat float)
 
 
-hexDigitChar : Int -> Int
-hexDigitChar n =
-    case n of
-        0 ->
-            '0'
-
-        1 ->
-            '1'
-
-        2 ->
-            '2'
-
-        3 ->
-            '3'
-
-        4 ->
-            '4'
-
-        5 ->
-            '5'
-
-        6 ->
-            '6'
-
-        7 ->
-            '7'
-
-        8 ->
-            '8'
-
-        9 ->
-            '9'
-
-        10 ->
-            'A'
-
-        11 ->
-            'B'
-
-        12 ->
-            'C'
-
-        13 ->
-            'D'
-
-        14 ->
-            'E'
-
-        15 ->
-            'F'
-
-        _ ->
-            '?'
-
-
 hex4 : Int -> List Int
 hex4 n =
     let
@@ -1571,11 +1516,145 @@ hex4 n =
                 , uintBytes
                 ]
     in
-    [ hexDigitChar n3
-    , hexDigitChar n2
-    , hexDigitChar n1
-    , hexDigitChar n0
+    [ hexDigitCharFromNibble n3
+    , hexDigitCharFromNibble n2
+    , hexDigitCharFromNibble n1
+    , hexDigitCharFromNibble n0
     ]
+
+
+hexDigitCharFromNibble : Int -> Int
+hexDigitCharFromNibble nibble =
+    if
+        Pine_kernel.equal
+            [ nibble
+            , Pine_kernel.skip [ 1, 0 ]
+            ]
+    then
+        '0'
+
+    else if
+        Pine_kernel.equal
+            [ nibble
+            , Pine_kernel.skip [ 1, 1 ]
+            ]
+    then
+        '1'
+
+    else if
+        Pine_kernel.equal
+            [ nibble
+            , Pine_kernel.skip [ 1, 2 ]
+            ]
+    then
+        '2'
+
+    else if
+        Pine_kernel.equal
+            [ nibble
+            , Pine_kernel.skip [ 1, 3 ]
+            ]
+    then
+        '3'
+
+    else if
+        Pine_kernel.equal
+            [ nibble
+            , Pine_kernel.skip [ 1, 4 ]
+            ]
+    then
+        '4'
+
+    else if
+        Pine_kernel.equal
+            [ nibble
+            , Pine_kernel.skip [ 1, 5 ]
+            ]
+    then
+        '5'
+
+    else if
+        Pine_kernel.equal
+            [ nibble
+            , Pine_kernel.skip [ 1, 6 ]
+            ]
+    then
+        '6'
+
+    else if
+        Pine_kernel.equal
+            [ nibble
+            , Pine_kernel.skip [ 1, 7 ]
+            ]
+    then
+        '7'
+
+    else if
+        Pine_kernel.equal
+            [ nibble
+            , Pine_kernel.skip [ 1, 8 ]
+            ]
+    then
+        '8'
+
+    else if
+        Pine_kernel.equal
+            [ nibble
+            , Pine_kernel.skip [ 1, 9 ]
+            ]
+    then
+        '9'
+
+    else if
+        Pine_kernel.equal
+            [ nibble
+            , Pine_kernel.skip [ 1, 10 ]
+            ]
+    then
+        'A'
+
+    else if
+        Pine_kernel.equal
+            [ nibble
+            , Pine_kernel.skip [ 1, 11 ]
+            ]
+    then
+        'B'
+
+    else if
+        Pine_kernel.equal
+            [ nibble
+            , Pine_kernel.skip [ 1, 12 ]
+            ]
+    then
+        'C'
+
+    else if
+        Pine_kernel.equal
+            [ nibble
+            , Pine_kernel.skip [ 1, 13 ]
+            ]
+    then
+        'D'
+
+    else if
+        Pine_kernel.equal
+            [ nibble
+            , Pine_kernel.skip [ 1, 14 ]
+            ]
+    then
+        'E'
+
+    else if
+        Pine_kernel.equal
+            [ nibble
+            , Pine_kernel.skip [ 1, 15 ]
+            ]
+    then
+        'F'
+
+    else
+        '?'
 
 """
     , """
