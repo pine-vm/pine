@@ -1441,6 +1441,7 @@ encodeStringUtf32ChunksFromBytes offset encodedChunks sourceBytes =
 {-| Advance the pointer up to the next char that escaping is needed for.
 This is an optimization to skip over simple characters quickly.
 It assumes that the input is valid UTF-32.
+<https://datatracker.ietf.org/doc/html/rfc8259#section-7>
 -}
 advanceUtf32OffsetForSimpleChars : Int -> Int -> Int
 advanceUtf32OffsetForSimpleChars sourceBytes offset =
@@ -1462,50 +1463,22 @@ advanceUtf32OffsetForSimpleChars sourceBytes offset =
             '\\\\' ->
                 offset
 
-            '\\u{0000}' ->
-                offset
-
-            '\\u{0001}' ->
-                offset
-
-            '\\u{0002}' ->
-                offset
-
-            '\\u{0003}' ->
-                offset
-
-            '\\u{0004}' ->
-                offset
-
-            '\\u{0005}' ->
-                offset
-
-            '\\u{0006}' ->
-                offset
-
-            '\\u{0007}' ->
-                offset
-
-            '\\u{0008}' ->
-                offset
-
-            '\\t' ->
-                offset
-
-            '\\n' ->
-                offset
-
-            '\\u{000B}' ->
-                offset
-
-            '\\u{000C}' ->
-                offset
-
-            '\\u{000D}' ->
-                offset
-
             _ ->
-                advanceUtf32OffsetForSimpleChars sourceBytes (Pine_kernel.int_add [ offset, 4 ])
+                if
+                    Pine_kernel.int_is_sorted_asc
+                        [ 0x20
+
+                        -- Prepend sign byte to nextChar to compare as Int
+                        , Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], nextChar ]
+                        , 0x0010FFFF
+                        ]
+                then
+                    advanceUtf32OffsetForSimpleChars
+                        sourceBytes
+                        (Pine_kernel.int_add [ offset, 4 ])
+
+                else
+                    offset
 
 
 float : Float -> Value
