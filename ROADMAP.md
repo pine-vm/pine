@@ -1,10 +1,14 @@
 # Pine Roadmap
 
+> PineVM is a deterministic virtual machine optimized for software development — it accelerates builds and testing and enables easy time-travel and replay.
+
 Here is a plan for what future releases of Pine will focus on.
 
-## Runtime Efficiency - General
+## Runtime Efficiency
 
 The runtime efficiency items are not related to the Pine language, but are implementation details of the execution engine that ships together with the primary distribution.
+
+### Runtime Efficiency - Fresh Evaluation
 
 - [ ] Emit IR frames using specialized function interfaces from code analysis, to save allocations in call sites.
 - [ ] In IR frames generated from static functions, link directly to call sites, to skip the general lookup of the target.
