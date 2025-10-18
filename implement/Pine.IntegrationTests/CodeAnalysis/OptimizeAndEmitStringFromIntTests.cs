@@ -72,7 +72,7 @@ public class OptimizeAndEmitStringFromIntTests
                     {
                         return Global_Anonymous.zzz_anon_12af8dcc_650df00b(param_1_0);
                     }
-
+            
                     return
                         KernelFunctionFused.ListPrependItem(
                             itemToPrepend: CommonReusedValues.Blob_Char_hyphen,
@@ -80,89 +80,89 @@ public class OptimizeAndEmitStringFromIntTests
                             Global_Anonymous.zzz_anon_12af8dcc_650df00b(
                                 KernelFunction.negate(param_1_0)));
                 }
-
-
+            
+            
                 public static PineValue zzz_anon_12af8dcc_650df00b(PineValue param_1_0)
                 {
                     return Global_Anonymous.zzz_anon_632693ae_2f148225(param_1_0, PineValue.EmptyList);
                 }
-
-
+            
+            
                 public static PineValue zzz_anon_39fa68f8_2402eeb0(PineValue param_1_0)
                 {
                     PineValue local_param_1_0 =
                         param_1_0;
-
+            
                     while (true)
                     {
                         if (local_param_1_0 == CommonReusedValues.Blob_Int_0)
                         {
                             return CommonReusedValues.Blob_Char_digit_0;
                         }
-
+            
                         if (local_param_1_0 == CommonReusedValues.Blob_Int_1)
                         {
                             return CommonReusedValues.Blob_Char_digit_1;
                         }
-
+            
                         if (local_param_1_0 == CommonReusedValues.Blob_Int_2)
                         {
                             return CommonReusedValues.Blob_Char_digit_2;
                         }
-
+            
                         if (local_param_1_0 == CommonReusedValues.Blob_Int_3)
                         {
                             return CommonReusedValues.Blob_Char_digit_3;
                         }
-
+            
                         if (local_param_1_0 == CommonReusedValues.Blob_Int_4)
                         {
                             return CommonReusedValues.Blob_Char_digit_4;
                         }
-
+            
                         if (local_param_1_0 == CommonReusedValues.Blob_Int_5)
                         {
                             return CommonReusedValues.Blob_Char_digit_5;
                         }
-
+            
                         if (local_param_1_0 == CommonReusedValues.Blob_Int_6)
                         {
                             return CommonReusedValues.Blob_Char_digit_6;
                         }
-
+            
                         if (local_param_1_0 == CommonReusedValues.Blob_Int_7)
                         {
                             return CommonReusedValues.Blob_Char_digit_7;
                         }
-
+            
                         if (local_param_1_0 == CommonReusedValues.Blob_Int_8)
                         {
                             return CommonReusedValues.Blob_Char_digit_8;
                         }
-
+            
                         if (local_param_1_0 == CommonReusedValues.Blob_Int_9)
                         {
                             return CommonReusedValues.Blob_Char_digit_9;
                         }
-
+            
                         {
                         }
-
+            
                         continue;
                     }
                 }
-
-
+            
+            
                 public static PineValue zzz_anon_632693ae_2f148225(
                     PineValue param_1_0,
                     PineValue param_1_1)
                 {
                     PineValue local_param_1_0 =
                         param_1_0;
-
+            
                     PineValue local_param_1_1 =
                         param_1_1;
-
+            
                     while (true)
                     {
                         if (KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(local_param_1_0, 0))
@@ -171,17 +171,17 @@ public class OptimizeAndEmitStringFromIntTests
                             {
                                 return CommonReusedValues.List_Single_Blob_Char_digit_0;
                             }
-
+            
                             return local_param_1_1;
                         }
-
+            
                         PineValue local_000 =
                             Basics.idiv(local_param_1_0, CommonReusedValues.Blob_Int_10);
-
+            
                         {
                             PineValue local_param_1_0_temp =
                                 local_000;
-
+            
                             PineValue local_param_1_1_temp =
                                 KernelFunctionFused.ListPrependItem(
                                     itemToPrepend:
@@ -190,19 +190,19 @@ public class OptimizeAndEmitStringFromIntTests
                                             local_param_1_0,
                                             KernelFunctionSpecialized.int_mul(-10, local_000))),
                                     suffix: local_param_1_1);
-
+            
                             local_param_1_0 =
                                 local_param_1_0_temp;
-
+            
                             local_param_1_1 =
                                 local_param_1_1_temp;
                         }
-
+            
                         continue;
                     }
                 }
-
-
+            
+            
                 public static PineValue zzz_anon_f8cc3fb0_cbcb2ff6(
                     PineValue param_1_0,
                     PineValue param_1_1,
@@ -210,34 +210,34 @@ public class OptimizeAndEmitStringFromIntTests
                 {
                     PineValue local_param_1_0 =
                         param_1_0;
-
+            
                     PineValue local_param_1_1 =
                         param_1_1;
-
+            
                     PineValue local_param_1_2 =
                         param_1_2;
-
+            
                     while (true)
                     {
                         PineValue local_000 =
                             KernelFunctionSpecialized.int_mul(16, local_param_1_1);
-
+            
                         if (KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(local_000, local_param_1_0))
                         {
-                            PineValue local_001 =
+                            PineValue local_002 =
                                 Global_Anonymous.zzz_anon_f8cc3fb0_cbcb2ff6(local_param_1_0, local_000, CommonReusedValues.Blob_Int_0);
-
+            
                             return
                                 KernelFunctionSpecialized.int_add(
-                                    KernelFunctionSpecialized.int_mul(16, local_001),
+                                    KernelFunctionSpecialized.int_mul(16, local_002),
                                     Global_Anonymous.zzz_anon_f8cc3fb0_cbcb2ff6(
                                         KernelFunctionSpecialized.int_add(
                                             local_param_1_0,
-                                            KernelFunctionSpecialized.int_mul(local_001, local_000, -1)),
+                                            KernelFunctionSpecialized.int_mul(local_002, local_000, -1)),
                                         local_param_1_1,
                                         CommonReusedValues.Blob_Int_0));
                         }
-
+            
                         if (KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(local_param_1_1, local_param_1_0))
                         {
                             {
@@ -245,20 +245,20 @@ public class OptimizeAndEmitStringFromIntTests
                                     KernelFunctionSpecialized.int_add(
                                         local_param_1_0,
                                         KernelFunctionSpecialized.int_mul(-1, local_param_1_1));
-
+            
                                 PineValue local_param_1_2_temp =
                                     KernelFunctionSpecialized.int_add(1, local_param_1_2);
-
+            
                                 local_param_1_0 =
                                     local_param_1_0_temp;
-
+            
                                 local_param_1_2 =
                                     local_param_1_2_temp;
                             }
-
+            
                             continue;
                         }
-
+            
                         return local_param_1_2;
                     }
                 }

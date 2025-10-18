@@ -2013,7 +2013,13 @@ public record StaticProgramCSharpClass(
          * Primary reason to separate a subexpression into a declaration is CSE (prevent repeated evaluation).
          * 
          * For any subexpression that occurs at least once unconditional and a second time, emit to CSE.
+         * 
+         * Additionally, expressions that appear in ALL branches of a conditional should be treated as
+         * effectively unconditional relative to that conditional.
          * */
+
+        // First pass: identify expressions that appear in all branches of conditionals
+        var expressionsCommonToAllBranches = FindExpressionsCommonToAllBranches(rootExpressions, ignoreExpr);
 
         var seenOnceUnconditional = new HashSet<StaticExpression<FuncId>>();
 
@@ -2052,8 +2058,11 @@ public record StaticProgramCSharpClass(
                 continue;
             }
 
+            // Treat expressions common to all branches as unconditional
+            var effectivelyConditional = current.conditional && !expressionsCommonToAllBranches.Contains(current.expr);
+
             if (seenOnceUnconditional.Contains(current.expr) ||
-                (seenOnceConditional.Contains(current.expr) && !current.conditional))
+                (seenOnceConditional.Contains(current.expr) && !effectivelyConditional))
             {
                 yield return current.expr;
 
@@ -2062,7 +2071,7 @@ public record StaticProgramCSharpClass(
                 continue;
             }
 
-            if (current.conditional)
+            if (effectivelyConditional)
             {
                 seenOnceConditional.Add(current.expr);
             }
@@ -2071,61 +2080,146 @@ public record StaticProgramCSharpClass(
                 seenOnceUnconditional.Add(current.expr);
             }
 
-            if (current.expr is StaticExpression<FuncId>.Conditional conditional)
-            {
-                EnqueueIfNoRoot(conditional.Condition, current.conditional);
-
-                EnqueueIfNoRoot(conditional.TrueBranch, true);
-                EnqueueIfNoRoot(conditional.FalseBranch, true);
-
-                continue;
-            }
-
-            if (current.expr is StaticExpression<FuncId>.Literal)
-            {
-                continue;
-            }
-
-            if (current.expr is StaticExpression<FuncId>.Environment)
-            {
-                continue;
-            }
-
-            if (current.expr is StaticExpression<FuncId>.List list)
-            {
-                foreach (var item in list.Items)
-                {
-                    EnqueueIfNoRoot(item, current.conditional);
-                }
-
-                continue;
-            }
-
-            if (current.expr is StaticExpression<FuncId>.KernelApplication kernelApp)
-            {
-                EnqueueIfNoRoot(kernelApp.Input, current.conditional);
-
-                continue;
-            }
-
-            if (current.expr is StaticExpression<FuncId>.FunctionApplication funcApp)
-            {
-                EnqueueIfNoRoot(funcApp.Arguments, current.conditional);
-
-                continue;
-            }
-
-            if (current.expr is StaticExpression<FuncId>.CrashingParseAndEval parseAndEval)
-            {
-                EnqueueIfNoRoot(parseAndEval.Encoded, current.conditional);
-                EnqueueIfNoRoot(parseAndEval.EnvironmentExpr, current.conditional);
-
-                continue;
-            }
-
-            throw new System.NotImplementedException(
-                "CSE collection for expression type " + current.expr.GetType() + " is not implemented.");
+            ProcessSubexpressions(
+                current.expr,
+                EnqueueIfNoRoot,
+                current.conditional);
         }
+    }
+
+    private static HashSet<StaticExpression<FuncId>> FindExpressionsCommonToAllBranches<FuncId>(
+        IReadOnlyList<StaticExpression<FuncId>> rootExpressions,
+        System.Func<StaticExpression<FuncId>, bool> ignoreExpr)
+    {
+        var result = new HashSet<StaticExpression<FuncId>>();
+
+        foreach (var rootExpr in rootExpressions)
+        {
+            CollectCommonSubexpressionsRecursive(
+                rootExpr,
+                ignoreExpr,
+                commonExprs: result,
+                visited: []);
+        }
+
+        return result;
+    }
+
+    private static void ProcessSubexpressions<FuncId>(
+        StaticExpression<FuncId> expr,
+        System.Action<StaticExpression<FuncId>, bool> processSubexpression,
+        bool parentIsConditional)
+    {
+        if (expr is StaticExpression<FuncId>.Conditional conditional)
+        {
+            processSubexpression(conditional.Condition, parentIsConditional);
+            processSubexpression(conditional.TrueBranch, true);
+            processSubexpression(conditional.FalseBranch, true);
+            return;
+        }
+
+        if (expr is StaticExpression<FuncId>.Literal)
+        {
+            return;
+        }
+
+        if (expr is StaticExpression<FuncId>.Environment)
+        {
+            return;
+        }
+
+        if (expr is StaticExpression<FuncId>.List list)
+        {
+            foreach (var item in list.Items)
+            {
+                processSubexpression(item, parentIsConditional);
+            }
+            return;
+        }
+
+        if (expr is StaticExpression<FuncId>.KernelApplication kernelApp)
+        {
+            processSubexpression(kernelApp.Input, parentIsConditional);
+            return;
+        }
+
+        if (expr is StaticExpression<FuncId>.FunctionApplication funcApp)
+        {
+            processSubexpression(funcApp.Arguments, parentIsConditional);
+            return;
+        }
+
+        if (expr is StaticExpression<FuncId>.CrashingParseAndEval parseAndEval)
+        {
+            processSubexpression(parseAndEval.Encoded, parentIsConditional);
+            processSubexpression(parseAndEval.EnvironmentExpr, parentIsConditional);
+            return;
+        }
+
+        throw new System.NotImplementedException(
+            "CSE collection for expression type " + expr.GetType() + " is not implemented.");
+    }
+
+    private static void CollectCommonSubexpressionsRecursive<FuncId>(
+        StaticExpression<FuncId> expr,
+        System.Func<StaticExpression<FuncId>, bool> ignoreExpr,
+        HashSet<StaticExpression<FuncId>> commonExprs,
+        HashSet<StaticExpression<FuncId>> visited)
+    {
+        if (!visited.Add(expr) || ignoreExpr(expr))
+        {
+            return;
+        }
+
+        if (expr is StaticExpression<FuncId>.Conditional conditional)
+        {
+            // Recursively process the condition
+            CollectCommonSubexpressionsRecursive(conditional.Condition, ignoreExpr, commonExprs, visited);
+
+            // Collect all subexpressions from both branches
+            var trueBranchExprs = new HashSet<StaticExpression<FuncId>>();
+            CollectAllSubexpressionsRecursive(conditional.TrueBranch, ignoreExpr, trueBranchExprs, []);
+
+            var falseBranchExprs = new HashSet<StaticExpression<FuncId>>();
+            CollectAllSubexpressionsRecursive(conditional.FalseBranch, ignoreExpr, falseBranchExprs, []);
+
+            // Find expressions common to both branches and add them to the result
+            var branchCommonExprs = trueBranchExprs.Intersect(falseBranchExprs);
+
+            commonExprs.UnionWith(branchCommonExprs);
+
+            // Continue recursing into both branches to find nested conditionals
+            CollectCommonSubexpressionsRecursive(conditional.TrueBranch, ignoreExpr, commonExprs, visited);
+            CollectCommonSubexpressionsRecursive(conditional.FalseBranch, ignoreExpr, commonExprs, visited);
+
+            return;
+        }
+
+        // For non-conditional expressions, recurse using the unified traversal
+        ProcessSubexpressions(
+            expr,
+            (subExpr, _) => CollectCommonSubexpressionsRecursive(subExpr, ignoreExpr, commonExprs, visited),
+            parentIsConditional: false);
+    }
+
+    private static void CollectAllSubexpressionsRecursive<FuncId>(
+        StaticExpression<FuncId> expr,
+        System.Func<StaticExpression<FuncId>, bool> ignoreExpr,
+        HashSet<StaticExpression<FuncId>> allExprs,
+        HashSet<StaticExpression<FuncId>> visited)
+    {
+        if (!visited.Add(expr) || ignoreExpr(expr))
+        {
+            return;
+        }
+
+        allExprs.Add(expr);
+
+        // Use the unified traversal to process subexpressions
+        ProcessSubexpressions(
+            expr,
+            (subExpr, _) => CollectAllSubexpressionsRecursive(subExpr, ignoreExpr, allExprs, visited),
+            parentIsConditional: false);
     }
 
     public static IReadOnlyList<ParameterSyntax> ComposeParameterList(

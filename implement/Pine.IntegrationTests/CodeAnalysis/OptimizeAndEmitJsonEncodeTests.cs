@@ -388,30 +388,30 @@ public class OptimizeAndEmitJsonEncodeTests
                 {
                     PineValue local_param_1_0 =
                         param_1_0;
-
+            
                     PineValue local_param_1_1 =
                         param_1_1;
-
+            
                     while (true)
                     {
                         PineValue local_000 =
                             KernelFunctionFused.SkipAndTake(takeCount: 4, skipCountValue: local_param_1_1, argument: local_param_1_0);
-
+            
                         if (KernelFunctionSpecialized.length_as_int(local_000) == 0)
                         {
                             return local_param_1_1;
                         }
-
+            
                         if (local_000 == CommonReusedValues.Blob_Char_doublequote)
                         {
                             return local_param_1_1;
                         }
-
+            
                         if (local_000 == CommonReusedValues.Blob_Char_backslash)
                         {
                             return local_param_1_1;
                         }
-
+            
                         if (KernelFunctionSpecialized.int_is_sorted_asc(
                             32,
                             KernelFunctionFused.BlobPrependByte(byteToPrepend: 4, suffix: local_000),
@@ -420,19 +420,19 @@ public class OptimizeAndEmitJsonEncodeTests
                             {
                                 PineValue local_param_1_1_temp =
                                     KernelFunctionSpecialized.int_add(4, local_param_1_1);
-
+            
                                 local_param_1_1 =
                                     local_param_1_1_temp;
                             }
-
+            
                             continue;
                         }
-
+            
                         return local_param_1_1;
                     }
                 }
-
-
+            
+            
                 public static PineValue encodeStringUtf32ChunksFromBytes(
                     PineValue param_1_0,
                     PineValue param_1_1,
@@ -440,316 +440,205 @@ public class OptimizeAndEmitJsonEncodeTests
                 {
                     PineValue local_param_1_0 =
                         param_1_0;
-
+            
                     PineValue local_param_1_1 =
                         param_1_1;
-
+            
                     PineValue local_param_1_2 =
                         param_1_2;
-
+            
                     while (true)
                     {
-                        PineValue local_000 =
-                            Test.advanceUtf32OffsetForSimpleChars(local_param_1_2, local_param_1_0);
-
                         PineValue local_001 =
-                            KernelFunctionFused.SkipAndTake(takeCount: 4, skipCountValue: local_000, argument: local_param_1_2);
-
-                        if (KernelFunctionSpecialized.length_as_int(local_001) == 0)
+                            Test.advanceUtf32OffsetForSimpleChars(local_param_1_2, local_param_1_0);
+            
+                        PineValue local_002 =
+                            KernelFunctionSpecialized.int_add(4, local_001);
+            
+                        PineValue local_003 =
+                            KernelFunctionSpecialized.int_add(
+                                local_001,
+                                KernelFunctionSpecialized.int_mul(-1, local_param_1_0));
+            
+                        PineValue local_004 =
+                            KernelFunctionFused.SkipAndTake(takeCount: 4, skipCountValue: local_001, argument: local_param_1_2);
+            
+                        PineValue local_005 =
+                            KernelFunctionFused.CanonicalIntegerFromUnsigned(signIsPositive: true, unsignedValue: local_004);
+            
+                        PineValue local_007 =
+                            local_003 == CommonReusedValues.Blob_Int_0
+                            ?
+                            local_param_1_1
+                            :
+                            KernelFunctionFused.ListAppendItem(
+                                prefix: local_param_1_1,
+                                itemToAppend:
+                                KernelFunctionSpecialized.take(
+                                    local_003,
+                                    KernelFunctionSpecialized.skip(local_param_1_0, local_param_1_2)));
+            
+                        if (KernelFunctionSpecialized.length_as_int(local_004) == 0)
                         {
-                            PineValue local_002 =
-                                KernelFunctionSpecialized.int_add(
-                                    local_000,
-                                    KernelFunctionSpecialized.int_mul(-1, local_param_1_0));
-
-                            if (local_002 == CommonReusedValues.Blob_Int_0)
+                            if (local_003 == CommonReusedValues.Blob_Int_0)
                             {
                                 return local_param_1_1;
                             }
-
+            
                             return
                                 KernelFunctionFused.ListAppendItem(
                                     prefix: local_param_1_1,
                                     itemToAppend:
                                     KernelFunctionSpecialized.take(
-                                        local_002,
+                                        local_003,
                                         KernelFunctionSpecialized.skip(local_param_1_0, local_param_1_2)));
                         }
-
-                        if (local_001 == CommonReusedValues.Blob_f063beda)
+            
+                        if (local_004 == CommonReusedValues.Blob_f063beda)
                         {
-                            PineValue local_003 =
-                                KernelFunctionSpecialized.int_add(
-                                    local_000,
-                                    KernelFunctionSpecialized.int_mul(-1, local_param_1_0));
-
                             {
                                 PineValue local_param_1_0_temp =
-                                    KernelFunctionSpecialized.int_add(4, local_000);
-
+                                    local_002;
+            
                                 PineValue local_param_1_1_temp =
-                                    KernelFunctionSpecialized.concat(
-                                        local_003 == CommonReusedValues.Blob_Int_0
-                                        ?
-                                        local_param_1_1
-                                        :
-                                        KernelFunctionFused.ListAppendItem(
-                                            prefix: local_param_1_1,
-                                            itemToAppend:
-                                            KernelFunctionSpecialized.take(
-                                                local_003,
-                                                KernelFunctionSpecialized.skip(local_param_1_0, local_param_1_2))),
-                                        CommonReusedValues.List_11431555);
-
+                                    KernelFunctionSpecialized.concat(local_007, CommonReusedValues.List_11431555);
+            
                                 local_param_1_0 =
                                     local_param_1_0_temp;
-
+            
                                 local_param_1_1 =
                                     local_param_1_1_temp;
                             }
-
+            
                             continue;
                         }
-
-                        if (local_001 == CommonReusedValues.Blob_Char_tab)
+            
+                        if (local_004 == CommonReusedValues.Blob_Char_tab)
                         {
-                            PineValue local_004 =
-                                KernelFunctionSpecialized.int_add(
-                                    local_000,
-                                    KernelFunctionSpecialized.int_mul(-1, local_param_1_0));
-
                             {
                                 PineValue local_param_1_0_temp =
-                                    KernelFunctionSpecialized.int_add(4, local_000);
-
+                                    local_002;
+            
                                 PineValue local_param_1_1_temp =
-                                    KernelFunctionSpecialized.concat(
-                                        local_004 == CommonReusedValues.Blob_Int_0
-                                        ?
-                                        local_param_1_1
-                                        :
-                                        KernelFunctionFused.ListAppendItem(
-                                            prefix: local_param_1_1,
-                                            itemToAppend:
-                                            KernelFunctionSpecialized.take(
-                                                local_004,
-                                                KernelFunctionSpecialized.skip(local_param_1_0, local_param_1_2))),
-                                        CommonReusedValues.List_6859d43a);
-
+                                    KernelFunctionSpecialized.concat(local_007, CommonReusedValues.List_6859d43a);
+            
                                 local_param_1_0 =
                                     local_param_1_0_temp;
-
+            
                                 local_param_1_1 =
                                     local_param_1_1_temp;
                             }
-
+            
                             continue;
                         }
-
-                        if (local_001 == CommonReusedValues.Blob_Char_newline)
+            
+                        if (local_004 == CommonReusedValues.Blob_Char_newline)
                         {
-                            PineValue local_005 =
-                                KernelFunctionSpecialized.int_add(
-                                    local_000,
-                                    KernelFunctionSpecialized.int_mul(-1, local_param_1_0));
-
                             {
                                 PineValue local_param_1_0_temp =
-                                    KernelFunctionSpecialized.int_add(4, local_000);
-
+                                    local_002;
+            
                                 PineValue local_param_1_1_temp =
-                                    KernelFunctionSpecialized.concat(
-                                        local_005 == CommonReusedValues.Blob_Int_0
-                                        ?
-                                        local_param_1_1
-                                        :
-                                        KernelFunctionFused.ListAppendItem(
-                                            prefix: local_param_1_1,
-                                            itemToAppend:
-                                            KernelFunctionSpecialized.take(
-                                                local_005,
-                                                KernelFunctionSpecialized.skip(local_param_1_0, local_param_1_2))),
-                                        CommonReusedValues.List_8cc957f8);
-
+                                    KernelFunctionSpecialized.concat(local_007, CommonReusedValues.List_8cc957f8);
+            
                                 local_param_1_0 =
                                     local_param_1_0_temp;
-
+            
                                 local_param_1_1 =
                                     local_param_1_1_temp;
                             }
-
+            
                             continue;
                         }
-
-                        if (local_001 == CommonReusedValues.Blob_Char_formfeed)
+            
+                        if (local_004 == CommonReusedValues.Blob_Char_formfeed)
                         {
-                            PineValue local_006 =
-                                KernelFunctionSpecialized.int_add(
-                                    local_000,
-                                    KernelFunctionSpecialized.int_mul(-1, local_param_1_0));
-
                             {
                                 PineValue local_param_1_0_temp =
-                                    KernelFunctionSpecialized.int_add(4, local_000);
-
+                                    local_002;
+            
                                 PineValue local_param_1_1_temp =
-                                    KernelFunctionSpecialized.concat(
-                                        local_006 == CommonReusedValues.Blob_Int_0
-                                        ?
-                                        local_param_1_1
-                                        :
-                                        KernelFunctionFused.ListAppendItem(
-                                            prefix: local_param_1_1,
-                                            itemToAppend:
-                                            KernelFunctionSpecialized.take(
-                                                local_006,
-                                                KernelFunctionSpecialized.skip(local_param_1_0, local_param_1_2))),
-                                        CommonReusedValues.List_21f12336);
-
+                                    KernelFunctionSpecialized.concat(local_007, CommonReusedValues.List_21f12336);
+            
                                 local_param_1_0 =
                                     local_param_1_0_temp;
-
+            
                                 local_param_1_1 =
                                     local_param_1_1_temp;
                             }
-
+            
                             continue;
                         }
-
-                        if (local_001 == CommonReusedValues.Blob_Char_carriagereturn)
+            
+                        if (local_004 == CommonReusedValues.Blob_Char_carriagereturn)
                         {
-                            PineValue local_007 =
-                                KernelFunctionSpecialized.int_add(
-                                    local_000,
-                                    KernelFunctionSpecialized.int_mul(-1, local_param_1_0));
-
                             {
                                 PineValue local_param_1_0_temp =
-                                    KernelFunctionSpecialized.int_add(4, local_000);
-
+                                    local_002;
+            
                                 PineValue local_param_1_1_temp =
-                                    KernelFunctionSpecialized.concat(
-                                        local_007 == CommonReusedValues.Blob_Int_0
-                                        ?
-                                        local_param_1_1
-                                        :
-                                        KernelFunctionFused.ListAppendItem(
-                                            prefix: local_param_1_1,
-                                            itemToAppend:
-                                            KernelFunctionSpecialized.take(
-                                                local_007,
-                                                KernelFunctionSpecialized.skip(local_param_1_0, local_param_1_2))),
-                                        CommonReusedValues.List_4495e748);
-
+                                    KernelFunctionSpecialized.concat(local_007, CommonReusedValues.List_4495e748);
+            
                                 local_param_1_0 =
                                     local_param_1_0_temp;
-
+            
                                 local_param_1_1 =
                                     local_param_1_1_temp;
                             }
-
+            
                             continue;
                         }
-
-                        if (local_001 == CommonReusedValues.Blob_Char_doublequote)
+            
+                        if (local_004 == CommonReusedValues.Blob_Char_doublequote)
                         {
-                            PineValue local_008 =
-                                KernelFunctionSpecialized.int_add(
-                                    local_000,
-                                    KernelFunctionSpecialized.int_mul(-1, local_param_1_0));
-
                             {
                                 PineValue local_param_1_0_temp =
-                                    KernelFunctionSpecialized.int_add(4, local_000);
-
+                                    local_002;
+            
                                 PineValue local_param_1_1_temp =
-                                    KernelFunctionSpecialized.concat(
-                                        local_008 == CommonReusedValues.Blob_Int_0
-                                        ?
-                                        local_param_1_1
-                                        :
-                                        KernelFunctionFused.ListAppendItem(
-                                            prefix: local_param_1_1,
-                                            itemToAppend:
-                                            KernelFunctionSpecialized.take(
-                                                local_008,
-                                                KernelFunctionSpecialized.skip(local_param_1_0, local_param_1_2))),
-                                        CommonReusedValues.List_0593a027);
-
+                                    KernelFunctionSpecialized.concat(local_007, CommonReusedValues.List_0593a027);
+            
                                 local_param_1_0 =
                                     local_param_1_0_temp;
-
+            
                                 local_param_1_1 =
                                     local_param_1_1_temp;
                             }
-
+            
                             continue;
                         }
-
-                        if (local_001 == CommonReusedValues.Blob_Char_backslash)
+            
+                        if (local_004 == CommonReusedValues.Blob_Char_backslash)
                         {
-                            PineValue local_009 =
-                                KernelFunctionSpecialized.int_add(
-                                    local_000,
-                                    KernelFunctionSpecialized.int_mul(-1, local_param_1_0));
-
                             {
                                 PineValue local_param_1_0_temp =
-                                    KernelFunctionSpecialized.int_add(4, local_000);
-
+                                    local_002;
+            
                                 PineValue local_param_1_1_temp =
-                                    KernelFunctionSpecialized.concat(
-                                        local_009 == CommonReusedValues.Blob_Int_0
-                                        ?
-                                        local_param_1_1
-                                        :
-                                        KernelFunctionFused.ListAppendItem(
-                                            prefix: local_param_1_1,
-                                            itemToAppend:
-                                            KernelFunctionSpecialized.take(
-                                                local_009,
-                                                KernelFunctionSpecialized.skip(local_param_1_0, local_param_1_2))),
-                                        CommonReusedValues.List_67fa5ac0);
-
+                                    KernelFunctionSpecialized.concat(local_007, CommonReusedValues.List_67fa5ac0);
+            
                                 local_param_1_0 =
                                     local_param_1_0_temp;
-
+            
                                 local_param_1_1 =
                                     local_param_1_1_temp;
                             }
-
+            
                             continue;
                         }
-
-                        PineValue local_010 =
-                            KernelFunctionSpecialized.int_add(
-                                local_000,
-                                KernelFunctionSpecialized.int_mul(-1, local_param_1_0));
-
-                        PineValue local_011 =
-                            KernelFunctionFused.CanonicalIntegerFromUnsigned(signIsPositive: true, unsignedValue: local_001);
-
+            
                         {
                             PineValue local_param_1_0_temp =
-                                KernelFunctionSpecialized.int_add(4, local_000);
-
+                                local_002;
+            
                             PineValue local_param_1_1_temp =
                                 KernelFunctionSpecialized.concat(
-                                    local_010 == CommonReusedValues.Blob_Int_0
-                                    ?
-                                    local_param_1_1
-                                    :
-                                    KernelFunctionFused.ListAppendItem(
-                                        prefix: local_param_1_1,
-                                        itemToAppend:
-                                        KernelFunctionSpecialized.take(
-                                            local_010,
-                                            KernelFunctionSpecialized.skip(local_param_1_0, local_param_1_2))),
-                                    KernelFunctionSpecialized.int_is_sorted_asc(0, local_011, 65_535) == PineKernelValues.TrueValue
+                                    local_007,
+                                    KernelFunctionSpecialized.int_is_sorted_asc(0, local_005, 65_535) == PineKernelValues.TrueValue
                                     ?
                                     KernelFunctionSpecialized.concat(
                                         CommonReusedValues.List_599c92a7,
-                                        Test.hex4(local_011))
+                                        Test.hex4(local_005))
                                     :
                                     KernelFunction.concat(
                                         PineValue.List(
@@ -760,33 +649,33 @@ public class OptimizeAndEmitJsonEncodeTests
                                                         55_296,
                                                         KernelFunctionSpecialized.bit_shift_right(
                                                             10,
-                                                            KernelFunctionSpecialized.int_add(-65_536, local_011)))),
+                                                            KernelFunctionSpecialized.int_add(-65_536, local_005)))),
                                                 CommonReusedValues.List_599c92a7,
                                                 Test.hex4(
                                                     KernelFunctionSpecialized.int_add(
                                                         56_320,
                                                         KernelFunctionSpecialized.bit_and(
                                                             IntegerEncoding.EncodeSignedInteger(1_023),
-                                                            KernelFunctionSpecialized.int_add(-65_536, local_011))))
+                                                            KernelFunctionSpecialized.int_add(-65_536, local_005))))
                                             ])));
-
+            
                             local_param_1_0 =
                                 local_param_1_0_temp;
-
+            
                             local_param_1_1 =
                                 local_param_1_1_temp;
                         }
-
+            
                         continue;
                     }
                 }
-
-
+            
+            
                 public static PineValue hex4(PineValue param_1_0)
                 {
                     PineValue local_000 =
                         KernelFunctionSpecialized.skip(1, param_1_0);
-
+            
                     return
                         PineValue.List(
                             [
@@ -806,94 +695,94 @@ public class OptimizeAndEmitJsonEncodeTests
                                     KernelFunctionSpecialized.bit_and(CommonReusedValues.Blob_2d8b523c, local_000))
                             ]);
                 }
-
-
+            
+            
                 public static PineValue hexDigitCharFromNibble(PineValue param_1_0)
                 {
                     if (param_1_0 == CommonReusedValues.Blob_449e9b79)
                     {
                         return CommonReusedValues.Blob_Char_digit_0;
                     }
-
+            
                     if (param_1_0 == CommonReusedValues.Blob_50453b36)
                     {
                         return CommonReusedValues.Blob_Char_digit_1;
                     }
-
+            
                     if (param_1_0 == PineKernelValues.FalseValue)
                     {
                         return CommonReusedValues.Blob_Char_digit_2;
                     }
-
+            
                     if (param_1_0 == CommonReusedValues.Blob_bd557c82)
                     {
                         return CommonReusedValues.Blob_Char_digit_3;
                     }
-
+            
                     if (param_1_0 == PineKernelValues.TrueValue)
                     {
                         return CommonReusedValues.Blob_Char_digit_4;
                     }
-
+            
                     if (param_1_0 == CommonReusedValues.Blob_7732e8fd)
                     {
                         return CommonReusedValues.Blob_Char_digit_5;
                     }
-
+            
                     if (param_1_0 == CommonReusedValues.Blob_4c5dc722)
                     {
                         return CommonReusedValues.Blob_Char_digit_6;
                     }
-
+            
                     if (param_1_0 == CommonReusedValues.Blob_735edfdb)
                     {
                         return CommonReusedValues.Blob_Char_digit_7;
                     }
-
+            
                     if (param_1_0 == CommonReusedValues.Blob_8db117dc)
                     {
                         return CommonReusedValues.Blob_Char_digit_8;
                     }
-
+            
                     if (param_1_0 == CommonReusedValues.Blob_fb88d96b)
                     {
                         return CommonReusedValues.Blob_Char_digit_9;
                     }
-
+            
                     if (param_1_0 == CommonReusedValues.Blob_4c0d52d1)
                     {
                         return CommonReusedValues.Blob_Char_letter_A;
                     }
-
+            
                     if (param_1_0 == CommonReusedValues.Blob_40896845)
                     {
                         return CommonReusedValues.Blob_Char_letter_B;
                     }
-
+            
                     if (param_1_0 == CommonReusedValues.Blob_02334608)
                     {
                         return CommonReusedValues.Blob_Char_letter_C;
                     }
-
+            
                     if (param_1_0 == CommonReusedValues.Blob_015f2803)
                     {
                         return CommonReusedValues.Blob_Char_letter_D;
                     }
-
+            
                     if (param_1_0 == CommonReusedValues.Blob_63e02745)
                     {
                         return CommonReusedValues.Blob_Char_letter_E;
                     }
-
+            
                     if (param_1_0 == CommonReusedValues.Blob_2d8b523c)
                     {
                         return CommonReusedValues.Blob_Char_letter_F;
                     }
-
+            
                     return CommonReusedValues.Blob_Char_question;
                 }
             }
-
+            
             """".Trim());
 
         moduleGlobalAnonymousText.Trim().Should().Be(
