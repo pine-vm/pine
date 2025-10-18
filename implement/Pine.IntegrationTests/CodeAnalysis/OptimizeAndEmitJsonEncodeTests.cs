@@ -474,9 +474,7 @@ public class OptimizeAndEmitJsonEncodeTests
                             KernelFunctionFused.ListAppendItem(
                                 prefix: local_param_1_1,
                                 itemToAppend:
-                                KernelFunctionSpecialized.take(
-                                    local_003,
-                                    KernelFunctionSpecialized.skip(local_param_1_0, local_param_1_2)));
+                                KernelFunctionFused.SkipAndTake(takeCountValue: local_003, skipCountValue: local_param_1_0, argument: local_param_1_2));
             
                         if (KernelFunctionSpecialized.length_as_int(local_004) == 0)
                         {
@@ -489,9 +487,7 @@ public class OptimizeAndEmitJsonEncodeTests
                                 KernelFunctionFused.ListAppendItem(
                                     prefix: local_param_1_1,
                                     itemToAppend:
-                                    KernelFunctionSpecialized.take(
-                                        local_003,
-                                        KernelFunctionSpecialized.skip(local_param_1_0, local_param_1_2)));
+                                    KernelFunctionFused.SkipAndTake(takeCountValue: local_003, skipCountValue: local_param_1_0, argument: local_param_1_2));
                         }
             
                         if (local_004 == CommonReusedValues.Blob_f063beda)

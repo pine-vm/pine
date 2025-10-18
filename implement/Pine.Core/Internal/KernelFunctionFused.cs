@@ -215,6 +215,24 @@ public class KernelFunctionFused
     }
 
     public static PineValue SkipAndTake(
+        PineValue takeCountValue,
+        PineValue skipCountValue,
+        PineValue argument)
+    {
+        if (KernelFunction.SignedIntegerFromValueRelaxed(takeCountValue) is not { } takeCount)
+        {
+            return PineValue.EmptyList;
+        }
+
+        if (KernelFunction.SignedIntegerFromValueRelaxed(skipCountValue) is not { } skipCount)
+        {
+            return PineValue.EmptyList;
+        }
+
+        return SkipAndTake((int)takeCount, (int)skipCount, argument);
+    }
+
+    public static PineValue SkipAndTake(
         int takeCount,
         int skipCount,
         PineValue argument)

@@ -113,7 +113,7 @@ public class CompileKernelFunctionApplication
         }
 
         {
-            // Variant: Fuse take(skip(seq)) where take count is a compile-time integer
+            // Variant: Fuse take(skip(seq))
             if (kernelApp.Function is nameof(KernelFunction.take) &&
                 kernelApp.Input is StaticExpression<DeclQualifiedName>.List takeArgsList &&
                 takeArgsList.Items.Count is 2 &&
@@ -126,6 +126,7 @@ public class CompileKernelFunctionApplication
                     KernelFunction.SignedIntegerFromValueRelaxed(takeCountLiteral.Value) is { } takeCountBI &&
                     takeCountBI >= int.MinValue && takeCountBI <= int.MaxValue)
                 {
+                    // Case 1: take count is a compile-time integer literal
                     var argumentExpr =
                         StaticProgramCSharpClass.CompileToCSharpExpression(
                             skipArgsList.Items[1],
@@ -150,6 +151,52 @@ public class CompileKernelFunctionApplication
                                     {
                                     SyntaxFactory.Argument(PineCSharpSyntaxFactory.ExpressionSyntaxForIntegerLiteral((int)takeCountBI))
                                         .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("takeCount"))),
+
+                                    SyntaxFactory.Token(SyntaxKind.CommaToken),
+
+                                    SyntaxFactory.Argument(skipCountExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
+                                        .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("skipCountValue"))),
+
+                                    SyntaxFactory.Token(SyntaxKind.CommaToken),
+
+                                    SyntaxFactory.Argument(argumentExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
+                                        .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("argument"))),
+                                    })));
+
+                    yield return CompiledCSharpExpression.Generic(genericCSharpExpr);
+                }
+                else
+                {
+                    // Case 2: both take count and skip count are runtime values
+                    var argumentExpr =
+                        StaticProgramCSharpClass.CompileToCSharpExpression(
+                            skipArgsList.Items[1],
+                            emitEnv);
+
+                    var takeCountExpr =
+                        StaticProgramCSharpClass.CompileToCSharpExpression(
+                            takeArgsList.Items[0],
+                            emitEnv);
+
+                    var skipCountExpr =
+                        StaticProgramCSharpClass.CompileToCSharpExpression(
+                            skipArgsList.Items[0],
+                            emitEnv);
+
+                    // Build fully-qualified invocation: Pine.Core.Internal.KernelFunctionFused.SkipAndTake(takeCountValue: ..., skipCountValue: ..., argument: ...)
+                    var genericCSharpExpr =
+                        SyntaxFactory.InvocationExpression(
+                            SyntaxFactory.MemberAccessExpression(
+                                SyntaxKind.SimpleMemberAccessExpression,
+                                TypeSyntaxFromType(typeof(KernelFunctionFused)),
+                                SyntaxFactory.IdentifierName(nameof(KernelFunctionFused.SkipAndTake))))
+                        .WithArgumentList(
+                            SyntaxFactory.ArgumentList(
+                                SyntaxFactory.SeparatedList<ArgumentSyntax>(
+                                    new SyntaxNodeOrToken[]
+                                    {
+                                    SyntaxFactory.Argument(takeCountExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
+                                        .WithNameColon(SyntaxFactory.NameColon(SyntaxFactory.IdentifierName("takeCountValue"))),
 
                                     SyntaxFactory.Token(SyntaxKind.CommaToken),
 
