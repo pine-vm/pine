@@ -821,7 +821,7 @@ public class JsonDecodeParseIntTests
             testClass.RenderToString();
 
         var commonValuesClassText =
-            Pine.PineVM.StaticProgramCSharpClass.RenderToString(asCSharp.CommonValueClass);
+            Core.DotNet.StaticProgramCSharpClass.RenderToString(asCSharp.CommonValueClass);
 
         moduleTestCSharpText.Trim().Should().Be(
             """"

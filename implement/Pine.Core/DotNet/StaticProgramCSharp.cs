@@ -5,7 +5,6 @@ using Pine.Core.Addressing;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.PineVM;
 using Pine.Core.PopularEncodings;
-using Pine.Pine.PineVM;
 using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;

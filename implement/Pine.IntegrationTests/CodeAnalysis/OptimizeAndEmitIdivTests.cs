@@ -300,10 +300,10 @@ public class OptimizeAndEmitIdivTests
             testClass.RenderToString();
 
         var commonValuesClassText =
-            Pine.PineVM.StaticProgramCSharpClass.RenderToString(asCSharp.CommonValueClass);
+            StaticProgramCSharpClass.RenderToString(asCSharp.CommonValueClass);
 
         var dispatcherClassText =
-            Pine.PineVM.StaticProgramCSharpClass.RenderToString(asCSharp.DispatcherClass);
+            StaticProgramCSharpClass.RenderToString(asCSharp.DispatcherClass);
 
         moduleTestCSharpText.Trim().Should().Be(
             """"
