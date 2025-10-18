@@ -606,6 +606,81 @@ public static class StaticExpressionExtension
     }
 
     /// <summary>
+    /// Checks if an expression is derived from a specific parameter path.
+    /// An expression is considered derived from a parameter if:
+    /// - It's a direct reference to the parameter (environment path)
+    /// - It's a conditional where all branches are derived from the parameter
+    /// - It's a concat where the first or last item is the parameter and other items don't mention it
+    /// </summary>
+    public static bool IsExpressionDerivedFromParamPath<TFunctionName>(
+        StaticExpression<TFunctionName> expr,
+        IReadOnlyList<int> paramPath)
+    {
+        // Direct reference to the parameter
+        if (TryParseAsPathToExpression(
+            expr,
+            StaticExpression<TFunctionName>.EnvironmentInstance) is { } exprPath &&
+            IntPathEqualityComparer.Instance.Equals(exprPath, paramPath))
+        {
+            return true;
+        }
+
+        // Conditional where both branches are derived from the parameter
+        if (expr is StaticExpression<TFunctionName>.Conditional conditional)
+        {
+            // The condition must not mention the parameter
+            if (MentionsEnvPath(conditional.Condition, paramPath))
+            {
+                return false;
+            }
+
+            // Both branches must be derived from the parameter
+            return IsExpressionDerivedFromParamPath(conditional.TrueBranch, paramPath) &&
+                   IsExpressionDerivedFromParamPath(conditional.FalseBranch, paramPath);
+        }
+
+        // Concat where the first or last item is derived from the parameter
+        if (expr is StaticExpression<TFunctionName>.KernelApplication kernelApp &&
+            kernelApp.Function is nameof(KernelFunction.concat) &&
+            kernelApp.Input is StaticExpression<TFunctionName>.List concatInputList &&
+            concatInputList.Items.Count > 0)
+        {
+            var firstItem = concatInputList.Items[0];
+            var lastItem = concatInputList.Items[^1];
+
+            // Check if first item is derived from parameter
+            if (IsExpressionDerivedFromParamPath(firstItem, paramPath))
+            {
+                // All other items must not mention the parameter
+                for (var i = 1; i < concatInputList.Items.Count; i++)
+                {
+                    if (MentionsEnvPath(concatInputList.Items[i], paramPath))
+                    {
+                        return false;
+                    }
+                }
+                return true;
+            }
+
+            // Check if last item is derived from parameter
+            if (IsExpressionDerivedFromParamPath(lastItem, paramPath))
+            {
+                // All other items must not mention the parameter
+                for (var i = 0; i < concatInputList.Items.Count - 1; i++)
+                {
+                    if (MentionsEnvPath(concatInputList.Items[i], paramPath))
+                    {
+                        return false;
+                    }
+                }
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// Parse the argument at <paramref name="paramPath"/> within <paramref name="funcAppExpr"/> as a concatenation
     /// involving the same parameter path and return the associated builder mutation, if any.
     /// </summary>
@@ -652,10 +727,8 @@ public static class StaticExpressionExtension
 
         var firstItem = concatInputList.Items[0];
 
-        if (TryParseAsPathToExpression(
-            firstItem,
-            StaticExpression<TFunctionName>.EnvironmentInstance) is { } firstItemPath &&
-            IntPathEqualityComparer.Instance.Equals(firstItemPath, paramPath))
+        // Check if first item is derived from the parameter (direct or through conditional/concat)
+        if (IsExpressionDerivedFromParamPath(firstItem, paramPath))
         {
             if (concatInputList.Items.Count <= 1)
             {
@@ -669,10 +742,8 @@ public static class StaticExpressionExtension
 
         var lastItem = concatInputList.Items[^1];
 
-        if (TryParseAsPathToExpression(
-            lastItem,
-            StaticExpression<TFunctionName>.EnvironmentInstance) is { } lastItemPath &&
-            IntPathEqualityComparer.Instance.Equals(lastItemPath, paramPath))
+        // Check if last item is derived from the parameter (direct or through conditional/concat)
+        if (IsExpressionDerivedFromParamPath(lastItem, paramPath))
         {
             if (concatInputList.Items.Count <= 1)
             {
@@ -717,13 +788,13 @@ public static class StaticExpressionExtension
     /// <param name="expr">The expression to search.</param>
     /// <param name="path">The environment path to look for.</param>
     /// <returns><see langword="true"/> if the path is mentioned anywhere within <paramref name="expr"/>; otherwise <see langword="false"/>.</returns>
-    public static bool MentionsEnvPath(
-        StaticExpression<DeclQualifiedName> expr,
+    public static bool MentionsEnvPath<TFunctionName>(
+        StaticExpression<TFunctionName> expr,
         IReadOnlyList<int> path)
     {
         if (TryParseAsPathToExpression(
             expr,
-            StaticExpression<DeclQualifiedName>.EnvironmentInstance) is { } currentEnvPath)
+            StaticExpression<TFunctionName>.EnvironmentInstance) is { } currentEnvPath)
         {
             if (currentEnvPath.Count < path.Count)
                 return false;
@@ -739,11 +810,11 @@ public static class StaticExpressionExtension
 
         switch (expr)
         {
-            case StaticExpression<DeclQualifiedName>.Literal:
-            case StaticExpression<DeclQualifiedName>.Environment:
+            case StaticExpression<TFunctionName>.Literal:
+            case StaticExpression<TFunctionName>.Environment:
                 return false;
 
-            case StaticExpression<DeclQualifiedName>.List list:
+            case StaticExpression<TFunctionName>.List list:
 
                 foreach (var item in list.Items)
                 {
@@ -753,24 +824,24 @@ public static class StaticExpressionExtension
 
                 return false;
 
-            case StaticExpression<DeclQualifiedName>.Conditional cond:
+            case StaticExpression<TFunctionName>.Conditional cond:
                 return MentionsEnvPath(cond.Condition, path)
                     || MentionsEnvPath(cond.TrueBranch, path)
                     || MentionsEnvPath(cond.FalseBranch, path);
 
-            case StaticExpression<DeclQualifiedName>.KernelApplication k:
+            case StaticExpression<TFunctionName>.KernelApplication k:
                 return MentionsEnvPath(k.Input, path);
 
-            case StaticExpression<DeclQualifiedName>.FunctionApplication f:
+            case StaticExpression<TFunctionName>.FunctionApplication f:
                 return MentionsEnvPath(f.Arguments, path);
 
-            case StaticExpression<DeclQualifiedName>.CrashingParseAndEval parseAndEval:
+            case StaticExpression<TFunctionName>.CrashingParseAndEval parseAndEval:
                 return
                     MentionsEnvPath(parseAndEval.Encoded, path) ||
                     MentionsEnvPath(parseAndEval.EnvironmentExpr, path);
 
             default:
-                throw new NotImplementedException(
+                throw new System.NotImplementedException(
                     "Internal error: Unknown expression type in MentionsEnvPath: " +
                     expr.GetType().FullName);
         }

@@ -310,7 +310,8 @@ public record StaticProgramCSharpClass(
                             availableValueDecls,
                             declarationSyntaxContext,
                             SelfFunctionInterfaceDelegate,
-                            GeneralOverride),
+                            GeneralOverride,
+                            paramsAsConcatBuilders),
                         alreadyDeclared);
 
                 // Check if the result is a tail call to self.
@@ -630,7 +631,8 @@ public record StaticProgramCSharpClass(
                             availableValueDecls,
                             declarationSyntaxContext,
                             SelfFunctionInterfaceDelegate,
-                            GeneralOverride),
+                            GeneralOverride,
+                            paramsAsConcatBuilders),
                         LocalDeclarations.Empty),
                     statementsFromResult: StatementsFromResult,
                     blockedDeclarations: blockedWithParamLocals);
@@ -676,7 +678,8 @@ public record StaticProgramCSharpClass(
                             availableValueDecls,
                             declarationSyntaxContext,
                             SelfFunctionInterfaceDelegate,
-                            GeneralOverride: _ => null),
+                            GeneralOverride: _ => null,
+                            ParamsAsConcatBuilders: new HashSet<IReadOnlyList<int>>(IntPathEqualityComparer.Instance)),
                         alreadyDeclared);
 
                 var resultExpression =
@@ -697,7 +700,8 @@ public record StaticProgramCSharpClass(
                             availableValueDecls,
                             declarationSyntaxContext,
                             SelfFunctionInterfaceDelegate,
-                            GeneralOverride: _ => null),
+                            GeneralOverride: _ => null,
+                            ParamsAsConcatBuilders: new HashSet<IReadOnlyList<int>>(IntPathEqualityComparer.Instance)),
                         LocalDeclarations.Empty),
                     statementsFromResult: StatementsFromResult,
                     blockedDeclarations: initialBlocked);
@@ -771,6 +775,46 @@ public record StaticProgramCSharpClass(
                             {
                                 return true;
                             }
+                        }
+                    }
+
+                    // Check for special case: concat that appends/prepends to the parameter.
+                    // This is allowed even in non-tail position because it's part of the pattern we're optimizing.
+                    if (kernelApp.Function is nameof(KernelFunction.concat) &&
+                        kernelApp.Input is StaticExpression<DeclQualifiedName>.List concatInputList &&
+                        concatInputList.Items.Count > 0)
+                    {
+                        var firstItem = concatInputList.Items[0];
+                        var lastItem = concatInputList.Items[^1];
+
+                        // Check if this is concat [ param, ...items ] (append pattern)
+                        if (StaticExpressionExtension.TryParseAsPathToExpression(
+                            firstItem,
+                            StaticExpression<DeclQualifiedName>.EnvironmentInstance) is { } firstPath &&
+                            firstPath.SequenceEqual(paramPath))
+                        {
+                            // All other items must not mention the parameter
+                            for (var i = 1; i < concatInputList.Items.Count; i++)
+                            {
+                                if (!IsGoodForConcatBuilderCandidate(concatInputList.Items[i], selfFunctionName, paramPath, false, ref sawConcatBuilderMutation))
+                                    return false;
+                            }
+                            return true;
+                        }
+
+                        // Check if this is concat [ ...items, param ] (prepend pattern)
+                        if (StaticExpressionExtension.TryParseAsPathToExpression(
+                            lastItem,
+                            StaticExpression<DeclQualifiedName>.EnvironmentInstance) is { } lastPath &&
+                            lastPath.SequenceEqual(paramPath))
+                        {
+                            // All other items must not mention the parameter
+                            for (var i = 0; i < concatInputList.Items.Count - 1; i++)
+                            {
+                                if (!IsGoodForConcatBuilderCandidate(concatInputList.Items[i], selfFunctionName, paramPath, false, ref sawConcatBuilderMutation))
+                                    return false;
+                            }
+                            return true;
                         }
                     }
 

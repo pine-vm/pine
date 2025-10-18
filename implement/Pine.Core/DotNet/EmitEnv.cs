@@ -31,12 +31,16 @@ using LocalDeclarations = ImmutableDictionary<StaticExpression<DeclQualifiedName
 /// Optional hook to replace emission for specific nodes with specialized C# (e.g., builder fast-paths).
 /// Returning <c>null</c> leaves default emission in place.
 /// </param>
+/// <param name="ParamsAsConcatBuilders">
+/// Set of parameter paths that have been identified as suitable for ImmutableConcatBuilder optimization.
+/// </param>
 public sealed record FunctionEmitEnv(
        IReadOnlyDictionary<DeclQualifiedName, StaticFunctionInterface> AvailableFunctions,
        IReadOnlyDictionary<PineValue, DeclQualifiedName> AvailableValueDeclarations,
        DeclarationSyntaxContext DeclarationSyntaxContext,
        System.Func<IReadOnlyList<int>, ExpressionSyntax?> SelfFunctionInterface,
-       System.Func<StaticExpression<DeclQualifiedName>, CompiledCSharpExpression?> GeneralOverride);
+       System.Func<StaticExpression<DeclQualifiedName>, CompiledCSharpExpression?> GeneralOverride,
+       IReadOnlySet<IReadOnlyList<int>> ParamsAsConcatBuilders);
 
 /// <summary>
 /// Per-expression emission environment derived from a <see cref="FunctionEmitEnv"/>,
