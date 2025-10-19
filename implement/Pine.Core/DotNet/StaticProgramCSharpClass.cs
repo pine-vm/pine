@@ -1051,7 +1051,7 @@ public record StaticProgramCSharpClass(
             StaticProgramCSharpMethodCSE.CollectSubexpressionsToSeparate(
                 expression,
                 ignoreExpr: IgnoreSubexpressionCollectingForCSE)
-            .OrderBy(expr => expr.SubexpressionCount)
+            .Order(StaticExpressionDeclarationOrder.Instance)
             .ToImmutableArray();
 
         var mutatedDeclared = emitEnv.AlreadyDeclared;

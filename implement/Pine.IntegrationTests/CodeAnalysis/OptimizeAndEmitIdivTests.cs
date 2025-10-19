@@ -313,50 +313,53 @@ public class OptimizeAndEmitIdivTests
                     PineValue param_1_0,
                     PineValue param_1_1)
                 {
-                    PineValue local_000 =
-                        KernelFunction.ValueFromBool(
-                            KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(0, param_1_0));
-            
-                    PineValue local_001 =
-                        KernelFunction.ValueFromBool(
-                            KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(0, param_1_1));
-            
-                    PineValue local_002 =
-                        Test.idivHelper(
-                            local_000 == PineKernelValues.TrueValue
-                            ?
-                            param_1_0
-                            :
-                            KernelFunctionSpecialized.int_mul(-1, param_1_0),
-                            local_001 == PineKernelValues.TrueValue
-                            ?
-                            param_1_1
-                            :
-                            KernelFunctionSpecialized.int_mul(-1, param_1_1),
-                            CommonReusedValues.Blob_Int_0);
-            
                     if (param_1_1 == CommonReusedValues.Blob_Int_0)
                     {
                         return CommonReusedValues.Blob_Int_0;
                     }
-            
-                    if ((local_000 == PineKernelValues.TrueValue
+
+                    PineValue local_001 =
+                        KernelFunction.ValueFromBool(
+                            KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(0, param_1_0));
+
+                    PineValue local_003 =
+                        KernelFunction.ValueFromBool(
+                            KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(0, param_1_1));
+
+                    PineValue local_004 =
+                        local_001 == PineKernelValues.TrueValue
+                        ?
+                        param_1_0
+                        :
+                        KernelFunctionSpecialized.int_mul(-1, param_1_0);
+
+                    PineValue local_005 =
+                        local_003 == PineKernelValues.TrueValue
+                        ?
+                        param_1_1
+                        :
+                        KernelFunctionSpecialized.int_mul(-1, param_1_1);
+
+                    PineValue local_008 =
+                        Test.idivHelper(local_004, local_005, CommonReusedValues.Blob_Int_0);
+
+                    if ((local_001 == PineKernelValues.TrueValue
                     ?
                     false
                     :
-                    true) == (local_001 == PineKernelValues.TrueValue
+                    true) == (local_003 == PineKernelValues.TrueValue
                     ?
                     false
                     :
                     true))
                     {
-                        return local_002;
+                        return local_008;
                     }
-            
-                    return KernelFunctionSpecialized.int_mul(-1, local_002);
+
+                    return KernelFunctionSpecialized.int_mul(-1, local_008);
                 }
-            
-            
+
+
                 public static PineValue idivHelper(
                     PineValue param_1_0,
                     PineValue param_1_1,
@@ -364,34 +367,34 @@ public class OptimizeAndEmitIdivTests
                 {
                     PineValue local_param_1_0 =
                         param_1_0;
-            
+
                     PineValue local_param_1_1 =
                         param_1_1;
-            
+
                     PineValue local_param_1_2 =
                         param_1_2;
-            
+
                     while (true)
                     {
                         PineValue local_000 =
                             KernelFunctionSpecialized.int_mul(17, local_param_1_1);
-            
+
                         if (KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(local_000, local_param_1_0))
                         {
-                            PineValue local_002 =
+                            PineValue local_001 =
                                 Test.idivHelper(local_param_1_0, local_000, CommonReusedValues.Blob_Int_0);
-            
+
                             return
                                 KernelFunctionSpecialized.int_add(
-                                    KernelFunctionSpecialized.int_mul(17, local_002),
+                                    KernelFunctionSpecialized.int_mul(17, local_001),
                                     Test.idivHelper(
                                         KernelFunctionSpecialized.int_add(
                                             local_param_1_0,
-                                            KernelFunctionSpecialized.int_mul(local_002, local_000, -1)),
+                                            KernelFunctionSpecialized.int_mul(local_001, local_000, -1)),
                                         local_param_1_1,
                                         CommonReusedValues.Blob_Int_0));
                         }
-            
+
                         if (KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(local_param_1_1, local_param_1_0))
                         {
                             {
@@ -399,20 +402,20 @@ public class OptimizeAndEmitIdivTests
                                     KernelFunctionSpecialized.int_add(
                                         local_param_1_0,
                                         KernelFunctionSpecialized.int_mul(-1, local_param_1_1));
-            
+
                                 PineValue local_param_1_2_temp =
                                     KernelFunctionSpecialized.int_add(1, local_param_1_2);
-            
+
                                 local_param_1_0 =
                                     local_param_1_0_temp;
-            
+
                                 local_param_1_2 =
                                     local_param_1_2_temp;
                             }
-            
+
                             continue;
                         }
-            
+
                         return local_param_1_2;
                     }
                 }
