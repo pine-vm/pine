@@ -491,7 +491,17 @@ public class OptimizeAndEmitJsonEncodeTests
 
                                 local_param_1_1 =
                                     local_param_1_1.AppendItems(
-                                        [CommonReusedValues.List_11431555]);
+                                        [
+                                            !(local_003 == PineKernelValues.TrueValue)
+                                            ?
+                                            PineValue.List(
+                                                [
+                                                    KernelFunctionFused.SkipAndTake(takeCountValue: local_001, skipCountValue: local_param_1_0, argument: local_param_1_2)
+                                                ])
+                                            :
+                                            PineValue.EmptyList,
+                                            CommonReusedValues.List_11431555
+                                        ]);
 
                                 local_param_1_0 =
                                     local_param_1_0_temp;
@@ -508,7 +518,17 @@ public class OptimizeAndEmitJsonEncodeTests
 
                                 local_param_1_1 =
                                     local_param_1_1.AppendItems(
-                                        [CommonReusedValues.List_6859d43a]);
+                                        [
+                                            !(local_003 == PineKernelValues.TrueValue)
+                                            ?
+                                            PineValue.List(
+                                                [
+                                                    KernelFunctionFused.SkipAndTake(takeCountValue: local_001, skipCountValue: local_param_1_0, argument: local_param_1_2)
+                                                ])
+                                            :
+                                            PineValue.EmptyList,
+                                            CommonReusedValues.List_6859d43a
+                                        ]);
 
                                 local_param_1_0 =
                                     local_param_1_0_temp;
@@ -525,7 +545,17 @@ public class OptimizeAndEmitJsonEncodeTests
 
                                 local_param_1_1 =
                                     local_param_1_1.AppendItems(
-                                        [CommonReusedValues.List_8cc957f8]);
+                                        [
+                                            !(local_003 == PineKernelValues.TrueValue)
+                                            ?
+                                            PineValue.List(
+                                                [
+                                                    KernelFunctionFused.SkipAndTake(takeCountValue: local_001, skipCountValue: local_param_1_0, argument: local_param_1_2)
+                                                ])
+                                            :
+                                            PineValue.EmptyList,
+                                            CommonReusedValues.List_8cc957f8
+                                        ]);
 
                                 local_param_1_0 =
                                     local_param_1_0_temp;
@@ -542,7 +572,17 @@ public class OptimizeAndEmitJsonEncodeTests
 
                                 local_param_1_1 =
                                     local_param_1_1.AppendItems(
-                                        [CommonReusedValues.List_21f12336]);
+                                        [
+                                            !(local_003 == PineKernelValues.TrueValue)
+                                            ?
+                                            PineValue.List(
+                                                [
+                                                    KernelFunctionFused.SkipAndTake(takeCountValue: local_001, skipCountValue: local_param_1_0, argument: local_param_1_2)
+                                                ])
+                                            :
+                                            PineValue.EmptyList,
+                                            CommonReusedValues.List_21f12336
+                                        ]);
 
                                 local_param_1_0 =
                                     local_param_1_0_temp;
@@ -559,7 +599,17 @@ public class OptimizeAndEmitJsonEncodeTests
 
                                 local_param_1_1 =
                                     local_param_1_1.AppendItems(
-                                        [CommonReusedValues.List_4495e748]);
+                                        [
+                                            !(local_003 == PineKernelValues.TrueValue)
+                                            ?
+                                            PineValue.List(
+                                                [
+                                                    KernelFunctionFused.SkipAndTake(takeCountValue: local_001, skipCountValue: local_param_1_0, argument: local_param_1_2)
+                                                ])
+                                            :
+                                            PineValue.EmptyList,
+                                            CommonReusedValues.List_4495e748
+                                        ]);
 
                                 local_param_1_0 =
                                     local_param_1_0_temp;
@@ -576,7 +626,17 @@ public class OptimizeAndEmitJsonEncodeTests
 
                                 local_param_1_1 =
                                     local_param_1_1.AppendItems(
-                                        [CommonReusedValues.List_0593a027]);
+                                        [
+                                            !(local_003 == PineKernelValues.TrueValue)
+                                            ?
+                                            PineValue.List(
+                                                [
+                                                    KernelFunctionFused.SkipAndTake(takeCountValue: local_001, skipCountValue: local_param_1_0, argument: local_param_1_2)
+                                                ])
+                                            :
+                                            PineValue.EmptyList,
+                                            CommonReusedValues.List_0593a027
+                                        ]);
 
                                 local_param_1_0 =
                                     local_param_1_0_temp;
@@ -593,7 +653,17 @@ public class OptimizeAndEmitJsonEncodeTests
 
                                 local_param_1_1 =
                                     local_param_1_1.AppendItems(
-                                        [CommonReusedValues.List_67fa5ac0]);
+                                        [
+                                            !(local_003 == PineKernelValues.TrueValue)
+                                            ?
+                                            PineValue.List(
+                                                [
+                                                    KernelFunctionFused.SkipAndTake(takeCountValue: local_001, skipCountValue: local_param_1_0, argument: local_param_1_2)
+                                                ])
+                                            :
+                                            PineValue.EmptyList,
+                                            CommonReusedValues.List_67fa5ac0
+                                        ]);
 
                                 local_param_1_0 =
                                     local_param_1_0_temp;
@@ -612,6 +682,14 @@ public class OptimizeAndEmitJsonEncodeTests
                             local_param_1_1 =
                                 local_param_1_1.AppendItems(
                                     [
+                                        !(local_003 == PineKernelValues.TrueValue)
+                                        ?
+                                        PineValue.List(
+                                            [
+                                                KernelFunctionFused.SkipAndTake(takeCountValue: local_001, skipCountValue: local_param_1_0, argument: local_param_1_2)
+                                            ])
+                                        :
+                                        PineValue.EmptyList,
                                         KernelFunctionSpecialized.int_is_sorted_asc(0, local_012, 65_535) == PineKernelValues.TrueValue
                                         ?
                                         KernelFunctionSpecialized.concat(

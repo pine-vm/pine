@@ -560,59 +560,91 @@ public static class StaticExpressionExtension
     }
 
     /// <summary>
-    /// Distinguishes whether a concat builder mutation appends or prepends items relative to the tracked parameter.
+    /// Represents an item used to build a concatenation composition that may be conditionally included.
     /// </summary>
-    public enum ConcatBuilderMutationKind
+    /// <typeparam name="TFunctionName">The type of user-defined function identifiers.</typeparam>
+    public abstract record ConcatItem<TFunctionName>
     {
         /// <summary>
-        /// Items are appended after the tracked parameter segment.
+        /// An item that is always included in the concatenation composition.
         /// </summary>
-        Append = 10,
+        /// <param name="Item">The static expression to include.</param>
+        public sealed record UnconditionalItem(
+            StaticExpression<TFunctionName> Item)
+            : ConcatItem<TFunctionName>;
 
         /// <summary>
-        /// Items are inserted before the tracked parameter segment.
+        /// An item that is included only when the given condition evaluates according to <paramref name="ConditionNegated"/>.
         /// </summary>
-        Prepend = 20,
-    }
+        /// <param name="Condition">The condition expression to evaluate.</param>
+        /// <param name="ConditionNegated">When true, the item is included if <paramref name="Condition"/> evaluates to false; otherwise included when it evaluates to true.</param>
+        /// <param name="Item">The item whose inclusion is guarded by the condition.</param>
+        public sealed record ConditionalItem(
+            StaticExpression<TFunctionName> Condition,
+            bool ConditionNegated,
+            ConcatItem<TFunctionName> Item)
+            : ConcatItem<TFunctionName>;
 
-    /// <summary>
-    /// Describes how a concat builder parameter is mutated within a function application.
-    /// </summary>
-    /// <typeparam name="TFunctionName">Type of user-defined function identifiers.</typeparam>
-    public readonly record struct ConcatBuilderMutation<TFunctionName>
-    {
         /// <summary>
-        /// Creates a new mutation description.
+        /// Creates an unconditional concatenation item from the given expression.
         /// </summary>
-        /// <param name="kind">Whether the mutation appends or prepends segments.</param>
-        /// <param name="items">The sequence of expressions participating in the mutation.</param>
-        public ConcatBuilderMutation(
-            ConcatBuilderMutationKind kind,
-            IReadOnlyList<StaticExpression<TFunctionName>> items)
+        /// <param name="item">The expression to include unconditionally.</param>
+        /// <returns>An unconditional <see cref="ConcatItem{TFunctionName}"/>.</returns>
+        public static ConcatItem<TFunctionName> Unconditional(
+            StaticExpression<TFunctionName> item) =>
+            new UnconditionalItem(item);
+
+        /// <summary>
+        /// Creates a conditional concatenation item.
+        /// </summary>
+        /// <param name="condition">The condition controlling inclusion of <paramref name="item"/>.</param>
+        /// <param name="conditionNegated">Whether to negate the condition when deciding inclusion.</param>
+        /// <param name="item">The item to include conditionally.</param>
+        /// <returns>A conditional <see cref="ConcatItem{TFunctionName}"/>.</returns>
+        public static ConcatItem<TFunctionName> Conditional(
+            StaticExpression<TFunctionName> condition,
+            bool conditionNegated,
+            ConcatItem<TFunctionName> item) =>
+            new ConditionalItem(condition, ConditionNegated: conditionNegated, item);
+
+        /// <summary>
+        /// Flattens nested conditional items into a list of conditions and the final, unconditional item.
+        /// </summary>
+        /// <returns>
+        /// A tuple where <c>conditions</c> contains the collected condition expressions with their negation flags
+        /// (outermost first), and <c>item</c> is the underlying unconditional static expression.
+        /// </returns>
+        public (IReadOnlyList<(StaticExpression<TFunctionName> conditionExpr, bool conditionNegated)> conditions, StaticExpression<TFunctionName> item)
+            DeconstructToConditionsAndItem()
         {
-            Kind = kind;
-            Items = items;
+            var conditions = new List<(StaticExpression<TFunctionName> conditionExpr, bool conditionNegated)>();
+
+            var current = this;
+
+            while (current is ConditionalItem conditional)
+            {
+                conditions.Add((conditional.Condition, conditional.ConditionNegated));
+
+                current = conditional.Item;
+            }
+
+            return (conditions, ((UnconditionalItem)current).Item);
         }
-
-        /// <summary>
-        /// Whether items are appended or prepended relative to the tracked parameter.
-        /// </summary>
-        public ConcatBuilderMutationKind Kind { get; }
-
-        /// <summary>
-        /// The sequence of expressions contributing additional concat segments.
-        /// </summary>
-        public IReadOnlyList<StaticExpression<TFunctionName>> Items { get; }
     }
 
     /// <summary>
-    /// Checks if an expression is derived from a specific parameter path.
-    /// An expression is considered derived from a parameter if:
-    /// - It's a direct reference to the parameter (environment path)
-    /// - It's a conditional where all branches are derived from the parameter
-    /// - It's a concat where the first or last item is the parameter and other items don't mention it
+    /// Describes how items are prepended and appended around a central occurrence when interpreting
+    /// a concat builder mutation that references a parameter path.
     /// </summary>
-    public static bool IsExpressionDerivedFromParamPath<TFunctionName>(
+    /// <typeparam name="TFunctionName">The type of user-defined function identifiers.</typeparam>
+    /// <param name="PrependedItems">Items that should appear before the central occurrence.</param>
+    /// <param name="AppendedItems">Items that should appear after the central occurrence.</param>
+    public readonly record struct ConcatComposition<TFunctionName>(
+        IReadOnlyList<ConcatItem<TFunctionName>> PrependedItems,
+        IReadOnlyList<ConcatItem<TFunctionName>> AppendedItems);
+
+    private static ConcatComposition<TFunctionName>?
+        TryParseParamPathAsPartOfConcatTree<TFunctionName>(
         StaticExpression<TFunctionName> expr,
         IReadOnlyList<int> paramPath)
     {
@@ -622,62 +654,143 @@ public static class StaticExpressionExtension
             StaticExpression<TFunctionName>.EnvironmentInstance) is { } exprPath &&
             IntPathEqualityComparer.Instance.Equals(exprPath, paramPath))
         {
-            return true;
+            return new ConcatComposition<TFunctionName>(
+                PrependedItems: [],
+                AppendedItems: []);
         }
 
-        // Conditional where both branches are derived from the parameter
-        if (expr is StaticExpression<TFunctionName>.Conditional conditional)
-        {
-            // The condition must not mention the parameter
-            if (MentionsEnvPath(conditional.Condition, paramPath))
-            {
-                return false;
-            }
-
-            // Both branches must be derived from the parameter
-            return IsExpressionDerivedFromParamPath(conditional.TrueBranch, paramPath) &&
-                   IsExpressionDerivedFromParamPath(conditional.FalseBranch, paramPath);
-        }
-
-        // Concat where the first or last item is derived from the parameter
         if (expr is StaticExpression<TFunctionName>.KernelApplication kernelApp &&
             kernelApp.Function is nameof(KernelFunction.concat) &&
-            kernelApp.Input is StaticExpression<TFunctionName>.List concatInputList &&
-            concatInputList.Items.Count > 0)
+            kernelApp.Input is StaticExpression<TFunctionName>.List concatInputList)
         {
-            var firstItem = concatInputList.Items[0];
-            var lastItem = concatInputList.Items[^1];
-
-            // Check if first item is derived from parameter
-            if (IsExpressionDerivedFromParamPath(firstItem, paramPath))
+            for (var itemIndex = 0; itemIndex < concatInputList.Items.Count; ++itemIndex)
             {
-                // All other items must not mention the parameter
-                for (var i = 1; i < concatInputList.Items.Count; i++)
+                if (TryParseParamPathAsPartOfConcatTree(
+                    concatInputList.Items[itemIndex],
+                    paramPath) is { } itemMatch)
                 {
-                    if (MentionsEnvPath(concatInputList.Items[i], paramPath))
-                    {
-                        return false;
-                    }
-                }
-                return true;
-            }
+                    IReadOnlyList<StaticExpression<TFunctionName>> itemsPrepended =
+                        [.. concatInputList.Items.Take(itemIndex)];
 
-            // Check if last item is derived from parameter
-            if (IsExpressionDerivedFromParamPath(lastItem, paramPath))
-            {
-                // All other items must not mention the parameter
-                for (var i = 0; i < concatInputList.Items.Count - 1; i++)
-                {
-                    if (MentionsEnvPath(concatInputList.Items[i], paramPath))
+                    IReadOnlyList<StaticExpression<TFunctionName>> itemsAppended =
+                        [.. concatInputList.Items.Skip(itemIndex + 1)];
+
+                    // Ensure no other use of the paramPath exists in the prepended/appended items
+
+                    foreach (var prependedItem in itemsPrepended)
                     {
-                        return false;
+                        if (MentionsEnvPath(prependedItem, paramPath))
+                        {
+                            return null;
+                        }
                     }
+
+                    foreach (var appendedItem in itemsAppended)
+                    {
+                        if (MentionsEnvPath(appendedItem, paramPath))
+                        {
+                            return null;
+                        }
+                    }
+
+                    var itemsPrependedWrapped =
+                        itemsPrepended
+                        .Select(ConcatItem<TFunctionName>.Unconditional)
+                        .ToArray();
+
+                    var itemsAppendedWrapped =
+                        itemsAppended
+                        .Select(ConcatItem<TFunctionName>.Unconditional)
+                        .ToArray();
+
+                    return new ConcatComposition<TFunctionName>(
+                        PrependedItems: [.. itemsPrependedWrapped, .. itemMatch.PrependedItems],
+                        AppendedItems: [.. itemMatch.AppendedItems, .. itemsAppendedWrapped]);
                 }
-                return true;
             }
         }
 
-        return false;
+
+        ConcatComposition<TFunctionName>? ContinueWithCondition(
+            StaticExpression<TFunctionName> condition,
+            bool conditionNegated,
+            ConcatComposition<TFunctionName> falseMatch,
+            ConcatComposition<TFunctionName> trueMatch)
+        {
+            if (falseMatch.AppendedItems.Count <= trueMatch.AppendedItems.Count &&
+                falseMatch.PrependedItems.Count <= trueMatch.PrependedItems.Count)
+            {
+                var middlePrepended =
+                    trueMatch.PrependedItems
+                    .Select(item => ConcatItem<TFunctionName>.Conditional(
+                        condition,
+                        conditionNegated,
+                        item))
+                    .ToArray();
+
+                var middleAppended =
+                    trueMatch.AppendedItems
+                    .Select(item => ConcatItem<TFunctionName>.Conditional(
+                        condition,
+                        conditionNegated,
+                        item))
+                    .ToArray();
+
+                return new ConcatComposition<TFunctionName>(
+                    PrependedItems:
+                        [.. middlePrepended, .. falseMatch.PrependedItems],
+                    AppendedItems:
+                        [.. falseMatch.AppendedItems, .. middleAppended]);
+            }
+
+            return null;
+        }
+
+        if (expr is StaticExpression<TFunctionName>.Conditional conditional)
+        {
+            if (MentionsEnvPath(conditional.Condition, paramPath))
+            {
+                return null;
+            }
+
+            // Simple case: No reset, both branches derive from paramPath
+
+            if (TryParseParamPathAsPartOfConcatTree(conditional.FalseBranch, paramPath) is { } falseMatch &&
+                TryParseParamPathAsPartOfConcatTree(conditional.TrueBranch, paramPath) is { } trueMatch)
+            {
+                if (falseMatch.PrependedItems.SequenceEqual(trueMatch.PrependedItems) &&
+                   falseMatch.AppendedItems.SequenceEqual(trueMatch.AppendedItems))
+                {
+                    return new ConcatComposition<TFunctionName>(
+                        PrependedItems:
+                            falseMatch.PrependedItems,
+                        AppendedItems:
+                            falseMatch.AppendedItems);
+                }
+
+                // Consider trivial case where the middle is the same in both branches
+
+                if (ContinueWithCondition(
+                    conditional.Condition,
+                    conditionNegated: false,
+                    falseMatch: falseMatch,
+                    trueMatch: trueMatch) is { } result)
+                {
+                    return result;
+                }
+
+                if (ContinueWithCondition(
+                    conditional.Condition,
+                    conditionNegated: true,
+                    falseMatch: trueMatch,
+                    trueMatch: falseMatch) is { } negatedResult)
+                {
+                    return negatedResult;
+                }
+            }
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -688,11 +801,11 @@ public static class StaticExpressionExtension
     /// <param name="funcAppExpr">The function application expression whose arguments are inspected.</param>
     /// <param name="paramPath">The path (list indices) to locate within <paramref name="funcAppExpr"/> arguments.</param>
     /// <returns>
-    /// A <see cref="ConcatBuilderMutation{TFunctionName}"/> describing whether items are appended or prepended relative to
+    /// A <see cref="ConcatComposition{TFunctionName}"/> describing whether items are appended or prepended relative to
     /// <paramref name="paramPath"/>, or <c>null</c> if the expression does not match the expected
     /// <see cref="KernelFunction.concat"/> shape.
     /// </returns>
-    public static ConcatBuilderMutation<TFunctionName>?
+    public static ConcatComposition<TFunctionName>?
         ParseParamPathAsConcatBuilderMutationInFunctionApplication<TFunctionName>(
         StaticExpression<TFunctionName>.FunctionApplication funcAppExpr,
         IReadOnlyList<int> paramPath)
@@ -715,68 +828,9 @@ public static class StaticExpressionExtension
             return null;
         }
 
-        if (kernelApp.Input is not StaticExpression<TFunctionName>.List concatInputList)
+        if (TryParseParamPathAsPartOfConcatTree(kernelApp, paramPath) is { } mutation)
         {
-            return null;
-        }
-
-        if (concatInputList.Items.Count is 0)
-        {
-            return null;
-        }
-
-        var firstItem = concatInputList.Items[0];
-
-        // Check if first item is derived from the parameter (direct or through conditional/concat)
-        if (IsExpressionDerivedFromParamPath(firstItem, paramPath))
-        {
-            if (concatInputList.Items.Count <= 1)
-            {
-                return null;
-            }
-
-            return new ConcatBuilderMutation<TFunctionName>(
-                ConcatBuilderMutationKind.Append,
-                [.. concatInputList.Items.Skip(1)]);
-        }
-
-        var lastItem = concatInputList.Items[^1];
-
-        // Check if last item is derived from the parameter (direct or through conditional/concat)
-        if (IsExpressionDerivedFromParamPath(lastItem, paramPath))
-        {
-            if (concatInputList.Items.Count <= 1)
-            {
-                return null;
-            }
-
-            return new ConcatBuilderMutation<TFunctionName>(
-                ConcatBuilderMutationKind.Prepend,
-                [.. concatInputList.Items.Take(concatInputList.Items.Count - 1)]);
-        }
-
-        return null;
-    }
-
-    /// <summary>
-    /// If the argument at <paramref name="paramPath"/> within the given function application is a
-    /// concatenation of the same parameter path with additional items appended after it, return those items.
-    /// </summary>
-    /// <param name="funcAppExpr">The function application expression whose arguments are inspected.</param>
-    /// <param name="paramPath">The path (list indices) to locate within <paramref name="funcAppExpr"/> arguments.</param>
-    /// <returns>
-    /// The sequence of expressions appended after the recursive reference to <paramref name="paramPath"/>,
-    /// or <c>null</c> if the shape does not match <c>concat [ path-to-env(paramPath), ...items ]</c> exactly.
-    /// </returns>
-    public static IReadOnlyList<StaticExpression<DeclQualifiedName>>?
-        ParseParamPathAsAppendItemsInFunctionApplication(
-        StaticExpression<DeclQualifiedName>.FunctionApplication funcAppExpr,
-        IReadOnlyList<int> paramPath)
-    {
-        if (ParseParamPathAsConcatBuilderMutationInFunctionApplication(funcAppExpr, paramPath)
-            is { Kind: ConcatBuilderMutationKind.Append, Items: { } items })
-        {
-            return items;
+            return mutation;
         }
 
         return null;
@@ -841,7 +895,7 @@ public static class StaticExpressionExtension
                     MentionsEnvPath(parseAndEval.EnvironmentExpr, path);
 
             default:
-                throw new System.NotImplementedException(
+                throw new NotImplementedException(
                     "Internal error: Unknown expression type in MentionsEnvPath: " +
                     expr.GetType().FullName);
         }

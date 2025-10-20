@@ -310,8 +310,7 @@ public record StaticProgramCSharpClass(
                             availableValueDecls,
                             declarationSyntaxContext,
                             SelfFunctionInterfaceDelegate,
-                            GeneralOverride,
-                            paramsAsConcatBuilders),
+                            GeneralOverride),
                         alreadyDeclared);
 
                 // Check if the result is a tail call to self.
@@ -348,39 +347,72 @@ public record StaticProgramCSharpClass(
                                 throw new System.Exception("Internal error: Missing local for param path.");
                             }
 
-                            var appendedItemsCompiled =
-                                mutation.Items
-                                .Select(appendedItemExpr =>
-                                    EnumerateExpressions(
-                                        appendedItemExpr,
-                                        exprEmitEnv)
-                                    .AsGenericValue(declarationSyntaxContext))
+                            ExpressionSyntax CompileConcatItem(StaticExpressionExtension.ConcatItem<DeclQualifiedName> concatItem)
+                            {
+                                var (conditions, item) = concatItem.DeconstructToConditionsAndItem();
+
+                                if (conditions.Count is 0)
+                                {
+                                    return
+                                        EnumerateExpressions(item, exprEmitEnv)
+                                        .AsGenericValue(declarationSyntaxContext);
+                                }
+
+                                var conditionExpr =
+                                    EmitAndConditionsChain(conditions, exprEmitEnv);
+
+                                var trueBranchExpr =
+                                    EnumerateExpressions(item, exprEmitEnv)
+                                    .AsGenericValue(declarationSyntaxContext);
+
+                                var falseBranchExpr =
+                                    PineCSharpSyntaxFactory.PineValueEmptyListSyntax(declarationSyntaxContext);
+
+                                return
+                                    SyntaxFactory.ConditionalExpression(
+                                        conditionExpr,
+                                        trueBranchExpr,
+                                        falseBranchExpr);
+
+                                throw new System.NotImplementedException(
+                                    "Internal error: Unsupported concat item type in CompileConcatItem: " +
+                                    concatItem.GetType().FullName);
+                            }
+
+                            var prependedItemsCompiled =
+                                mutation.PrependedItems
+                                .Select(CompileConcatItem)
                                 .ToImmutableArray();
 
-                            var updatedBuilderExpr =
-                                mutation.Kind switch
-                                {
-                                    StaticExpressionExtension.ConcatBuilderMutationKind.Append =>
-                                        PineCSharpSyntaxFactory.AppendItemsToImmutableConcatBuilderSyntax(
-                                            SyntaxFactory.IdentifierName(localName),
-                                            appendedItemsCompiled),
+                            var appendedItemsCompiled =
+                                mutation.AppendedItems
+                                .Select(CompileConcatItem)
+                                .ToImmutableArray();
 
-                                    StaticExpressionExtension.ConcatBuilderMutationKind.Prepend =>
-                                        PineCSharpSyntaxFactory.PrependItemsToImmutableConcatBuilderSyntax(
-                                            SyntaxFactory.IdentifierName(localName),
-                                            appendedItemsCompiled),
+                            ExpressionSyntax afterPrependItems =
+                                prependedItemsCompiled.Length is 0
+                                ?
+                                SyntaxFactory.IdentifierName(localName)
+                                :
+                                PineCSharpSyntaxFactory.PrependItemsToImmutableConcatBuilderSyntax(
+                                    SyntaxFactory.IdentifierName(localName),
+                                    prependedItemsCompiled);
 
-                                    _ =>
-                                        throw new System.NotImplementedException(
-                                            "Unknown concat builder mutation kind: " + mutation.Kind)
-                                };
+                            var afterAppendItems =
+                                appendedItemsCompiled.Length is 0
+                                ?
+                                afterPrependItems
+                                :
+                                PineCSharpSyntaxFactory.AppendItemsToImmutableConcatBuilderSyntax(
+                                    afterPrependItems,
+                                    appendedItemsCompiled);
 
                             mutatingUpdates.Add(
                                 SyntaxFactory.ExpressionStatement(
                                     SyntaxFactory.AssignmentExpression(
                                         SyntaxKind.SimpleAssignmentExpression,
                                         SyntaxFactory.IdentifierName(localName),
-                                        updatedBuilderExpr)));
+                                        afterAppendItems)));
                         }
                         else if (paramsAsSliceBuilders.Contains(paramPath))
                         {
@@ -631,8 +663,7 @@ public record StaticProgramCSharpClass(
                             availableValueDecls,
                             declarationSyntaxContext,
                             SelfFunctionInterfaceDelegate,
-                            GeneralOverride,
-                            paramsAsConcatBuilders),
+                            GeneralOverride),
                         LocalDeclarations.Empty),
                     statementsFromResult: StatementsFromResult,
                     blockedDeclarations: blockedWithParamLocals);
@@ -678,8 +709,7 @@ public record StaticProgramCSharpClass(
                             availableValueDecls,
                             declarationSyntaxContext,
                             SelfFunctionInterfaceDelegate,
-                            GeneralOverride: _ => null,
-                            ParamsAsConcatBuilders: new HashSet<IReadOnlyList<int>>(IntPathEqualityComparer.Instance)),
+                            GeneralOverride: _ => null),
                         alreadyDeclared);
 
                 var resultExpression =
@@ -700,8 +730,7 @@ public record StaticProgramCSharpClass(
                             availableValueDecls,
                             declarationSyntaxContext,
                             SelfFunctionInterfaceDelegate,
-                            GeneralOverride: _ => null,
-                            ParamsAsConcatBuilders: new HashSet<IReadOnlyList<int>>(IntPathEqualityComparer.Instance)),
+                            GeneralOverride: _ => null),
                         LocalDeclarations.Empty),
                     statementsFromResult: StatementsFromResult,
                     blockedDeclarations: initialBlocked);
@@ -834,10 +863,37 @@ public record StaticProgramCSharpClass(
                         if (mutation is not { } concatMutation)
                             return false;
 
-                        for (var i = 0; i < concatMutation.Items.Count; i++)
+                        var prependedAndAppendedItems =
+                            concatMutation.PrependedItems
+                            .Concat(concatMutation.AppendedItems)
+                            .ToList();
+
+                        for (var i = 0; i < prependedAndAppendedItems.Count; i++)
                         {
-                            if (!IsGoodForConcatBuilderCandidate(concatMutation.Items[i], selfFunctionName, paramPath, false, ref sawConcatBuilderMutation))
+                            var itemExpr =
+                                prependedAndAppendedItems[i] switch
+                                {
+                                    StaticExpressionExtension.ConcatItem<DeclQualifiedName>.UnconditionalItem unconditionalItem =>
+                                    unconditionalItem.Item,
+
+                                    StaticExpressionExtension.ConcatItem<DeclQualifiedName>.ConditionalItem conditionalItem =>
+                                    conditionalItem.Condition,
+
+                                    _ =>
+                                    throw new System.NotImplementedException(
+                                        "Internal error: Unknown concat item type in IsGoodForConcatBuilderCandidate: " +
+                                        prependedAndAppendedItems[i].GetType().FullName),
+                                };
+
+                            if (!IsGoodForConcatBuilderCandidate(
+                                itemExpr,
+                                selfFunctionName,
+                                paramPath,
+                                isTailPosition: false,
+                                ref sawConcatBuilderMutation))
+                            {
                                 return false;
+                            }
                         }
 
                         sawConcatBuilderMutation = true;

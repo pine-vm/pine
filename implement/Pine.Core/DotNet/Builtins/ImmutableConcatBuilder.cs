@@ -331,7 +331,7 @@ public abstract record ImmutableConcatBuilder
                         }
 
                     default:
-                        throw new System.NotImplementedException(
+                        throw new NotImplementedException(
                             "Unrecognized ImmutableConcatBuilder variant: " + builder.GetType().FullName);
                 }
             }
@@ -386,7 +386,7 @@ public abstract record ImmutableConcatBuilder
                         }
 
                     default:
-                        throw new System.NotImplementedException(
+                        throw new NotImplementedException(
                             "Unrecognized ImmutableConcatBuilder variant: " + builder.GetType().FullName);
                 }
             }
@@ -426,14 +426,14 @@ public abstract record ImmutableConcatBuilder
     /// <inheritdoc/>
     public virtual bool Equals(ImmutableConcatBuilder? other)
     {
-        throw new System.InvalidOperationException(
+        throw new InvalidOperationException(
             "Equals should not be called directly, instead explicitly evaluate first.");
     }
 
     /// <inheritdoc/>
     public override int GetHashCode()
     {
-        throw new System.InvalidOperationException(
+        throw new InvalidOperationException(
             "GetHashCode should not be called directly, instead explicitly evaluate first.");
     }
 }
