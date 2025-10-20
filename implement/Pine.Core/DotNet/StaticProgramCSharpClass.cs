@@ -1713,11 +1713,47 @@ public record StaticProgramCSharpClass(
             return andChainConjunctsCompiled[0].AsBooleanValue(emitEnv.FunctionEnv.DeclarationSyntaxContext);
         }
 
+        return EmitAndConditionsChain(
+            [.. conditionAsAndChain.Select(item => (item, false))],
+            emitEnv);
+    }
+
+    public static ExpressionSyntax EmitAndConditionsChain(
+        IReadOnlyList<(StaticExpression<DeclQualifiedName> expr, bool negated)> conditions,
+        ExpressionEmitEnv emitEnv)
+    {
+        if (conditions.Count is 0)
+        {
+            return PineCSharpSyntaxFactory.ExpressionSyntaxForBooleanLiteral(true);
+        }
+
+        ExpressionSyntax EmitItem(StaticExpression<DeclQualifiedName> expr, bool negated)
+        {
+            var plain =
+                CompileToCSharpExpression(
+                    expr,
+                    emitEnv);
+
+            if (negated)
+            {
+                return
+                    SyntaxFactory.PrefixUnaryExpression(
+                        SyntaxKind.LogicalNotExpression,
+                        CompiledCSharpExpression.EnsureIsParenthesizedForComposition(
+                            plain.AsBooleanValue(emitEnv.FunctionEnv.DeclarationSyntaxContext)));
+            }
+            else
+            {
+                return
+                    plain.AsBooleanValue(emitEnv.FunctionEnv.DeclarationSyntaxContext);
+            }
+        }
+
         // Combine conjuncts with '&&'
 
         return
-            andChainConjunctsCompiled
-            .Select(e => e.AsBooleanValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
+            conditions
+            .Select(item => EmitItem(item.expr, item.negated))
             .Aggregate((left, right) =>
                 SyntaxFactory.BinaryExpression(
                     SyntaxKind.LogicalAndExpression,
