@@ -38,12 +38,39 @@ public abstract record ImmutableConcatBuilder
     /// <summary>
     /// Predict whether the result from <see cref="Evaluate"/> would be a <see cref="PineValue.ListValue"/> value without fully evaluating.
     /// </summary>
-    public abstract bool IsList();
+    public bool IsList()
+    {
+        if (ContainsNonEmptyListInternal())
+        {
+            return true;
+        }
+
+        return !ContainsBlobInternal();
+    }
 
     /// <summary>
     /// Predict whether the result from <see cref="Evaluate"/> would be a <see cref="PineValue.BlobValue"/> value without fully evaluating.
     /// </summary>
-    public abstract bool IsBlob();
+    public bool IsBlob()
+    {
+        if (ContainsNonEmptyListInternal())
+        {
+            return false;
+        }
+
+        return ContainsBlobInternal();
+    }
+
+    /// <summary>
+    /// Determines whether any leaf in this builder contains a blob value.
+    /// </summary>
+    protected abstract bool ContainsBlobInternal();
+
+    /// <summary>
+    /// Determines whether the current instance contains at least one non-empty list.
+    /// </summary>
+    /// <returns>true if a non-empty list is present; otherwise, false.</returns>
+    protected abstract bool ContainsNonEmptyListInternal();
 
     /// <summary>
     /// Returns a new builder that appends the specified sequence of items to the end.
@@ -236,27 +263,31 @@ public abstract record ImmutableConcatBuilder
         }
 
         /// <inheritdoc/>
-        public override bool IsList()
+        protected override bool ContainsBlobInternal()
         {
-            // concat() returns a list if the first element is a list, or if empty
-            if (Values.Count is 0)
+            for (var i = 0; i < Values.Count; i++)
             {
-                return true; // Empty concat returns EmptyList
+                if (Values[i] is PineValue.BlobValue)
+                {
+                    return true;
+                }
             }
 
-            return Values[0] is PineValue.ListValue;
+            return false;
         }
 
         /// <inheritdoc/>
-        public override bool IsBlob()
+        protected override bool ContainsNonEmptyListInternal()
         {
-            // concat() returns a blob if the first element is a blob
-            if (Values.Count is 0)
+            for (var i = 0; i < Values.Count; i++)
             {
-                return false; // Empty concat returns EmptyList, not a blob
+                if (Values[i] is PineValue.ListValue listValue && listValue.Items.Length > 0)
+                {
+                    return true;
+                }
             }
 
-            return Values[0] is PineValue.BlobValue;
+            return false;
         }
     }
 
@@ -395,31 +426,31 @@ public abstract record ImmutableConcatBuilder
         }
 
         /// <inheritdoc/>
-        public override bool IsList()
+        protected override bool ContainsBlobInternal()
         {
-            // The result type of concat depends on the first value in the flattened sequence
-            // If no items, concat returns EmptyList
-            if (Items.Count is 0)
+            for (var i = 0; i < Items.Count; i++)
             {
-                return true;
+                if (Items[i].ContainsBlobInternal())
+                {
+                    return true;
+                }
             }
 
-            // Find the first builder's result type
-            return Items[0].IsList();
+            return false;
         }
 
         /// <inheritdoc/>
-        public override bool IsBlob()
+        protected override bool ContainsNonEmptyListInternal()
         {
-            // The result type of concat depends on the first value in the flattened sequence
-            // If no items, concat returns EmptyList (not a blob)
-            if (Items.Count is 0)
+            for (var i = 0; i < Items.Count; i++)
             {
-                return false;
+                if (Items[i].ContainsNonEmptyListInternal())
+                {
+                    return true;
+                }
             }
 
-            // Find the first builder's result type
-            return Items[0].IsBlob();
+            return false;
         }
     }
 

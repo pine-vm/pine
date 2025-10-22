@@ -600,7 +600,7 @@ public class ImmutableConcatBuilderTests
     }
 
     [Fact]
-    public void IsList_returns_true_when_any_item_is_list()
+    public void IsList_returns_true_when_any_item_is_non_empty_list()
     {
         var blob1 = PineValue.Blob([1, 2, 3]);
         var list1 = PineValue.List([PineValue.Blob([4])]);
@@ -644,7 +644,19 @@ public class ImmutableConcatBuilderTests
     }
 
     [Fact]
-    public void IsBlob_returns_false_when_any_item_is_list()
+    public void Leaf_with_blobs_and_empty_list()
+    {
+        var blob1 = PineValue.Blob([1, 2, 3]);
+        var list1 = PineValue.List([]);
+        var blob2 = PineValue.Blob([5, 6]);
+
+        var builder = ImmutableConcatBuilder.Create([blob1, list1, blob2]);
+
+        VerifyConsistencyOfDerivedProperties(builder);
+    }
+
+    [Fact]
+    public void Leaf_with_blobs_and_non_empty_list()
     {
         var blob1 = PineValue.Blob([1, 2, 3]);
         var list1 = PineValue.List([PineValue.Blob([4])]);

@@ -131,8 +131,27 @@ public static class KernelFunctionSpecialized
             "Unexpected value type: " + value.GetType().FullName);
     }
 
-    public static PineValue concat(ReadOnlySpan<PineValue> list)
+    public static PineValue concat(ReadOnlySpan<PineValue> listBeforeSkipEmpty)
     {
+        // Skip over any empty lists at the start.
+
+        var firstNonEmptyIndex = 0;
+
+        while (firstNonEmptyIndex < listBeforeSkipEmpty.Length)
+        {
+            var item = listBeforeSkipEmpty[firstNonEmptyIndex];
+
+            if (item is PineValue.ListValue listItem && listItem.Items.Length is 0)
+            {
+                ++firstNonEmptyIndex;
+                continue;
+            }
+
+            break;
+        }
+
+        var list = listBeforeSkipEmpty[firstNonEmptyIndex..];
+
         if (list.Length is 0)
         {
             return PineValue.EmptyList;
@@ -151,10 +170,12 @@ public static class KernelFunctionSpecialized
 
             for (var i = 0; i < list.Length; ++i)
             {
-                if (list[i] is PineValue.ListValue listValueElement)
+                if (list[i] is not PineValue.ListValue listValueElement)
                 {
-                    aggregateCount += listValueElement.Items.Length;
+                    return PineValue.EmptyList;
                 }
+
+                aggregateCount += listValueElement.Items.Length;
             }
 
             var concatenated = new PineValue[aggregateCount];
@@ -163,12 +184,14 @@ public static class KernelFunctionSpecialized
 
             for (var i = 0; i < list.Length; ++i)
             {
-                if (list[i] is PineValue.ListValue listValueElement)
+                if (list[i] is not PineValue.ListValue listValueElement)
                 {
-                    listValueElement.Items.CopyTo(concatenated.AsMemory(start: destItemIndex));
-
-                    destItemIndex += listValueElement.Items.Length;
+                    return PineValue.EmptyList;
                 }
+
+                listValueElement.Items.CopyTo(concatenated.AsMemory(start: destItemIndex));
+
+                destItemIndex += listValueElement.Items.Length;
             }
 
             return PineValue.List(concatenated);
@@ -180,8 +203,16 @@ public static class KernelFunctionSpecialized
 
             for (var i = 0; i < list.Length; ++i)
             {
-                if (list[i] is not PineValue.BlobValue blobValue)
+                var item = list[i];
+
+                if (item is PineValue.ListValue listItem && listItem.Items.Length is 0)
+                {
+                    // Skip empty lists
                     continue;
+                }
+
+                if (list[i] is not PineValue.BlobValue blobValue)
+                    return PineValue.EmptyList;
 
                 blobs.Add(blobValue.Bytes);
             }
@@ -199,7 +230,7 @@ public static class KernelFunctionSpecialized
         {
             if (valueB is not PineValue.ListValue listB)
             {
-                return valueA;
+                return PineValue.EmptyList;
             }
 
             if (listA.Items.Length is 0)

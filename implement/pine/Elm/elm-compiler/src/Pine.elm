@@ -362,43 +362,70 @@ kernelFunction_concat : Value -> Value
 kernelFunction_concat value =
     case value of
         ListValue list ->
-            case list of
-                [] ->
-                    listValue_Empty
-
-                (BlobValue _) :: _ ->
-                    kernelFunction_concat_blob [] list
-
-                (ListValue _) :: _ ->
-                    kernelFunction_concat_list [] list
+            kernelFunction_concat_list list
 
         _ ->
             listValue_Empty
 
 
-kernelFunction_concat_blob : List Int -> List Value -> Value
-kernelFunction_concat_blob bytes remainingItems =
+kernelFunction_concat_list : List Value -> Value
+kernelFunction_concat_list list =
+    case list of
+        firstItem :: remainingItems ->
+            case firstItem of
+                ListValue firstItems ->
+                    if List.length firstItems == 0 then
+                        kernelFunction_concat_list remainingItems
+
+                    else
+                        kernelFunction_concat_list_items
+                            firstItems
+                            remainingItems
+
+                BlobValue firstBytes ->
+                    kernelFunction_concat_blob_bytes
+                        firstBytes
+                        remainingItems
+
+        _ ->
+            listValue_Empty
+
+
+kernelFunction_concat_blob_bytes : List Int -> List Value -> Value
+kernelFunction_concat_blob_bytes bytes remainingItems =
     case remainingItems of
-        (BlobValue currentBytes) :: followingItems ->
-            kernelFunction_concat_blob (List.concat [ bytes, currentBytes ]) followingItems
+        nextItem :: followingItems ->
+            case nextItem of
+                BlobValue currentBytes ->
+                    kernelFunction_concat_blob_bytes
+                        (List.concat [ bytes, currentBytes ])
+                        followingItems
 
-        (ListValue _) :: followingItems ->
-            kernelFunction_concat_blob bytes followingItems
+                ListValue items ->
+                    if List.length items == 0 then
+                        kernelFunction_concat_blob_bytes bytes followingItems
 
-        [] ->
+                    else
+                        listValue_Empty
+
+        _ ->
             BlobValue bytes
 
 
-kernelFunction_concat_list : List Value -> List Value -> Value
-kernelFunction_concat_list flattenedItems remainingItems =
+kernelFunction_concat_list_items : List Value -> List Value -> Value
+kernelFunction_concat_list_items flattenedItems remainingItems =
     case remainingItems of
-        (ListValue currentItems) :: followingItems ->
-            kernelFunction_concat_list (List.concat [ flattenedItems, currentItems ]) followingItems
+        nextItem :: followingItems ->
+            case nextItem of
+                ListValue currentItems ->
+                    kernelFunction_concat_list_items
+                        (List.concat [ flattenedItems, currentItems ])
+                        followingItems
 
-        (BlobValue _) :: followingItems ->
-            kernelFunction_concat_list flattenedItems followingItems
+                BlobValue _ ->
+                    listValue_Empty
 
-        [] ->
+        _ ->
             ListValue flattenedItems
 
 
