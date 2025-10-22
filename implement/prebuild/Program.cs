@@ -23,7 +23,7 @@ public class Program
         "./history/2025-10-10-compiler-bundle/elm-syntax-parser-and-compiler.bin.gzip";
 
     public const string LastTrainedCSharpArchiveFilePath =
-        "./history/2025-10-16-distilled-csharp-files.tar.gz";
+        "./history/2025-10-22-distilled-csharp-files.tar.gz";
 
     public static void Main()
     {
