@@ -43,7 +43,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Http.Abstractions" Version="2.3.0" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="4.14.0" />
-    <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="9.0.9" />
+    <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="9.0.10" />
   </ItemGroup>
 
 </Project>

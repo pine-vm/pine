@@ -16,8 +16,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="AwesomeAssertions" Version="9.2.0" />
-    <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="9.0.9" />
+    <PackageReference Include="AwesomeAssertions" Version="9.2.1" />
+    <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="9.0.10" />
     <PackageReference Include="Microsoft.Testing.Extensions.TrxReport" Version="1.9.0" />
     <PackageReference Include="xunit.v3.core" Version="3.1.0" />
   </ItemGroup>
