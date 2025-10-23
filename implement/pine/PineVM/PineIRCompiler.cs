@@ -745,76 +745,54 @@ public class PineIRCompiler
             }
         }
 
+        NodeCompilationResult ContinueForConst(
+            PineValue partConst,
+            Expression partVar)
+        {
+            if (IntegerEncoding.ParseSignedIntegerRelaxed(partConst).IsOkOrNullable() is { } constInteger &&
+                partVar is Expression.KernelApplication varKernelApp &&
+                varKernelApp.Function is nameof(KernelFunction.length))
+            {
+                var afterVar =
+                    CompileExpressionTransitive(
+                        varKernelApp.Input,
+                        context,
+                        prior,
+                        parseCache);
+
+                return
+                    afterVar
+                    .AppendInstruction(
+                        StackInstruction.Length_Equal_Const(constInteger));
+            }
+
+            {
+                var afterVar =
+                    CompileExpressionTransitive(
+                        partVar,
+                        context,
+                        prior,
+                        parseCache);
+
+                return
+                    afterVar
+                    .AppendInstruction(
+                        StackInstruction.Equal_Binary_Const(partConst));
+            }
+        }
+
         if (input is Expression.List listExpr)
         {
             if (listExpr.Items.Count is 2)
             {
                 if (TryEvalIndependent(listExpr.Items[0], parseCache) is { } leftLiteralValue)
                 {
-                    if (IntegerEncoding.ParseSignedIntegerRelaxed(leftLiteralValue).IsOkOrNullable() is { } leftInteger &&
-                        listExpr.Items[1] is Expression.KernelApplication rightKernelApp &&
-                        rightKernelApp.Function is nameof(KernelFunction.length))
-                    {
-                        var afterRight =
-                            CompileExpressionTransitive(
-                                rightKernelApp.Input,
-                                context,
-                                prior,
-                                parseCache);
-
-                        return
-                            afterRight
-                            .AppendInstruction(
-                                StackInstruction.Length_Equal_Const(leftInteger));
-                    }
-
-                    {
-                        var afterRight =
-                            CompileExpressionTransitive(
-                                listExpr.Items[1],
-                                context,
-                                prior,
-                                parseCache);
-
-                        return
-                            afterRight
-                            .AppendInstruction(
-                                StackInstruction.Equal_Binary_Const(leftLiteralValue));
-                    }
+                    return ContinueForConst(leftLiteralValue, listExpr.Items[1]);
                 }
 
                 if (TryEvalIndependent(listExpr.Items[1], parseCache) is { } rightLiteralValue)
                 {
-                    if (IntegerEncoding.ParseSignedIntegerRelaxed(rightLiteralValue).IsOkOrNullable() is { } rightInteger &&
-                        listExpr.Items[0] is Expression.KernelApplication leftKernelApp &&
-                        leftKernelApp.Function is nameof(KernelFunction.length))
-                    {
-                        var afterLeft =
-                            CompileExpressionTransitive(
-                                leftKernelApp.Input,
-                                context,
-                                prior,
-                                parseCache);
-
-                        return
-                            afterLeft
-                            .AppendInstruction(
-                                StackInstruction.Length_Equal_Const(rightInteger));
-                    }
-
-                    {
-                        var afterLeft =
-                            CompileExpressionTransitive(
-                                listExpr.Items[0],
-                                context,
-                                prior,
-                                parseCache);
-
-                        return
-                            afterLeft
-                            .AppendInstruction(
-                                StackInstruction.Equal_Binary_Const(rightLiteralValue));
-                    }
+                    return ContinueForConst(rightLiteralValue, listExpr.Items[0]);
                 }
 
                 {
@@ -862,27 +840,39 @@ public class PineIRCompiler
             return null;
         }
 
+        (Expression expr, PineValue start)? ContinueWithConst(
+            PineValue partConst,
+            Expression partVar)
         {
-            if (TryEvalIndependent(inputList.Items[0], parseCache) is { } leftValue &&
-                TryParse_KernelTake_Const(inputList.Items[1], parseCache) is { } rightTake)
+            if (TryParse_KernelTake_Const(partVar, parseCache) is { } varTake)
             {
-                if (leftValue is PineValue.BlobValue leftBlob &&
-                    leftBlob.Bytes.Length == rightTake.takeCount)
+                if (partConst is PineValue.BlobValue leftBlob &&
+                    leftBlob.Bytes.Length == varTake.takeCount)
                 {
-                    return (rightTake.sourceExpr, leftBlob);
+                    return (varTake.sourceExpr, leftBlob);
                 }
+
+                if (partConst is PineValue.ListValue leftList &&
+                    leftList.Items.Length == varTake.takeCount)
+                {
+                    return (varTake.sourceExpr, leftList);
+                }
+            }
+
+            return null;
+        }
+
+        {
+            if (TryEvalIndependent(inputList.Items[0], parseCache) is { } leftValue)
+            {
+                return ContinueWithConst(leftValue, inputList.Items[1]);
             }
         }
 
         {
-            if (TryEvalIndependent(inputList.Items[1], parseCache) is { } rightValue &&
-                TryParse_KernelTake_Const(inputList.Items[0], parseCache) is { } leftTake)
+            if (TryEvalIndependent(inputList.Items[1], parseCache) is { } rightValue)
             {
-                if (rightValue is PineValue.BlobValue rightBlob &&
-                    rightBlob.Bytes.Length == leftTake.takeCount)
-                {
-                    return (leftTake.sourceExpr, rightBlob);
-                }
+                return ContinueWithConst(rightValue, inputList.Items[0]);
             }
         }
 
