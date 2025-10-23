@@ -2722,13 +2722,13 @@ public class PineVM : IPineVM
                                 ??
                                 throw new Exception("Invalid operation form: Missing prefix value");
 
-                            var skipCountValue = currentFrame.PopTopmostFromStack().Evaluate();
+                            var skipCountValue = currentFrame.PopTopmostFromStack();
 
                             var slicedValue = currentFrame.PopTopmostFromStack().Evaluate();
 
                             var resultValue = PineKernelValues.FalseValue;
 
-                            if (KernelFunction.SignedIntegerFromValueRelaxed(skipCountValue) is { } skipCount)
+                            if (skipCountValue.AsInteger() is { } skipCount)
                             {
                                 if (prefixValue is PineValue.BlobValue prefixBlob)
                                 {
@@ -2762,7 +2762,7 @@ public class PineVM : IPineVM
 
                                             for (var i = 0; i < prefixList.Items.Length; i++)
                                             {
-                                                if (slicedValueList.Items.Span[i] != prefixList.Items.Span[i])
+                                                if (slicedValueList.Items.Span[i + (int)skipCount] != prefixList.Items.Span[i])
                                                 {
                                                     allItemsMatch = false;
                                                     break;
