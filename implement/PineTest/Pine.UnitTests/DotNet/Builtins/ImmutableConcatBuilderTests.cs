@@ -314,7 +314,7 @@ public class ImmutableConcatBuilderTests
     public void Node_with_single_child_evaluates_correctly()
     {
         var item = PineValue.List([PineValue.Blob([1])]);
-        var leaf = new ImmutableConcatBuilder.Leaf([item]);
+        var leaf = new ImmutableConcatBuilder.Leaf((PineValue[])[item]);
         var node = new ImmutableConcatBuilder.Node([leaf]);
 
         var result = node.Evaluate();
@@ -336,8 +336,8 @@ public class ImmutableConcatBuilderTests
             PineValue.List([PineValue.Blob([4])])
         ];
 
-        var leaf1 = new ImmutableConcatBuilder.Leaf([items[0], items[1]]);
-        var leaf2 = new ImmutableConcatBuilder.Leaf([items[2], items[3]]);
+        var leaf1 = new ImmutableConcatBuilder.Leaf((PineValue[])[items[0], items[1]]);
+        var leaf2 = new ImmutableConcatBuilder.Leaf((PineValue[])[items[2], items[3]]);
         var node = new ImmutableConcatBuilder.Node([leaf1, leaf2]);
 
         var result = node.Evaluate();
@@ -357,11 +357,11 @@ public class ImmutableConcatBuilderTests
             PineValue.List([PineValue.Blob([3])])
         ];
 
-        var leaf1 = new ImmutableConcatBuilder.Leaf([items[0]]);
-        var leaf2 = new ImmutableConcatBuilder.Leaf([items[1]]);
+        var leaf1 = new ImmutableConcatBuilder.Leaf((PineValue[])[items[0]]);
+        var leaf2 = new ImmutableConcatBuilder.Leaf((PineValue[])[items[1]]);
         var node1 = new ImmutableConcatBuilder.Node([leaf1, leaf2]);
 
-        var leaf3 = new ImmutableConcatBuilder.Leaf([items[2]]);
+        var leaf3 = new ImmutableConcatBuilder.Leaf((PineValue[])[items[2]]);
         var node2 = new ImmutableConcatBuilder.Node([node1, leaf3]);
 
         var result = node2.Evaluate();
@@ -374,7 +374,7 @@ public class ImmutableConcatBuilderTests
     [Fact]
     public void Empty_leaf_evaluates_to_empty_list()
     {
-        var leaf = new ImmutableConcatBuilder.Leaf([]);
+        var leaf = new ImmutableConcatBuilder.Leaf((PineValue[])[]);
 
         var result = leaf.Evaluate();
         var expected = KernelFunction.concat(PineValue.EmptyList);

@@ -27,13 +27,24 @@ public abstract record ImmutableConcatBuilder
     /// <summary>
     /// Evaluates this builder into a single <see cref="PineValue"/> by applying the recorded concatenations.
     /// </summary>
-    public abstract PineValue Evaluate();
+    public PineValue Evaluate()
+    {
+        var flattenedItems = Flatten(this);
+
+        return Internal.KernelFunctionSpecialized.concat(flattenedItems.Span);
+    }
+
 
     /// <summary>
     /// Evaluates this builder by reversing the order of items, then applying concatenations.
     /// Equivalent to Evaluate() followed by reverse(), but more efficient.
     /// </summary>
-    public abstract PineValue EvaluateReverse();
+    public PineValue EvaluateReverse()
+    {
+        var flattenedItems = Flatten(this);
+
+        return Internal.KernelFunctionFused.ConcatAndReverse(flattenedItems.Span);
+    }
 
     /// <summary>
     /// Predict whether the result from <see cref="Evaluate"/> would be a <see cref="PineValue.ListValue"/> value without fully evaluating.
@@ -77,10 +88,13 @@ public abstract record ImmutableConcatBuilder
     /// </summary>
     public ImmutableConcatBuilder AppendItems(IEnumerable<PineValue> values)
     {
-        var newItems = values as IReadOnlyList<PineValue> ?? [.. values];
+        var newItems =
+            values is PineValue[] arrayValues
+                ? arrayValues
+                : [.. values];
 
         // If there are no new items, return this builder unchanged
-        if (newItems.Count is 0)
+        if (newItems.Length is 0)
         {
             return this;
         }
@@ -91,19 +105,19 @@ public abstract record ImmutableConcatBuilder
             var lastChild = node.Items[node.Items.Count - 1];
 
             if (lastChild is Leaf lastLeaf &&
-                lastLeaf.Values.Count + newItems.Count <= MaxLeafSizeForConsolidation)
+                lastLeaf.Values.Length + newItems.Length <= MaxLeafSizeForConsolidation)
             {
                 // Consolidate: merge the new items into the last leaf
-                var consolidatedValues = new PineValue[lastLeaf.Values.Count + newItems.Count];
+                var consolidatedValues = new PineValue[lastLeaf.Values.Length + newItems.Length];
 
-                for (var i = 0; i < lastLeaf.Values.Count; i++)
+                for (var i = 0; i < lastLeaf.Values.Length; i++)
                 {
-                    consolidatedValues[i] = lastLeaf.Values[i];
+                    consolidatedValues[i] = lastLeaf.Values.Span[i];
                 }
 
-                for (var i = 0; i < newItems.Count; i++)
+                for (var i = 0; i < newItems.Length; i++)
                 {
-                    consolidatedValues[lastLeaf.Values.Count + i] = newItems[i];
+                    consolidatedValues[lastLeaf.Values.Length + i] = newItems[i];
                 }
 
                 var consolidatedLeaf = new Leaf(consolidatedValues);
@@ -122,19 +136,19 @@ public abstract record ImmutableConcatBuilder
             }
         }
         else if (this is Leaf thisLeaf &&
-                 thisLeaf.Values.Count + newItems.Count <= MaxLeafSizeForConsolidation)
+                 thisLeaf.Values.Length + newItems.Length <= MaxLeafSizeForConsolidation)
         {
             // Consolidate: merge the new items into the current leaf
-            var consolidatedValues = new PineValue[thisLeaf.Values.Count + newItems.Count];
+            var consolidatedValues = new PineValue[thisLeaf.Values.Length + newItems.Length];
 
-            for (var i = 0; i < thisLeaf.Values.Count; i++)
+            for (var i = 0; i < thisLeaf.Values.Length; i++)
             {
-                consolidatedValues[i] = thisLeaf.Values[i];
+                consolidatedValues[i] = thisLeaf.Values.Span[i];
             }
 
-            for (var i = 0; i < newItems.Count; i++)
+            for (var i = 0; i < newItems.Length; i++)
             {
-                consolidatedValues[thisLeaf.Values.Count + i] = newItems[i];
+                consolidatedValues[thisLeaf.Values.Length + i] = newItems[i];
             }
 
             return new Leaf(consolidatedValues);
@@ -157,10 +171,10 @@ public abstract record ImmutableConcatBuilder
     /// </summary>
     public ImmutableConcatBuilder PrependItems(IEnumerable<PineValue> values)
     {
-        var newItems = values as IReadOnlyList<PineValue> ?? [.. values];
+        var newItems = (values as PineValue[]) ?? [.. values];
 
         // If there are no new items, return this builder unchanged
-        if (newItems.Count is 0)
+        if (newItems.Length is 0)
         {
             return this;
         }
@@ -171,19 +185,19 @@ public abstract record ImmutableConcatBuilder
             var firstChild = node.Items[0];
 
             if (firstChild is Leaf firstLeaf &&
-                firstLeaf.Values.Count + newItems.Count <= MaxLeafSizeForConsolidation)
+                firstLeaf.Values.Length + newItems.Length <= MaxLeafSizeForConsolidation)
             {
                 // Consolidate: merge the new items into the first leaf
-                var consolidatedValues = new PineValue[newItems.Count + firstLeaf.Values.Count];
+                var consolidatedValues = new PineValue[newItems.Length + firstLeaf.Values.Length];
 
-                for (var i = 0; i < newItems.Count; i++)
+                for (var i = 0; i < newItems.Length; i++)
                 {
                     consolidatedValues[i] = newItems[i];
                 }
 
-                for (var i = 0; i < firstLeaf.Values.Count; i++)
+                for (var i = 0; i < firstLeaf.Values.Length; i++)
                 {
-                    consolidatedValues[newItems.Count + i] = firstLeaf.Values[i];
+                    consolidatedValues[newItems.Length + i] = firstLeaf.Values.Span[i];
                 }
 
                 var consolidatedLeaf = new Leaf(consolidatedValues);
@@ -201,19 +215,19 @@ public abstract record ImmutableConcatBuilder
             }
         }
         else if (this is Leaf thisLeaf &&
-                 thisLeaf.Values.Count + newItems.Count <= MaxLeafSizeForConsolidation)
+                 thisLeaf.Values.Length + newItems.Length <= MaxLeafSizeForConsolidation)
         {
             // Consolidate: merge the new items into the current leaf
-            var consolidatedValues = new PineValue[newItems.Count + thisLeaf.Values.Count];
+            var consolidatedValues = new PineValue[newItems.Length + thisLeaf.Values.Length];
 
-            for (var i = 0; i < newItems.Count; i++)
+            for (var i = 0; i < newItems.Length; i++)
             {
                 consolidatedValues[i] = newItems[i];
             }
 
-            for (var i = 0; i < thisLeaf.Values.Count; i++)
+            for (var i = 0; i < thisLeaf.Values.Length; i++)
             {
-                consolidatedValues[newItems.Count + i] = thisLeaf.Values[i];
+                consolidatedValues[newItems.Length + i] = thisLeaf.Values.Span[i];
             }
 
             return new Leaf(consolidatedValues);
@@ -237,37 +251,23 @@ public abstract record ImmutableConcatBuilder
     public static ImmutableConcatBuilder Create(
         IEnumerable<PineValue> values)
     {
-        return new Leaf([.. values]);
+        return new Leaf(values.ToArray());
     }
 
     /// <summary>
     /// Leaf node holding a concrete list of values.
     /// </summary>
-    public sealed record Leaf(IReadOnlyList<PineValue> Values) : ImmutableConcatBuilder
+    public sealed record Leaf(ReadOnlyMemory<PineValue> Values) : ImmutableConcatBuilder
     {
         /// <inheritdoc/>
-        public override int AggregateItemsCount => Values.Count;
-
-        /// <inheritdoc/>
-        public override PineValue Evaluate()
-        {
-            return Internal.KernelFunctionSpecialized.concat(Values.ToArray());
-        }
-
-        /// <inheritdoc/>
-        public override PineValue EvaluateReverse()
-        {
-            var reversed = Values.ToArray();
-            Array.Reverse(reversed);
-            return Internal.KernelFunctionSpecialized.concat(reversed);
-        }
+        public override int AggregateItemsCount => Values.Length;
 
         /// <inheritdoc/>
         protected override bool ContainsBlobInternal()
         {
-            for (var i = 0; i < Values.Count; i++)
+            for (var i = 0; i < Values.Length; i++)
             {
-                if (Values[i] is PineValue.BlobValue)
+                if (Values.Span[i] is PineValue.BlobValue)
                 {
                     return true;
                 }
@@ -279,9 +279,9 @@ public abstract record ImmutableConcatBuilder
         /// <inheritdoc/>
         protected override bool ContainsNonEmptyListInternal()
         {
-            for (var i = 0; i < Values.Count; i++)
+            for (var i = 0; i < Values.Length; i++)
             {
-                if (Values[i] is PineValue.ListValue listValue && listValue.Items.Length > 0)
+                if (Values.Span[i] is PineValue.ListValue listValue && listValue.Items.Length > 0)
                 {
                     return true;
                 }
@@ -323,109 +323,6 @@ public abstract record ImmutableConcatBuilder
         }
 
         /// <inheritdoc/>
-        public override PineValue Evaluate()
-        {
-            var flattenedItems = new PineValue[AggregateItemsCount];
-
-            var currentIndex = 0;
-
-            // Use an explicit stack to avoid deep recursion when the tree degenerates into a chain.
-            var stack = new Stack<(ImmutableConcatBuilder Builder, int NextChildIndex)>();
-
-            stack.Push((this, 0));
-
-            while (stack.Count > 0)
-            {
-                var (builder, nextChildIndex) = stack.Pop();
-
-                switch (builder)
-                {
-                    case Leaf leaf:
-                        {
-                            foreach (var value in leaf.Values)
-                            {
-                                flattenedItems[currentIndex++] = value;
-                            }
-
-                            break;
-                        }
-
-                    case Node node:
-                        {
-                            if (nextChildIndex < node.Items.Count)
-                            {
-                                stack.Push((node, nextChildIndex + 1));
-                                stack.Push((node.Items[nextChildIndex], 0));
-                            }
-
-                            break;
-                        }
-
-                    default:
-                        throw new NotImplementedException(
-                            "Unrecognized ImmutableConcatBuilder variant: " + builder.GetType().FullName);
-                }
-            }
-
-            return Internal.KernelFunctionSpecialized.concat(flattenedItems);
-        }
-
-        /// <inheritdoc/>
-        public override PineValue EvaluateReverse()
-        {
-            var flattenedItems = new PineValue[AggregateItemsCount];
-
-            var currentIndex = 0;
-
-            // Use an explicit stack to avoid deep recursion when the tree degenerates into a chain.
-            var stack = new Stack<(ImmutableConcatBuilder Builder, int NextChildIndex)>();
-
-            stack.Push((this, Items.Count - 1));
-
-            while (stack.Count > 0)
-            {
-                var (builder, nextChildIndex) = stack.Pop();
-
-                switch (builder)
-                {
-                    case Leaf leaf:
-                        {
-                            for (var i = leaf.Values.Count - 1; i >= 0; i--)
-                            {
-                                flattenedItems[currentIndex++] = leaf.Values[i];
-                            }
-
-                            break;
-                        }
-
-                    case Node node:
-                        {
-                            if (nextChildIndex >= 0)
-                            {
-                                stack.Push((node, nextChildIndex - 1));
-
-                                var childBuilder = node.Items[nextChildIndex];
-                                var childStartIndex = childBuilder switch
-                                {
-                                    Node childNode => childNode.Items.Count - 1,
-                                    _ => 0
-                                };
-                                stack.Push((childBuilder, childStartIndex));
-                            }
-
-                            break;
-                        }
-
-                    default:
-                        throw new NotImplementedException(
-                            "Unrecognized ImmutableConcatBuilder variant: " + builder.GetType().FullName);
-                }
-            }
-
-            return Internal.KernelFunctionSpecialized.concat(flattenedItems);
-        }
-
-        /// <inheritdoc/>
         protected override bool ContainsBlobInternal()
         {
             for (var i = 0; i < Items.Count; i++)
@@ -452,6 +349,64 @@ public abstract record ImmutableConcatBuilder
 
             return false;
         }
+    }
+
+    /// <summary>
+    /// Flattens the immutable concat tree rooted at <paramref name="builder"/> into a contiguous buffer
+    /// of <see cref="PineValue"/> items in left-to-right order.
+    /// </summary>
+    /// <param name="builder">The root <see cref="ImmutableConcatBuilder"/> to flatten.</param>
+    /// <returns>
+    /// A <see cref="ReadOnlyMemory{T}"/> segment containing all items from the tree in evaluation order.
+    /// The returned memory is backed by a newly allocated array whose length equals <see cref="AggregateItemsCount"/>.
+    /// </returns>
+    protected static ReadOnlyMemory<PineValue> Flatten(ImmutableConcatBuilder builder)
+    {
+        var result = new PineValue[builder.AggregateItemsCount];
+
+        var currentIndex = 0;
+
+        // Use an explicit stack to avoid deep recursion when the tree degenerates into a chain.
+        var stack = new Stack<(ImmutableConcatBuilder Builder, int NextChildIndex)>();
+
+        stack.Push((builder, 0));
+
+        while (stack.Count > 0)
+        {
+            var (currentBuilder, nextChildIndex) = stack.Pop();
+
+            switch (currentBuilder)
+            {
+                case Leaf leaf:
+                    {
+                        var span = leaf.Values.Span;
+
+                        for (var i = 0; i < span.Length; i++)
+                        {
+                            result[currentIndex++] = span[i];
+                        }
+
+                        break;
+                    }
+
+                case Node node:
+                    {
+                        if (nextChildIndex < node.Items.Count)
+                        {
+                            stack.Push((node, nextChildIndex + 1));
+                            stack.Push((node.Items[nextChildIndex], 0));
+                        }
+
+                        break;
+                    }
+
+                default:
+                    throw new NotImplementedException(
+                        "Unrecognized ImmutableConcatBuilder variant: " + currentBuilder.GetType().FullName);
+            }
+        }
+
+        return result;
     }
 
     /// <inheritdoc/>

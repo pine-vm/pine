@@ -1,6 +1,7 @@
 using Pine.Core.DotNet.Builtins;
 using Pine.Core.PineVM;
 using Pine.Core.PopularEncodings;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
@@ -396,7 +397,7 @@ public class PineValueInProcess
 
         return new PineValueInProcess
         {
-            _concatBuilder = new ImmutableConcatBuilder.Leaf([leftEval, rightEval])
+            _concatBuilder = new ImmutableConcatBuilder.Leaf(new PineValue[] { leftEval, rightEval })
         };
     }
 
@@ -607,21 +608,16 @@ public class PineValueInProcess
         return true;
     }
 
-    private static bool AreListItemsEqual(IReadOnlyList<PineValue> left, IReadOnlyList<PineValue> right)
+    private static bool AreListItemsEqual(ReadOnlyMemory<PineValue> left, ReadOnlyMemory<PineValue> right)
     {
-        if (ReferenceEquals(left, right))
-        {
-            return true;
-        }
-
-        if (left.Count != right.Count)
+        if (left.Length != right.Length)
         {
             return false;
         }
 
-        for (var i = 0; i < left.Count; i++)
+        for (var i = 0; i < left.Length; i++)
         {
-            if (!left[i].Equals(right[i]))
+            if (!left.Span[i].Equals(right.Span[i]))
             {
                 return false;
             }
