@@ -468,7 +468,7 @@ public class CodeAnalysis
 
 
     public static IReadOnlyDictionary<Expression, IReadOnlyList<PineValueClass>> EnvironmentClassesFromInvocationReports(
-        IReadOnlyList<PineVM.EvaluationReport> invocationReports,
+        IReadOnlyList<EvaluationReport> invocationReports,
         int limitInvocationSampleCount,
         int limitSampleCountPerSample,
         int classUsageCountMin,
@@ -482,7 +482,7 @@ public class CodeAnalysis
             limitClassesPerExpression: limitClassesPerExpression);
 
     public static IReadOnlyDictionary<Expression, IReadOnlyList<PineValueClass>> EnvironmentClassesFromInvocationReports(
-        IReadOnlyList<PineVM.EvaluationReport> invocationReports,
+        IReadOnlyList<EvaluationReport> invocationReports,
         IReadOnlySet<Expression> expressionsToIgnore,
         int limitInvocationSampleCount,
         int limitSampleCountPerSample,
@@ -680,7 +680,7 @@ public class CodeAnalysis
             var lastExpression = currentExpression;
 
             currentExpression =
-                PineVM.ReduceExpressionAndInlineRecursive(
+                ExpressionCompilation.ReduceExpressionAndInlineRecursive(
                     currentExpression: currentExpression,
                     rootExprForms: [currentExpression],
                     inlinedParents: [],
@@ -768,7 +768,7 @@ public class CodeAnalysis
                 PineValueClass.Create([.. envClassSimplifiedItems]);
 
             Expression ProjectCompilation(PineValueClass envClass) =>
-                PineVM.ReduceExpressionAndInlineRecursive(
+                ExpressionCompilation.ReduceExpressionAndInlineRecursive(
                     rootExpression: expression,
                     rootExprAlternativeForms: [],
                     envConstraintId: envClass,
@@ -785,7 +785,7 @@ public class CodeAnalysis
                 ProjectCompilation(envClassSimplified);
 
             var simplifiedReducedExpr =
-                PineVM.SubstituteSubexpressionsForEnvironmentConstraint(
+                ExpressionCompilation.SubstituteSubexpressionsForEnvironmentConstraint(
                     simplifiedReducedExprBeforeSubstitute,
                     envConstraintId: envClass);
 

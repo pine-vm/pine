@@ -220,7 +220,7 @@ public class PineIRCompilerTests
         */
 
         var expectedInstructions =
-            new PineVM.PineVM.StackFrameInstructions(
+            new StackFrameInstructions(
                 [
                 StackInstruction.Push_Environment,
 

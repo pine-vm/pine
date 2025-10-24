@@ -4,7 +4,7 @@ using Pine.Core.PopularEncodings;
 using Pine.PineVM;
 using Xunit;
 
-using StackFrameInstructions = Pine.PineVM.PineVM.StackFrameInstructions;
+using StackFrameInstructions = Pine.PineVM.StackFrameInstructions;
 
 namespace Pine.IntegrationTests;
 
@@ -2513,7 +2513,7 @@ public class PineVMTests
             var testCase = testCases[testCaseIndex];
 
             var compiled =
-                PineVM.PineVM.CompileExpression(
+                PineVM.ExpressionCompilation.CompileExpression(
                     testCase.expression,
                     specializations: [],
                     parseCache,

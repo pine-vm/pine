@@ -516,10 +516,13 @@ public class ReducePineExpressionTests
 
         // skip-last 1 -> reverse(skip(1, reverse(x)))
         var rev1 = new Expression.KernelApplication(nameof(KernelFunction.reverse), listConditional);
-        var skipArgs = Expression.ListInstance([
-            Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(1)),
-            rev1
-        ]);
+
+        var skipArgs =
+            Expression.ListInstance(
+                [
+                Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(1)),
+                rev1
+                ]);
 
         var skip = new Expression.KernelApplication(nameof(KernelFunction.skip), skipArgs);
         var skipLast = new Expression.KernelApplication(nameof(KernelFunction.reverse), skip);
@@ -527,6 +530,7 @@ public class ReducePineExpressionTests
         var reduced = ReducePineExpression.ReduceExpressionBottomUp(skipLast, s_parseCache);
 
         (reduced is Expression.Conditional).Should().BeTrue();
+
         var reducedCond = (Expression.Conditional)reduced;
 
         reducedCond.FalseBranch.Should().Be(
