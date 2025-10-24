@@ -2495,11 +2495,45 @@ public class PineVMTests
                     [
                         StackInstruction.Push_Environment,
 
+                        StackInstruction.Is_Blob_Value,
+
+                        StackInstruction.Return,
+                    ])
+            },
+
+            new
+            {
+                expression =
+                (Expression)
+                new Expression.KernelApplication(
+                    function: nameof(KernelFunction.equal),
+                    input:
+                    Expression.ListInstance(
+                        [
+                        new Expression.KernelApplication(
+                            function: nameof(KernelFunction.take),
+                            input:
+                            Expression.ListInstance(
+                                [
+                                Expression.LiteralInstance(
+                                    IntegerEncoding.EncodeSignedInteger(1)),
+
+                                Expression.EnvironmentInstance,
+                                ])),
+
+                        Expression.LiteralInstance(PineValue.Blob([123])),
+                        ])),
+
+                expected =
+                new StackFrameInstructions(
+                    [
+                        StackInstruction.Push_Environment,
+
                         StackInstruction.Push_Literal(
                             IntegerEncoding.EncodeSignedInteger(0)),
 
                         StackInstruction.Starts_With_Const_At_Offset_Var(
-                            PineValue.EmptyBlob),
+                            PineValue.Blob([123])),
 
                         StackInstruction.Return,
                     ])
@@ -2513,7 +2547,7 @@ public class PineVMTests
             var testCase = testCases[testCaseIndex];
 
             var compiled =
-                PineVM.ExpressionCompilation.CompileExpression(
+                ExpressionCompilation.CompileExpression(
                     testCase.expression,
                     specializations: [],
                     parseCache,

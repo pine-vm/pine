@@ -725,7 +725,6 @@ public class PineIRCompiler
                     afterSkipCount
                     .AppendInstruction(
                         StackInstruction.Starts_With_Const_At_Offset_Var(startingWith.start));
-
             }
 
             {
@@ -735,6 +734,20 @@ public class PineIRCompiler
                         context,
                         prior,
                         parseCache);
+
+                if (startingWith.start is PineValue.ListValue startList && startList.Items.Length is 0)
+                {
+                    return
+                        afterSliced
+                        .AppendInstruction(StackInstruction.Is_List_Value);
+                }
+
+                if (startingWith.start is PineValue.BlobValue startBlob && startBlob.Bytes.Length is 0)
+                {
+                    return
+                        afterSliced
+                        .AppendInstruction(StackInstruction.Is_Blob_Value);
+                }
 
                 return
                     afterSliced

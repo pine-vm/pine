@@ -1789,6 +1789,30 @@ public class PineVM : IPineVM
                             continue;
                         }
 
+                    case StackInstructionKind.Is_Blob_Value:
+                        {
+                            var topmostValue = currentFrame.PopTopmostFromStack();
+
+                            var isBlob = topmostValue.IsBlob();
+
+                            currentFrame.PushInstructionResult(
+                                PineValueInProcess.CreateBool(isBlob));
+
+                            continue;
+                        }
+
+                    case StackInstructionKind.Is_List_Value:
+                        {
+                            var topmostValue = currentFrame.PopTopmostFromStack();
+
+                            var isList = topmostValue.IsList();
+
+                            currentFrame.PushInstructionResult(
+                                PineValueInProcess.CreateBool(isList));
+
+                            continue;
+                        }
+
                     case StackInstructionKind.Starts_With_Const_At_Offset_Var:
                         {
                             var prefixValue =

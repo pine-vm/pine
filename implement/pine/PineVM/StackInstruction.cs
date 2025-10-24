@@ -138,6 +138,20 @@ public enum StackInstructionKind
     Equal_Generic,
 
     /// <summary>
+    /// An application of <see cref="KernelFunction.equal(PineValue)"/> which checks if the top value is a list.
+    /// One way compilers form such a test is to <see cref="KernelFunction.take(PineValue)"/> zero items from the value and
+    /// then compare that to an empty list.
+    /// </summary>
+    Is_List_Value,
+
+    /// <summary>
+    /// An application of <see cref="KernelFunction.equal(PineValue)"/> which checks if the top value is a blob.
+    /// One way compilers form such a test is to <see cref="KernelFunction.take(PineValue)"/> zero items from the value and
+    /// then compare that to an empty blob.
+    /// </summary>
+    Is_Blob_Value,
+
+    /// <summary>
     /// Negate the top value on the stack, works for both integers and booleans.
     /// </summary>
     Negate,
@@ -425,6 +439,12 @@ public record StackInstruction(
 
     public static StackInstruction Equal_Binary_Const(PineValue literal) =>
         new(StackInstructionKind.Equal_Binary_Const, Literal: literal);
+
+    public static readonly StackInstruction Is_List_Value =
+        new(StackInstructionKind.Is_List_Value);
+
+    public static readonly StackInstruction Is_Blob_Value =
+        new(StackInstructionKind.Is_Blob_Value);
 
     public static readonly StackInstruction Int_Is_Sorted_Asc_Generic =
         new(StackInstructionKind.Int_Is_Sorted_Asc_Generic);
@@ -764,6 +784,18 @@ public record StackInstruction(
                     )]),
 
             StackInstructionKind.Equal_Generic =>
+                new InstructionDetails(
+                    PopCount: 1,
+                    PushCount: 1,
+                    []),
+
+            StackInstructionKind.Is_List_Value =>
+                new InstructionDetails(
+                    PopCount: 1,
+                    PushCount: 1,
+                    []),
+
+            StackInstructionKind.Is_Blob_Value =>
                 new InstructionDetails(
                     PopCount: 1,
                     PushCount: 1,
