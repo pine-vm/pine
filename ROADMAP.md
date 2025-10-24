@@ -4,9 +4,18 @@
 
 Here is a plan for what future releases of Pine will focus on.
 
-## Runtime Efficiency
+## Runtime Performance
 
 The runtime efficiency items are not related to the Pine language, but are implementation details of the execution engine that ships together with the primary distribution.
+
+### Runtime Efficiency - Caching
+
++ [ ] Local persistent caching.
++ [ ] Remote caching.
+
+### Runtime Performance - Remote Execution
+
++ [ ] Minimum viable remote execution. Transparently distribute build and test actions across multiple machines, such as a datacenter.
 
 ### Runtime Efficiency - Fresh Evaluation
 
