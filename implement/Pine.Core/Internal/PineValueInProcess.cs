@@ -686,4 +686,109 @@ public class PineValueInProcess
     {
         return base.GetHashCode();
     }
+
+    /// <summary>
+    /// Checks if this value starts with a constant prefix at a variable offset.
+    /// </summary>
+    /// <param name="offset">The offset (in elements for lists, in bytes for blobs) at which to check for the prefix.</param>
+    /// <param name="prefix">The constant prefix value to check for.</param>
+    /// <returns>
+    /// <c>true</c> if the value starts with the prefix at the given offset; otherwise, <c>false</c>.
+    /// </returns>
+    /// <remarks>
+    /// This method is optimized to avoid fully evaluating the value when possible.
+    /// If the offset is not a valid integer, returns true only if the prefix is <see cref="PineValue.EmptyList"/>.
+    /// </remarks>
+    public bool StartsWithConstAtOffsetVar(int offset, PineValue prefix)
+    {
+        // Check blob case
+        if (prefix is PineValue.BlobValue prefixBlob)
+        {
+            // Ensure this value is also a blob
+            if (!IsBlob())
+            {
+                return false;
+            }
+
+            // For optimization, check length without full evaluation if possible
+            var thisLength = GetLength();
+
+            var sliceLength = thisLength - offset;
+
+            if (sliceLength < prefixBlob.Bytes.Length)
+            {
+                return false;
+            }
+
+            if (sliceLength is 0)
+                return true;
+
+            // Now we need to check the actual bytes
+            var evaluated = Evaluate();
+
+            if (evaluated is PineValue.BlobValue thisBlob)
+            {
+                var valueBytes = thisBlob.Bytes.Span;
+
+                if (valueBytes
+                    .Slice(start: offset, length: prefixBlob.Bytes.Length)
+                    .SequenceEqual(prefixBlob.Bytes.Span))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        // Check list case
+        if (prefix is PineValue.ListValue prefixList)
+        {
+            // Ensure this value is also a list
+            if (!IsList())
+            {
+                return false;
+            }
+
+            // For optimization, check length without full evaluation if possible
+            var thisLength = GetLength();
+
+            var sliceLength = thisLength - offset;
+
+            if (sliceLength < prefixList.Items.Length)
+            {
+                return false;
+            }
+
+            if (sliceLength is 0)
+                return true;
+
+            // Now we need to check the actual items
+            var evaluated = Evaluate();
+
+            if (evaluated is PineValue.ListValue thisList)
+            {
+                var allItemsMatch = true;
+
+                for (var i = 0; i < prefixList.Items.Length; i++)
+                {
+                    if (thisList.Items.Span[i + offset] != prefixList.Items.Span[i])
+                    {
+                        allItemsMatch = false;
+                        break;
+                    }
+                }
+
+                if (allItemsMatch)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        throw new NotImplementedException(
+            "Unsupported prefix type in StartsWithConstAtOffsetVar: " + prefix.GetType().FullName);
+    }
 }

@@ -1344,6 +1344,282 @@ public class PineValueInProcessTests
         evaluated.Should().Be(expected);
     }
 
+    [Fact]
+    public void StartsWithConstAtOffsetVar_blob_matches_at_offset_zero()
+    {
+        var value = PineValueInProcess.Create(PineValue.Blob([1, 2, 3, 4, 5]));
+        var prefix = PineValue.Blob([1, 2, 3]);
+
+        value.StartsWithConstAtOffsetVar(0, prefix).Should().BeTrue();
+    }
+
+    [Fact]
+    public void StartsWithConstAtOffsetVar_blob_matches_at_offset_two()
+    {
+        var value = PineValueInProcess.Create(PineValue.Blob([1, 2, 3, 4, 5]));
+        var prefix = PineValue.Blob([3, 4]);
+
+        value.StartsWithConstAtOffsetVar(2, prefix).Should().BeTrue();
+    }
+
+    [Fact]
+    public void StartsWithConstAtOffsetVar_blob_does_not_match()
+    {
+        var value = PineValueInProcess.Create(PineValue.Blob([1, 2, 3, 4, 5]));
+        var prefix = PineValue.Blob([2, 3, 4]);
+
+        value.StartsWithConstAtOffsetVar(0, prefix).Should().BeFalse();
+    }
+
+    [Fact]
+    public void StartsWithConstAtOffsetVar_blob_offset_beyond_length()
+    {
+        var value = PineValueInProcess.Create(PineValue.Blob([1, 2, 3]));
+        var prefix = PineValue.Blob([4, 5]);
+
+        value.StartsWithConstAtOffsetVar(10, prefix).Should().BeFalse();
+    }
+
+    [Fact]
+    public void StartsWithConstAtOffsetVar_blob_prefix_longer_than_remaining()
+    {
+        var value = PineValueInProcess.Create(PineValue.Blob([1, 2, 3, 4, 5]));
+        var prefix = PineValue.Blob([4, 5, 6]);
+
+        value.StartsWithConstAtOffsetVar(3, prefix).Should().BeFalse();
+    }
+
+    [Fact]
+    public void StartsWithConstAtOffsetVar_list_matches_at_offset_zero()
+    {
+        var value =
+            PineValueInProcess.Create(
+                PineValue.List(
+                    [
+                    PineValue.Blob([1]),
+                    PineValue.Blob([2]),
+                    PineValue.Blob([3]),
+                    PineValue.Blob([4])
+                    ]));
+
+        var prefix = PineValue.List([PineValue.Blob([1]), PineValue.Blob([2])]);
+
+        value.StartsWithConstAtOffsetVar(0, prefix).Should().BeTrue();
+    }
+
+    [Fact]
+    public void StartsWithConstAtOffsetVar_list_matches_at_offset_one()
+    {
+        var value =
+            PineValueInProcess.Create(
+                PineValue.List(
+                    [
+                    PineValue.Blob([1]),
+                    PineValue.Blob([2]),
+                    PineValue.Blob([3]),
+                    PineValue.Blob([4])
+                    ]));
+
+        var prefix = PineValue.List([PineValue.Blob([2]), PineValue.Blob([3])]);
+
+        value.StartsWithConstAtOffsetVar(1, prefix).Should().BeTrue();
+    }
+
+    [Fact]
+    public void StartsWithConstAtOffsetVar_list_does_not_match()
+    {
+        var value =
+            PineValueInProcess.Create(
+                PineValue.List(
+                    [
+                    PineValue.Blob([1]),
+                    PineValue.Blob([2]),
+                    PineValue.Blob([3])
+                    ]));
+
+        var prefix = PineValue.List([PineValue.Blob([2]), PineValue.Blob([4])]);
+
+        value.StartsWithConstAtOffsetVar(1, prefix).Should().BeFalse();
+    }
+
+    [Fact]
+    public void StartsWithConstAtOffsetVar_list_empty_prefix_always_matches()
+    {
+        var value =
+            PineValueInProcess.Create(
+                PineValue.List(
+                    [
+                    PineValue.Blob([1]),
+                    PineValue.Blob([2])
+                    ]));
+
+        var prefix = PineValue.EmptyList;
+
+        value.StartsWithConstAtOffsetVar(0, prefix).Should().BeTrue();
+        value.StartsWithConstAtOffsetVar(5, prefix).Should().BeFalse();
+    }
+
+    [Fact]
+    public void StartsWithConstAtOffsetVar_list_offset_beyond_length()
+    {
+        var value =
+            PineValueInProcess.Create(
+                PineValue.List([PineValue.Blob([1]), PineValue.Blob([2])]));
+
+        var prefix = PineValue.List([PineValue.Blob([3])]);
+
+        value.StartsWithConstAtOffsetVar(10, prefix).Should().BeFalse();
+    }
+
+    [Fact]
+    public void StartsWithConstAtOffsetVar_type_mismatch_blob_vs_list()
+    {
+        var value = PineValueInProcess.Create(PineValue.Blob([1, 2, 3]));
+        var prefix = PineValue.List([PineValue.Blob([1])]);
+
+        value.StartsWithConstAtOffsetVar(0, prefix).Should().BeFalse();
+    }
+
+    [Fact]
+    public void StartsWithConstAtOffsetVar_type_mismatch_list_vs_blob()
+    {
+        var value =
+            PineValueInProcess.Create(
+                PineValue.List(
+                    [
+                    PineValue.Blob([1]),
+                    PineValue.Blob([2])
+                    ]));
+
+        var prefix = PineValue.Blob([1, 2]);
+
+        value.StartsWithConstAtOffsetVar(0, prefix).Should().BeFalse();
+    }
+
+    [Fact]
+    public void StartsWithConstAtOffsetVar_with_skip_operation()
+    {
+        var originalValue = PineValue.Blob([1, 2, 3, 4, 5, 6, 7, 8]);
+        var value = PineValueInProcess.Create(originalValue);
+        var skipped = PineValueInProcess.Skip(2, value);
+
+        // After skip(2), the blob is [3, 4, 5, 6, 7, 8]
+        // Check if it starts with [5, 6] at offset 2
+        var prefix = PineValue.Blob([5, 6]);
+
+        skipped.StartsWithConstAtOffsetVar(2, prefix).Should().BeTrue();
+    }
+
+    [Fact]
+    public void StartsWithConstAtOffsetVar_with_take_operation()
+    {
+        var originalValue = PineValue.Blob([1, 2, 3, 4, 5, 6, 7, 8]);
+        var value = PineValueInProcess.Create(originalValue);
+        var taken = PineValueInProcess.Take(5, value);
+
+        // After take(5), the blob is [1, 2, 3, 4, 5]
+        // Check if it starts with [3, 4] at offset 2
+        var prefix = PineValue.Blob([3, 4]);
+
+        taken.StartsWithConstAtOffsetVar(2, prefix).Should().BeTrue();
+    }
+
+    [Fact]
+    public void StartsWithConstAtOffsetVar_with_skip_and_take()
+    {
+        var originalValue =
+            PineValue.List(
+                [
+                PineValue.Blob([1]),
+                PineValue.Blob([2]),
+                PineValue.Blob([3]),
+                PineValue.Blob([4]),
+                PineValue.Blob([5]),
+                PineValue.Blob([6])
+                ]);
+
+        var value = PineValueInProcess.Create(originalValue);
+        var skipped = PineValueInProcess.Skip(1, value);
+        var taken = PineValueInProcess.Take(4, skipped);
+
+        // After skip(1).take(4), the list is [2, 3, 4, 5]
+        // Check if it starts with [4, 5] at offset 2
+        var prefix = PineValue.List([PineValue.Blob([4]), PineValue.Blob([5])]);
+
+        taken.StartsWithConstAtOffsetVar(2, prefix).Should().BeTrue();
+    }
+
+    [Fact]
+    public void StartsWithConstAtOffsetVar_with_unevaluated_list()
+    {
+        var items = new List<PineValueInProcess>
+        {
+            PineValueInProcess.Create(PineValue.Blob([10])),
+            PineValueInProcess.Create(PineValue.Blob([20])),
+            PineValueInProcess.Create(PineValue.Blob([30])),
+            PineValueInProcess.Create(PineValue.Blob([40]))
+        };
+
+        var value = PineValueInProcess.CreateList(items);
+
+        // Check if it starts with [20, 30] at offset 1
+        var prefix = PineValue.List([PineValue.Blob([20]), PineValue.Blob([30])]);
+
+        value.StartsWithConstAtOffsetVar(1, prefix).Should().BeTrue();
+    }
+
+    [Fact]
+    public void StartsWithConstAtOffsetVar_blob_exact_match_at_end()
+    {
+        var value = PineValueInProcess.Create(PineValue.Blob([1, 2, 3, 4, 5]));
+        var prefix = PineValue.Blob([4, 5]);
+
+        value.StartsWithConstAtOffsetVar(3, prefix).Should().BeTrue();
+    }
+
+    [Fact]
+    public void StartsWithConstAtOffsetVar_list_exact_match_at_end()
+    {
+        var value =
+            PineValueInProcess.Create(
+                PineValue.List(
+                    [
+                    PineValue.Blob([1]),
+                    PineValue.Blob([2]),
+                    PineValue.Blob([3])
+                    ]));
+
+        var prefix = PineValue.List([PineValue.Blob([3])]);
+
+        value.StartsWithConstAtOffsetVar(2, prefix).Should().BeTrue();
+    }
+
+    [Fact]
+    public void StartsWithConstAtOffsetVar_single_byte_match()
+    {
+        var value = PineValueInProcess.Create(PineValue.Blob([10, 20, 30, 40]));
+        var prefix = PineValue.Blob([30]);
+
+        value.StartsWithConstAtOffsetVar(2, prefix).Should().BeTrue();
+    }
+
+    [Fact]
+    public void StartsWithConstAtOffsetVar_single_element_list_match()
+    {
+        var value =
+            PineValueInProcess.Create(
+                PineValue.List(
+                    [
+                    PineValue.Blob([10]),
+                    PineValue.Blob([20]),
+                    PineValue.Blob([30])
+                    ]));
+
+        var prefix = PineValue.List([PineValue.Blob([20])]);
+
+        value.StartsWithConstAtOffsetVar(1, prefix).Should().BeTrue();
+    }
+
     private static void VerifyConsistencyOfDerivedProperties(PineValueInProcess inProcess)
     {
         var isList = inProcess.IsList();

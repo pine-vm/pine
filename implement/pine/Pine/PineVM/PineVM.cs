@@ -1822,58 +1822,20 @@ public class PineVM : IPineVM
 
                             var skipCountValue = currentFrame.PopTopmostFromStack();
 
-                            var slicedValue = currentFrame.PopTopmostFromStack().Evaluate();
+                            var slicedValue = currentFrame.PopTopmostFromStack();
 
                             var resultValue = PineKernelValues.FalseValue;
 
                             if (skipCountValue.AsInteger() is { } skipCount)
                             {
-                                if (prefixValue is PineValue.BlobValue prefixBlob)
-                                {
-                                    if (slicedValue is PineValue.BlobValue slicedValueBlob)
-                                    {
-                                        var sliceLength = slicedValueBlob.Bytes.Length - skipCount;
-
-                                        if (sliceLength >= prefixBlob.Bytes.Length)
-                                        {
-                                            var valueBytes = slicedValueBlob.Bytes.Span;
-
-                                            if (valueBytes
-                                                .Slice(start: (int)skipCount, length: prefixBlob.Bytes.Length)
-                                                .SequenceEqual(prefixBlob.Bytes.Span))
-                                            {
-                                                resultValue = PineKernelValues.TrueValue;
-                                            }
-                                        }
-                                    }
-                                }
-
-                                if (prefixValue is PineValue.ListValue prefixList)
-                                {
-                                    if (slicedValue is PineValue.ListValue slicedValueList)
-                                    {
-                                        var sliceLength = slicedValueList.Items.Length - skipCount;
-
-                                        if (sliceLength >= prefixList.Items.Length)
-                                        {
-                                            var allItemsMatch = true;
-
-                                            for (var i = 0; i < prefixList.Items.Length; i++)
-                                            {
-                                                if (slicedValueList.Items.Span[i + (int)skipCount] != prefixList.Items.Span[i])
-                                                {
-                                                    allItemsMatch = false;
-                                                    break;
-                                                }
-                                            }
-
-                                            if (allItemsMatch)
-                                            {
-                                                resultValue = PineKernelValues.TrueValue;
-                                            }
-                                        }
-                                    }
-                                }
+                                resultValue =
+                                    slicedValue.StartsWithConstAtOffsetVar(
+                                        offset: (int)skipCount,
+                                        prefix: prefixValue)
+                                    ?
+                                    PineKernelValues.TrueValue
+                                    :
+                                    PineKernelValues.FalseValue;
                             }
                             else
                             {
