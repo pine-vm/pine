@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace Pine.Core.Internal;
 
@@ -464,5 +465,127 @@ public class KernelFunctionFused
 
         throw new NotImplementedException(
             "Unexpected value type: " + value.GetType().FullName);
+    }
+
+    /// <summary>
+    /// Combination of <see cref="KernelFunction.reverse"/> applied to result from <see cref="KernelFunction.concat"/> 
+    /// </summary>
+    public static PineValue ConcatAndReverse(ReadOnlySpan<PineValue> listBeforeSkipEmpty)
+    {
+        // First, perform the concat operation (following the semantics of KernelFunction.concat)
+        // Skip over any empty lists at the start.
+
+        var firstNonEmptyIndex = 0;
+
+        while (firstNonEmptyIndex < listBeforeSkipEmpty.Length)
+        {
+            var item = listBeforeSkipEmpty[firstNonEmptyIndex];
+
+            if (item is PineValue.ListValue listItem && listItem.Items.Length is 0)
+            {
+                ++firstNonEmptyIndex;
+                continue;
+            }
+
+            break;
+        }
+
+        var list = listBeforeSkipEmpty[firstNonEmptyIndex..];
+
+        if (list.Length is 0)
+        {
+            return PineValue.EmptyList;
+        }
+
+        var head = list[0];
+
+        if (list.Length is 1)
+        {
+            // Single element: just reverse it (following KernelFunction.reverse semantics)
+            return KernelFunction.reverse(head);
+        }
+
+        if (head is PineValue.ListValue)
+        {
+            // Concatenate lists, then reverse
+            var aggregateCount = 0;
+
+            for (var i = 0; i < list.Length; ++i)
+            {
+                if (list[i] is not PineValue.ListValue listValueElement)
+                {
+                    return PineValue.EmptyList;
+                }
+
+                aggregateCount += listValueElement.Items.Length;
+            }
+
+            var concatenated = new PineValue[aggregateCount];
+
+            var destItemIndex = 0;
+
+            for (var i = 0; i < list.Length; ++i)
+            {
+                if (list[i] is not PineValue.ListValue listValueElement)
+                {
+                    return PineValue.EmptyList;
+                }
+
+                listValueElement.Items.CopyTo(concatenated.AsMemory(start: destItemIndex));
+
+                destItemIndex += listValueElement.Items.Length;
+            }
+
+            // Now reverse the concatenated list
+            if (concatenated.Length <= 1)
+                return PineValue.List(concatenated);
+
+            Array.Reverse(concatenated);
+
+            return PineValue.List(concatenated);
+        }
+
+        if (head is PineValue.BlobValue)
+        {
+            // Concatenate blobs, then reverse
+            var blobs = new List<ReadOnlyMemory<byte>>(capacity: list.Length);
+
+            for (var i = 0; i < list.Length; ++i)
+            {
+                var item = list[i];
+
+                if (item is PineValue.ListValue listItem && listItem.Items.Length is 0)
+                {
+                    // Skip empty lists
+                    continue;
+                }
+
+                if (list[i] is not PineValue.BlobValue blobValue)
+                    return PineValue.EmptyList;
+
+                blobs.Add(blobValue.Bytes);
+            }
+
+            var concatenatedBytes = BytesConversions.Concat(blobs);
+
+            // Now reverse the concatenated blob
+            if (concatenatedBytes.Length <= 1)
+                return PineValue.Blob(concatenatedBytes);
+
+            if (concatenatedBytes.Length is 2)
+            {
+                return PineValue.ReusedBlobTupleFromBytes(
+                    concatenatedBytes.Span[1],
+                    concatenatedBytes.Span[0]);
+            }
+
+            var reversed = concatenatedBytes.ToArray();
+            reversed.AsMemory().Span.Reverse();
+
+            return PineValue.Blob(reversed);
+        }
+
+        throw new NotImplementedException(
+            "Unexpected value type: " + head.GetType().FullName);
     }
 }
