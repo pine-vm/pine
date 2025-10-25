@@ -25,6 +25,16 @@ public abstract record ImmutableConcatBuilder
     public abstract int AggregateItemsCount { get; }
 
     /// <summary>
+    /// Whether any leaf in this builder contains a blob value.
+    /// </summary>
+    protected abstract bool ContainsBlob { get; }
+
+    /// <summary>
+    /// Whether any leaf in this builder contains a non-empty list value.
+    /// </summary>
+    protected abstract bool ContainsNonEmptyList { get; }
+
+    /// <summary>
     /// Evaluates this builder into a single <see cref="PineValue"/> by applying the recorded concatenations.
     /// </summary>
     public PineValue Evaluate()
@@ -51,12 +61,12 @@ public abstract record ImmutableConcatBuilder
     /// </summary>
     public bool IsList()
     {
-        if (ContainsNonEmptyListInternal())
+        if (ContainsNonEmptyList)
         {
             return true;
         }
 
-        return !ContainsBlobInternal();
+        return !ContainsBlob;
     }
 
     /// <summary>
@@ -64,24 +74,13 @@ public abstract record ImmutableConcatBuilder
     /// </summary>
     public bool IsBlob()
     {
-        if (ContainsNonEmptyListInternal())
+        if (ContainsNonEmptyList)
         {
             return false;
         }
 
-        return ContainsBlobInternal();
+        return ContainsBlob;
     }
-
-    /// <summary>
-    /// Determines whether any leaf in this builder contains a blob value.
-    /// </summary>
-    protected abstract bool ContainsBlobInternal();
-
-    /// <summary>
-    /// Determines whether the current instance contains at least one non-empty list.
-    /// </summary>
-    /// <returns>true if a non-empty list is present; otherwise, false.</returns>
-    protected abstract bool ContainsNonEmptyListInternal();
 
     /// <summary>
     /// Returns a new builder that appends the specified sequence of items to the end.
@@ -255,39 +254,57 @@ public abstract record ImmutableConcatBuilder
     }
 
     /// <summary>
-    /// Leaf node holding a concrete list of values.
+    /// Leaf node holding a concrete list of values given to <see cref="KernelFunction.concat(PineValue)"/>
     /// </summary>
-    public sealed record Leaf(ReadOnlyMemory<PineValue> Values) : ImmutableConcatBuilder
+    public sealed record Leaf
+        : ImmutableConcatBuilder
     {
         /// <inheritdoc/>
         public override int AggregateItemsCount => Values.Length;
 
+        /// <summary>
+        /// Items contained in the list given to <see cref="KernelFunction.concat(PineValue)"/>
+        /// </summary>
+        public ReadOnlyMemory<PineValue> Values { get; }
+
         /// <inheritdoc/>
-        protected override bool ContainsBlobInternal()
+        override protected bool ContainsBlob { get; } = false;
+
+        /// <inheritdoc/>
+        override protected bool ContainsNonEmptyList { get; } = false;
+
+        /// <summary>
+        /// Initializes a new <see cref="Leaf"/> with the provided items.
+        /// </summary>
+        public Leaf(ReadOnlyMemory<PineValue> values)
         {
-            for (var i = 0; i < Values.Length; i++)
+            var containsBlob = false;
+
+            var containsNonEmptyList = false;
+
+            for (var i = 0; i < values.Length; i++)
             {
-                if (Values.Span[i] is PineValue.BlobValue)
+                if (values.Span[i] is PineValue.BlobValue)
                 {
-                    return true;
+                    containsBlob = true;
+                }
+
+                if (values.Span[i] is PineValue.ListValue listValue && listValue.Items.Length > 0)
+                {
+                    containsNonEmptyList = true;
                 }
             }
 
-            return false;
-        }
-
-        /// <inheritdoc/>
-        protected override bool ContainsNonEmptyListInternal()
-        {
-            for (var i = 0; i < Values.Length; i++)
+            if (containsBlob && containsNonEmptyList)
             {
-                if (Values.Span[i] is PineValue.ListValue listValue && listValue.Items.Length > 0)
-                {
-                    return true;
-                }
+                Values = ReadOnlyMemory<PineValue>.Empty;
             }
-
-            return false;
+            else
+            {
+                ContainsBlob = containsBlob;
+                ContainsNonEmptyList = containsNonEmptyList;
+                Values = values;
+            }
         }
     }
 
@@ -305,49 +322,49 @@ public abstract record ImmutableConcatBuilder
         /// </summary>
         public IReadOnlyList<ImmutableConcatBuilder> Items { get; }
 
+        /// <inheritdoc/>
+        override protected bool ContainsBlob { get; } = false;
+
+        /// <inheritdoc/>
+        override protected bool ContainsNonEmptyList { get; } = false;
+
         /// <summary>
         /// Initializes a new <see cref="Node"/> with the provided <paramref name="items"/>.
         /// </summary>
         public Node(IReadOnlyList<ImmutableConcatBuilder> items)
         {
-            Items = items;
-
             var count = 0;
+            var containsBlob = false;
+            var containsNonEmptyList = false;
 
             for (var i = 0; i < items.Count; i++)
             {
                 count += items[i].AggregateItemsCount;
-            }
 
-            AggregateItemsCount = count;
-        }
-
-        /// <inheritdoc/>
-        protected override bool ContainsBlobInternal()
-        {
-            for (var i = 0; i < Items.Count; i++)
-            {
-                if (Items[i].ContainsBlobInternal())
+                if (items[i].ContainsBlob)
                 {
-                    return true;
+                    containsBlob = true;
+                }
+
+                if (items[i].ContainsNonEmptyList)
+                {
+                    containsNonEmptyList = true;
                 }
             }
 
-            return false;
-        }
-
-        /// <inheritdoc/>
-        protected override bool ContainsNonEmptyListInternal()
-        {
-            for (var i = 0; i < Items.Count; i++)
+            if (containsBlob && containsNonEmptyList)
             {
-                if (Items[i].ContainsNonEmptyListInternal())
-                {
-                    return true;
-                }
+                Items = [];
             }
+            else
+            {
+                Items = items;
 
-            return false;
+                ContainsBlob = containsBlob;
+                ContainsNonEmptyList = containsNonEmptyList;
+
+                AggregateItemsCount = count;
+            }
         }
     }
 

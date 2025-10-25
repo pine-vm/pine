@@ -624,9 +624,13 @@ public class ImmutableConcatBuilderTests
     }
 
     [Fact]
-    public void IsList_returns_false_for_empty_builder()
+    public void IsList_returns_true_for_empty_builder()
     {
         var builder = ImmutableConcatBuilder.Create([]);
+
+        // Empty builder produces empty list, which is a ListValue
+        builder.IsList().Should().BeTrue();
+        builder.IsBlob().Should().BeFalse();
 
         VerifyConsistencyOfDerivedProperties(builder);
     }
@@ -668,9 +672,13 @@ public class ImmutableConcatBuilderTests
     }
 
     [Fact]
-    public void IsBlob_returns_true_for_empty_builder()
+    public void Empty_builder_produces_empty_list()
     {
         var builder = ImmutableConcatBuilder.Create([]);
+
+        // Empty builder produces empty list, which is a ListValue
+        builder.IsList().Should().BeTrue();
+        builder.IsBlob().Should().BeFalse();
 
         VerifyConsistencyOfDerivedProperties(builder);
     }
@@ -681,7 +689,8 @@ public class ImmutableConcatBuilderTests
         var blob1 = PineValue.Blob([1, 2, 3]);
         var blob2 = PineValue.Blob([4, 5]);
 
-        var builder = ImmutableConcatBuilder.Create([blob1])
+        var builder =
+            ImmutableConcatBuilder.Create([blob1])
             .AppendItem(blob2);
 
         // Both items are blobs
@@ -701,7 +710,8 @@ public class ImmutableConcatBuilderTests
         var list2 = PineValue.List([PineValue.Blob([2])]);
         var list3 = PineValue.List([PineValue.Blob([3])]);
 
-        var builder = ImmutableConcatBuilder.Create([list1])
+        var builder =
+            ImmutableConcatBuilder.Create([list1])
             .AppendItem(list2)
             .PrependItem(list3);
 
@@ -715,25 +725,12 @@ public class ImmutableConcatBuilderTests
         var blob2 = PineValue.Blob([2]);
         var blob3 = PineValue.Blob([3]);
 
-        var builder = ImmutableConcatBuilder.Create([blob1])
+        var builder =
+            ImmutableConcatBuilder.Create([blob1])
             .AppendItem(blob2)
             .PrependItem(blob3);
 
         VerifyConsistencyOfDerivedProperties(builder);
-    }
-
-    private static void VerifyConsistencyOfDerivedProperties(ImmutableConcatBuilder builder)
-    {
-        var isList = builder.IsList();
-        var isBlob = builder.IsBlob();
-        var evaluated = builder.Evaluate();
-
-        // Verify IsList and IsBlob are mutually exclusive
-        (isList != isBlob).Should().BeTrue();
-
-        // Verify the type checks match the evaluated result
-        (evaluated is PineValue.ListValue).Should().Be(isList);
-        (evaluated is PineValue.BlobValue).Should().Be(isBlob);
     }
 
     [Fact]
@@ -851,35 +848,101 @@ public class ImmutableConcatBuilderTests
 
         var builder =
             ImmutableConcatBuilder.Create(largeItems)
-            .AppendItems([list1, list2]);
+            .AppendItems([list1, list2])
+            .AppendItem(list3);
 
-        // Now append a small item - it should consolidate with the last leaf in the node
-        var newBuilder = builder.AppendItem(list3);
+        var referenceStep_0 =
+            KernelFunction.concat(PineValue.List(largeItems));
+
+        var referenceStep_1 =
+            KernelFunction.concat(
+                PineValue.List(
+                    [
+                    referenceStep_0,
+                    list1,
+                    list2
+                    ]));
+
+        var expected =
+            KernelFunction.concat(
+                PineValue.List(
+                    [
+                    referenceStep_1,
+                    list3,
+                    ]));
 
         // Verify the result is correct
-        var result = newBuilder.Evaluate();
-
-        var allItemsList = new List<PineValue>(largeItems)
-        {
-            list1,
-            list2,
-            list3
-        };
-
-        PineValue[] allItems = [.. allItemsList];
-        var expected = KernelFunction.concat(PineValue.List(allItems));
+        var result = builder.Evaluate();
 
         result.Should().Be(expected);
-        newBuilder.AggregateItemsCount.Should().Be(36);
+        builder.AggregateItemsCount.Should().Be(36);
 
         // Verify it's still a Node (we consolidated the last leaf but the structure remains a Node)
-        newBuilder.Should().BeOfType<ImmutableConcatBuilder.Node>();
+        builder.Should().BeOfType<ImmutableConcatBuilder.Node>();
 
         // The last child should be a consolidated leaf with 3 items (list1, list2, list3)
-        var node = (ImmutableConcatBuilder.Node)newBuilder;
+        var node = (ImmutableConcatBuilder.Node)builder;
         var lastChild = node.Items[node.Items.Count - 1];
         lastChild.Should().BeOfType<ImmutableConcatBuilder.Leaf>();
         lastChild.AggregateItemsCount.Should().Be(3);
+    }
+
+    [Fact]
+    public void Consolidation_works_with_nested_nodes_mixing_blobs_and_lists()
+    {
+        var append_1 = PineValue.Blob([1, 2, 3]);
+        var append_2 = PineValue.List([PineValue.List(PineValue.Blob([11]))]);
+        var append_3 = PineValue.Blob([3]);
+        var append_4 = PineValue.Blob([41, 17]);
+
+        var builder =
+            ImmutableConcatBuilder.Create([])
+            .AppendItem(append_1)
+            .AppendItem(append_2)
+            .AppendItem(append_3)
+            .AppendItem(append_4);
+
+        var result = builder.Evaluate();
+
+        var reference_step_0 =
+            KernelFunction.concat(
+                PineValue.List(
+                    [
+                    ]));
+
+        var reference_step_1 =
+            KernelFunction.concat(
+                PineValue.List(
+                    [
+                    reference_step_0,
+                    append_1
+                    ]));
+
+        var reference_step_2 =
+            KernelFunction.concat(
+                PineValue.List(
+                    [
+                    reference_step_1,
+                    append_2,
+                    ]));
+
+        var reference_step_3 =
+            KernelFunction.concat(
+                PineValue.List(
+                    [
+                    reference_step_2,
+                    append_3,
+                    ]));
+
+        var expected =
+            KernelFunction.concat(
+                PineValue.List(
+                    [
+                    reference_step_3,
+                    append_4,
+                    ]));
+
+        result.Should().Be(expected);
     }
 
     [Fact]
@@ -904,5 +967,93 @@ public class ImmutableConcatBuilderTests
 
         // Should return the same builder instance
         newBuilder.Should().BeSameAs(builder);
+    }
+
+    [Fact]
+    public void Nested_blob_then_list_should_evaluate_to_empty()
+    {
+        // Test case for the issue: blob followed by non-empty list should return empty
+        var blob1 = PineValue.Blob([1, 2, 3]);
+        var list1 = PineValue.List([PineValue.Blob([4])]);
+
+        var builder = ImmutableConcatBuilder.Create([blob1]).AppendItem(list1);
+
+        var result = builder.Evaluate();
+        var expected = KernelFunction.concat(PineValue.List([blob1, list1]));
+
+        result.Should().Be(expected);
+
+        // The result should be empty list (error case)
+        result.Should().Be(PineValue.EmptyList);
+
+        // IsList and IsBlob should both return false for error cases
+        // (Currently this will fail because IsList returns true)
+        VerifyConsistencyOfDerivedProperties(builder);
+    }
+
+    [Fact]
+    public void Nested_list_then_blob_should_evaluate_to_empty()
+    {
+        // Test case for the issue: list followed by blob should return empty
+        var list1 = PineValue.List([PineValue.Blob([1])]);
+        var blob1 = PineValue.Blob([2, 3]);
+
+        var builder = ImmutableConcatBuilder.Create([list1]).AppendItem(blob1);
+
+        var result = builder.Evaluate();
+        var expected = KernelFunction.concat(PineValue.List([list1, blob1]));
+
+        result.Should().Be(expected);
+
+        // The result should be empty list (error case)
+        result.Should().Be(PineValue.EmptyList);
+
+        // IsList and IsBlob should both return false for error cases
+        VerifyConsistencyOfDerivedProperties(builder);
+    }
+
+    [Fact]
+    public void Nested_blob_empty_list_blob_should_be_blob()
+    {
+        // Test case: blob, empty list, blob should produce a blob
+        var blob1 = PineValue.Blob([1, 2]);
+        var emptyList = PineValue.EmptyList;
+        var blob2 = PineValue.Blob([3, 4]);
+
+        var builder = ImmutableConcatBuilder.Create([blob1])
+            .AppendItem(emptyList)
+            .AppendItem(blob2);
+
+        var result = builder.Evaluate();
+        var expected = KernelFunction.concat(PineValue.List([blob1, emptyList, blob2]));
+
+        result.Should().Be(expected);
+        VerifyConsistencyOfDerivedProperties(builder);
+    }
+
+    private static void VerifyConsistencyOfDerivedProperties(ImmutableConcatBuilder builder)
+    {
+        var isList = builder.IsList();
+        var isBlob = builder.IsBlob();
+        var evaluated = builder.Evaluate();
+
+        // Determine if this is an error case by checking if we have incompatible types
+        // An error case is when both IsList and IsBlob are false
+        bool isErrorCase = !isList && !isBlob;
+
+        if (isErrorCase)
+        {
+            // Error case: incompatible types, result should be EmptyList
+            evaluated.Should().Be(PineValue.EmptyList);
+        }
+        else
+        {
+            // Normal case: exactly one should be true
+            (isList != isBlob).Should().BeTrue();
+
+            // Verify the type checks match the evaluated result
+            (evaluated is PineValue.ListValue).Should().Be(isList);
+            (evaluated is PineValue.BlobValue).Should().Be(isBlob);
+        }
     }
 }
