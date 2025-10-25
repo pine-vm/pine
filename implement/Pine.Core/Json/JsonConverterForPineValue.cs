@@ -1,4 +1,3 @@
-using Pine.Core;
 using Pine.Core.PopularEncodings;
 using System;
 using System.Collections.Generic;
@@ -6,14 +5,17 @@ using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace Pine.Json;
+namespace Pine.Core.Json;
 
+/// <summary>
+/// Custom <see cref="JsonConverter{T}"/> that converts between <see cref="PineValue"/> instances and their JSON representations.
+/// </summary>
 public class JsonConverterForPineValue : JsonConverter<PineValue>
 {
     /// <inheritdoc/>
     public override PineValue? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
-        if (reader.TokenType == JsonTokenType.Number)
+        if (reader.TokenType is JsonTokenType.Number)
         {
             var integerString = System.Text.Encoding.UTF8.GetString(reader.ValueSpan);
 
@@ -25,13 +27,13 @@ public class JsonConverterForPineValue : JsonConverter<PineValue>
             }
         }
 
-        if (reader.TokenType == JsonTokenType.StartArray)
+        if (reader.TokenType is JsonTokenType.StartArray)
         {
             reader.Read();
 
             var elements = new List<PineValue>();
 
-            while (reader.TokenType != JsonTokenType.EndArray)
+            while (reader.TokenType is not JsonTokenType.EndArray)
             {
                 elements.Add(Read(ref reader, typeToConvert: typeToConvert, options: options)!);
             }
@@ -41,7 +43,7 @@ public class JsonConverterForPineValue : JsonConverter<PineValue>
             return PineValue.List([.. elements]);
         }
 
-        if (reader.TokenType == JsonTokenType.StartObject)
+        if (reader.TokenType is JsonTokenType.StartObject)
         {
             reader.Read();
 
@@ -73,7 +75,11 @@ public class JsonConverterForPineValue : JsonConverter<PineValue>
              * */
             if (propertyName is "BlobAsString" or "ListAsString")
             {
-                var pineValue = StringEncoding.BlobValueFromString(reader.GetString());
+                var propertyValue =
+                    reader.GetString() ??
+                    throw new JsonException("Expected non-null string value for property " + propertyName);
+
+                var pineValue = StringEncoding.BlobValueFromString(propertyValue);
 
                 reader.Read();
 
@@ -87,7 +93,11 @@ public class JsonConverterForPineValue : JsonConverter<PineValue>
 
             if (propertyName is "ListAsString_2024")
             {
-                var pineValue = StringEncoding.ValueFromString_2024(reader.GetString());
+                var propertyValue =
+                    reader.GetString() ??
+                    throw new JsonException("Expected non-null string value for property " + propertyName);
+
+                var pineValue = StringEncoding.ValueFromString_2024(propertyValue);
 
                 reader.Read();
 
@@ -105,7 +115,12 @@ public class JsonConverterForPineValue : JsonConverter<PineValue>
         throw new NotImplementedException("Unexpected token type: " + reader.TokenType);
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Serialize a <see cref="PineValue"/> by emitting integers, arrays, or blob wrappers to maintain round-trippable JSON.
+    /// </summary>
+    /// <param name="writer">Writer receiving the JSON output.</param>
+    /// <param name="value">The Pine value to encode.</param>
+    /// <param name="options">Serializer options applied to nested conversions.</param>
     public override void Write(Utf8JsonWriter writer, PineValue value, JsonSerializerOptions options)
     {
         if (IntegerEncoding.ParseSignedIntegerStrict(value) is Result<string, System.Numerics.BigInteger>.Ok asInt)
@@ -141,6 +156,12 @@ public class JsonConverterForPineValue : JsonConverter<PineValue>
         WriteDefaultRepresentation(writer, value, options);
     }
 
+    /// <summary>
+    /// Falls back to the canonical JSON representation for lists and binary blobs when no specialized form applies.
+    /// </summary>
+    /// <param name="writer">Writer receiving the JSON output.</param>
+    /// <param name="value">The Pine value to encode.</param>
+    /// <param name="options">Serializer options applied to nested conversions.</param>
     private void WriteDefaultRepresentation(Utf8JsonWriter writer, PineValue value, JsonSerializerOptions options)
     {
         if (value is PineValue.ListValue list)

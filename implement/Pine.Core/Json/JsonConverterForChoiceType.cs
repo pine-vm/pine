@@ -64,7 +64,7 @@ public class JsonConverterForChoiceType : JsonConverterFactory
     /// <param name="Default">Value to use when constructing a variant during deserialization</param>
     public record JsonIgnore(object? Default);
 
-    private static readonly ConcurrentDictionary<Type, Result<string, ParsedChoiceType>> parseTypeToConvertCache = new();
+    private static readonly ConcurrentDictionary<Type, Result<string, ParsedChoiceType>> s_parseTypeToConvertCache = new();
 
     /// <summary>
     /// Checks if the given type is a choice type of a supported declaration format.
@@ -92,7 +92,7 @@ public class JsonConverterForChoiceType : JsonConverterFactory
     /// Caches the result of <see cref="ParseTypeToConvert(Type)"/> for the given type.
     /// </summary>
     public static Result<string, ParsedChoiceType> CachedParseTypeToConvert(Type typeToConvert) =>
-        parseTypeToConvertCache.GetOrAdd(typeToConvert, valueFactory: ParseTypeToConvert);
+        s_parseTypeToConvertCache.GetOrAdd(typeToConvert, valueFactory: ParseTypeToConvert);
 
     /// <summary>
     /// Inspects the given type and returns a <see cref="ParsedChoiceType"/> with information about the variants of the choice type.
@@ -111,8 +111,6 @@ public class JsonConverterForChoiceType : JsonConverterFactory
 
             if (typeToConvert.IsGenericType && nestedType.IsGenericTypeDefinition)
             {
-                var typeToConvertGenericTypeDefinition = typeToConvert.GetGenericTypeDefinition();
-
                 var typeToConvertGenericArguments = typeToConvert.GetGenericArguments();
 
                 var genericFromNestedType = nestedType.MakeGenericType(typeToConvertGenericArguments);
@@ -237,7 +235,7 @@ public class JsonConverterForChoiceType : JsonConverterFactory
 /// </summary>
 public class JsonConverterForChoiceType<T> : JsonConverter<T>
 {
-    private static readonly JsonConverterForChoiceType.ParsedChoiceType ParsedType =
+    private static readonly JsonConverterForChoiceType.ParsedChoiceType s_parsedType =
         JsonConverterForChoiceType.CachedParseTypeToConvert(typeof(T))
         .Extract(error => throw new Exception(error));
 
@@ -270,14 +268,14 @@ public class JsonConverterForChoiceType<T> : JsonConverter<T>
 
         reader.Read();
 
-        ParsedType.Variants.TryGetValue(propertyName, out var variant);
+        s_parsedType.Variants.TryGetValue(propertyName, out var variant);
 
         if (variant is null)
         {
             throw new JsonException(
                 "Unexpected variant name: " + propertyName +
-                ". Expected one of these " + ParsedType.Variants.Count + " names: " +
-                string.Join(", ", ParsedType.Variants.Keys));
+                ". Expected one of these " + s_parsedType.Variants.Count + " names: " +
+                string.Join(", ", s_parsedType.Variants.Keys));
         }
 
         var constructorArguments = new object?[variant.ConstructorParameters.Count];
@@ -286,9 +284,9 @@ public class JsonConverterForChoiceType<T> : JsonConverter<T>
         {
             var constructorParameter = variant.ConstructorParameters[argumentIndex];
 
-            if (constructorParameter.JsonIgnore is { } JsonIgnore)
+            if (constructorParameter.JsonIgnore is { } jsonIgnore)
             {
-                constructorArguments[argumentIndex] = JsonIgnore.Default;
+                constructorArguments[argumentIndex] = jsonIgnore.Default;
             }
             else
             {
@@ -329,9 +327,9 @@ public class JsonConverterForChoiceType<T> : JsonConverter<T>
 
         JsonConverterForChoiceType.ParsedChoiceType.Variant? variant = null;
 
-        for (var i = 0; i < ParsedType.Variants.Count; ++i)
+        for (var i = 0; i < s_parsedType.Variants.Count; ++i)
         {
-            var v = ParsedType.Variants.ElementAt(i);
+            var v = s_parsedType.Variants.ElementAt(i);
 
             if (v.Value.ClrType.IsInstanceOfType(value))
             {

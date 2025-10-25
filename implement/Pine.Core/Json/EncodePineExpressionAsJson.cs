@@ -1,5 +1,4 @@
 using Pine.Core.PopularEncodings;
-using Pine.Json;
 using System;
 using System.Collections.Generic;
 using System.Text.Json;
@@ -17,7 +16,7 @@ public class EncodePineExpressionAsJson
     /// Serializes a single <see cref="Expression"/> to a JSON string.
     /// </summary>
     public static string ToJsonString(Expression expression) =>
-        JsonSerializer.Serialize(expression, jsonSerializerOptions);
+        JsonSerializer.Serialize(expression, s_jsonSerializerOptions);
 
     /// <summary>
     /// Serializes a list of <see cref="Expression"/>s to a JSON string.
@@ -26,23 +25,23 @@ public class EncodePineExpressionAsJson
     /// JSON string with an array of JSON objects, each representing a <see cref="Expression"/>.
     /// </returns>
     public static string ToJsonString(IReadOnlyList<Expression> expression) =>
-        JsonSerializer.Serialize(expression, jsonSerializerOptions);
+        JsonSerializer.Serialize(expression, s_jsonSerializerOptions);
 
     /// <summary>
     /// Expects a JSON string encoding a single <see cref="Expression"/>.
     /// </summary>
     public static Expression SingleFromJsonString(string json) =>
-        JsonSerializer.Deserialize<Expression>(json, jsonSerializerOptions)
+        JsonSerializer.Deserialize<Expression>(json, s_jsonSerializerOptions)
         ?? throw new Exception();
 
     /// <summary>
     /// Expects a JSON string encoding a list (JSON array) of <see cref="Expression"/>.
     /// </summary>
     public static IReadOnlyList<Expression> ListFromJsonString(string json) =>
-        JsonSerializer.Deserialize<IReadOnlyList<Expression>>(json, jsonSerializerOptions)
+        JsonSerializer.Deserialize<IReadOnlyList<Expression>>(json, s_jsonSerializerOptions)
         ?? throw new Exception();
 
-    private readonly static JsonSerializerOptions jsonSerializerOptions = BuildJsonSerializerOptions();
+    private readonly static JsonSerializerOptions s_jsonSerializerOptions = BuildJsonSerializerOptions();
 
     /// <summary>
     /// Configuration to use <see cref="JsonSerializer"/> with <see cref="Expression"/>s.

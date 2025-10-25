@@ -1,7 +1,7 @@
 using AwesomeAssertions;
 using Pine.Core;
+using Pine.Core.Json;
 using Pine.Core.PopularEncodings;
-using Pine.Json;
 using System.Text.Json;
 using Xunit;
 
@@ -106,16 +106,16 @@ public class JsonConverterForPineValueTests
 
         jsonSerializerOptions.Converters.Add(new JsonConverterForPineValue());
 
-        string serializePineValue(PineValue pineValue) =>
+        string SerializePineValue(PineValue pineValue) =>
             JsonSerializer.Serialize(
                 pineValue,
                 options: jsonSerializerOptions);
 
-        serializePineValue(
+        SerializePineValue(
             IntegerEncoding.EncodeSignedInteger(1234))
             .Should().Be("1234");
 
-        serializePineValue(
+        SerializePineValue(
             IntegerEncoding.EncodeSignedInteger(-34567))
             .Should().Be("-34567");
     }
@@ -127,16 +127,16 @@ public class JsonConverterForPineValueTests
 
         jsonSerializerOptions.Converters.Add(new JsonConverterForPineValue());
 
-        string serializePineValue(PineValue pineValue) =>
+        string SerializePineValue(PineValue pineValue) =>
             JsonSerializer.Serialize(
                 pineValue,
                 options: jsonSerializerOptions);
 
-        serializePineValue(
+        SerializePineValue(
             StringEncoding.BlobValueFromString("stringValue 789"))
             .Should().Be($$"""{"BlobAsString":"stringValue 789"}""");
 
-        serializePineValue(PineValue.EmptyList)
+        SerializePineValue(PineValue.EmptyList)
             .Should().Be("[]");
     }
 }
