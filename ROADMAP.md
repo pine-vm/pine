@@ -6,7 +6,7 @@ Here is a plan for what future releases of Pine will focus on.
 
 ## Runtime Performance
 
-The runtime efficiency items are not related to the Pine language, but are implementation details of the execution engine that ships together with the primary distribution.
+The runtime performance items are not related to the Pine language, but are implementation details of the execution engine that ships together with the primary distribution.
 
 ### Runtime Efficiency - Caching
 
@@ -24,6 +24,7 @@ The runtime efficiency items are not related to the Pine language, but are imple
 - [ ] Use the static program from code analysis to inline functions saving allocations of short-lived structures. (e.g. Pipeline sequences of `Result.map`)
 - [X] Use static program from code analysis to emit to more concrete form, like C# or WASM.
 - [x] For emitting to lower level forms, ensure tail call optimization works to avoid stack overflows (like it already does in the IR-interpreter).
+- [ ] Expand parsing to support higher-order function.
 - [ ] Introduce specialized representation for slice of blob value to make slicing cheaper.
 - [ ] Introduce specialized representation for slice of list value to make slicing cheaper.
 - [ ] Introduce specialized representation for concatenated blob value to make blob composition cheaper.
