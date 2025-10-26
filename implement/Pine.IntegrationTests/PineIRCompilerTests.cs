@@ -222,13 +222,6 @@ public class PineIRCompilerTests
         var expectedInstructions =
             new StackFrameInstructions(
                 [
-                StackInstruction.Push_Environment,
-
-                // Use a form storing the environment in a local, so stack depth is zero when we loop:
-                StackInstruction.Local_Set(0),
-
-                StackInstruction.Pop,
-
                 // Start of the section we loop over:
                 StackInstruction.Local_Get(0),
 

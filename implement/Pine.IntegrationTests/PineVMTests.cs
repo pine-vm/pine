@@ -339,15 +339,15 @@ public class PineVMTests
                     [
                     StackInstruction.Push_Literal(PineValue.EmptyList),
 
-                    StackInstruction.Push_Environment,
+                    StackInstruction.Local_Get(0),
 
                     StackInstruction.Skip_Const(1),
 
-                    StackInstruction.Local_Set(0),
+                    StackInstruction.Local_Set(1),
 
                     StackInstruction.Push_Literal(PineValue.EmptyBlob),
 
-                    StackInstruction.Local_Get(0),
+                    StackInstruction.Local_Get(1),
 
                     StackInstruction.Build_List(4),
 
@@ -409,17 +409,17 @@ public class PineVMTests
                     [
                     StackInstruction.Push_Literal(PineValue.EmptyList),
 
-                    StackInstruction.Push_Environment,
+                    StackInstruction.Local_Get(0),
 
                     StackInstruction.Skip_Const(13),
 
                     StackInstruction.Concat_Generic,
 
-                    StackInstruction.Local_Set(0),
+                    StackInstruction.Local_Set(1),
 
                     StackInstruction.Push_Literal(PineValue.EmptyBlob),
 
-                    StackInstruction.Local_Get(0),
+                    StackInstruction.Local_Get(1),
 
                     StackInstruction.Build_List(4),
 
@@ -438,9 +438,9 @@ public class PineVMTests
                 expected =
                 new StackFrameInstructions(
                     [
-                        StackInstruction.Push_Environment,
+                        StackInstruction.Local_Get(0),
 
-                        StackInstruction.Push_Environment,
+                        StackInstruction.Local_Get(0),
 
                         StackInstruction.Parse_And_Eval_Binary,
 
@@ -464,9 +464,9 @@ public class PineVMTests
                 expected =
                 new StackFrameInstructions(
                     [
-                        StackInstruction.Push_Environment,
+                        StackInstruction.Local_Get(0),
 
-                        StackInstruction.Push_Environment,
+                        StackInstruction.Local_Get(0),
 
                         StackInstruction.Parse_And_Eval_Binary,
 
@@ -514,7 +514,7 @@ public class PineVMTests
 
                     StackInstruction.Build_List(2),
 
-                    StackInstruction.Push_Environment,
+                    StackInstruction.Local_Get(0),
 
                     StackInstruction.Parse_And_Eval_Binary,
 
@@ -555,7 +555,7 @@ public class PineVMTests
                     StackInstruction.Push_Literal(
                         IntegerEncoding.EncodeSignedInteger(17)),
 
-                    StackInstruction.Push_Environment,
+                    StackInstruction.Local_Get(0),
 
                     StackInstruction.Jump_If_True(2),
 
@@ -648,9 +648,9 @@ public class PineVMTests
 
                     StackInstruction.Return,
 
-                    StackInstruction.Push_Environment,
+                    StackInstruction.Local_Get(0),
 
-                    StackInstruction.Push_Environment,
+                    StackInstruction.Local_Get(0),
 
                     StackInstruction.Skip_Const(13),
 
@@ -711,9 +711,9 @@ public class PineVMTests
 
                     StackInstruction.Jump_Unconditional(5),
 
-                    StackInstruction.Push_Environment,
+                    StackInstruction.Local_Get(0),
 
-                    StackInstruction.Push_Environment,
+                    StackInstruction.Local_Get(0),
 
                     StackInstruction.Skip_Const(13),
 
@@ -758,9 +758,9 @@ public class PineVMTests
 
                     StackInstruction.Jump_If_True(4),
 
-                    StackInstruction.Push_Environment,
+                    StackInstruction.Local_Get(0),
 
-                    StackInstruction.Push_Environment,
+                    StackInstruction.Local_Get(0),
 
                     StackInstruction.Parse_And_Eval_Binary,
 
@@ -822,7 +822,7 @@ public class PineVMTests
 
                     StackInstruction.Jump_Unconditional(4),
 
-                    StackInstruction.Push_Environment,
+                    StackInstruction.Local_Get(0),
 
                     StackInstruction.Push_Literal(
                         IntegerEncoding.EncodeSignedInteger(41)),
@@ -839,7 +839,7 @@ public class PineVMTests
 
                     StackInstruction.Jump_Unconditional(4),
 
-                    StackInstruction.Push_Environment,
+                    StackInstruction.Local_Get(0),
 
                     StackInstruction.Push_Literal(
                         IntegerEncoding.EncodeSignedInteger(43)),
@@ -926,7 +926,7 @@ public class PineVMTests
                 expected =
                 new StackFrameInstructions(
                     [
-                    StackInstruction.Push_Environment,
+                    StackInstruction.Local_Get(0),
 
                     StackInstruction.Skip_Head_Const(17),
 
@@ -986,7 +986,7 @@ public class PineVMTests
                     StackInstruction.Push_Literal(
                         IntegerEncoding.EncodeSignedInteger(21)),
 
-                    StackInstruction.Push_Environment,
+                    StackInstruction.Local_Get(0),
 
                     StackInstruction.Skip_Head_Const(23),
 
@@ -1053,25 +1053,25 @@ public class PineVMTests
                 expected =
                 new StackFrameInstructions(
                     [
-                    StackInstruction.Push_Environment,
-
-                    StackInstruction.Push_Environment,
-
-                    StackInstruction.Int_Mul_Binary,
-
-                    StackInstruction.Push_Environment,
-
-                    StackInstruction.Int_Mul_Binary,
-
-                    StackInstruction.Local_Set(0),
+                    StackInstruction.Local_Get(0),
 
                     StackInstruction.Local_Get(0),
+
+                    StackInstruction.Int_Mul_Binary,
+
+                    StackInstruction.Local_Get(0),
+
+                    StackInstruction.Int_Mul_Binary,
+
+                    StackInstruction.Local_Set(1),
+
+                    StackInstruction.Local_Get(1),
 
                     StackInstruction.Build_List(2),
 
                     StackInstruction.Jump_If_True(6),
 
-                    StackInstruction.Local_Get(0),
+                    StackInstruction.Local_Get(1),
 
                     StackInstruction.Jump_If_True(2),
 
@@ -1132,11 +1132,11 @@ public class PineVMTests
                 expected =
                 new StackFrameInstructions(
                     [
-                    StackInstruction.Push_Environment,
+                    StackInstruction.Local_Get(0),
 
                     StackInstruction.Skip_Head_Const(1),
 
-                    StackInstruction.Push_Environment,
+                    StackInstruction.Local_Get(0),
 
                     StackInstruction.Skip_Head_Const(2),
 
@@ -1196,11 +1196,11 @@ public class PineVMTests
                 expected =
                 new StackFrameInstructions(
                     [
-                    StackInstruction.Push_Environment,
+                    StackInstruction.Local_Get(0),
 
                     StackInstruction.Skip_Head_Const(1),
 
-                    StackInstruction.Push_Environment,
+                    StackInstruction.Local_Get(0),
 
                     StackInstruction.Skip_Head_Const(2),
 
@@ -1229,7 +1229,7 @@ public class PineVMTests
                 expected =
                 new StackFrameInstructions(
                     [
-                    StackInstruction.Push_Environment,
+                    StackInstruction.Local_Get(0),
 
                     StackInstruction.Head_Generic,
 
@@ -1259,7 +1259,7 @@ public class PineVMTests
                 expected =
                 new StackFrameInstructions(
                     [
-                    StackInstruction.Push_Environment,
+                    StackInstruction.Local_Get(0),
 
                     StackInstruction.Head_Generic,
 
@@ -1312,11 +1312,11 @@ public class PineVMTests
                 expected =
                 new StackFrameInstructions(
                     [
-                    StackInstruction.Push_Environment,
+                    StackInstruction.Local_Get(0),
 
                     StackInstruction.Skip_Head_Const(11),
 
-                    StackInstruction.Push_Environment,
+                    StackInstruction.Local_Get(0),
 
                     StackInstruction.Skip_Head_Const(13),
 
@@ -1365,13 +1365,13 @@ public class PineVMTests
                 expected =
                 new StackFrameInstructions(
                     [
-                        new StackInstruction(StackInstructionKind.Push_Environment),
+                        StackInstruction.Local_Get(0),
 
                         new StackInstruction(
                             StackInstructionKind.Skip_Head_Const,
                             SkipCount: 17),
 
-                        StackInstruction.Push_Environment,
+                        StackInstruction.Local_Get(0),
 
                         new StackInstruction(
                             StackInstructionKind.Skip_Head_Const,
@@ -1426,11 +1426,11 @@ public class PineVMTests
                 expected =
                 new StackFrameInstructions(
                     [
-                    StackInstruction.Push_Environment,
+                    StackInstruction.Local_Get(0),
 
                     StackInstruction.Skip_Head_Const(13),
 
-                    StackInstruction.Push_Environment,
+                    StackInstruction.Local_Get(0),
 
                     StackInstruction.Skip_Head_Const(11),
 
@@ -1459,7 +1459,7 @@ public class PineVMTests
                 expected =
                 new StackFrameInstructions(
                     [
-                    StackInstruction.Push_Environment,
+                    StackInstruction.Local_Get(0),
 
                     StackInstruction.Head_Generic,
 
@@ -1488,7 +1488,7 @@ public class PineVMTests
                 expected =
                 new StackFrameInstructions(
                     [
-                    StackInstruction.Push_Environment,
+                    StackInstruction.Local_Get(0),
 
                     StackInstruction.Head_Generic,
 
@@ -1521,7 +1521,7 @@ public class PineVMTests
                 expected =
                 new StackFrameInstructions(
                     [
-                        StackInstruction.Push_Environment,
+                        StackInstruction.Local_Get(0),
 
                         StackInstruction.Head_Generic,
 
@@ -1555,7 +1555,7 @@ public class PineVMTests
                 expected =
                 new StackFrameInstructions(
                     [
-                        StackInstruction.Push_Environment,
+                        StackInstruction.Local_Get(0),
 
                         StackInstruction.Head_Generic,
 
@@ -1589,7 +1589,7 @@ public class PineVMTests
                 expected =
                 new StackFrameInstructions(
                     [
-                        StackInstruction.Push_Environment,
+                        StackInstruction.Local_Get(0),
 
                         StackInstruction.Length_Equal_Const(11),
 
@@ -1620,7 +1620,7 @@ public class PineVMTests
                 expected =
                 new StackFrameInstructions(
                     [
-                        StackInstruction.Push_Environment,
+                        StackInstruction.Local_Get(0),
 
                         StackInstruction.Length_Equal_Const(13),
 
@@ -1645,7 +1645,7 @@ public class PineVMTests
                 expected =
                 new StackFrameInstructions(
                     [
-                        StackInstruction.Push_Environment,
+                        StackInstruction.Local_Get(0),
 
                         StackInstruction.Int_Less_Than_Or_Equal_Const(13),
 
@@ -1670,7 +1670,7 @@ public class PineVMTests
                 expected =
                 new StackFrameInstructions(
                     [
-                        StackInstruction.Push_Environment,
+                        StackInstruction.Local_Get(0),
 
                         StackInstruction.Int_Greater_Than_Or_Equal_Const(17),
 
@@ -1698,9 +1698,7 @@ public class PineVMTests
                 expected =
                 new StackFrameInstructions(
                     [
-                        StackInstruction.Push_Environment,
-
-                        StackInstruction.Local_Set(0),
+                        StackInstruction.Local_Get(0),
 
                         StackInstruction.Int_Greater_Than_Or_Equal_Const(23),
 
@@ -1764,17 +1762,17 @@ public class PineVMTests
                 expected =
                 new StackFrameInstructions(
                     [
-                        StackInstruction.Push_Environment,
+                        StackInstruction.Local_Get(0),
 
                         StackInstruction.Skip_Head_Const(43),
 
                         StackInstruction.Skip_Head_Const(41),
 
-                        StackInstruction.Local_Set(0),
+                        StackInstruction.Local_Set(1),
 
                         StackInstruction.Int_Greater_Than_Or_Equal_Const(23),
 
-                        StackInstruction.Local_Get(0),
+                        StackInstruction.Local_Get(1),
 
                         StackInstruction.Int_Less_Than_Or_Equal_Const(27),
 
@@ -1801,7 +1799,7 @@ public class PineVMTests
                 expected =
                 new StackFrameInstructions(
                     [
-                        StackInstruction.Push_Environment,
+                        StackInstruction.Local_Get(0),
 
                         StackInstruction.Bit_And_Const(
                             IntegerEncoding.EncodeSignedInteger(23)),
@@ -1827,7 +1825,7 @@ public class PineVMTests
                 expected =
                 new StackFrameInstructions(
                     [
-                        StackInstruction.Push_Environment,
+                        StackInstruction.Local_Get(0),
 
                         StackInstruction.Bit_And_Const(
                             IntegerEncoding.EncodeSignedInteger(27)),
@@ -1853,7 +1851,7 @@ public class PineVMTests
                 expected =
                 new StackFrameInstructions(
                     [
-                        StackInstruction.Push_Environment,
+                        StackInstruction.Local_Get(0),
 
                         StackInstruction.Bit_Or_Const(
                             IntegerEncoding.EncodeSignedInteger(31)),
@@ -1879,7 +1877,7 @@ public class PineVMTests
                 expected =
                 new StackFrameInstructions(
                     [
-                        StackInstruction.Push_Environment,
+                        StackInstruction.Local_Get(0),
 
                         StackInstruction.Bit_Or_Const(
                             IntegerEncoding.EncodeSignedInteger(37)),
@@ -1905,7 +1903,7 @@ public class PineVMTests
                 expected =
                 new StackFrameInstructions(
                     [
-                        StackInstruction.Push_Environment,
+                        StackInstruction.Local_Get(0),
 
                         StackInstruction.Bit_Shift_Left_Const(13),
 
@@ -1930,7 +1928,7 @@ public class PineVMTests
                 expected =
                 new StackFrameInstructions(
                     [
-                        StackInstruction.Push_Environment,
+                        StackInstruction.Local_Get(0),
 
                         StackInstruction.Bit_Shift_Right_Const(17),
 
@@ -1955,7 +1953,7 @@ public class PineVMTests
                 expected =
                 new StackFrameInstructions(
                     [
-                        StackInstruction.Push_Environment,
+                        StackInstruction.Local_Get(0),
 
                         StackInstruction.Take_Const(71),
 
@@ -1980,7 +1978,7 @@ public class PineVMTests
                 expected =
                 new StackFrameInstructions(
                     [
-                        StackInstruction.Push_Environment,
+                        StackInstruction.Local_Get(0),
 
                         StackInstruction.Skip_Const(73),
 
@@ -2031,7 +2029,7 @@ public class PineVMTests
                 expected =
                 new StackFrameInstructions(
                     [
-                        StackInstruction.Push_Environment,
+                        StackInstruction.Local_Get(0),
 
                         StackInstruction.Head_Generic,
 
@@ -2084,7 +2082,7 @@ public class PineVMTests
                 expected =
                 new StackFrameInstructions(
                     [
-                        StackInstruction.Push_Environment,
+                        StackInstruction.Local_Get(0),
 
                         StackInstruction.Head_Generic,
 
@@ -2137,7 +2135,7 @@ public class PineVMTests
                 expected =
                 new StackFrameInstructions(
                     [
-                        StackInstruction.Push_Environment,
+                        StackInstruction.Local_Get(0),
 
                         StackInstruction.Head_Generic,
 
@@ -2193,15 +2191,15 @@ public class PineVMTests
                 expected =
                 new StackFrameInstructions(
                     [
-                        StackInstruction.Push_Environment,
+                        StackInstruction.Local_Get(0),
 
                         StackInstruction.Head_Generic,
 
-                        StackInstruction.Local_Set(0),
+                        StackInstruction.Local_Set(1),
 
                         StackInstruction.Int_Unsigned_Greater_Than_Or_Equal_Const(83),
 
-                        StackInstruction.Local_Get(0),
+                        StackInstruction.Local_Get(1),
 
                         StackInstruction.Int_Unsigned_Less_Than_Or_Equal_Const(107),
 
@@ -2299,7 +2297,7 @@ public class PineVMTests
                 expected =
                 new StackFrameInstructions(
                     [
-                        StackInstruction.Push_Environment,
+                        StackInstruction.Local_Get(0),
 
                         StackInstruction.Head_Generic,
 
@@ -2312,7 +2310,7 @@ public class PineVMTests
 
                         StackInstruction.Return,
 
-                        StackInstruction.Push_Environment,
+                        StackInstruction.Local_Get(0),
 
                         StackInstruction.Head_Generic,
 
@@ -2350,7 +2348,7 @@ public class PineVMTests
                 expected =
                 new StackFrameInstructions(
                     [
-                        StackInstruction.Push_Environment,
+                        StackInstruction.Local_Get(0),
 
                         StackInstruction.Take_Last_Const(3),
 
@@ -2399,7 +2397,7 @@ public class PineVMTests
                 expected =
                 new StackFrameInstructions(
                     [
-                        StackInstruction.Push_Environment,
+                        StackInstruction.Local_Get(0),
 
                         StackInstruction.Blob_Trim_Leading_Zeros(minRemainingCount:1),
 
@@ -2425,7 +2423,7 @@ public class PineVMTests
                 expected =
                 new StackFrameInstructions(
                     [
-                        StackInstruction.Push_Environment,
+                        StackInstruction.Local_Get(0),
 
                         StackInstruction.Push_Literal(
                             IntegerEncoding.EncodeSignedInteger(0)),
@@ -2455,7 +2453,7 @@ public class PineVMTests
                 expected =
                 new StackFrameInstructions(
                     [
-                        StackInstruction.Push_Environment,
+                        StackInstruction.Local_Get(0),
 
                         StackInstruction.Push_Literal(
                             IntegerEncoding.EncodeSignedInteger(0)),
@@ -2493,7 +2491,7 @@ public class PineVMTests
                 expected =
                 new StackFrameInstructions(
                     [
-                        StackInstruction.Push_Environment,
+                        StackInstruction.Local_Get(0),
 
                         StackInstruction.Is_Blob_Value,
 
@@ -2527,7 +2525,7 @@ public class PineVMTests
                 expected =
                 new StackFrameInstructions(
                     [
-                        StackInstruction.Push_Environment,
+                        StackInstruction.Local_Get(0),
 
                         StackInstruction.Push_Literal(
                             IntegerEncoding.EncodeSignedInteger(0)),

@@ -25,8 +25,6 @@ public enum StackInstructionKind
     /// </summary>
     Push_Literal,
 
-    Push_Environment,
-
     /// <summary>
     /// Copy the top value from the stack into the local at index <see cref="StackInstruction.LocalIndex"/>.
     /// The value is not popped from the stack.
@@ -306,9 +304,6 @@ public record StackInstruction(
     int? JumpOffset = null,
     int? ShiftCount = null)
 {
-    public static readonly StackInstruction Push_Environment =
-        new(StackInstructionKind.Push_Environment);
-
     public static readonly StackInstruction Return =
         new(StackInstructionKind.Return);
 
@@ -588,12 +583,6 @@ public record StackInstruction(
                     ?? throw new Exception(
                         "Missing Literal for PushLiteral instruction")
                     )]),
-
-            StackInstructionKind.Push_Environment =>
-                new InstructionDetails(
-                    PopCount: 0,
-                    PushCount: 1,
-                    []),
 
             StackInstructionKind.Local_Set =>
                 new InstructionDetails(

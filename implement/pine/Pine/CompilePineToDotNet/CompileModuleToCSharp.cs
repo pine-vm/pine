@@ -661,11 +661,6 @@ public static class CompileModuleToCSharp
     {
         var stackInstruction = instruction.StackInstruction;
 
-        if (stackInstruction.Kind is StackInstructionKind.Push_Environment)
-        {
-            return SyntaxFactory.IdentifierName(paramEnvName);
-        }
-
         if (stackInstruction.Kind is StackInstructionKind.Skip_Head_Const)
         {
             var skipCount =
@@ -861,11 +856,6 @@ public static class CompileModuleToCSharp
         {
             var inst = instructions[i];
 
-            if (inst.StackInstruction.Kind is StackInstructionKind.Push_Environment)
-            {
-                paramPathByAssignment[inst.AssignmentIndex] = ReadOnlyMemory<int>.Empty;
-            }
-
             if (inst.StackInstruction.Kind is StackInstructionKind.Skip_Head_Const)
             {
                 var parent = paramPathByAssignment[inst.AssignmentIndex - 1];
@@ -942,14 +932,6 @@ public static class CompileModuleToCSharp
         StackInstruction stackInstruction,
         int ssaOffset)
     {
-        if (stackInstruction.Kind is StackInstructionKind.Push_Environment)
-        {
-            return
-                new DependenciesAndReturnType(
-                    Dependencies: [],
-                    ReturnType: null);
-        }
-
         if (stackInstruction.Kind is StackInstructionKind.Skip_Head_Const)
         {
             return

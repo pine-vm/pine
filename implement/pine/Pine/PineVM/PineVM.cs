@@ -169,13 +169,18 @@ public class PineVM : IPineVM
 
         var instructions = compilation.SelectInstructionsForEnvironment(environment);
 
+        var localsValues =
+            new PineValueInProcess[instructions.MaxLocalIndex + 1];
+
+        localsValues[0] = environment;
+
         return new StackFrame(
             expressionValue,
             expression,
             instructions,
             EnvironmentValue: environment,
             StackValues: new PineValueInProcess[instructions.MaxStackUsage],
-            LocalsValues: new PineValueInProcess[instructions.MaxLocalIndex + 1],
+            LocalsValues: localsValues,
             ProfilingBaseline: profilingBaseline,
             Specialization: null);
     }
@@ -587,13 +592,6 @@ public class PineVM : IPineVM
                                     currentInstruction.Literal
                                     ??
                                     throw new Exception("Invalid operation form: Missing literal value")));
-
-                            continue;
-                        }
-
-                    case StackInstructionKind.Push_Environment:
-                        {
-                            currentFrame.PushInstructionResult(currentFrame.EnvironmentValue);
 
                             continue;
                         }

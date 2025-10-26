@@ -106,7 +106,7 @@ public class PineIRCompiler
             }
 
             return new JumpToLoop(
-                DestinationInstructionIndex: 3,
+                DestinationInstructionIndex: 0,
                 EnvironmentLocalIndex: 0);
         }
 
@@ -117,7 +117,7 @@ public class PineIRCompiler
             .Map(jump => new KeyValuePair<Expression.ParseAndEval, JumpToLoop>(callExpr, jump)))
             .ToImmutableDictionary();
 
-        var prior =
+        var priorBeforeParameters =
             tailCallEliminationDict.IsEmpty
             ?
             new NodeCompilationResult(
@@ -127,15 +127,20 @@ public class PineIRCompiler
             new NodeCompilationResult(
                 Instructions:
                 [
-                    StackInstruction.Push_Environment,
-
-                    // Use a form storing the environment in a local, so stack depth is zero when we loop:
-                    StackInstruction.Local_Set(0),
-
-                    StackInstruction.Pop,
+                    // 2025-10-26: Currently, we store in local(0) what used to be the 'environment'.
+                    // TODO: Introduce mapping to individual parameters
                 ],
                 ImmutableDictionary<Expression, int>.Empty
                 .SetItem(Expression.EnvironmentInstance, 0));
+
+        var prior =
+            priorBeforeParameters
+            with
+            {
+                LocalsSet = priorBeforeParameters.LocalsSet.SetItem(
+                    Expression.EnvironmentInstance,
+                    0)
+            };
 
         return
             CompileExpressionTransitive(
@@ -385,7 +390,9 @@ public class PineIRCompiler
                 return
                     prior
                     .AppendInstruction(
-                        StackInstruction.Push_Environment);
+                        // 2025-10-26: Currently, we store in local(0) what used to be the 'environment'.
+                        // TODO: Introduce mapping to individual parameters
+                        StackInstruction.Local_Get(0));
 
             case Expression.List listExpr:
                 {

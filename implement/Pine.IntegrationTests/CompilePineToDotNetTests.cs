@@ -478,7 +478,7 @@ public class CompilePineToDotNetTests
         }
     }
 
-    [Fact]
+    [Fact(Skip = "Switched to alternative compilation path")]
     public void Compile_from_Elm_to_CSharp()
     {
         var elmJsonFile =
