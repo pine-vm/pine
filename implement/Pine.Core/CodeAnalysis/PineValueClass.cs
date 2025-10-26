@@ -168,11 +168,26 @@ public record PineValueClass
         PineValue concreteValue,
         bool skipUnavailableItems)
     {
+        return
+            Create(
+                observedPart,
+                CreateEquals(concreteValue),
+                skipUnavailableItems);
+    }
+
+    /// <summary>
+    /// Creates a <see cref="PineValueClass"/> from the observed environment items and a concrete environment value.
+    /// </summary>
+    public static PineValueClass Create(
+        ExpressionEnvClass.ConstrainedEnv observedPart,
+        PineValueClass valueClass,
+        bool skipUnavailableItems)
+    {
         var parsedItems =
             observedPart.ParsedEnvItems
             .SelectMany(path =>
             {
-                var itemValue = CodeAnalysis.ValueFromPathInValue(concreteValue, [.. path]);
+                var itemValue = valueClass.TryGetValue(path);
 
                 if (itemValue is null)
                 {
