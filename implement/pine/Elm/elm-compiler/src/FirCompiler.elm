@@ -2513,15 +2513,15 @@ searchForExpressionReduction expression =
         Pine.ConditionalExpression condition falseBranch trueBranch ->
             if pineExpressionIsIndependent condition then
                 case Pine.evaluateExpression Pine.emptyEvalEnvironment condition of
-                    Err _ ->
-                        Nothing
-
                     Ok conditionValue ->
                         if conditionValue == Pine.trueValue then
                             Just trueBranch
 
                         else
                             Just falseBranch
+
+                    _ ->
+                        Nothing
 
             else
                 attemptReduceViaEval ()
