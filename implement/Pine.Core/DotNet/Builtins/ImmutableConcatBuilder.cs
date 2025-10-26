@@ -35,6 +35,16 @@ public abstract record ImmutableConcatBuilder
     protected abstract bool ContainsNonEmptyList { get; }
 
     /// <summary>
+    /// Predicts the length of the value from <see cref="Evaluate"/>
+    /// </summary>
+    protected abstract int PrecomputedLength { get; }
+
+    /// <summary>
+    /// Predict the length from <see cref="KernelFunction.length(PineValue)"/> used on the value from <see cref="Evaluate"/>.
+    /// </summary>
+    public int PredictLength() => PrecomputedLength;
+
+    /// <summary>
     /// Evaluates this builder into a single <see cref="PineValue"/> by applying the recorded concatenations.
     /// </summary>
     public PineValue Evaluate()
@@ -259,13 +269,16 @@ public abstract record ImmutableConcatBuilder
     public sealed record Leaf
         : ImmutableConcatBuilder
     {
-        /// <inheritdoc/>
-        public override int AggregateItemsCount => Values.Length;
-
         /// <summary>
         /// Items contained in the list given to <see cref="KernelFunction.concat(PineValue)"/>
         /// </summary>
         public ReadOnlyMemory<PineValue> Values { get; }
+
+        /// <inheritdoc/>
+        public override int AggregateItemsCount => Values.Length;
+
+        /// <inheritdoc/>
+        protected override int PrecomputedLength { get; } = 0;
 
         /// <inheritdoc/>
         override protected bool ContainsBlob { get; } = false;
@@ -279,19 +292,21 @@ public abstract record ImmutableConcatBuilder
         public Leaf(ReadOnlyMemory<PineValue> values)
         {
             var containsBlob = false;
-
             var containsNonEmptyList = false;
+            var precomputedLength = 0;
 
             for (var i = 0; i < values.Length; i++)
             {
-                if (values.Span[i] is PineValue.BlobValue)
+                if (values.Span[i] is PineValue.BlobValue blobValue)
                 {
                     containsBlob = true;
+                    precomputedLength += blobValue.Bytes.Length;
                 }
 
                 if (values.Span[i] is PineValue.ListValue listValue && listValue.Items.Length > 0)
                 {
                     containsNonEmptyList = true;
+                    precomputedLength += listValue.Items.Length;
                 }
             }
 
@@ -303,6 +318,7 @@ public abstract record ImmutableConcatBuilder
             {
                 ContainsBlob = containsBlob;
                 ContainsNonEmptyList = containsNonEmptyList;
+                PrecomputedLength = precomputedLength;
                 Values = values;
             }
         }
@@ -314,13 +330,16 @@ public abstract record ImmutableConcatBuilder
     public sealed record Node
         : ImmutableConcatBuilder
     {
-        /// <inheritdoc/>
-        public override int AggregateItemsCount { get; }
-
         /// <summary>
         /// The child builders forming this node.
         /// </summary>
         public IReadOnlyList<ImmutableConcatBuilder> Items { get; }
+
+        /// <inheritdoc/>
+        public override int AggregateItemsCount { get; }
+
+        /// <inheritdoc/>
+        protected override int PrecomputedLength { get; }
 
         /// <inheritdoc/>
         override protected bool ContainsBlob { get; } = false;
@@ -334,19 +353,23 @@ public abstract record ImmutableConcatBuilder
         public Node(IReadOnlyList<ImmutableConcatBuilder> items)
         {
             var count = 0;
+            var precomputedLength = 0;
             var containsBlob = false;
             var containsNonEmptyList = false;
 
             for (var i = 0; i < items.Count; i++)
             {
-                count += items[i].AggregateItemsCount;
+                var item = items[i];
 
-                if (items[i].ContainsBlob)
+                count += item.AggregateItemsCount;
+                precomputedLength += item.PrecomputedLength;
+
+                if (item.ContainsBlob)
                 {
                     containsBlob = true;
                 }
 
-                if (items[i].ContainsNonEmptyList)
+                if (item.ContainsNonEmptyList)
                 {
                     containsNonEmptyList = true;
                 }
@@ -364,6 +387,7 @@ public abstract record ImmutableConcatBuilder
                 ContainsNonEmptyList = containsNonEmptyList;
 
                 AggregateItemsCount = count;
+                PrecomputedLength = precomputedLength;
             }
         }
     }

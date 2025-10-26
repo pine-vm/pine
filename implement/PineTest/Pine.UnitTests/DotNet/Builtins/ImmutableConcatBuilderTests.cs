@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Pine.Core;
 using Pine.Core.DotNet.Builtins;
+using Pine.Core.Internal;
 using System.Collections.Generic;
 using System.Linq;
 using Xunit;
@@ -1035,25 +1036,16 @@ public class ImmutableConcatBuilderTests
     {
         var isList = builder.IsList();
         var isBlob = builder.IsBlob();
+        var predictedLength = builder.PredictLength();
+
         var evaluated = builder.Evaluate();
 
-        // Determine if this is an error case by checking if we have incompatible types
-        // An error case is when both IsList and IsBlob are false
-        bool isErrorCase = !isList && !isBlob;
+        (isList != isBlob).Should().BeTrue();
 
-        if (isErrorCase)
-        {
-            // Error case: incompatible types, result should be EmptyList
-            evaluated.Should().Be(PineValue.EmptyList);
-        }
-        else
-        {
-            // Normal case: exactly one should be true
-            (isList != isBlob).Should().BeTrue();
+        predictedLength.Should().Be(KernelFunctionSpecialized.length_as_int(evaluated));
 
-            // Verify the type checks match the evaluated result
-            (evaluated is PineValue.ListValue).Should().Be(isList);
-            (evaluated is PineValue.BlobValue).Should().Be(isBlob);
-        }
+        // Verify the type checks match the evaluated result
+        (evaluated is PineValue.ListValue).Should().Be(isList);
+        (evaluated is PineValue.BlobValue).Should().Be(isBlob);
     }
 }

@@ -165,7 +165,7 @@ public class PineValueInProcess
             return _evaluated;
         }
 
-        throw new System.NotImplementedException(
+        throw new NotImplementedException(
             "Missing branch in PineValueInProcess.AsEvaluated");
     }
 
@@ -211,7 +211,7 @@ public class PineValueInProcess
         if (_concatBuilder is not null)
             return _concatBuilder.IsList();
 
-        throw new System.NotImplementedException(
+        throw new NotImplementedException(
             "Missing branch in " + nameof(IsList));
     }
 
@@ -235,7 +235,7 @@ public class PineValueInProcess
         if (_concatBuilder is not null)
             return _concatBuilder.IsBlob();
 
-        throw new System.NotImplementedException(
+        throw new NotImplementedException(
             "Missing branch in " + nameof(IsBlob));
     }
 
@@ -243,7 +243,7 @@ public class PineValueInProcess
     /// Predict the length of the value from <see cref="Evaluate"/> without actually evaluating it.
     /// </summary>
     /// <returns></returns>
-    /// <exception cref="System.NotImplementedException"></exception>
+    /// <exception cref="NotImplementedException"></exception>
     public int GetLength()
     {
         if (_list is not null)
@@ -264,12 +264,10 @@ public class PineValueInProcess
 
         if (_concatBuilder is not null)
         {
-            var evaluated = _concatBuilder.Evaluate();
-
-            return KernelFunctionSpecialized.length_as_int(evaluated);
+            return _concatBuilder.PredictLength();
         }
 
-        throw new System.NotImplementedException(
+        throw new NotImplementedException(
             "Missing branch in " + nameof(GetLength));
     }
 
@@ -455,7 +453,7 @@ public class PineValueInProcess
             return Create(PineValue.BlobSingleByte(blobValue.Bytes.Span[index]));
         }
 
-        throw new System.InvalidOperationException(
+        throw new InvalidOperationException(
             "Unsupported value type for GetElementAt: " + evaluated.GetType().FullName);
     }
 
@@ -648,7 +646,7 @@ public class PineValueInProcess
 
     public static PineValue? ValueFromPathOrNull(
         PineValueInProcess root,
-        System.ReadOnlySpan<int> path)
+        ReadOnlySpan<int> path)
     {
         if (path.Length is 0)
         {
@@ -665,19 +663,19 @@ public class PineValueInProcess
     /// Use <see cref="AreEqual(PineValueInProcess, PineValueInProcess)"/> instead.
     /// </summary>
     public static bool operator ==(PineValueInProcess? left, PineValueInProcess? right) =>
-        throw new System.InvalidOperationException("Use PineValueInProcess.AreEqual(...) instead of '=='.");
+        throw new InvalidOperationException("Use PineValueInProcess.AreEqual(...) instead of '=='.");
 
     /// <summary>
     /// The infix inequality operator is intentionally disabled to avoid accidental use of expensive comparisons.
     /// Use <see cref="AreEqual(PineValueInProcess, PineValueInProcess)"/> instead.
     /// </summary>
     public static bool operator !=(PineValueInProcess? left, PineValueInProcess? right) =>
-        throw new System.InvalidOperationException("Use PineValueInProcess.AreEqual(...) instead of '!='.");
+        throw new InvalidOperationException("Use PineValueInProcess.AreEqual(...) instead of '!='.");
 
     /// <inheritdoc/>
     public override bool Equals(object? obj)
     {
-        throw new System.InvalidOperationException(
+        throw new InvalidOperationException(
             "Use the static Equal method instead of instance Equals");
     }
 
