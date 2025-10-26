@@ -265,17 +265,15 @@ public static class PineValueBinaryEncoding
             }
         }
 
-        var blobDeclarations =
+        var blobDeclarationsByLength =
             seenTwice
             .OfType<PineValue.BlobValue>()
-            .OrderBy(b => b.Bytes.Length)
-            .ToArray();
+            .GroupBy(b => b.Bytes.Length);
 
-        var listsDeclarations =
+        var listsDeclarationsByNodesCount =
             seenTwice
             .OfType<PineValue.ListValue>()
-            .OrderBy(l => l.NodesCount)
-            .ToArray();
+            .GroupBy(l => l.NodesCount);
 
         var componentId = componentIdOffset;
 
@@ -300,18 +298,30 @@ public static class PineValueBinaryEncoding
             ++componentId;
         }
 
-        void WriteDeclarations(IReadOnlyList<PineValue> declarations)
+        void OrderAndWriteDeclarations(IEnumerable<PineValue> declarationsBeforeOrdering)
         {
-            for (var i = 0; i < declarations.Count; i++)
+            var declarations =
+                declarationsBeforeOrdering
+                .Order(DotNet.CSharpDeclarationOrder.ValueDeclarationOrder.Instance)
+                .ToArray();
+
+            for (var i = 0; i < declarations.Length; i++)
             {
                 var declaration = declarations[i];
+
                 WriteDeclaration(declaration);
             }
         }
 
-        WriteDeclarations(blobDeclarations);
+        foreach (var lengthGroup in blobDeclarationsByLength.OrderBy(kv => kv.Key))
+        {
+            OrderAndWriteDeclarations(lengthGroup);
+        }
 
-        WriteDeclarations(listsDeclarations);
+        foreach (var nodesCountGroup in listsDeclarationsByNodesCount.OrderBy(kv => kv.Key))
+        {
+            OrderAndWriteDeclarations(nodesCountGroup);
+        }
 
         WriteDeclaration(root);
     }
