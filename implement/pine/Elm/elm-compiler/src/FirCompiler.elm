@@ -2517,14 +2517,11 @@ searchForExpressionReduction expression =
                         Nothing
 
                     Ok conditionValue ->
-                        if conditionValue == Pine.falseValue then
-                            Just falseBranch
-
-                        else if conditionValue == Pine.trueValue then
+                        if conditionValue == Pine.trueValue then
                             Just trueBranch
 
                         else
-                            Just (Pine.LiteralExpression (Pine.ListValue []))
+                            Just falseBranch
 
             else
                 attemptReduceViaEval ()
