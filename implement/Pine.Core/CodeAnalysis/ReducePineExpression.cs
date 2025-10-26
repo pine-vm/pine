@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using System.Numerics;
 
 using KernelFunctionSpecialized = Pine.Core.Internal.KernelFunctionSpecialized;
 
@@ -1151,10 +1152,81 @@ public class ReducePineExpression
         var reducedArg =
             ReduceExpressionBottomUp(kernelApp.Input, parseCache, dontReduceExpression);
 
+        if (kernelApp.Function is nameof(KernelFunction.int_mul) &&
+            reducedArg is Expression.List operandList)
+        {
+            var constants = CollectConstantIntegers(operandList.Items);
+
+            if (1 < constants.constants.Count)
+            {
+                var product = BigInteger.One;
+
+                foreach (var c in constants.constants)
+                {
+                    product *= c;
+                }
+
+                var newItems = new List<Expression>(capacity: constants.variables.Count + 1)
+                {
+                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(product))
+                };
+
+                newItems.AddRange(constants.variables);
+
+                reducedArg = Expression.ListInstance(newItems);
+            }
+        }
+
+        if (kernelApp.Function is nameof(KernelFunction.int_add) &&
+            reducedArg is Expression.List addendList)
+        {
+            var constants = CollectConstantIntegers(addendList.Items);
+            if (1 < constants.constants.Count)
+            {
+                var sum = BigInteger.Zero;
+
+                foreach (var c in constants.constants)
+                {
+                    sum += c;
+                }
+
+                var newItems = new List<Expression>(capacity: constants.variables.Count + 1)
+                {
+                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(sum))
+                };
+
+                newItems.AddRange(constants.variables);
+
+                reducedArg = Expression.ListInstance(newItems);
+            }
+        }
+
         if (reducedArg == kernelApp.Input)
             return kernelApp;
 
         return new Expression.KernelApplication(kernelApp.Function, reducedArg);
+    }
+
+    private static (IReadOnlyList<BigInteger> constants, IReadOnlyList<Expression> variables) CollectConstantIntegers(
+        IReadOnlyList<Expression> items)
+    {
+        var constants = new List<BigInteger>();
+        var variableExpressions = new List<Expression>();
+
+        for (var i = 0; i < items.Count; i++)
+        {
+            if (items[i] is Expression.Literal literal &&
+                KernelFunction.SignedIntegerFromValueRelaxed(literal.Value) is { } intValue)
+            {
+                constants.Add(intValue);
+            }
+            else
+            {
+                variableExpressions.Add(items[i]);
+            }
+        }
+
+        return (constants, variableExpressions);
     }
 
     /// <summary>
