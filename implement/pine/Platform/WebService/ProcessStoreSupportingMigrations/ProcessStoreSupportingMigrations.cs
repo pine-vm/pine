@@ -42,7 +42,7 @@ public interface IProcessStoreReader
     {
         var projectedFiles =
             new ConcurrentDictionary<IImmutableList<string>, ReadOnlyMemory<byte>>(
-                comparer: EnumerableExtension.EqualityComparer<IImmutableList<string>>());
+                comparer: EnumerableExtensions.EqualityComparer<IImmutableList<string>>());
 
         var fileStoreWriter = new DelegatingFileStoreWriter
         (
@@ -98,7 +98,7 @@ public interface IProcessStoreReader
 
                 return
                     originalFileStore.ListFilesInDirectory(directoryPath).Concat(fromProjectedFiles)
-                    .Distinct(EnumerableExtension.EqualityComparer<IImmutableList<string>>());
+                    .Distinct(EnumerableExtensions.EqualityComparer<IImmutableList<string>>());
             }
         );
 
@@ -247,7 +247,7 @@ public class ProcessStoreInFileStore
         ImmutableList.Create(componentHash[..2], componentHash);
 
     private static readonly IComparer<IImmutableList<string>> CompositionLogFileOrderPathComparer =
-        EnumerableExtension.Comparer<IImmutableList<string>>();
+        EnumerableExtensions.Comparer<IImmutableList<string>>();
 
     protected static IEnumerable<IImmutableList<string>> CompositionLogFileOrder(
         IEnumerable<IImmutableList<string>> logFilesPaths) =>

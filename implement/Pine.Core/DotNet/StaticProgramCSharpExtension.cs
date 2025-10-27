@@ -56,7 +56,7 @@ public static class StaticProgramCSharpExtension
                             [.. namespacePrefix, .. cd.namespaces]).ToFullString())
                     .AsMemory(),
                 comparer:
-                EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
+                EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
     }
 
     public static CompilationUnitSyntax BuildCompilationUnitSyntax(

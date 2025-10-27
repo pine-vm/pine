@@ -58,7 +58,7 @@ public static class ElmModule
                         moduleText.AsSpan(0, Math.Min(1000, moduleText.Length))))),
                 ImportedModulesNames:
                     ParseModuleImportedModulesNames(moduleText)
-                    .ToImmutableHashSet(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>())
+                    .ToImmutableHashSet(EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>())
                 )))
             .ToImmutableList();
 
@@ -81,7 +81,7 @@ public static class ElmModule
             .ToImmutableDictionary(
                 keySelector: moduleTextAndParsed => moduleTextAndParsed.parsedModule.ModuleName,
                 elementSelector: parsedModule => parsedModule,
-                keyComparer: EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
+                keyComparer: EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
 
         IReadOnlySet<IReadOnlyList<string>> ListImportsOfModuleTransitive(IReadOnlyList<string> moduleName)
         {
@@ -89,7 +89,7 @@ public static class ElmModule
                 new Queue<IReadOnlyList<string>>([moduleName]);
 
             var set =
-                new HashSet<IReadOnlyList<string>>(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
+                new HashSet<IReadOnlyList<string>>(EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
 
             while (queue.TryDequeue(out var currentModuleName))
             {
@@ -120,8 +120,8 @@ public static class ElmModule
             .Concat(ElmCoreAutoImportedModulesNames)
             .Intersect(
                 parsedModules.Select(pm => pm.parsedModule.ModuleName),
-                EnumerableExtension.EqualityComparer<IReadOnlyList<string>>())
-            .ToImmutableHashSet(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
+                EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>())
+            .ToImmutableHashSet(EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
 
         IReadOnlyList<IReadOnlyList<string>> includedModulesNamesWithDeps =
             [
@@ -133,10 +133,10 @@ public static class ElmModule
 
         var includedModulesNamesOrdered =
             includedModulesNamesWithDeps
-            .Distinct(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>())
+            .Distinct(EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>())
             .Intersect(
                 includedModulesNames,
-                EnumerableExtension.EqualityComparer<IReadOnlyList<string>>())
+                EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>())
             .ToImmutableArray();
 
         return
@@ -390,7 +390,7 @@ public static class ElmModule
         var filteredModulesPaths =
             filteredModules
             .Select(moduleText => allElmModules.First(moduleNameAndText => moduleNameAndText.content == moduleText).path)
-            .ToImmutableHashSet(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
+            .ToImmutableHashSet(EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
 
         return
             PineValueComposition.SortedTreeFromSetOfBlobs(

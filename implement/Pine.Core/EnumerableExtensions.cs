@@ -10,7 +10,7 @@ namespace Pine.Core;
 /// <summary>
 /// Extension methods for <see cref="IEnumerable{T}"/>.
 /// </summary>
-public static class EnumerableExtension
+public static partial class EnumerableExtensions
 {
     /// <summary>
     /// Filters a sequence of nullable value types, returning only the elements that have a value.
@@ -90,8 +90,8 @@ public static class EnumerableExtension
     // From https://github.com/morelinq/MoreLINQ/blob/07bd0861658b381ce97c8b44d3b9f2cd3c9bf769/MoreLinq/TakeUntil.cs
     public static IEnumerable<TSource> TakeUntil<TSource>(this IEnumerable<TSource> source, Func<TSource, bool> predicate)
     {
-        if (source == null) throw new ArgumentNullException(nameof(source));
-        if (predicate == null) throw new ArgumentNullException(nameof(predicate));
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(predicate);
 
         return _(); IEnumerable<TSource> _()
         {
@@ -108,7 +108,15 @@ public static class EnumerableExtension
     {
         public bool Equals(T? x, T? y)
         {
-            return ReferenceEquals(x, y) || x != null && y != null && x.SequenceEqual(y);
+            if (ReferenceEquals(x, y))
+                return true;
+
+            if (x is null || y is null)
+            {
+                return false;
+            }
+
+            return x.SequenceEqual(y);
         }
 
         public int GetHashCode(T obj) => 0;
@@ -118,14 +126,17 @@ public static class EnumerableExtension
     {
         public static int Compare([AllowNull] IEnumerable<IComparable> x, [AllowNull] IEnumerable<IComparable> y)
         {
-            if (x == y)
+            if (ReferenceEquals(x, y))
                 return 0;
 
-            if (x == null)
+            if (x is null)
                 return -1;
 
-            if (y == null)
+            if (y is null)
                 return 1;
+
+            if (x.Equals(y))
+                return 0;
 
             var xEnumerator = x.GetEnumerator();
             var yEnumerator = y.GetEnumerator();
@@ -146,7 +157,7 @@ public static class EnumerableExtension
 
                 var currentComparison = xEnumerator.Current.CompareTo(yEnumerator.Current);
 
-                if (currentComparison != 0)
+                if (currentComparison is not 0)
                     return currentComparison;
             }
         }
@@ -180,7 +191,7 @@ public static class EnumerableExtension
     /// <returns>An <see cref="IEnumerable{T}"/> whose elements are sorted according to the natural sort order of their keys.</returns>
     public static IEnumerable<T> OrderByNatural<T>(this IEnumerable<T> items, Func<T, string> selector, StringComparer? stringComparer = null)
     {
-        var regex = new Regex(@"\d+", RegexOptions.Compiled);
+        var regex = oneOrMoreDigitsRegex();
 
         var maxDigits =
             items
@@ -264,4 +275,7 @@ public static class EnumerableExtension
             yield return item;
         }
     }
+
+    [GeneratedRegex(@"\d+", RegexOptions.Compiled)]
+    private static partial Regex oneOrMoreDigitsRegex();
 }

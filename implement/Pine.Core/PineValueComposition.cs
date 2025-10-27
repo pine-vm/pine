@@ -90,7 +90,7 @@ public static class PineValueComposition
         filesBeforeSorting.ToImmutableSortedDictionary(
             entry => entry.filePath,
             entry => entry.fileContent,
-            keyComparer: EnumerableExtension.Comparer<IReadOnlyList<string>>());
+            keyComparer: EnumerableExtensions.Comparer<IReadOnlyList<string>>());
 
     public static IEqualityComparer<T> FromDictionaryComparer<T>()
         where T : IReadOnlyDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> =>

@@ -83,7 +83,7 @@ public class CodeAnalysisTestHelper
                 ElmTime.ElmSyntax.ElmModule.ParseModuleName(moduleText)
                 .Extract(err => throw new System.Exception("Failed parsing module name from module text: " + err)),
                 moduleText => moduleText,
-                comparer: EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
+                comparer: EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
 
         var elmJsonFile =
             """

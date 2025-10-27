@@ -18,7 +18,7 @@ public class FileStoreFromConcurrentDictionary : IFileStore
     /// Underlying map from componentized path to blob content.
     /// </summary>
     private readonly ConcurrentDictionary<IImmutableList<string>, ReadOnlyMemory<byte>> _files =
-        new(EnumerableExtension.EqualityComparer<IImmutableList<string>>());
+        new(EnumerableExtensions.EqualityComparer<IImmutableList<string>>());
 
     /// <inheritdoc />
     public void AppendFileContent(IImmutableList<string> path, ReadOnlyMemory<byte> fileContent)

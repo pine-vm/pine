@@ -55,7 +55,7 @@ public class ElmAppDependencyResolution
             ElmCompiler.FilterTreeForCompilationRoots(
                 sourceFiles,
                 ImmutableHashSet.Create(
-                    EnumerableExtension.EqualityComparer<IReadOnlyList<string>>(),
+                    EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>(),
                     entryPointFilePath),
                 skipFilteringForSourceDirs: false);
 
@@ -82,7 +82,7 @@ public class ElmAppDependencyResolution
             remainingElmModulesNameAndImports
             .SelectMany(kv => kv.Value)
             .Where(importedModuleName => !remainingElmModulesNameAndImports.Any(kv => kv.Key.SequenceEqual(importedModuleName)))
-            .ToImmutableHashSet(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
+            .ToImmutableHashSet(EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
 
         var packages = LoadPackagesForElmApp(sourceFilesDict);
 
@@ -98,8 +98,7 @@ public class ElmAppDependencyResolution
             .SelectMany(package => package.Value.elmJson.ExposedModules)
             .ToImmutableHashSet();
 
-        IReadOnlyDictionary<string, IReadOnlySet<string>>
-            packagesFromExposedModuleName =
+        var packagesFromExposedModuleName =
             aggregateExposedModuleNames
             .Select(moduleName =>
             {
@@ -135,7 +134,7 @@ public class ElmAppDependencyResolution
             })
             .ToImmutableHashSet();
 
-        IEnumerable<string> enumeratePackageDependenciesTransitive(string packageName)
+        IEnumerable<string> EnumeratePackageDependenciesTransitive(string packageName)
         {
             if (!packages.TryGetValue(packageName, out var package))
             {
@@ -151,7 +150,7 @@ public class ElmAppDependencyResolution
             {
                 yield return dependency.Key;
 
-                foreach (var transitiveDependency in enumeratePackageDependenciesTransitive(dependency.Key))
+                foreach (var transitiveDependency in EnumeratePackageDependenciesTransitive(dependency.Key))
                 {
                     yield return transitiveDependency;
                 }
@@ -160,7 +159,7 @@ public class ElmAppDependencyResolution
 
         var packagesToIncludeNames =
             packagesToIncludeRootsNames
-            .Concat(packagesToIncludeRootsNames.SelectMany(enumeratePackageDependenciesTransitive))
+            .Concat(packagesToIncludeRootsNames.SelectMany(EnumeratePackageDependenciesTransitive))
             .ToImmutableHashSet();
 
         var packagesToInclude =
@@ -170,7 +169,7 @@ public class ElmAppDependencyResolution
 
         var packagesOrdered =
             packagesToInclude
-            .OrderBy(kv => enumeratePackageDependenciesTransitive(kv.Key).Count())
+            .OrderBy(kv => EnumeratePackageDependenciesTransitive(kv.Key).Count())
             .ThenBy(kv => kv.Key)
             .ToImmutableList();
 

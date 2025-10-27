@@ -222,7 +222,7 @@ public record BundledPineToDotnet(
     {
         var filesSorted =
             files
-            .OrderBy(kv => kv.Key, EnumerableExtension.Comparer<IReadOnlyList<string>>());
+            .OrderBy(kv => kv.Key, EnumerableExtensions.Comparer<IReadOnlyList<string>>());
 
         foreach (var file in filesSorted)
         {

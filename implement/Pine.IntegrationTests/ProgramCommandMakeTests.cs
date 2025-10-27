@@ -143,7 +143,7 @@ public class ProgramCommandMakeTests
             projectFiles.ToImmutableDictionary(
                 entry => entry.path,
                 entry => entry.content,
-                keyComparer: EnumerableExtension.EqualityComparer<IReadOnlyList<string>>()),
+                keyComparer: EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>()),
             entryPointFilePath: entryPointFilePath);
 
     private static ReadOnlyMemory<byte> GetOutputFileContentForCommandMake(

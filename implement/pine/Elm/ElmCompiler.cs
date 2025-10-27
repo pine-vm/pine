@@ -44,7 +44,7 @@ public class ElmCompiler
             Encoding.UTF8.GetString(blobAtPath.blobContent.Span),
 
             comparer:
-            EnumerableExtension.EqualityComparer<IReadOnlyList<string>>()));
+            EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>()));
 
     static public readonly Lazy<BlobTreeWithStringPath> CompilerSourceFilesDefault =
         new(() => ElmCompilerFileTreeFromBundledFileTree(CompilerSourceContainerFilesDefault.Value));
@@ -406,7 +406,7 @@ public class ElmCompiler
             allAvailableElmFiles
             .Where(elmFile => !elmModulesIncluded.Any(included => elmFile.moduleText == included))
             .Select(elmFile => elmFile.blobAtPath.path)
-            .ToImmutableHashSet(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
+            .ToImmutableHashSet(EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
 
         return
             BlobTreeWithStringPath.FilterNodesByPath(
@@ -704,7 +704,7 @@ public class ElmCompiler
             allAvailableElmFiles
             .Where(elmFile => !elmModulesIncluded.Any(included => Encoding.UTF8.GetString(elmFile.blobContent.Span) == included))
             .Select(elmFile => elmFile.path)
-            .ToImmutableHashSet(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
+            .ToImmutableHashSet(EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
 
         return
             BlobTreeWithStringPath.FilterNodesByPath(
@@ -790,7 +790,7 @@ public class ElmCompiler
             .ToImmutableDictionary(
                 keySelector: entry => entry.filePath,
                 elementSelector: entry => entry.elmJsonParsed,
-                keyComparer: EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
+                keyComparer: EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
 
         // Walk upwards from the directory of entryPointFilePath to find the "closest" elm.json
         // that includes the entryPointFilePath in one of its source-directories:

@@ -110,7 +110,7 @@ public class ElmPackageSource
     {
         var result =
             new Dictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>(
-                EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
+                EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
 
         using var memoryStream = new MemoryStream(zipBytes);
 
@@ -156,7 +156,7 @@ public class ElmPackageSource
             {
                 var directoryFiles =
                     new Dictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>(
-                        EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
+                        EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
 
                 foreach (var (filePath, fileContent) in rawDownload)
                 {

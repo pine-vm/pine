@@ -622,7 +622,7 @@ public class LanguageServer(
 
                 var elmModulesToAdd =
                     new Dictionary<IReadOnlyList<string>, string>(
-                        comparer: EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
+                        comparer: EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
 
                 foreach (var filePath in elmModuleFiles)
                 {

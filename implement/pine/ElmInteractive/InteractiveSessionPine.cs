@@ -248,7 +248,7 @@ public class InteractiveSessionPine : IInteractiveSession
 
                 return new KeyValuePair<IReadOnlyList<string>, ReadOnlyMemory<byte>>(moduleName, blob.blobContent);
             })
-            .ToImmutableDictionary(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
+            .ToImmutableDictionary(EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
 
         ReadOnlyMemory<byte>? replaceKernelModule(
             IImmutableList<string> path,
@@ -358,7 +358,7 @@ public class InteractiveSessionPine : IInteractiveSession
                 appFilesAfterKernelModules,
                 skipLowering: skipLowering,
                 entryPointsFilePaths:
-                entryPointsFilePaths?.ToImmutableHashSet(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>()),
+                entryPointsFilePaths?.ToImmutableHashSet(EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>()),
                 skipFilteringForSourceDirs: skipFilteringForSourceDirs)
             .ToImmutableArray();
 
@@ -462,7 +462,7 @@ public class InteractiveSessionPine : IInteractiveSession
         var entryPointsFilePaths =
             elmJson.ExposedModules
             .Select((moduleNameFlat) => fileNameFromModuleName[moduleNameFlat])
-            .ToImmutableHashSet(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
+            .ToImmutableHashSet(EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
 
         var compilationUnitResult =
             CompileInteractiveEnvironmentUnitEncodedInCompiler(
@@ -597,7 +597,7 @@ public class InteractiveSessionPine : IInteractiveSession
 
                 return [moduleName];
             })
-            .ToImmutableHashSet(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
+            .ToImmutableHashSet(EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
 
         return
             elmCoreAndKernelModuleFilesDefault

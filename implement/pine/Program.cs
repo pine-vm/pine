@@ -396,7 +396,7 @@ public class Program
 
         var loadInputDirectoryFailedFiles =
         new Dictionary<IReadOnlyList<string>, IOException>(
-            comparer: EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
+            comparer: EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
 
         var loadInputDirectoryResult =
             LoadComposition.LoadFromPathResolvingNetworkDependencies(
@@ -2084,7 +2084,7 @@ public class Program
     {
         var loadInputDirectoryFailedFiles =
             new Dictionary<IReadOnlyList<string>, IOException>(
-                comparer: EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
+                comparer: EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
 
         var loadInputDirectoryResult =
             LoadComposition.LoadFromPathResolvingNetworkDependencies(

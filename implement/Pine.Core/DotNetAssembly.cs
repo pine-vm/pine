@@ -17,7 +17,7 @@ public class DotNetAssembly
         var seed =
             Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>>.ok(
                 ImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>.Empty
-                .WithComparers(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>()));
+                .WithComparers(EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>()));
 
         return
             filePaths

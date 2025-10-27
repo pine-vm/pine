@@ -312,7 +312,7 @@ namespace ElmTime
                                                 .ToImmutableDictionary(
                                                     entry => [.. entry.Path],
                                                     entry => (ReadOnlyMemory<byte>)Convert.FromBase64String(entry.Content.AsBase64),
-                                                    keyComparer: EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
+                                                    keyComparer: EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
 
                                             return
                                             ElmMake(

@@ -416,7 +416,7 @@ public sealed class PersistentProcessLive : IAsyncDisposable
     {
         var filesForProcessRestore =
             new ConcurrentDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>(
-                EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
+                EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
 
         var recordingReader = new DelegatingFileStoreReader
         (
@@ -443,7 +443,7 @@ public sealed class PersistentProcessLive : IAsyncDisposable
             .ToImmutableList();
 
         return (
-            files: filesForProcessRestore.ToImmutableDictionary(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>()),
+            files: filesForProcessRestore.ToImmutableDictionary(EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>()),
             lastCompositionLogRecordHashBase16: compositionLogRecords.LastOrDefault().CompositionRecordHashBase16);
     }
 

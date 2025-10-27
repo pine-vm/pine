@@ -214,11 +214,11 @@ public class ElmSyntaxTests
         {
             var parsedImports =
                 ElmModule.ParseModuleImportedModulesNames(testCase.moduleText)
-                .ToImmutableHashSet(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
+                .ToImmutableHashSet(EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
 
             parsedImports.Should().BeEquivalentTo(
                 testCase.expectedImports,
-                config => config.Using(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>()));
+                config => config.Using(EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>()));
         }
     }
 

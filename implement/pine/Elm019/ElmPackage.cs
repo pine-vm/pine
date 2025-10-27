@@ -19,7 +19,7 @@ public class ElmPackage
         IReadOnlyDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> packageSourceFiles)
     {
         Dictionary<IReadOnlyList<string>, (ReadOnlyMemory<byte> fileContent, string moduleText, IReadOnlyList<string> moduleName)> exposedModules =
-            new(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
+            new(EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
 
         var elmJsonFile =
             /*
@@ -38,7 +38,7 @@ public class ElmPackage
         var elmJson = JsonSerializer.Deserialize<ElmJsonStructure>(elmJsonFile.Value.Span);
 
         Dictionary<IReadOnlyList<string>, (IReadOnlyList<string> filePath, ReadOnlyMemory<byte> fileContent, string moduleText, ParsedModule parsedModule)> parsedModulesByName =
-            new(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
+            new(EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
 
         foreach (var (filePath, fileContent) in packageSourceFiles)
         {
@@ -70,7 +70,7 @@ public class ElmPackage
                 new Queue<IReadOnlyList<string>>([moduleName]);
 
             var set =
-                new HashSet<IReadOnlyList<string>>(EnumerableExtension.EqualityComparer<IReadOnlyList<string>>());
+                new HashSet<IReadOnlyList<string>>(EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
 
             while (queue.TryDequeue(out var currentModuleName))
             {
