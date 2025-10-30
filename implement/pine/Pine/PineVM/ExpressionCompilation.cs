@@ -59,6 +59,7 @@ public record ExpressionCompilation(
     {
         var generic =
             new StackFrameInstructions(
+                StackFrameParameters.Generic,
                 InstructionsFromExpressionTransitive(
                     rootExpression,
                     envConstraintId: null,
@@ -78,6 +79,7 @@ public record ExpressionCompilation(
                             [..specialization.ParsedItems
                         .Select(envItem => new EnvConstraintItem(envItem.Key.ToArray(), envItem.Value))],
                             new StackFrameInstructions(
+                                StackFrameParameters.Generic,
                                 InstructionsFromExpressionTransitive(
                                     rootExpression,
                                     envConstraintId: specialization,
