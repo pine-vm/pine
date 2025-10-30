@@ -6,6 +6,7 @@ using System.Linq;
 namespace Pine.PineVM;
 
 public record StackFrameInstructions(
+    StackFrameParameters Parameters,
     IReadOnlyList<StackInstruction> Instructions,
     PineValueClass? TrackEnvConstraint = null)
 {
@@ -116,11 +117,16 @@ public record StackFrameInstructions(
 
     public virtual bool Equals(StackFrameInstructions? other)
     {
+        if (ReferenceEquals(this, other))
+            return true;
+
         if (other is not { } notNull)
             return false;
 
+        if (!other.Parameters.Equals(Parameters))
+            return false;
+
         return
-            ReferenceEquals(this, notNull) ||
             Instructions.Count == notNull.Instructions.Count &&
             Instructions.SequenceEqual(notNull.Instructions);
     }
@@ -128,6 +134,8 @@ public record StackFrameInstructions(
     public override int GetHashCode()
     {
         var hashCode = new HashCode();
+
+        hashCode.Add(Parameters);
 
         foreach (var item in Instructions)
         {

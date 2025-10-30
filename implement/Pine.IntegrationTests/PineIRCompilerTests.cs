@@ -221,6 +221,7 @@ public class PineIRCompilerTests
 
         var expectedInstructions =
             new StackFrameInstructions(
+                StackFrameParameters.Generic,
                 [
                 // Start of the section we loop over:
                 StackInstruction.Local_Get(0),
