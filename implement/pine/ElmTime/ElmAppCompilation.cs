@@ -59,6 +59,33 @@ namespace ElmTime
             IReadOnlyList<string> workingDirectoryRelative,
             ElmAppInterfaceConfig interfaceConfig)
         {
+            var pineVMCache = new PineVMCache();
+
+            var pineVM =
+                new PineVM(evalCache: pineVMCache.EvalCache);
+
+            var parseCache = new PineVMParseCache();
+
+            var elmCompilerCache = new ElmCompilerCache();
+
+            return
+                AsCompletelyLoweredElmApp(
+                    sourceFiles,
+                    workingDirectoryRelative,
+                    interfaceConfig,
+                    pineVM,
+                    parseCache,
+                    elmCompilerCache);
+        }
+
+        public static CompilationResult AsCompletelyLoweredElmApp(
+            IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> sourceFiles,
+            IReadOnlyList<string> workingDirectoryRelative,
+            ElmAppInterfaceConfig interfaceConfig,
+            Pine.Core.PineVM.IPineVM pineVM,
+            PineVMParseCache parseCache,
+            ElmCompilerCache elmCompilerCache)
+        {
             var clock = System.Diagnostics.Stopwatch.StartNew();
 
 
@@ -70,16 +97,6 @@ namespace ElmTime
             var elmCompiler =
                 ElmCompiler.ElmCompilerFromEnvValue(elmCompilerFromBundle)
                 .Extract(err => throw new Exception(err));
-
-            var pineVMCache = new PineVMCache();
-
-            var pineVM =
-                new PineVM(evalCache: pineVMCache.EvalCache);
-
-            var parseCache = new PineVMParseCache();
-
-            var elmCompilerCache = new ElmCompilerCache();
-
 
             var sourceFilesHash =
                 Convert.ToHexStringLower(
@@ -98,7 +115,7 @@ namespace ElmTime
             var compilationHashBase16 =
                 Convert.ToHexStringLower(compilationHash);
 
-            CompilationResult compileNew() =>
+            CompilationResult CompileNew() =>
                 AsCompletelyLoweredElmApp(
                     sourceFiles,
                     workingDirectoryRelative: workingDirectoryRelative,
@@ -115,7 +132,7 @@ namespace ElmTime
                 if (previousEntryCompilationResult is CompilationResult.Ok ok)
                     return (previousEntryCompilationResult, cacheItemTimeSource.Elapsed);
 
-                return (compileNew(), cacheItemTimeSource.Elapsed);
+                return (CompileNew(), cacheItemTimeSource.Elapsed);
             }
 
             var (compilationResult, _) =
@@ -148,7 +165,7 @@ namespace ElmTime
             IReadOnlyList<string> interfaceToHostRootModuleName,
             ElmCompiler elmCompiler,
             PineVMParseCache parseCache,
-            PineVM pineVM,
+            Pine.Core.PineVM.IPineVM pineVM,
             ElmCompilerCache elmCompilerCache) =>
             AsCompletelyLoweredElmApp(
                 sourceFiles,
@@ -169,7 +186,7 @@ namespace ElmTime
             IImmutableStack<StackFrame> stack,
             ElmCompiler elmCompiler,
             PineVMParseCache parseCache,
-            PineVM pineVM,
+            Pine.Core.PineVM.IPineVM pineVM,
             ElmCompilerCache elmCompilerCache)
         {
             if (10 < stack.Count())
@@ -396,7 +413,7 @@ namespace ElmTime
             IReadOnlyList<(CompilerSerialInterface.DependencyKey key, ReadOnlyMemory<byte> value)> dependencies,
             ElmCompiler elmCompiler,
             PineVMParseCache parseCache,
-            PineVM pineVM,
+            Pine.Core.PineVM.IPineVM pineVM,
             ElmCompilerCache elmCompilerCache)
         {
             var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
