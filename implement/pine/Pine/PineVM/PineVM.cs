@@ -14,7 +14,7 @@ namespace Pine.PineVM;
 
 public record struct EvalCacheEntryKey(
     PineValue ExprValue,
-    PineValue EnvValue);
+    StackFrameInput InvocationInput);
 
 public class PineVM : IPineVM
 {
@@ -447,8 +447,13 @@ public class PineVM : IPineVM
 
                     if (instructionCountSinceLastCacheEntry + parseAndEvalCountSinceLastCacheEntry * 100 > 700)
                     {
+                        var invocationInput =
+                            new StackFrameInput(
+                                parameters: StackFrameParameters.Generic,
+                                arguments: [currentFrame.EnvironmentValue.Evaluate()]);
+
                         if (evalCache.TryAdd(
-                            new EvalCacheEntryKey(currentFrameExprValue, currentFrame.EnvironmentValue.Evaluate()),
+                            new EvalCacheEntryKey(currentFrameExprValue, invocationInput),
                             frameReturnValue))
                         {
                             lastCacheEntryInstructionCount = instructionCount;
@@ -1932,7 +1937,12 @@ public class PineVM : IPineVM
     {
         if (EvalCache is { } evalCache)
         {
-            var cacheKey = new EvalCacheEntryKey(ExprValue: expressionValue, EnvValue: environmentValue.Evaluate());
+            var invocationInput =
+                new StackFrameInput(
+                    parameters: StackFrameParameters.Generic,
+                    arguments: [environmentValue.Evaluate()]);
+
+            var cacheKey = new EvalCacheEntryKey(ExprValue: expressionValue, invocationInput);
 
             if (evalCache.TryGetValue(cacheKey, out var fromCache))
             {
