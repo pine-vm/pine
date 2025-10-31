@@ -106,7 +106,7 @@ public class ProfilingPineVM
                     // if (DynamicPGOShare.ShouldIncludeExpressionInCompilation(expression))
                     // if (expression is Expression.ParseAndEvalExpression parseAndEval)
                     {
-                        Result<string, IReadOnlyList<ExpressionUsageAnalysis>> runAnalysis()
+                        Result<string, IReadOnlyList<ExpressionUsageAnalysis>> RunAnalysis()
                         {
                             var analysisOuterStartTime = System.Diagnostics.Stopwatch.GetTimestamp();
 
@@ -117,7 +117,7 @@ public class ProfilingPineVM
                                         Result<string, IReadOnlyList<ExpressionUsageAnalysis>>.ok(
                                             AnalyzeExpressionUsage(
                                                 originalExpression,
-                                                funcApplReport.Environment,
+                                                PineValueClass.CreateEquals(funcApplReport.Environment),
                                                 exprAnalysisMutatedCache,
                                                 parseCache: parseExprCache,
                                                 evalVM: analysisVM));
@@ -145,7 +145,7 @@ public class ProfilingPineVM
                         envContainer ??= new ExpressionEnvUsageRecord(
                             Environment: funcApplReport.Environment,
                             OrigEvalInstructionCounts: [],
-                            Analysis: new System.Lazy<Result<string, IReadOnlyList<ExpressionUsageAnalysis>>>(runAnalysis));
+                            Analysis: new System.Lazy<Result<string, IReadOnlyList<ExpressionUsageAnalysis>>>(RunAnalysis));
 
                         envContainer.OrigEvalInstructionCounts.Add(funcApplReport.InstructionCount);
 
@@ -168,7 +168,7 @@ public class ProfilingPineVM
 
     public static IReadOnlyList<ExpressionUsageAnalysis> AnalyzeExpressionUsage(
         Expression expression,
-        PineValue environment,
+        PineValueClass environment,
         ConcurrentDictionary<Expression, CodeAnalysis.ExprAnalysis> exprAnalysisMutatedCache,
         PineVMParseCache parseCache,
         PineVM evalVM)

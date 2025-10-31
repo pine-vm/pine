@@ -174,6 +174,11 @@ public class PineVM : IPineVM
 
         localsValues[0] = environment;
 
+        var stackFrameInput =
+            StackFrameInput.FromEnvironmentValue(
+                environmentValue: environment,
+                parameters: instructions.Parameters);
+
         return new StackFrame(
             expressionValue,
             expression,
