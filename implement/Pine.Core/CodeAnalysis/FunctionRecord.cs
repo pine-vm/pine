@@ -17,7 +17,6 @@ public record FunctionRecord(
     ReadOnlyMemory<PineValue> ArgumentsAlreadyCollected)
 {
 
-
     /// <summary>
     /// Analog to the 'parseFunctionRecordFromValueTagged' function in FirCompiler.elm.
     /// Accepts either a tagged value ("Function") or a raw value (zero-argument function literal shortcut).
@@ -29,8 +28,32 @@ public record FunctionRecord(
         PineValue pineValue,
         PineVMParseCache parseCache)
     {
+        var parseTaggedResult = ElmInteractiveEnvironment.ParseTagged(pineValue);
+
+        if (parseTaggedResult.IsOkOrNullable() is { } taggedFunctionDeclaration &&
+            taggedFunctionDeclaration.name is "Function")
+        {
+            return ParseFunctionRecord(taggedFunctionDeclaration.value, parseCache);
+        }
+
+        if (parseTaggedResult.IsErrOrNull() is { } err)
+        {
+            return "Failed to parse tagged function record: " + err;
+        }
+
+        /*
+         * If the declaration has zero parameters, it could be encoded as plain value without wrapping in a 'Function' record.
+         * */
+
         return
-            ParseFunctionRecordTagged(PineValueClass.CreateEquals(pineValue), parseCache);
+            new FunctionRecord(
+                InnerFunction: Expression.LiteralInstance(pineValue),
+                ParameterCount: 0,
+                EnvFunctions: ReadOnlyMemory<PineValue>.Empty,
+                ArgumentsAlreadyCollected: ReadOnlyMemory<PineValue>.Empty);
+
+        throw new NotImplementedException(
+            "Unexpected result type: " + parseTaggedResult.GetType());
     }
 
     /// <summary>
@@ -107,8 +130,72 @@ public record FunctionRecord(
         PineValue pineValue,
         PineVMParseCache parseCache)
     {
+        if (PineValueExtension.ValueFromPathOrNull(pineValue, [0]) is not { } innerExprValue)
+        {
+            return "Function record missing inner function at [0]";
+        }
+
+        var parseInnerExprResult = parseCache.ParseExpression(innerExprValue);
+
+        {
+            if (parseInnerExprResult.IsErrOrNull() is { } err)
+            {
+                return "Failed to parse inner function: " + err;
+            }
+        }
+
+        if (parseInnerExprResult.IsOkOrNull() is not { } innerFunction)
+        {
+            throw new NotImplementedException(
+                "Unexpected result type: " + parseInnerExprResult.GetType());
+        }
+
+        if (PineValueExtension.ValueFromPathOrNull(pineValue, [1]) is not { } paramCountValue)
+        {
+            return "Function record missing parameter count at [1]";
+        }
+
+        var parseFunctionParameterCountResult =
+            IntegerEncoding.ParseSignedIntegerStrict(paramCountValue);
+        {
+            if (parseFunctionParameterCountResult.IsErrOrNull() is { } err)
+            {
+                return "Failed to decode function parameter count: " + err;
+            }
+        }
+
+        if (parseFunctionParameterCountResult.IsOkOrNullable() is not { } functionParameterCount)
+        {
+            throw new NotImplementedException(
+                "Unexpected result type: " + parseFunctionParameterCountResult.GetType());
+        }
+
+        if (PineValueExtension.ValueFromPathOrNull(pineValue, [2]) is not { } envFunctionsValue)
+        {
+            return "Function record missing env functions at [2]";
+        }
+
+        if (envFunctionsValue is not PineValue.ListValue envFunctionsList)
+        {
+            return "envFunctionsValue is not a list";
+        }
+
+        if (PineValueExtension.ValueFromPathOrNull(pineValue, [3]) is not { } argumentsAlreadyCollectedValue)
+        {
+            return "Function record missing collected arguments at [3]";
+        }
+
+        if (argumentsAlreadyCollectedValue is not PineValue.ListValue argumentsAlreadyCollectedList)
+        {
+            return "argumentsAlreadyCollectedValue is not a list";
+        }
+
         return
-            ParseFunctionRecord(PineValueClass.CreateEquals(pineValue), parseCache);
+            new FunctionRecord(
+                InnerFunction: innerFunction,
+                ParameterCount: (int)functionParameterCount,
+                EnvFunctions: envFunctionsList.Items.ToArray(),
+                ArgumentsAlreadyCollected: argumentsAlreadyCollectedList.Items.ToArray());
     }
 
     /// <summary>
