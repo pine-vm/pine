@@ -60,7 +60,7 @@ record StackFrame(
         LocalsValues.Span[localIndex] = value;
     }
 
-    public PineValue LocalGet(int localIndex)
+    public PineValueInProcess LocalGet(int localIndex)
     {
         var value = LocalsValues.Span[localIndex];
 
@@ -70,7 +70,7 @@ record StackFrame(
                 "LocalGet called with null value");
         }
 
-        return value.Evaluate();
+        return value;
     }
 
     public PineValueInProcess PopTopmostFromStack()

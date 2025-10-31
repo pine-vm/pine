@@ -987,7 +987,7 @@ public class PineVM : IPineVM
                                     ??
                                     throw new Exception("Invalid operation form: Missing local index"));
 
-                            currentFrame.PushInstructionResult(PineValueInProcess.Create(value));
+                            currentFrame.PushInstructionResult(value);
 
                             continue;
                         }
