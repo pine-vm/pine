@@ -172,13 +172,21 @@ public class PineVM : IPineVM
         var localsValues =
             new PineValueInProcess[instructions.MaxLocalIndex + 1];
 
-        localsValues[0] = environment;
+        var stackFrameInput =
+            StackFrameInput.FromEnvironmentValue(
+                environmentValue: environment,
+                parameters: instructions.Parameters);
+
+        for (var i = 0; i < stackFrameInput.Arguments.Count; ++i)
+        {
+            localsValues[i] = PineValueInProcess.Create(stackFrameInput.Arguments[i]);
+        }
 
         return new StackFrame(
             expressionValue,
             expression,
             instructions,
-            EnvironmentValue: environment,
+            InputValues: stackFrameInput,
             StackValues: new PineValueInProcess[instructions.MaxStackUsage],
             LocalsValues: localsValues,
             ProfilingBaseline: profilingBaseline,
@@ -270,17 +278,6 @@ public class PineVM : IPineVM
 
                         currentFrame.PushInstructionResult(PineValueInProcess.Create(finalValue.Value));
 
-                        reportFunctionApplication?.Invoke(
-                            new EvaluationReport(
-                                ExpressionValue: expressionValue,
-                                expression,
-                                environmentValue.Evaluate(),
-                                InstructionCount: 0,
-                                LoopIterationCount: 0,
-                                InvocationCount: finalValue.StackFrameCount,
-                                ReturnValue: finalValue.Value,
-                                StackTrace: CompileStackTrace(10)));
-
                         return null;
 
                     case Precompiled.PrecompiledResult.ContinueParseAndEval continueParseAndEval:
@@ -326,7 +323,7 @@ public class PineVM : IPineVM
                                     ExpressionValue: expressionValue,
                                     Expression: expression,
                                     Instructions: null,
-                                    EnvironmentValue: environmentValue,
+                                    InputValues: null,
                                     StackValues: null,
                                     LocalsValues: null,
                                     ProfilingBaseline:
@@ -447,13 +444,8 @@ public class PineVM : IPineVM
 
                     if (instructionCountSinceLastCacheEntry + parseAndEvalCountSinceLastCacheEntry * 100 > 700)
                     {
-                        var invocationInput =
-                            new StackFrameInput(
-                                parameters: StackFrameParameters.Generic,
-                                arguments: [currentFrame.EnvironmentValue.Evaluate()]);
-
                         if (evalCache.TryAdd(
-                            new EvalCacheEntryKey(currentFrameExprValue, invocationInput),
+                            new EvalCacheEntryKey(currentFrameExprValue, currentFrame.InputValues),
                             frameReturnValue))
                         {
                             lastCacheEntryInstructionCount = instructionCount;
@@ -466,7 +458,7 @@ public class PineVM : IPineVM
                     new EvaluationReport(
                         ExpressionValue: currentFrameExprValue,
                         currentFrame.Expression,
-                        currentFrame.EnvironmentValue.Evaluate(),
+                        currentFrame.InputValues,
                         InstructionCount: frameTotalInstructionCount,
                         LoopIterationCount: currentFrame.LoopIterationCount,
                         InvocationCount: frameParseAndEvalCount,
@@ -484,7 +476,7 @@ public class PineVM : IPineVM
                 return new EvaluationReport(
                     ExpressionValue: rootExprValue,
                     Expression: rootExpression,
-                    Environment: rootEnvironment,
+                    Input: StackFrameInput.GenericFromEnvironmentValue(rootEnvironment),
                     InstructionCount: instructionCount,
                     LoopIterationCount: loopIterationCount,
                     InvocationCount: parseAndEvalCount,
@@ -524,7 +516,7 @@ public class PineVM : IPineVM
             return
                 new(
                     FrameExpression: stackFrame.Expression,
-                    EnvironmentValue: stackFrame.EnvironmentValue.Evaluate(),
+                    InputValues: stackFrame.InputValues,
                     Instructions: stackFrame.Instructions,
                     FrameInstructionPointer: stackFrame.InstructionPointer);
         }

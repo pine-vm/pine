@@ -11,7 +11,7 @@ record StackFrame(
     PineValue? ExpressionValue,
     Expression Expression,
     StackFrameInstructions Instructions,
-    PineValueInProcess EnvironmentValue,
+    StackFrameInput InputValues,
     Memory<PineValueInProcess> StackValues,
     Memory<PineValueInProcess> LocalsValues,
     StackFrameProfilingBaseline ProfilingBaseline,

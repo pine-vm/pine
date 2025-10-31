@@ -648,14 +648,38 @@ public class PineValueInProcess
         PineValueInProcess root,
         ReadOnlySpan<int> path)
     {
-        if (path.Length is 0)
+        var current = root;
+
+        for (var i = 0; i < path.Length; i++)
         {
-            return root.Evaluate();
+            current = current.GetElementAt(path[i]);
+
+            if (current is null)
+            {
+                return null;
+            }
         }
 
-        var first = root.GetElementAt(path[0]);
+        return current.Evaluate();
+    }
 
-        return PineValueExtension.ValueFromPathOrNull(first.Evaluate(), path[1..]);
+    public static PineValue? ValueFromPathOrNull(
+        PineValueInProcess root,
+        IReadOnlyList<int> path)
+    {
+        var current = root;
+
+        for (var i = 0; i < path.Count; i++)
+        {
+            current = current.GetElementAt(path[i]);
+
+            if (current is null)
+            {
+                return null;
+            }
+        }
+
+        return current.Evaluate();
     }
 
     /// <summary>

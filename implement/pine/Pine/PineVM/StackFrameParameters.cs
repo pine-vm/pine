@@ -1,5 +1,6 @@
 using Pine.Core;
 using Pine.Core.CodeAnalysis;
+using Pine.Core.Internal;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -32,6 +33,61 @@ public record StackFrameInput
         }
 
         _hashCode = hashCode.ToHashCode();
+    }
+
+    public static StackFrameInput FromEnvironmentValue(
+        PineValue environmentValue,
+        StackFrameParameters parameters)
+    {
+        var arguments = new PineValue[parameters.EnvPaths.Count];
+
+        for (var i = 0; i < parameters.EnvPaths.Count; i++)
+        {
+            var envPath = parameters.EnvPaths[i];
+
+            var valueAtPath =
+                PineValueExtension.ValueFromPathOrEmptyList(
+                    environmentValue,
+                    envPath);
+
+            arguments[i] = valueAtPath;
+        }
+
+        return new StackFrameInput(
+            parameters,
+            arguments);
+    }
+
+    public static StackFrameInput FromEnvironmentValue(
+        PineValueInProcess environmentValue,
+        StackFrameParameters parameters)
+    {
+        var arguments = new PineValue[parameters.EnvPaths.Count];
+
+        for (var i = 0; i < parameters.EnvPaths.Count; i++)
+        {
+            var envPath = parameters.EnvPaths[i];
+
+            var valueAtPath =
+                PineValueInProcess.ValueFromPathOrNull(
+                    environmentValue,
+                    envPath)
+                ?? PineValue.ListValue.Empty;
+
+            arguments[i] = valueAtPath;
+        }
+
+        return new StackFrameInput(
+            parameters,
+            arguments);
+    }
+
+    public static StackFrameInput GenericFromEnvironmentValue(
+        PineValue environmentValue)
+    {
+        return FromEnvironmentValue(
+            environmentValue,
+            StackFrameParameters.Generic);
     }
 
     /// <inheritdoc/>
@@ -89,6 +145,13 @@ public record StackFrameInput
             ];
 
         return PineValueClass.Create(parsedItems);
+    }
+
+    public PineValue CreateMinimalValue()
+    {
+        var asClass = ToValueClass();
+
+        return PineValueClassExtensions.CreateMinimalValue(asClass);
     }
 }
 

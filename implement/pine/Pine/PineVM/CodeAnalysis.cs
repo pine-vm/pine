@@ -38,13 +38,13 @@ public class DelegatingEqualityComparer<T>(
 public class CodeAnalysis
 {
     public record ExprAnalysis(
-        IImmutableDictionary<PineValue, RecursiveAnalysisResult> EnvDict);
+        IImmutableDictionary<PineValueClass, RecursiveAnalysisResult> EnvDict);
 
     public record ExprUsageAnalysisStackEntry(
         Expression Expression,
         CompilePineToDotNet.CompiledExpressionId ExpressionId,
         PineValueClass EnvConstraintId,
-        PineValue Environment);
+        PineValueClass Environment);
 
     public record ParseSubExpression(
         Expression.ParseAndEval ParseAndEvalExpr,
@@ -55,7 +55,7 @@ public class CodeAnalysis
     public static RecursiveAnalysisResult AnalyzeExpressionUsageRecursive(
         IReadOnlyList<ExprUsageAnalysisStackEntry> stack,
         Expression expression,
-        PineValue environment,
+        PineValueClass environment,
         ConcurrentDictionary<Expression, ExprAnalysis> mutatedCache,
         PineVMParseCache parseCache,
         PineVM evalVM)
@@ -79,7 +79,7 @@ public class CodeAnalysis
                     literalInParentEnv.Value,
 
                     ExprMappedToParentEnv.PathInParentEnv pathInParentEnv =>
-                    Core.CodeAnalysis.CodeAnalysis.ValueFromPathInValue(environment, [.. pathInParentEnv.Path]),
+                    environment.TryGetValue(pathInParentEnv.Path),
 
                     null =>
                     /*
@@ -167,7 +167,7 @@ public class CodeAnalysis
                 addValueFactory: _ =>
                 new ExprAnalysis(
                     EnvDict: ImmutableDictionary.CreateRange(
-                        [new KeyValuePair<PineValue, RecursiveAnalysisResult>(environment, recursiveAnalysisResult)])),
+                        [new KeyValuePair<PineValueClass, RecursiveAnalysisResult>(environment, recursiveAnalysisResult)])),
                 updateValueFactory: (expr, oldAnalysis) =>
                 new ExprAnalysis(oldAnalysis.EnvDict.SetItem(environment, recursiveAnalysisResult)));
 
@@ -234,7 +234,7 @@ public class CodeAnalysis
                  * */
                 .EvaluateExpressionOnCustomStack(
                     parseSubExpr.ParseAndEvalExpr.Environment,
-                    environment,
+                    PineValueClassExtensions.CreateMinimalValue(environment),
                     config: new PineVM.EvaluationConfig(ParseAndEvalCountLimit: 100))
                 .Unpack(
                     fromErr: _ => null,
@@ -262,7 +262,7 @@ public class CodeAnalysis
                 AnalyzeExpressionUsageRecursive(
                     nextStack,
                     parsedChildExpr,
-                    childEnvValue,
+                    PineValueClass.CreateEquals(childEnvValue),
                     mutatedCache: mutatedCache,
                     parseCache: parseCache,
                     evalVM: evalVM);
@@ -512,7 +512,7 @@ public class CodeAnalysis
                 exprGroup =>
                 EnvironmentClassesFromExpressionInvocationReports(
                     expression: exprGroup.Key,
-                    invocationsEnvironments: [.. exprGroup.Select(report => report.Environment)],
+                    invocationsInputs: [.. exprGroup.Select(report => report.Input)],
                     limitSampleCountPerSample: limitSampleCountPerSample,
                     classUsageCountMin: classUsageCountMin,
                     limitClassesCount: limitClassesPerExpression,
@@ -524,7 +524,7 @@ public class CodeAnalysis
 
     public static IReadOnlyList<PineValueClass> EnvironmentClassesFromExpressionInvocationReports(
         Expression expression,
-        IReadOnlyList<PineValue> invocationsEnvironments,
+        IReadOnlyList<StackFrameInput> invocationsInputs,
         int limitSampleCountPerSample,
         int classUsageCountMin,
         int limitClassesCount,
@@ -532,7 +532,7 @@ public class CodeAnalysis
     {
         var environmentClasses =
             GenerateEnvironmentClasses(
-                invocationsEnvironments,
+                invocationsInputs,
                 limitIntersectionCountPerValue: limitSampleCountPerSample,
                 classDepthLimit: 6);
 
@@ -583,7 +583,7 @@ public class CodeAnalysis
 
         var simplifiedClassesRanked =
             simplifiedClasses
-            .Select(envClass => (envClass, matchCount: invocationsEnvironments.Count(envClass.SatisfiedByValue)))
+            .Select(envClass => (envClass, matchCount: invocationsInputs.Count(input => envClass.SatisfiedByConstraint(input.ToValueClass()))))
             .Where(envClassAndMatchCount => classUsageCountMin <= envClassAndMatchCount.matchCount)
             .OrderByDescending(envClassAndMatchCount => envClassAndMatchCount.matchCount)
             .Select(envClassAndMatchCount => envClassAndMatchCount.envClass)
@@ -802,10 +802,15 @@ public class CodeAnalysis
     }
 
     public static IReadOnlyList<(PineValueClass envClass, int matchCount)> GenerateEnvironmentClasses(
-        IReadOnlyList<PineValue> values,
+        IReadOnlyList<StackFrameInput> invocationsInputs,
         int limitIntersectionCountPerValue,
         int classDepthLimit)
     {
+        var values =
+            invocationsInputs
+            .Select(input => input.CreateMinimalValue())
+            .ToImmutableArray();
+
         var distinctValues = new HashSet<PineValue>(values);
 
         var classes =
