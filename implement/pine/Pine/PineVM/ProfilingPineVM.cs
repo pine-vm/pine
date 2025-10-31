@@ -99,6 +99,9 @@ public class ProfilingPineVM
                 reportFunctionApplication:
                 funcApplReport =>
                 {
+                    if (funcApplReport.Input is null)
+                        return;
+
                     var originalExpression =
                     ExpressionEncoding.ParseExpressionFromValue(funcApplReport.ExpressionValue)
                     .Extract(err => throw new System.Exception(err));
@@ -106,7 +109,7 @@ public class ProfilingPineVM
                     // if (DynamicPGOShare.ShouldIncludeExpressionInCompilation(expression))
                     // if (expression is Expression.ParseAndEvalExpression parseAndEval)
                     {
-                        Result<string, IReadOnlyList<ExpressionUsageAnalysis>> runAnalysis()
+                        Result<string, IReadOnlyList<ExpressionUsageAnalysis>> RunAnalysis()
                         {
                             var analysisOuterStartTime = System.Diagnostics.Stopwatch.GetTimestamp();
 
@@ -117,7 +120,7 @@ public class ProfilingPineVM
                                         Result<string, IReadOnlyList<ExpressionUsageAnalysis>>.ok(
                                             AnalyzeExpressionUsage(
                                                 originalExpression,
-                                                funcApplReport.Environment,
+                                                funcApplReport.Input.ToValueClass(),
                                                 exprAnalysisMutatedCache,
                                                 parseCache: parseExprCache,
                                                 evalVM: analysisVM));
@@ -137,15 +140,18 @@ public class ProfilingPineVM
 
                         exprUsageRecord ??= [];
 
+                        var funcInputMinimalValue =
+                            funcApplReport.Input.CreateMinimalValue();
+
                         var envUsageAlreadyInDict =
                             exprUsageRecord.TryGetValue(
-                                key: funcApplReport.Environment,
+                                key: funcInputMinimalValue,
                                 out var envContainer);
 
                         envContainer ??= new ExpressionEnvUsageRecord(
-                            Environment: funcApplReport.Environment,
+                            Environment: funcInputMinimalValue,
                             OrigEvalInstructionCounts: [],
-                            Analysis: new System.Lazy<Result<string, IReadOnlyList<ExpressionUsageAnalysis>>>(runAnalysis));
+                            Analysis: new System.Lazy<Result<string, IReadOnlyList<ExpressionUsageAnalysis>>>(RunAnalysis));
 
                         envContainer.OrigEvalInstructionCounts.Add(funcApplReport.InstructionCount);
 
@@ -155,7 +161,7 @@ public class ProfilingPineVM
 
                         if (!envUsageAlreadyInDict)
                         {
-                            exprUsageRecord[funcApplReport.Environment] = envContainer;
+                            exprUsageRecord[funcInputMinimalValue] = envContainer;
                         }
 
                         if (!exprUsageAlreadyInDict)
@@ -168,7 +174,7 @@ public class ProfilingPineVM
 
     public static IReadOnlyList<ExpressionUsageAnalysis> AnalyzeExpressionUsage(
         Expression expression,
-        PineValue environment,
+        PineValueClass environment,
         ConcurrentDictionary<Expression, CodeAnalysis.ExprAnalysis> exprAnalysisMutatedCache,
         PineVMParseCache parseCache,
         PineVM evalVM)

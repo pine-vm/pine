@@ -8,7 +8,7 @@ namespace Pine.PineVM;
 
 public record ExecutionErrorReport(
     Expression FrameExpression,
-    PineValue EnvironmentValue,
+    StackFrameInput InputValues,
     StackFrameInstructions Instructions,
     int FrameInstructionPointer);
 
@@ -27,15 +27,10 @@ public static class ExecutionErrorReportExtensions
 
         var exprHashBase16 = Convert.ToHexStringLower(exprHash.Span);
 
-        var envHash =
-            mutableCacheValueHash.GetHash(errorReport.EnvironmentValue);
-
-        var envHashBase16 = Convert.ToHexStringLower(envHash.Span);
-
         yield return
             "Instruction " + errorReport.FrameInstructionPointer +
             " in expression: " + exprHashBase16[..8] + " for environment " +
-            envHashBase16[..8];
+            errorReport.InputValues.ToString();
 
         var specializationText =
             errorReport.Instructions.TrackEnvConstraint is { } trackEnvConstraint

@@ -6,7 +6,7 @@ namespace Pine.PineVM;
 public record EvaluationReport(
     PineValue ExpressionValue,
     Expression Expression,
-    PineValue Environment,
+    StackFrameInput Input,
     long InstructionCount,
     long InvocationCount,
     long LoopIterationCount,
