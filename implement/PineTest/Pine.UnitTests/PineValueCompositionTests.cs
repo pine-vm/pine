@@ -286,4 +286,107 @@ public class PineValueCompositionTests
             sortedTree.Should().Be(testCase.expected);
         }
     }
+
+    [Fact]
+    public void MaxDepth_empty_list()
+    {
+        var emptyList = PineValue.EmptyList;
+
+        emptyList.MaxDepth.Should().Be(0);
+    }
+
+    [Fact]
+    public void MaxDepth_list_with_only_blobs()
+    {
+        var listWithBlobs = PineValue.List([
+            PineValue.Blob([1, 2, 3]),
+            PineValue.Blob([4, 5, 6])
+        ]);
+
+        listWithBlobs.MaxDepth.Should().Be(1);
+    }
+
+    [Fact]
+    public void MaxDepth_list_with_one_level_nesting()
+    {
+        var nestedOnce = PineValue.List([
+            PineValue.List([PineValue.Blob([1])]),
+            PineValue.Blob([2])
+        ]);
+
+        nestedOnce.MaxDepth.Should().Be(2);
+    }
+
+    [Fact]
+    public void MaxDepth_list_with_two_levels_nesting()
+    {
+        var nestedTwice = PineValue.List([
+            PineValue.List([
+                PineValue.List([PineValue.Blob([1])])
+            ])
+        ]);
+
+        nestedTwice.MaxDepth.Should().Be(3);
+    }
+
+    [Fact]
+    public void MaxDepth_mixed_nested_structure()
+    {
+        var mixed = PineValue.List([
+            PineValue.Blob([1]),
+            PineValue.List([PineValue.Blob([2])]),
+            PineValue.List([
+                PineValue.List([PineValue.Blob([3])])
+            ])
+        ]);
+
+        mixed.MaxDepth.Should().Be(3);
+    }
+
+    [Fact]
+    public void MaxDepth_deeply_nested_structure()
+    {
+        var depth5 = PineValue.List([
+            PineValue.List([
+                PineValue.List([
+                    PineValue.List([
+                        PineValue.List([PineValue.Blob([1])])
+                    ])
+                ])
+            ])
+        ]);
+
+        depth5.MaxDepth.Should().Be(5);
+    }
+
+    [Fact]
+    public void MaxDepth_multiple_branches_different_depths()
+    {
+        var multiDepth = PineValue.List([
+            PineValue.Blob([1]),
+            PineValue.List([PineValue.Blob([2])]),
+            PineValue.List([
+                PineValue.List([
+                    PineValue.List([PineValue.Blob([3])])
+                ])
+            ]),
+            PineValue.List([PineValue.Blob([4])])
+        ]);
+
+        // Should return the maximum depth among all branches (4 in this case)
+        multiDepth.MaxDepth.Should().Be(4);
+    }
+
+    [Fact]
+    public void MaxDepth_consistency_with_nodes_and_blobs_count()
+    {
+        var testValue = PineValue.List([
+            PineValue.List([PineValue.Blob([1, 2, 3])]),
+            PineValue.Blob([4, 5])
+        ]);
+
+        testValue.MaxDepth.Should().Be(2);
+        testValue.NodesCount.Should().Be(3);
+        testValue.BlobsBytesCount.Should().Be(5);
+    }
 }

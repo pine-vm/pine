@@ -239,6 +239,12 @@ public abstract record PineValue : IEquatable<PineValue>
         public readonly long BlobsBytesCount;
 
         /// <summary>
+        /// Maximum depth of the tree structure, where the depth of a list is 1 plus the maximum depth of its nested lists.
+        /// For an empty list, the depth is 0.
+        /// </summary>
+        public readonly long MaxDepth;
+
+        /// <summary>
         /// List value containing zero items.
         /// </summary>
         public static ListValue Empty => EmptyList;
@@ -258,18 +264,21 @@ public abstract record PineValue : IEquatable<PineValue>
             _slimHashCode = listValueStruct.SlimHashCode;
             NodesCount = listValueStruct.NodesCount;
             BlobsBytesCount = listValueStruct.BlobsBytesCount;
+            MaxDepth = listValueStruct.MaxDepth;
         }
 
         private static void ComputeDerivations(
             ReadOnlySpan<PineValue> items,
             out int slimHashCode,
             out long nodesCount,
-            out long blobsBytesCount)
+            out long blobsBytesCount,
+            out long maxDepth)
         {
             var hash = new HashCode();
 
             nodesCount = items.Length;
             blobsBytesCount = 0;
+            maxDepth = items.Length > 0 ? 1 : 0;
 
             var length = items.Length;
 
@@ -287,6 +296,10 @@ public abstract record PineValue : IEquatable<PineValue>
                     case ListValue listItem:
                         nodesCount += listItem.NodesCount;
                         blobsBytesCount += listItem.BlobsBytesCount;
+
+                        var childDepth = 1 + listItem.MaxDepth;
+                        if (childDepth > maxDepth)
+                            maxDepth = childDepth;
                         break;
 
                     case BlobValue blobItem:
@@ -312,7 +325,8 @@ public abstract record PineValue : IEquatable<PineValue>
 
             if (self._slimHashCode != other._slimHashCode ||
                 self.NodesCount != other.NodesCount ||
-                self.BlobsBytesCount != other.BlobsBytesCount)
+                self.BlobsBytesCount != other.BlobsBytesCount ||
+                self.MaxDepth != other.MaxDepth)
             {
                 return false;
             }
@@ -365,7 +379,8 @@ public abstract record PineValue : IEquatable<PineValue>
                 ToString(
                     itemsCount: Items.Length,
                     nodesCount: NodesCount,
-                    blobsBytesCount: BlobsBytesCount);
+                    blobsBytesCount: BlobsBytesCount,
+                    maxDepth: MaxDepth);
         }
 
         /// <summary>
@@ -381,6 +396,8 @@ public abstract record PineValue : IEquatable<PineValue>
 
             internal readonly long BlobsBytesCount;
 
+            internal readonly long MaxDepth;
+
             /// <summary>
             /// Construct a list value from a sequence of other values.
             /// </summary>
@@ -392,7 +409,8 @@ public abstract record PineValue : IEquatable<PineValue>
                     items.Span,
                     out SlimHashCode,
                     out NodesCount,
-                    out BlobsBytesCount);
+                    out BlobsBytesCount,
+                    out MaxDepth);
             }
 
             /// <summary>
@@ -405,6 +423,7 @@ public abstract record PineValue : IEquatable<PineValue>
                 SlimHashCode = instance._slimHashCode;
                 NodesCount = instance.NodesCount;
                 BlobsBytesCount = instance.BlobsBytesCount;
+                MaxDepth = instance.MaxDepth;
             }
 
             /// <inheritdoc/>
@@ -457,19 +476,21 @@ public abstract record PineValue : IEquatable<PineValue>
                     ListValue.ToString(
                         itemsCount: Items.Length,
                         nodesCount: NodesCount,
-                        blobsBytesCount: BlobsBytesCount);
+                        blobsBytesCount: BlobsBytesCount,
+                        maxDepth: MaxDepth);
             }
         }
 
         private static string ToString(
             long itemsCount,
             long nodesCount,
-            long blobsBytesCount)
+            long blobsBytesCount,
+            long maxDepth)
         {
             /*
              * Example:
              * 
-             * ListValue { ItemsCount = 85, NodesCount = 6_523_426_362, BlobsBytesCount = 91_790_840_965 }
+             * ListValue { ItemsCount = 85, NodesCount = 6_523_426_362, BlobsBytesCount = 91_790_840_965, MaxDepth = 42 }
              * */
 
             return
@@ -477,6 +498,7 @@ public abstract record PineValue : IEquatable<PineValue>
                 " { ItemsCount = " + CommandLineInterface.FormatIntegerForDisplay(itemsCount) +
                 ", NodesCount = " + CommandLineInterface.FormatIntegerForDisplay(nodesCount) +
                 ", BlobsBytesCount = " + CommandLineInterface.FormatIntegerForDisplay(blobsBytesCount) +
+                ", MaxDepth = " + CommandLineInterface.FormatIntegerForDisplay(maxDepth) +
                 " }";
         }
     }
