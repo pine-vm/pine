@@ -70,6 +70,11 @@ public record ImmutableSliceBuilder(
             newTakeCount = adjusted <= 0 ? 0 : adjusted;
         }
 
+        if (newSkipCount == SkipCount && newTakeCount == TakeCount)
+        {
+            return this;
+        }
+
         return new(
             Original,
             SkipCount: newSkipCount,
@@ -93,7 +98,17 @@ public record ImmutableSliceBuilder(
             count = 0;
         }
 
-        var newTakeCount = TakeCount is { } currentTake ? (currentTake < count ? currentTake : count) : count;
+        var newTakeCount =
+            TakeCount is { } currentTake
+            ?
+            (currentTake < count ? currentTake : count)
+            :
+            count;
+
+        if (newTakeCount == TakeCount)
+        {
+            return this;
+        }
 
         return new(
             Original,

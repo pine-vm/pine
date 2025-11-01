@@ -297,6 +297,23 @@ public class PineValueInProcess
             };
         }
 
+        if (source._list is { } list)
+        {
+            if (list.Count <= skipCount)
+            {
+                return EmptyList;
+            }
+
+            var sublist = new PineValueInProcess[list.Count - skipCount];
+
+            for (var i = 0; i < sublist.Length; i++)
+            {
+                sublist[i] = list[i + skipCount];
+            }
+
+            return CreateList(sublist);
+        }
+
         var evaluated = source.Evaluate();
 
         return new PineValueInProcess
@@ -313,12 +330,39 @@ public class PineValueInProcess
     /// <returns>A new <see cref="PineValueInProcess"/> representing the sliced value.</returns>
     public static PineValueInProcess Take(int takeCount, PineValueInProcess source)
     {
+        if (source.GetLength() <= takeCount)
+        {
+            return source;
+        }
+
         if (source._sliceBuilder is { } sliceBuilder)
         {
             return new PineValueInProcess
             {
                 _sliceBuilder = sliceBuilder.Take(takeCount),
             };
+        }
+
+        if (source._list is { } list)
+        {
+            if (list.Count <= takeCount)
+            {
+                return source;
+            }
+
+            if (takeCount <= 0)
+            {
+                return EmptyList;
+            }
+
+            var sublist = new PineValueInProcess[takeCount];
+
+            for (var i = 0; i < takeCount; i++)
+            {
+                sublist[i] = list[i];
+            }
+
+            return CreateList(sublist);
         }
 
         var evaluated = source.Evaluate();
@@ -369,6 +413,18 @@ public class PineValueInProcess
         if (left._concatBuilder is { } leftConcatBuilder &&
             right._concatBuilder is { } rightConcatBuilder)
         {
+            if (leftConcatBuilder.IsList() &&
+                leftConcatBuilder.PredictLength() is 0)
+            {
+                return right;
+            }
+
+            if (rightConcatBuilder.IsList() &&
+                rightConcatBuilder.PredictLength() is 0)
+            {
+                return left;
+            }
+
             return new PineValueInProcess
             {
                 _concatBuilder = new ImmutableConcatBuilder.Node([leftConcatBuilder, rightConcatBuilder])
@@ -377,6 +433,11 @@ public class PineValueInProcess
 
         if (left._concatBuilder is { } leftOnlyConcatBuilder)
         {
+            if (right.GetLength() is 0 && right.IsList())
+            {
+                return left;
+            }
+
             var rightEvaluated = right.Evaluate();
 
             return new PineValueInProcess
@@ -387,6 +448,11 @@ public class PineValueInProcess
 
         if (right._concatBuilder is { } rightOnlyConcatBuilder)
         {
+            if (left.GetLength() is 0 && left.IsList())
+            {
+                return right;
+            }
+
             var leftEvaluated = left.Evaluate();
 
             return new PineValueInProcess
