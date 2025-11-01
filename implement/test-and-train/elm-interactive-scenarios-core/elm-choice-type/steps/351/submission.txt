@@ -1,0 +1,1 @@
+test_00 = AppModule.Variant_Gamma  "alfa"
