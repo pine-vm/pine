@@ -1,12 +1,11 @@
 using AwesomeAssertions;
-using Pine.Core;
 using Pine.Core.DotNet.Builtins;
 using Pine.Core.Internal;
 using System.Collections.Generic;
 using System.Linq;
 using Xunit;
 
-namespace Pine.UnitTests.DotNet.Builtins;
+namespace Pine.Core.Tests.DotNet.Builtins;
 
 public class ImmutableConcatBuilderTests
 {

@@ -1,5 +1,4 @@
 using AwesomeAssertions;
-using Pine.Core;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using System.Collections.Generic;
@@ -10,7 +9,7 @@ using Xunit;
 using StaticExpression = Pine.Core.CodeAnalysis.StaticExpression<Pine.Core.CodeAnalysis.DeclQualifiedName>;
 
 
-namespace Pine.UnitTests.CodeAnalysis;
+namespace Pine.Core.Tests.CodeAnalysis;
 
 public class StaticExpressionDisplayTests
 {

@@ -40,13 +40,13 @@ jobs:
 
     - name: Clean package cache as a temporary workaround for https://github.com/actions/setup-dotnet/issues/155
       run: |
-        dotnet clean ./implement/PineTest/Pine.UnitTests/Pine.UnitTests.csproj && dotnet nuget locals all --clear
+        dotnet clean ./implement/Pine.Core.Tests/Pine.Core.Tests.csproj && dotnet nuget locals all --clear
         dotnet clean ./implement/Pine.IntegrationTests/Pine.IntegrationTests.csproj && dotnet nuget locals all --clear
 
     - name: Check formatting in .NET source code
       run: |
         dotnet  format  ./implement/Pine.Core  --verify-no-changes  --verbosity detailed
-        dotnet  format  ./implement/PineTest/Pine.UnitTests  --verify-no-changes  --verbosity detailed
+        dotnet  format  ./implement/Pine.Core.Tests  --verify-no-changes  --verbosity detailed
         dotnet  format  ./implement/pine  --verify-no-changes  --verbosity detailed
         dotnet  format  ./implement/Pine.IntegrationTests  --verify-no-changes  --verbosity detailed
         dotnet  format  ./implement/prebuild  --verify-no-changes  --verbosity detailed
@@ -56,9 +56,9 @@ jobs:
       run: |
         dotnet  run  --project ./prebuild/prebuild.csproj  --configuration Release
 
-    - name: Run Pine unit tests
+    - name: Run Pine Core tests
       run: |
-        dotnet  run  --project=./implement/PineTest/Pine.UnitTests/Pine.UnitTests.csproj  --  --report-xunit-trx  --diagnostic
+        dotnet  run  --project=./implement/Pine.Core.Tests/Pine.Core.Tests.csproj  --  --report-xunit-trx  --diagnostic
 
     - name: Run integration tests
       run: |

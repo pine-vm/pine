@@ -1,11 +1,10 @@
 using AwesomeAssertions;
-using Pine.Core;
 using Pine.Core.PopularEncodings;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using Xunit;
 
-namespace Pine.UnitTests;
+namespace Pine.Core.Tests;
 
 public class StringNamedValueBinaryEncodingTests
 {

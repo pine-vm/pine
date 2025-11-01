@@ -4,7 +4,7 @@ using Microsoft.CodeAnalysis.CSharp;
 using Pine.Core.DotNet;
 using Xunit;
 
-namespace Pine.UnitTests.DotNet;
+namespace Pine.Core.Tests.DotNet;
 
 public class FormatCSharpSyntaxRewriterTests
 {

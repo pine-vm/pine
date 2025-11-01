@@ -12,7 +12,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Pine.Core\Pine.Core.csproj" />
+    <ProjectReference Include="..\Pine.Core\Pine.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>

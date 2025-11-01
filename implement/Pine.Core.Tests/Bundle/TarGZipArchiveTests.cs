@@ -5,7 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Xunit;
 
-namespace Pine.UnitTests.Bundle;
+namespace Pine.Core.Tests.Bundle;
 
 public class TarGZipArchiveTests
 {

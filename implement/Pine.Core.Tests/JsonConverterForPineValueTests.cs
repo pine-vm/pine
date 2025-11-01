@@ -1,11 +1,10 @@
 using AwesomeAssertions;
-using Pine.Core;
 using Pine.Core.Json;
 using Pine.Core.PopularEncodings;
 using System.Text.Json;
 using Xunit;
 
-namespace Pine.UnitTests;
+namespace Pine.Core.Tests;
 
 public class JsonConverterForPineValueTests
 {

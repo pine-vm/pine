@@ -1,9 +1,8 @@
 using AwesomeAssertions;
-using Pine.Core;
 using System.Text.Json;
 using Xunit;
 
-namespace Pine.UnitTests;
+namespace Pine.Core.Tests;
 
 public class PineResultTests
 {

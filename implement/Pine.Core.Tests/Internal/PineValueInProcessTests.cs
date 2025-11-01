@@ -1,5 +1,4 @@
 using AwesomeAssertions;
-using Pine.Core;
 using Pine.Core.Internal;
 using Pine.Core.PopularEncodings;
 using System.Collections.Generic;
@@ -7,7 +6,7 @@ using System.Linq;
 using System.Numerics;
 using Xunit;
 
-namespace Pine.UnitTests.Internal;
+namespace Pine.Core.Tests.Internal;
 
 public class PineValueInProcessTests
 {

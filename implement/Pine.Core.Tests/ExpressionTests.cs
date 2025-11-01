@@ -1,10 +1,9 @@
 using AwesomeAssertions;
-using Pine.Core;
 using System.Collections.Generic;
 using System.Linq;
 using Xunit;
 
-namespace Pine.UnitTests;
+namespace Pine.Core.Tests;
 
 public class ExpressionTests
 {

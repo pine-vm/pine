@@ -1,11 +1,10 @@
 using AwesomeAssertions;
-using Pine.Core;
 using Pine.Core.PopularEncodings;
 using System.Collections.Generic;
 using System.Linq;
 using Xunit;
 
-namespace Pine.UnitTests;
+namespace Pine.Core.Tests;
 
 public class ValueBinaryEncodingTests
 {
@@ -131,7 +130,7 @@ public class ValueBinaryEncodingTests
                 PineValue.List(
                     IntegerEncoding.EncodeSignedInteger(43))),
 
-            PineVM.PopularExpression.BuildPopularValueDictionary().Values
+            Pine.PineVM.PopularExpression.BuildPopularValueDictionary().Values
             .OfType<PineValue.ListValue>()
             .OrderByDescending(l => l.NodesCount)
             .First()

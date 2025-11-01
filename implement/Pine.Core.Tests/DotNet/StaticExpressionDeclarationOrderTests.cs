@@ -1,11 +1,10 @@
 using System.Linq;
 using AwesomeAssertions;
-using Pine.Core;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.DotNet;
 using Xunit;
 
-namespace Pine.UnitTests.DotNet;
+namespace Pine.Core.Tests.DotNet;
 
 public class StaticExpressionDeclarationOrderTests
 {

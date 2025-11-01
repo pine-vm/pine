@@ -36,7 +36,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\pine\pine.csproj" />
-    <ProjectReference Include="..\PineTest\Pine.UnitTests\Pine.UnitTests.csproj" />
+    <ProjectReference Include="..\Pine.Core.Tests\Pine.Core.Tests.csproj" />
   </ItemGroup>
 
   <ItemGroup>

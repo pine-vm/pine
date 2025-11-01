@@ -1,11 +1,10 @@
 using AwesomeAssertions;
-using Pine.Core;
 using Pine.Core.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Xunit;
 
-namespace Pine.UnitTests;
+namespace Pine.Core.Tests;
 
 public class JsonConverterForChoiceTypeTests
 {

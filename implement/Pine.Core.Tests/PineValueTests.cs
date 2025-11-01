@@ -1,8 +1,7 @@
 using AwesomeAssertions;
-using Pine.Core;
 using Xunit;
 
-namespace Pine.IntegrationTests;
+namespace Pine.Core.Tests;
 
 public class PineValueTests
 {

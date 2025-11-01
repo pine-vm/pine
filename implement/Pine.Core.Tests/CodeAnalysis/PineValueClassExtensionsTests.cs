@@ -1,11 +1,10 @@
-using Pine.Core;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.PopularEncodings;
 using System.Collections.Generic;
 using AwesomeAssertions;
 using Xunit;
 
-namespace Pine.UnitTests.CodeAnalysis;
+namespace Pine.Core.Tests.CodeAnalysis;
 
 public class PineValueClassExtensionsTests
 {
