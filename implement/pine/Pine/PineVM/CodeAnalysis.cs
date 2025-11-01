@@ -238,7 +238,7 @@ public class CodeAnalysis
                     config: new PineVM.EvaluationConfig(ParseAndEvalCountLimit: 100))
                 .Unpack(
                     fromErr: _ => null,
-                    fromOk: ok => ok.ReturnValue);
+                    fromOk: ok => ok.ReturnValue.Evaluate());
             }
             catch
             {

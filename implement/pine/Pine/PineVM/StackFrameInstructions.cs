@@ -10,11 +10,8 @@ public record StackFrameInstructions(
     IReadOnlyList<StackInstruction> Instructions,
     PineValueClass? TrackEnvConstraint = null)
 {
-    public int MaxLocalIndex { init; get; } =
-        Instructions
-        .Select(i => i.Kind is StackInstructionKind.Local_Set ? i.LocalIndex ?? 0 : 0)
-        .DefaultIfEmpty(-1)
-        .Max();
+    public int LocalsCount { init; get; } =
+        ComputeLocalsCount(Instructions, Parameters);
 
     public int MaxStackUsage { init; get; } =
         ComputeMaxStackUsage(Instructions);
@@ -113,6 +110,36 @@ public record StackFrameInstructions(
         }
 
         return maxDepth;
+    }
+
+    public static int ComputeLocalsCount(
+        IReadOnlyList<StackInstruction> instructions,
+        StackFrameParameters parameters)
+    {
+        var aggregateMax = parameters.EnvPaths.Count;
+
+        for (var i = 0; i < instructions.Count; i++)
+        {
+            var inst = instructions[i];
+
+            if (inst.Kind is StackInstructionKind.Local_Get or StackInstructionKind.Local_Set)
+            {
+                if (inst.LocalIndex is null)
+                {
+                    throw new InvalidOperationException(
+                        $"Local instruction without index at {i}.");
+                }
+
+                var instrMax = inst.LocalIndex.Value + 1;
+
+                aggregateMax =
+                    aggregateMax < instrMax
+                    ? instrMax
+                    : aggregateMax;
+            }
+        }
+
+        return aggregateMax;
     }
 
     public virtual bool Equals(StackFrameInstructions? other)

@@ -349,7 +349,7 @@ public class PineIRCompilerTests
         }
 
         var resultAsInteger =
-            IntegerEncoding.ParseSignedIntegerRelaxed(evalReport.ReturnValue);
+            IntegerEncoding.ParseSignedIntegerRelaxed(evalReport.ReturnValue.Evaluate());
 
         if (resultAsInteger.IsErrOrNull() is { } resultErr)
         {

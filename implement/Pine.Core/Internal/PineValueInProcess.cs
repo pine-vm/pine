@@ -94,6 +94,11 @@ public class PineValueInProcess
     /// <returns>A new <see cref="PineValueInProcess"/> representing the list.</returns>
     public static PineValueInProcess CreateList(IReadOnlyList<PineValueInProcess> list)
     {
+        if (list.Count is 0)
+        {
+            return EmptyList;
+        }
+
         return new PineValueInProcess
         {
             _list = list,
@@ -388,6 +393,16 @@ public class PineValueInProcess
             {
                 _concatBuilder = rightOnlyConcatBuilder.PrependItems([leftEvaluated]),
             };
+        }
+
+        if (AreEqual(left, PineValue.EmptyList))
+        {
+            return right;
+        }
+
+        if (AreEqual(right, PineValue.EmptyList))
+        {
+            return left;
         }
 
         var leftEval = left.Evaluate();

@@ -25,7 +25,7 @@ record StackFrame(
 
     public long InstructionCount { get; set; } = 0;
 
-    public void ReturnFromChildFrame(PineValue frameReturnValue)
+    public void ReturnFromChildFrame(PineValueInProcess frameReturnValue)
     {
         if (Specialization is not null)
         {
@@ -33,7 +33,7 @@ record StackFrame(
             return;
         }
 
-        PushInstructionResult(PineValueInProcess.Create(frameReturnValue));
+        PushInstructionResult(frameReturnValue);
     }
 
     public void PushInstructionResult(PineValueInProcess value)

@@ -10,6 +10,6 @@ public record EvaluationReport(
     long InstructionCount,
     long InvocationCount,
     long LoopIterationCount,
-    PineValue ReturnValue,
+    Core.Internal.PineValueInProcess ReturnValue,
     IReadOnlyList<Expression> StackTrace);
 

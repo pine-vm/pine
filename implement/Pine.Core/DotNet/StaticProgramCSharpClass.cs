@@ -465,10 +465,10 @@ public record StaticProgramCSharpClass(
                                     sliceOperation.Kind switch
                                     {
                                         SliceOperationKind.Skip =>
-                                        nameof(Core.DotNet.Builtins.ImmutableSliceBuilder.Skip),
+                                        nameof(Builtins.ImmutableSliceBuilder.Skip),
 
                                         SliceOperationKind.Take =>
-                                        nameof(Core.DotNet.Builtins.ImmutableSliceBuilder.Take),
+                                        nameof(Builtins.ImmutableSliceBuilder.Take),
 
                                         _
                                         => throw new System.NotImplementedException(

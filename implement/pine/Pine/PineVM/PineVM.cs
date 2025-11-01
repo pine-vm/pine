@@ -109,7 +109,7 @@ public class PineVM : IPineVM
                 "Unexpected result type: " + evalReportResult.GetType().FullName);
         }
 
-        return evalReport.ReturnValue;
+        return evalReport.ReturnValue.Evaluate();
     }
 
     /*
@@ -126,7 +126,7 @@ public class PineVM : IPineVM
             CurrentStep = start;
         }
 
-        public void ReturningFromChildFrame(PineValue frameReturnValue)
+        public void ReturningFromChildFrame(PineValueInProcess frameReturnValue)
         {
             if (CurrentStep is StepResult.Continue cont)
             {
@@ -142,11 +142,11 @@ public class PineVM : IPineVM
         {
             public sealed record Continue(
                 Expression Expression,
-                PineValue EnvironmentValue,
-                Func<PineValue, StepResult> Callback)
+                PineValueInProcess EnvironmentValue,
+                Func<PineValueInProcess, StepResult> Callback)
                 : StepResult;
 
-            public sealed record Complete(PineValue PineValue)
+            public sealed record Complete(PineValueInProcess PineValue)
                 : StepResult;
         }
     }
@@ -170,7 +170,7 @@ public class PineVM : IPineVM
         var instructions = compilation.SelectInstructionsForEnvironment(environment);
 
         var localsValues =
-            new PineValueInProcess[instructions.MaxLocalIndex + 1];
+            new PineValueInProcess[instructions.LocalsCount];
 
         var stackFrameInput =
             StackFrameInput.FromEnvironmentValue(
@@ -276,7 +276,7 @@ public class PineVM : IPineVM
 
                         stackFrameCount += finalValue.StackFrameCount;
 
-                        currentFrame.PushInstructionResult(PineValueInProcess.Create(finalValue.Value));
+                        currentFrame.ReturnFromChildFrame(PineValueInProcess.Create(finalValue.Value));
 
                         return null;
 
@@ -422,7 +422,7 @@ public class PineVM : IPineVM
             ++stackFrameCount;
         }
 
-        EvaluationReport? ReturnFromStackFrame(PineValue frameReturnValue)
+        EvaluationReport? ReturnFromStackFrame(PineValueInProcess frameReturnValue)
         {
             var currentFrame = stack.Peek();
 
@@ -446,7 +446,7 @@ public class PineVM : IPineVM
                     {
                         if (evalCache.TryAdd(
                             new EvalCacheEntryKey(currentFrameExprValue, currentFrame.InputValues),
-                            frameReturnValue))
+                            frameReturnValue.Evaluate()))
                         {
                             lastCacheEntryInstructionCount = instructionCount;
                             lastCacheEntryParseAndEvalCount = parseAndEvalCount;
@@ -553,7 +553,7 @@ public class PineVM : IPineVM
                         if (InvokePrecompiledOrBuildStackFrame(
                             expressionValue: null,
                             expression: cont.Expression,
-                            environmentValue: PineValueInProcess.Create(cont.EnvironmentValue),
+                            environmentValue: cont.EnvironmentValue,
                             replaceCurrentFrame: false) is { } error)
                         {
                             return error;
@@ -684,7 +684,7 @@ public class PineVM : IPineVM
                             var areEqual = length == testedLength;
 
                             currentFrame.PushInstructionResult(
-                                PineValueInProcess.Create(areEqual ? PineKernelValues.TrueValue : PineKernelValues.FalseValue));
+                                PineValueInProcess.CreateBool(areEqual));
 
                             continue;
                         }
@@ -1283,7 +1283,7 @@ public class PineVM : IPineVM
                     case StackInstructionKind.Return:
                         {
                             var frameReturnValue =
-                                currentFrame.PopTopmostFromStack().Evaluate();
+                                currentFrame.PopTopmostFromStack();
 
                             var returnOverall =
                                 ReturnFromStackFrame(frameReturnValue);

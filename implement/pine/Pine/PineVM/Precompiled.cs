@@ -747,10 +747,6 @@ public class Precompiled
                     new KeyValuePair<IReadOnlyList<int>, PineValue>(
                     [0],
                     adaptivePartialApplicationExpressionValue),
-
-                    new KeyValuePair<IReadOnlyList<int>, PineValue>(
-                    [1,0],
-                    StringEncoding.ValueFromString("Function")),
                     ]);
 
             yield return
@@ -3702,7 +3698,7 @@ public class Precompiled
         var environmentFunctionsEntry =
             PineValue.List(functionRecord.EnvFunctions);
 
-        PineValue environmentForItem(PineValue itemValue)
+        PineValueInProcess EnvironmentForItem(PineValue itemValue)
         {
             var argumentsItems = new PineValue[functionRecord.ArgumentsAlreadyCollected.Length + 1];
 
@@ -3713,15 +3709,19 @@ public class Precompiled
             var argumentsList = PineValue.List(argumentsItems);
 
             return
-                PineValue.List([environmentFunctionsEntry, argumentsList]);
+                PineValueInProcess.CreateList(
+                    [
+                    PineValueInProcess.Create(environmentFunctionsEntry),
+                    PineValueInProcess.Create(argumentsList)
+                    ]);
         }
 
         var itemsResults = new PineValue[remainingItemsListValue.Items.Length];
         var itemIndex = 0;
 
-        PineVM.ApplyStepwise.StepResult Step(PineValue itemResultValue)
+        PineVM.ApplyStepwise.StepResult Step(PineValueInProcess itemResultValue)
         {
-            itemsResults[itemIndex] = itemResultValue;
+            itemsResults[itemIndex] = itemResultValue.Evaluate();
 
             ++itemIndex;
 
@@ -3730,14 +3730,14 @@ public class Precompiled
                 return
                     new PineVM.ApplyStepwise.StepResult.Continue(
                         Expression: functionRecord.InnerFunction,
-                        EnvironmentValue: environmentForItem(remainingItemsListValue.Items.Span[itemIndex]),
+                        EnvironmentValue: EnvironmentForItem(remainingItemsListValue.Items.Span[itemIndex]),
                         Callback: Step);
             }
 
             var resultValue =
                 KernelFunctionSpecialized.concat(mappedReversed, PineValue.List(itemsResults));
 
-            return new PineVM.ApplyStepwise.StepResult.Complete(resultValue);
+            return new PineVM.ApplyStepwise.StepResult.Complete(PineValueInProcess.Create(resultValue));
         }
 
         return
@@ -3746,7 +3746,7 @@ public class Precompiled
                     start:
                     new PineVM.ApplyStepwise.StepResult.Continue(
                         Expression: functionRecord.InnerFunction,
-                        EnvironmentValue: environmentForItem(remainingItemsListValue.Items.Span[itemIndex]),
+                        EnvironmentValue: EnvironmentForItem(remainingItemsListValue.Items.Span[itemIndex]),
                         Callback: Step)));
     }
 
@@ -3787,7 +3787,7 @@ public class Precompiled
         var environmentFunctionsEntry =
             PineValue.List(functionRecord.EnvFunctions);
 
-        PineValue EnvironmentForItem(PineValue itemValue)
+        PineValueInProcess EnvironmentForItem(PineValue itemValue)
         {
             var argumentsItems = new PineValue[functionRecord.ArgumentsAlreadyCollected.Length + 1];
 
@@ -3796,19 +3796,19 @@ public class Precompiled
             argumentsItems[^1] = itemValue;
 
             return
-                PineValue.List(
+                PineValueInProcess.CreateList(
                     [
-                    environmentFunctionsEntry,
-                    PineValue.List(argumentsItems)
+                    PineValueInProcess.Create(environmentFunctionsEntry),
+                    PineValueInProcess.Create(PineValue.List(argumentsItems))
                     ]);
         }
 
         var itemsResults = new PineValue[itemsListValue.Items.Length];
         var itemIndex = 0;
 
-        PineVM.ApplyStepwise.StepResult Step(PineValue itemResultValue)
+        PineVM.ApplyStepwise.StepResult Step(PineValueInProcess itemResultValue)
         {
-            itemsResults[itemIndex] = itemResultValue;
+            itemsResults[itemIndex] = itemResultValue.Evaluate();
 
             ++itemIndex;
 
@@ -3823,7 +3823,7 @@ public class Precompiled
 
             var concatResult = KernelFunction.concat(PineValue.List(itemsResults));
 
-            return new PineVM.ApplyStepwise.StepResult.Complete(concatResult);
+            return new PineVM.ApplyStepwise.StepResult.Complete(PineValueInProcess.Create(concatResult));
         }
 
         return
@@ -3876,7 +3876,7 @@ public class Precompiled
         var environmentFunctionsEntry =
             PineValue.List(functionRecord.EnvFunctions);
 
-        PineValue environmentForItem(PineValue aggregate, PineValue itemValue)
+        PineValueInProcess EnvironmentForItem(PineValue aggregate, PineValue itemValue)
         {
             var argumentsItems = new PineValue[functionRecord.ArgumentsAlreadyCollected.Length + 2];
 
@@ -3889,15 +3889,19 @@ public class Precompiled
             var argumentsList = PineValue.List(argumentsItems);
 
             return
-                PineValue.List([environmentFunctionsEntry, argumentsList]);
+                PineValueInProcess.CreateList(
+                    [
+                    PineValueInProcess.Create(environmentFunctionsEntry),
+                    PineValueInProcess.Create(argumentsList)
+                    ]);
         }
 
         var mutatedAggregate = argumentAggregate;
         var itemIndex = 0;
 
-        PineVM.ApplyStepwise.StepResult Step(PineValue itemResultValue)
+        PineVM.ApplyStepwise.StepResult Step(PineValueInProcess itemResultValue)
         {
-            mutatedAggregate = itemResultValue;
+            mutatedAggregate = itemResultValue.Evaluate();
 
             ++itemIndex;
 
@@ -3906,7 +3910,7 @@ public class Precompiled
                 return
                     new PineVM.ApplyStepwise.StepResult.Continue(
                         Expression: functionRecord.InnerFunction,
-                        EnvironmentValue: environmentForItem(mutatedAggregate, itemsListValue.Items.Span[itemIndex]),
+                        EnvironmentValue: EnvironmentForItem(mutatedAggregate, itemsListValue.Items.Span[itemIndex]),
                         Callback: Step);
             }
 
@@ -3927,7 +3931,7 @@ public class Precompiled
                 }
             }
 
-            return new PineVM.ApplyStepwise.StepResult.Complete(mutatedAggregate);
+            return new PineVM.ApplyStepwise.StepResult.Complete(PineValueInProcess.Create(mutatedAggregate));
         }
 
         return
@@ -3936,7 +3940,7 @@ public class Precompiled
                     start:
                     new PineVM.ApplyStepwise.StepResult.Continue(
                         Expression: functionRecord.InnerFunction,
-                        EnvironmentValue: environmentForItem(mutatedAggregate, itemsListValue.Items.Span[itemIndex]),
+                        EnvironmentValue: EnvironmentForItem(mutatedAggregate, itemsListValue.Items.Span[itemIndex]),
                         Callback: Step)));
     }
 
@@ -3983,7 +3987,7 @@ public class Precompiled
         var environmentFunctionsEntry =
             PineValue.List(functionRecord.EnvFunctions);
 
-        PineValue EnvironmentForItem(PineValue itemValue)
+        PineValueInProcess EnvironmentForItem(PineValue itemValue)
         {
             var argumentsItems = new PineValue[functionRecord.ArgumentsAlreadyCollected.Length + 1];
 
@@ -3994,16 +3998,20 @@ public class Precompiled
             var argumentsList = PineValue.List(argumentsItems);
 
             return
-                PineValue.List([environmentFunctionsEntry, argumentsList]);
+                PineValueInProcess.CreateList(
+                    [
+                    PineValueInProcess.Create(environmentFunctionsEntry),
+                    PineValueInProcess.Create(argumentsList)
+                    ]);
         }
 
         var includedItems = new PineValue[itemsList.Items.Length];
         var itemIndex = 0;
         var includedItemCount = 0;
 
-        PineVM.ApplyStepwise.StepResult Step(PineValue itemResultValue)
+        PineVM.ApplyStepwise.StepResult Step(PineValueInProcess itemResultValue)
         {
-            if (itemResultValue == PineKernelValues.TrueValue)
+            if (PineValueInProcess.AreEqual(itemResultValue, PineValueInProcess.KernelTrueValue))
             {
                 includedItems[includedItemCount] = itemsList.Items.Span[itemIndex];
 
@@ -4026,7 +4034,7 @@ public class Precompiled
                     accumulatedReversed,
                     PineValue.List(includedItems[..includedItemCount]));
 
-            return new PineVM.ApplyStepwise.StepResult.Complete(resultValue);
+            return new PineVM.ApplyStepwise.StepResult.Complete(PineValueInProcess.Create(resultValue));
         }
 
         return
@@ -4099,7 +4107,7 @@ public class Precompiled
         var environmentFunctionsEntry =
             PineValue.List(functionRecord.EnvFunctions);
 
-        PineValue environmentForItem(PineValue itemValue)
+        PineValueInProcess EnvironmentForItem(PineValue itemValue)
         {
             var argumentsItems = new PineValue[functionRecord.ArgumentsAlreadyCollected.Length + 1];
 
@@ -4110,7 +4118,11 @@ public class Precompiled
             var argumentsList = PineValue.List(argumentsItems);
 
             return
-                PineValue.List([environmentFunctionsEntry, argumentsList]);
+                PineValueInProcess.CreateList(
+                    [
+                    PineValueInProcess.Create(environmentFunctionsEntry),
+                    PineValueInProcess.Create(argumentsList)
+                    ]);
         }
 
         var includedItems = new PineValue[itemsList.Items.Length];
@@ -4119,15 +4131,17 @@ public class Precompiled
 
         var includedItemCount = 0;
 
-        PineVM.ApplyStepwise.StepResult Step(PineValue itemResultValue)
+        PineVM.ApplyStepwise.StepResult Step(PineValueInProcess itemResultValue)
         {
             var itemResultValueTag =
-                itemResultValue.ValueFromPathOrEmptyList([0]);
+                PineValueInProcess.ValueFromPathOrNull(itemResultValue, [0]);
 
             if (itemResultValueTag == Tag_Just_Name_Value)
             {
                 includedItems[includedItemCount] =
-                    itemResultValue.ValueFromPathOrEmptyList([1, 0]);
+                    PineValueInProcess.ValueFromPathOrNull(itemResultValue, [1, 0])
+                    ??
+                    PineValue.EmptyList;
 
                 ++includedItemCount;
             }
@@ -4146,7 +4160,7 @@ public class Precompiled
                 return
                     new PineVM.ApplyStepwise.StepResult.Continue(
                         Expression: functionRecord.InnerFunction,
-                        EnvironmentValue: environmentForItem(itemsList.Items.Span[itemIndex]),
+                        EnvironmentValue: EnvironmentForItem(itemsList.Items.Span[itemIndex]),
                         Callback: Step);
             }
 
@@ -4155,7 +4169,7 @@ public class Precompiled
                     accumulatedReversed,
                     PineValue.List(includedItems[..includedItemCount]));
 
-            return new PineVM.ApplyStepwise.StepResult.Complete(resultValue);
+            return new PineVM.ApplyStepwise.StepResult.Complete(PineValueInProcess.Create(resultValue));
         }
 
         return
@@ -4164,7 +4178,7 @@ public class Precompiled
                     start:
                     new PineVM.ApplyStepwise.StepResult.Continue(
                         Expression: functionRecord.InnerFunction,
-                        EnvironmentValue: environmentForItem(itemsList.Items.Span[itemIndex]),
+                        EnvironmentValue: EnvironmentForItem(itemsList.Items.Span[itemIndex]),
                         Callback: Step)));
     }
 
@@ -4205,7 +4219,7 @@ public class Precompiled
         var environmentFunctionsEntry =
             PineValue.List(functionRecord.EnvFunctions);
 
-        PineValue environmentForItem(PineValue itemValue)
+        PineValueInProcess EnvironmentForItem(PineValue itemValue)
         {
             var argumentsItems = new PineValue[functionRecord.ArgumentsAlreadyCollected.Length + 1];
 
@@ -4216,16 +4230,20 @@ public class Precompiled
             var argumentsList = PineValue.List(argumentsItems);
 
             return
-                PineValue.List([environmentFunctionsEntry, argumentsList]);
+                PineValueInProcess.CreateList(
+                    [
+                    PineValueInProcess.Create(environmentFunctionsEntry),
+                    PineValueInProcess.Create(argumentsList)
+                    ]);
         }
 
         var itemIndex = 0;
 
-        PineVM.ApplyStepwise.StepResult Step(PineValue itemResultValue)
+        PineVM.ApplyStepwise.StepResult Step(PineValueInProcess itemResultValue)
         {
-            if (itemResultValue != PineKernelValues.TrueValue)
+            if (!PineValueInProcess.AreEqual(itemResultValue, PineValueInProcess.KernelTrueValue))
             {
-                return new PineVM.ApplyStepwise.StepResult.Complete(PineKernelValues.FalseValue);
+                return new PineVM.ApplyStepwise.StepResult.Complete(PineValueInProcess.KernelFalseValue);
             }
 
             ++itemIndex;
@@ -4235,12 +4253,12 @@ public class Precompiled
                 return
                     new PineVM.ApplyStepwise.StepResult.Continue(
                         Expression: functionRecord.InnerFunction,
-                        EnvironmentValue: environmentForItem(itemsListValue.Items.Span[itemIndex]),
+                        EnvironmentValue: EnvironmentForItem(itemsListValue.Items.Span[itemIndex]),
                         Callback: Step);
             }
 
             return
-                new PineVM.ApplyStepwise.StepResult.Complete(PineKernelValues.TrueValue);
+                new PineVM.ApplyStepwise.StepResult.Complete(PineValueInProcess.KernelTrueValue);
         }
 
         return
@@ -4249,7 +4267,7 @@ public class Precompiled
                     start:
                     new PineVM.ApplyStepwise.StepResult.Continue(
                         Expression: functionRecord.InnerFunction,
-                        EnvironmentValue: environmentForItem(itemsListValue.Items.Span[itemIndex]),
+                        EnvironmentValue: EnvironmentForItem(itemsListValue.Items.Span[itemIndex]),
                         Callback: Step)));
     }
 
@@ -4290,7 +4308,7 @@ public class Precompiled
         var environmentFunctionsEntry =
             PineValue.List(functionRecordOk.EnvFunctions);
 
-        PineValue EnvironmentForItem(PineValue itemValue)
+        PineValueInProcess EnvironmentForItem(PineValue itemValue)
         {
             var argumentsItems = new PineValue[functionRecordOk.ArgumentsAlreadyCollected.Length + 1];
 
@@ -4301,16 +4319,20 @@ public class Precompiled
             var argumentsList = PineValue.List(argumentsItems);
 
             return
-                PineValue.List([environmentFunctionsEntry, argumentsList]);
+                PineValueInProcess.CreateList(
+                    [
+                    PineValueInProcess.Create(environmentFunctionsEntry),
+                    PineValueInProcess.Create(argumentsList)
+                    ]);
         }
 
         var itemIndex = 0;
 
-        PineVM.ApplyStepwise.StepResult Step(PineValue itemResultValue)
+        PineVM.ApplyStepwise.StepResult Step(PineValueInProcess itemResultValue)
         {
-            if (itemResultValue == PineKernelValues.TrueValue)
+            if (PineValueInProcess.AreEqual(itemResultValue, PineValueInProcess.KernelTrueValue))
             {
-                return new PineVM.ApplyStepwise.StepResult.Complete(PineKernelValues.TrueValue);
+                return new PineVM.ApplyStepwise.StepResult.Complete(PineValueInProcess.KernelTrueValue);
             }
 
             ++itemIndex;
@@ -4325,7 +4347,7 @@ public class Precompiled
             }
 
             return
-                new PineVM.ApplyStepwise.StepResult.Complete(PineKernelValues.FalseValue);
+                new PineVM.ApplyStepwise.StepResult.Complete(PineValueInProcess.KernelFalseValue);
         }
 
         return
@@ -5688,88 +5710,194 @@ public class Precompiled
         if (envList.Items.Length < 2)
             return null;
 
-        if (envList.Items.Span[1] is not PineValue.ListValue taggedFunctionRecordList)
+        if (envList.Items.Span[1] is not PineValue.ListValue rootTaggedFunctionRecordList)
             return null;
 
-        if (envList.Items.Span[2] is not PineValue.ListValue newArgumentsList)
+        if (envList.Items.Span[2] is not PineValue.ListValue rootArgumentsList)
             return null;
 
-        if (newArgumentsList.Items.Length is 0)
+        if (rootArgumentsList.Items.Length is 0)
         {
-            return () => new PrecompiledResult.FinalValue(taggedFunctionRecordList, StackFrameCount: 0);
+            return
+                () => new PrecompiledResult.FinalValue(rootTaggedFunctionRecordList, StackFrameCount: 0);
         }
 
-        if (taggedFunctionRecordList.Items.Length < 2)
-            return null;
+        var consumedArgsCount = 0;
 
-        /*
-         * We already check this condition via the environment value class.
-         * 
-        if (taggedFunctionRecordList.Elements[0] != ElmCompilerFunctionTagValue)
-            return null;
-        */
-
-        if (taggedFunctionRecordList.Items.Span[1] is not PineValue.ListValue functionRecord)
-            return null;
-
-        if (functionRecord.Items.Length < 4)
-            return null;
-
-        if (functionRecord.Items.Span[3] is not PineValue.ListValue argsCollectedPreviouslyList)
-            return null;
-
-        if (functionRecord.Items.Span[1] is not PineValue.BlobValue paramCountBlob)
-            return null;
-
-        if (paramCountBlob.Bytes.Length is not 2)
-            return null;
-
-        if (paramCountBlob.Bytes.Span[0] is not 4)
-            return null;
-
-        var paramCount = paramCountBlob.Bytes.Span[1];
-
-        var envFunctions = functionRecord.Items.Span[2];
-
-        if (paramCount != argsCollectedPreviouslyList.Items.Length + newArgumentsList.Items.Length)
-            return null;
-
-        PineValue? combinedArgumentsValue = null;
-
-        if (argsCollectedPreviouslyList.Items.Length is 0)
+        PineVM.ApplyStepwise.StepResult Step(PineValueInProcess itemResultValue)
         {
-            combinedArgumentsValue = newArgumentsList;
-        }
-        else
-        {
-            var combinedArgsArray =
-                new PineValue[argsCollectedPreviouslyList.Items.Length + newArgumentsList.Items.Length];
+            var remainingArgsCount =
+                rootArgumentsList.Items.Length - consumedArgsCount;
 
-            for (var i = 0; i < argsCollectedPreviouslyList.Items.Length; ++i)
+            if (remainingArgsCount is 0)
             {
-                combinedArgsArray[i] = argsCollectedPreviouslyList.Items.Span[i];
+                return new PineVM.ApplyStepwise.StepResult.Complete(itemResultValue);
             }
 
-            for (var i = 0; i < newArgumentsList.Items.Length; ++i)
+            if (!PineValueInProcess.AreEqual(itemResultValue.GetElementAt(0), s_elmCompilerFunctionTagValue))
             {
-                combinedArgsArray[i + argsCollectedPreviouslyList.Items.Length] = newArgumentsList.Items.Span[i];
+                var parseResult =
+                    parseCache.ParseExpression(itemResultValue.Evaluate());
+
+                if (parseResult.IsOkOrNull() is { } expression)
+                {
+                    var currentArgIndex = consumedArgsCount;
+
+                    consumedArgsCount += 1;
+
+                    return
+                        new PineVM.ApplyStepwise.StepResult.Continue(
+                            Expression: expression,
+                            EnvironmentValue: PineValueInProcess.Create(rootArgumentsList.Items.Span[currentArgIndex]),
+                            Callback: Step);
+                }
+
+                if (parseResult.IsErrOrNull() is { } error)
+                {
+                    throw new InvalidOperationException(
+                        "Failed to parse expression during Elm adaptive partial application: " + error);
+                }
+
+                throw new NotImplementedException(
+                    "Unexpected ParseExpression result: " + parseResult.GetType().FullName);
             }
 
-            combinedArgumentsValue = PineValue.List(combinedArgsArray);
+            {
+                var functionRecordList =
+                    itemResultValue.GetElementAt(1);
+
+                var newExpressionValue =
+                    functionRecordList.GetElementAt(0);
+
+                var paramCountValue =
+                    functionRecordList.GetElementAt(1);
+
+                var environmentFunctionsValue =
+                    functionRecordList.GetElementAt(2);
+
+                var alreadyCollectedArgsValue =
+                    functionRecordList.GetElementAt(3).Evaluate();
+
+                var argsAvailableSum =
+                    KernelFunctionSpecialized.length_as_int(alreadyCollectedArgsValue) +
+                    remainingArgsCount;
+
+                if (paramCountValue.AsInteger() is { } paramCount && paramCount <= argsAvailableSum)
+                {
+                    // Have collected enough arguments to apply the function
+
+                    var combinedArgsArray =
+                        new PineValueInProcess[(int)paramCount];
+
+                    var argIndex = 0;
+
+                    if (alreadyCollectedArgsValue is PineValue.ListValue alreadyCollectedArgsList)
+                    {
+                        for (var i = 0; i < alreadyCollectedArgsList.Items.Length; ++i)
+                        {
+                            combinedArgsArray[argIndex] =
+                                PineValueInProcess.Create(alreadyCollectedArgsList.Items.Span[i]);
+
+                            ++argIndex;
+                        }
+                    }
+
+                    while (argIndex < paramCount)
+                    {
+                        combinedArgsArray[argIndex] =
+                            PineValueInProcess.Create(rootArgumentsList.Items.Span[consumedArgsCount]);
+
+                        ++consumedArgsCount;
+                        ++argIndex;
+                    }
+
+                    var newEnvironmentValue =
+                        PineValueInProcess.CreateList(
+                            [
+                            environmentFunctionsValue,
+                            PineValueInProcess.CreateList(combinedArgsArray)
+                            ]);
+
+                    var parseResult =
+                        parseCache.ParseExpression(newExpressionValue.Evaluate());
+
+                    if (parseResult.IsOkOrNull() is { } expression)
+                    {
+                        return
+                            new PineVM.ApplyStepwise.StepResult.Continue(
+                                Expression: expression,
+                                EnvironmentValue: newEnvironmentValue,
+                                Callback: Step);
+                    }
+
+                    if (parseResult.IsErrOrNull() is { } parseErr)
+                    {
+                        throw new InvalidOperationException(
+                            "Failed to parse expression during Elm adaptive partial application: " + parseErr);
+                    }
+
+                    throw new NotImplementedException(
+                        "Unexpected ParseExpression result: " + parseResult.GetType().FullName);
+                }
+
+                // Need to collect more arguments
+
+                var aggregateArgsList =
+                    KernelFunctionSpecialized.concat(
+                        alreadyCollectedArgsValue,
+                        KernelFunctionSpecialized.skip(consumedArgsCount, rootArgumentsList));
+
+                var newFunctionRecordValue =
+                    PineValueInProcess.CreateList(
+                        [
+                        newExpressionValue,
+                        functionRecordList.GetElementAt(1),
+                        environmentFunctionsValue,
+                        PineValueInProcess.Create(aggregateArgsList),
+                        ]);
+
+                var newFunctionRecordTaggedValue =
+                    PineValueInProcess.CreateList(
+                        [
+                        s_elmCompilerFunctionTagValueInProcess,
+                        newFunctionRecordValue,
+                        ]);
+
+                return
+                    new PineVM.ApplyStepwise.StepResult.Complete(
+                        newFunctionRecordTaggedValue);
+            }
         }
 
-        var newEnvironment =
-            PineValue.List(
-                [
-                envFunctions,
-                combinedArgumentsValue
-                ]);
+        var firstStepResult =
+            Step(PineValueInProcess.Create(rootTaggedFunctionRecordList));
+
+        if (firstStepResult is PineVM.ApplyStepwise.StepResult.Complete completeResult)
+        {
+            return
+                () => new PrecompiledResult.FinalValue(
+                    completeResult.PineValue.Evaluate(),
+                    StackFrameCount: 0);
+        }
+
+        if (firstStepResult is not PineVM.ApplyStepwise.StepResult.Continue firstContinue)
+        {
+            throw new NotImplementedException(
+                "Unexpected StepResult variant: " + firstStepResult.GetType().FullName);
+        }
 
         return
-            () => new PrecompiledResult.ContinueParseAndEval(
-                EnvironmentValue: newEnvironment,
-                ExpressionValue: functionRecord.Items.Span[0]);
+            () => new PrecompiledResult.StepwiseSpecialization(
+                new PineVM.ApplyStepwise(
+                    start:
+                    firstContinue));
     }
+
+    private static readonly PineValue s_elmCompilerFunctionTagValue =
+        StringEncoding.ValueFromString("Function");
+
+    private static readonly PineValueInProcess s_elmCompilerFunctionTagValueInProcess =
+        PineValueInProcess.Create(s_elmCompilerFunctionTagValue);
 
     private static Func<PrecompiledResult>? ElmKernelJsonDecode_parseJsonStringSimpleChars(
         PineValue environment,

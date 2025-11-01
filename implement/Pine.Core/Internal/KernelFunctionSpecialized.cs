@@ -150,7 +150,12 @@ public static class KernelFunctionSpecialized
             break;
         }
 
-        var list = listBeforeSkipEmpty[firstNonEmptyIndex..];
+        var list =
+            firstNonEmptyIndex is 0
+            ?
+            listBeforeSkipEmpty
+            :
+            listBeforeSkipEmpty[firstNonEmptyIndex..];
 
         if (list.Length is 0)
         {
