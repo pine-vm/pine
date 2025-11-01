@@ -103,10 +103,10 @@ public class Precompiled
             {
                 var envItem = envItems[i];
 
-                var environmentValue = environment.Evaluate();
-
-                if (envItem.EnvConstraint.SatisfiedByValue(environmentValue))
+                if (envItem.EnvConstraint.SatisfiedByValue(environment))
                 {
+                    var environmentValue = environment.Evaluate();
+
                     return envItem.PrecompiledDelegate.Invoke(environmentValue, parseCache);
                 }
             }

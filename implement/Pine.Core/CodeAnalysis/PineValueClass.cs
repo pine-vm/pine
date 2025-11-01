@@ -1,3 +1,4 @@
+using Pine.Core.Internal;
 using Pine.Core.PopularEncodings;
 using System;
 using System.Collections.Generic;
@@ -58,6 +59,27 @@ public record PineValueClass
                 var (path, expectedValue) = Constraints.Span[i];
 
                 if (CodeAnalysis.ValueFromPathInValue(concreteValue, path.Span) is not { } pathValue)
+                    return false;
+
+                if (!pathValue.Equals(expectedValue))
+                    return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Tests whether the given <see cref="PineValueInProcess"/> is a member of the class.
+        /// </summary>
+        /// <param name="concreteValue">The value to test.</param>
+        /// <returns>True if all constraints are satisfied; otherwise false.</returns>
+        public bool SatisfiedByValue(PineValueInProcess concreteValue)
+        {
+            for (var i = 0; i < Constraints.Length; ++i)
+            {
+                var (path, expectedValue) = Constraints.Span[i];
+
+                if (PineValueInProcess.ValueFromPathOrNull(concreteValue, path.Span) is not { } pathValue)
                     return false;
 
                 if (!pathValue.Equals(expectedValue))
@@ -247,6 +269,16 @@ public record PineValueClass
     /// <param name="concreteValue">The value to test.</param>
     /// <returns>True if the value satisfies all constraints; otherwise false.</returns>
     public bool SatisfiedByValue(PineValue concreteValue)
+    {
+        return _fastRepresentation.SatisfiedByValue(concreteValue);
+    }
+
+    /// <summary>
+    /// Tests whether the provided concrete value satisfies all constraints in this class.
+    /// </summary>
+    /// <param name="concreteValue">The value to test.</param>
+    /// <returns>True if the value satisfies all constraints; otherwise false.</returns>
+    public bool SatisfiedByValue(PineValueInProcess concreteValue)
     {
         return _fastRepresentation.SatisfiedByValue(concreteValue);
     }
