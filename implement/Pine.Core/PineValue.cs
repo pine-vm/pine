@@ -278,6 +278,8 @@ public abstract record PineValue : IEquatable<PineValue>
 
             nodesCount = items.Length;
             blobsBytesCount = 0;
+            
+            // Empty lists have depth 0, non-empty lists start with depth 1 (the list itself)
             maxDepth = items.Length > 0 ? 1 : 0;
 
             var length = items.Length;
