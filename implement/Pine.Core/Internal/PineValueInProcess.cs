@@ -166,7 +166,16 @@ public class PineValueInProcess
 
         if (_list is not null)
         {
-            _evaluated = PineValue.List([.. _list.Select(item => item.Evaluate())]);
+            var evaluatedItems =
+                new PineValue[_list.Count];
+
+            for (var i = 0; i < _list.Count; i++)
+            {
+                evaluatedItems[i] = _list[i].Evaluate();
+            }
+
+            _evaluated = PineValue.List(evaluatedItems);
+
             return _evaluated;
         }
 
