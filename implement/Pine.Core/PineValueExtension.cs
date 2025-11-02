@@ -44,17 +44,41 @@ public static class PineValueExtension
     /// </summary>
     /// <param name="environment">The root <see cref="PineValue"/> to start navigation from.</param>
     /// <param name="path">A sequence of zero-based indices indicating which item to select at each list level. Negative indices are treated as 0.</param>
+    /// <param name="startOffset">The index in the path to start from.</param>
     /// <returns>
     /// The <see cref="PineValue"/> found at the specified path, or <see cref="PineValue.EmptyList"/> if any step
     /// encounters a non-list value or an out-of-range index.
     /// </returns>
     public static PineValue ValueFromPathOrEmptyList(
         this PineValue environment,
-        IReadOnlyList<int> path)
+        IReadOnlyList<int> path,
+        int startOffset = 0)
+    {
+        return
+            ValueFromPathOrNull(
+                environment,
+                path,
+                startOffset) ?? PineValue.EmptyList;
+    }
+
+    /// <summary>
+    /// Navigates a nested <see cref="PineValue"/> list structure by following the given sequence of indices.
+    /// </summary>
+    /// <param name="environment">The root <see cref="PineValue"/> to start navigation from.</param>
+    /// <param name="path">A sequence of zero-based indices indicating which item to select at each list level. Negative indices are treated as 0.</param>
+    /// <param name="startOffset">The index in the path to start from.</param>
+    /// <returns>
+    /// The <see cref="PineValue"/> found at the specified path, or <langword>null</langword> if any step
+    /// encounters a non-list value or an out-of-range index.
+    /// </returns>
+    public static PineValue? ValueFromPathOrNull(
+        this PineValue environment,
+        IReadOnlyList<int> path,
+        int startOffset = 0)
     {
         var currentNode = environment;
 
-        for (var i = 0; i < path.Count; i++)
+        for (var i = startOffset; i < path.Count; i++)
         {
             if (currentNode is not PineValue.ListValue listValue)
                 return PineValue.EmptyList;

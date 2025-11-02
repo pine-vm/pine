@@ -540,6 +540,7 @@ public class PineValueInProcess
             {
                 return Create(PineValue.EmptyBlob);
             }
+
             return Create(PineValue.BlobSingleByte(blobValue.Bytes.Span[index]));
         }
 
@@ -742,6 +743,13 @@ public class PineValueInProcess
 
         for (var i = 0; i < path.Length; i++)
         {
+            if (current._evaluated is { } currentMaterialized)
+            {
+                return PineValueExtension.ValueFromPathOrNull(
+                    currentMaterialized,
+                    path[i..]);
+            }
+
             current = current.GetElementAt(path[i]);
 
             if (current is null)
@@ -761,6 +769,14 @@ public class PineValueInProcess
 
         for (var i = 0; i < path.Count; i++)
         {
+            if (current._evaluated is { } currentMaterialized)
+            {
+                return PineValueExtension.ValueFromPathOrNull(
+                    currentMaterialized,
+                    path,
+                    startOffset: i);
+            }
+
             current = current.GetElementAt(path[i]);
 
             if (current is null)
