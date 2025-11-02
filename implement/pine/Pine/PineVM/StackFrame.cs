@@ -12,7 +12,7 @@ record StackFrame(
     Expression Expression,
     StackFrameInstructions Instructions,
     StackFrameInput InputValues,
-    Memory<PineValueInProcess> StackValues,
+    Memory<PineValueInProcess?> StackValues,
     Memory<PineValueInProcess> LocalsValues,
     StackFrameProfilingBaseline ProfilingBaseline,
     ApplyStepwise? Specialization)
@@ -79,7 +79,15 @@ record StackFrame(
             throw new InvalidOperationException("ConsumeSingleFromStack called with empty stack");
 
         --StackPointer;
-        return StackValues.Span[StackPointer];
+
+        var itemValue =
+            StackValues.Span[StackPointer]
+            ??
+            throw new InvalidOperationException("Invalid program code: null reference on pop from stack");
+
+        StackValues.Span[StackPointer] = null;
+
+        return itemValue;
     }
 
     public PineValueInProcess PeekTopmostFromStack()
@@ -87,7 +95,12 @@ record StackFrame(
         if (StackPointer <= 0)
             throw new InvalidOperationException("PeekTopmostFromStack called with empty stack");
 
-        return StackValues.Span[StackPointer - 1];
+        var itemValue =
+            StackValues.Span[StackPointer - 1]
+            ??
+            throw new InvalidOperationException("Invalid program code: null reference on pop from stack");
+
+        return itemValue;
     }
 }
 
