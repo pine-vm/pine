@@ -1749,9 +1749,12 @@ public class PineVM : IPineVM
 
                             if (skipCountValue.AsInteger() is { } skipCount)
                             {
+                                var skipCountInt =
+                                    skipCount < 0 ? 0 : (int)skipCount;
+
                                 resultValue =
                                     slicedValue.StartsWithConstAtOffsetVar(
-                                        offset: (int)skipCount,
+                                        offset: skipCountInt,
                                         prefix: prefixValue)
                                     ?
                                     PineKernelValues.TrueValue

@@ -825,7 +825,6 @@ public class PineValueInProcess
     /// </returns>
     /// <remarks>
     /// This method is optimized to avoid fully evaluating the value when possible.
-    /// If the offset is not a valid integer, returns true only if the prefix is <see cref="PineValue.EmptyList"/>.
     /// </remarks>
     public bool StartsWithConstAtOffsetVar(int offset, PineValue prefix)
     {
