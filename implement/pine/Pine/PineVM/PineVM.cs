@@ -1745,7 +1745,7 @@ public class PineVM : IPineVM
 
                             var slicedValue = currentFrame.PopTopmostFromStack();
 
-                            var resultValue = PineKernelValues.FalseValue;
+                            var resultValue = false;
 
                             if (skipCountValue.AsInteger() is { } skipCount)
                             {
@@ -1755,23 +1755,16 @@ public class PineVM : IPineVM
                                 resultValue =
                                     slicedValue.StartsWithConstAtOffsetVar(
                                         offset: skipCountInt,
-                                        prefix: prefixValue)
-                                    ?
-                                    PineKernelValues.TrueValue
-                                    :
-                                    PineKernelValues.FalseValue;
+                                        prefix: prefixValue);
                             }
                             else
                             {
                                 resultValue =
-                                    prefixValue == PineValue.EmptyList
-                                    ?
-                                    PineKernelValues.TrueValue
-                                    :
-                                    PineKernelValues.FalseValue;
+                                    prefixValue == PineValue.EmptyList;
                             }
 
-                            currentFrame.PushInstructionResult(PineValueInProcess.Create(resultValue));
+                            currentFrame.PushInstructionResult(
+                                PineValueInProcess.CreateBool(resultValue));
 
                             continue;
                         }
