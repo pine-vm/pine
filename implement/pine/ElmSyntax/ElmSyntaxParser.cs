@@ -1924,16 +1924,20 @@ public class ElmSyntaxParser
             // Handle identifiers (start with letter or underscore, then letters, digits or underscores)
             if (char.IsLetter(current) || current is '_')
             {
-                var identifier = new StringBuilder(capacity: 16);
+                var identifierBuilder = new StringBuilder(capacity: 16);
 
                 while (!IsAtEnd() && (char.IsLetterOrDigit(Peek()) || Peek() is '_'))
                 {
-                    identifier.Append(Advance());
+                    identifierBuilder.Append(Advance());
                 }
 
                 Location end = new(_line, _column);
 
-                return new Token(TokenType.Identifier, identifier.ToString(), start, end);
+                var identifier = identifierBuilder.ToString();
+
+                identifier = string.IsInterned(identifier) ?? identifier;
+
+                return new Token(TokenType.Identifier, identifier, start, end);
             }
 
             // Handle single-character tokens and multi-character tokens like the arrow "->"

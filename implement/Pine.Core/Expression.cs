@@ -404,6 +404,8 @@ public abstract record Expression
             string function,
             Expression input)
         {
+            function = PopularValues.InternIfKnown(function);
+
             _slimHashCode = HashCode.Combine(function, input);
 
             Function = function;

@@ -830,7 +830,7 @@ public class FormatCSharpSyntaxRewriter(
     /// <param name="indentCharsPerLevel">The number of <paramref name="indentChar"/> characters per level.</param>
     /// <returns>A string containing only indentation characters.</returns>
     public static string IndentationTextForLevel(int level, char indentChar, int indentCharsPerLevel) =>
-        new(indentChar, level * indentCharsPerLevel);
+        string.Intern(new(indentChar, level * indentCharsPerLevel));
 
     /// <summary>
     /// Computes the indentation level for the specified <paramref name="node"/> by walking up the parent

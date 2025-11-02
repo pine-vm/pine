@@ -429,7 +429,7 @@ public static class StaticExpressionDisplay
     {
         if (3 < blobValue.Bytes.Length)
         {
-            var asStringResult = StringEncoding.StringFromBlobValue(blobValue.Bytes);
+            var asStringResult = StringEncoding.StringFromValue(blobValue);
 
             if (asStringResult.IsOkOrNull() is { } asString && ElmValueEncoding.StringIsValidTagName(asString))
             {

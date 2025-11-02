@@ -28,6 +28,12 @@ public static class StringEncoding
             keySelector: s => s,
             elementSelector: ValueFromString_2024);
 
+    private static readonly FrozenDictionary<PineValue, string> s_reusedStringFromValue =
+        ReusedInstances
+        .ToFrozenDictionary(
+            keySelector: kvp => kvp.Value,
+            elementSelector: kvp => kvp.Key);
+
     private static readonly FrozenDictionary<PineValue.ListValue, string> CommonStringsDecodedAsList =
         ReusedInstances_2024
         .ToFrozenDictionary(
@@ -131,6 +137,13 @@ public static class StringEncoding
     /// </summary>
     public static Result<string, string> StringFromValue(PineValue pineValue)
     {
+        if (s_reusedStringFromValue is { } dict &&
+            dict.TryGetValue(pineValue, out var reusedInst) &&
+            reusedInst is not null)
+        {
+            return Result<string, string>.ok(reusedInst);
+        }
+
         if (pineValue is PineValue.ListValue list)
             return StringFromListValue(list);
 
@@ -179,7 +192,10 @@ public static class StringEncoding
             stringBuilder.Append(char.ConvertFromUtf32(codePoint));
         }
 
-        return Result<string, string>.ok(stringBuilder.ToString());
+        var asString =
+            PopularValues.InternIfKnown(stringBuilder.ToString());
+
+        return Result<string, string>.ok(asString);
     }
 
     public static Result<string, string> StringFromListValue(PineValue.ListValue list)

@@ -1,16 +1,28 @@
 using Pine.Core.Elm;
+using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 
 namespace Pine.Core;
 
 public static class PopularValues
 {
-    public static readonly IReadOnlyList<string> PopularStrings =
-        [.. PopularStringsSource
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static string InternIfKnown(string s)
+    {
+        if (string.IsInterned(s) is { } interned)
+            return interned;
+
+        return PopularStrings.Contains(s) ? string.Intern(s) : s;
+    }
+
+    public static readonly FrozenSet<string> PopularStrings =
+        PopularStringsSource
         .Concat(SingleCharStrings)
         .Concat(TwoLetterStrings)
-        .Distinct()];
+        .Select(string.Intern)
+        .ToFrozenSet(System.StringComparer.Ordinal);
 
     private static IEnumerable<string> SingleCharStrings =>
         from c in Enumerable.Range(0, 128)
@@ -23,6 +35,11 @@ public static class PopularValues
 
     private static IEnumerable<string> PopularStringsSource =>
     [
+        new string(' ', 4),
+        new string(' ', 8),
+        new string(' ', 12),
+        new string(' ', 16),
+
         "Pine",
         "pine",
         "Pine_kernel",

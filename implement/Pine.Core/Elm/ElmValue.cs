@@ -505,12 +505,23 @@ public abstract record ElmValue
     /// <summary>
     /// Represents an Elm string value.
     /// </summary>
-    /// <param name="Value">The string value.</param>
-    public record ElmString(string Value)
+    public record ElmString
         : ElmValue
     {
+        /// <summary>
+        /// Gets the string value represented by this instance.
+        /// </summary>
+        public string Value { get; }
+
         /// <inheritdoc/>
         public override int ContainedNodesCount { get; } = 0;
+
+        internal ElmString(string value)
+        {
+            value = PopularValues.InternIfKnown(value);
+
+            Value = value;
+        }
     }
 
     /// <summary>

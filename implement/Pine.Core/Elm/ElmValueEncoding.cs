@@ -269,7 +269,7 @@ public static class ElmValueEncoding
                         {
                             // Optimize, especially for the case of an Elm Tag.
 
-                            if (StringEncoding.StringFromBlobValue(tagBlobValue.Bytes).IsOkOrNull() is { } tagName)
+                            if (StringEncoding.StringFromValue(tagBlobValue).IsOkOrNull() is { } tagName)
                             {
                                 if (StringIsValidTagName(tagName))
                                 {
