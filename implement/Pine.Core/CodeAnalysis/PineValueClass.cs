@@ -508,7 +508,7 @@ public record PineValueClass
     /// Expression to analyze. Recognized cases:
     /// - <see cref="Expression.Environment"/>: returns <paramref name="envClass"/>.
     /// - <see cref="Expression.Literal"/>: returns an equality constraint to the literal value.
-    /// - Path in parent env (via <see cref="CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(Expression)"/>):
+    /// - Path in parent env (via <see cref="CodeAnalysis.TryParseExprAsPathInEnv(Expression)"/>):
     ///   if the path resolves in <paramref name="envClass"/>, returns an equality constraint to that value;
     ///   otherwise returns the projection of <paramref name="envClass"/> under that path via <see cref="PartUnderPath"/>.
     /// - <see cref="Expression.List"/>: maps each item recursively and combines constraints under their list indices.
@@ -532,15 +532,14 @@ public record PineValueClass
             return CreateEquals(literal.Value);
         }
 
-        if (CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(expression) is
-            ExprMappedToParentEnv.PathInParentEnv pathInParentEnv)
+        if (CodeAnalysis.TryParseExprAsPathInEnv(expression) is { } pathInParentEnv)
         {
-            if (envClass.TryGetValue(pathInParentEnv.Path) is { } valueAtPath)
+            if (envClass.TryGetValue(pathInParentEnv) is { } valueAtPath)
             {
                 return CreateEquals(valueAtPath);
             }
 
-            return envClass.PartUnderPath(pathInParentEnv.Path);
+            return envClass.PartUnderPath(pathInParentEnv);
         }
 
         if (expression is Expression.List listExpr)

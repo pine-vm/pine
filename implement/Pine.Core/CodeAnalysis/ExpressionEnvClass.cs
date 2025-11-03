@@ -90,12 +90,12 @@ public abstract record ExpressionEnvClass
     /// A mapping descriptor to the parent environment when possible; otherwise null. If <paramref name="path"/> is empty,
     /// returns the mapping for <paramref name="envExpr"/> itself.
     /// </returns>
-    public static ExprMappedToParentEnv? TryMapPathToParentEnvironment(
+    public static IReadOnlyList<int>? TryMapPathToParentEnvironment(
         Expression envExpr,
         IReadOnlyList<int> path)
     {
         if (path.Count is 0)
-            return CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(envExpr);
+            return CodeAnalysis.TryParseExprAsPathInEnv(envExpr);
 
         var currentIndex = path[0];
 

@@ -693,19 +693,16 @@ public record ExpressionCompilation(
                 findReplacement:
                 descendant =>
                 {
-                    if (Core.CodeAnalysis.CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(descendant) is { } indexPath)
+                    if (Core.CodeAnalysis.CodeAnalysis.TryParseAsLiteral(descendant) is { } literal)
                     {
-                        if (indexPath is ExprMappedToParentEnv.LiteralInParentEnv asLiteral)
-                        {
-                            return Expression.LiteralInstance(asLiteral.Value);
-                        }
+                        return Expression.LiteralInstance(literal);
+                    }
 
-                        if (indexPath is ExprMappedToParentEnv.PathInParentEnv pathInParentEnv)
+                    if (Core.CodeAnalysis.CodeAnalysis.TryParseExprAsPathInEnv(descendant) is { } pathInEnv)
+                    {
+                        if (envConstraintId.TryGetValue(pathInEnv) is { } value)
                         {
-                            if (envConstraintId?.TryGetValue(pathInParentEnv.Path) is { } value)
-                            {
-                                return Expression.LiteralInstance(value);
-                            }
+                            return Expression.LiteralInstance(value);
                         }
                     }
 

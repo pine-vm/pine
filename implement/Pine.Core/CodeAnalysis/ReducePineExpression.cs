@@ -291,19 +291,17 @@ public class ReducePineExpression
         if (expression is Expression.Literal)
             return null;
 
-        if (CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(expression) is { } parsedAsPath)
+        if (CodeAnalysis.TryParseAsLiteral(expression) is { } literalValue)
         {
-            if (parsedAsPath is ExprMappedToParentEnv.LiteralInParentEnv asLiteral)
-            {
-                return Expression.LiteralInstance(asLiteral.Value);
-            }
+            return Expression.LiteralInstance(literalValue);
+        }
 
-            if (parsedAsPath is ExprMappedToParentEnv.PathInParentEnv asPath && envConstraintId is not null)
+        if (envConstraintId is not null &&
+            CodeAnalysis.TryParseExprAsPathInEnv(expression) is { } parsedAsPath)
+        {
+            if (envConstraintId.TryGetValue(parsedAsPath) is { } fromEnvConstraint)
             {
-                if (envConstraintId.TryGetValue(asPath.Path) is { } fromEnvConstraint)
-                {
-                    return Expression.LiteralInstance(fromEnvConstraint);
-                }
+                return Expression.LiteralInstance(fromEnvConstraint);
             }
         }
 
@@ -735,11 +733,17 @@ public class ReducePineExpression
             yield return (listExpr.Items.Count, listExpr.Items.Count);
         }
 
-        var asParsedPath = CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(expression);
-
-        if (asParsedPath is ExprMappedToParentEnv.PathInParentEnv itemPath)
+        if (CodeAnalysis.TryParseAsLiteral(expression) is { } literal)
         {
-            var itemConstraint = envConstraintId.PartUnderPath(itemPath.Path);
+            if (literal is PineValue.ListValue literalList)
+            {
+                yield return (literalList.Items.Length, literalList.Items.Length);
+            }
+        }
+
+        if (CodeAnalysis.TryParseExprAsPathInEnv(expression) is { } itemPath)
+        {
+            var itemConstraint = envConstraintId.PartUnderPath(itemPath);
 
             foreach (var itemConstraintItem in itemConstraint.ParsedItems)
             {
@@ -754,14 +758,6 @@ public class ReducePineExpression
                 {
                     yield return (itemConstraintItem.Key[0] + 1, null);
                 }
-            }
-        }
-
-        if (asParsedPath is ExprMappedToParentEnv.LiteralInParentEnv literal)
-        {
-            if (literal.Value is PineValue.ListValue literalList)
-            {
-                yield return (literalList.Items.Length, literalList.Items.Length);
             }
         }
 

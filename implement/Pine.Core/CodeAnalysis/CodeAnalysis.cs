@@ -687,10 +687,9 @@ public class CodeAnalysis
         PineValueClass envValueClass,
         PineVMParseCache parseCache)
     {
-        if (TryParseExpressionAsIndexPathFromEnv(expression) is
-            ExprMappedToParentEnv.PathInParentEnv asPath)
+        if (TryParseExprAsPathInEnv(expression) is { } asPath)
         {
-            if (envValueClass.TryGetValue(asPath.Path) is { } valueFromEnvClass)
+            if (envValueClass.TryGetValue(asPath) is { } valueFromEnvClass)
             {
                 return
                     StaticExpressionGen.LiteralInstance(valueFromEnvClass);
@@ -948,12 +947,11 @@ public class CodeAnalysis
         PineVMParseCache parseCache)
     {
         if (parseAndEval.Encoded.ReferencesEnvironment &&
-            TryParseExpressionAsIndexPathFromEnv(parseAndEval.Encoded) is
-            ExprMappedToParentEnv.PathInParentEnv pathInParentEnv)
+            TryParseExprAsPathInEnv(parseAndEval.Encoded) is { } pathInParentEnv)
         {
             // Try get function value from the environment class:
 
-            if (envValueClass.TryGetValue(pathInParentEnv.Path) is not { } valueFromPath)
+            if (envValueClass.TryGetValue(pathInParentEnv) is not { } valueFromPath)
             {
                 // Cannot interpret the encoded part as a path from the environment.
                 // This means we cannot statically determine what part of the environment
@@ -962,7 +960,7 @@ public class CodeAnalysis
 
                 return
                     "Could not find value for parseAndEval.Encoded path [" +
-                    string.Join(',', pathInParentEnv.Path) + "] in the given environment";
+                    string.Join(',', pathInParentEnv) + "] in the given environment";
             }
 
             return valueFromPath;
@@ -1484,7 +1482,6 @@ public class CodeAnalysis
 
         return ValueFromPathInValue(listValue.Items.Span[path[0]], path[1..]);
     }
-
     /// <summary>
     /// Returns a mapping for the given expression if it corresponds to a path from the environment root,
     /// otherwise returns <c>null</c>.
@@ -1497,70 +1494,118 @@ public class CodeAnalysis
     /// </returns>
     public static ExprMappedToParentEnv? TryParseExpressionAsIndexPathFromEnv(Expression expression)
     {
+        if (TryParseAsLiteral(expression) is { } literalValue)
+        {
+            return new ExprMappedToParentEnv.LiteralInParentEnv(literalValue);
+        }
+
+        if (TryParseExprAsPathInExpr(
+            pathExpression: expression,
+            rootExpression: Expression.EnvironmentInstance) is { } pathInParentEnv)
+        {
+            return new ExprMappedToParentEnv.PathInParentEnv(pathInParentEnv);
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Interprets <paramref name="pathExpression"/> as a path into the current environment,
+    /// assuming the expression navigates from <see cref="Expression.EnvironmentInstance"/>
+    /// by composing Pine kernel calls <c>head</c> and <c>skip</c>.
+    /// </summary>
+    /// <param name="pathExpression">Candidate expression representing an environment access chain.</param>
+    /// <returns>
+    /// The list of indices describing the environment path when parsing succeeds; otherwise <c>null</c>.
+    /// </returns>
+    public static IReadOnlyList<int>? TryParseExprAsPathInEnv(
+        Expression pathExpression)
+    {
         return
-            TryParseExpressionAsIndexPath(
-                pathExpression: expression,
+            TryParseExprAsPathInExpr(
+                pathExpression,
                 rootExpression: Expression.EnvironmentInstance);
     }
 
     /// <summary>
     /// Tries to interpret <paramref name="pathExpression"/> as a path relative to <paramref name="rootExpression"/>,
-    /// following the Pine built-ins <c>skip</c> and <c>head</c>.
+    /// as a combination of Pine kernel applications <c>head</c> and <c>skip</c>.
     /// </summary>
     /// <param name="pathExpression">The expression to interpret as a path.</param>
     /// <param name="rootExpression">The root expression considered as the origin of the path.</param>
-    /// <returns>
-    /// <see cref="ExprMappedToParentEnv.PathInParentEnv"/> for a recognized path, <see cref="ExprMappedToParentEnv.LiteralInParentEnv"/> for literals,
-    /// or <c>null</c> if the expression does not match a supported pattern.
-    /// </returns>
-    public static ExprMappedToParentEnv? TryParseExpressionAsIndexPath(
+    public static IReadOnlyList<int>? TryParseExprAsPathInExpr(
         Expression pathExpression,
         Expression rootExpression)
     {
         if (pathExpression == rootExpression)
-            return new ExprMappedToParentEnv.PathInParentEnv([]);
+            return [];
 
-        if (pathExpression is Expression.Literal literal)
-            return new ExprMappedToParentEnv.LiteralInParentEnv(literal.Value);
+        var pathSegments = new List<int>();
 
-        if (pathExpression is Expression.StringTag stringTagExpr)
-            return TryParseExpressionAsIndexPath(stringTagExpr.Tagged, rootExpression);
+        var currentExpression = pathExpression;
 
-        if (pathExpression is not Expression.KernelApplication kernelApplication)
-            return null;
-
-        if (kernelApplication.Function is not nameof(KernelFunction.head))
-            return null;
-
-        if (kernelApplication.Input is Expression.KernelApplication inputKernelApplication &&
-            inputKernelApplication.Function is nameof(KernelFunction.skip))
+        while (true)
         {
-            if (inputKernelApplication.Input is not Expression.List skipInputList)
+            if (currentExpression == rootExpression)
+            {
+                pathSegments.Reverse();
+
+                return pathSegments;
+            }
+
+            if (currentExpression is not Expression.KernelApplication kernelApplication)
                 return null;
 
-            if (skipInputList.Items.Count is not 2)
+            if (kernelApplication.Function is not nameof(KernelFunction.head))
                 return null;
 
-            if (skipInputList.Items[0] is not Expression.Literal skipCountLiteral)
-                return null;
+            if (kernelApplication.Input is Expression.KernelApplication inputKernelApplication &&
+                inputKernelApplication.Function is nameof(KernelFunction.skip))
+            {
+                if (inputKernelApplication.Input is not Expression.List skipInputList)
+                    return null;
 
-            if (TryParseExpressionAsIndexPath(skipInputList.Items[1], rootExpression) is not ExprMappedToParentEnv.PathInParentEnv pathPrefix)
-                return null;
+                if (skipInputList.Items.Count is not 2)
+                    return null;
 
-            return
-                KernelFunction.SignedIntegerFromValueRelaxed(skipCountLiteral.Value) is { } skipValue
-                ?
-                new ExprMappedToParentEnv.PathInParentEnv([.. pathPrefix.Path, (int)skipValue])
-                :
-                null;
+                if (skipInputList.Items[0] is not Expression.Literal skipCountLiteral)
+                    return null;
+
+                if (KernelFunction.SignedIntegerFromValueRelaxed(skipCountLiteral.Value) is not { } skipValue)
+                    return null;
+
+                pathSegments.Add((int)skipValue);
+
+                currentExpression = skipInputList.Items[1];
+            }
+            else
+            {
+                pathSegments.Add(0);
+
+                currentExpression = kernelApplication.Input;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Returns the literal <see cref="PineValue"/> carried by <paramref name="expression"/>,
+    /// unfolding <see cref="Expression.StringTag"/> layers when present.
+    /// </summary>
+    /// <param name="expression">Expression to inspect for an embedded literal value.</param>
+    /// <returns>The literal value when the expression represents one; otherwise <c>null</c>.</returns>
+    public static PineValue? TryParseAsLiteral(Expression expression)
+    {
+        if (expression is Expression.Literal literal)
+        {
+            return literal.Value;
         }
 
+        if (expression is Expression.StringTag stringTagExpr)
         {
-            if (TryParseExpressionAsIndexPath(kernelApplication.Input, rootExpression) is not ExprMappedToParentEnv.PathInParentEnv pathPrefix)
-                return null;
-
-            return new ExprMappedToParentEnv.PathInParentEnv([.. pathPrefix.Path, 0]);
+            return TryParseAsLiteral(stringTagExpr.Tagged);
         }
+
+        return null;
     }
 
     /// <summary>
@@ -1664,6 +1709,12 @@ public class CodeAnalysis
     }
 
 
+    /// <summary>
+    /// Computes the minimal environment class that still satisfies all parse-and-eval dependencies of <paramref name="expression"/>.
+    /// </summary>
+    /// <param name="expression">Root expression of the static program.</param>
+    /// <param name="availableEnvironment">Environment class used as the search space for required entries.</param>
+    /// <returns>A class containing exactly the environment entries required for successful parsing, or an error description.</returns>
     public static Result<string, PineValueClass> MinimalValueClassForStaticProgram(
         Expression expression,
         PineValueClass availableEnvironment)
@@ -1687,17 +1738,17 @@ public class CodeAnalysis
                 continue;
             }
 
-            if (TryParseExpressionAsIndexPathFromEnv(parseAndEval.Encoded) is not ExprMappedToParentEnv.PathInParentEnv pathInParentEnv)
+            if (TryParseExprAsPathInEnv(parseAndEval.Encoded) is not { } pathInParentEnv)
             {
                 return "Could not interpret parseAndEval.Encoded as path from environment";
             }
 
-            if (availableEnvironment.TryGetValue(pathInParentEnv.Path) is not { } valueAtPath)
+            if (availableEnvironment.TryGetValue(pathInParentEnv) is not { } valueAtPath)
             {
                 return "Environment does not contain value at path required by parseAndEval";
             }
 
-            parsedItems[pathInParentEnv.Path] = valueAtPath;
+            parsedItems[pathInParentEnv] = valueAtPath;
         }
 
         return

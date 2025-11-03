@@ -49,6 +49,9 @@ public class PineIRCompiler
         IReadOnlyDictionary<Expression.ParseAndEval, JumpToLoop> TailCallElimination,
         int InstructionOffset)
     {
+        public static CompilationContext Init() =>
+            Init(tailCallElimination: ImmutableDictionary<Expression.ParseAndEval, JumpToLoop>.Empty);
+
         public static CompilationContext Init(
             IReadOnlyDictionary<Expression.ParseAndEval, JumpToLoop> tailCallElimination) =>
             new(
@@ -78,58 +81,9 @@ public class PineIRCompiler
         PineValueClass? envClass,
         PineVMParseCache parseCache)
     {
-        /*
-         * Tail calls are invocations that are either the root expression of the root of a branch of a conditional that is the root.
-         * Since an unconditional invocation makes no sense in practice, we can focus on the invocations in conditional branches.
-         * */
-
-        var allTailCalls =
-            EnumerateTailCalls(rootExpression)
-            .ToImmutableArray();
-
-        /*
-         * At the moment, we only optimize cases with direct recursion, not mutual recursion.
-         * */
-
-        JumpToLoop? TailCallElimination(Expression.ParseAndEval parseAndEval)
-        {
-            if (envClass is null)
-                return null;
-
-            if (!IsRecursiveCall(
-                parseAndEval,
-                envClass,
-                rootExprForms: rootExprAlternativeForms.Add(rootExpression),
-                parseCache))
-            {
-                return null;
-            }
-
-            return new JumpToLoop(
-                DestinationInstructionIndex: 0,
-                EnvironmentLocalIndex: 0);
-        }
-
-        var tailCallEliminationDict =
-            allTailCalls
-            .SelectWhere(callExpr =>
-            Maybe.NothingFromNull(TailCallElimination(callExpr))
-            .Map(jump => new KeyValuePair<Expression.ParseAndEval, JumpToLoop>(callExpr, jump)))
-            .ToImmutableDictionary();
-
         var priorBeforeParameters =
-            tailCallEliminationDict.IsEmpty
-            ?
             new NodeCompilationResult(
                 Instructions: [],
-                ImmutableDictionary<Expression, int>.Empty)
-            :
-            new NodeCompilationResult(
-                Instructions:
-                [
-                    // 2025-10-26: Currently, we store in local(0) what used to be the 'environment'.
-                    // TODO: Introduce mapping to individual parameters
-                ],
                 ImmutableDictionary<Expression, int>.Empty
                 .SetItem(Expression.EnvironmentInstance, 0));
 
@@ -146,51 +100,9 @@ public class PineIRCompiler
             CompileExpressionTransitive(
                 rootExpression,
                 context:
-                CompilationContext.Init(tailCallEliminationDict),
+                CompilationContext.Init(),
                 prior: prior,
                 parseCache);
-    }
-
-    public static bool IsRecursiveCall(
-        Expression.ParseAndEval parseAndEval,
-        PineValueClass envClass,
-        ImmutableHashSet<Expression> rootExprForms,
-        PineVMParseCache parseCache)
-    {
-        if (Core.CodeAnalysis.CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(parseAndEval.Encoded) is not
-            ExprMappedToParentEnv.PathInParentEnv encodedPath)
-        {
-            return false;
-        }
-
-        var childPathEnvMap = CodeAnalysis.BuildPathMapFromChildToParentEnv(parseAndEval.Environment);
-
-        if (childPathEnvMap(encodedPath.Path) is not { } encodedPathMapped)
-        {
-            return false;
-        }
-
-        if (!encodedPathMapped.Equals(encodedPath))
-        {
-            return false;
-        }
-
-        if (envClass.TryGetValue(encodedPath.Path) is not { } envClassValueAtPath)
-        {
-            return false;
-        }
-
-        if (parseCache.ParseExpression(envClassValueAtPath).IsOkOrNull() is not { } parsedExpr)
-        {
-            return false;
-        }
-
-        if (rootExprForms.Contains(parsedExpr))
-        {
-            return true;
-        }
-
-        return false;
     }
 
     public static IEnumerable<Expression.ParseAndEval> EnumerateTailCalls(Expression expression)

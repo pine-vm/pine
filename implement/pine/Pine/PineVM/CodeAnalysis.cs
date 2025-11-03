@@ -69,27 +69,26 @@ public class CodeAnalysis
             .OfType<Expression.ParseAndEval>()
             .Select(parseAndEvalExpr =>
             {
-                var encodedMapped =
-                Core.CodeAnalysis.CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(parseAndEvalExpr.Encoded);
+                PineValue? expressionValue = null;
 
-                var expressionValue =
-                encodedMapped switch
+                if (Core.CodeAnalysis.CodeAnalysis.TryParseAsLiteral(parseAndEvalExpr.Encoded) is { } literalValue)
                 {
-                    ExprMappedToParentEnv.LiteralInParentEnv literalInParentEnv =>
-                    literalInParentEnv.Value,
+                    expressionValue = literalValue;
+                }
+                else
+                {
+                    if (Core.CodeAnalysis.CodeAnalysis.TryParseExprAsPathInEnv(parseAndEvalExpr.Encoded) is { } path)
+                    {
+                        expressionValue = environment.TryGetValue(path);
 
-                    ExprMappedToParentEnv.PathInParentEnv pathInParentEnv =>
-                    environment.TryGetValue(pathInParentEnv.Path),
-
-                    null =>
-                    /*
-                     * The parsing is not smart enough to understand this case.
-                     * */
-                    null,
-
-                    _ =>
-                    throw new NotImplementedException(encodedMapped.ToString())
-                };
+                        return
+                        new ParseSubExpression(
+                            parseAndEvalExpr,
+                            ExpressionPath: path,
+                            expressionValue,
+                            ParsedExpr: null);
+                    }
+                }
 
                 if (expressionValue is null)
                 {
@@ -114,7 +113,7 @@ public class CodeAnalysis
                 return
                     new ParseSubExpression(
                         parseAndEvalExpr,
-                        ExpressionPath: (encodedMapped as ExprMappedToParentEnv.PathInParentEnv)?.Path,
+                        ExpressionPath: null,
                         expressionValue,
                         ParsedExpr: parsedExpr);
             })
@@ -600,11 +599,7 @@ public class CodeAnalysis
             Expression.EnumerateSelfAndDescendants(expression)
             .SelectWhereNotNull(
                 expr =>
-                Core.CodeAnalysis.CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(expr) is ExprMappedToParentEnv.PathInParentEnv path
-                ?
-                path.Path
-                :
-                null)
+                Core.CodeAnalysis.CodeAnalysis.TryParseExprAsPathInEnv(expr))
             .ToHashSet(IntPathEqualityComparer.Instance);
 
         bool KeepClassItemPath(IReadOnlyList<int> classItemPath)
@@ -660,13 +655,7 @@ public class CodeAnalysis
 
         static ImmutableHashSet<IReadOnlyList<int>> ObservedPathsFromExpression(Expression expression) =>
             Expression.EnumerateSelfAndDescendants(expression)
-            .SelectWhereNotNull(
-                expr =>
-                Core.CodeAnalysis.CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(expr) is ExprMappedToParentEnv.PathInParentEnv path
-                ?
-                path.Path
-                :
-                null)
+            .SelectWhereNotNull(Core.CodeAnalysis.CodeAnalysis.TryParseExprAsPathInEnv)
             .ToImmutableHashSet(IntPathEqualityComparer.Instance);
 
         var rootObservedPaths = ObservedPathsFromExpression(rootExpression);

@@ -139,13 +139,12 @@ public record NamesFromCompiledEnv
         {
             // Which env function is the entry pointing to?
 
-            if (CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(innerParseAndEval.Encoded) is
-                ExprMappedToParentEnv.PathInParentEnv bodyExprPath)
+            if (CodeAnalysis.TryParseExprAsPathInEnv(innerParseAndEval.Encoded) is { } bodyExprPath)
             {
-                if (bodyExprPath.Path.Count is 2 &&
-                    bodyExprPath.Path[0] is 0 && bodyExprPath.Path[1] < functionRecord.EnvFunctions.Length)
+                if (bodyExprPath.Count is 2 &&
+                    bodyExprPath[0] is 0 && bodyExprPath[1] < functionRecord.EnvFunctions.Length)
                 {
-                    var namedValue = functionRecord.EnvFunctions.Span[bodyExprPath.Path[1]];
+                    var namedValue = functionRecord.EnvFunctions.Span[bodyExprPath[1]];
 
                     var innerEnvClass =
                         PineValueClass.MapValueClass(outerEnvClass, innerParseAndEval.Environment);

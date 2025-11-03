@@ -64,9 +64,9 @@ public record FunctionCompilationEnv(
         return
             [..expressions
                 .SelectMany<Expression, (Expression subExpr, IReadOnlyList<int> path)>(subExpr =>
-                CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(subExpr) is ExprMappedToParentEnv.PathInParentEnv subExprPath
+                CodeAnalysis.TryParseExprAsPathInEnv(subExpr) is { } subExprPath
                 ?
-                [(subExpr, subExprPath.Path)]
+                [(subExpr, subExprPath)]
                 :
                 [])];
     }
@@ -181,9 +181,9 @@ public record ExprFunctionCompilationInterface(
         return
             [..expressions
                 .SelectMany<Expression, (Expression subExpr, IReadOnlyList<int> path)>(subExpr =>
-                CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(subExpr) is ExprMappedToParentEnv.PathInParentEnv subExprPath
+                CodeAnalysis.TryParseExprAsPathInEnv(subExpr) is { } subExprPath
                 ?
-                [(subExpr, subExprPath.Path)]
+                [(subExpr, subExprPath)]
                 :
                 [])];
     }
@@ -228,17 +228,14 @@ public record ExprFunctionCompilationInterface(
         Expression expression,
         PineValueClass? envConstraint)
     {
-        if (CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(expression) is not { } exprMappedToParent)
-            return null;
-
-        if (exprMappedToParent is ExprMappedToParentEnv.LiteralInParentEnv asLiteral)
+        if (CodeAnalysis.TryParseAsLiteral(expression) is { } asLiteral)
         {
-            return new ExprResolvedInFunction.ExprResolvedToLiteral(asLiteral.Value);
+            return new ExprResolvedInFunction.ExprResolvedToLiteral(asLiteral);
         }
 
-        if (exprMappedToParent is ExprMappedToParentEnv.PathInParentEnv pathInParentEnv)
+        if (CodeAnalysis.TryParseExprAsPathInEnv(expression) is { } pathInParentEnv)
         {
-            if (envConstraint?.TryGetValue(pathInParentEnv.Path) is { } fromEnvConstraint)
+            if (envConstraint?.TryGetValue(pathInParentEnv) is { } fromEnvConstraint)
             {
                 return new ExprResolvedInFunction.ExprResolvedToLiteral(fromEnvConstraint);
             }
@@ -252,7 +249,7 @@ public record ExprFunctionCompilationInterface(
                 return new ExprResolvedInFunction.ExprResolvedToFunctionParam(paramName);
             */
 
-            if (functionInterface.GetParamForEnvItemPath(pathInParentEnv.Path) is not { } match)
+            if (functionInterface.GetParamForEnvItemPath(pathInParentEnv) is not { } match)
                 return null;
 
             return
