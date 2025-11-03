@@ -38,8 +38,6 @@ public class PineVM : IPineVM
 
     public readonly PineVMParseCache parseCache = new();
 
-    private readonly IReadOnlyDictionary<PineValue, Func<EvalExprDelegate, PineValue, Result<string, PineValue>>>? overrideInvocations;
-
     private readonly IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>? _precompiledLeaves;
 
     private readonly Action<PineValue, PineValue>? _reportEnterPrecompiledLeaf;
@@ -59,7 +57,6 @@ public class PineVM : IPineVM
         IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>? precompiledLeaves = null,
         Action<PineValue, PineValue>? reportEnterPrecompiledLeaf = null,
         Action<PineValue, PineValue, PineValue?>? reportExitPrecompiledLeaf = null,
-        IReadOnlyDictionary<PineValue, Func<EvalExprDelegate, PineValue, Result<string, PineValue>>>? overrideInvocations = null,
         IReadOnlyDictionary<PineValue, IReadOnlyList<string>>? expressionsDisplayNames = null)
     {
         EvalCache = evalCache;
@@ -83,8 +80,6 @@ public class PineVM : IPineVM
 
         _reportEnterPrecompiledLeaf = reportEnterPrecompiledLeaf;
         _reportExitPrecompiledLeaf = reportExitPrecompiledLeaf;
-
-        this.overrideInvocations = overrideInvocations;
     }
 
     public Result<string, PineValue> EvaluateExpression(
@@ -265,6 +260,36 @@ public class PineVM : IPineVM
         {
             var currentFrame = stack.Peek();
 
+            if (EvalCache is { } evalCache && expressionValue is not null)
+            {
+                var isTailCallRecursion =
+                    currentFrame.ExpressionValue == expressionValue &&
+                    replaceCurrentFrame;
+
+
+                if (!isTailCallRecursion)
+                {
+                    /*
+                     * 2025-10-15: Disabled looking into the cache for tail-call recursion,
+                     * so that we do not force evaluation/materialization of in-process value representations.
+                     * */
+
+                    var invocationInput =
+                        new StackFrameInput(
+                            parameters: StackFrameParameters.Generic,
+                            arguments: [environmentValue.Evaluate()]);
+
+                    var cacheKey = new EvalCacheEntryKey(ExprValue: expressionValue, invocationInput);
+
+                    if (evalCache.TryGetValue(cacheKey, out var fromCache))
+                    {
+                        currentFrame.PushInstructionResult(PineValueInProcess.Create(fromCache));
+
+                        return null;
+                    }
+                }
+            }
+
             if (!disablePrecompiled &&
                 Precompiled.SelectPrecompiled(expression, environmentValue, parseCache) is { } precompiledDelegate)
             {
@@ -282,15 +307,6 @@ public class PineVM : IPineVM
 
                     case Precompiled.PrecompiledResult.ContinueParseAndEval continueParseAndEval:
                         {
-                            if (InvocationCachedResultOrOverride(
-                                expressionValue: continueParseAndEval.ExpressionValue,
-                                environmentValue: PineValueInProcess.Create(continueParseAndEval.EnvironmentValue)) is { } fromCacheOrDelegate)
-                            {
-                                currentFrame.PushInstructionResult(PineValueInProcess.Create(fromCacheOrDelegate));
-
-                                return null;
-                            }
-
                             var contParseResult = parseCache.ParseExpression(continueParseAndEval.ExpressionValue);
 
                             if (contParseResult.IsErrOrNull() is { } contParseErr)
@@ -1359,27 +1375,6 @@ public class PineVM : IPineVM
                             var replaceCurrentFrame =
                                 followingInstruction.Kind is StackInstructionKind.Return;
 
-                            var isTailCallRecursion =
-                                currentFrame.ExpressionValue == expressionValue &&
-                                replaceCurrentFrame;
-
-                            if (!isTailCallRecursion)
-                            {
-                                /*
-                                 * 2025-10-15: Disabled looking into the cache for tail-call recursion,
-                                 * so that we do not force evaluation/materialization of in-process value representations.
-                                 * */
-
-                                if (InvocationCachedResultOrOverride(
-                                    expressionValue: expressionValue,
-                                    environmentValue: environmentValue) is { } fromCacheOrDelegate)
-                                {
-                                    currentFrame.PushInstructionResult(PineValueInProcess.Create(fromCacheOrDelegate));
-
-                                    continue;
-                                }
-                            }
-
                             var parseResult = parseCache.ParseExpression(expressionValue);
 
                             if (parseResult.IsErrOrNull() is { } parseErr)
@@ -1786,259 +1781,7 @@ public class PineVM : IPineVM
         }
     }
 
-    public PineValue EvaluateExpressionDefaultLessStack(
-        Expression expression,
-        PineValue environment,
-        ReadOnlyMemory<PineValue> stackPrevValues)
-    {
-        if (expression is Expression.Literal literalExpression)
-            return literalExpression.Value;
-
-        if (expression is Expression.List listExpression)
-        {
-            return EvaluateListExpression(listExpression, environment, stackPrevValues: stackPrevValues);
-        }
-
-        if (expression is Expression.ParseAndEval applicationExpression)
-        {
-            return
-                EvaluateParseAndEvalExpression(
-                    applicationExpression,
-                    environment,
-                    stackPrevValues: stackPrevValues);
-        }
-
-        if (expression is Expression.KernelApplication kernelApplicationExpression)
-        {
-            return
-                EvaluateKernelApplicationExpression(
-                    environment,
-                    kernelApplicationExpression,
-                    stackPrevValues: stackPrevValues);
-        }
-
-        if (expression is Expression.Conditional conditionalExpression)
-        {
-            return EvaluateConditionalExpression(
-                environment,
-                conditionalExpression,
-                stackPrevValues: stackPrevValues);
-        }
-
-        if (expression is Expression.Environment)
-        {
-            return environment;
-        }
-
-        if (expression is Expression.StringTag stringTagExpression)
-        {
-            return EvaluateExpressionDefaultLessStack(
-                stringTagExpression.Tagged,
-                environment,
-                stackPrevValues: stackPrevValues);
-        }
-
-        throw new NotImplementedException(
-            "Unexpected shape of expression: " + expression.GetType().FullName);
-    }
-
-    public PineValue EvaluateListExpression(
-        Expression.List listExpression,
-        PineValue environment,
-        ReadOnlyMemory<PineValue> stackPrevValues)
-    {
-        var listItems = new PineValue[listExpression.Items.Count];
-
-        for (var i = 0; i < listExpression.Items.Count; i++)
-        {
-            var item = listExpression.Items[i];
-
-            var itemResult =
-                EvaluateExpressionDefaultLessStack(
-                    item,
-                    environment,
-                    stackPrevValues: stackPrevValues);
-
-            listItems[i] = itemResult;
-        }
-
-        return PineValue.List(listItems);
-    }
-
-    public PineValue EvaluateParseAndEvalExpression(
-        Expression.ParseAndEval parseAndEval,
-        PineValue environment,
-        ReadOnlyMemory<PineValue> stackPrevValues)
-    {
-        var environmentValue =
-            EvaluateExpressionDefaultLessStack(
-                parseAndEval.Environment,
-                environment,
-                stackPrevValues: stackPrevValues);
-
-        var expressionValue =
-            EvaluateExpressionDefaultLessStack(
-                parseAndEval.Encoded,
-                environment,
-                stackPrevValues: stackPrevValues);
-
-        if (InvocationCachedResultOrOverride(
-            expressionValue: expressionValue,
-            environmentValue: PineValueInProcess.Create(environmentValue)) is { } fromCacheOrDelegate)
-        {
-            return fromCacheOrDelegate;
-        }
-
-        var parseResult = parseCache.ParseExpression(expressionValue);
-
-        if (parseResult is Result<string, Expression>.Err parseErr)
-        {
-            var message =
-                "Failed to parse expression from value: " + parseErr.Value +
-                " - expressionValue is " + DescribeValueForErrorMessage(expressionValue) +
-                " - environmentValue is " + DescribeValueForErrorMessage(environmentValue);
-
-            throw new ParseExpressionException(message);
-        }
-
-        if (parseResult is not Result<string, Expression>.Ok parseOk)
-        {
-            throw new NotImplementedException("Unexpected result type: " + parseResult.GetType().FullName);
-        }
-
-        if (environmentValue is PineValue.ListValue list)
-        {
-            FunctionApplicationMaxEnvSize =
-            FunctionApplicationMaxEnvSize < list.Items.Length ? list.Items.Length : FunctionApplicationMaxEnvSize;
-        }
-
-        return
-            EvaluateExpressionDefaultLessStack(
-                environment: environmentValue,
-                expression: parseOk.Value,
-                stackPrevValues: ReadOnlyMemory<PineValue>.Empty);
-    }
-
-    private PineValue? InvocationCachedResultOrOverride(
-        PineValue expressionValue,
-        PineValueInProcess environmentValue)
-    {
-        if (EvalCache is { } evalCache)
-        {
-            var invocationInput =
-                new StackFrameInput(
-                    parameters: StackFrameParameters.Generic,
-                    arguments: [environmentValue.Evaluate()]);
-
-            var cacheKey = new EvalCacheEntryKey(ExprValue: expressionValue, invocationInput);
-
-            if (evalCache.TryGetValue(cacheKey, out var fromCache))
-            {
-                return fromCache;
-            }
-        }
-
-        if (overrideInvocations?.TryGetValue(expressionValue, out var overrideValue) ?? false)
-        {
-            var result =
-            overrideValue(
-                (expr, envVal) =>
-                EvaluateExpressionDefaultLessStack(
-                    expr,
-                    envVal,
-                    stackPrevValues: ReadOnlyMemory<PineValue>.Empty),
-                environmentValue.Evaluate());
-
-            return
-                result
-                .Extract(err => throw new Exception(err));
-        }
-
-        return null;
-    }
-
     public static string DescribeValueForErrorMessage(PineValue pineValue) =>
         StringEncoding.StringFromValue(pineValue)
         .Unpack(fromErr: _ => "not a string", fromOk: asString => "string \'" + asString + "\'");
-
-    public PineValue EvaluateKernelApplicationExpression(
-        PineValue environment,
-        Expression.KernelApplication application,
-        ReadOnlyMemory<PineValue> stackPrevValues)
-    {
-        if (application.Function is nameof(KernelFunction.head) &&
-            application.Input is Expression.KernelApplication innerKernelApplication)
-        {
-            if (innerKernelApplication.Function is nameof(KernelFunction.skip) &&
-                innerKernelApplication.Input is Expression.List skipListExpr &&
-                skipListExpr.Items.Count is 2)
-            {
-                var skipValue =
-                    EvaluateExpressionDefaultLessStack(
-                        skipListExpr.Items[0],
-                        environment,
-                        stackPrevValues);
-
-                if (KernelFunction.SignedIntegerFromValueRelaxed(skipValue) is { } skipCount)
-                {
-                    if (EvaluateExpressionDefaultLessStack(
-                        skipListExpr.Items[1],
-                        environment,
-                        stackPrevValues) is PineValue.ListValue list)
-                    {
-                        if (list.Items.Length < 1 || list.Items.Length <= skipCount)
-                        {
-                            return PineValue.EmptyList;
-                        }
-
-                        return list.Items.Span[skipCount < 0 ? 0 : (int)skipCount];
-                    }
-                    else
-                    {
-                        return PineValue.EmptyList;
-                    }
-                }
-            }
-        }
-
-        return EvaluateKernelApplicationExpressionGeneric(environment, application, stackPrevValues);
-    }
-
-    public PineValue EvaluateKernelApplicationExpressionGeneric(
-        PineValue environment,
-        Expression.KernelApplication application,
-        ReadOnlyMemory<PineValue> stackPrevValues)
-    {
-        var inputValue = EvaluateExpressionDefaultLessStack(application.Input, environment, stackPrevValues);
-
-        return
-            KernelFunction.ApplyKernelFunctionGeneric(
-                function: application.Function,
-                inputValue: inputValue);
-    }
-
-    public PineValue EvaluateConditionalExpression(
-        PineValue environment,
-        Expression.Conditional conditional,
-        ReadOnlyMemory<PineValue> stackPrevValues)
-    {
-        var conditionValue =
-            EvaluateExpressionDefaultLessStack(
-                conditional.Condition,
-                environment,
-                stackPrevValues: stackPrevValues);
-
-        if (conditionValue == PineKernelValues.TrueValue)
-        {
-            return EvaluateExpressionDefaultLessStack(
-                conditional.TrueBranch,
-                environment,
-                stackPrevValues: stackPrevValues);
-        }
-
-        return EvaluateExpressionDefaultLessStack(
-            conditional.FalseBranch,
-            environment,
-            stackPrevValues: stackPrevValues);
-    }
 }

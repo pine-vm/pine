@@ -82,15 +82,13 @@ public class ProfilingPineVM
 
     public ProfilingPineVM(
         IDictionary<EvalCacheEntryKey, PineValue>? evalCache = null,
-        PineVMCache? analysisEvalCache = null,
-        IReadOnlyDictionary<PineValue, System.Func<EvalExprDelegate, PineValue, Result<string, PineValue>>>? overrideInvocations = null)
+        PineVMCache? analysisEvalCache = null)
     {
         ConcurrentDictionary<Expression, CodeAnalysis.ExprAnalysis> exprAnalysisMutatedCache = new();
 
         var analysisVM =
             new PineVM(
                 evalCache: analysisEvalCache?.EvalCache,
-                overrideInvocations: overrideInvocations,
                 precompiledLeaves: ImmutableDictionary<PineValue, System.Func<PineValue, PineValue?>>.Empty);
 
         PineVM =

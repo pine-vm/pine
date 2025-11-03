@@ -1509,18 +1509,6 @@ public class Program
                             description: "Test a list of interactive scenarios from the given directory. Each scenario specifies the submissions and can also specify expectations.",
                             optionType: CommandOptionType.MultipleValue);
 
-                    var compileOption =
-                        testCommand.Option(
-                            template: "--compile",
-                            description: "Compile an optimized engine first and run the test scenarios in there.",
-                            optionType: CommandOptionType.NoValue);
-
-                    var saveCompiledCSharpOption =
-                        testCommand.Option(
-                            template: "--save-compiled-csharp",
-                            description: "Path to a file to save a C# representation of the compiled pine expressions",
-                            optionType: CommandOptionType.SingleValue);
-
                     testCommand.OnExecute(() =>
                     {
                         var console = (Pine.IConsole)StaticConsole.Instance;
@@ -1614,121 +1602,8 @@ public class Program
                             aggregateCompositionTree,
                             console);
 
-                        var saveCompiledCSharp = saveCompiledCSharpOption.Value();
-
-                        IReadOnlyDictionary<PineValue, Func<EvalExprDelegate, PineValue, Result<string, PineValue>>>?
-                        compiledDecodeExpressionOverrides = null;
-
-                        if (compileOption.HasValue() || saveCompiledCSharp is not null)
-                        {
-                            var profilingScenarios =
-                            parsedScenarios.NamedDistinctScenarios.Values
-                            .ToImmutableList();
-
-                            console.WriteLine("Starting to compile for " + profilingScenarios.Count + " scenarios...");
-
-                            var pgoAndCompileStopwatch = System.Diagnostics.Stopwatch.StartNew();
-
-                            var syntaxContainerConfig =
-                            new Pine.CompilePineToDotNet.SyntaxContainerConfig(
-                                ContainerTypeName: "container_type",
-                                DictionaryMemberName: "compiled_expressions_dictionary");
-
-                            var compileResult =
-                            InteractiveSessionPine.CompileForProfiledScenarios(
-                                compileElmProgramCodeFiles: compileElmProgramCodeFiles,
-                                profilingScenarios,
-                                syntaxContainerConfig: syntaxContainerConfig,
-                                limitNumber: 60,
-                                enableEvalExprCache: false);
-
-                            var compileToFileResult =
-                            compileResult
-                            .Map(compiledClass =>
-                            Pine.CompilePineToDotNet.CompileToCSharp.GenerateCSharpFile(compiledClass));
-
-                            compiledDecodeExpressionOverrides =
-                            compileToFileResult
-                            .AndThen(
-                                compileSuccess =>
-                                {
-                                    var compileToAssemblyResult =
-                                    Pine.CompilePineToDotNet.CompileToAssembly.Compile(
-                                        compileSuccess,
-                                        optimizationLevel: Microsoft.CodeAnalysis.OptimizationLevel.Release);
-
-                                    console.WriteLine(
-                                        "Completed PGO and compilation in " +
-                                        pgoAndCompileStopwatch.Elapsed.TotalSeconds.ToString("0.##") + " seconds.");
-
-                                    if (saveCompiledCSharp is not null)
-                                    {
-                                        var outputPath = Path.GetFullPath(saveCompiledCSharp);
-
-                                        var outputDirectory = Path.GetDirectoryName(outputPath);
-
-                                        if (outputDirectory is not null)
-                                            Directory.CreateDirectory(outputDirectory);
-
-                                        File.WriteAllText(outputPath, compileSuccess.FileText);
-
-                                        console.WriteLine("Saved the compiled code to " + outputPath, color: Pine.IConsole.TextColor.Green);
-                                    }
-
-                                    return
-                                    compileToAssemblyResult
-                                    .MapError(err => "Compiling to assembly failed:\n" + err)
-                                    .AndThen(
-                                        compileToAssemblyOk =>
-                                        {
-                                            console.WriteLine(
-                                                "Compiled to assembly with " + compileToAssemblyOk.Assembly.Length + " bytes");
-
-                                            return
-                                            compileToAssemblyOk
-                                            .BuildCompiledExpressionsDictionary()
-                                            .MapError(err => "Building compiled expressions dictionary failed:\n" + err)
-                                            .Map(buildDictionaryOk =>
-                                            {
-                                                console.WriteLine(
-                                                    "Dictionary of compiled expressions contains " +
-                                                    buildDictionaryOk.Count + " entries.");
-
-                                                return buildDictionaryOk;
-                                            });
-                                        });
-                                })
-                            .Extract(
-                                fromErr: err =>
-                                {
-                                    console.WriteLine("Failed compilation:\n" + err, color: Pine.IConsole.TextColor.Red);
-
-                                    throw new Exception("Failed compilation: " + err);
-                                });
-                        }
-
                         IInteractiveSession newInteractiveSessionFromAppCode(BlobTreeWithStringPath? appCodeTree)
                         {
-                            if (compileOption.HasValue() || saveCompiledCSharp is not null)
-                            {
-                                if (compiledDecodeExpressionOverrides is not null)
-                                {
-                                    var vmCache = new PineVMCache();
-
-                                    var pineVMWithCompiledAssembly =
-                                    new PineVM(
-                                        overrideInvocations: compiledDecodeExpressionOverrides,
-                                        evalCache: vmCache.EvalCache);
-
-                                    return new InteractiveSessionPine(
-                                        compilerSourceFiles: compileElmProgramCodeFiles,
-                                        appCodeTree: appCodeTree,
-                                        overrideSkipLowering: null,
-                                        entryPointsFilePaths: null,
-                                        pineVMWithCompiledAssembly);
-                                }
-                            }
-
                             return IInteractiveSession.Create(
                                 compilerSourceFiles: compileElmProgramCodeFiles,
                                 appCodeTree: appCodeTree,

@@ -219,6 +219,11 @@ public class DynamicPGOShare : IDisposable
         IReadOnlyDictionary<PineValue, Func<EvalExprDelegate, PineValue, Result<string, PineValue>>>?
         compiledParseExpressionOverrides = null)
     {
+        if (compiledParseExpressionOverrides is not null)
+        {
+            throw new NotImplementedException("Old system to link compiled code was removed");
+        }
+
         var newCancellationTokenSource = new CancellationTokenSource();
 
         var combinedCancellationTokenSource =
@@ -231,8 +236,7 @@ public class DynamicPGOShare : IDisposable
         var profilingVM =
             new ProfilingPineVM(
                 evalCache: evalCache,
-                analysisEvalCache: analysisEvalCache,
-                overrideInvocations: compiledParseExpressionOverrides);
+                analysisEvalCache: analysisEvalCache);
 
         var evalTask =
             Task.Run(() => profilingVM.PineVM.EvaluateExpression(expression, environment));
