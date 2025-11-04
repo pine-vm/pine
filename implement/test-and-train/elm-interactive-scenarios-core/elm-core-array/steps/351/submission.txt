@@ -1,0 +1,1 @@
+Array.toList  (Array.slice  0  3 (Array.fromList [0,1,2,3,4]))

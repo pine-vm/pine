@@ -104,3 +104,44 @@ initialize n init =
             0
             (Pine_kernel.int_add [ n, -1 ])
         )
+
+
+slice : Int -> Int -> Array a -> Array a
+slice start end array =
+    let
+        sourceLength =
+            Pine_kernel.length array
+
+        startNormalized =
+            if Pine_kernel.int_is_sorted_asc [ 0, start ] then
+                start
+
+            else
+                Pine_kernel.int_add
+                    [ sourceLength
+                    , start
+                    ]
+
+        endNormalized =
+            if Pine_kernel.int_is_sorted_asc [ 0, end ] then
+                end
+
+            else
+                Pine_kernel.int_add
+                    [ sourceLength
+                    , end
+                    ]
+
+        takeCount =
+            Pine_kernel.int_add
+                [ endNormalized
+                , Pine_kernel.int_mul [ -1, startNormalized ]
+                ]
+    in
+    Pine_kernel.take
+        [ takeCount
+        , Pine_kernel.skip
+            [ startNormalized
+            , array
+            ]
+        ]
