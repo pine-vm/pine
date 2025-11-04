@@ -9,14 +9,14 @@ namespace Pine.PineVM;
 
 public record StackFrameInput
 {
-    public StackFrameParameters Parameters { get; }
+    public StaticFunctionInterface Parameters { get; }
 
     public IReadOnlyList<PineValue> Arguments { get; }
 
     private readonly int _hashCode;
 
-    public StackFrameInput(
-        StackFrameParameters parameters,
+    private StackFrameInput(
+        StaticFunctionInterface parameters,
         IReadOnlyList<PineValue> arguments)
     {
         Parameters = parameters;
@@ -37,13 +37,13 @@ public record StackFrameInput
 
     public static StackFrameInput FromEnvironmentValue(
         PineValue environmentValue,
-        StackFrameParameters parameters)
+        StaticFunctionInterface parameters)
     {
-        var arguments = new PineValue[parameters.EnvPaths.Count];
+        var arguments = new PineValue[parameters.ParamsPaths.Count];
 
-        for (var i = 0; i < parameters.EnvPaths.Count; i++)
+        for (var i = 0; i < parameters.ParamsPaths.Count; i++)
         {
-            var envPath = parameters.EnvPaths[i];
+            var envPath = parameters.ParamsPaths[i];
 
             var valueAtPath =
                 PineValueExtension.ValueFromPathOrEmptyList(
@@ -60,13 +60,13 @@ public record StackFrameInput
 
     public static StackFrameInput FromEnvironmentValue(
         PineValueInProcess environmentValue,
-        StackFrameParameters parameters)
+        StaticFunctionInterface parameters)
     {
-        var arguments = new PineValue[parameters.EnvPaths.Count];
+        var arguments = new PineValue[parameters.ParamsPaths.Count];
 
-        for (var i = 0; i < parameters.EnvPaths.Count; i++)
+        for (var i = 0; i < parameters.ParamsPaths.Count; i++)
         {
-            var envPath = parameters.EnvPaths[i];
+            var envPath = parameters.ParamsPaths[i];
 
             var valueAtPath =
                 PineValueInProcess.ValueFromPathOrNull(
@@ -87,7 +87,15 @@ public record StackFrameInput
     {
         return FromEnvironmentValue(
             environmentValue,
-            StackFrameParameters.Generic);
+            StaticFunctionInterface.Generic);
+    }
+
+    public static StackFrameInput GenericFromEnvironmentValue(
+        PineValueInProcess environmentValue)
+    {
+        return FromEnvironmentValue(
+            environmentValue,
+            StaticFunctionInterface.Generic);
     }
 
     /// <inheritdoc/>
@@ -137,7 +145,7 @@ public record StackFrameInput
     public PineValueClass ToValueClass()
     {
         IReadOnlyList<KeyValuePair<IReadOnlyList<int>, PineValue>> parsedItems =
-            [..Parameters.EnvPaths
+            [..Parameters.ParamsPaths
             .Select((envPath, index) =>
                 new KeyValuePair<IReadOnlyList<int>, PineValue>(
                     envPath,
@@ -155,85 +163,3 @@ public record StackFrameInput
     }
 }
 
-
-public record StackFrameParameters
-{
-    public IReadOnlyList<IReadOnlyList<int>> EnvPaths { get; }
-
-    private readonly int _hashCode;
-
-    /// <summary>
-    /// Only a single parameter containing the whole environment.
-    /// </summary>
-    public static readonly StackFrameParameters Generic = new([[]]);
-
-    public StackFrameParameters(
-        IReadOnlyList<IReadOnlyList<int>> envPaths)
-    {
-        EnvPaths = envPaths;
-
-        // Pre-compute hash code.
-        var hashCode = new HashCode();
-
-        foreach (var path in EnvPaths)
-        {
-            foreach (var index in path)
-            {
-                hashCode.Add(index);
-            }
-            hashCode.Add(-1);
-        }
-
-        _hashCode = hashCode.ToHashCode();
-    }
-
-    /// <inheritdoc/>
-    public virtual bool Equals(StackFrameParameters? other)
-    {
-        if (ReferenceEquals(this, other))
-            return true;
-
-        if (other is not { } notNull)
-            return false;
-
-        if (_hashCode != notNull._hashCode)
-            return false;
-
-        if (EnvPaths.Count != notNull.EnvPaths.Count)
-            return false;
-
-        for (var i = 0; i < EnvPaths.Count; i++)
-        {
-            var pathA = EnvPaths[i];
-            var pathB = notNull.EnvPaths[i];
-
-            if (pathA.Count != pathB.Count)
-                return false;
-
-            for (var j = 0; j < pathA.Count; j++)
-            {
-                if (pathA[j] != pathB[j])
-                    return false;
-            }
-        }
-
-        return true;
-    }
-
-    /// <inheritdoc/>
-    public override int GetHashCode()
-    {
-        return _hashCode;
-    }
-
-    override public string ToString()
-    {
-        return
-            "Params[" +
-            string.Join(
-                ", ",
-                EnvPaths.Select(
-                    p => "[" + string.Join(", ", p) + "]")) +
-            "]";
-    }
-}

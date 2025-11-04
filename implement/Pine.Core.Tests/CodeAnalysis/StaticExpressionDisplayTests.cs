@@ -21,7 +21,7 @@ public class StaticExpressionDisplayTests
             StaticExpressionExtension.BuildPathToExpression([1, 0], StaticExpression.EnvironmentInstance);
 
         static StaticFunctionInterface InterfaceFromParamCount(int paramCount) =>
-            new(
+            StaticFunctionInterface.FromPathsSorted(
                 [
                     .. Enumerable.Range(0, paramCount)
                     .Select(i => (IReadOnlyList<int>)[1, i])

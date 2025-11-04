@@ -47,16 +47,15 @@ public class PineIRCompiler
     public record CompilationContext(
         ImmutableHashSet<Expression> CopyToLocal,
         IReadOnlyDictionary<Expression.ParseAndEval, JumpToLoop> TailCallElimination,
+        StaticFunctionInterface StackFrameParameters,
         int InstructionOffset)
     {
-        public static CompilationContext Init() =>
-            Init(tailCallElimination: ImmutableDictionary<Expression.ParseAndEval, JumpToLoop>.Empty);
-
         public static CompilationContext Init(
-            IReadOnlyDictionary<Expression.ParseAndEval, JumpToLoop> tailCallElimination) =>
+            StaticFunctionInterface stackFrameParameters) =>
             new(
                 CopyToLocal: [],
-                TailCallElimination: tailCallElimination,
+                TailCallElimination: ImmutableDictionary<Expression.ParseAndEval, JumpToLoop>.Empty,
+                StackFrameParameters: stackFrameParameters,
                 InstructionOffset: 0);
 
         public CompilationContext AddInstructionOffset(int offset) =>
@@ -65,6 +64,27 @@ public class PineIRCompiler
             {
                 InstructionOffset = InstructionOffset + offset
             };
+
+        public int? IsAvailableAsLocalIndex(Expression expression)
+        {
+            if (Core.CodeAnalysis.CodeAnalysis.TryParseExprAsPathInEnv(expression) is { } path)
+            {
+                for (var i = 0; i < StackFrameParameters.ParamsPaths.Count; ++i)
+                {
+                    if (StackFrameParameters.ParamsPaths[i].SequenceEqual(path))
+                    {
+                        return i;
+                    }
+                }
+            }
+
+            if (!CopyToLocal.Contains(expression))
+            {
+                return null;
+            }
+
+            return null;
+        }
     }
 
     public record JumpToLoop(
@@ -79,28 +99,19 @@ public class PineIRCompiler
         Expression rootExpression,
         ImmutableHashSet<Expression> rootExprAlternativeForms,
         PineValueClass? envClass,
+        StaticFunctionInterface parametersAsLocals,
         PineVMParseCache parseCache)
     {
-        var priorBeforeParameters =
+        var prior =
             new NodeCompilationResult(
                 Instructions: [],
-                ImmutableDictionary<Expression, int>.Empty
-                .SetItem(Expression.EnvironmentInstance, 0));
-
-        var prior =
-            priorBeforeParameters
-            with
-            {
-                LocalsSet = priorBeforeParameters.LocalsSet.SetItem(
-                    Expression.EnvironmentInstance,
-                    0)
-            };
+                ImmutableDictionary<Expression, int>.Empty);
 
         return
             CompileExpressionTransitive(
                 rootExpression,
                 context:
-                CompilationContext.Init(),
+                CompilationContext.Init(parametersAsLocals),
                 prior: prior,
                 parseCache);
     }
@@ -150,6 +161,16 @@ public class PineIRCompiler
         NodeCompilationResult prior,
         PineVMParseCache parseCache)
     {
+        if (context.IsAvailableAsLocalIndex(expression) is { } paramLocalIndex)
+        {
+            var afterParamGet =
+                prior
+                .AppendInstruction(
+                    StackInstruction.Local_Get(paramLocalIndex));
+
+            return (afterParamGet, paramLocalIndex);
+        }
+
         if (prior.LocalsSet.TryGetValue(expression, out var localIndex))
         {
             var afterLocalGet =
@@ -207,6 +228,11 @@ public class PineIRCompiler
                             return true;
                         }
 
+                        if (context.IsAvailableAsLocalIndex(expression) is not null)
+                        {
+                            return true;
+                        }
+
                         if (prior.LocalsSet.ContainsKey(subexpression))
                         {
                             return true;
@@ -246,6 +272,11 @@ public class PineIRCompiler
                     subexpression =>
                     {
                         if (!ExpressionLargeEnoughForCSE(subexpression))
+                        {
+                            return true;
+                        }
+
+                        if (context.IsAvailableAsLocalIndex(expression) is not null)
                         {
                             return true;
                         }
@@ -297,7 +328,7 @@ public class PineIRCompiler
             var newLocalIndex =
                 lessCSE.LocalsSet.IsEmpty
                 ?
-                0
+                context.StackFrameParameters.ParamsPaths.Count
                 :
                 lessCSE.LocalsSet.Values.Max() + 1;
 
@@ -320,6 +351,14 @@ public class PineIRCompiler
         NodeCompilationResult prior,
         PineVMParseCache parseCache)
     {
+        if (context.IsAvailableAsLocalIndex(expr) is { } paramLocalIndex)
+        {
+            return
+                prior
+                .AppendInstruction(
+                    StackInstruction.Local_Get(paramLocalIndex));
+        }
+
         if (prior.LocalsSet.TryGetValue(expr, out var localIndex))
         {
             return

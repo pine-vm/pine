@@ -57,12 +57,16 @@ public record ExpressionCompilation(
         bool enableTailRecursionOptimization,
         Func<Expression, PineValueClass?, bool> skipInlining)
     {
+        var genericParameters =
+            StaticFunctionInterface.FromExpression(rootExpression);
+
         var generic =
             new StackFrameInstructions(
-                StackFrameParameters.Generic,
+                genericParameters,
                 InstructionsFromExpressionTransitive(
                     rootExpression,
                     envConstraintId: null,
+                    parametersAsLocals: genericParameters,
                     parseCache: parseCache,
                     disableReduction: disableReduction,
                     skipInlining: skipInlining,
@@ -79,10 +83,11 @@ public record ExpressionCompilation(
                             [..specialization.ParsedItems
                         .Select(envItem => new EnvConstraintItem(envItem.Key.ToArray(), envItem.Value))],
                             new StackFrameInstructions(
-                                StackFrameParameters.Generic,
+                                genericParameters,
                                 InstructionsFromExpressionTransitive(
                                     rootExpression,
                                     envConstraintId: specialization,
+                                    parametersAsLocals: genericParameters,
                                     parseCache: parseCache,
                                     disableReduction: disableReduction,
                         enableTailRecursionOptimization: enableTailRecursionOptimization,
@@ -115,6 +120,7 @@ public record ExpressionCompilation(
     public static IReadOnlyList<StackInstruction> InstructionsFromExpressionTransitive(
         Expression rootExpression,
         PineValueClass? envConstraintId,
+        StaticFunctionInterface parametersAsLocals,
         PineVMParseCache parseCache,
         bool disableReduction,
         bool enableTailRecursionOptimization,
@@ -168,6 +174,7 @@ public record ExpressionCompilation(
                 rootExpression: reducedExpression,
                 rootExprAlternativeForms: [rootExpression],
                 envClass: enableTailRecursionOptimization ? envConstraintId : null,
+                parametersAsLocals: parametersAsLocals,
                 parseCache)
             .ToArray();
 
@@ -715,6 +722,7 @@ public record ExpressionCompilation(
         Expression rootExpression,
         ImmutableHashSet<Expression> rootExprAlternativeForms,
         PineValueClass? envClass,
+        StaticFunctionInterface parametersAsLocals,
         PineVMParseCache parseCache)
     {
         return
@@ -722,6 +730,7 @@ public record ExpressionCompilation(
                 rootExpression,
                 rootExprAlternativeForms: rootExprAlternativeForms,
                 envClass,
+                parametersAsLocals: parametersAsLocals,
                 parseCache)
             .Instructions;
     }

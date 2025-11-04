@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Pine.Core;
+using Pine.Core.CodeAnalysis;
 using Pine.Core.PopularEncodings;
 using Pine.PineVM;
 using System.Collections.Generic;
@@ -265,7 +266,7 @@ public class PineVMTests
                 Expression.LiteralInstance(PineValue.EmptyBlob),
 
                 expected =
-                GenericInstructions(
+                WithZeroParameters(
                     [
                         new StackInstruction(
                             StackInstructionKind.Push_Literal,
@@ -286,7 +287,7 @@ public class PineVMTests
                     ]),
 
                 expected =
-                GenericInstructions(
+                WithZeroParameters(
                     [
                         StackInstruction.Push_Literal(PineValue.EmptyList),
 
@@ -336,7 +337,7 @@ public class PineVMTests
                  * Expect CSE, reusing the result of the kernel application.
                  * */
                 expected =
-                GenericInstructions(
+                WithGenericParameters(
                     [
                     StackInstruction.Push_Literal(PineValue.EmptyList),
 
@@ -406,7 +407,7 @@ public class PineVMTests
                  * Expect CSE does not separate subexpressions for which all parents are already in separate instructions.
                  * */
                 expected =
-                GenericInstructions(
+                WithGenericParameters(
                     [
                     StackInstruction.Push_Literal(PineValue.EmptyList),
 
@@ -437,7 +438,7 @@ public class PineVMTests
                     environment: Expression.EnvironmentInstance),
 
                 expected =
-                GenericInstructions(
+                WithGenericParameters(
                     [
                         StackInstruction.Local_Get(0),
 
@@ -463,7 +464,7 @@ public class PineVMTests
                     ]),
 
                 expected =
-                GenericInstructions(
+                WithGenericParameters(
                     [
                         StackInstruction.Local_Get(0),
 
@@ -500,7 +501,7 @@ public class PineVMTests
                     ]),
 
                 expected =
-                GenericInstructions(
+                WithGenericParameters(
                     [
                     StackInstruction.Push_Literal(
                         IntegerEncoding.EncodeSignedInteger(13)),
@@ -551,7 +552,7 @@ public class PineVMTests
                     ]),
 
                 expected =
-                GenericInstructions(
+                WithGenericParameters(
                     [
                     StackInstruction.Push_Literal(
                         IntegerEncoding.EncodeSignedInteger(17)),
@@ -590,7 +591,7 @@ public class PineVMTests
                     Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(17))),
 
                 expected =
-                GenericInstructions(
+                WithZeroParameters(
                     [
                     StackInstruction.Push_Literal(
                         IntegerEncoding.EncodeSignedInteger(11)),
@@ -637,7 +638,7 @@ public class PineVMTests
                     Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(17))),
 
                 expected =
-                GenericInstructions(
+                WithGenericParameters(
                     [
                     StackInstruction.Push_Literal(
                         IntegerEncoding.EncodeSignedInteger(11)),
@@ -697,7 +698,7 @@ public class PineVMTests
                 ]),
 
                 expected =
-                GenericInstructions(
+                WithGenericParameters(
                     [
                     StackInstruction.Push_Literal(
                         IntegerEncoding.EncodeSignedInteger(47)),
@@ -747,7 +748,7 @@ public class PineVMTests
                     Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(23))),
 
                 expected =
-                GenericInstructions(
+                WithGenericParameters(
                     [
                     StackInstruction.Push_Literal(
                         IntegerEncoding.EncodeSignedInteger(11)),
@@ -811,7 +812,7 @@ public class PineVMTests
                 ]),
 
                 expected =
-                GenericInstructions(
+                WithGenericParameters(
                     [
                     StackInstruction.Push_Literal(
                         IntegerEncoding.EncodeSignedInteger(11)),
@@ -872,7 +873,7 @@ public class PineVMTests
                         Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(27)))),
 
                 expected =
-                GenericInstructions(
+                WithZeroParameters(
                     [
                     StackInstruction.Push_Literal(
                         IntegerEncoding.EncodeSignedInteger(11)),
@@ -919,15 +920,21 @@ public class PineVMTests
                             [
                             Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(17)),
 
-                            Expression.EnvironmentInstance,
+                            new Expression.KernelApplication
+                            (
+                                function: nameof(KernelFunction.reverse),
+                                input: Expression.EnvironmentInstance
+                            ),
                             ])
                     )
                 ),
 
                 expected =
-                GenericInstructions(
+                WithGenericParameters(
                     [
                     StackInstruction.Local_Get(0),
+
+                    StackInstruction.Reverse,
 
                     StackInstruction.Skip_Head_Const(17),
 
@@ -972,7 +979,9 @@ public class PineVMTests
                                             Expression.LiteralInstance(
                                                 IntegerEncoding.EncodeSignedInteger(23)),
 
-                                            Expression.EnvironmentInstance,
+                                            new Expression.KernelApplication(
+                                                function: nameof(KernelFunction.negate),
+                                                input: Expression.EnvironmentInstance)
                                             ])
                                     )
                                 )
@@ -982,12 +991,14 @@ public class PineVMTests
                 ),
 
                 expected =
-                GenericInstructions(
+                WithGenericParameters(
                     [
                     StackInstruction.Push_Literal(
                         IntegerEncoding.EncodeSignedInteger(21)),
 
                     StackInstruction.Local_Get(0),
+
+                    StackInstruction.Negate,
 
                     StackInstruction.Skip_Head_Const(23),
 
@@ -1052,7 +1063,7 @@ public class PineVMTests
                         Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(27)))),
 
                 expected =
-                GenericInstructions(
+                WithGenericParameters(
                     [
                     StackInstruction.Local_Get(0),
 
@@ -1131,15 +1142,12 @@ public class PineVMTests
                         ])),
 
                 expected =
-                GenericInstructions(
+                WithParameters(
+                    [[1],[2]],
                     [
                     StackInstruction.Local_Get(0),
 
-                    StackInstruction.Skip_Head_Const(1),
-
-                    StackInstruction.Local_Get(0),
-
-                    StackInstruction.Skip_Head_Const(2),
+                    StackInstruction.Local_Get(1),
 
                     StackInstruction.Int_Sub_Binary,
 
@@ -1195,15 +1203,12 @@ public class PineVMTests
                         ])),
 
                 expected =
-                GenericInstructions(
+                WithParameters(
+                    [[1],[2]],
                     [
                     StackInstruction.Local_Get(0),
 
-                    StackInstruction.Skip_Head_Const(1),
-
-                    StackInstruction.Local_Get(0),
-
-                    StackInstruction.Skip_Head_Const(2),
+                    StackInstruction.Local_Get(1),
 
                     StackInstruction.Int_Sub_Binary,
 
@@ -1228,11 +1233,10 @@ public class PineVMTests
                         ])),
 
                 expected =
-                GenericInstructions(
+                WithParameters(
+                    [[0]],
                     [
                     StackInstruction.Local_Get(0),
-
-                    StackInstruction.Head_Generic,
 
                     StackInstruction.Equal_Binary_Const(
                         IntegerEncoding.EncodeSignedInteger(13)),
@@ -1246,23 +1250,22 @@ public class PineVMTests
                 expression =
                 (Expression)
                 new Expression.KernelApplication(
-                    function: "equal",
+                    function: nameof(KernelFunction.equal),
                     input:
                     Expression.ListInstance(
                         [
                         Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(17)),
 
                         new Expression.KernelApplication(
-                            function: "head",
+                            function: nameof(KernelFunction.head),
                             input: Expression.EnvironmentInstance),
                         ])),
 
                 expected =
-                GenericInstructions(
+                WithParameters(
+                    [[0]],
                     [
                     StackInstruction.Local_Get(0),
-
-                    StackInstruction.Head_Generic,
 
                     StackInstruction.Equal_Binary_Const(
                         IntegerEncoding.EncodeSignedInteger(17)),
@@ -1311,15 +1314,12 @@ public class PineVMTests
                             ]))),
 
                 expected =
-                GenericInstructions(
+                WithParameters(
+                    [[11],[13]],
                     [
                     StackInstruction.Local_Get(0),
 
-                    StackInstruction.Skip_Head_Const(11),
-
-                    StackInstruction.Local_Get(0),
-
-                    StackInstruction.Skip_Head_Const(13),
+                    StackInstruction.Local_Get(1),
 
                     StackInstruction.Not_Equal_Binary,
 
@@ -1364,19 +1364,12 @@ public class PineVMTests
                         ])),
 
                 expected =
-                GenericInstructions(
+                WithParameters(
+                    [[17],[19]],
                     [
                         StackInstruction.Local_Get(0),
 
-                        new StackInstruction(
-                            StackInstructionKind.Skip_Head_Const,
-                            SkipCount: 17),
-
-                        StackInstruction.Local_Get(0),
-
-                        new StackInstruction(
-                            StackInstructionKind.Skip_Head_Const,
-                            SkipCount: 19),
+                        StackInstruction.Local_Get(1),
 
                         new StackInstruction(
                             StackInstructionKind.Int_Less_Than_Or_Equal_Binary),
@@ -1425,15 +1418,12 @@ public class PineVMTests
                             ]))),
 
                 expected =
-                GenericInstructions(
+                WithParameters(
+                    [[11],[13]],
                     [
-                    StackInstruction.Local_Get(0),
-
-                    StackInstruction.Skip_Head_Const(13),
+                    StackInstruction.Local_Get(1),
 
                     StackInstruction.Local_Get(0),
-
-                    StackInstruction.Skip_Head_Const(11),
 
                     StackInstruction.Int_Less_Than_Binary,
 
@@ -1458,11 +1448,10 @@ public class PineVMTests
                         ])),
 
                 expected =
-                GenericInstructions(
+                WithParameters(
+                    [[0]],
                     [
                     StackInstruction.Local_Get(0),
-
-                    StackInstruction.Head_Generic,
 
                     StackInstruction.Int_Add_Const(13),
 
@@ -1487,11 +1476,10 @@ public class PineVMTests
                         ])),
 
                 expected =
-                GenericInstructions(
+                WithParameters(
+                    [[0]],
                     [
                     StackInstruction.Local_Get(0),
-
-                    StackInstruction.Head_Generic,
 
                     StackInstruction.Int_Mul_Const(17),
 
@@ -1520,11 +1508,10 @@ public class PineVMTests
                     ),
 
                 expected =
-                GenericInstructions(
+                WithParameters(
+                    [[0]],
                     [
                         StackInstruction.Local_Get(0),
-
-                        StackInstruction.Head_Generic,
 
                         StackInstruction.Equal_Binary_Const(
                             IntegerEncoding.EncodeSignedInteger(71)),
@@ -1554,11 +1541,10 @@ public class PineVMTests
                     ),
 
                 expected =
-                GenericInstructions(
+                WithParameters(
+                    [[0]],
                     [
                         StackInstruction.Local_Get(0),
-
-                        StackInstruction.Head_Generic,
 
                         StackInstruction.Equal_Binary_Const(
                             IntegerEncoding.EncodeSignedInteger(73)),
@@ -1588,7 +1574,7 @@ public class PineVMTests
                     ),
 
                 expected =
-                GenericInstructions(
+                WithGenericParameters(
                     [
                         StackInstruction.Local_Get(0),
 
@@ -1619,7 +1605,7 @@ public class PineVMTests
                     ),
 
                 expected =
-                GenericInstructions(
+                WithGenericParameters(
                     [
                         StackInstruction.Local_Get(0),
 
@@ -1644,7 +1630,7 @@ public class PineVMTests
                         ])),
 
                 expected =
-                GenericInstructions(
+                WithGenericParameters(
                     [
                         StackInstruction.Local_Get(0),
 
@@ -1669,7 +1655,7 @@ public class PineVMTests
                         ])),
 
                 expected =
-                GenericInstructions(
+                WithGenericParameters(
                     [
                         StackInstruction.Local_Get(0),
 
@@ -1697,7 +1683,7 @@ public class PineVMTests
                         ])),
 
                 expected =
-                GenericInstructions(
+                WithGenericParameters(
                     [
                         StackInstruction.Local_Get(0),
 
@@ -1761,19 +1747,14 @@ public class PineVMTests
                         ])),
 
                 expected =
-                GenericInstructions(
+                WithParameters(
+                    [[43,41]],
                     [
                         StackInstruction.Local_Get(0),
 
-                        StackInstruction.Skip_Head_Const(43),
-
-                        StackInstruction.Skip_Head_Const(41),
-
-                        StackInstruction.Local_Set(1),
-
                         StackInstruction.Int_Greater_Than_Or_Equal_Const(23),
 
-                        StackInstruction.Local_Get(1),
+                        StackInstruction.Local_Get(0),
 
                         StackInstruction.Int_Less_Than_Or_Equal_Const(27),
 
@@ -1798,7 +1779,7 @@ public class PineVMTests
                         ])),
 
                 expected =
-                GenericInstructions(
+                WithGenericParameters(
                     [
                         StackInstruction.Local_Get(0),
 
@@ -1824,7 +1805,7 @@ public class PineVMTests
                         ])),
 
                 expected =
-                GenericInstructions(
+                WithGenericParameters(
                     [
                         StackInstruction.Local_Get(0),
 
@@ -1850,7 +1831,7 @@ public class PineVMTests
                         ])),
 
                 expected =
-                GenericInstructions(
+                WithGenericParameters(
                     [
                         StackInstruction.Local_Get(0),
 
@@ -1876,7 +1857,7 @@ public class PineVMTests
                         ])),
 
                 expected =
-                GenericInstructions(
+                WithGenericParameters(
                     [
                         StackInstruction.Local_Get(0),
 
@@ -1902,7 +1883,7 @@ public class PineVMTests
                         ])),
 
                 expected =
-                GenericInstructions(
+                WithGenericParameters(
                     [
                         StackInstruction.Local_Get(0),
 
@@ -1927,7 +1908,7 @@ public class PineVMTests
                         ])),
 
                 expected =
-                GenericInstructions(
+                WithGenericParameters(
                     [
                         StackInstruction.Local_Get(0),
 
@@ -1952,7 +1933,7 @@ public class PineVMTests
                         ])),
 
                 expected =
-                GenericInstructions(
+                WithGenericParameters(
                     [
                         StackInstruction.Local_Get(0),
 
@@ -1977,7 +1958,7 @@ public class PineVMTests
                         ])),
 
                 expected =
-                GenericInstructions(
+                WithGenericParameters(
                     [
                         StackInstruction.Local_Get(0),
 
@@ -2028,11 +2009,10 @@ public class PineVMTests
                         ])),
 
                 expected =
-                GenericInstructions(
+                WithParameters(
+                    [[0]],
                     [
                         StackInstruction.Local_Get(0),
-
-                        StackInstruction.Head_Generic,
 
                         StackInstruction.Int_Unsigned_Add_Const(79),
 
@@ -2081,11 +2061,10 @@ public class PineVMTests
                         ])),
 
                 expected =
-                GenericInstructions(
+                WithParameters(
+                    [[0]],
                     [
                         StackInstruction.Local_Get(0),
-
-                        StackInstruction.Head_Generic,
 
                         StackInstruction.Int_Unsigned_Less_Than_Or_Equal_Const(79),
 
@@ -2134,11 +2113,10 @@ public class PineVMTests
                         ])),
 
                 expected =
-                GenericInstructions(
+                WithParameters(
+                    [[0]],
                     [
                         StackInstruction.Local_Get(0),
-
-                        StackInstruction.Head_Generic,
 
                         StackInstruction.Int_Unsigned_Greater_Than_Or_Equal_Const(83),
 
@@ -2190,17 +2168,14 @@ public class PineVMTests
                         ])),
 
                 expected =
-                GenericInstructions(
+                WithParameters(
+                    [[0]],
                     [
                         StackInstruction.Local_Get(0),
 
-                        StackInstruction.Head_Generic,
-
-                        StackInstruction.Local_Set(1),
-
                         StackInstruction.Int_Unsigned_Greater_Than_Or_Equal_Const(83),
 
-                        StackInstruction.Local_Get(1),
+                        StackInstruction.Local_Get(0),
 
                         StackInstruction.Int_Unsigned_Less_Than_Or_Equal_Const(107),
 
@@ -2296,11 +2271,10 @@ public class PineVMTests
                     ),
 
                 expected =
-                GenericInstructions(
+                WithParameters(
+                    [[0]],
                     [
                         StackInstruction.Local_Get(0),
-
-                        StackInstruction.Head_Generic,
 
                         StackInstruction.Int_Unsigned_Greater_Than_Or_Equal_Const(83),
 
@@ -2312,8 +2286,6 @@ public class PineVMTests
                         StackInstruction.Return,
 
                         StackInstruction.Local_Get(0),
-
-                        StackInstruction.Head_Generic,
 
                         StackInstruction.Int_Unsigned_Add_Const(79),
 
@@ -2347,7 +2319,7 @@ public class PineVMTests
                 ),
 
                 expected =
-                GenericInstructions(
+                WithGenericParameters(
                     [
                         StackInstruction.Local_Get(0),
 
@@ -2396,7 +2368,7 @@ public class PineVMTests
                 ),
 
                 expected =
-                GenericInstructions(
+                WithGenericParameters(
                     [
                         StackInstruction.Local_Get(0),
 
@@ -2422,7 +2394,7 @@ public class PineVMTests
                         ])),
 
                 expected =
-                GenericInstructions(
+                WithGenericParameters(
                     [
                         StackInstruction.Local_Get(0),
 
@@ -2452,7 +2424,7 @@ public class PineVMTests
                         ])),
 
                 expected =
-                GenericInstructions(
+                WithGenericParameters(
                     [
                         StackInstruction.Local_Get(0),
 
@@ -2490,7 +2462,7 @@ public class PineVMTests
                         ])),
 
                 expected =
-                GenericInstructions(
+                WithGenericParameters(
                     [
                         StackInstruction.Local_Get(0),
 
@@ -2524,7 +2496,7 @@ public class PineVMTests
                         ])),
 
                 expected =
-                GenericInstructions(
+                WithGenericParameters(
                     [
                         StackInstruction.Local_Get(0),
 
@@ -2577,11 +2549,29 @@ public class PineVMTests
         }
     }
 
-    private static StackFrameInstructions GenericInstructions(
+    private static StackFrameInstructions WithZeroParameters(
         IReadOnlyList<StackInstruction> instructions)
     {
         return new StackFrameInstructions(
-            Parameters: StackFrameParameters.Generic,
+            Parameters: StaticFunctionInterface.ZeroParameters,
+            instructions);
+    }
+
+    private static StackFrameInstructions WithGenericParameters(
+        IReadOnlyList<StackInstruction> instructions)
+    {
+        return new StackFrameInstructions(
+            Parameters: StaticFunctionInterface.Generic,
+            instructions);
+    }
+
+
+    private static StackFrameInstructions WithParameters(
+        IReadOnlyList<IReadOnlyList<int>> parameters,
+        IReadOnlyList<StackInstruction> instructions)
+    {
+        return new StackFrameInstructions(
+            Parameters: StaticFunctionInterface.FromPathsSorted(parameters),
             instructions);
     }
 }

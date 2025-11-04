@@ -277,6 +277,7 @@ public static class CompileModuleToCSharp
                 functionRecord.InnerFunction,
                 rootExprAlternativeForms: [],
                 envClass: null,
+                parametersAsLocals: StaticFunctionInterface.Generic,
                 parseCache: parseCache);
 
         var ssaInstructionsLessFilter =
@@ -548,112 +549,9 @@ public static class CompileModuleToCSharp
         FunctionRecord functionRecord)
     {
         IReadOnlyList<ReadOnlyMemory<int>> paramPaths =
-            [.. UnpackedParamsFiltered(functionRecord.InnerFunction)];
+            [.. StaticFunctionInterface.UnpackedParamsFiltered(functionRecord.InnerFunction)];
 
         return new ProcedureInterface(paramPaths);
-    }
-
-    private static IEnumerable<ReadOnlyMemory<int>> UnpackedParamsFiltered(
-        Expression rootExpression)
-    {
-        IReadOnlyList<ReadOnlyMemory<int>> unfiltered =
-            [.. EnumerateUnpackedParamsDistinct(rootExpression)];
-
-        bool isCoveredByOther(ReadOnlyMemory<int> path)
-        {
-            foreach (var otherPath in unfiltered)
-            {
-                if (path.Length <= otherPath.Length)
-                    continue;
-
-                if (path.Span[..otherPath.Length].SequenceEqual(path.Span))
-                    return true;
-            }
-
-            return false;
-        }
-
-        foreach (var path in unfiltered)
-        {
-            if (isCoveredByOther(path))
-                continue;
-
-            yield return path;
-        }
-    }
-
-    private static IEnumerable<ReadOnlyMemory<int>> EnumerateUnpackedParamsDistinct(
-        Expression rootExpression)
-    {
-        var alreadySeen = new HashSet<Expression>();
-
-        var stack = new Stack<Expression>([rootExpression]);
-
-        while (stack.TryPop(out var expression))
-        {
-            if (!expression.ReferencesEnvironment)
-                continue;
-
-            if (alreadySeen.Contains(expression))
-                continue;
-
-            alreadySeen.Add(expression);
-
-            if (Core.CodeAnalysis.CodeAnalysis.TryParseExpressionAsIndexPathFromEnv(expression) is ExprMappedToParentEnv.PathInParentEnv path)
-            {
-                yield return new ReadOnlyMemory<int>([.. path.Path]);
-
-                continue;
-            }
-
-            switch (expression)
-            {
-                case Expression.Environment:
-                    yield return ReadOnlyMemory<int>.Empty;
-                    break;
-
-                case Expression.Literal:
-                    break;
-
-                case Expression.List list:
-                    for (var i = 0; i < list.Items.Count; i++)
-                    {
-                        stack.Push(list.Items[i]);
-                    }
-                    break;
-
-                case Expression.ParseAndEval parseAndEvaluate:
-
-                    stack.Push(parseAndEvaluate.Encoded);
-                    stack.Push(parseAndEvaluate.Environment);
-
-                    break;
-
-                case Expression.KernelApplication kernelApplication:
-
-                    stack.Push(kernelApplication.Input);
-
-                    break;
-
-                case Expression.Conditional conditional:
-
-                    stack.Push(conditional.Condition);
-                    stack.Push(conditional.FalseBranch);
-                    stack.Push(conditional.TrueBranch);
-
-                    break;
-
-                case Expression.StringTag stringTag:
-
-                    stack.Push(stringTag.Tagged);
-
-                    break;
-
-                default:
-                    throw new NotImplementedException(
-                        "Unknown expression type: " + expression.GetType().FullName);
-            }
-        }
     }
 
     private static ExpressionSyntax ExpressionSyntaxFromStackInstruction(

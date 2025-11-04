@@ -6,7 +6,7 @@ using System.Linq;
 namespace Pine.PineVM;
 
 public record StackFrameInstructions(
-    StackFrameParameters Parameters,
+    StaticFunctionInterface Parameters,
     IReadOnlyList<StackInstruction> Instructions,
     PineValueClass? TrackEnvConstraint = null)
 {
@@ -114,9 +114,9 @@ public record StackFrameInstructions(
 
     public static int ComputeLocalsCount(
         IReadOnlyList<StackInstruction> instructions,
-        StackFrameParameters parameters)
+        StaticFunctionInterface parameters)
     {
-        var aggregateMax = parameters.EnvPaths.Count;
+        var aggregateMax = parameters.ParamsPaths.Count;
 
         for (var i = 0; i < instructions.Count; i++)
         {
