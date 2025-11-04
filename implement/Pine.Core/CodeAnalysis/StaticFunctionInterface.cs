@@ -94,7 +94,18 @@ public record StaticFunctionInterface
                 if (path.Length <= otherPath.Length)
                     continue;
 
-                if (path.Span[..otherPath.Length].SequenceEqual(path.Span))
+                var isPrefix = true;
+
+                for (var i = 0; i < otherPath.Length; i++)
+                {
+                    if (otherPath.Span[i] != path.Span[i])
+                    {
+                        isPrefix = false;
+                        break;
+                    }
+                }
+
+                if (isPrefix)
                     return true;
             }
 
