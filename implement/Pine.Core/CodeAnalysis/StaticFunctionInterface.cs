@@ -221,11 +221,13 @@ public record StaticFunctionInterface
 
         builder.Append(paramsPaths.Count);
 
+        builder.Append(';');
+
         for (var i = 0; i < paramsPaths.Count; i++)
         {
             if (i > 0)
             {
-                builder.Append('|');
+                builder.Append(',');
             }
 
             var path = paramsPaths[i];
@@ -234,7 +236,7 @@ public record StaticFunctionInterface
 
             for (var j = 0; j < path.Count; j++)
             {
-                builder.Append(',');
+                builder.Append('.');
 
                 builder.Append(path[j]);
             }
