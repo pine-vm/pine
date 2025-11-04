@@ -143,6 +143,44 @@ public class PineIRCompiler
                 parseCache);
     }
 
+    public static (NodeCompilationResult nodeResult, int localIndex)
+        CompileExpressionTransitiveAsLocal(
+        Expression expression,
+        CompilationContext context,
+        NodeCompilationResult prior,
+        PineVMParseCache parseCache)
+    {
+        if (prior.LocalsSet.TryGetValue(expression, out var localIndex))
+        {
+            var afterLocalGet =
+                prior
+                .AppendInstruction(
+                    StackInstruction.Local_Get(localIndex));
+
+            return (afterLocalGet, localIndex);
+        }
+
+        var contextSettingLocal =
+            context
+            with
+            {
+                CopyToLocal =
+                    context.CopyToLocal.Add(expression)
+            };
+
+        var compiledExpr =
+            CompileExpressionTransitive(
+                expression,
+                contextSettingLocal,
+                prior,
+                parseCache);
+
+        var newLocalIndex =
+            compiledExpr.LocalsSet[expression];
+
+        return (compiledExpr, newLocalIndex);
+    }
+
     /// <summary>
     /// Recursively compile an expression into a flat list of instructions.
     /// </summary>
@@ -1014,15 +1052,12 @@ public class PineIRCompiler
                         prior,
                         parseCache);
 
-                if (takeCountValueExpr is Expression.Literal takeCountLiteralExpr)
+                if (TryParse_IndependentSignedIntegerRelaxed(takeCountValueExpr, parseCache) is { } takeCount)
                 {
-                    if (KernelFunction.SignedIntegerFromValueRelaxed(takeCountLiteralExpr.Value) is { } takeCount)
-                    {
-                        return
-                            afterSource
-                            .AppendInstruction(
-                                StackInstruction.Take_Const((int)takeCount));
-                    }
+                    return
+                        afterSource
+                        .AppendInstruction(
+                            StackInstruction.Take_Const((int)takeCount));
                 }
 
                 var afterTakeCount =
@@ -1284,7 +1319,7 @@ public class PineIRCompiler
                 }
                 else
                 {
-                    if (IsIntNegated(itemExpr) is { } subtractedExpr)
+                    if (IsIntNegated(itemExpr, parseCache) is { } subtractedExpr)
                     {
                         varItemsSubtract.Add(subtractedExpr);
                     }
@@ -1480,7 +1515,9 @@ public class PineIRCompiler
         return null;
     }
 
-    private static Expression? IsIntNegated(Expression expr)
+    private static Expression? IsIntNegated(
+        Expression expr,
+        PineVMParseCache parseCache)
     {
         if (expr is Expression.KernelApplication kernelApp)
         {
@@ -1491,11 +1528,10 @@ public class PineIRCompiler
 
 
             if (kernelApp.Function is nameof(KernelFunction.int_mul) &&
-               kernelApp.Input is Expression.List mulListExpr && mulListExpr.Items.Count is 2)
+                kernelApp.Input is Expression.List mulListExpr && mulListExpr.Items.Count is 2)
             {
                 {
-                    if (mulListExpr.Items[0] is Expression.Literal literalExpr &&
-                        KernelFunction.SignedIntegerFromValueRelaxed(literalExpr.Value) is { } leftInt &&
+                    if (TryParse_IndependentSignedIntegerRelaxed(mulListExpr.Items[0], parseCache) is { } leftInt &&
                         leftInt == -1)
                     {
                         return mulListExpr.Items[1];
@@ -1503,8 +1539,7 @@ public class PineIRCompiler
                 }
 
                 {
-                    if (mulListExpr.Items[1] is Expression.Literal literalExpr &&
-                        KernelFunction.SignedIntegerFromValueRelaxed(literalExpr.Value) is { } rightInt &&
+                    if (TryParse_IndependentSignedIntegerRelaxed(mulListExpr.Items[1], parseCache) is { } rightInt &&
                         rightInt == -1)
                     {
                         return mulListExpr.Items[0];
@@ -1649,8 +1684,7 @@ public class PineIRCompiler
 
             if (listExpr.Items.Count is 2)
             {
-                if (listExpr.Items[0] is Expression.Literal leftLiteralExpr &&
-                    KernelFunction.SignedIntegerFromValueRelaxed(leftLiteralExpr.Value) is { } leftInt)
+                if (TryParse_IndependentSignedIntegerRelaxed(listExpr.Items[0], parseCache) is { } leftInt)
                 {
                     var rightExpr = listExpr.Items[1];
 
@@ -1684,8 +1718,7 @@ public class PineIRCompiler
                     }
                 }
 
-                if (listExpr.Items[1] is Expression.Literal rightLiteralExpr &&
-                    KernelFunction.SignedIntegerFromValueRelaxed(rightLiteralExpr.Value) is { } rightInt)
+                if (TryParse_IndependentSignedIntegerRelaxed(listExpr.Items[1], parseCache) is { } rightInt)
                 {
                     var leftExpr = listExpr.Items[0];
 
@@ -1742,28 +1775,18 @@ public class PineIRCompiler
 
             if (listExpr.Items.Count is 3)
             {
-                if (listExpr.Items[0] is Expression.Literal leftLiteralExpr &&
-                    KernelFunction.SignedIntegerFromValueRelaxed(leftLiteralExpr.Value) is { } leftInt)
+                if (TryParse_IndependentSignedIntegerRelaxed(listExpr.Items[0], parseCache) is { } leftInt)
                 {
-                    if (listExpr.Items[2] is Expression.Literal rightLiteralExpr &&
-                        KernelFunction.SignedIntegerFromValueRelaxed(rightLiteralExpr.Value) is { } rightInt)
+                    if (TryParse_IndependentSignedIntegerRelaxed(listExpr.Items[2], parseCache) is { } rightInt)
                     {
                         var middleExpr = listExpr.Items[1];
 
                         if (IsIntUnsigned(middleExpr, parseCache) is { } middleUnsigned)
                         {
-                            var contextSettingLocal =
-                                context
-                                with
-                                {
-                                    CopyToLocal =
-                                        context.CopyToLocal.Add(middleUnsigned)
-                                };
-
-                            var afterMiddle =
-                                CompileExpressionTransitive(
+                            var (afterMiddle, middleLocalIndex) =
+                                CompileExpressionTransitiveAsLocal(
                                     middleUnsigned,
-                                    contextSettingLocal,
+                                    context,
                                     prior,
                                     parseCache);
 
@@ -1772,7 +1795,7 @@ public class PineIRCompiler
                                 .AppendInstruction(
                                     StackInstruction.Int_Unsigned_Greater_Than_Or_Equal_Const(leftInt))
                                 .AppendInstruction(
-                                    StackInstruction.Local_Get(afterMiddle.LocalsSet[middleUnsigned]))
+                                    StackInstruction.Local_Get(middleLocalIndex))
                                 .AppendInstruction(
                                     StackInstruction.Int_Unsigned_Less_Than_Or_Equal_Const(rightInt))
                                 .AppendInstruction(
@@ -1780,18 +1803,10 @@ public class PineIRCompiler
                         }
 
                         {
-                            var contextSettingLocal =
-                                context
-                                with
-                                {
-                                    CopyToLocal =
-                                        context.CopyToLocal.Add(middleExpr)
-                                };
-
-                            var afterMiddle =
-                                CompileExpressionTransitive(
+                            var (afterMiddle, middleLocalIndex) =
+                                CompileExpressionTransitiveAsLocal(
                                     middleExpr,
-                                    contextSettingLocal,
+                                    context,
                                     prior,
                                     parseCache);
 
@@ -1800,7 +1815,7 @@ public class PineIRCompiler
                                 .AppendInstruction(
                                     StackInstruction.Int_Greater_Than_Or_Equal_Const(leftInt))
                                 .AppendInstruction(
-                                    StackInstruction.Local_Get(afterMiddle.LocalsSet[middleExpr]))
+                                    StackInstruction.Local_Get(middleLocalIndex))
                                 .AppendInstruction(
                                     StackInstruction.Int_Less_Than_Or_Equal_Const(rightInt))
                                 .AppendInstruction(
@@ -2087,8 +2102,7 @@ public class PineIRCompiler
             var sourceExpr =
                 listExpr.Items[1];
 
-            if (shiftCountExpr is Expression.Literal shiftCountLiteralExpr &&
-                KernelFunction.SignedIntegerFromValueRelaxed(shiftCountLiteralExpr.Value) is { } shiftCount)
+            if (TryParse_IndependentSignedIntegerRelaxed(shiftCountExpr, parseCache) is { } shiftCount)
             {
                 return
                     CompileExpressionTransitive(
@@ -2142,8 +2156,7 @@ public class PineIRCompiler
             var sourceExpr =
                 listExpr.Items[1];
 
-            if (shiftCountExpr is Expression.Literal shiftCountLiteralExpr &&
-                KernelFunction.SignedIntegerFromValueRelaxed(shiftCountLiteralExpr.Value) is { } shiftCount)
+            if (TryParse_IndependentSignedIntegerRelaxed(shiftCountExpr, parseCache) is { } shiftCount)
             {
                 return
                     CompileExpressionTransitive(
@@ -2183,7 +2196,9 @@ public class PineIRCompiler
             .AppendInstruction(StackInstruction.Bit_Shift_Right_Generic);
     }
 
-    public static Expression? TryParse_IntNegation(Expression expression)
+    public static Expression? TryParse_IntNegation(
+        Expression expression,
+        PineVMParseCache parseCache)
     {
         if (expression is not Expression.KernelApplication kernelApp)
         {
@@ -2198,15 +2213,13 @@ public class PineIRCompiler
         if (kernelApp.Function is nameof(KernelFunction.int_mul) &&
             kernelApp.Input is Expression.List mulList && mulList.Items.Count is 2)
         {
-            if (mulList.Items[0] is Expression.Literal literalExpr &&
-                KernelFunction.SignedIntegerFromValueRelaxed(literalExpr.Value) is { } literalValue &&
+            if (TryParse_IndependentSignedIntegerRelaxed(mulList.Items[0], parseCache) is { } literalValue &&
                 literalValue == -1)
             {
                 return mulList.Items[1];
             }
 
-            if (mulList.Items[1] is Expression.Literal literalExpr2 &&
-                KernelFunction.SignedIntegerFromValueRelaxed(literalExpr2.Value) is { } literalValue2 &&
+            if (TryParse_IndependentSignedIntegerRelaxed(mulList.Items[1], parseCache) is { } literalValue2 &&
                 literalValue2 == -1)
             {
                 return mulList.Items[0];
