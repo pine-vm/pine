@@ -12,19 +12,13 @@ namespace Pine.Elm;
 public class LanguageServiceState(
     ElmCompiler.LanguageServiceInterfaceStruct languageServiceInterface,
     PineValue initState,
-    PineVM.PineVMCache pineVMCache,
     IPineVM pineVM)
 {
-    private PineValue state = initState;
+    private PineValue _state = initState;
 
-    public static Result<string, LanguageServiceState> InitLanguageServiceState()
+    public static Result<string, LanguageServiceState> InitLanguageServiceState(
+        IPineVM pineVM)
     {
-        var pineVMCache =
-            new PineVM.PineVMCache();
-
-        var pineVM =
-            new PineVM.PineVM(evalCache: pineVMCache.EvalCache);
-
         var compilerSourceFiles =
             ElmCompiler.CompilerSourceFilesDefault.Value;
 
@@ -95,8 +89,18 @@ public class LanguageServiceState(
         return new LanguageServiceState(
             languageServiceInterface,
             initOk,
-            pineVMCache,
             pineVM);
+    }
+
+    public static Result<string, LanguageServiceState> InitLanguageServiceState()
+    {
+        // TODO: Use overlap and warmup to reduce response delays.
+
+        var pineVM =
+            PineVM.PineVMResettingCache.Create(
+                resetCacheEntriesThresold: 10_000);
+
+        return InitLanguageServiceState(pineVM);
     }
 
     public Result<string, Interface.Response.WorkspaceSummaryResponse>
@@ -265,18 +269,8 @@ public class LanguageServiceState(
                     languageServiceInterface.HandleRequestInCurrentWorkspace,
                     [
                         requestEncoded,
-                        state,
+                        _state,
                     ]);
-
-            {
-                // TODO: Use overlap and warmup to reduce response delays.
-
-                if (pineVMCache.EvalCache.Count > 10_000)
-                {
-                    pineVMCache.EvalCache.Clear();
-                }
-            }
-
 
             {
                 if (handleRequestResult.IsErrOrNull() is { } err)
@@ -309,7 +303,7 @@ public class LanguageServiceState(
             var langServiceStateValue =
                 handleRequestOkList.Items.Span[1];
 
-            state = langServiceStateValue;
+            _state = langServiceStateValue;
 
             var langServiceResponseOk =
                 ElmValueInterop.ParseElmResultValue(
