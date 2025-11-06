@@ -55,9 +55,9 @@ vscodeMarketplaceUrl =
 
 downloads : DownloadLinksByPlatform
 downloads =
-    { linux = "https://github.com/pine-vm/pine/releases/download/v0.4.21/pine-bin-v0.4.21-linux-x64.zip"
-    , windows = "https://github.com/pine-vm/pine/releases/download/v0.4.21/pine-bin-v0.4.21-win-x64.zip"
-    , macOS = "https://github.com/pine-vm/pine/releases/download/v0.4.21/pine-bin-v0.4.21-osx-x64.zip"
+    { linux = "https://github.com/pine-vm/pine/releases/download/v0.4.22/pine-bin-v0.4.22-linux-x64.zip"
+    , windows = "https://github.com/pine-vm/pine/releases/download/v0.4.22/pine-bin-v0.4.22-win-x64.zip"
+    , macOS = "https://github.com/pine-vm/pine/releases/download/v0.4.22/pine-bin-v0.4.22-osx-x64.zip"
     }
 
 

@@ -48,7 +48,7 @@ jobs:
       - name: Install Pine to $RUNNER_TEMP and expose it
         run: |
           set -euo pipefail
-          curl -L https://github.com/pine-vm/pine/releases/download/v0.4.21/pine-bin-v0.4.21-linux-x64.zip \
+          curl -L https://github.com/pine-vm/pine/releases/download/v0.4.22/pine-bin-v0.4.22-linux-x64.zip \
               -o "$RUNNER_TEMP/pine.zip"
           unzip -q "$RUNNER_TEMP/pine.zip" -d "$RUNNER_TEMP/pine"
           echo "$RUNNER_TEMP/pine" >> "$GITHUB_PATH"
