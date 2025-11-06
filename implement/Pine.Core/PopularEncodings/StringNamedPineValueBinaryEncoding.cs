@@ -5,7 +5,7 @@ using System.IO;
 namespace Pine.Core.PopularEncodings;
 
 /// <summary>
-/// Wraps binary encoding of PineValues (<see cref="PineValueBinaryEncoding"/>) to model a
+/// Wraps binary encoding of PineValues (<see cref="ValueBinaryEncodingClassic"/>) to model a
 /// set of values each associated with a string name.
 /// </summary>
 public static class StringNamedPineValueBinaryEncoding
@@ -58,7 +58,7 @@ public static class StringNamedPineValueBinaryEncoding
         PineValue declarationComposition =
             PineValue.List([.. declsValues]);
 
-        PineValueBinaryEncoding.Encode(write, declarationComposition, onDeclarationWritten: componentDeclWritten);
+        ValueBinaryEncodingClassic.Encode(write, declarationComposition, onDeclarationWritten: componentDeclWritten);
     }
 
     /// <summary>
@@ -76,7 +76,7 @@ public static class StringNamedPineValueBinaryEncoding
 
         PineValue? rootValue = null;
 
-        foreach (var (declId, declValue) in PineValueBinaryEncoding.DecodeSequence(bytes))
+        foreach (var (declId, declValue) in ValueBinaryEncodingClassic.DecodeSequence(bytes))
         {
             rootValue = declValue;
 

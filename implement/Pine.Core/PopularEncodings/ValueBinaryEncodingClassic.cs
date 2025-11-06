@@ -9,7 +9,7 @@ namespace Pine.Core.PopularEncodings;
 /// Functions to encode and decode <see cref="PineValue"/> instances 
 /// to and from a compact binary representation.
 /// </summary>
-public static class PineValueBinaryEncoding
+public static class ValueBinaryEncodingClassic
 {
     /// <summary>
     /// Size in bytes of the component ID prefix used in binary encoding (64-bit version).

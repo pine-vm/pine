@@ -891,7 +891,7 @@ public class ElmCompiler
 
         var fileContent = stream.ToArray();
 
-        var compiledEnv = PineValueBinaryEncoding.DecodeRoot(fileContent);
+        var compiledEnv = ValueBinaryEncodingClassic.DecodeRoot(fileContent);
 
         return ElmCompilerFromEnvValue(compiledEnv);
     }

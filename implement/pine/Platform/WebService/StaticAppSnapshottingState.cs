@@ -149,7 +149,7 @@ public sealed record StaticAppSnapshottingState : IAsyncDisposable
             try
             {
                 var appState =
-                    PineValueBinaryEncoding.DecodeRoot(appStateSnapshotBytes);
+                    ValueBinaryEncodingClassic.DecodeRoot(appStateSnapshotBytes);
 
                 var setStateResult =
                     _process.ResetAppStateIgnoringTypeChecking(appState);
@@ -269,7 +269,7 @@ public sealed record StaticAppSnapshottingState : IAsyncDisposable
             {
                 using var stream = new System.IO.MemoryStream();
 
-                PineValueBinaryEncoding.Encode(stream, newAppStateSnapshot);
+                ValueBinaryEncodingClassic.Encode(stream, newAppStateSnapshot);
 
                 stream.Seek(0, System.IO.SeekOrigin.Begin);
 

@@ -1199,7 +1199,7 @@ public class InteractiveSessionPine : IInteractiveSession
             {
                 if (fileStore.GetFileContent([fileName]) is { } fileContent)
                 {
-                    var loadedValue = PineValueBinaryEncoding.DecodeRoot(fileContent);
+                    var loadedValue = ValueBinaryEncodingClassic.DecodeRoot(fileContent);
 
                     evalCache[(expression, environment)] = loadedValue;
 
@@ -1225,7 +1225,7 @@ public class InteractiveSessionPine : IInteractiveSession
                     {
                         using var stream = new System.IO.MemoryStream();
 
-                        PineValueBinaryEncoding.Encode(stream, evalOk);
+                        ValueBinaryEncodingClassic.Encode(stream, evalOk);
 
                         stream.Seek(0, System.IO.SeekOrigin.Begin);
 

@@ -6,7 +6,7 @@ using Xunit;
 
 namespace Pine.Core.Tests;
 
-public class ValueBinaryEncodingTests
+public class ValueBinaryEncodingClassicTests
 {
     [Fact]
     public void Reuses_components()
@@ -41,25 +41,25 @@ public class ValueBinaryEncodingTests
 
         using var compositionAlfaEncodedBytes = new System.IO.MemoryStream();
 
-        PineValueBinaryEncoding.Encode(compositionAlfaEncodedBytes, compositionAlfa);
+        ValueBinaryEncodingClassic.Encode(compositionAlfaEncodedBytes, compositionAlfa);
 
         compositionAlfaEncodedBytes.Seek(
             offset: 0,
             System.IO.SeekOrigin.Begin);
 
         var reproducedAlfa =
-            PineValueBinaryEncoding.DecodeRoot(compositionAlfaEncodedBytes.ToArray());
+            ValueBinaryEncodingClassic.DecodeRoot(compositionAlfaEncodedBytes.ToArray());
 
         using var compositionBetaEncodedBytes = new System.IO.MemoryStream();
 
-        PineValueBinaryEncoding.Encode(compositionBetaEncodedBytes, compositionBeta);
+        ValueBinaryEncodingClassic.Encode(compositionBetaEncodedBytes, compositionBeta);
 
         compositionBetaEncodedBytes.Seek(
             offset: 0,
             System.IO.SeekOrigin.Begin);
 
         var reproducedBeta =
-            PineValueBinaryEncoding.DecodeRoot(compositionBetaEncodedBytes.ToArray());
+            ValueBinaryEncodingClassic.DecodeRoot(compositionBetaEncodedBytes.ToArray());
 
         reproducedAlfa.Should().Be(compositionAlfa);
 
@@ -144,12 +144,12 @@ public class ValueBinaryEncodingTests
             {
                 using var encodedStream = new System.IO.MemoryStream();
 
-                PineValueBinaryEncoding.Encode(encodedStream, testCase);
+                ValueBinaryEncodingClassic.Encode(encodedStream, testCase);
 
                 var encodedFlat = encodedStream.ToArray();
 
                 var decoded =
-                    PineValueBinaryEncoding.DecodeRoot(encodedFlat);
+                    ValueBinaryEncodingClassic.DecodeRoot(encodedFlat);
 
                 decoded.Should().Be(testCase);
             }
@@ -175,11 +175,11 @@ public class ValueBinaryEncodingTests
 
         // Encode with new 32-bit format
         using var encoded32Stream = new System.IO.MemoryStream();
-        PineValueBinaryEncoding.Encode(encoded32Stream, testValue);
+        ValueBinaryEncodingClassic.Encode(encoded32Stream, testValue);
         var encoded32 = encoded32Stream.ToArray();
 
         // Encode with old 64-bit format by calling Encode64 directly via reflection
-        var encode64Method = typeof(PineValueBinaryEncoding)
+        var encode64Method = typeof(ValueBinaryEncodingClassic)
             .GetMethod("Encode64", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
 
         using var encoded64Stream = new System.IO.MemoryStream();
@@ -196,10 +196,10 @@ public class ValueBinaryEncodingTests
         encoded32.Length.Should().BeLessThan(encoded64.Length);
 
         // Verify both decode correctly
-        var decoded32 = PineValueBinaryEncoding.DecodeRoot(encoded32);
+        var decoded32 = ValueBinaryEncodingClassic.DecodeRoot(encoded32);
         decoded32.Should().Be(testValue);
 
-        var decoded64 = PineValueBinaryEncoding.DecodeRoot(encoded64);
+        var decoded64 = ValueBinaryEncodingClassic.DecodeRoot(encoded64);
         decoded64.Should().Be(testValue);
     }
 
@@ -221,7 +221,7 @@ public class ValueBinaryEncodingTests
         {
             // Encode with old 64-bit format using reflection
             var encode64Method =
-                typeof(PineValueBinaryEncoding)
+                typeof(ValueBinaryEncodingClassic)
                 .GetMethod("Encode64", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
 
             encode64Method.Should().NotBeNull();
@@ -238,7 +238,7 @@ public class ValueBinaryEncodingTests
             var encoded64 = encoded64Stream.ToArray();
 
             // Verify that DecodeRoot can read the 64-bit format
-            var decoded = PineValueBinaryEncoding.DecodeRoot(encoded64);
+            var decoded = ValueBinaryEncodingClassic.DecodeRoot(encoded64);
             decoded.Should().Be(testCase);
         }
     }

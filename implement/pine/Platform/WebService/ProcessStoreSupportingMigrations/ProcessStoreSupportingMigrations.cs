@@ -340,7 +340,7 @@ public class ProcessStoreReaderInFileStore(
         {
             var binaryBytes = BytesConversions.Inflate(fileContentBinaryDeflated);
 
-            return PineValueBinaryEncoding.DecodeRoot(binaryBytes);
+            return ValueBinaryEncodingClassic.DecodeRoot(binaryBytes);
         }
 
         if (ValueJsonDeflatedFileStore.GetFileContent(
@@ -708,7 +708,7 @@ public class ProcessStoreWriterInFileStore : ProcessStoreInFileStore, IProcessSt
                     System.IO.Compression.CompressionLevel.Optimal,
                     leaveOpen: true);
 
-            PineValueBinaryEncoding.Encode(deflateStream, component);
+            ValueBinaryEncodingClassic.Encode(deflateStream, component);
 
             deflateStream.Flush();
 
