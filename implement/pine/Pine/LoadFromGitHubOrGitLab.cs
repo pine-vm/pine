@@ -1,9 +1,7 @@
-using LibGit2Sharp;
 using Pine.Core;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
@@ -112,8 +110,6 @@ public static class LoadFromGitHubOrGitLab
         string sourceUrl,
         Func<GetRepositoryFilesPartialForCommitRequest, Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>>> getRepositoryFilesPartialForCommit)
     {
-        ElmTime.Git.LibGit2Sharp.SetupTask.Value.Wait();
-
         var parsedUrl = ParseUrl(sourceUrl);
 
         if (parsedUrl is null)
@@ -132,7 +128,7 @@ public static class LoadFromGitHubOrGitLab
         var cloneUrl = parsedUrl.repository.TrimEnd('/') + ".git";
 
         getRepositoryFilesPartialForCommit ??=
-            req => GetRepositoryFilesPartialForCommitViaLibGitSharpCheckout(
+            req => GetRepositoryFilesPartialForCommitViaGitCore(
                 cloneUrl: req.cloneUrlCandidates[0],
                 commit: req.commit);
 
@@ -143,10 +139,7 @@ public static class LoadFromGitHubOrGitLab
                     commit: parsedUrl.inRepository!.@ref,
                     cloneUrlCandidates: [cloneUrl]))
             :
-            GetRepositoryFilesPartialForBranchViaLibGitSharpCheckout(cloneUrl, branchName);
-
-        var tempWorkingDirectory = Filesystem.CreateRandomDirectoryInTempDirectory();
-        var gitRepositoryLocalDirectory = Path.Combine(tempWorkingDirectory, "git-repository");
+            GetRepositoryFilesPartialForBranchViaGitCore(cloneUrl, branchName);
 
         return
             repositoryFilesResult
@@ -154,164 +147,255 @@ public static class LoadFromGitHubOrGitLab
             {
                 try
                 {
-                    foreach (var fileWithPath in repositoryFilesPartial)
-                    {
-                        var absoluteFilePath = Path.Combine([gitRepositoryLocalDirectory, .. fileWithPath.Key]);
-                        var absoluteDirectoryPath = Path.GetDirectoryName(absoluteFilePath)!;
-
-                        Directory.CreateDirectory(absoluteDirectoryPath);
-                        File.WriteAllBytes(absoluteFilePath, fileWithPath.Value.ToArray());
-                    }
-
-                    (string hash, CommitContent content)? rootCommit = null;
-
-                    using var gitRepository = new Repository(gitRepositoryLocalDirectory);
+                    var refName = RefCanonicalNameFromPathComponentInGitHubRepository(parsedUrl.inRepository?.@ref);
 
                     var loadStartCommitResult =
-                        GetCommitFromReference(
-                            cloneUrl: cloneUrl,
-                            RefCanonicalNameFromPathComponentInGitHubRepository(parsedUrl.inRepository?.@ref))
-                        .MapError(err => "I did not find the commit for ref '" + err + "'.")
-                        .AndThen(commitId =>
-                        {
-                            if (gitRepository.Lookup(commitId) is Commit commit)
-                                return Result<string, Commit>.ok(commit);
-
-                            return "Did not find commit " + commitId;
-                        });
+                        GetCommitFromReference(cloneUrl, refName)
+                        .MapError(err => "I did not find the commit for ref '" + err + "'.");
 
                     return
                         loadStartCommitResult
-                        .AndThen(startCommit =>
+                        .AndThen(commitSha =>
                         {
-                            ParsedUrlInRepository partInRepositoryWithCommit(Commit replacementCommit) =>
-                            parsedUrl.inRepository is null ?
-                            new ParsedUrlInRepository(GitObjectType.tree, @ref: replacementCommit.Sha, path: "") :
-                            parsedUrl.inRepository with { @ref = replacementCommit.Sha };
+                            // Fetch the repository with commit data using GitCore
+                            var repository = GitCore.LoadFromUrl.FetchBloblessClone(
+                                gitUrl: cloneUrl,
+                                commitSha: commitSha,
+                                depth: null);
 
-                            var urlInCommit = BackToUrl(parsedUrl with { inRepository = partInRepositoryWithCommit(startCommit) });
+                            var commitObject =
+                                repository.GetObject(commitSha)
+                                ?? throw new Exception("Commit " + commitSha + " not found in repository");
 
-                            rootCommit = GetCommitHashAndContent(startCommit);
+                            if (commitObject.Type is not GitCore.PackFile.ObjectType.Commit)
+                                throw new Exception("Object " + commitSha + " is not a commit");
+
+                            var commit = GitCore.GitObjects.ParseCommit(commitObject.Data);
+
+                            ParsedUrlInRepository partInRepositoryWithCommit(string replacementCommitSha) =>
+                                parsedUrl.inRepository is null ?
+                                new ParsedUrlInRepository(GitObjectType.tree, @ref: replacementCommitSha, path: "") :
+                                parsedUrl.inRepository with { @ref = replacementCommitSha };
+
+                            var urlInCommit = BackToUrl(parsedUrl with { inRepository = partInRepositoryWithCommit(commitSha) });
+
+                            var rootCommit = GetCommitHashAndContentFromGitCore(commitSha, commit);
 
                             var parsedUrlPath = parsedUrl.inRepository == null ? "" : parsedUrl.inRepository.path;
 
                             var pathNodesNames = parsedUrlPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
 
-                            return
-                            FindGitObjectAtPath(startCommit.Tree, pathNodesNames)
-                            .MapError(_ => "I did not find an object at path '" + parsedUrlPath + "' in " + startCommit.Sha)
-                            .AndThen(linkedObject =>
+                            // Get the tree or blob at the specified path
+                            var treeHash = commit.TreeHash;
+                            var currentPath = new List<string>();
+
+                            // Navigate to the specified path
+                            foreach (var pathComponent in pathNodesNames)
                             {
-                                IEnumerable<Commit> traceBackTreeParents()
+                                var treeObj = repository.GetObject(treeHash);
+                                if (treeObj is null || treeObj.Type is not GitCore.PackFile.ObjectType.Tree)
+                                    return "Path not found: " + string.Join("/", currentPath);
+
+                                var tree = GitCore.GitObjects.ParseTree(treeObj.Data);
+                                var entry = tree.Entries.FirstOrDefault(e => e.Name == pathComponent);
+
+                                if (entry is null)
+                                    return "Path not found: " + string.Join("/", currentPath.Append(pathComponent));
+
+                                treeHash = entry.HashBase16;
+                                currentPath.Add(pathComponent);
+                            }
+
+                            // Collect all blob SHAs we need
+                            var blobShas = new List<string>();
+                            void CollectBlobShas(string objHash)
+                            {
+                                var obj = repository.GetObject(objHash);
+
+                                // If object is not in repository, assume it's a blob that needs to be fetched
+                                if (obj is null)
                                 {
-                                    var queue = new Queue<Commit>();
+                                    blobShas.Add(objHash);
+                                    return;
+                                }
 
-                                    queue.Enqueue(startCommit);
-
-                                    while (queue.TryDequeue(out var currentCommit))
+                                if (obj.Type is GitCore.PackFile.ObjectType.Blob)
+                                {
+                                    blobShas.Add(objHash);
+                                }
+                                else if (obj.Type is GitCore.PackFile.ObjectType.Tree)
+                                {
+                                    var tree = GitCore.GitObjects.ParseTree(obj.Data);
+                                    foreach (var entry in tree.Entries)
                                     {
-                                        yield return currentCommit;
+                                        CollectBlobShas(entry.HashBase16);
+                                    }
+                                }
+                            }
 
-                                        foreach (var parent in currentCommit.Parents)
+                            CollectBlobShas(treeHash);
+
+                            // Fetch all blobs if we have any
+                            if (blobShas.Count > 0)
+                            {
+                                var blobsPackFileData = GitCore.GitSmartHttp.FetchSpecificObjectsAsync(
+                                    cloneUrl, blobShas).GetAwaiter().GetResult();
+
+                                // Parse the blobs pack file
+                                var blobsIndexResult = GitCore.PackIndex.GeneratePackIndexV2(blobsPackFileData);
+                                var blobsIndexEntries = GitCore.PackIndex.ParsePackIndexV2(blobsIndexResult.IndexData);
+                                var blobObjects = GitCore.PackFile.ParseAllObjects(blobsPackFileData, blobsIndexEntries);
+
+                                // Add blobs to repository
+                                var blobPackObjects = blobObjects
+                                    .Where(obj => obj.Type is GitCore.PackFile.ObjectType.Blob)
+                                    .ToDictionary(obj => obj.SHA1base16, obj => obj);
+
+                                repository = repository.WithObjects(blobPackObjects.ToImmutableDictionary());
+                            }
+
+                            // Trace back to find first parent with same tree at this path
+                            (string hash, CommitContent content) TraceBackToFirstParentWithSameTree()
+                            {
+                                var visited = new HashSet<string>();
+                                var queue = new Queue<string>();
+                                queue.Enqueue(commitSha);
+
+                                (string hash, CommitContent content)? earliestCommit = null;
+                                DateTimeOffset earliestTime = DateTimeOffset.MaxValue;
+
+                                while (queue.Count > 0)
+                                {
+                                    var currentCommitSha = queue.Dequeue();
+
+                                    if (!visited.Add(currentCommitSha))
+                                        continue;
+
+                                    var currentCommitObj = repository.GetObject(currentCommitSha);
+                                    if (currentCommitObj is null || currentCommitObj.Type is not GitCore.PackFile.ObjectType.Commit)
+                                        continue;
+
+                                    var currentCommit = GitCore.GitObjects.ParseCommit(currentCommitObj.Data);
+
+                                    // Check if this commit has the same tree at the specified path
+                                    var currentTreeHash = currentCommit.TreeHash;
+                                    foreach (var pathComponent in pathNodesNames)
+                                    {
+                                        var treeObj = repository.GetObject(currentTreeHash);
+                                        if (treeObj is null || treeObj.Type is not GitCore.PackFile.ObjectType.Tree)
                                         {
-                                            if (FindGitObjectAtPath(parent.Tree, pathNodesNames).Map(find => (string?)find.Sha).WithDefault(null) != linkedObject?.Sha)
-                                                continue;
+                                            currentTreeHash = string.Empty;
+                                            break;
+                                        }
 
-                                            queue.Enqueue(parent);
+                                        var tree = GitCore.GitObjects.ParseTree(treeObj.Data);
+                                        var entry = tree.Entries.FirstOrDefault(e => e.Name == pathComponent);
+
+                                        if (entry is null)
+                                        {
+                                            currentTreeHash = string.Empty;
+                                            break;
+                                        }
+
+                                        currentTreeHash = entry.HashBase16;
+                                    }
+
+                                    if (currentTreeHash == treeHash)
+                                    {
+                                        var commitTime = currentCommit.Author.Timestamp;
+                                        if (commitTime < earliestTime)
+                                        {
+                                            earliestTime = commitTime;
+                                            earliestCommit = GetCommitHashAndContentFromGitCore(currentCommitSha, currentCommit);
+                                        }
+
+                                        // Continue tracing through parents
+                                        foreach (var parentHash in currentCommit.ParentHashes)
+                                        {
+                                            queue.Enqueue(parentHash);
                                         }
                                     }
                                 }
 
-                                var firstParentCommitWithSameTreeRef =
-                                    traceBackTreeParents().OrderBy(commit => commit.Author.When).First();
+                                return earliestCommit ?? rootCommit;
+                            }
 
-                                var firstParentCommitWithSameTree =
-                                    GetCommitHashAndContent(firstParentCommitWithSameTreeRef);
+                            var firstParentCommitWithSameTree = TraceBackToFirstParentWithSameTree();
 
-                                var urlInFirstParentCommitWithSameValueAtThisPath =
-                                    BackToUrl(parsedUrl with { inRepository = partInRepositoryWithCommit(firstParentCommitWithSameTreeRef) });
+                            var urlInFirstParentCommitWithSameValueAtThisPath =
+                                BackToUrl(parsedUrl with { inRepository = partInRepositoryWithCommit(firstParentCommitWithSameTree.hash) });
 
-                                static BlobTreeWithStringPath convertToLiteralNodeObjectRecursive(GitObject gitObject)
+                            // Convert the tree or blob to the expected format
+                            BlobTreeWithStringPath ConvertGitObjectToBlobTree(string objectHash)
+                            {
+                                var obj = repository.GetObject(objectHash);
+                                if (obj is null)
+                                    throw new Exception("Object not found: " + objectHash);
+
+                                if (obj.Type is GitCore.PackFile.ObjectType.Blob)
                                 {
-                                    if (gitObject is Tree gitTree)
-                                    {
-                                        return BlobTreeWithStringPath.SortedTree(
-                                            treeContent:
-                                                gitTree.Select(treeEntry =>
-                                                    (treeEntry.Name,
-                                                    convertToLiteralNodeObjectRecursive(treeEntry.Target)))
-                                                .ToImmutableList());
-                                    }
+                                    // Verify blob hash
+                                    var blobContent = obj.Data.ToArray();
+                                    var expectedSHA = objectHash.ToLowerInvariant();
+                                    var loadedBlobSHA1Base16Lower =
+                                        Convert.ToHexStringLower(GitBlobSHAFromBlobContent(blobContent));
 
-                                    if (gitObject is Blob gitBlob)
-                                    {
-                                        var memoryStream = new MemoryStream();
+                                    if (loadedBlobSHA1Base16Lower != expectedSHA)
+                                        throw new Exception("Unexpected content for git object : SHA is " + loadedBlobSHA1Base16Lower + " instead of " + expectedSHA);
 
-                                        var gitBlobContentStream = gitBlob.GetContentStream();
-
-                                        if (gitBlobContentStream == null)
-                                            throw new Exception("Failed to get content of git blob");
-
-                                        gitBlobContentStream.CopyTo(memoryStream);
-
-                                        var blobContent = memoryStream.ToArray();
-
-                                        var expectedSHA = gitBlob.Sha.ToLowerInvariant();
-
-                                        //  This will change with the introduction of the new hash in git.
-                                        //  We could branch on the length of 'gitBlob.Sha' to choose between old and new hash.
-                                        //  (https://github.com/git/git/blob/74583d89127e21255c12dd3c8a3bf60b497d7d03/Documentation/technical/hash-function-transition.txt)
-                                        //  (https://www.youtube.com/watch?v=qHERDFUSa14)
-                                        var loadedBlobSHA1Base16Lower =
-                                            Convert.ToHexStringLower(GitBlobSHAFromBlobContent(blobContent));
-
-                                        if (loadedBlobSHA1Base16Lower != expectedSHA)
-                                            throw new Exception("Unexpected content for git object : SHA is " + loadedBlobSHA1Base16Lower + " instead of " + expectedSHA);
-
-                                        return BlobTreeWithStringPath.Blob(memoryStream.ToArray());
-                                    }
-
-                                    throw new Exception("Unexpected kind of git object: " + gitObject.GetType() + ", " + gitObject.Id);
+                                    return BlobTreeWithStringPath.Blob(blobContent);
                                 }
 
-                                try
+                                if (obj.Type is GitCore.PackFile.ObjectType.Tree)
                                 {
-                                    var literalNodeObject = convertToLiteralNodeObjectRecursive(linkedObject);
+                                    var tree = GitCore.GitObjects.ParseTree(obj.Data);
+                                    return BlobTreeWithStringPath.SortedTree(
+                                        treeContent:
+                                            tree.Entries.Select(entry =>
+                                                (entry.Name, ConvertGitObjectToBlobTree(entry.HashBase16)))
+                                            .ToImmutableList());
+                                }
 
-                                    return Result<string, LoadFromUrlSuccess>.ok(
-                                        new LoadFromUrlSuccess
-                                        (
-                                            tree: literalNodeObject,
-                                            urlInCommit: urlInCommit,
-                                            urlInFirstParentCommitWithSameValueAtThisPath: urlInFirstParentCommitWithSameValueAtThisPath,
-                                            rootCommit: rootCommit.Value,
-                                            firstParentCommitWithSameTree: firstParentCommitWithSameTree
-                                        )
-                                    );
-                                }
-                                catch (Exception e)
-                                {
-                                    return "Failed to convert from git object:\n" + e;
-                                }
-                            });
+                                throw new Exception("Unexpected git object type: " + obj.Type);
+                            }
+
+                            var literalNodeObject = ConvertGitObjectToBlobTree(treeHash);
+
+                            return Result<string, LoadFromUrlSuccess>.ok(
+                                new LoadFromUrlSuccess
+                                (
+                                    tree: literalNodeObject,
+                                    urlInCommit: urlInCommit,
+                                    urlInFirstParentCommitWithSameValueAtThisPath: urlInFirstParentCommitWithSameValueAtThisPath,
+                                    rootCommit: rootCommit,
+                                    firstParentCommitWithSameTree: firstParentCommitWithSameTree
+                                )
+                            );
                         });
                 }
-                finally
+                catch (Exception e)
                 {
-                    try
-                    {
-                        DeleteLocalDirectoryRecursive(tempWorkingDirectory);
-                    }
-                    catch
-                    {
-                        /*
-                        Adapt to observations 2020-02-15:
-                        A user got a `System.IO.DirectoryNotFoundException` out of `DeleteLocalDirectoryRecursive`.
-                        Also, it seems common other software interferring with contents of `Path.GetTempPath()` (https://github.com/dotnet/runtime/issues/3778).
-                        */
-                    }
+                    return "Failed to load from git repository:\n" + e;
                 }
             });
+    }
+
+    private static (string hash, CommitContent content) GetCommitHashAndContentFromGitCore(
+        string commitSha,
+        GitCore.GitObjects.CommitObject commit)
+    {
+        // GitCore trims trailing newlines, but the original implementation kept them
+        // Add back a single trailing newline to match expected behavior
+        var message = commit.Message;
+        if (!string.IsNullOrEmpty(message) && !message.EndsWith('\n'))
+            message += "\n";
+
+        return (commitSha, new CommitContent
+        (
+            message: message,
+            author: new GitParticipantSignature(name: commit.Author.Name, email: commit.Author.Email),
+            committer: new GitParticipantSignature(name: commit.Committer.Name, email: commit.Committer.Email)
+        ));
     }
 
     private static Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>> GetRepositoryFilesPartialForCommitDefault(
@@ -324,7 +408,7 @@ public static class LoadFromGitHubOrGitLab
                     request.cloneUrlCandidates.Select(
                         cloneUrlCandidate =>
                         new Func<Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>>>(
-                        () => GetRepositoryFilesPartialForCommitViaLibGitSharpCheckout(
+                        () => GetRepositoryFilesPartialForCommitViaGitCore(
                         cloneUrl: cloneUrlCandidate,
                         commit: request.commit)));
 
@@ -359,82 +443,52 @@ public static class LoadFromGitHubOrGitLab
         };
     }
 
-    public static Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>> GetRepositoryFilesPartialForBranchViaLibGitSharpCheckout(
+    public static Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>> GetRepositoryFilesPartialForBranchViaGitCore(
         string cloneUrl,
         string? branchName)
     {
-        ElmTime.Git.LibGit2Sharp.SetupTask.Value.Wait();
-
         var refName = RefCanonicalNameFromPathComponentInGitHubRepository(branchName);
 
         return
             GetCommitFromReference(cloneUrl, refName)
             .MapError(err => "Failed to get commit from ref '" + refName + "': " + err)
-            .AndThen(commitId => GetRepositoryFilesPartialForCommitViaLibGitSharpCheckout(cloneUrl, commitId));
+            .AndThen(commitId => GetRepositoryFilesPartialForCommitViaGitCore(cloneUrl, commitId));
     }
 
-    public static Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>> GetRepositoryFilesPartialForCommitViaLibGitSharpCheckout(
+    public static Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>> GetRepositoryFilesPartialForCommitViaGitCore(
         string cloneUrl,
         string commit)
     {
-        var tempWorkingDirectory =
-            Path.GetFullPath(Filesystem.CreateRandomDirectoryInTempDirectory().TrimEnd('/') + "/");
-
-        /*
-         * 2023-05-20
-         * Adapt to https://github.com/libgit2/libgit2sharp/issues/1945:
-         * On MacOS, `Repository.Init` yields different WorkingDirectory than provided in constructor
-         * 
-         * Before we started to map the directory path to resolve symbolic links here, `Repository.CheckoutPaths` failed on OSX with an error message like this:
-         * Unable to process file '/var/folders/24/8k48jl6d249_n_qfxwsl6xvm0000gn/T/zqdzg3qp.4ni/'. This file is not located under the working directory of the repository ('/private/var/folders/24/8k48jl6d249_n_qfxwsl6xvm0000gn/T/zqdzg3qp.4ni/').
-         * 
-         * */
-        tempWorkingDirectory =
-            ResolveLinkTargetFullNameIncludingParents(tempWorkingDirectory);
-
         try
         {
-            //  https://github.com/libgit2/libgit2sharp/wiki/git-clone
-            Repository.Clone(
-                cloneUrl, tempWorkingDirectory,
-                new CloneOptions { Checkout = false, BranchName = null });
+            // Use GitCore to load the tree contents
+            var treeContents = GitCore.LoadFromUrl.LoadTreeContentsFromGitUrl(
+                gitUrl: cloneUrl,
+                commitSha: commit);
 
-            // TODO: Test reduce size of returned files using partial clone?
-
-            using var gitRepository = new Repository(tempWorkingDirectory);
-
-            gitRepository.CheckoutPaths(commit, [tempWorkingDirectory.TrimEnd('/') + "/"]);
-
-            return
-                Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>>.ok(
-                    PineValueComposition.ToFlatDictionaryWithPathComparer(
-                        Filesystem.GetAllFilesFromDirectory(tempWorkingDirectory)
-                        .Where(predicate: c => c.path?[0] == ".git")));
+            // Convert from GitCore's IReadOnlyList<string> path format to the expected format
+            return Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>>.ok(
+                PineValueComposition.ToFlatDictionaryWithPathComparer(
+                    treeContents.Select(kvp => (path: kvp.Key, blobContent: kvp.Value))));
         }
         catch (Exception e)
         {
-            throw new Exception("Failed to clone from '" + cloneUrl + "'", e);
-        }
-        finally
-        {
-            DeleteLocalDirectoryRecursive(tempWorkingDirectory);
+            return Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>>.err(
+                "Failed to load from '" + cloneUrl + "' at commit " + commit + ": " + e.Message);
         }
     }
 
-    private static string ResolveLinkTargetFullNameIncludingParents(string directory)
+    // This method name is kept for backwards compatibility but now uses GitCore
+    public static Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>> GetRepositoryFilesPartialForBranchViaLibGitSharpCheckout(
+        string cloneUrl,
+        string? branchName)
     {
-        if (directory == Path.GetPathRoot(directory))
-            return directory;
+        var refName = RefCanonicalNameFromPathComponentInGitHubRepository(branchName);
 
-        if (Directory.ResolveLinkTarget(directory, returnFinalTarget: true) is { } resolved)
-            return resolved.FullName;
-
-        if (Path.GetDirectoryName(directory) is { } parent)
-        {
-            return ResolveLinkTargetFullNameIncludingParents(parent) + Path.DirectorySeparatorChar + Path.GetFileName(directory);
-        }
-
-        return directory;
+        return
+            GetCommitFromReference(cloneUrl, refName)
+            .MapError(err => "Failed to get commit from ref '" + refName + "': " + err)
+            .AndThen(commitId => GetRepositoryFilesPartialForCommitViaGitCore(cloneUrl, commitId));
     }
 
     public static string RefCanonicalNameFromPathComponentInGitHubRepository(string? refPathComponent)
@@ -455,17 +509,59 @@ public static class LoadFromGitHubOrGitLab
         if (RefLooksLikeCommit(referenceCanonicalName))
             return Result<string, string>.ok(referenceCanonicalName);
 
-        var remoteReferences = Repository.ListRemoteReferences(cloneUrl).ToImmutableList();
+        try
+        {
+            // Parse the clone URL to extract base URL, owner, and repo
+            // Expected format: https://github.com/owner/repo.git or https://gitlab.com/owner/repo.git
+            var uri = new Uri(cloneUrl);
+            var baseUrl = $"{uri.Scheme}://{uri.Host}";
+            var pathParts = uri.AbsolutePath.TrimStart('/').TrimEnd('/').Replace(".git", "").Split('/');
 
-        return GetCommitFromReference(
-            ImmutableHashSet<string>.Empty,
-            remoteReferences,
-            referenceCanonicalName);
+            if (pathParts.Length < 2)
+                return Result<string, string>.err("Invalid clone URL format: " + cloneUrl);
+
+            var owner = pathParts[0];
+            var repo = pathParts[1];
+
+            // Extract branch name from canonical name (e.g., "refs/heads/main" -> "main")
+            var branchName = referenceCanonicalName.StartsWith("refs/heads/")
+                ? referenceCanonicalName.Substring("refs/heads/".Length)
+                : referenceCanonicalName;
+
+            if (branchName == "HEAD")
+            {
+                // Try common default branch names
+                foreach (var defaultBranch in new[] { "main", "master" })
+                {
+                    try
+                    {
+                        var commitSha = GitCore.GitSmartHttp.FetchBranchCommitShaAsync(
+                            baseUrl, owner, repo, defaultBranch).GetAwaiter().GetResult();
+                        return Result<string, string>.ok(commitSha);
+                    }
+                    catch
+                    {
+                        // Try next default branch name
+                    }
+                }
+
+                return Result<string, string>.err("Failed to resolve HEAD to common default branches (main, master)");
+            }
+
+            var commitShaResult = GitCore.GitSmartHttp.FetchBranchCommitShaAsync(
+                baseUrl, owner, repo, branchName).GetAwaiter().GetResult();
+
+            return Result<string, string>.ok(commitShaResult);
+        }
+        catch (Exception e)
+        {
+            return Result<string, string>.err("Failed to resolve reference '" + referenceCanonicalName + "': " + e.Message);
+        }
     }
 
     public static Result<string, string> GetCommitFromReference(
         IImmutableSet<string> stack,
-        IReadOnlyList<Reference> remoteReferences,
+        IReadOnlyList<(string CanonicalName, string TargetIdentifier)> remoteReferences,
         string referenceCanonicalName)
     {
         if (RefLooksLikeCommit(referenceCanonicalName))
@@ -477,7 +573,7 @@ public static class LoadFromGitHubOrGitLab
         var matchingReference =
             remoteReferences.FirstOrDefault(c => c.CanonicalName == referenceCanonicalName);
 
-        if (matchingReference == null)
+        if (matchingReference == default)
         {
             return Result<string, string>.err("Found no reference matching '" + referenceCanonicalName + "' (" + remoteReferences.Count + " remote references)");
         }
@@ -555,55 +651,6 @@ public static class LoadFromGitHubOrGitLab
         {
             DeleteLocalDirectoryRecursive(tempWorkingDirectory);
         }
-    }
-
-    public static (string hash, CommitContent content) GetCommitHashAndContent(Commit commit)
-    {
-        return (commit.Sha, new CommitContent
-        (
-            message: commit.Message,
-            author: GetParticipantSignature(commit.Author),
-            committer: GetParticipantSignature(commit.Committer)
-        ));
-    }
-
-    public static GitParticipantSignature GetParticipantSignature(Signature signature)
-    {
-        return new GitParticipantSignature
-        (
-            name: signature.Name,
-            email: signature.Email
-        );
-    }
-
-    private static Result<object, GitObject> FindGitObjectAtPath(Tree root, IEnumerable<string> nodesNames)
-    {
-        if (root is null)
-            return Result<object, GitObject>.err(new object());
-
-        GitObject? currentObject = root;
-
-        foreach (var nodeName in nodesNames)
-        {
-            var currentTree = currentObject as Tree;
-
-            if (currentTree is null)
-                return Result<object, GitObject>.err(new object());
-
-            var treeEntry = currentTree?[nodeName];
-
-            currentObject =
-                treeEntry?.Mode == Mode.Nonexistent || !(treeEntry?.TargetType == TreeEntryTargetType.Blob || treeEntry?.TargetType == TreeEntryTargetType.Tree)
-                ?
-                null
-                :
-                treeEntry.Target;
-        }
-
-        if (currentObject is null)
-            return Result<object, GitObject>.err(new object());
-
-        return currentObject;
     }
 
     private static byte[] GitBlobSHAFromBlobContent(byte[] blobContent)
