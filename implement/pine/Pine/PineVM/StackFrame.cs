@@ -15,7 +15,8 @@ record StackFrame(
     Memory<PineValueInProcess?> StackValues,
     Memory<PineValueInProcess> LocalsValues,
     StackFrameProfilingBaseline ProfilingBaseline,
-    ApplyStepwise? Specialization)
+    ApplyStepwise? Specialization,
+    string? CacheFileName)
 {
     public int InstructionPointer { get; set; } = 0;
 

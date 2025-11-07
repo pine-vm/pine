@@ -132,6 +132,11 @@ public class PineValueInProcess
         };
     }
 
+    /// <summary>
+    /// Create an in-process representation from an integer without immediately encoding it as a blob.
+    /// </summary>
+    /// <param name="integer">The integer payload to encode lazily.</param>
+    /// <returns>A new <see cref="PineValueInProcess"/> representing the integer.</returns>
     public static PineValueInProcess CreateInteger(BigInteger integer)
     {
         return new PineValueInProcess
@@ -140,6 +145,10 @@ public class PineValueInProcess
         };
     }
 
+    /// <summary>
+    /// Representation of a boolean, as returned by kernel functions such as <see cref="KernelFunction.equal(PineValue)"/>.
+    /// </summary>
+    /// <param name="boolean">The boolean value to represent.</param>
     public static PineValueInProcess CreateBool(bool boolean)
     {
         return boolean ? KernelTrueValue : KernelFalseValue;
@@ -852,6 +861,12 @@ public class PineValueInProcess
         return true;
     }
 
+    /// <summary>
+    /// Resolve a descendant value by following a sequence of indices, evaluating only as needed.
+    /// </summary>
+    /// <param name="root">The value serving as the traversal root.</param>
+    /// <param name="path">The zero-based index path to traverse.</param>
+    /// <returns>The materialized value at the given path or <c>null</c> if any step is missing.</returns>
     public static PineValue? ValueFromPathOrNull(
         PineValueInProcess root,
         ReadOnlySpan<int> path)
@@ -878,6 +893,12 @@ public class PineValueInProcess
         return current.Evaluate();
     }
 
+    /// <summary>
+    /// Resolve a descendant value by following a sequence of indices, preserving deferred evaluation when possible.
+    /// </summary>
+    /// <param name="root">The value serving as the traversal root.</param>
+    /// <param name="path">The zero-based index path to traverse.</param>
+    /// <returns>A <see cref="PineValueInProcess"/> at the given path or <c>null</c> if any step is missing.</returns>
     public static PineValueInProcess? ValueFromPathOrNull(
         PineValueInProcess root,
         IReadOnlyList<int> path)

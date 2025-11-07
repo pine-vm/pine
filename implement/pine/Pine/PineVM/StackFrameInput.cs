@@ -15,6 +15,8 @@ public record StackFrameInput
 
     private readonly PineValue[] _evaluatedArguments;
 
+    public IReadOnlyList<PineValue> EvaluatedArguments => _evaluatedArguments;
+
     private readonly int _hashCode;
 
     private StackFrameInput(

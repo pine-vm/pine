@@ -211,11 +211,19 @@ public record StaticFunctionInterface
     }
 
     /// <summary>
+    /// Unique string representation of all parameter paths in this interface.
+    /// </summary>
+    public static string HashString(StaticFunctionInterface functionInterface)
+    {
+        return functionInterface._hashString;
+    }
+
+    /// <summary>
     /// Builds a hash string representation for a collection of parameter paths.
     /// The string is distinct for distinct collections of paths, to guarantee there are no hash collisions.
     /// </summary>
     /// <param name="paramsPaths">Sorted list of paths.</param>
-    private static string ComputeHashString(IReadOnlyList<IReadOnlyList<int>> paramsPaths)
+    public static string ComputeHashString(IReadOnlyList<IReadOnlyList<int>> paramsPaths)
     {
         var builder = new System.Text.StringBuilder(capacity: 100);
 
