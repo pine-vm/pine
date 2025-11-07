@@ -127,6 +127,7 @@ public static class ElmModule
             [
                 .. ElmCoreAutoImportedModulesNames,
                 .. includedModulesNames
+                .OrderBy(moduleName => string.Join(".", moduleName))
                 .SelectMany(moduleName => ListImportsOfModuleTransitive(moduleName).Prepend(moduleName))
                 .OrderBy(moduleName => ListImportsOfModuleTransitive(moduleName).Count),
             ];
@@ -134,9 +135,7 @@ public static class ElmModule
         var includedModulesNamesOrdered =
             includedModulesNamesWithDeps
             .Distinct(EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>())
-            .Intersect(
-                includedModulesNames,
-                EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>())
+            .Where(includedModulesNames.Contains)
             .ToImmutableArray();
 
         return
