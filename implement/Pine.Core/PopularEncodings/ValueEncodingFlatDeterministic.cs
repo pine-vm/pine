@@ -1,5 +1,6 @@
 using System;
 using System.Buffers.Binary;
+using System.Collections.Frozen;
 using System.Collections.Generic;
 
 namespace Pine.Core.PopularEncodings;
@@ -162,8 +163,13 @@ public static class ValueEncodingFlatDeterministic
     /// Decodes the root <see cref="PineValue"/> from its binary representation.
     /// </summary>
     /// <param name="sourceBytes">The binary-encoded data as memory.</param>
+    /// <param name="blobInstancesToReuse">Optional dictionary of blob instances to reuse during decoding.</param>
+    /// <param name="listInstancesToReuse">Optional dictionary of list instances to reuse during decoding.</param>
     /// <returns>The decoded PineValue instance.</returns>
-    public static PineValue DecodeRoot(ReadOnlyMemory<byte> sourceBytes)
+    public static PineValue DecodeRoot(
+        ReadOnlyMemory<byte> sourceBytes,
+        IReadOnlyDictionary<int, FrozenSet<PineValue.BlobValue>>? blobInstancesToReuse = null,
+        IReadOnlyDictionary<int, FrozenSet<PineValue.ListValue>>? listInstancesToReuse = null)
     {
         var decoded = new Dictionary<long, PineValue>();
 
@@ -208,7 +214,17 @@ public static class ValueEncodingFlatDeterministic
                     items[i] = DecodeNext();
                 }
 
-                var listValue = new PineValue.ListValue(items);
+                var listValue = PineValue.List(items);
+
+                if (listInstancesToReuse is not null &&
+                    listInstancesToReuse.TryGetValue(itemCount, out var reusableLists))
+                {
+                    reusableLists.TryGetValue(
+                        listValue,
+                        out var reusedListValue);
+
+                    listValue = reusedListValue ?? listValue;
+                }
 
                 decoded[startAddress] = listValue;
 
@@ -227,7 +243,17 @@ public static class ValueEncodingFlatDeterministic
 
                 readPosition += paddedBytesCount;
 
-                var blobValue = new PineValue.BlobValue(blobBytes);
+                var blobValue = PineValue.Blob(blobBytes);
+
+                if (blobInstancesToReuse is not null &&
+                    blobInstancesToReuse.TryGetValue(byteCount, out var reusableBlobs))
+                {
+                    reusableBlobs.TryGetValue(
+                        blobValue,
+                        out var reusedBlobValue);
+
+                    blobValue = reusedBlobValue ?? blobValue;
+                }
 
                 decoded[startAddress] = blobValue;
 

@@ -32,7 +32,7 @@ public abstract record PineValue : IEquatable<PineValue>
     /// <summary>
     /// Construct a blob value from a sequence of bytes.
     /// </summary>
-    public static PineValue Blob(ReadOnlyMemory<byte> bytes)
+    public static BlobValue Blob(ReadOnlyMemory<byte> bytes)
     {
         if (bytes.Length is 0)
             return EmptyBlob;
@@ -256,7 +256,7 @@ public abstract record PineValue : IEquatable<PineValue>
         /// <summary>
         /// Construct a list value from a sequence of other values.
         /// </summary>
-        public ListValue(ReadOnlyMemory<PineValue> items)
+        internal ListValue(ReadOnlyMemory<PineValue> items)
             : this(new ListValueStruct(items))
         {
         }
@@ -524,7 +524,7 @@ public abstract record PineValue : IEquatable<PineValue>
         /// <remarks>The provided byte data is used to compute a hash code for the instance, which can be
         /// used for efficient comparisons or storage in hash-based collections.</remarks>
         /// <param name="bytes">The read-only memory containing the byte data to initialize the blob value.</param>
-        public BlobValue(ReadOnlyMemory<byte> bytes)
+        internal BlobValue(ReadOnlyMemory<byte> bytes)
         {
             Bytes = bytes;
 
