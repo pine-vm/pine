@@ -384,41 +384,12 @@ public class PineIRCompiler
                         StackInstruction.Local_Get(0));
 
             case Expression.List listExpr:
-                {
-                    if (listExpr.Items.Count is 0)
-                    {
-                        return
-                            prior
-                            .AppendInstruction(
-                                StackInstruction.Push_Literal(PineValue.EmptyList));
-                    }
-
-                    /*
-                     * Assume that the subsequence for each item only leaves one value on the stack.
-                     * 
-                     * (When we need to reuse a value from a subexpression multiple times,
-                     * we don't use a non-consuming instruction but use local_get instead to copy it)
-                     * */
-
-                    var lastItemResult = prior;
-
-                    for (var i = 0; i < listExpr.Items.Count; ++i)
-                    {
-                        var itemExpr = listExpr.Items[i];
-
-                        lastItemResult =
-                            CompileExpressionTransitive(
-                                itemExpr,
-                                context,
-                                lastItemResult,
-                                parseCache);
-                    }
-
-                    return
-                        lastItemResult
-                        .AppendInstruction(
-                            StackInstruction.Build_List(listExpr.Items.Count));
-                }
+                return
+                    CompileList(
+                        listExpr,
+                        context,
+                        prior,
+                        parseCache);
 
             case Expression.Conditional conditional:
                 return
@@ -448,6 +419,73 @@ public class PineIRCompiler
                 throw new NotImplementedException(
                     "Unexpected expression type: " + expr.GetType().Name);
         }
+    }
+
+    public static NodeCompilationResult CompileList(
+        Expression.List listExpr,
+        CompilationContext context,
+        NodeCompilationResult prior,
+        PineVMParseCache parseCache)
+    {
+        if (listExpr.Items.Count is 0)
+        {
+            return
+                prior
+                .AppendInstruction(
+                    StackInstruction.Push_Literal(PineValue.EmptyList));
+        }
+
+        if (listExpr.Items.Count is 2 &&
+            TryEvalIndependent(listExpr.Items[0], parseCache) is { } tagLiteralValue &&
+            listExpr.Items[1] is Expression.List tagArgList)
+        {
+            var afterArgs = prior;
+
+            for (var i = 0; i < tagArgList.Items.Count; ++i)
+            {
+                var argExpr = tagArgList.Items[i];
+
+                afterArgs =
+                    CompileExpressionTransitive(
+                        argExpr,
+                        context,
+                        afterArgs,
+                        parseCache);
+            }
+
+            return
+                afterArgs
+                .AppendInstruction(
+                    StackInstruction.Build_List_Tagged_Const(
+                        tagLiteralValue,
+                        tagArgList.Items.Count));
+        }
+
+        /*
+         * Assume that the subsequence for each item only leaves one value on the stack.
+         * 
+         * (When we need to reuse a value from a subexpression multiple times,
+         * we don't use a non-consuming instruction but use local_get instead to copy it)
+         * */
+
+        var lastItemResult = prior;
+
+        for (var i = 0; i < listExpr.Items.Count; ++i)
+        {
+            var itemExpr = listExpr.Items[i];
+
+            lastItemResult =
+                CompileExpressionTransitive(
+                    itemExpr,
+                    context,
+                    lastItemResult,
+                    parseCache);
+        }
+
+        return
+            lastItemResult
+            .AppendInstruction(
+                StackInstruction.Build_List(listExpr.Items.Count));
     }
 
     public static NodeCompilationResult CompileConditional(

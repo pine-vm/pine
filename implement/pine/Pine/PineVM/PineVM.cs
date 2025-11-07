@@ -869,6 +869,39 @@ public class PineVM : IPineVM
                             continue;
                         }
 
+                    case StackInstructionKind.Build_List_Tagged_Const:
+                        {
+                            var tagValue =
+                                currentInstruction.Literal
+                                ??
+                                throw new Exception("Invalid operation form: Missing literal tag value");
+
+                            var itemsCount =
+                                currentInstruction.TakeCount
+                                ??
+                                throw new Exception("Invalid operation form: Missing take count");
+
+                            var items = new PineValueInProcess[itemsCount];
+
+                            for (var i = 0; i < itemsCount; ++i)
+                            {
+                                items[itemsCount - i - 1] = currentFrame.PopTopmostFromStack();
+                            }
+
+                            var argumentsValue =
+                                PineValueInProcess.CreateList(items);
+
+                            var taggedListValue =
+                                PineValueInProcess.CreateList(
+                                    [
+                                    PineValueInProcess.Create(tagValue),
+                                    argumentsValue
+                                    ]);
+
+                            currentFrame.PushInstructionResult(taggedListValue);
+                            continue;
+                        }
+
                     case StackInstructionKind.Concat_Binary:
                         {
                             var right = currentFrame.PopTopmostFromStack();

@@ -116,6 +116,8 @@ public enum StackInstructionKind
     /// </summary>
     Build_List,
 
+    Build_List_Tagged_Const,
+
     /// <summary>
     /// Check if the top two values on the stack are equal.
     /// </summary>
@@ -327,6 +329,9 @@ public record StackInstruction(
 
     public static StackInstruction Build_List(int takeCount) =>
         new(StackInstructionKind.Build_List, TakeCount: takeCount);
+
+    public static StackInstruction Build_List_Tagged_Const(PineValue tag, int takeCount) =>
+        new(StackInstructionKind.Build_List_Tagged_Const, Literal: tag, TakeCount: takeCount);
 
     public static readonly StackInstruction Pop =
         new(StackInstructionKind.Pop);
@@ -741,6 +746,21 @@ public record StackInstruction(
                     [instruction.TakeCount?.ToString()
                         ?? throw new Exception(
                             "Missing TakeCount for BuildList instruction")]),
+
+            StackInstructionKind.Build_List_Tagged_Const =>
+                new InstructionDetails(
+                    PopCount:
+                    instruction.TakeCount
+                    ?? throw new Exception(
+                            "Missing TakeCount for BuildList instruction"),
+                    PushCount: 1,
+                    [literalDisplayString(instruction.Literal
+                    ?? throw new Exception(
+                        "Missing Literal for EqualBinaryConst instruction")),
+                    instruction.TakeCount?.ToString()
+                        ?? throw new Exception(
+                            "Missing TakeCount for BuildList instruction")
+                    ]),
 
             StackInstructionKind.Equal_Binary =>
                 new InstructionDetails(
