@@ -888,15 +888,10 @@ public class PineVM : IPineVM
                                 items[itemsCount - i - 1] = currentFrame.PopTopmostFromStack();
                             }
 
-                            var argumentsValue =
-                                PineValueInProcess.CreateList(items);
-
                             var taggedListValue =
-                                PineValueInProcess.CreateList(
-                                    [
+                                PineValueInProcess.CreateTagged(
                                     PineValueInProcess.Create(tagValue),
-                                    argumentsValue
-                                    ]);
+                                    items);
 
                             currentFrame.PushInstructionResult(taggedListValue);
                             continue;

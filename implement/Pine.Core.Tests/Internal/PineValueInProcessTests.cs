@@ -604,7 +604,7 @@ public class PineValueInProcessTests
 
         var evaluated = taken.Evaluate();
         var originalValue = PineValue.List(
-            Enumerable.Range(0, 1000).Select(i => PineValue.Blob([(byte)(i % 256)])).ToArray());
+            [.. Enumerable.Range(0, 1000).Select(i => PineValue.Blob([(byte)(i % 256)]))]);
 
         var afterSkip =
             KernelFunction.skip(
@@ -1617,6 +1617,489 @@ public class PineValueInProcessTests
         var prefix = PineValue.List([PineValue.Blob([20])]);
 
         value.StartsWithConstAtOffsetVar(1, prefix).Should().BeTrue();
+    }
+
+    [Fact]
+    public void CreateTagged_evaluates_to_two_element_list()
+    {
+        var tag = PineValueInProcess.Create(PineValue.Blob([1]));
+        var arg1 = PineValueInProcess.Create(PineValue.Blob([2]));
+        var arg2 = PineValueInProcess.Create(PineValue.Blob([3]));
+        var tagArgs = new List<PineValueInProcess> { arg1, arg2 };
+
+        var tagged = PineValueInProcess.CreateTagged(tag, tagArgs);
+
+        var evaluated = tagged.Evaluate();
+
+        var expected = PineValue.List([
+            PineValue.Blob([1]),
+            PineValue.List([PineValue.Blob([2]), PineValue.Blob([3])])
+        ]);
+
+        evaluated.Should().Be(expected);
+    }
+
+    [Fact]
+    public void CreateTagged_with_empty_tagArgs()
+    {
+        var tag = PineValueInProcess.Create(PineValue.Blob([10]));
+        var tagArgs = new List<PineValueInProcess>();
+
+        var tagged = PineValueInProcess.CreateTagged(tag, tagArgs);
+
+        var evaluated = tagged.Evaluate();
+
+        var expected = PineValue.List([
+            PineValue.Blob([10]),
+            PineValue.EmptyList
+        ]);
+
+        evaluated.Should().Be(expected);
+    }
+
+    [Fact]
+    public void CreateTagged_IsList_returns_true()
+    {
+        var tag = PineValueInProcess.Create(PineValue.Blob([1]));
+        var tagArgs = new List<PineValueInProcess> { PineValueInProcess.Create(PineValue.Blob([2])) };
+
+        var tagged = PineValueInProcess.CreateTagged(tag, tagArgs);
+
+        tagged.IsList().Should().BeTrue();
+        VerifyConsistencyOfDerivedProperties(tagged);
+    }
+
+    [Fact]
+    public void CreateTagged_IsBlob_returns_false()
+    {
+        var tag = PineValueInProcess.Create(PineValue.Blob([1]));
+        var tagArgs = new List<PineValueInProcess> { PineValueInProcess.Create(PineValue.Blob([2])) };
+
+        var tagged = PineValueInProcess.CreateTagged(tag, tagArgs);
+
+        tagged.IsBlob().Should().BeFalse();
+    }
+
+    [Fact]
+    public void CreateTagged_GetLength_returns_two()
+    {
+        var tag = PineValueInProcess.Create(PineValue.Blob([1]));
+        var tagArgs = new List<PineValueInProcess> {
+            PineValueInProcess.Create(PineValue.Blob([2])),
+            PineValueInProcess.Create(PineValue.Blob([3])),
+            PineValueInProcess.Create(PineValue.Blob([4]))
+        };
+
+        var tagged = PineValueInProcess.CreateTagged(tag, tagArgs);
+
+        tagged.GetLength().Should().Be(2);
+        VerifyConsistencyOfDerivedProperties(tagged);
+    }
+
+    [Fact]
+    public void CreateTagged_GetElementAt_returns_tag_at_index_zero()
+    {
+        var tag = PineValueInProcess.Create(PineValue.Blob([100]));
+        var tagArgs = new List<PineValueInProcess> {
+            PineValueInProcess.Create(PineValue.Blob([200])),
+            PineValueInProcess.Create(PineValue.Blob([250]))
+        };
+
+        var tagged = PineValueInProcess.CreateTagged(tag, tagArgs);
+
+        var element0 = tagged.GetElementAt(0);
+
+        element0.Evaluate().Should().Be(PineValue.Blob([100]));
+    }
+
+    [Fact]
+    public void CreateTagged_GetElementAt_returns_tagArgs_at_index_one()
+    {
+        var tag = PineValueInProcess.Create(PineValue.Blob([100]));
+        var tagArgs = new List<PineValueInProcess> {
+            PineValueInProcess.Create(PineValue.Blob([200])),
+            PineValueInProcess.Create(PineValue.Blob([250]))
+        };
+
+        var tagged = PineValueInProcess.CreateTagged(tag, tagArgs);
+
+        var element1 = tagged.GetElementAt(1);
+
+        var evaluated = element1.Evaluate();
+
+        var expected = PineValue.List([PineValue.Blob([200]), PineValue.Blob([250])]);
+
+        evaluated.Should().Be(expected);
+    }
+
+    [Fact]
+    public void CreateTagged_GetElementAt_returns_empty_for_out_of_bounds()
+    {
+        var tag = PineValueInProcess.Create(PineValue.Blob([1]));
+        var tagArgs = new List<PineValueInProcess> { PineValueInProcess.Create(PineValue.Blob([2])) };
+
+        var tagged = PineValueInProcess.CreateTagged(tag, tagArgs);
+
+        var element2 = tagged.GetElementAt(2);
+        var element10 = tagged.GetElementAt(10);
+
+        PineValueInProcess.AreEqual(element2, PineValue.EmptyList).Should().BeTrue();
+        PineValueInProcess.AreEqual(element10, PineValue.EmptyList).Should().BeTrue();
+    }
+
+    [Fact]
+    public void CreateTagged_Skip_with_zero_returns_same()
+    {
+        var tag = PineValueInProcess.Create(PineValue.Blob([1]));
+        var tagArgs = new List<PineValueInProcess> { PineValueInProcess.Create(PineValue.Blob([2])) };
+
+        var tagged = PineValueInProcess.CreateTagged(tag, tagArgs);
+
+        var result = PineValueInProcess.Skip(0, tagged);
+
+        ReferenceEquals(result, tagged).Should().BeTrue();
+    }
+
+    [Fact]
+    public void CreateTagged_Skip_with_one_returns_single_element_list()
+    {
+        var tag = PineValueInProcess.Create(PineValue.Blob([100]));
+        var tagArgs = new List<PineValueInProcess> {
+            PineValueInProcess.Create(PineValue.Blob([200])),
+            PineValueInProcess.Create(PineValue.Blob([250]))
+        };
+
+        var tagged = PineValueInProcess.CreateTagged(tag, tagArgs);
+
+        var result = PineValueInProcess.Skip(1, tagged);
+
+        var evaluated = result.Evaluate();
+
+        var expected = PineValue.List([
+            PineValue.List([PineValue.Blob([200]), PineValue.Blob([250])])
+        ]);
+
+        evaluated.Should().Be(expected);
+    }
+
+    [Fact]
+    public void CreateTagged_Skip_with_two_returns_empty()
+    {
+        var tag = PineValueInProcess.Create(PineValue.Blob([1]));
+        var tagArgs = new List<PineValueInProcess> { PineValueInProcess.Create(PineValue.Blob([2])) };
+
+        var tagged = PineValueInProcess.CreateTagged(tag, tagArgs);
+
+        var result = PineValueInProcess.Skip(2, tagged);
+
+        PineValueInProcess.AreEqual(result, PineValue.EmptyList).Should().BeTrue();
+    }
+
+    [Fact]
+    public void CreateTagged_Skip_beyond_length_returns_empty()
+    {
+        var tag = PineValueInProcess.Create(PineValue.Blob([1]));
+        var tagArgs = new List<PineValueInProcess> { PineValueInProcess.Create(PineValue.Blob([2])) };
+
+        var tagged = PineValueInProcess.CreateTagged(tag, tagArgs);
+
+        var result = PineValueInProcess.Skip(10, tagged);
+
+        PineValueInProcess.AreEqual(result, PineValue.EmptyList).Should().BeTrue();
+    }
+
+    [Fact]
+    public void CreateTagged_Take_with_zero_returns_empty()
+    {
+        var tag = PineValueInProcess.Create(PineValue.Blob([1]));
+        var tagArgs = new List<PineValueInProcess> { PineValueInProcess.Create(PineValue.Blob([2])) };
+
+        var tagged = PineValueInProcess.CreateTagged(tag, tagArgs);
+
+        var result = PineValueInProcess.Take(0, tagged);
+
+        PineValueInProcess.AreEqual(result, PineValue.EmptyList).Should().BeTrue();
+    }
+
+    [Fact]
+    public void CreateTagged_Take_with_one_returns_single_element_list()
+    {
+        var tag = PineValueInProcess.Create(PineValue.Blob([100]));
+        var tagArgs = new List<PineValueInProcess> {
+            PineValueInProcess.Create(PineValue.Blob([200])),
+            PineValueInProcess.Create(PineValue.Blob([250]))
+        };
+
+        var tagged = PineValueInProcess.CreateTagged(tag, tagArgs);
+
+        var result = PineValueInProcess.Take(1, tagged);
+
+        var evaluated = result.Evaluate();
+
+        var expected = PineValue.List([PineValue.Blob([100])]);
+
+        evaluated.Should().Be(expected);
+    }
+
+    [Fact]
+    public void CreateTagged_Take_with_two_returns_full_tagged()
+    {
+        var tag = PineValueInProcess.Create(PineValue.Blob([1]));
+        var tagArgs = new List<PineValueInProcess> { PineValueInProcess.Create(PineValue.Blob([2])) };
+
+        var tagged = PineValueInProcess.CreateTagged(tag, tagArgs);
+
+        var result = PineValueInProcess.Take(2, tagged);
+
+        ReferenceEquals(result, tagged).Should().BeTrue();
+    }
+
+    [Fact]
+    public void CreateTagged_Take_beyond_length_returns_full_tagged()
+    {
+        var tag = PineValueInProcess.Create(PineValue.Blob([1]));
+        var tagArgs = new List<PineValueInProcess> { PineValueInProcess.Create(PineValue.Blob([2])) };
+
+        var tagged = PineValueInProcess.CreateTagged(tag, tagArgs);
+
+        var result = PineValueInProcess.Take(10, tagged);
+
+        ReferenceEquals(result, tagged).Should().BeTrue();
+    }
+
+    [Fact]
+    public void CreateTagged_AreEqual_same_reference_returns_true()
+    {
+        var tag = PineValueInProcess.Create(PineValue.Blob([1]));
+        var tagArgs = new List<PineValueInProcess> { PineValueInProcess.Create(PineValue.Blob([2])) };
+
+        var tagged = PineValueInProcess.CreateTagged(tag, tagArgs);
+
+        PineValueInProcess.AreEqual(tagged, tagged).Should().BeTrue();
+    }
+
+    [Fact]
+    public void CreateTagged_AreEqual_same_tag_and_args_returns_true()
+    {
+        var tag = PineValueInProcess.Create(PineValue.Blob([1]));
+        var tagArgs = new List<PineValueInProcess> { PineValueInProcess.Create(PineValue.Blob([2])) };
+
+        var tagged1 = PineValueInProcess.CreateTagged(tag, tagArgs);
+        var tagged2 = PineValueInProcess.CreateTagged(tag, tagArgs);
+
+        PineValueInProcess.AreEqual(tagged1, tagged2).Should().BeTrue();
+    }
+
+    [Fact]
+    public void CreateTagged_AreEqual_different_tag_returns_false()
+    {
+        var tag1 = PineValueInProcess.Create(PineValue.Blob([1]));
+        var tag2 = PineValueInProcess.Create(PineValue.Blob([2]));
+        var tagArgs = new List<PineValueInProcess> { PineValueInProcess.Create(PineValue.Blob([3])) };
+
+        var tagged1 = PineValueInProcess.CreateTagged(tag1, tagArgs);
+        var tagged2 = PineValueInProcess.CreateTagged(tag2, tagArgs);
+
+        PineValueInProcess.AreEqual(tagged1, tagged2).Should().BeFalse();
+    }
+
+    [Fact]
+    public void CreateTagged_AreEqual_different_args_returns_false()
+    {
+        var tag = PineValueInProcess.Create(PineValue.Blob([1]));
+        var tagArgs1 = new List<PineValueInProcess> { PineValueInProcess.Create(PineValue.Blob([2])) };
+        var tagArgs2 = new List<PineValueInProcess> { PineValueInProcess.Create(PineValue.Blob([3])) };
+
+        var tagged1 = PineValueInProcess.CreateTagged(tag, tagArgs1);
+        var tagged2 = PineValueInProcess.CreateTagged(tag, tagArgs2);
+
+        PineValueInProcess.AreEqual(tagged1, tagged2).Should().BeFalse();
+    }
+
+    [Fact]
+    public void CreateTagged_AreEqual_with_evaluated_equivalent()
+    {
+        var tag = PineValueInProcess.Create(PineValue.Blob([1]));
+        var tagArgs = new List<PineValueInProcess> {
+            PineValueInProcess.Create(PineValue.Blob([2])),
+            PineValueInProcess.Create(PineValue.Blob([3]))
+        };
+
+        var tagged = PineValueInProcess.CreateTagged(tag, tagArgs);
+
+        var evaluated = PineValueInProcess.Create(
+            PineValue.List([
+                PineValue.Blob([1]),
+                PineValue.List([PineValue.Blob([2]), PineValue.Blob([3])])
+            ]));
+
+        PineValueInProcess.AreEqual(tagged, evaluated).Should().BeTrue();
+    }
+
+    [Fact]
+    public void CreateTagged_without_forcing_evaluation()
+    {
+        var tag = PineValueInProcess.Create(PineValue.Blob([1]));
+        var tagArgs = new List<PineValueInProcess> {
+            PineValueInProcess.Create(PineValue.Blob([2])),
+            PineValueInProcess.Create(PineValue.Blob([3]))
+        };
+
+        var tagged = PineValueInProcess.CreateTagged(tag, tagArgs);
+
+        // Verify that creating the tagged value doesn't force evaluation
+        tagged.EvaluatedOrNull.Should().BeNull("Tagged value should not be evaluated upon creation");
+
+        // Verify properties work without forcing evaluation
+        var isList = tagged.IsList();
+        var length = tagged.GetLength();
+
+        isList.Should().BeTrue();
+        length.Should().Be(2);
+
+        // Still should not be evaluated
+        tagged.EvaluatedOrNull.Should().BeNull("Checking properties should not force evaluation");
+    }
+
+    [Fact]
+    public void CreateTagged_GetElementAt_without_forcing_full_evaluation()
+    {
+        var tag = PineValueInProcess.Create(PineValue.Blob([100]));
+        var arg1 = PineValueInProcess.CreateList([
+            PineValueInProcess.Create(PineValue.Blob([1])),
+            PineValueInProcess.Create(PineValue.Blob([2]))
+        ]);
+
+        var tagged = PineValueInProcess.CreateTagged(tag, [arg1]);
+
+        // Getting element at 0 should return the tag without evaluating the full tagged value
+        var element0 = tagged.GetElementAt(0);
+
+        tagged.EvaluatedOrNull.Should().BeNull("Getting element should not force evaluation of tagged value");
+
+        element0.Evaluate().Should().Be(PineValue.Blob([100]));
+    }
+
+    [Fact]
+    public void CreateTagged_nested_tags()
+    {
+        var innerTag = PineValueInProcess.Create(PineValue.Blob([1]));
+        var innerArgs = new List<PineValueInProcess> { PineValueInProcess.Create(PineValue.Blob([2])) };
+        var innerTagged = PineValueInProcess.CreateTagged(innerTag, innerArgs);
+
+        var outerTag = PineValueInProcess.Create(PineValue.Blob([10]));
+        var outerArgs = new List<PineValueInProcess> { innerTagged };
+        var outerTagged = PineValueInProcess.CreateTagged(outerTag, outerArgs);
+
+        var evaluated = outerTagged.Evaluate();
+
+        var expected = PineValue.List([
+            PineValue.Blob([10]),
+            PineValue.List([
+                PineValue.List([
+                    PineValue.Blob([1]),
+                    PineValue.List([PineValue.Blob([2])])
+                ])
+            ])
+        ]);
+
+        evaluated.Should().Be(expected);
+    }
+
+    [Fact]
+    public void CreateTagged_with_multiple_args()
+    {
+        var tag = PineValueInProcess.Create(PineValue.Blob([100]));
+        var tagArgs = new List<PineValueInProcess> {
+            PineValueInProcess.Create(PineValue.Blob([1])),
+            PineValueInProcess.Create(PineValue.Blob([2])),
+            PineValueInProcess.Create(PineValue.Blob([3])),
+            PineValueInProcess.Create(PineValue.Blob([4])),
+            PineValueInProcess.Create(PineValue.Blob([5]))
+        };
+
+        var tagged = PineValueInProcess.CreateTagged(tag, tagArgs);
+
+        var evaluated = tagged.Evaluate();
+
+        var expected = PineValue.List([
+            PineValue.Blob([100]),
+            PineValue.List([
+                PineValue.Blob([1]),
+                PineValue.Blob([2]),
+                PineValue.Blob([3]),
+                PineValue.Blob([4]),
+                PineValue.Blob([5])
+            ])
+        ]);
+
+        evaluated.Should().Be(expected);
+        VerifyConsistencyOfDerivedProperties(tagged);
+    }
+
+    [Fact]
+    public void CreateTagged_complex_tag()
+    {
+        var tagValue = PineValue.List([
+            PineValue.Blob([10]),
+            PineValue.Blob([20])
+        ]);
+        var tag = PineValueInProcess.Create(tagValue);
+        var tagArgs = new List<PineValueInProcess> { PineValueInProcess.Create(PineValue.Blob([30])) };
+
+        var tagged = PineValueInProcess.CreateTagged(tag, tagArgs);
+
+        var evaluated = tagged.Evaluate();
+
+        var expected = PineValue.List([
+            tagValue,
+            PineValue.List([PineValue.Blob([30])])
+        ]);
+
+        evaluated.Should().Be(expected);
+    }
+
+    [Fact]
+    public void CreateTagged_GetElementAt_negative_index()
+    {
+        var tag = PineValueInProcess.Create(PineValue.Blob([1]));
+        var tagArgs = new List<PineValueInProcess> { PineValueInProcess.Create(PineValue.Blob([2])) };
+
+        var tagged = PineValueInProcess.CreateTagged(tag, tagArgs);
+
+        var element = tagged.GetElementAt(-1);
+
+        // Negative index is treated as 0
+        element.Evaluate().Should().Be(PineValue.Blob([1]));
+    }
+
+    [Fact]
+    public void CreateTagged_matches_Build_List_Tagged_Const_behavior()
+    {
+        // Simulate what Build_List_Tagged_Const does in the VM
+        var tagValue = PineValue.Blob([42]);
+        var arg1 = PineValueInProcess.Create(PineValue.Blob([1]));
+        var arg2 = PineValueInProcess.Create(PineValue.Blob([2]));
+
+        var items = new[] { arg1, arg2 };
+
+        var argumentsValue = PineValueInProcess.CreateList(items);
+
+        var taggedListValue = PineValueInProcess.CreateList(
+            [
+                PineValueInProcess.Create(tagValue),
+                argumentsValue
+            ]);
+
+        // Now using CreateTagged
+        var taggedDirect = PineValueInProcess.CreateTagged(
+            PineValueInProcess.Create(tagValue),
+            items);
+
+        var result1 = taggedListValue.Evaluate();
+        var result2 = taggedDirect.Evaluate();
+
+        result1.Should().Be(result2);
     }
 
     private static void VerifyConsistencyOfDerivedProperties(PineValueInProcess inProcess)
