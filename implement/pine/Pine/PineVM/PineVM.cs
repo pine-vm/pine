@@ -166,7 +166,7 @@ public class PineVM : IPineVM
 
         for (var i = 0; i < stackFrameInput.Arguments.Count; ++i)
         {
-            localsValues[i] = PineValueInProcess.Create(stackFrameInput.Arguments[i]);
+            localsValues[i] = stackFrameInput.Arguments[i];
         }
 
         return new StackFrame(

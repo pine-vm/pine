@@ -11,25 +11,36 @@ public record StackFrameInput
 {
     public StaticFunctionInterface Parameters { get; }
 
-    public IReadOnlyList<PineValue> Arguments { get; }
+    public IReadOnlyList<PineValueInProcess> Arguments { get; }
+
+    private readonly PineValue[] _evaluatedArguments;
 
     private readonly int _hashCode;
 
     private StackFrameInput(
         StaticFunctionInterface parameters,
-        IReadOnlyList<PineValue> arguments)
+        IReadOnlyList<PineValueInProcess> arguments)
     {
         Parameters = parameters;
         Arguments = arguments;
+
+        var evaluatedArguments = new PineValue[arguments.Count];
+
+        for (var i = 0; i < arguments.Count; i++)
+        {
+            evaluatedArguments[i] = arguments[i].Evaluate();
+        }
+
+        _evaluatedArguments = evaluatedArguments;
 
         // Pre-compute hash code.
         var hashCode = new HashCode();
 
         hashCode.Add(Parameters);
 
-        for (var i = 0; i < Arguments.Count; i++)
+        for (var i = 0; i < evaluatedArguments.Length; i++)
         {
-            hashCode.Add(Arguments[i]);
+            hashCode.Add(evaluatedArguments[i]);
         }
 
         _hashCode = hashCode.ToHashCode();
@@ -39,7 +50,7 @@ public record StackFrameInput
         PineValue environmentValue,
         StaticFunctionInterface parameters)
     {
-        var arguments = new PineValue[parameters.ParamsPaths.Count];
+        var arguments = new PineValueInProcess[parameters.ParamsPaths.Count];
 
         for (var i = 0; i < parameters.ParamsPaths.Count; i++)
         {
@@ -50,7 +61,7 @@ public record StackFrameInput
                     environmentValue,
                     envPath);
 
-            arguments[i] = valueAtPath;
+            arguments[i] = PineValueInProcess.Create(valueAtPath);
         }
 
         return new StackFrameInput(
@@ -62,7 +73,7 @@ public record StackFrameInput
         PineValueInProcess environmentValue,
         StaticFunctionInterface parameters)
     {
-        var arguments = new PineValue[parameters.ParamsPaths.Count];
+        var arguments = new PineValueInProcess[parameters.ParamsPaths.Count];
 
         for (var i = 0; i < parameters.ParamsPaths.Count; i++)
         {
@@ -72,7 +83,7 @@ public record StackFrameInput
                 PineValueInProcess.ValueFromPathOrNull(
                     environmentValue,
                     envPath)
-                ?? PineValue.ListValue.Empty;
+                ?? PineValueInProcess.EmptyList;
 
             arguments[i] = valueAtPath;
         }
@@ -84,14 +95,6 @@ public record StackFrameInput
 
     public static StackFrameInput GenericFromEnvironmentValue(
         PineValue environmentValue)
-    {
-        return FromEnvironmentValue(
-            environmentValue,
-            StaticFunctionInterface.Generic);
-    }
-
-    public static StackFrameInput GenericFromEnvironmentValue(
-        PineValueInProcess environmentValue)
     {
         return FromEnvironmentValue(
             environmentValue,
@@ -118,12 +121,12 @@ public record StackFrameInput
         if (!Parameters.Equals(other.Parameters))
             return false;
 
-        if (Arguments.Count != other.Arguments.Count)
+        if (_evaluatedArguments.Length != other._evaluatedArguments.Length)
             return false;
 
-        for (var i = 0; i < Arguments.Count; i++)
+        for (var i = 0; i < _evaluatedArguments.Length; i++)
         {
-            if (!Arguments[i].Equals(other.Arguments[i]))
+            if (!_evaluatedArguments[i].Equals(other._evaluatedArguments[i]))
                 return false;
         }
 
@@ -138,7 +141,7 @@ public record StackFrameInput
             ", Args[" +
             string.Join(
                 ", ",
-                Arguments.Select(a => a.ToString())) +
+                _evaluatedArguments.Select(a => a.ToString())) +
             "])";
     }
 
@@ -149,7 +152,7 @@ public record StackFrameInput
             .Select((envPath, index) =>
                 new KeyValuePair<IReadOnlyList<int>, PineValue>(
                     envPath,
-                    Arguments[index]))
+                    _evaluatedArguments[index]))
             ];
 
         return PineValueClass.Create(parsedItems);

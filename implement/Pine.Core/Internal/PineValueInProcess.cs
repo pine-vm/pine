@@ -761,7 +761,7 @@ public class PineValueInProcess
         return current.Evaluate();
     }
 
-    public static PineValue? ValueFromPathOrNull(
+    public static PineValueInProcess? ValueFromPathOrNull(
         PineValueInProcess root,
         IReadOnlyList<int> path)
     {
@@ -771,10 +771,18 @@ public class PineValueInProcess
         {
             if (current._evaluated is { } currentMaterialized)
             {
-                return PineValueExtension.ValueFromPathOrNull(
-                    currentMaterialized,
-                    path,
-                    startOffset: i);
+                var concreteValue =
+                    PineValueExtension.ValueFromPathOrNull(
+                        currentMaterialized,
+                        path,
+                        startOffset: i);
+
+                if (concreteValue is null)
+                {
+                    return null;
+                }
+
+                return Create(concreteValue);
             }
 
             current = current.GetElementAt(path[i]);
@@ -785,7 +793,7 @@ public class PineValueInProcess
             }
         }
 
-        return current.Evaluate();
+        return current;
     }
 
     /// <summary>
