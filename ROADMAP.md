@@ -32,6 +32,10 @@ The runtime performance items are not related to the Pine language, but are impl
 - [ ] Introduce specialized representation for `Int64` for cheaper integer arithmetic.
 - [ ] Introduce specialized representation for `Int32` for cheaper integer arithmetic.
 
+## Language Elm
+
+- [ ] Expand the Elm compiler to instantiate higher-order functions so that downstream code analysis only needs to parse first-order functions.
+
 ## App Developer Tools
 
 - [ ] Tool for interactive inspection for Pine programs.
