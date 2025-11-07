@@ -141,17 +141,22 @@ public record NamesFromCompiledEnv
 
             if (CodeAnalysis.TryParseExprAsPathInEnv(innerParseAndEval.Encoded) is { } bodyExprPath)
             {
-                if (bodyExprPath.Count is 2 &&
+                if (bodyExprPath.Count > 1 &&
                     bodyExprPath[0] is 0 && bodyExprPath[1] < functionRecord.EnvFunctions.Length)
                 {
-                    var namedValue = functionRecord.EnvFunctions.Span[bodyExprPath[1]];
+                    var envFunctionEntryValue = functionRecord.EnvFunctions.Span[bodyExprPath[1]];
+
+                    var namedValue =
+                        PineValueExtension.ValueFromPathOrEmptyList(
+                            envFunctionEntryValue,
+                            [.. bodyExprPath.Skip(2)]);
 
                     var innerEnvClass =
                         PineValueClass.MapValueClass(outerEnvClass, innerParseAndEval.Environment);
 
                     if (innerEnvClass is null)
                     {
-                        throw new System.NotImplementedException(
+                        throw new NotImplementedException(
                             "Failed to map outer environment class to inner environment.");
                     }
 
