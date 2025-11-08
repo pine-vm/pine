@@ -5,10 +5,12 @@ using Pine.Core;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.DotNet;
 using Pine.Core.Internal;
+using Pine.Core.PineVM;
 using Pine.Core.PopularEncodings;
 using Pine.Elm;
 using System.Collections.Frozen;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 
@@ -153,5 +155,22 @@ public class CodeAnalysisTestHelper
                 parseCache);
 
         return (parsedEnv, staticProgram);
+    }
+
+
+    /// <summary>
+    /// Create a VM with all optimizations disabled, to support repeatable profiling.
+    /// </summary>
+    public static IPineVM PineVMForProfiling(
+        System.Action<PineVM.EvaluationReport> reportFunctionApplication)
+    {
+        var vm =
+            new PineVM.PineVM(
+                evalCache: null,
+                disablePrecompiled: true,
+                reportFunctionApplication: reportFunctionApplication,
+                precompiledLeaves: ImmutableDictionary<PineValue, System.Func<PineValue, PineValue?>>.Empty);
+
+        return vm;
     }
 }
