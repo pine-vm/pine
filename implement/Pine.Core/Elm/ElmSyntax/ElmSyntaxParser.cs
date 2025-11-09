@@ -1723,6 +1723,20 @@ public class ElmSyntaxParser
             :
             '\0';
 
+        private char PeekPrevious(int offset = 1) =>
+            (_position - offset >= 0)
+            ?
+            _input[_position - offset]
+            :
+            '\0';
+
+        /// <summary>
+        /// Checks if a character can be the last character of an expression,
+        /// meaning a minus sign after it should be treated as an operator rather than negation.
+        /// </summary>
+        private static bool CharCanEndExpression(char c) =>
+            char.IsLetterOrDigit(c) || c is ')' || c is ']' || c is '}' || c is '_' || c is '\'';
+
         private char Advance()
         {
             var current = _input[_position];
@@ -2088,6 +2102,16 @@ public class ElmSyntaxParser
                         Advance(); // Consume '-'
                         Advance(); // Consume '>'
                         return new Token(TokenType.Arrow, "->", start, new Location(_line, _column));
+                    }
+
+                    // Check if the previous character can end an expression
+                    // If so, the minus is an infix operator, not a negation
+                    var prevChar = PeekPrevious();
+
+                    if (CharCanEndExpression(prevChar))
+                    {
+                        Advance();
+                        return new Token(TokenType.Operator, "-", start, new Location(_line, _column));
                     }
 
                     switch (PeekNext())
