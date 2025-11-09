@@ -1716,6 +1716,24 @@ public class ParseElmModuleTextToPineValueTests
                 """",
 
                 """"
+                module VariedFormat exposing (..)
+
+
+                alfa =
+                    n-1
+                """",
+
+                """"
+                module GenericRecord exposing (..)
+
+
+                alfa : { a | field : Int } -> Int
+                alfa r =
+                    r.field
+
+                """",
+
+                """"
                 module Floats exposing (..)
 
 

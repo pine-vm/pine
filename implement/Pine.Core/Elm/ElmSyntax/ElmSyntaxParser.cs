@@ -3396,11 +3396,17 @@ public class ElmSyntaxParser
                     ConsumeAllTrivia();
 
                     var fieldRangeEnd =
-                        fields.Count is 0
+                        genericName is not null
+                        ?
+                        // For generic records, include trailing whitespace
+                        EnumeratePrecedingTokensBackwards().First().End
+                        :
+                        // For regular records, use the end of the type annotation
+                        (fields.Count is 0
                         ?
                         fieldTypeAnnotation.Range.End
                         :
-                        EnumeratePrecedingTokensBackwards().First().End;
+                        EnumeratePrecedingTokensBackwards().First().End);
 
                     var field =
                         new Node<RecordField>(
@@ -3423,6 +3429,10 @@ public class ElmSyntaxParser
                         break;
                     }
                 }
+
+                // Capture the end position before consuming the closing brace
+                // This includes any trailing whitespace after the last field
+                var recordDefinitionEnd = EnumeratePrecedingTokensBackwards().First().End;
 
                 var closingToken = Consume(TokenType.CloseBrace);
 
@@ -3448,7 +3458,7 @@ public class ElmSyntaxParser
                                         {
                                             Column = genericName.Range.End.Column + 2
                                         },
-                                        End: fields.Last().Range.End),
+                                        End: recordDefinitionEnd),
                                     new RecordDefinition(fields))));
                 }
 
