@@ -29,8 +29,8 @@ jobs:
     - name: Avoid git mutating files on checkout
       run: |
         git config --global core.autocrlf false
-    - uses: actions/checkout@v4
-    - uses: actions/setup-dotnet@v4
+    - uses: actions/checkout@v5
+    - uses: actions/setup-dotnet@v5
       with:
         dotnet-version: '9.0.305'
 
@@ -50,7 +50,7 @@ jobs:
         Get-ChildItem -Path "./dotnet-build/" -Filter "native-tools*" | ForEach-Object { Copy-Item -Path $_.FullName -Destination "./publish/" }
 
     - name: Publish artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: native-tools-bin-${{ github.sha }}-${{ matrix.publish-runtime-id }}
         path: ./publish

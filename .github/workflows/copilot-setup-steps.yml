@@ -38,7 +38,7 @@ jobs:
         run: |
           git config --global core.autocrlf false
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '9.0.x'
 
@@ -65,7 +65,7 @@ jobs:
         run: elm-test-rs --version
 
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Prebuild
         working-directory: ./implement/
