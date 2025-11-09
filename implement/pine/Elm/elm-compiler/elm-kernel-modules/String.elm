@@ -1248,6 +1248,75 @@ intPow acc base exponent =
 
 toRationalComponentsLessSign : Int -> Maybe ( Int, Int )
 toRationalComponentsLessSign charsBlob =
+    let
+        parseWithExponent exponentChar =
+            case splitHelperOnBlob 0 [] 0 exponentChar charsBlob of
+                [ String mantissa, String exponent ] ->
+                    if Pine_kernel.equal [ Pine_kernel.length mantissa, 0 ] then
+                        Nothing
+
+                    else if Pine_kernel.equal [ Pine_kernel.length exponent, 0 ] then
+                        Nothing
+
+                    else
+                        case
+                            ( toRationalComponentsWithoutExponent mantissa
+                            , parseInt exponent
+                            )
+                        of
+                            ( Just (Elm_Float numerator denom), Just exponentInt ) ->
+                                let
+                                    exponentIsNonPositive =
+                                        Pine_kernel.int_is_sorted_asc [ exponentInt, 0 ]
+
+                                    exponentMagnitude =
+                                        if exponentIsNonPositive then
+                                            Pine_kernel.int_mul [ -1, exponentInt ]
+
+                                        else
+                                            exponentInt
+
+                                    powTen =
+                                        intPow 1 10 exponentMagnitude
+                                in
+                                if exponentIsNonPositive then
+                                    Just
+                                        (Elm_Float
+                                            numerator
+                                            (Pine_kernel.int_mul [ denom, powTen ])
+                                        )
+
+                                else
+                                    Just
+                                        (Elm_Float
+                                            (Pine_kernel.int_mul [ numerator, powTen ])
+                                            denom
+                                        )
+
+                            _ ->
+                                Nothing
+
+                [ String _ ] ->
+                    Nothing
+
+                _ ->
+                    Nothing
+    in
+    case parseWithExponent 'e' of
+        Just result ->
+            Just result
+
+        Nothing ->
+            case parseWithExponent 'E' of
+                Just upperCaseResult ->
+                    Just upperCaseResult
+
+                Nothing ->
+                    toRationalComponentsWithoutExponent charsBlob
+
+
+toRationalComponentsWithoutExponent : Int -> Maybe ( Int, Int )
+toRationalComponentsWithoutExponent charsBlob =
     case splitHelperOnBlob 0 [] 0 '.' charsBlob of
         [] ->
             Nothing

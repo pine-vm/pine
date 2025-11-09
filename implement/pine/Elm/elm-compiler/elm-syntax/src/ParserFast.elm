@@ -2106,10 +2106,10 @@ skipAfterFloatExponentMark : Int -> Int -> Int
 skipAfterFloatExponentMark offsetBytes srcBytes =
     case Pine_kernel.take [ 4, Pine_kernel.skip [ offsetBytes, srcBytes ] ] of
         '+' ->
-            skip1OrMoreDigits0To9 (offsetBytes + 1) srcBytes
+            skip1OrMoreDigits0To9 (offsetBytes + 4) srcBytes
 
         '-' ->
-            skip1OrMoreDigits0To9 (offsetBytes + 1) srcBytes
+            skip1OrMoreDigits0To9 (offsetBytes + 4) srcBytes
 
         _ ->
             skip1OrMoreDigits0To9 offsetBytes srcBytes
