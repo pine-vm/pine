@@ -1763,7 +1763,15 @@ public class ParseElmModuleTextToPineValueTests
                 import Json.Encode
 
                 port sendMessageToMonacoFrame : Json.Encode.Value -> Cmd msg
+                """",
+
                 """"
+                module Unicodes exposing (..)
+
+
+                decl =
+                    "🤖"
+                """",
 
             ];
 
