@@ -689,6 +689,7 @@ public class ElmSyntaxParser
                 "-" => new InfixOperatorInfo(6, InfixDirection.Left),
                 "*" => new InfixOperatorInfo(7, InfixDirection.Left),
                 "//" => new InfixOperatorInfo(7, InfixDirection.Left),
+                "/" => new InfixOperatorInfo(7, InfixDirection.Left),
                 "^" => new InfixOperatorInfo(8, InfixDirection.Right),
 
                 "<<" => new InfixOperatorInfo(9, InfixDirection.Left),
@@ -2058,6 +2059,26 @@ public class ElmSyntaxParser
                     }
 
                     return new Token(TokenType.Pipe, "|", start, new Location(_line, _column));
+
+
+                case '/':
+
+                    Advance();
+
+                    // Check if this is part of a two-character operator:
+
+                    if (CharCanAppearInOperator(Peek()))
+                    {
+                        var operatorToken = current.ToString() + Advance();
+
+                        return new Token(
+                            TokenType.Operator,
+                            operatorToken,
+                            start,
+                            new Location(_line, _column));
+                    }
+
+                    return new Token(TokenType.Operator, current.ToString(), start, new Location(_line, _column));
 
                 case '-':
 
