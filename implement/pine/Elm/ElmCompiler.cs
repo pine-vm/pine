@@ -183,11 +183,11 @@ public class ElmCompiler
             compilerPackageSourcesTrees
             .SelectMany(tree => tree.tree.EnumerateBlobsTransitive())
             .Where(blobAtPath =>
-            blobAtPath.path.First() == "src" && blobAtPath.path.Last().ToLower().EndsWith(".elm"));
+            blobAtPath.path.First() == "src" && blobAtPath.path.Last().EndsWith(".elm", StringComparison.OrdinalIgnoreCase));
 
         var compilerAppCodeSourceFiles =
             bundledFileTree.EnumerateBlobsTransitive()
-            .Where(blobAtPath => blobAtPath.path.Last().ToLower().EndsWith(".elm"))
+            .Where(blobAtPath => blobAtPath.path.Last().EndsWith(".elm", StringComparison.OrdinalIgnoreCase))
             .ToImmutableArray();
 
         var compilerProgramOnlyElmJson =
@@ -697,8 +697,12 @@ public class ElmCompiler
 
         var elmModulesIncluded =
             ElmTime.ElmSyntax.ElmModule.ModulesTextOrderedForCompilationByDependencies(
-                rootModulesTexts: [.. rootElmFiles.Select(file => Encoding.UTF8.GetString(file.blobContent.Span))],
-                availableModulesTexts: [.. availableElmFiles.Select(file => Encoding.UTF8.GetString(file.blobContent.Span))]);
+                rootModulesTexts:
+                [.. rootElmFiles.Select(file => Encoding.UTF8.GetString(file.blobContent.Span))
+                ],
+                availableModulesTexts:
+                [.. availableElmFiles.Select(file => Encoding.UTF8.GetString(file.blobContent.Span))
+                ]);
 
         var filePathsExcluded =
             allAvailableElmFiles
@@ -726,22 +730,43 @@ public class ElmCompiler
         IReadOnlyList<ElmJsonStructure.RelativeDirectory> sourceDirectories =
             [.. elmJsonForEntryPoint.elmJsonParsed.ParsedSourceDirectories];
 
-        bool filePathIsInSourceDirectory(IReadOnlyList<string> filePath)
-        {
-            foreach (var sourceDirectory in sourceDirectories)
-            {
-                if (sourceDirectory.ParentLevel is not 0)
-                {
-                    throw new NotImplementedException(
-                        "ParentLevel in elm.json source-directories not implemented");
-                }
+        IReadOnlyList<string> elmJsonDirectoryPath =
+            [.. elmJsonForEntryPoint.filePath.SkipLast(1)];
 
-                if (filePath.Count < sourceDirectory.Subdirectories.Count)
+        var sourceDirectoriesMapped = new List<IReadOnlyList<string>>();
+
+        foreach (var sourceDirectory in sourceDirectories)
+        {
+            if (sourceDirectory.ParentLevel > elmJsonDirectoryPath.Count)
+            {
+                throw new InvalidOperationException(
+                    "Path is not contained in source: Source directory parent level is " +
+                    sourceDirectory.ParentLevel +
+                    " but elm.json is at path " +
+                    string.Join("/", elmJsonDirectoryPath));
+            }
+
+            IReadOnlyList<string> mappedPrefix =
+                [.. elmJsonDirectoryPath.SkipLast(sourceDirectory.ParentLevel)];
+
+            IReadOnlyList<string> mappedSourceDirectory =
+                [..mappedPrefix,
+                ..sourceDirectory.Subdirectories
+                ];
+
+            sourceDirectoriesMapped.Add(mappedSourceDirectory);
+        }
+
+        bool FilePathIsInSourceDirectory(IReadOnlyList<string> filePath)
+        {
+            foreach (var mappedSourceDirectory in sourceDirectoriesMapped)
+            {
+                if (filePath.Count < mappedSourceDirectory.Count)
                 {
                     continue;
                 }
 
-                if (filePath.Take(sourceDirectory.Subdirectories.Count).SequenceEqual(sourceDirectory.Subdirectories))
+                if (filePath.Take(mappedSourceDirectory.Count).SequenceEqual(mappedSourceDirectory))
                 {
                     return true;
                 }
@@ -750,7 +775,7 @@ public class ElmCompiler
             return false;
         }
 
-        return filePathIsInSourceDirectory;
+        return FilePathIsInSourceDirectory;
     }
 
     public static (IReadOnlyList<string> filePath, ElmJsonStructure elmJsonParsed)?
@@ -782,7 +807,7 @@ public class ElmCompiler
                             (filePath: (IReadOnlyList<string>)pathAndContent.path, elmJsonParsed)
                         };
                 }
-                catch (Exception e)
+                catch (Exception)
                 {
                     return [];
                 }
