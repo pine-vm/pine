@@ -2,6 +2,7 @@ using Pine;
 using Pine.Core;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
+using Pine.Core.Files;
 using Pine.Elm;
 using System;
 using System.Collections.Generic;
@@ -197,7 +198,7 @@ public class Program
                 "./elm-compiler-source.zip";
 
             var zipArchive =
-                ZipArchive.ZipArchiveFromEntries(
+                ZipArchive.ZipArchiveFromFiles(
                     elmCompilerSource.EnumerateBlobsTransitive()
                     .Select(entry => (string.Join("/", entry.path), entry.blobContent)));
 

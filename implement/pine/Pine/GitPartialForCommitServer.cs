@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Pine.Core.Files;
 using Pine.Core.IO;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -72,7 +73,7 @@ public class GitPartialForCommitServer
                         cloneUrl: supportedCloneUrls[0],
                         commit: commitId);
 
-                var zipArchive = ZipArchive.ZipArchiveFromEntries(files);
+                var zipArchive = ZipArchive.ZipArchiveFromFiles(files);
 
                 System.Console.WriteLine(
                     "Cloned for commit " + commitId + ": Got " + files.Count + " files. Size of zip archive: " + zipArchive.Length + " bytes.");

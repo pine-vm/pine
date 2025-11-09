@@ -1,4 +1,5 @@
 using Pine.Core;
+using Pine.Core.Files;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -428,7 +429,7 @@ public static class LoadFromGitHubOrGitLab
             {
                 return localCache.Value.Unpack(
                     fromErr: _ => null,
-                    fromOk: files => (byte[]?)ZipArchive.ZipArchiveFromEntries(files));
+                    fromOk: files => (byte[]?)ZipArchive.ZipArchiveFromFiles(files));
             });
 
         return fromExternalCache switch

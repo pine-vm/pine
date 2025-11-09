@@ -8,6 +8,7 @@ using Pine;
 using Pine.Core;
 using Pine.Core.Addressing;
 using Pine.Core.Elm;
+using Pine.Core.Files;
 using Pine.Core.Http;
 using Pine.Core.IO;
 using Pine.Elm;
@@ -655,7 +656,7 @@ public class Program
 
                 Console.WriteLine("Completed reading files to restore process " + lastCompositionLogRecordHashBase16 + ". Read " + files.Count + " files from '" + site + "'.");
 
-                var zipArchive = ZipArchive.ZipArchiveFromEntries(files);
+                var zipArchive = ZipArchive.ZipArchiveFromFiles(files);
 
                 var fileName = "process-" + lastCompositionLogRecordHashBase16 + ".zip";
                 var filePath = Path.Combine(Environment.CurrentDirectory, fileName);
@@ -1261,7 +1262,7 @@ public class Program
             var compiledTree = PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(compileResult.compiledAppFiles);
             var compiledFiles = PineValueComposition.TreeToFlatDictionaryWithPathComparer(compiledTree);
 
-            var compiledCompositionArchive = ZipArchive.ZipArchiveFromEntries(compiledFiles);
+            var compiledCompositionArchive = ZipArchive.ZipArchiveFromFiles(compiledFiles);
 
             var outputCompositionFileName = compileResult.report.compiledCompositionId + ".zip";
 
@@ -1873,16 +1874,16 @@ public class Program
                 var compositionDescription =
                     string.Join(
                         "\n",
-                        DescribeCompositionForHumans(
+                        FileTreeExtensions.DescribeFileTreeForHumans(
                             loadCompositionResult.tree,
-                            listBlobs: listBlobsOption.HasValue(),
-                            extractBlobName: sourcePath.Split('\\', '/').Last()));
+                            listFiles: listBlobsOption.HasValue(),
+                            extractFileName: sourcePath.Split('\\', '/').Last()));
 
                 Console.WriteLine("Composition " + compositionId + " is " + compositionDescription);
 
                 if (compileZipArchiveOption.HasValue())
                 {
-                    var asZipArchive = ZipArchive.ZipArchiveFromEntries(
+                    var asZipArchive = ZipArchive.ZipArchiveFromFiles(
                         loadCompositionResult.tree.EnumerateBlobsTransitive()
                         .Select(entry => (string.Join("/", entry.path), entry.blobContent)));
 
@@ -2043,8 +2044,7 @@ public class Program
             if (filteredSourceTree.GetNodeAtPath(["elm.json"]) is not
                 BlobTreeWithStringPath.BlobNode elmJsonFile)
             {
-                return Result<string, LoadForMakeResult>.err(
-                    "Did not find elm.json file in that directory.");
+                return "Did not find elm.json file in that directory.";
             }
 
             var elmJsonFileParsed =
@@ -2052,8 +2052,7 @@ public class Program
 
             if (elmJsonFileParsed is null)
             {
-                return Result<string, LoadForMakeResult>.err(
-                    "Failed to parse elm.json file.");
+                return "Failed to parse elm.json file.";
             }
 
             var elmJsonSourceDirectories =
@@ -2068,8 +2067,7 @@ public class Program
 
             if (string.IsNullOrEmpty(pathToElmFile))
             {
-                return Result<string, LoadForMakeResult>.err(
-                    "The path to the entry point Elm file is empty.");
+                return "The path to the entry point Elm file is empty.";
             }
 
             if (pathToElmFile.StartsWith("./"))
@@ -2090,7 +2088,7 @@ public class Program
                     "Failed to work with elm.json file containing directory which is not contained in input directory: This configuration is only supported when loading from a local file system";
             }
 
-            string absoluteSourceDirectoryFromRelative(ElmJsonStructure.RelativeDirectory relDir)
+            string AbsoluteSourceDirectoryFromRelative(ElmJsonStructure.RelativeDirectory relDir)
             {
                 var path = inputDirectory;
 
@@ -2113,30 +2111,30 @@ public class Program
 
             var outerSourceDirectoriesAbsolute =
                 sourceDirectoriesNotInInputDirectory
-                .Select(absoluteSourceDirectoryFromRelative)
+                .Select(AbsoluteSourceDirectoryFromRelative)
                 .ToImmutableList();
 
             var maxParentLevel =
                 sourceDirectoriesNotInInputDirectory.Max(sd => sd.ParentLevel);
 
             var commonParentDirectory =
-                absoluteSourceDirectoryFromRelative(
+                AbsoluteSourceDirectoryFromRelative(
                     new ElmJsonStructure.RelativeDirectory(
                         ParentLevel: maxParentLevel,
                         Subdirectories: []));
 
-            IReadOnlyList<string> pathRelativeToCommonParentFromAbsolute(string absolutePath) =>
+            IReadOnlyList<string> PathRelativeToCommonParentFromAbsolute(string absolutePath) =>
                 absolutePath[commonParentDirectory.Length..].Replace('\\', '/').Trim('/').Split('/');
 
             var inputDirectoryAbsolute = Path.GetFullPath(inputDirectory);
 
             var workingDirectoryRelative =
-                pathRelativeToCommonParentFromAbsolute(inputDirectoryAbsolute);
+                PathRelativeToCommonParentFromAbsolute(inputDirectoryAbsolute);
 
             var pathToElmFileAbsolute = Path.GetFullPath(pathToElmFile);
 
             var pathToFileWithElmEntryPoint =
-                pathRelativeToCommonParentFromAbsolute(pathToElmFileAbsolute);
+                PathRelativeToCommonParentFromAbsolute(pathToElmFileAbsolute);
 
             return
                 outerSourceDirectoriesAbsolute
@@ -2147,7 +2145,7 @@ public class Program
                                 .LogToActions(Console.WriteLine)
                                 .Map(outerSourceDirLoadOk =>
                                     (outerSourceDirLoadOk.tree,
-                                        relativePath: pathRelativeToCommonParentFromAbsolute(outerSourceDirectory)));
+                                        relativePath: PathRelativeToCommonParentFromAbsolute(outerSourceDirectory)));
                     })
                     .ListCombine()
                     .Map(outerSourceDirectories =>
@@ -2187,7 +2185,12 @@ public class Program
 
         Console.WriteLine(
             "Loaded " + inputHash[..10] + " as input: " +
-            string.Join("\n", DescribeCompositionForHumans(loadSourceFilesOk.SourceFiles, listBlobs: false, extractBlobName: null)));
+            string.Join(
+                "\n",
+                FileTreeExtensions.DescribeFileTreeForHumans(
+                    loadSourceFilesOk.SourceFiles,
+                    listFiles: false,
+                    extractFileName: null)));
 
         var makeResult =
             Make(
@@ -2211,7 +2214,7 @@ public class Program
                 "Unexpected make result type: " + makeResult);
         }
 
-        ReadOnlyMemory<byte> computeOutputFileContent()
+        ReadOnlyMemory<byte> ComputeOutputFileContent()
         {
             if (makeOk.ProducedFiles is BlobTreeWithStringPath.BlobNode blobNode)
             {
@@ -2235,7 +2238,7 @@ public class Program
                     CommandLineInterface.FormatIntegerForDisplay(blobs.Sum(entry => entry.blobContent.Length)) +
                     " aggregate bytes). Packaging these into zip archive...");
 
-                var zipArchive = ZipArchive.ZipArchiveFromEntries(blobs);
+                var zipArchive = ZipArchive.ZipArchiveFromFiles(blobs);
 
                 return zipArchive;
             }
@@ -2244,7 +2247,7 @@ public class Program
                 "Unexpected produced files type: " + makeOk.ProducedFiles);
         }
 
-        var outputFileContent = computeOutputFileContent();
+        var outputFileContent = ComputeOutputFileContent();
 
         var outputPath = Path.GetFullPath(outputPathArgument);
 
@@ -2587,57 +2590,6 @@ public class Program
         }
 
         return "Unexpected Elm tag value type: " + elmTag;
-    }
-
-    public static IEnumerable<string> DescribeCompositionForHumans(
-        BlobTreeWithStringPath composition,
-        bool listBlobs,
-        string? extractBlobName)
-    {
-        if (composition is BlobTreeWithStringPath.TreeNode tree)
-        {
-            var blobs = composition.EnumerateBlobsTransitive().ToImmutableList();
-
-            yield return
-                "a tree containing " + blobs.Count + " blobs with an aggregate size of " +
-                CommandLineInterface.FormatIntegerForDisplay(blobs.Sum(blob => (long)blob.blobContent.Length)) + " bytes.";
-
-            if (listBlobs)
-                yield return
-                    "blobs paths, sizes and hashes:\n" +
-                    string.Join(
-                        "\n",
-                        blobs.Select(blobAtPath =>
-                        string.Join("/", blobAtPath.path) + " : " +
-                        blobAtPath.blobContent.Length + " bytes, " +
-                        Convert.ToHexStringLower(PineValueHashTree.ComputeHash(PineValue.Blob(blobAtPath.blobContent)).Span)[..10]));
-
-            yield break;
-        }
-
-        if (composition is BlobTreeWithStringPath.BlobNode blob)
-        {
-            yield return "a blob containing " + blob.Bytes.Length + " bytes";
-
-            if (extractBlobName != null)
-            {
-                foreach (var extractedTree in BlobLibrary.ExtractTreesFromNamedBlob(extractBlobName, blob.Bytes))
-                {
-                    var extractedTreeCompositionId =
-                        Convert.ToHexStringLower(PineValueHashTree.ComputeHashNotSorted(extractedTree).Span);
-
-                    var compositionDescription =
-                        string.Join(
-                            "\n",
-                            DescribeCompositionForHumans(
-                                extractedTree,
-                                listBlobs: listBlobs,
-                                extractBlobName: null));
-
-                    yield return "Extracted composition " + extractedTreeCompositionId + ", which is " + compositionDescription;
-                }
-            }
-        }
     }
 
     private static CommandLineApplication AddRunCacheServerCmd(CommandLineApplication app) =>

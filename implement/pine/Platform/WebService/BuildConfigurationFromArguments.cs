@@ -1,6 +1,7 @@
 using Pine;
 using Pine.Core;
 using Pine.Core.Addressing;
+using Pine.Core.Files;
 using System;
 
 namespace ElmTime.Platform.WebService;
@@ -51,6 +52,6 @@ public static class BuildConfigurationFromArguments
 
         var sourceFiles = PineValueComposition.TreeToFlatDictionaryWithPathComparer(parseSourceAsTree);
 
-        return ZipArchive.ZipArchiveFromEntries(sourceFiles);
+        return ZipArchive.ZipArchiveFromFiles(sourceFiles);
     }
 }

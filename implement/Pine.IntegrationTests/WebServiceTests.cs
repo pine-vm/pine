@@ -1,10 +1,11 @@
-using ElmTime.Platform.WebService;
 using AwesomeAssertions;
+using ElmTime.Platform.WebService;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Pine.Core;
 using Pine.Core.Addressing;
+using Pine.Core.Files;
 using Pine.Core.IO;
 using Pine.Elm.Platform;
 using System;
@@ -16,6 +17,7 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using Xunit;
+
 using static MoreLinq.Extensions.BatchExtension;
 using static MoreLinq.Extensions.SkipLastWhileExtension;
 
@@ -759,7 +761,7 @@ public class WebServiceTests
             .BeGreaterThan(2, "More than two batches of events to test with.");
 
         var deploymentZipArchive =
-            ZipArchive.ZipArchiveFromEntries(TestSetup.CounterElmWebApp);
+            ZipArchive.ZipArchiveFromFiles(TestSetup.CounterElmWebApp);
 
         var deploymentTree =
             PineValueComposition.SortedTreeFromSetOfBlobsWithCommonFilePath(
@@ -869,7 +871,7 @@ public class WebServiceTests
             TestSetup.GetElmAppFromSubdirectoryName("test-prevent-damage-by-migrate-webapp");
 
         var deploymentZipArchive =
-            ZipArchive.ZipArchiveFromEntries(deploymentFiles);
+            ZipArchive.ZipArchiveFromFiles(deploymentFiles);
 
         using var testSetup =
             WebHostAdminInterfaceTestSetup.Setup(
@@ -988,7 +990,7 @@ public class WebServiceTests
             TestSetup.GetElmAppFromSubdirectoryName("migrate-from-int-to-string-builder-web-app");
 
         var migrateAndSecondDeploymentZipArchive =
-            ZipArchive.ZipArchiveFromEntries(migrateAndSecondDeployment);
+            ZipArchive.ZipArchiveFromFiles(migrateAndSecondDeployment);
 
         using var testSetup =
             WebHostAdminInterfaceTestSetup.Setup(deployAppAndInitElmState: initialDeployment);

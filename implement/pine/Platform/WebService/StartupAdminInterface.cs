@@ -6,9 +6,9 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Pine;
 using Pine.Core;
 using Pine.Core.Addressing;
+using Pine.Core.Files;
 using Pine.Core.IO;
 using System;
 using System.Collections.Generic;
@@ -607,7 +607,7 @@ public class StartupAdminInterface
                             .Unpack(
                                 fromErr: _ => throw   new Exception("Failed to parse as tree with string path"),
                                 fromOk: appConfigTree =>
-                                ZipArchive.ZipArchiveFromEntries(
+                                ZipArchive.ZipArchiveFromFiles(
                                     PineValueComposition.TreeToFlatDictionaryWithPathComparer(appConfigTree)));
 
                             context.Response.StatusCode = 200;

@@ -298,53 +298,8 @@ public class BlobLibrary
 
         var blobName = sourceUrl.Split('/', '\\').Last();
 
-        foreach (var extracted in ExtractTreesFromNamedBlob(blobName, responseContent))
+        foreach (var extracted in Core.Files.CommonMappings.ExtractTreesFromNamedBlob(blobName, responseContent))
             yield return extracted;
-    }
-
-    public static IEnumerable<BlobTreeWithStringPath> ExtractTreesFromNamedBlob(string blobName, ReadOnlyMemory<byte> blobContent)
-    {
-        {
-            BlobTreeWithStringPath? fromZipArchive = null;
-
-            try
-            {
-                fromZipArchive =
-                    PineValueComposition.SortedTreeFromSetOfBlobsWithCommonFilePath(
-                        ZipArchive.EntriesFromZipArchive(blobContent));
-            }
-            catch { }
-
-            if (fromZipArchive != null)
-                yield return fromZipArchive;
-        }
-
-        if (blobName.EndsWith(".tar.gz", StringComparison.OrdinalIgnoreCase) || blobName.EndsWith(".tgz", StringComparison.OrdinalIgnoreCase))
-        {
-            BlobTreeWithStringPath? fromTarArchive = null;
-
-            try
-            {
-                fromTarArchive = TarArchive.TreeWithStringPathFromTarArchive(BytesConversions.DecompressGzip(blobContent));
-            }
-            catch { }
-
-            if (fromTarArchive != null)
-                yield return fromTarArchive;
-        }
-        else if (blobName.EndsWith(".gz"))
-        {
-            ReadOnlyMemory<byte>? fromGzip = null;
-
-            try
-            {
-                fromGzip = BytesConversions.DecompressGzip(blobContent);
-            }
-            catch { }
-
-            if (fromGzip is not null)
-                yield return BlobTreeWithStringPath.Blob(fromGzip.Value);
-        }
     }
 
     public static async Task<TResult> RetryOnExceptionAsync<TResult, TException>(

@@ -7,9 +7,9 @@ using System.Text;
 using ElmTime.Platform.WebService;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
-using Pine;
 using Pine.Core;
 using Pine.Core.Addressing;
+using Pine.Core.Files;
 using Pine.Core.IO;
 
 namespace ElmTime;
@@ -184,7 +184,7 @@ public class RunServer
         var processHistoryComponentHash = PineValueHashTree.ComputeHashNotSorted(processHistoryTree);
         var processHistoryComponentHashBase16 = Convert.ToHexStringLower(processHistoryComponentHash.Span);
 
-        var processHistoryZipArchive = ZipArchive.ZipArchiveFromEntries(restoreFiles);
+        var processHistoryZipArchive = ZipArchive.ZipArchiveFromFiles(restoreFiles);
 
         using var httpClient = new System.Net.Http.HttpClient();
 
