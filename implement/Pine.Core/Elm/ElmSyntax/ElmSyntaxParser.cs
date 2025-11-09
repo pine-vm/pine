@@ -1915,6 +1915,34 @@ public class ElmSyntaxParser
                     number.Append(Advance());
                 }
 
+                // Handle decimal point for floats (only for non-hex numbers)
+                if (!isHex && Peek() is '.' && PeekNext() is char nextChar && char.IsDigit(nextChar))
+                {
+                    number.Append(Advance()); // Consume '.'
+
+                    while (!IsAtEnd() && char.IsDigit(Peek()))
+                    {
+                        number.Append(Advance());
+                    }
+                }
+
+                // Handle exponent notation for floats (only for non-hex numbers)
+                if (!isHex && Peek() is 'e' or 'E')
+                {
+                    number.Append(Advance()); // Consume 'e' or 'E'
+
+                    // Optional '+' or '-' after exponent
+                    if (Peek() is '+' or '-')
+                    {
+                        number.Append(Advance());
+                    }
+
+                    while (!IsAtEnd() && char.IsDigit(Peek()))
+                    {
+                        number.Append(Advance());
+                    }
+                }
+
                 Location end = new(_line, _column);
 
                 return new Token(TokenType.NumberLiteral, number.ToString(), start, end);
@@ -3604,7 +3632,7 @@ public class ElmSyntaxParser
                     Consume(TokenType.Dot);
 
                     var recordFieldToken =
-                        ConsumeAnyIdentifier("record field");
+                        ConsumeAnyIdentifier("record field name");
 
                     var recordAccessRange =
                         new Range(
@@ -4033,7 +4061,7 @@ public class ElmSyntaxParser
                 var dotToken = Consume(TokenType.Dot);
 
                 var recordFieldToken =
-                    ConsumeAnyIdentifier("record field");
+                    ConsumeAnyIdentifier("record field name");
 
                 var recordAccessRange =
                     new Range(dotToken.Start, recordFieldToken.End);
@@ -4181,6 +4209,14 @@ public class ElmSyntaxParser
 
                 return new Expression.Hex(
                     long.Parse(hexNumber, System.Globalization.NumberStyles.HexNumber));
+            }
+
+            // Check if the number contains a decimal point or exponent notation
+            if (expression.Contains('.') || expression.Contains('e') || expression.Contains('E'))
+            {
+                // Float number
+                var floatValue = double.Parse(expression, System.Globalization.CultureInfo.InvariantCulture);
+                return new Expression.Floatable(floatValue);
             }
 
             var dec = long.Parse(expression);

@@ -1715,6 +1715,30 @@ public class ParseElmModuleTextToPineValueTests
                 
                 """",
 
+                """"
+                module Floats exposing (..)
+
+
+                alfa =
+                    3.14
+
+                beta =
+                    -0.00159
+
+                gamma =
+                    2.7e8
+
+                """",
+
+                """"
+                module ApplyInRecord exposing (..)
+
+
+                defaultLinkConfig =
+                    { color = Element.rgb 0.3 0.7 0.9
+                    }
+                """",
+
             ];
 
         for (var i = 0; i < testCases.Count; ++i)
