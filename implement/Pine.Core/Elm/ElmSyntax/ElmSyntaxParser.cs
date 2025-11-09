@@ -1,5 +1,3 @@
-using Pine.Core;
-using Pine.Core.Elm;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -7,7 +5,7 @@ using System.Text;
 
 using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
 
-namespace Pine.ElmSyntax;
+namespace Pine.Core.Elm.ElmSyntax;
 
 public class ElmSyntaxParser
 {
@@ -803,7 +801,7 @@ public class ElmSyntaxParser
                         [
                         ("command",
                         moduleData.ModuleData.Command is not { } moduleCommand
-                            ? maybeNothingInstance
+                            ? s_maybeNothingInstance
                             : ElmValue.TagInstance(
                                 "Just",
                                 [EncodeNode(EncodeString, moduleCommand)])),
@@ -816,7 +814,7 @@ public class ElmSyntaxParser
 
                         ("subscription",
                         moduleData.ModuleData.Subscription is not { } moduleSubscription
-                            ? maybeNothingInstance
+                            ? s_maybeNothingInstance
                             : ElmValue.TagInstance(
                                 "Just",
                                 [EncodeNode(EncodeString, moduleSubscription)])),
@@ -914,14 +912,14 @@ public class ElmSyntaxParser
                 [
                 ("exposingList",
                 import.ExposingList is null
-                    ? maybeNothingInstance
+                    ? s_maybeNothingInstance
                     : ElmValue.TagInstance(
                         "Just",
                         [EncodeNode(EncodeExposing, import.ExposingList)])),
 
                 ("moduleAlias",
                 import.ModuleAlias is null
-                    ? maybeNothingInstance
+                    ? s_maybeNothingInstance
                     : ElmValue.TagInstance(
                         "Just",
                         [EncodeNode(EncodeModuleName, import.ModuleAlias)])),
@@ -1147,7 +1145,7 @@ public class ElmSyntaxParser
 
                 ("signature",
                 function.Signature is null
-                    ? maybeNothingInstance
+                    ? s_maybeNothingInstance
                     : ElmValue.TagInstance(
                         "Just",
                         [EncodeNode(EncodeSignature, function.Signature)])),
@@ -1584,7 +1582,7 @@ public class ElmSyntaxParser
     {
         if (maybe is Maybe<JustT>.Nothing)
         {
-            return maybeNothingInstance;
+            return s_maybeNothingInstance;
         }
 
         if (maybe is Maybe<JustT>.Just just)
@@ -1605,7 +1603,7 @@ public class ElmSyntaxParser
             return ElmValue.TagInstance("Just", [encodeJust(just)]);
         }
 
-        return maybeNothingInstance;
+        return s_maybeNothingInstance;
     }
 
     private static ElmValue EncodeInteger(int value)
@@ -1613,7 +1611,8 @@ public class ElmSyntaxParser
         return ElmValue.Integer(value);
     }
 
-    private static readonly ElmValue maybeNothingInstance = ElmValue.TagInstance("Nothing", []);
+    private static readonly ElmValue s_maybeNothingInstance =
+        ElmValue.TagInstance("Nothing", []);
 
     public record Token(
         TokenType Type,
@@ -1865,7 +1864,7 @@ public class ElmSyntaxParser
                 }
 
                 // Unterminated string literal; here you might want to throw an error.
-                throw new ElmSyntaxParserException(
+                throw new ParserException(
                     "Unterminated string literal",
                     lineNumber: _line,
                     columnNumber: _column);
@@ -1885,7 +1884,7 @@ public class ElmSyntaxParser
                 }
 
                 // Unterminated character literal; here you might want to throw an error.
-                throw new ElmSyntaxParserException(
+                throw new ParserException(
                     "Unterminated character literal",
                     lineNumber: _line,
                     columnNumber: _column);
@@ -4800,7 +4799,7 @@ public class ElmSyntaxParser
 
             if (nextToken.Type != expectedType)
             {
-                throw new ElmSyntaxParserException(
+                throw new ParserException(
                     "Expected " + (tokenDescription ?? "token") + " of type " + expectedType +
                     " but found " + nextToken.Type,
                     lineNumber: nextToken.Start.Row,
@@ -4817,7 +4816,7 @@ public class ElmSyntaxParser
                     "Expected token with lexeme " + expectedLexeme) +
                     "' but found '" + nextToken.Lexeme + "'";
 
-                throw new ElmSyntaxParserException(
+                throw new ParserException(
                     errorDescription,
                     lineNumber: nextToken.Start.Row,
                     columnNumber: nextToken.Start.Column);
@@ -4826,14 +4825,14 @@ public class ElmSyntaxParser
             return Advance();
         }
 
-        private ElmSyntaxParserException ExceptionForCurrentLocation(string message)
+        private ParserException ExceptionForCurrentLocation(string message)
         {
             var token =
             IsAtEnd() ?
             tokens.Span[tokens.Length - 1] :
             Peek;
 
-            return new ElmSyntaxParserException(
+            return new ParserException(
             message,
             lineNumber: token.Start.Row,
             columnNumber: token.Start.Column);

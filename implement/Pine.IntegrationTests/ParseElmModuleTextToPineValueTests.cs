@@ -1735,7 +1735,7 @@ public class ParseElmModuleTextToPineValueTests
                     ElmValue.RenderAsElmExpression(responseAsElmValue).expressionString;
 
                 var fromDotnetResult =
-                    ElmSyntax.ElmSyntaxParser.ParseModuleTextAsElmSyntaxElmValue(testCase);
+                    Core.Elm.ElmSyntax.ElmSyntaxParser.ParseModuleTextAsElmSyntaxElmValue(testCase);
 
                 if (fromDotnetResult.IsErrOrNull() is { } err)
                 {
@@ -1816,7 +1816,7 @@ public class ParseElmModuleTextToPineValueTests
         if (alsoTestDotnetParser)
         {
             var fromDotnetResult =
-                ElmSyntax.ElmSyntaxParser.ParseModuleTextAsElmSyntaxElmValue(elmModuleText);
+                Core.Elm.ElmSyntax.ElmSyntaxParser.ParseModuleTextAsElmSyntaxElmValue(elmModuleText);
 
             if (fromDotnetResult.IsErrOrNull() is { } err)
             {
@@ -1854,10 +1854,10 @@ public class ParseElmModuleTextToPineValueTests
         var pineVM =
             new PineVM.PineVM(evalCache: pineVMCache.EvalCache);
 
-        return bundledElmCompiler.Value.ParseElmModuleText(elmModuleText, pineVM);
+        return s_bundledElmCompiler.Value.ParseElmModuleText(elmModuleText, pineVM);
     }
 
-    private static readonly Lazy<ElmCompiler> bundledElmCompiler =
+    private static readonly Lazy<ElmCompiler> s_bundledElmCompiler =
         new(() =>
         {
             var elmCompilerFromBundle =

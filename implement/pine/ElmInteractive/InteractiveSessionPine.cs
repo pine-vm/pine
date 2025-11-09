@@ -2,6 +2,7 @@ using Pine;
 using Pine.Core;
 using Pine.Core.Addressing;
 using Pine.Core.Elm;
+using Pine.Core.Elm.ElmSyntax;
 using Pine.Core.IO;
 using Pine.Core.PineVM;
 using Pine.Core.PopularEncodings;
@@ -738,7 +739,7 @@ public class InteractiveSessionPine : IInteractiveSession
 
         {
             var fromDotnetResult =
-                Pine.ElmSyntax.ElmSyntaxParser.ParseModuleTextAsElmSyntaxElmValue(moduleText);
+                ElmSyntaxParser.ParseModuleTextAsElmSyntaxElmValue(moduleText);
 
             // .NET based implementation of ElmSyntaxParser does not yet cover all syntax.
 
