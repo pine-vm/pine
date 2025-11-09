@@ -1749,7 +1749,13 @@ public class ElmSyntaxParser
             }
             else
             {
-                _column++;
+                // Only increment column for non-surrogate characters and low surrogates
+                // High surrogates (first half of a surrogate pair) don't increment the column
+                // because we want to count UTF-32 code points, not UTF-16 code units
+                if (!char.IsHighSurrogate(current))
+                {
+                    _column++;
+                }
             }
 
             return current;
