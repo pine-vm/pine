@@ -2522,6 +2522,60 @@ public class ElmSyntaxParser
                 return moduleNode;
             }
 
+            if (NextTokenMatches(p => p.Lexeme is "port"))
+            {
+                /*
+                 * Example syntax:
+                 * ----
+                 * port module Main exposing (..)
+                 * */
+
+                var portKeyword = ConsumeKeyword("port");
+
+                ConsumeAllTrivia();
+
+                var moduleKeyword = ConsumeKeyword("module");
+
+                ConsumeAllTrivia();
+
+                // Parse module name (e.g. Main)
+                var moduleNameParts = new List<Token>();
+
+                var firstModuleNamePart =
+                    ConsumeAnyIdentifier("module name");
+
+                moduleNameParts.Add(firstModuleNamePart);
+
+                while (Peek.Type is TokenType.Dot)
+                {
+                    Consume(TokenType.Dot);
+
+                    var moduleNamePart = ConsumeAnyIdentifier("module name part");
+
+                    moduleNameParts.Add(moduleNamePart);
+                }
+
+                // Create a Node<IReadOnlyList<string>> for the module name.
+                var moduleNameNode =
+                    new Node<ModuleName>(
+                        new Range(firstModuleNamePart.Start, moduleNameParts.Last().End),
+                        [.. moduleNameParts.Select(t => t.Lexeme)]);
+
+                ConsumeAllTrivia();
+
+                var exposingNode = ParseExposing();
+
+                // Build the module data and wrap it in a Module.PortModule.
+                var moduleData = new DefaultModuleData(moduleNameNode, exposingNode);
+                var moduleNodeValue = new Module.PortModule(moduleData);
+
+                var moduleNode = new Node<Module>(
+                    new Range(portKeyword.Start, exposingNode.Range.End),
+                    moduleNodeValue);
+
+                return moduleNode;
+            }
+
             {
                 /*
                  * Example syntax:
@@ -2878,6 +2932,41 @@ public class ElmSyntaxParser
             if (Peek.Lexeme is "type")
             {
                 return ParseTypeDeclaration(docComment);
+            }
+
+            if (Peek.Lexeme is "port")
+            {
+                /*
+                 * Example syntax:
+                 * ----
+                 * port sendMessageToMonacoFrame : Json.Encode.Value -> Cmd msg
+                 * */
+
+                var portKeywordToken = ConsumeKeyword("port");
+
+                ConsumeAllTrivia();
+
+                var portNameToken = ConsumeAnyIdentifier("port name");
+
+                ConsumeAllTrivia();
+
+                var colonToken = Consume(TokenType.Colon);
+
+                ConsumeAllTrivia();
+
+                var typeAnnotation = ParseTypeAnnotation(indentMin: 0);
+
+                ConsumeAllTrivia();
+
+                var signature =
+                    new Signature(
+                        Name: new Node<string>(portNameToken.Range, portNameToken.Lexeme),
+                        TypeAnnotation: typeAnnotation);
+
+                return
+                    new Node<Declaration>(
+                        new Range(portKeywordToken.Start, typeAnnotation.Range.End),
+                        new Declaration.PortDeclaration(signature));
             }
 
             return

@@ -1757,6 +1757,14 @@ public class ParseElmModuleTextToPineValueTests
                     }
                 """",
 
+                """"
+                port module Main exposing (..)
+
+                import Json.Encode
+
+                port sendMessageToMonacoFrame : Json.Encode.Value -> Cmd msg
+                """"
+
             ];
 
         for (var i = 0; i < testCases.Count; ++i)
