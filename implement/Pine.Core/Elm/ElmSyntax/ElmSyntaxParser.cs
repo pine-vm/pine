@@ -2352,9 +2352,20 @@ public class ElmSyntaxParser
                             {
                                 return commentToken.End.Row < Peek.Start.Row;
                             }
+
+                            // If there are no imports (or comment is before imports), check if comment is immediately before declaration
+                            return commentToken.End.Row + 1 == Peek.Start.Row;
+                        }
+                        else
+                        {
+                            // For subsequent declarations, check if the comment is between the last declaration and the current one
+                            if (declarations.LastOrDefault() is { } lastDecl)
+                            {
+                                return lastDecl.Range.End.Row < commentToken.End.Row && commentToken.End.Row < Peek.Start.Row;
+                            }
                         }
 
-                        return commentToken.End.Row == Peek.Start.Row - 1;
+                        return commentToken.End.Row + 1 == Peek.Start.Row;
                     }
 
                     var docComment =

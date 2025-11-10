@@ -1734,6 +1734,30 @@ public class ParseElmModuleTextToPineValueTests
                 """",
 
                 """"
+                module MixedComments exposing (..)
+
+                import Dict
+
+
+                {- This is a
+                {- nested -}
+                comment -}
+
+                alfa = 123
+
+                -- single line comment
+
+                beta = 456
+
+                {-| Stray documentation comment
+                -}
+
+                -- another single line comment
+
+                gamma = Dict.empty
+                """",
+
+                """"
                 module Floats exposing (..)
 
 
