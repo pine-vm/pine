@@ -35,7 +35,7 @@ public static class StaticExpressionDisplay
     /// Line endings are always <c>LF</c> to ensure consistent rendering across platforms.
     /// </summary>
     /// <param name="expression">Expression to render.</param>
-    /// <param name="blobValueRenderer">Function to render blob values (receives a <see cref="PineValue.BlobValue"/> and returns the textual form plus a flag indicating if parentheses are needed when embedded).</param>
+    /// <param name="valueRenderer">Function to render values (receives a <see cref="PineValue"/> and returns the textual form plus a flag indicating if parentheses are needed when embedded).</param>
     /// <param name="functionApplicationRenderer">Function to render function application.</param>
     /// <param name="environmentPathReferenceRenderer">Function to render environment path references.</param>
     /// <param name="indentString">String used for one indentation step (e.g., two spaces).</param>
@@ -43,7 +43,7 @@ public static class StaticExpressionDisplay
     /// <returns>Formatted string representation using only <c>\n</c> as line terminators.</returns>
     public static string RenderToString<TFunctionName>(
         this StaticExpression<TFunctionName> expression,
-        Func<PineValue.BlobValue, (string exprText, bool needsParens)> blobValueRenderer,
+        Func<PineValue, (string exprText, bool needsParens)> valueRenderer,
         Func<TFunctionName, FunctionApplicationRendering> functionApplicationRenderer,
         Func<IReadOnlyList<int>, string?> environmentPathReferenceRenderer,
         string indentString,
@@ -54,7 +54,7 @@ public static class StaticExpressionDisplay
         foreach (var (indent, text) in
             RenderToLines(
                 expression,
-                blobValueRenderer,
+                valueRenderer: valueRenderer,
                 functionApplicationRenderer,
                 environmentPathReferenceRenderer,
                 indentLevel,
@@ -77,7 +77,7 @@ public static class StaticExpressionDisplay
     /// and the line text as produced by the renderer.
     /// </summary>
     /// <param name="expression">Expression to render.</param>
-    /// <param name="blobValueRenderer">Function to render blob values.</param>
+    /// <param name="valueRenderer">Function to render values.</param>
     /// <param name="functionApplicationRenderer">Function to render function application.</param>
     /// <param name="environmentPathReferenceRenderer">Function to render environment path references.</param>
     /// <param name="indentLevel">Indentation level for the first rendered line of the <paramref name="expression"/>.</param>
@@ -88,7 +88,7 @@ public static class StaticExpressionDisplay
     /// <returns>Sequence of pairs (indent, text) that together form the full rendering.</returns>
     public static IEnumerable<(int indent, string text)> RenderToLines<TFunctionName>(
         StaticExpression<TFunctionName> expression,
-        Func<PineValue.BlobValue, (string exprText, bool needsParens)> blobValueRenderer,
+        Func<PineValue, (string exprText, bool needsParens)> valueRenderer,
         Func<TFunctionName, FunctionApplicationRendering> functionApplicationRenderer,
         Func<IReadOnlyList<int>, string?> environmentPathReferenceRenderer,
         int indentLevel,
@@ -109,7 +109,7 @@ public static class StaticExpressionDisplay
         {
             case StaticExpression<TFunctionName>.Literal literal:
                 {
-                    var (valueText, needsParens) = RenderValueAsExpression(literal.Value, blobValueRenderer);
+                    var (valueText, needsParens) = valueRenderer(literal.Value);
 
                     if (needsParens && !containerDelimits)
                     {
@@ -141,7 +141,7 @@ public static class StaticExpressionDisplay
                             var itemLines =
                                 RenderToLines(
                                     item,
-                                    blobValueRenderer,
+                                    valueRenderer,
                                     functionApplicationRenderer,
                                     environmentPathReferenceRenderer,
                                     indentLevel,
@@ -193,7 +193,7 @@ public static class StaticExpressionDisplay
 
                     foreach (var line in RenderToLines(
                         kernel.Input,
-                        blobValueRenderer,
+                        valueRenderer,
                         functionApplicationRenderer,
                         environmentPathReferenceRenderer,
                         indentLevel + 1,
@@ -227,7 +227,7 @@ public static class StaticExpressionDisplay
                         .SelectMany(arg =>
                         RenderToLines(
                             arg,
-                            blobValueRenderer,
+                            valueRenderer,
                             functionApplicationRenderer,
                             environmentPathReferenceRenderer,
                             indentLevel + 1,
@@ -277,7 +277,7 @@ public static class StaticExpressionDisplay
 
                     foreach (var line in RenderToLines(
                         cond.Condition,
-                        blobValueRenderer,
+                        valueRenderer,
                         functionApplicationRenderer,
                         environmentPathReferenceRenderer,
                         indentLevel + 1,
@@ -290,7 +290,7 @@ public static class StaticExpressionDisplay
 
                     foreach (var line in RenderToLines(
                         cond.TrueBranch,
-                        blobValueRenderer,
+                        valueRenderer,
                         functionApplicationRenderer,
                         environmentPathReferenceRenderer,
                         indentLevel + 1,
@@ -315,7 +315,7 @@ public static class StaticExpressionDisplay
 
                         foreach (var line in RenderToLines(
                             nested.Condition,
-                            blobValueRenderer,
+                            valueRenderer,
                             functionApplicationRenderer,
                             environmentPathReferenceRenderer,
                             indentLevel + 1,
@@ -328,7 +328,7 @@ public static class StaticExpressionDisplay
 
                         foreach (var line in RenderToLines(
                             nested.TrueBranch,
-                            blobValueRenderer,
+                            valueRenderer,
                             functionApplicationRenderer,
                             environmentPathReferenceRenderer,
                             indentLevel + 1,
@@ -346,7 +346,7 @@ public static class StaticExpressionDisplay
 
                     foreach (var line in RenderToLines(
                         falseBranch,
-                        blobValueRenderer,
+                        valueRenderer,
                         functionApplicationRenderer,
                         environmentPathReferenceRenderer,
                         indentLevel + 1,
@@ -382,6 +382,32 @@ public static class StaticExpressionDisplay
         PineValue value,
         Func<PineValue.BlobValue, (string exprText, bool needsParens)> blobRenderer)
     {
+        return RenderValueAsExpression(
+            value,
+            listItemRenderer: item => RenderValueAsExpression(item, blobRenderer),
+            blobRenderer: blobRenderer);
+    }
+
+    /// <summary>
+    /// Render a <see cref="PineValue"/> into an Elm-like expression string with caller-provided renderers
+    /// for list items and blob values.
+    /// </summary>
+    /// <remarks>
+    /// The method first tries to decode <paramref name="value"/> into an Elm value via
+    /// <see cref="ElmValueEncoding.PineValueAsElmValue"/>.
+    /// If that succeeds, it delegates to <see cref="ElmValue.RenderAsElmExpression(ElmValue)"/> and returns the
+    /// resulting expression string and parentheses requirement. Otherwise:
+    /// - If the value is a blob, <paramref name="blobRenderer"/> is used.
+    /// - If the value is a list, each element is rendered using <paramref name="listItemRenderer"/> and combined with square brackets.
+    /// </remarks>
+    /// <param name="value">The value to render.</param>
+    /// <param name="listItemRenderer">Renderer invoked for each element when <paramref name="value"/> is a list.</param>
+    /// <param name="blobRenderer">Renderer invoked when <paramref name="value"/> is a blob and cannot be represented as a built-in Elm value.</param>
+    public static (string exprText, bool needsParens) RenderValueAsExpression(
+        PineValue value,
+        Func<PineValue, (string exprText, bool needsParens)> listItemRenderer,
+        Func<PineValue.BlobValue, (string exprText, bool needsParens)> blobRenderer)
+    {
         if (ElmValueEncoding.PineValueAsElmValue(
             value,
             additionalReusableDecodings: null,
@@ -404,13 +430,19 @@ public static class StaticExpressionDisplay
                 return ("[]", false);
             }
 
-            var itemsRenderings =
-                listValue.Items.ToArray()
-                .Select(item => RenderValueAsExpression(item, blobRenderer))
-                .ToList();
+            var itemsRenderingsTexts = new string[listValue.Items.Length];
+
+            for (var i = 0; i < itemsRenderingsTexts.Length; i++)
+            {
+                var item = listValue.Items.Span[i];
+
+                var itemRendering = listItemRenderer(item);
+
+                itemsRenderingsTexts[i] = itemRendering.exprText;
+            }
 
             var combinedText =
-                "[" + string.Join(", ", itemsRenderings.Select(ir => ir.exprText)) + "]";
+                "[" + string.Join(", ", itemsRenderingsTexts) + "]";
 
             return (combinedText, false);
         }
@@ -518,7 +550,8 @@ public static class StaticExpressionDisplay
         StaticExpression<DeclQualifiedName> functionBody,
         Func<IReadOnlyList<int>, string, string?>? substituteEnvironmentPath)
     {
-        var functionInterface = staticProgram.GetFunctionApplicationRendering(functionName).FunctionInterface;
+        var functionInterface =
+            staticProgram.GetFunctionApplicationRendering(functionName).FunctionInterface;
 
         var functionParameters = functionInterface.ParamsPaths;
 
@@ -555,7 +588,7 @@ public static class StaticExpressionDisplay
             "\n" +
             RenderToString(
                 functionBody,
-                blobValueRenderer: DefaultBlobRenderer,
+                valueRenderer: val => RenderValueAsExpression(val, DefaultBlobRenderer),
                 functionApplicationRenderer: staticProgram.GetFunctionApplicationRendering,
                 environmentPathReferenceRenderer: RenderParamRefCombined,
                 indentString: "    ",
