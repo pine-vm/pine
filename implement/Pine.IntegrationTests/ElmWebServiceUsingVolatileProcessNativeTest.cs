@@ -124,7 +124,7 @@ public class ElmWebServiceUsingVolatileProcessNativeTest
             200,
             "Response status code should be OK.\nresponseContentAsString:\n" + formatResponseContentAsString);
 
-        ElmTime.ElmSyntax.ElmModule.ModuleLines(formatResponseContentAsString)
+        Core.Elm.ElmSyntax.ElmModule.ModuleLines(formatResponseContentAsString)
             .First().Should().Be("[1,3,4]", "Response content should match the expected JSON format.");
     }
 }

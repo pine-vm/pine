@@ -82,7 +82,7 @@ public class CodeAnalysisTestHelper
             elmModulesTexts
             .ToFrozenDictionary(
                 moduleText =>
-                ElmTime.ElmSyntax.ElmModule.ParseModuleName(moduleText)
+                Core.Elm.ElmSyntax.ElmModule.ParseModuleName(moduleText)
                 .Extract(err => throw new System.Exception("Failed parsing module name from module text: " + err)),
                 moduleText => moduleText,
                 comparer: EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());

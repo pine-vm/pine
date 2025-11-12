@@ -1,11 +1,11 @@
 using AwesomeAssertions;
-using Pine.Elm019;
+using Pine.Core.Elm.Elm019;
 using System.Text.Json;
 using Xunit;
 
-namespace Pine.IntegrationTests;
+namespace Pine.Core.Tests.Elm.Elm019;
 
-public class Elm019JsonFileParsingTests
+public class ElmJsonStructureTests
 {
     [Fact]
     public void Parse_elm_json_of_application_type()

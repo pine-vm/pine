@@ -398,7 +398,7 @@ static public string GetElmHomeDirectory()
     elmHomeDirectory =
         overrideElmMakeHomeDirectory ??
         elmHomeDirectory ??
-        System.IO.Path.Combine(Pine.Filesystem.CreateRandomDirectoryInTempDirectory(), "elm-home");
+        System.IO.Path.Combine(Pine.Core.IO.Filesystem.CreateRandomDirectoryInTempDirectory(), "elm-home");
 
     System.IO.Directory.CreateDirectory(elmHomeDirectory);
     return elmHomeDirectory;

@@ -1,4 +1,5 @@
 using Pine.Core;
+using Pine.Core.Elm.Elm019;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -46,7 +47,7 @@ public class ElmPackage
             {
                 var moduleText = Encoding.UTF8.GetString(fileContent.Span);
 
-                if (ElmTime.ElmSyntax.ElmModule.ParseModuleName(moduleText).IsOkOrNull() is not { } moduleName)
+                if (Core.Elm.ElmSyntax.ElmModule.ParseModuleName(moduleText).IsOkOrNull() is not { } moduleName)
                 {
                     continue;
                 }
@@ -57,7 +58,7 @@ public class ElmPackage
                     moduleText,
                     new ParsedModule(
                         ModuleName: moduleName,
-                        ImportedModulesNames: [.. ElmTime.ElmSyntax.ElmModule.ParseModuleImportedModulesNames(moduleText)]));
+                        ImportedModulesNames: [.. Core.Elm.ElmSyntax.ElmModule.ParseModuleImportedModulesNames(moduleText)]));
             }
             catch (Exception)
             {

@@ -1,9 +1,8 @@
 using Pine.Core;
 using Pine.Core.Addressing;
 using Pine.Core.Elm;
+using Pine.Core.Elm.Elm019;
 using Pine.Core.PopularEncodings;
-using Pine.Elm;
-using Pine.Elm019;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -451,7 +450,7 @@ public class ElmInteractive
             ?
             loweredTree
             :
-            ElmCompiler.FilterTreeForCompilationRoots(
+            ElmAppDependencyResolution.FilterTreeForCompilationRoots(
                 loweredTree,
                 entryPointsFilePaths,
                 skipFilteringForSourceDirs: skipFilteringForSourceDirs);

@@ -3,7 +3,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace Pine.Elm019;
+namespace Pine.Core.Elm.Elm019;
 
 /*
 {
@@ -136,6 +136,19 @@ namespace Pine.Elm019;
 
  * */
 
+/// <summary>
+/// Represents the parsed contents of an <c>elm.json</c> file for Elm 0.19.x applications and packages.
+/// Handles both application and package shapes and supports flexible dependency and exposed-module layouts.
+/// </summary>
+/// <param name="Type">The document type, e.g. <c>application</c> or <c>package</c>.</param>
+/// <param name="Name">The package name (only for package type).</param>
+/// <param name="Summary">A short description of the app or package.</param>
+/// <param name="License">The SPDX license identifier.</param>
+/// <param name="Version">The version string (only for package type).</param>
+/// <param name="ExposedModules">List of exposed module names; accepts both array and sectioned object shapes.</param>
+/// <param name="SourceDirectories">List of source directories (application type).</param>
+/// <param name="ElmVersion">Elm version range or exact version required.</param>
+/// <param name="Dependencies">Dependency table supporting direct/indirect or flat forms.</param>
 public record ElmJsonStructure(
     [property: JsonPropertyName("type")]
     string Type,
@@ -158,16 +171,27 @@ public record ElmJsonStructure(
     [property: JsonConverter(typeof(DependenciesConverter))]
     ElmJsonStructure.DependenciesStruct Dependencies)
 {
+    /// <summary>
+    /// Enumerates source directories parsed into a relative-directory structure with parent traversal depth.
+    /// </summary>
     public IEnumerable<RelativeDirectory> ParsedSourceDirectories =>
         SourceDirectories.Select(ParseSourceDirectory);
 
+    /// <summary>
+    /// Parses a source directory string from <c>elm.json</c> into a <see cref="RelativeDirectory"/>.
+    /// Handles <c>./</c>, <c>..</c>, and path separators.
+    /// </summary>
+    /// <param name="sourceDirectory">A source directory path as written in <c>elm.json</c>.</param>
+    /// <returns>A normalized relative-directory record.</returns>
     public static RelativeDirectory ParseSourceDirectory(string sourceDirectory)
     {
         var initialRecord = new RelativeDirectory(ParentLevel: 0, Subdirectories: []);
 
-        sourceDirectory = sourceDirectory.Replace('\\', '/');
+        sourceDirectory =
+            sourceDirectory.Replace('\\', '/');
 
-        sourceDirectory = sourceDirectory.StartsWith("./") ? sourceDirectory[2..] : sourceDirectory;
+        sourceDirectory =
+            sourceDirectory.StartsWith("./") ? sourceDirectory[2..] : sourceDirectory;
 
         var segmentsStrings =
             sourceDirectory
@@ -204,10 +228,23 @@ public record ElmJsonStructure(
                         });
     }
 
+    /// <summary>
+    /// A relative directory path expressed as the number of levels to traverse up from a base directory and
+    /// the remaining subdirectory segments.
+    /// </summary>
+    /// <param name="ParentLevel">Number of <c>..</c> traversals above the base directory.</param>
+    /// <param name="Subdirectories">Remaining subdirectory segments after applying <c>ParentLevel</c>.</param>
     public record RelativeDirectory(
         int ParentLevel,
         IReadOnlyList<string> Subdirectories);
 
+    /// <summary>
+    /// Represents dependencies declared in <c>elm.json</c>. Supports the application shape with
+    /// <c>direct</c>/<c>indirect</c> sections and the package shape as a flat dictionary.
+    /// </summary>
+    /// <param name="Direct">Direct dependencies (application shape).</param>
+    /// <param name="Indirect">Indirect dependencies (application shape).</param>
+    /// <param name="Flat">Flat dependency dictionary (package shape, or additional keys).</param>
     public record DependenciesStruct(
         [property: JsonPropertyName("direct")]
         IReadOnlyDictionary<string, string>? Direct,
@@ -217,8 +254,14 @@ public record ElmJsonStructure(
         IReadOnlyDictionary<string, string>? Flat);
 }
 
+/// <summary>
+/// JSON converter supporting both array and sectioned object shapes for <c>exposed-modules</c>.
+/// </summary>
 public class ExposedModulesConverter : JsonConverter<IReadOnlyList<string>>
 {
+    /// <summary>
+    /// Reads the <c>exposed-modules</c> value as either an array of strings or a dictionary of sections.
+    /// </summary>
     public override IReadOnlyList<string> Read(ref Utf8JsonReader reader, System.Type typeToConvert, JsonSerializerOptions options)
     {
         if (reader.TokenType == JsonTokenType.StartArray)
@@ -240,14 +283,25 @@ public class ExposedModulesConverter : JsonConverter<IReadOnlyList<string>>
         throw new JsonException("Unsupported shape for exposed-modules.");
     }
 
+    /// <summary>
+    /// Writes the list of exposed modules as a simple JSON array.
+    /// </summary>
     public override void Write(Utf8JsonWriter writer, IReadOnlyList<string> value, JsonSerializerOptions options)
     {
         JsonSerializer.Serialize(writer, value, options);
     }
 }
 
+/// <summary>
+/// JSON converter that accepts both the application dependency shape (with <c>direct</c>/<c>indirect</c>)
+/// and the package shape (flat dictionary). Any extra keys become part of <c>Flat</c>.
+/// </summary>
 public class DependenciesConverter : JsonConverter<ElmJsonStructure.DependenciesStruct>
 {
+    /// <summary>
+    /// Reads dependency tables, normalizing into <see cref="ElmJsonStructure.DependenciesStruct"/>.
+    /// </summary>
+    /// <exception cref="JsonException">Thrown when the JSON does not represent an object.</exception>
     public override ElmJsonStructure.DependenciesStruct Read(
         ref Utf8JsonReader reader,
         System.Type typeToConvert,
@@ -291,6 +345,10 @@ public class DependenciesConverter : JsonConverter<ElmJsonStructure.Dependencies
         return new ElmJsonStructure.DependenciesStruct(direct, indirect, flat);
     }
 
+    /// <summary>
+    /// Writes dependency tables, emitting <c>direct</c> and <c>indirect</c> when present and writing any <c>Flat</c>
+    /// entries as top-level properties.
+    /// </summary>
     public override void Write(
         Utf8JsonWriter writer,
         ElmJsonStructure.DependenciesStruct value,

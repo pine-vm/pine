@@ -1,15 +1,24 @@
-using Pine.Core;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text.RegularExpressions;
 
-namespace ElmTime.ElmSyntax;
+namespace Pine.Core.Elm.ElmSyntax;
 
-public static class ElmModule
+/// <summary>
+/// Provides helpers for parsing Elm module texts and determining compilation order based on
+/// inter-module dependencies. This includes:
+/// <list type="bullet">
+/// <item>Parsing module names and imported module names.</item>
+/// <item>Removing leading Elm trivia (comments/whitespace).</item>
+/// <item>Enumerating lines and line bounds from a module text.</item>
+/// <item>Computing a filtered app code tree containing only required modules for given roots.</item>
+/// </list>
+/// </summary>
+public static partial class ElmModule
 {
-    static readonly IReadOnlyList<IReadOnlyList<string>> ElmCoreAutoImportedModulesNames =
+    static readonly IReadOnlyList<IReadOnlyList<string>> s_elmCoreAutoImportedModulesNames =
         [
             ["Basics"],
             ["Tuple"],
@@ -20,16 +29,38 @@ public static class ElmModule
             ["Result"],
         ];
 
+    /// <summary>
+    /// Internal representation containing the parsed module name and its directly imported modules.
+    /// </summary>
+    /// <param name="ModuleName">Segments composing the module name, e.g. ["Http", "Request"].</param>
+    /// <param name="ImportedModulesNames">Set of module names (as segments) directly imported.</param>
     record ParsedModule(
         IReadOnlyList<string> ModuleName,
         IImmutableSet<IReadOnlyList<string>> ImportedModulesNames);
 
+    /// <summary>
+    /// Returns the ordered list of module texts (exact strings passed in) required for compilation,
+    /// considering each input as a root. This overload assumes there are no additional available modules
+    /// beyond the provided list.
+    /// </summary>
+    /// <param name="modulesTexts">The module texts to treat as roots.</param>
+    /// <returns>Ordered list of module texts including their transitive dependencies.</returns>
     public static IReadOnlyList<string> ModulesTextOrderedForCompilationByDependencies(
         IReadOnlyList<string> modulesTexts) =>
         ModulesTextOrderedForCompilationByDependencies(
             rootModulesTexts: modulesTexts,
             availableModulesTexts: []);
 
+    /// <summary>
+    /// Computes the ordered list of module texts needed to compile the given root modules. All dependencies
+    /// (direct and transitive) that are found among the <paramref name="rootModulesTexts"/> and
+    /// <paramref name="availableModulesTexts"/> are included. Modules are ordered roughly by dependency depth so that
+    /// dependencies appear before the modules that depend on them.
+    /// </summary>
+    /// <param name="rootModulesTexts">Module texts representing roots of compilation.</param>
+    /// <param name="availableModulesTexts">Additional module texts that may be depended upon by roots.</param>
+    /// <returns>Ordered list of module texts ready for compilation.</returns>
+    /// <exception cref="Exception">Thrown if a module name cannot be parsed or duplicate module names are found.</exception>
     public static IReadOnlyList<string> ModulesTextOrderedForCompilationByDependencies(
         IReadOnlyList<string> rootModulesTexts,
         IReadOnlyList<string> availableModulesTexts)
@@ -117,7 +148,7 @@ public static class ElmModule
             .SelectMany(rootModule =>
             ListImportsOfModuleTransitive(rootModule.parsedModule.ModuleName)
             .Prepend(rootModule.parsedModule.ModuleName))
-            .Concat(ElmCoreAutoImportedModulesNames)
+            .Concat(s_elmCoreAutoImportedModulesNames)
             .Intersect(
                 parsedModules.Select(pm => pm.parsedModule.ModuleName),
                 EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>())
@@ -125,7 +156,7 @@ public static class ElmModule
 
         IReadOnlyList<IReadOnlyList<string>> includedModulesNamesWithDeps =
             [
-                .. ElmCoreAutoImportedModulesNames,
+                .. s_elmCoreAutoImportedModulesNames,
                 .. includedModulesNames
                 .OrderBy(moduleName => string.Join(".", moduleName))
                 .SelectMany(moduleName => ListImportsOfModuleTransitive(moduleName).Prepend(moduleName))
@@ -144,28 +175,12 @@ public static class ElmModule
             .Select(parsedModule => parsedModule.moduleText)];
     }
 
-    public class DelegateComparer<T>(Func<T?, T?, int> func) : IComparer<T>
-    {
-        private readonly Func<T?, T?, int> func = func;
-
-        public int Compare(T? x, T? y) => func(x, y);
-    }
-
-    public static Result<string, IReadOnlyList<string>> ParseModuleName(ReadOnlyMemory<byte> moduleContent)
-    {
-        try
-        {
-            var moduleText =
-                System.Text.Encoding.UTF8.GetString(moduleContent.Span);
-
-            return ParseModuleName(moduleText);
-        }
-        catch (Exception exception)
-        {
-            return "Failed decoding text: " + exception.Message;
-        }
-    }
-
+    /// <summary>
+    /// Parses the module name from Elm source text. Handles standard <c>module</c>, <c>port module</c>, and
+    /// <c>effect module</c> declarations. Leading comments/whitespace are skipped.
+    /// </summary>
+    /// <param name="moduleText">Raw Elm module source text.</param>
+    /// <returns>A result containing the module name segments or an error string.</returns>
     public static Result<string, IReadOnlyList<string>> ParseModuleName(string moduleText)
     {
         var textWithoutLeadingComments = RemoveLeadingTrivia(moduleText);
@@ -175,10 +190,7 @@ public static class ElmModule
             // Example:  port module MyModule exposing
 
             var match =
-                Regex.Match(
-                    textWithoutLeadingComments,
-                    @"^(port\s+)?module\s+([\w.]+)\s+exposing",
-                    RegexOptions.Singleline);
+                ModuleDeclarationSyntaxRegex().Match(textWithoutLeadingComments);
 
             if (match.Success)
             {
@@ -204,6 +216,12 @@ public static class ElmModule
         return Result<string, IReadOnlyList<string>>.err("No module name found");
     }
 
+    /// <summary>
+    /// Enumerates imported module names found in an Elm module text. Leading trivia is removed before parsing.
+    /// Triple-quoted string regions are ignored to avoid false positives on <c>import</c> keywords appearing inside them.
+    /// </summary>
+    /// <param name="moduleText">Elm module source text.</param>
+    /// <returns>Sequence of module names (each as list of segments) imported by the module.</returns>
     public static IEnumerable<IReadOnlyList<string>> ParseModuleImportedModulesNames(string moduleText)
     {
         var textWithoutLeadingComments = RemoveLeadingTrivia(moduleText);
@@ -215,9 +233,11 @@ public static class ElmModule
             // We'll do a simple toggle for every """ we see on the line.
             // Each occurrence flips us from outside->inside or inside->outside.
             var searchStart = 0;
+
             while (true)
             {
                 var index = line.IndexOf("\"\"\"", searchStart, StringComparison.Ordinal);
+
                 if (index < 0)
                     break;
 
@@ -228,7 +248,8 @@ public static class ElmModule
             // Only parse imports if we are outside any triple-quoted string
             if (!inTripleQuotedString)
             {
-                var match = Regex.Match(line, @"^import\s+([\w.]+)(\s|$)");
+                var match = ImportDeclarationSyntaxRegex().Match(line);
+
                 if (match.Success)
                 {
                     yield return match.Groups[1].Value.Split('.');
@@ -237,6 +258,12 @@ public static class ElmModule
         }
     }
 
+    /// <summary>
+    /// Removes leading Elm trivia (whitespace, single-line comments, multi-line comments) from a module text.
+    /// Useful before attempting to parse declarations at the top of the file.
+    /// </summary>
+    /// <param name="moduleText">Raw Elm module source.</param>
+    /// <returns>Text with leading trivia removed.</returns>
     public static string RemoveLeadingTrivia(string moduleText)
     {
         // This pattern removes all leading:
@@ -245,15 +272,9 @@ public static class ElmModule
         //   - multi-line comments ({- ... -}), which can span multiple lines
         // The * at the end repeats that pattern until it no longer matches.
         // Using RegexOptions.Singleline so '.' can match across newlines within {- -}.
-        var textWithoutLeadingComments = Regex.Replace(
-            moduleText,
-            pattern: @"\A(?:
-                      \s+                                 # skip any whitespace
-                    | --[^\r\n]*(?:\r\n|\r|\n|$)         # skip single-line comment + EOL
-                    | \{\-[\s\S]*?\-\}                   # skip multi-line comment
-                  )*",
-            replacement: "",
-            options: RegexOptions.IgnorePatternWhitespace | RegexOptions.Singleline);
+
+        var textWithoutLeadingComments =
+            LeadingTriviaSyntaxRegex().Replace(moduleText, replacement: "");
 
         return textWithoutLeadingComments;
     }
@@ -336,6 +357,14 @@ public static class ElmModule
         }
     }
 
+    /// <summary>
+    /// Filters an application code tree to retain only the modules required for compilation given a predicate
+    /// identifying root modules. All transitive dependencies of those roots are included. Non-Elm files are
+    /// preserved only if they are <c>elm.json</c> files.
+    /// </summary>
+    /// <param name="appCodeTree">Tree containing application code blobs.</param>
+    /// <param name="moduleNameIsRootModule">Predicate returning true for module names that should act as compilation roots.</param>
+    /// <returns>A new tree containing only required Elm modules and any <c>elm.json</c> files.</returns>
     public static BlobTreeWithStringPath FilterAppCodeTreeForRootModulesAndDependencies(
         BlobTreeWithStringPath appCodeTree,
         Func<IReadOnlyList<string>, bool> moduleNameIsRootModule)
@@ -398,4 +427,17 @@ public static class ElmModule
                 filteredModulesPaths.Contains(pathAndContent.path) ||
                 pathAndContent.path.LastOrDefault() is "elm.json")]);
     }
+
+    [GeneratedRegex(@"^import\s+([\w.]+)(\s|$)")]
+    private static partial Regex ImportDeclarationSyntaxRegex();
+
+    [GeneratedRegex(@"^(port\s+)?module\s+([\w.]+)\s+exposing", RegexOptions.Singleline)]
+    private static partial Regex ModuleDeclarationSyntaxRegex();
+
+    [GeneratedRegex(@"\A(?:
+                      \s+                                 # skip any whitespace
+                    | --[^\r\n]*(?:\r\n|\r|\n|$)         # skip single-line comment + EOL
+                    | \{\-[\s\S]*?\-\}                   # skip multi-line comment
+                  )*", RegexOptions.Singleline | RegexOptions.IgnorePatternWhitespace)]
+    private static partial Regex LeadingTriviaSyntaxRegex();
 }

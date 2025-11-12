@@ -1,13 +1,12 @@
-using ElmTime.ElmSyntax;
 using AwesomeAssertions;
-using Pine.Core;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using Xunit;
+using Pine.Core.Elm.ElmSyntax;
 
-namespace Pine.IntegrationTests;
+namespace Pine.Core.Tests.Elm.ElmSyntax;
 
-public class ElmSyntaxTests
+public class ElmModuleTests
 {
     [Fact]
     public void Parse_Elm_module_name()

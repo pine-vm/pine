@@ -8,12 +8,13 @@ using Pine;
 using Pine.Core;
 using Pine.Core.Addressing;
 using Pine.Core.Elm;
+using Pine.Core.Elm.Elm019;
+using Pine.Core.Elm.ElmSyntax;
 using Pine.Core.Files;
 using Pine.Core.Http;
 using Pine.Core.IO;
 using Pine.Elm;
 using Pine.Elm.Platform;
-using Pine.Elm019;
 using Pine.PineVM;
 using System;
 using System.Collections.Generic;
@@ -247,7 +248,7 @@ public class Program
             return 0;
         });
 
-        int executeAndGuideInCaseOfException()
+        int ExecuteAndGuideInCaseOfException()
         {
             try
             {
@@ -268,7 +269,7 @@ public class Program
             }
         }
 
-        return executeAndGuideInCaseOfException();
+        return ExecuteAndGuideInCaseOfException();
     }
 
     private static CommandLineApplication AddSelfTestCommand(CommandLineApplication app) =>
@@ -445,7 +446,7 @@ public class Program
         var entryPointFileText = Encoding.UTF8.GetString(entryPointBlob.Bytes.Span);
 
         var parseModuleNameResult =
-        ElmSyntax.ElmModule.ParseModuleName(entryPointFileText);
+        ElmModule.ParseModuleName(entryPointFileText);
 
         if (parseModuleNameResult.IsErrOrNull() is { } err)
         {
@@ -1702,7 +1703,7 @@ public class Program
                 ?
                 null
                 :
-                ElmSyntax.ElmModule.FilterAppCodeTreeForRootModulesAndDependencies(
+                ElmModule.FilterAppCodeTreeForRootModulesAndDependencies(
                     contextAppCodeTreeBeforeFilter,
                     moduleNameIsRootModule: contextAppModuleNameFilter);
 
@@ -2295,7 +2296,7 @@ public class Program
             Encoding.UTF8.GetString(entryPointSourceFile.Span);
 
         var entryPointModuleNameResult =
-            ElmSyntax.ElmModule.ParseModuleName(entryPointSourceFileText);
+            ElmModule.ParseModuleName(entryPointSourceFileText);
 
         if (entryPointModuleNameResult.IsErrOrNull() is { } entryPointModuleNameErr)
         {

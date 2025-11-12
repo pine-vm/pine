@@ -154,15 +154,15 @@ public class ElmLanguageServiceTests
             beforeCursor + afterCursor;
 
         var elmModuleTextLines =
-            ElmTime.ElmSyntax.ElmModule.ModuleLines(elmModuleText)
+            Core.Elm.ElmSyntax.ElmModule.ModuleLines(elmModuleText)
             .ToImmutableArray();
 
         var beforeCursorLines =
-            ElmTime.ElmSyntax.ElmModule.ModuleLines(beforeCursor)
+            Core.Elm.ElmSyntax.ElmModule.ModuleLines(beforeCursor)
             .ToImmutableArray();
 
         var afterCursorLines =
-            ElmTime.ElmSyntax.ElmModule.ModuleLines(afterCursor)
+            Core.Elm.ElmSyntax.ElmModule.ModuleLines(afterCursor)
             .ToImmutableArray();
 
         var lineText =
@@ -252,15 +252,15 @@ public class ElmLanguageServiceTests
             beforeCursor + afterCursor;
 
         var elmModuleTextLines =
-            ElmTime.ElmSyntax.ElmModule.ModuleLines(elmModuleText)
+            Core.Elm.ElmSyntax.ElmModule.ModuleLines(elmModuleText)
             .ToImmutableArray();
 
         var beforeCursorLines =
-            ElmTime.ElmSyntax.ElmModule.ModuleLines(beforeCursor)
+            Core.Elm.ElmSyntax.ElmModule.ModuleLines(beforeCursor)
             .ToImmutableArray();
 
         var afterCursorLines =
-            ElmTime.ElmSyntax.ElmModule.ModuleLines(afterCursor)
+            Core.Elm.ElmSyntax.ElmModule.ModuleLines(afterCursor)
             .ToImmutableArray();
 
         var lineText =

@@ -1,7 +1,6 @@
 using Pine.Core;
 using Pine.Core.Elm;
 using Pine.Core.PopularEncodings;
-using Pine.Elm019;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -37,7 +36,7 @@ public class ElmCompiler
         .Where(blob => blob.path.Last().EndsWith(".elm", StringComparison.OrdinalIgnoreCase))
         .ToDictionary(
             blobAtPath =>
-            ElmTime.ElmSyntax.ElmModule.ParseModuleName(Encoding.UTF8.GetString(blobAtPath.blobContent.Span))
+            Core.Elm.ElmSyntax.ElmModule.ParseModuleName(Encoding.UTF8.GetString(blobAtPath.blobContent.Span))
             .Extract(err => throw new Exception(err)),
 
             blobAtPath =>
@@ -207,7 +206,7 @@ public class ElmCompiler
             .ToImmutableArray();
 
         var elmModulesTextsForElmCompiler =
-            ElmTime.ElmSyntax.ElmModule.ModulesTextOrderedForCompilationByDependencies(
+            Core.Elm.ElmSyntax.ElmModule.ModulesTextOrderedForCompilationByDependencies(
                 rootModulesTexts: [.. rootElmFiles.Select(file => file.moduleText)],
                 availableModulesTexts: [.. allAvailableElmFiles.Select(file => file.moduleText)]);
 
@@ -242,7 +241,7 @@ public class ElmCompiler
         if (rootFilePaths.Count is not 0)
         {
             var appCodeFilteredForRoots =
-                FilterTreeForCompilationRoots(
+                ElmAppDependencyResolution.FilterTreeForCompilationRoots(
                     appCodeTree,
                     rootFilePaths);
 
@@ -363,7 +362,7 @@ public class ElmCompiler
             ?
             appCodeTree
             :
-            FilterTreeForCompilationRoots(
+            ElmAppDependencyResolution.FilterTreeForCompilationRoots(
                 appCodeTree,
                 rootFilePaths);
 
@@ -379,40 +378,6 @@ public class ElmCompiler
                 entryPointsFilePaths: rootFilePaths,
                 skipFilteringForSourceDirs: skipFilteringForSourceDirs,
                 elmCompiler: defaultCompiler);
-    }
-
-    public static BlobTreeWithStringPath FilterTreeForCompilationRoots(
-        BlobTreeWithStringPath tree,
-        IReadOnlyList<IReadOnlyList<string>> rootFilePaths)
-    {
-        var allAvailableElmFiles =
-            tree
-            .EnumerateBlobsTransitive()
-            .Where(blobAtPath => blobAtPath.path.Last().EndsWith(".elm", StringComparison.OrdinalIgnoreCase))
-            .Select(blobAtPath => (blobAtPath, moduleText: Encoding.UTF8.GetString(blobAtPath.blobContent.Span)))
-            .ToImmutableArray();
-
-        var rootElmFiles =
-            allAvailableElmFiles
-            .Where(c => rootFilePaths.Any(root => c.blobAtPath.path.SequenceEqual(root)))
-            .ToImmutableArray();
-
-        var elmModulesIncluded =
-            ElmTime.ElmSyntax.ElmModule.ModulesTextOrderedForCompilationByDependencies(
-                rootModulesTexts: [.. rootElmFiles.Select(file => file.moduleText)],
-                availableModulesTexts: [.. allAvailableElmFiles.Select(file => file.moduleText)]);
-
-        var filePathsExcluded =
-            allAvailableElmFiles
-            .Where(elmFile => !elmModulesIncluded.Any(included => elmFile.moduleText == included))
-            .Select(elmFile => elmFile.blobAtPath.path)
-            .ToImmutableHashSet(EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
-
-        return
-            BlobTreeWithStringPath.FilterNodesByPath(
-                tree,
-                nodePath =>
-                !filePathsExcluded.Contains(nodePath));
     }
 
     public static Result<string, ElmCompiler> ElmCompilerFromEnvValue(PineValue compiledEnv)
@@ -634,259 +599,11 @@ public class ElmCompiler
         foreach (var file in allAvailableElmFiles)
         {
             var elmModuleName =
-                ElmTime.ElmSyntax.ElmModule.ParseModuleName(file.moduleText)
+                Core.Elm.ElmSyntax.ElmModule.ParseModuleName(file.moduleText)
                 .Extract(err => throw new Exception("Failed parsing module name: " + err));
 
             if (elmModuleName.First() is "CompilationInterface")
             {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    public static BlobTreeWithStringPath FilterTreeForCompilationRoots(
-        BlobTreeWithStringPath tree,
-        IReadOnlySet<IReadOnlyList<string>> rootFilePaths,
-        bool skipFilteringForSourceDirs)
-    {
-        var trees =
-            rootFilePaths
-            .Select(rootFilePath =>
-            FilterTreeForCompilationRoot(
-                tree,
-                rootFilePath,
-                skipFilteringForSourceDirs: skipFilteringForSourceDirs))
-            .ToImmutableArray();
-
-        return
-            trees
-            .Aggregate(
-                seed: BlobTreeWithStringPath.EmptyTree,
-                BlobTreeWithStringPath.MergeBlobs);
-    }
-
-    public static BlobTreeWithStringPath FilterTreeForCompilationRoot(
-        BlobTreeWithStringPath tree,
-        IReadOnlyList<string> rootFilePath,
-        bool skipFilteringForSourceDirs)
-    {
-        var keepElmModuleAtFilePath =
-            skipFilteringForSourceDirs
-            ?
-            _ => true
-            :
-            BuildPredicateFilePathIsInSourceDirectory(tree, rootFilePath);
-
-        var allAvailableElmFiles =
-            tree
-            .EnumerateBlobsTransitive()
-            .Where(blobAtPath => blobAtPath.path.Last().EndsWith(".elm", StringComparison.OrdinalIgnoreCase))
-            .ToImmutableArray();
-
-        var availableElmFiles =
-            allAvailableElmFiles
-            .Where(blobAtPath => keepElmModuleAtFilePath(blobAtPath.path))
-            .ToImmutableArray();
-
-        var rootElmFiles =
-            availableElmFiles
-            .Where(c => c.path.SequenceEqual(rootFilePath))
-            .ToImmutableArray();
-
-        var elmModulesIncluded =
-            ElmTime.ElmSyntax.ElmModule.ModulesTextOrderedForCompilationByDependencies(
-                rootModulesTexts:
-                [.. rootElmFiles.Select(file => Encoding.UTF8.GetString(file.blobContent.Span))
-                ],
-                availableModulesTexts:
-                [.. availableElmFiles.Select(file => Encoding.UTF8.GetString(file.blobContent.Span))
-                ]);
-
-        var filePathsExcluded =
-            allAvailableElmFiles
-            .Where(elmFile => !elmModulesIncluded.Any(included => Encoding.UTF8.GetString(elmFile.blobContent.Span) == included))
-            .Select(elmFile => elmFile.path)
-            .ToImmutableHashSet(EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
-
-        return
-            BlobTreeWithStringPath.FilterNodesByPath(
-                tree,
-                nodePath =>
-                !filePathsExcluded.Contains(nodePath));
-    }
-
-    private static Func<IReadOnlyList<string>, bool> BuildPredicateFilePathIsInSourceDirectory(
-        BlobTreeWithStringPath tree,
-        IReadOnlyList<string> rootFilePath)
-    {
-        if (FindElmJsonForEntryPoint(tree, rootFilePath) is not { } elmJsonForEntryPoint)
-        {
-            throw new Exception(
-                "Failed to find elm.json for entry point: " + string.Join("/", rootFilePath));
-        }
-
-        IReadOnlyList<ElmJsonStructure.RelativeDirectory> sourceDirectories =
-            [.. elmJsonForEntryPoint.elmJsonParsed.ParsedSourceDirectories];
-
-        IReadOnlyList<string> elmJsonDirectoryPath =
-            [.. elmJsonForEntryPoint.filePath.SkipLast(1)];
-
-        var sourceDirectoriesMapped = new List<IReadOnlyList<string>>();
-
-        foreach (var sourceDirectory in sourceDirectories)
-        {
-            if (sourceDirectory.ParentLevel > elmJsonDirectoryPath.Count)
-            {
-                throw new InvalidOperationException(
-                    "Path is not contained in source: Source directory parent level is " +
-                    sourceDirectory.ParentLevel +
-                    " but elm.json is at path " +
-                    string.Join("/", elmJsonDirectoryPath));
-            }
-
-            IReadOnlyList<string> mappedPrefix =
-                [.. elmJsonDirectoryPath.SkipLast(sourceDirectory.ParentLevel)];
-
-            IReadOnlyList<string> mappedSourceDirectory =
-                [..mappedPrefix,
-                ..sourceDirectory.Subdirectories
-                ];
-
-            sourceDirectoriesMapped.Add(mappedSourceDirectory);
-        }
-
-        bool FilePathIsInSourceDirectory(IReadOnlyList<string> filePath)
-        {
-            foreach (var mappedSourceDirectory in sourceDirectoriesMapped)
-            {
-                if (filePath.Count < mappedSourceDirectory.Count)
-                {
-                    continue;
-                }
-
-                if (filePath.Take(mappedSourceDirectory.Count).SequenceEqual(mappedSourceDirectory))
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        return FilePathIsInSourceDirectory;
-    }
-
-    public static (IReadOnlyList<string> filePath, ElmJsonStructure elmJsonParsed)?
-        FindElmJsonForEntryPoint(
-        BlobTreeWithStringPath sourceFiles,
-        IReadOnlyList<string> entryPointFilePath)
-    {
-        // Collect all elm.json files from the tree, storing each parsed ElmJsonStructure along with its path:
-        var elmJsonFiles =
-            sourceFiles
-            .EnumerateBlobsTransitive()
-            .SelectMany(pathAndContent =>
-            {
-                if (!pathAndContent.path.Last().EndsWith("elm.json", StringComparison.OrdinalIgnoreCase))
-                {
-                    return [];
-                }
-
-                var elmJsonContent = pathAndContent.blobContent;
-
-                try
-                {
-                    var elmJsonParsed =
-                        System.Text.Json.JsonSerializer.Deserialize<ElmJsonStructure>(elmJsonContent.Span);
-
-                    return
-                        new[]
-                        {
-                            (filePath: (IReadOnlyList<string>)pathAndContent.path, elmJsonParsed)
-                        };
-                }
-                catch (Exception)
-                {
-                    return [];
-                }
-            })
-            .ToImmutableDictionary(
-                keySelector: entry => entry.filePath,
-                elementSelector: entry => entry.elmJsonParsed,
-                keyComparer: EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
-
-        // Walk upwards from the directory of entryPointFilePath to find the "closest" elm.json
-        // that includes the entryPointFilePath in one of its source-directories:
-        var currentDirectory = DirectoryOf(entryPointFilePath);
-
-        while (true)
-        {
-            // See if there is an elm.json directly in this directory:
-
-            IReadOnlyList<string> elmJsonFilePath = [.. currentDirectory, "elm.json"];
-
-            if (elmJsonFiles.TryGetValue(elmJsonFilePath, out var elmJsonParsed) && elmJsonParsed is not null)
-            {
-                // We found an elm.json in the current directory; now check if it includes the entry point
-                // by verifying that entryPointFilePath is under one of its source-directories:
-                if (ElmJsonIncludesEntryPoint(
-                    currentDirectory, elmJsonParsed, entryPointFilePath))
-                {
-                    return (elmJsonFilePath, elmJsonParsed);
-                }
-            }
-
-            // If we are at the root (no parent to move up to), stop:
-            if (currentDirectory.Count is 0)
-            {
-                return null;
-            }
-
-            // Move up one level:
-            currentDirectory = [.. currentDirectory.Take(currentDirectory.Count - 1)];
-        }
-    }
-
-    /// <summary>
-    /// Returns all but the last segment of filePath (i.e. the directory path).
-    /// </summary>
-    private static IReadOnlyList<string> DirectoryOf(IReadOnlyList<string> filePath)
-    {
-        if (filePath.Count is 0)
-            return filePath;
-
-        return [.. filePath.Take(filePath.Count - 1)];
-    }
-
-    /// <summary>
-    /// Checks whether the given elm.json file includes entryPointFilePath in one of its source-directories.
-    /// Since source-directories in elm.json are relative to the directory containing elm.json,
-    /// we build absolute paths and compare.
-    /// </summary>
-    private static bool ElmJsonIncludesEntryPoint(
-        IReadOnlyList<string> elmJsonDirectory,
-        ElmJsonStructure elmJson,
-        IReadOnlyList<string> entryPointFilePath)
-    {
-        // For each source directory in elm.json, build its absolute path (relative to elm.jsonDirectory),
-        // and check whether entryPointFilePath starts with that path.
-
-        foreach (var sourceDir in elmJson.ParsedSourceDirectories)
-        {
-            // Combine the elmJsonDirectory with the subdirectories from sourceDir
-            // to get the absolute path to the "source directory":
-            IReadOnlyList<string> absSourceDir =
-                [.. elmJsonDirectory, .. sourceDir.Subdirectories];
-
-            // Check if entryPointFilePath is "under" absSourceDir:
-            if (entryPointFilePath.Count >= absSourceDir.Count &&
-                entryPointFilePath
-                .Take(absSourceDir.Count)
-                .SequenceEqual(absSourceDir))
-            {
-                // The entry point sits in one of the source-directories recognized by this elm.json
                 return true;
             }
         }

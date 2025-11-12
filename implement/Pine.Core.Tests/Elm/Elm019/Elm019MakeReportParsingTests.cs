@@ -1,10 +1,10 @@
 using AwesomeAssertions;
-using Pine.Elm019;
+using Pine.Core.Elm.Elm019;
 using Xunit;
 
-namespace Pine.IntegrationTests;
+namespace Pine.Core.Tests.Elm.Elm019;
 
-public class Elm019MakeReportParsingTests
+public class ElmMakeReportConverterTests
 {
     [Fact]
     public void Elm_make_report_compile_errors()

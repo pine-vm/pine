@@ -1,13 +1,12 @@
-using Pine;
 using Pine.Core;
 using Pine.Core.Addressing;
 using Pine.Core.Elm;
+using Pine.Core.Elm.Elm019;
 using Pine.Core.Elm.ElmSyntax;
 using Pine.Core.IO;
 using Pine.Core.PineVM;
 using Pine.Core.PopularEncodings;
 using Pine.Elm;
-using Pine.Elm019;
 using Pine.PineVM;
 using System;
 using System.Collections.Concurrent;
@@ -244,7 +243,7 @@ public class InteractiveSessionPine : IInteractiveSession
                 var moduleText = System.Text.Encoding.UTF8.GetString(blob.blobContent.Span);
 
                 var moduleName =
-                ElmSyntax.ElmModule.ParseModuleName(moduleText)
+                ElmModule.ParseModuleName(moduleText)
                 .Extract(err => throw new Exception("Failed parsing module name: " + err));
 
                 return new KeyValuePair<IReadOnlyList<string>, ReadOnlyMemory<byte>>(moduleName, blob.blobContent);
@@ -451,7 +450,7 @@ public class InteractiveSessionPine : IInteractiveSession
             {
                 var moduleText = System.Text.Encoding.UTF8.GetString(blob.blobContent.Span);
                 var moduleName =
-                ElmSyntax.ElmModule.ParseModuleName(moduleText)
+                ElmModule.ParseModuleName(moduleText)
                 .Extract(err => throw new Exception("Failed parsing module name: " + err));
 
                 return new KeyValuePair<string, IReadOnlyList<string>>(
@@ -515,7 +514,7 @@ public class InteractiveSessionPine : IInteractiveSession
             .ToImmutableArray();
 
         var modulesTextsOrdered =
-            ElmSyntax.ElmModule.ModulesTextOrderedForCompilationByDependencies(
+            ElmModule.ModulesTextOrderedForCompilationByDependencies(
                 rootModulesTexts: modulesToCompileTexts,
                 availableModulesTexts: []);
 
@@ -527,7 +526,7 @@ public class InteractiveSessionPine : IInteractiveSession
         foreach (var compilationIncrement in modulesToCompileOrdered)
         {
             var moduleName =
-                ElmSyntax.ElmModule.ParseModuleName(compilationIncrement.moduleText)
+                ElmModule.ParseModuleName(compilationIncrement.moduleText)
                 .Extract(err => throw new Exception("Failed parsing module name: " + err));
 
             var parseResult =
@@ -633,7 +632,7 @@ public class InteractiveSessionPine : IInteractiveSession
         if (!System.Text.Encoding.UTF8.TryGetChars(fileContent, blobChars, out var charsWritten))
             return null;
 
-        if (ElmSyntax.ElmModule.ParseModuleName(
+        if (ElmModule.ParseModuleName(
             new string(blobChars.AsSpan()[..charsWritten])).IsOkOrNull() is not { } moduleName)
         {
             return null;
@@ -675,7 +674,7 @@ public class InteractiveSessionPine : IInteractiveSession
             .ToImmutableArray();
 
         var modulesTextsOrdered =
-            ElmSyntax.ElmModule.ModulesTextOrderedForCompilationByDependencies(
+            ElmModule.ModulesTextOrderedForCompilationByDependencies(
                 rootModulesTexts: compileableSourceModulesTexts,
                 availableModulesTexts: []);
 
@@ -689,7 +688,7 @@ public class InteractiveSessionPine : IInteractiveSession
         foreach (var sourceModule in compileableSourceModulesOrdered)
         {
             var moduleName =
-                ElmSyntax.ElmModule.ParseModuleName(sourceModule.moduleText)
+                ElmModule.ParseModuleName(sourceModule.moduleText)
                 .Extract(err => throw new Exception("Failed parsing module name: " + err));
 
             mutatedTree =
@@ -720,7 +719,7 @@ public class InteractiveSessionPine : IInteractiveSession
         IPineVM pineVM)
     {
         var parseNameResult =
-            ElmSyntax.ElmModule.ParseModuleName(moduleText);
+            ElmModule.ParseModuleName(moduleText);
 
         {
             if (parseNameResult.IsErrOrNull() is { } parseNameErr)

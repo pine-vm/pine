@@ -368,7 +368,7 @@ public class CompileElmCompilerTests
             .First(c => c.blobAtPath.path.SequenceEqual(["src", "ElmCompiler.elm"]));
 
         var elmModulesTextsForElmCompiler =
-            ElmTime.ElmSyntax.ElmModule.ModulesTextOrderedForCompilationByDependencies(
+            Core.Elm.ElmSyntax.ElmModule.ModulesTextOrderedForCompilationByDependencies(
                 rootModulesTexts: [rootElmFile.moduleText],
                 availableModulesTexts: [.. allAvailableElmFiles.Select(f => f.moduleText)]);
 
@@ -459,7 +459,7 @@ public class CompileElmCompilerTests
             string moduleText)
         {
             return
-                ElmTime.ElmSyntax.ElmModule.ParseModuleName(moduleText)
+                Core.Elm.ElmSyntax.ElmModule.ParseModuleName(moduleText)
                 .MapError(err => "Failed parsing name for module " + moduleText.Split('\n', '\r').FirstOrDefault())
                 .AndThen(moduleName =>
                 bundledElmCompiler.ParseElmModuleText(moduleText, pineVM)

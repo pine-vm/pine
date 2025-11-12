@@ -466,7 +466,7 @@ public class ElmLanguageServerTests
         var isWholeDocumentReplacement =
             firstEdit.Range.Start.Line is 0 &&
             firstEdit.Range.Start.Character is 0 &&
-            firstEdit.Range.End.Line >= ElmTime.ElmSyntax.ElmModule.ModuleLines(originalContent).Count();
+            firstEdit.Range.End.Line >= Core.Elm.ElmSyntax.ElmModule.ModuleLines(originalContent).Count();
 
         isWholeDocumentReplacement.Should().BeFalse("formatting should return minimal edits, not whole document replacement");
 
