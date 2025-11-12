@@ -17,17 +17,18 @@ jobs:
 
     - name: download build tool
       run: |
-        pwsh -nologo -noprofile -command "Invoke-WebRequest 'https://github.com/pine-vm/pine/releases/download/v2023-09-12/elm-time-bin-v2023-09-12-linux-x64.zip' -OutFile elm-time-linux-x64.zip"
-        pwsh -nologo -noprofile -command "& { Add-Type -A 'System.IO.Compression.FileSystem'; [IO.Compression.ZipFile]::ExtractToDirectory('elm-time-linux-x64.zip','./elm-time');}"
+        pwsh -nologo -noprofile -command "Invoke-WebRequest 'https://github.com/pine-vm/pine/releases/download/v0.4.23/pine-bin-v0.4.23-linux-x64.zip' -OutFile pine-bin-linux-x64.zip"
+        pwsh -nologo -noprofile -command "& { Add-Type -A 'System.IO.Compression.FileSystem'; [IO.Compression.ZipFile]::ExtractToDirectory('pine-bin-linux-x64.zip','./pine');}"
+
     - name: install build tool
       run: |
-        chmod  +x  ./elm-time/elm-time
-        sudo  ./elm-time/elm-time  install
+        chmod  +x  ./pine/pine
+        sudo  ./pine/pine  install
 
     - name: Build for Netlify
       working-directory: ./implement/pine/Elm/learn-elm
       run: |
-        elm-time  make  src/Frontend/ElmSilentTeacher/Build.elm  --output=netlify.zip
+        pine  make  src/Frontend/ElmSilentTeacher/Build.elm  --output=netlify.zip
         pwsh -nologo -noprofile -command "& { Add-Type -A 'System.IO.Compression.FileSystem'; [IO.Compression.ZipFile]::ExtractToDirectory('netlify.zip','./out/netlify');}"
 
     - name: Deploy to Netlify
