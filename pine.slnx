@@ -1,5 +1,4 @@
 <Solution>
-  <Project Path="implement/GitCore/GitCore.csproj" />
   <Project Path="implement/native-tools/native-tools.csproj" />
   <Project Path="implement/Pine.Core/Pine.Core.csproj" />
   <Project Path="implement/Pine.Core.Tests/Pine.Core.Tests.csproj" />

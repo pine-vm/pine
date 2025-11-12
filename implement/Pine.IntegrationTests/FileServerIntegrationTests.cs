@@ -52,7 +52,7 @@ public class FileServerIntegrationTests
                 args.Append($" --store \"{TempDirectory}\"");
             }
 
-            if (authPassword != null)
+            if (authPassword is not null)
             {
                 args.Append($" --auth-password \"{authPassword}\"");
             }
@@ -68,7 +68,8 @@ public class FileServerIntegrationTests
             };
 
             ServerProcess = Process.Start(processStartInfo);
-            if (ServerProcess == null)
+
+            if (ServerProcess is null)
             {
                 throw new InvalidOperationException("Failed to start server process");
             }
@@ -79,10 +80,10 @@ public class FileServerIntegrationTests
 
         private async Task WaitForServerToStart()
         {
-            const int maxAttempts = 30; // 30 seconds
-            const int delayMs = 1000;
+            const int MaxAttempts = 30; // 30 seconds
+            const int DelayMs = 1000;
 
-            for (int attempt = 0; attempt < maxAttempts; attempt++)
+            for (var attempt = 0; attempt < MaxAttempts; attempt++)
             {
                 try
                 {
@@ -93,7 +94,7 @@ public class FileServerIntegrationTests
                 catch (HttpRequestException)
                 {
                     // Server not ready yet
-                    await Task.Delay(delayMs);
+                    await Task.Delay(DelayMs);
                 }
             }
 
@@ -104,14 +105,15 @@ public class FileServerIntegrationTests
         {
             // Look for the pine executable in the build output
             var implementDir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "pine"));
-            var executableName = Environment.OSVersion.Platform == PlatformID.Win32NT ? "pine.exe" : "pine";
+            var executableName = Environment.OSVersion.Platform is PlatformID.Win32NT ? "pine.exe" : "pine";
 
             // Check bin/Debug and bin/Release directories
-            var debugPath = Path.Combine(implementDir, "bin", "Debug", "net9.0", executableName);
-            var releasePath = Path.Combine(implementDir, "bin", "Release", "net9.0", executableName);
+            var debugPath = Path.Combine(implementDir, "bin", "Debug", "net10.0", executableName);
+            var releasePath = Path.Combine(implementDir, "bin", "Release", "net10.0", executableName);
 
             if (File.Exists(debugPath))
                 return debugPath;
+
             if (File.Exists(releasePath))
                 return releasePath;
 
@@ -138,7 +140,7 @@ public class FileServerIntegrationTests
         {
             HttpClient?.Dispose();
 
-            if (ServerProcess != null && !ServerProcess.HasExited)
+            if (ServerProcess is not null && !ServerProcess.HasExited)
             {
                 try
                 {
@@ -275,8 +277,9 @@ public class FileServerIntegrationTests
     {
         // Arrange
         using var setup = new TestSetup();
-        const string password = "test-password-123";
-        await setup.StartServerAsync(authPassword: password, useFileStore: true);
+        const string Password = "test-password-123";
+
+        await setup.StartServerAsync(authPassword: Password, useFileStore: true);
 
         // Act & Assert - Request without authentication should fail
         var response = await setup.HttpClient.GetAsync($"http://localhost:{setup.Port}/files/test.txt");
@@ -293,7 +296,7 @@ public class FileServerIntegrationTests
         // Request with correct authentication should succeed (even if file doesn't exist)
         setup.HttpClient.DefaultRequestHeaders.Authorization =
             new System.Net.Http.Headers.AuthenticationHeaderValue("Basic",
-                Convert.ToBase64String(Encoding.UTF8.GetBytes($"user:{password}")));
+                Convert.ToBase64String(Encoding.UTF8.GetBytes($"user:{Password}")));
 
         response = await setup.HttpClient.GetAsync($"http://localhost:{setup.Port}/files/test.txt");
         response.StatusCode.Should().Be(HttpStatusCode.NotFound); // File doesn't exist, but auth passed
@@ -304,13 +307,14 @@ public class FileServerIntegrationTests
     {
         // Arrange
         using var setup = new TestSetup();
-        const string password = "secure-password-456";
-        await setup.StartServerAsync(authPassword: password, useFileStore: true);
+        const string Password = "secure-password-456";
+
+        await setup.StartServerAsync(authPassword: Password, useFileStore: true);
 
         // Set up authentication
         setup.HttpClient.DefaultRequestHeaders.Authorization =
             new System.Net.Http.Headers.AuthenticationHeaderValue("Basic",
-                Convert.ToBase64String(Encoding.UTF8.GetBytes($"testuser:{password}")));
+                Convert.ToBase64String(Encoding.UTF8.GetBytes($"testuser:{Password}")));
 
         var filePath = "authenticated/file.txt";
         var originalContent = "Authenticated content"u8.ToArray();
