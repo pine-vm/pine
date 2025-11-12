@@ -23,7 +23,7 @@ public static class ElmInteractiveEnvironment
                 interactiveEnvironment: interactiveEnvironment,
                 moduleName: moduleName,
                 declarationName: declarationName,
-                pineVM.parseCache)
+                pineVM.ParseCache)
                 .AndThen(functionValueAndRecord =>
                 {
                     var combinedArguments =

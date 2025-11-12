@@ -39,7 +39,7 @@ public class PineVM : IPineVM
 
     private readonly bool enableTailRecursionOptimization;
 
-    public readonly PineVMParseCache parseCache = new();
+    public readonly PineVMParseCache ParseCache;
 
     private readonly IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>? _precompiledLeaves;
 
@@ -66,6 +66,7 @@ public class PineVM : IPineVM
         bool disableReductionInCompilation = false,
         bool disablePrecompiled = false,
         bool enableTailRecursionOptimization = false,
+        PineVMParseCache? parseCache = null,
         IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>? precompiledLeaves = null,
         Action<PineValue, PineValue>? reportEnterPrecompiledLeaf = null,
         Action<PineValue, PineValue, PineValue?>? reportExitPrecompiledLeaf = null,
@@ -84,6 +85,11 @@ public class PineVM : IPineVM
         this.disableReductionInCompilation = disableReductionInCompilation;
         this.disablePrecompiled = disablePrecompiled;
         this.enableTailRecursionOptimization = enableTailRecursionOptimization;
+
+        ParseCache =
+            parseCache
+            ??
+            new PineVMParseCache();
 
         _precompiledLeaves =
             precompiledLeaves
@@ -248,7 +254,7 @@ public class PineVM : IPineVM
             ExpressionCompilation.CompileExpression(
                 rootExpression,
                 specializations ?? [],
-                parseCache: parseCache,
+                parseCache: ParseCache,
                 disableReduction: disableReductionInCompilation,
                 skipInlining: SkipInlining,
                 enableTailRecursionOptimization: enableTailRecursionOptimization);
@@ -306,7 +312,7 @@ public class PineVM : IPineVM
             var currentFrame = stack.Peek();
 
             if (!disablePrecompiled &&
-                Precompiled.SelectPrecompiled(expression, environmentValue, parseCache) is { } precompiledDelegate)
+                Precompiled.SelectPrecompiled(expression, environmentValue, ParseCache) is { } precompiledDelegate)
             {
                 var precompiledResult = precompiledDelegate();
 
@@ -322,7 +328,8 @@ public class PineVM : IPineVM
 
                     case Precompiled.PrecompiledResult.ContinueParseAndEval continueParseAndEval:
                         {
-                            var contParseResult = parseCache.ParseExpression(continueParseAndEval.ExpressionValue);
+                            var contParseResult =
+                                ParseCache.ParseExpression(continueParseAndEval.ExpressionValue);
 
                             if (contParseResult.IsErrOrNull() is { } contParseErr)
                             {
@@ -1510,7 +1517,7 @@ public class PineVM : IPineVM
                             var replaceCurrentFrame =
                                 followingInstruction.Kind is StackInstructionKind.Return;
 
-                            var parseResult = parseCache.ParseExpression(expressionValue);
+                            var parseResult = ParseCache.ParseExpression(expressionValue);
 
                             if (parseResult.IsErrOrNull() is { } parseErr)
                             {

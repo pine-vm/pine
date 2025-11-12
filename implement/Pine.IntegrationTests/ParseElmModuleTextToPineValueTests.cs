@@ -4,15 +4,38 @@ using Pine.Core;
 using Pine.Core.Elm;
 using Pine.Elm;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using System.Threading.Tasks;
 using Xunit;
 
 namespace Pine.IntegrationTests;
 
 public class ParseElmModuleTextToPineValueTests
 {
+    public readonly IEnumerable<string> TestCasesSourceDirectories =
+        [
+        "https://github.com/pine-vm/pine/tree/64f5258d6f110737df6f3c5aea83f118552803cb/implement/pine/Elm/elm-compiler",
+        // "https://github.com/pine-vm/pine/tree/64f5258d6f110737df6f3c5aea83f118552803cb/implement/example-apps",
+        "https://github.com/guida-lang/compiler/tree/8af68e3c4124f52a60ceb4b66193cc5b46962562/src",
+        ];
+
+    private static readonly Core.CodeAnalysis.PineVMParseCache s_pineVMParseCache = new();
+
+    private static PineVM.PineVM CreateVMWithCache()
+    {
+        var pineVMCache = new PineVM.PineVMCache();
+
+        var pineVM =
+            new PineVM.PineVM(
+                evalCache: pineVMCache.EvalCache,
+                parseCache: s_pineVMParseCache);
+
+        return pineVM;
+    }
+
     [Fact]
     public void Parse_Elm_module_with_varied_syntax()
     {
@@ -540,7 +563,7 @@ public class ParseElmModuleTextToPineValueTests
 
 
     [Fact]
-    public void Dotnet_parser_results_in_same_expression_as_Elm_parser()
+    public void Dotnet_parser_results_in_same_expression_as_Elm_parser_small_set()
     {
         IReadOnlyList<string> testCases =
             [
@@ -1799,52 +1822,192 @@ public class ParseElmModuleTextToPineValueTests
 
             ];
 
+        var pineVM = CreateVMWithCache();
+
         for (var i = 0; i < testCases.Count; ++i)
         {
             var testCase = testCases[i].TrimStart();
 
             try
             {
-                var parsedModulePineValue =
-                    ParseElmModuleTextToPineValue(testCase)
-                    .Extract(err => throw new Exception(err));
-
-                var responseAsElmValue =
-                    s_elmCompilerCache.PineValueDecodedAsElmValue(parsedModulePineValue)
-                    .Extract(err => throw new Exception(err));
-
-                var responseAsExpression =
-                    ElmValue.RenderAsElmExpression(responseAsElmValue).expressionString;
-
-                var fromDotnetResult =
-                    Core.Elm.ElmSyntax.ElmSyntaxParser.ParseModuleTextAsElmSyntaxElmValue(testCase);
-
-                if (fromDotnetResult.IsErrOrNull() is { } err)
-                {
-                    throw new AssertionFailedException("Failed to parse Elm module text as Elm syntax: " + err);
-                }
-
-                if (fromDotnetResult.IsOkOrNull() is not { } fromDotnetOk)
-                {
-                    throw new NotImplementedException("Unexpected result type: " + fromDotnetResult);
-                }
-
-                var fromDotnetExpression =
-                    ElmValue.RenderAsElmExpression(fromDotnetOk).expressionString;
-
-                if (Testing.CompareStringsChunkwiseAndReportFirstDifference(
-                    expectedChunks: [responseAsExpression],
-                    actual: fromDotnetExpression) is { } firstDifference)
-                {
-                    Console.WriteLine(firstDifference);
-
-                    throw new AssertionFailedException(firstDifference);
-                }
+                Dotnet_parser_results_in_same_expression_as_Elm_parser(testCase, pineVM);
             }
             catch (Exception e)
             {
                 throw new Exception("Failed in test case " + i + ":\n" + testCase, e);
             }
+        }
+    }
+
+    private record ElmModuleWorkItem(
+        string SourceDirectory,
+        IReadOnlyList<string> FilePath,
+        string ModuleText);
+
+    private record ElmModuleReport(
+        ElmModuleWorkItem WorkItem,
+        TimeSpan AggregateDuration,
+        Exception? Failure);
+
+
+    [Fact]
+    public async Task Dotnet_parser_results_in_same_expression_as_Elm_parser_large_set()
+    {
+        var allWorkItems = new List<ElmModuleWorkItem>();
+
+        static bool AssumeIsElmModuleFile(
+            IReadOnlyList<string> filePath)
+        {
+            var lastSegment = filePath[filePath.Count - 1];
+
+            return lastSegment.EndsWith(".elm", StringComparison.OrdinalIgnoreCase);
+        }
+
+        foreach (var sourceDirectory in TestCasesSourceDirectories)
+        {
+            try
+            {
+                var sourceFiles =
+                    await GitCore.LoadFromUrl.LoadTreeContentsFromUrlAsync(sourceDirectory);
+
+                var elmModuleFiles =
+                    sourceFiles
+                    .Where(filePathAndContent => AssumeIsElmModuleFile(filePathAndContent.Key))
+                    .ToImmutableArray();
+
+                Console.WriteLine(
+                    "Found Elm module files from source directory: " +
+                    sourceDirectory +
+                    " (" +
+                    elmModuleFiles.Length +
+                    " .elm files)");
+
+                foreach (var elmModuleFile in elmModuleFiles)
+                {
+                    var elmModuleText =
+                        System.Text.Encoding.UTF8.GetString(elmModuleFile.Value.Span);
+
+                    allWorkItems.Add(
+                        new ElmModuleWorkItem(
+                            SourceDirectory: sourceDirectory,
+                            FilePath: elmModuleFile.Key,
+                            ModuleText: elmModuleText));
+                }
+            }
+            catch (Exception e)
+            {
+                throw new Exception(
+                    "Failed for test case source: " + sourceDirectory, e);
+            }
+        }
+
+        var workQueue =
+            new ConcurrentQueue<ElmModuleWorkItem>(allWorkItems);
+
+        var reports =
+            new ConcurrentBag<ElmModuleReport>();
+
+        Parallel.ForEach(
+            Partitioner.Create(allWorkItems, EnumerablePartitionerOptions.NoBuffering),
+            new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount },
+            localInit: CreateVMWithCache,
+            (workItem, state, vm) =>
+            {
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+
+                Exception? failure = null;
+
+                try
+                {
+                    Dotnet_parser_results_in_same_expression_as_Elm_parser(workItem.ModuleText, vm);
+                }
+                catch (Exception e)
+                {
+                    failure = e;
+                }
+
+                sw.Stop();
+                reports.Add(new ElmModuleReport(workItem, AggregateDuration: sw.Elapsed, failure));
+
+                return vm;
+            },
+            localFinally: vm => (vm as IDisposable)?.Dispose());
+
+        // Report total count and failures:
+
+        Console.WriteLine(
+            "Processed total of " +
+            CommandLineInterface.FormatIntegerForDisplay(allWorkItems.Count) +
+            " Elm module files.");
+
+        var reportsOrderedBySource =
+            reports
+            .OrderBy(report => report.WorkItem.SourceDirectory)
+            .ThenBy(report => string.Join("/", report.WorkItem.FilePath))
+            .ToImmutableArray();
+
+        var failureReports =
+            reportsOrderedBySource
+            .Where(report => report.Failure is not null)
+            .ToImmutableArray();
+
+        Console.WriteLine(
+            "Total failures: " +
+            CommandLineInterface.FormatIntegerForDisplay(failureReports.Length));
+
+        foreach (var failureReport in failureReports)
+        {
+            throw new Exception(
+                "Failed for Elm module file: " +
+                string.Join("/", failureReport.WorkItem.FilePath) +
+                " from source directory: " +
+                failureReport.WorkItem.SourceDirectory +
+                " (parsed in " +
+                CommandLineInterface.FormatIntegerForDisplay(
+                    (long)failureReport.AggregateDuration.TotalMilliseconds) +
+                " ms)",
+                failureReport.Failure);
+        }
+    }
+
+    public static void Dotnet_parser_results_in_same_expression_as_Elm_parser(
+        string testCase,
+        Core.PineVM.IPineVM pineVM)
+    {
+        var parsedModulePineValue =
+            ParseElmModuleTextToPineValue(testCase, pineVM)
+            .Extract(err => throw new Exception(err));
+
+        var responseAsElmValue =
+            s_elmCompilerCache.PineValueDecodedAsElmValue(parsedModulePineValue)
+            .Extract(err => throw new Exception(err));
+
+        var responseAsExpression =
+            ElmValue.RenderAsElmExpression(responseAsElmValue).expressionString;
+
+        var fromDotnetResult =
+            Core.Elm.ElmSyntax.ElmSyntaxParser.ParseModuleTextAsElmSyntaxElmValue(testCase);
+
+        if (fromDotnetResult.IsErrOrNull() is { } err)
+        {
+            throw new AssertionFailedException("Failed to parse Elm module text as Elm syntax: " + err);
+        }
+
+        if (fromDotnetResult.IsOkOrNull() is not { } fromDotnetOk)
+        {
+            throw new NotImplementedException("Unexpected result type: " + fromDotnetResult);
+        }
+
+        var fromDotnetExpression =
+            ElmValue.RenderAsElmExpression(fromDotnetOk).expressionString;
+
+        if (Testing.CompareStringsChunkwiseAndReportFirstDifference(
+            expectedChunks: [responseAsExpression],
+            actual: fromDotnetExpression) is { } firstDifference)
+        {
+            Console.WriteLine(firstDifference);
+
+            throw new AssertionFailedException(firstDifference);
         }
     }
 
@@ -1855,13 +2018,28 @@ public class ParseElmModuleTextToPineValueTests
         IReadOnlyList<string> expectedExpressionStringChunks,
         bool alsoTestDotnetParser)
     {
+        var pineVM = CreateVMWithCache();
+
+        return TestParsingModuleText(
+            elmModuleText,
+            expectedExpressionStringChunks,
+            alsoTestDotnetParser,
+            pineVM);
+    }
+
+    public static ElmValue TestParsingModuleText(
+        string elmModuleText,
+        IReadOnlyList<string> expectedExpressionStringChunks,
+        bool alsoTestDotnetParser,
+        Core.PineVM.IPineVM pineVM)
+    {
         var expectedExpressionString =
             string.Concat(expectedExpressionStringChunks);
 
         var parseClock = System.Diagnostics.Stopwatch.StartNew();
 
         var parsedModulePineValue =
-            ParseElmModuleTextToPineValue(elmModuleText)
+            ParseElmModuleTextToPineValue(elmModuleText, pineVM)
             .Extract(err => throw new Exception(err));
 
         Console.WriteLine(
@@ -1929,13 +2107,10 @@ public class ParseElmModuleTextToPineValueTests
         return responseAsElmValue;
     }
 
-    public static Result<string, PineValue> ParseElmModuleTextToPineValue(string elmModuleText)
+    public static Result<string, PineValue> ParseElmModuleTextToPineValue(
+        string elmModuleText,
+        Core.PineVM.IPineVM pineVM)
     {
-        var pineVMCache = new PineVM.PineVMCache();
-
-        var pineVM =
-            new PineVM.PineVM(evalCache: pineVMCache.EvalCache);
-
         return s_bundledElmCompiler.Value.ParseElmModuleText(elmModuleText, pineVM);
     }
 
@@ -1946,7 +2121,7 @@ public class ParseElmModuleTextToPineValueTests
                 BundledElmEnvironments.BundledElmCompilerCompiledEnvValue();
 
             elmCompilerFromBundle.Should().NotBeNull(
-                    because: "Elm compiler environment not found in bundled environments");
+                because: "Elm compiler environment not found in bundled environments");
 
             return
             ElmCompiler.ElmCompilerFromEnvValue(elmCompilerFromBundle)

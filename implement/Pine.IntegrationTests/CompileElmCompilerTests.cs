@@ -58,7 +58,7 @@ public class CompileElmCompilerTests
                 interactiveEnvironment: interactiveEnvironmentValue,
                 moduleName: "Basics",
                 declarationName: "modBy",
-                pineVM.parseCache)
+                pineVM.ParseCache)
             .Extract(err => throw new Exception(err));
 
         var modByApplicationResult =
@@ -291,7 +291,7 @@ public class CompileElmCompilerTests
                 interactiveEnvironment: interactiveEnvironmentValue,
                 moduleName: "String",
                 declarationName: "split",
-                pineVM.parseCache)
+                pineVM.ParseCache)
             .Extract(err => throw new Exception(err));
 
         var stringSplitApplicationResult =
@@ -417,7 +417,7 @@ public class CompileElmCompilerTests
                     interactiveEnvironment: interactiveInitialState,
                     moduleName: "Pine",
                     declarationName: "stringAsValue_Function",
-                    pineVM.parseCache)
+                    pineVM.ParseCache)
                 .Extract(err => throw new Exception(err));
 
             var declarationValueResult =
@@ -488,7 +488,7 @@ public class CompileElmCompilerTests
                 interactiveEnvironment: interactiveInitialState,
                 moduleName: "ElmCompiler",
                 declarationName: "expandElmInteractiveEnvironmentWithModules",
-                pineVM.parseCache)
+                pineVM.ParseCache)
             .Extract(err => throw new Exception(err));
 
         /*

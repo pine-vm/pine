@@ -638,7 +638,7 @@ public sealed class PersistentProcessLive : IAsyncDisposable
                     compositionLogRecord.Composition!.Value,
                     process,
                     pineVM,
-                    pineVMParseCache: pineVM.parseCache,
+                    pineVMParseCache: pineVM.ParseCache,
                     overrideElmAppInterfaceConfig)
                 .AndThen(ContinueOk);
         }
