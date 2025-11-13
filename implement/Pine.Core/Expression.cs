@@ -7,8 +7,6 @@ namespace Pine.Core;
 
 public delegate Result<string, PineValue> EvalExprDelegate(Expression expression, PineValue environment);
 
-public delegate Result<string, Expression> ParseExprDelegate(PineValue value);
-
 
 /// <summary>
 /// An expression in the Pine language.

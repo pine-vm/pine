@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using Pine.Core;
 
@@ -15,21 +14,8 @@ namespace Pine.PineVM;
 /// </summary>
 public class PineVMCache
 {
-    private readonly ConcurrentDictionary<PineValue, Result<string, Expression>> parseExprCache = new();
-
     public Dictionary<EvalCacheEntryKey, PineValue> EvalCache { init; get; } = [];
 
     public long FunctionApplicationCacheSize => EvalCache.Count;
-
-
-    public ParseExprDelegate BuildParseExprDelegate(ParseExprDelegate evalExprDelegate)
-    {
-        return new ParseExprDelegate(exprValue =>
-        {
-            return parseExprCache.GetOrAdd(
-                key: exprValue,
-                valueFactory: exprValue => evalExprDelegate(exprValue));
-        });
-    }
 }
 
