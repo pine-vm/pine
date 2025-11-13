@@ -1694,14 +1694,14 @@ public class CodeAnalysis
         var skipExpr =
             nextOffset is 0
             ? current
-            : new Expression.KernelApplication(
+            : Expression.KernelApplicationInstance(
                 function: nameof(KernelFunction.skip),
                 input:
-                new Expression.List(
+                Expression.ListInstance(
                     items: [new Expression.Literal(IntegerEncoding.EncodeSignedInteger(nextOffset)), current]));
 
         var headExpr =
-            new Expression.KernelApplication(
+            Expression.KernelApplicationInstance(
                 function: nameof(KernelFunction.head),
                 input: skipExpr);
 

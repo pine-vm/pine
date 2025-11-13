@@ -57,7 +57,7 @@ public class ExpressionTests
                 Expression.EnvironmentInstance,
                 Expression.EnvironmentInstance),
 
-            new Expression.KernelApplication(
+            Expression.KernelApplicationInstance(
                 "function",
                 Expression.EnvironmentInstance),
 

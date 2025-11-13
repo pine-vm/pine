@@ -1,5 +1,7 @@
 using Pine.Core.Json;
+using Pine.Core.PopularEncodings;
 using System;
+using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
@@ -37,6 +39,12 @@ public abstract record Expression
     /// </summary>
     public static readonly List EmptyList = new([]);
 
+    private static readonly FrozenDictionary<(string function, Expression input), KernelApplication> s_kernelApplicationInstances =
+        ReusedKernelApplicationInstancesSource()
+        .ToFrozenDictionary(
+            keySelector: instance => (instance.Function, instance.Input),
+            elementSelector: instance => instance);
+
 
     /// <summary>
     /// For a given expression, checks if an equivalent instance is available in the cache of reused instances.
@@ -44,6 +52,19 @@ public abstract record Expression
     /// </summary>
     public static Expression EnsureReuseInstanceGeneral(Expression expression)
     {
+        if (expression is KernelApplication kernelApplicationExpression)
+        {
+            if (s_kernelApplicationInstances is { } reusedKernelApplications)
+            {
+                if (reusedKernelApplications.TryGetValue(
+                    (kernelApplicationExpression.Function, kernelApplicationExpression.Input),
+                    out var reusedInstance))
+                {
+                    return reusedInstance;
+                }
+            }
+        }
+
         if (ReusedInstances.Instance?.Expressions?.TryGetValue(expression, out var reused) ?? false)
         {
             return reused;
@@ -106,6 +127,24 @@ public abstract record Expression
         }
 
         return new Conditional(conditionalStruct);
+    }
+
+    /// <summary>
+    /// Instance of the <see cref="KernelApplication"/> variant, applying a kernel function.
+    /// </summary>
+    public static KernelApplication KernelApplicationInstance(
+        string function,
+        Expression input)
+    {
+        if (s_kernelApplicationInstances is { } reusedKernelApplications)
+        {
+            if (reusedKernelApplications.TryGetValue((function, input), out var reusedInstance))
+                return reusedInstance;
+        }
+
+        var newInstance = new KernelApplication(function, input);
+
+        return newInstance;
     }
 
     /// <summary>
@@ -398,7 +437,7 @@ public abstract record Expression
         /// <summary>
         /// Creates a new instance of a kernel application.
         /// </summary>
-        public KernelApplication(
+        internal KernelApplication(
             string function,
             Expression input)
         {
@@ -771,6 +810,56 @@ public abstract record Expression
                     throw new NotImplementedException(
                         "Unknown expression type: " + expression.GetType().FullName);
             }
+        }
+    }
+
+    private static IEnumerable<KernelApplication> ReusedKernelApplicationInstancesSource()
+    {
+        yield return KernelApplicationInstance(
+            nameof(KernelFunction.head),
+            EnvironmentInstance);
+
+        for (var i = 0; i <= 16; ++i)
+        {
+            var skipZero =
+                KernelApplicationInstance(
+                    nameof(KernelFunction.skip),
+                    ListInstance(
+                        [
+                        LiteralInstance(IntegerEncoding.EncodeSignedInteger(i)),
+                        KernelApplicationInstance(
+                            nameof(KernelFunction.head),
+                            EnvironmentInstance)
+                        ]));
+
+            yield return skipZero;
+
+            yield return KernelApplicationInstance(
+                nameof(KernelFunction.head),
+                skipZero);
+
+            var skipOne =
+                KernelApplicationInstance(
+                    nameof(KernelFunction.skip),
+                    ListInstance(
+                        [
+                        LiteralInstance(IntegerEncoding.EncodeSignedInteger(i)),
+                        KernelApplicationInstance(
+                            nameof(KernelFunction.skip),
+                            ListInstance(
+                                [
+                                LiteralInstance(IntegerEncoding.EncodeSignedInteger(1)),
+                                KernelApplicationInstance(
+                                    nameof(KernelFunction.head),
+                                    EnvironmentInstance)
+                                ]))
+                        ]));
+
+            yield return skipOne;
+
+            yield return KernelApplicationInstance(
+                nameof(KernelFunction.head),
+                skipOne);
         }
     }
 }

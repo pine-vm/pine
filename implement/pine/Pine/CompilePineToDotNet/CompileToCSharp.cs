@@ -1489,7 +1489,7 @@ public partial class CompileToCSharp
                     Expression.KernelApplication kernelAppl =>
                     TransformPineExpressionWithOptionalReplacement(findReplacement, kernelAppl.Input)
                     .MapError(err => "Failed to transform kernel application argument: " + err)
-                    .Map(transformedArgument => (Expression)new Expression.KernelApplication(
+                    .Map(transformedArgument => (Expression)Expression.KernelApplicationInstance(
                         function: kernelAppl.Function,
                         input: transformedArgument)),
 

@@ -354,7 +354,7 @@ public static class PineCSharpSyntaxFactory
             ?
             compositionExpr
             :
-            new Expression.KernelApplication(
+            Expression.KernelApplicationInstance(
                 function: "skip",
                 input:
                 Expression.ListInstance(
@@ -364,7 +364,7 @@ public static class PineCSharpSyntaxFactory
                     ]));
 
         var currentExpr =
-            new Expression.KernelApplication(
+            Expression.KernelApplicationInstance(
                 function: "head",
                 input: skippedExpr);
 

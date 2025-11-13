@@ -336,7 +336,7 @@ public class ReducePineExpression
             case Expression.KernelApplication rootKernelApp:
 
                 Expression.KernelApplication ContinueWithReducedInput(Expression newInput) =>
-                    new(
+                    Expression.KernelApplicationInstance(
                         function: rootKernelApp.Function,
                         input: newInput);
 
@@ -899,7 +899,7 @@ public class ReducePineExpression
 
                         return
                             (
-                            new Expression.KernelApplication(
+                            Expression.KernelApplicationInstance(
                                 function: kernelApp.Function,
                                 input: argumentTransform.expr),
                             argumentTransform.referencesOriginalEnv);
@@ -1200,7 +1200,7 @@ public class ReducePineExpression
         if (reducedArg == kernelApp.Input)
             return kernelApp;
 
-        return new Expression.KernelApplication(kernelApp.Function, reducedArg);
+        return Expression.KernelApplicationInstance(kernelApp.Function, reducedArg);
     }
 
     private static (IReadOnlyList<BigInteger> constants, IReadOnlyList<Expression> variables) CollectConstantIntegers(

@@ -474,7 +474,7 @@ public class ElmValueInterop
                         "Unexpected result type for environment: " + environmentResult.GetType().FullName);
                 }
 
-                return new Expression.KernelApplication(functionString.Value, environmentOk);
+                return Expression.KernelApplicationInstance(functionString.Value, environmentOk);
             }
 
             if (tag.TagName is "ConditionalExpression")

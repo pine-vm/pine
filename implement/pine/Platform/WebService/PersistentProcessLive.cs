@@ -298,7 +298,7 @@ public sealed class PersistentProcessLive : IAsyncDisposable
                 ?
                 currentNode
                 :
-                new Expression.KernelApplication(
+                Expression.KernelApplicationInstance(
                     function: nameof(KernelFunction.skip),
                     Expression.ListInstance(
                         [
@@ -307,7 +307,7 @@ public sealed class PersistentProcessLive : IAsyncDisposable
                         ]));
 
             currentNode =
-                new Expression.KernelApplication(
+                Expression.KernelApplicationInstance(
                     function: nameof(KernelFunction.head),
                     skippedExpr);
         }

@@ -302,7 +302,7 @@ public static class ExpressionEncoding
                 "Unexpected result type: " + parseInputResult.GetType().FullName);
         }
 
-        return new Expression.KernelApplication(function: function, input: input);
+        return Expression.KernelApplicationInstance(function: function, input: input);
     }
 
     private static PineValue.ListValue EncodeConditional(

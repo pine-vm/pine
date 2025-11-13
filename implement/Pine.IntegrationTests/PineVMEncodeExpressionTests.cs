@@ -32,7 +32,7 @@ public class PineVMEncodeExpressionTests
                 encoded: new Expression.Literal(StringEncoding.ValueFromString("encoded")),
                 environment: new Expression.Literal(StringEncoding.ValueFromString("environment"))),
 
-            new Expression.KernelApplication(
+            Expression.KernelApplicationInstance(
                 function: nameof(KernelFunction.length),
                 input: new Expression.Literal(StringEncoding.ValueFromString("kernel app arg"))),
 

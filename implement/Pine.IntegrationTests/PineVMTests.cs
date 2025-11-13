@@ -36,7 +36,8 @@ public class PineVMTests
             new
             {
                 expression =
-                (Expression)new Expression.KernelApplication
+                (Expression)
+                Expression.KernelApplicationInstance
                 (
                     input: Expression.ListInstance([]),
                     function: "concat"
@@ -48,7 +49,8 @@ public class PineVMTests
             new
             {
                 expression =
-                (Expression)new Expression.KernelApplication
+                (Expression)
+                Expression.KernelApplicationInstance
                 (
                     input:
                     Expression.ListInstance(
@@ -59,7 +61,7 @@ public class PineVMTests
                                         IntegerEncoding.EncodeSignedInteger(1)),
                                 ]),
 
-                            new Expression.KernelApplication
+                            Expression.KernelApplicationInstance
                             (
                                 function: nameof(KernelFunction.head),
                                 input: Expression.EnvironmentInstance
@@ -69,13 +71,13 @@ public class PineVMTests
                                 encoded:
                                 Expression.LiteralInstance(
                                     ExpressionEncoding.EncodeExpressionAsValue(
-                                        new Expression.KernelApplication
+                                        Expression.KernelApplicationInstance
                                         (
                                             function: nameof(KernelFunction.head),
                                             input: Expression.EnvironmentInstance
                                         ))),
                                 environment:
-                                new Expression.KernelApplication
+                                Expression.KernelApplicationInstance
                                 (
                                     function: "skip",
                                     input: Expression.ListInstance(
@@ -131,11 +133,11 @@ public class PineVMTests
                     falseBranch:
                     new Expression.ParseAndEval(
                         encoded:
-                        new Expression.KernelApplication
+                        Expression.KernelApplicationInstance
                             (
                                 function: nameof(KernelFunction.head),
                                 input:
-                                new Expression.KernelApplication
+                                Expression.KernelApplicationInstance
                                 (
                                     function: "skip",
                                     input: Expression.ListInstance(
@@ -157,7 +159,7 @@ public class PineVMTests
                     [
                         IntegerEncoding.EncodeSignedInteger(43),
                         ExpressionEncoding.EncodeExpressionAsValue(
-                            new Expression.KernelApplication
+                            Expression.KernelApplicationInstance
                             (
                                 function: nameof(KernelFunction.head),
                                 input: Expression.EnvironmentInstance
@@ -178,7 +180,7 @@ public class PineVMTests
                     falseBranch:
                     new Expression.ParseAndEval(
                         encoded:
-                        new Expression.KernelApplication
+                        Expression.KernelApplicationInstance
                             (
                                 function: nameof(KernelFunction.head),
                                 input: Expression.EnvironmentInstance
@@ -205,11 +207,11 @@ public class PineVMTests
                     trueBranch:
                     new Expression.ParseAndEval(
                         encoded:
-                        new Expression.KernelApplication
+                        Expression.KernelApplicationInstance
                             (
                                 function: nameof(KernelFunction.head),
                                 input:
-                                new Expression.KernelApplication
+                                Expression.KernelApplicationInstance
                                 (
                                     function: "skip",
                                     input: Expression.ListInstance(
@@ -228,7 +230,7 @@ public class PineVMTests
                         IntegerEncoding.EncodeSignedInteger(41),
 
                         ExpressionEncoding.EncodeExpressionAsValue(
-                            new Expression.KernelApplication
+                            Expression.KernelApplicationInstance
                             (
                                 function: nameof(KernelFunction.head),
                                 input: Expression.EnvironmentInstance
@@ -306,7 +308,7 @@ public class PineVMTests
                     [
                         Expression.LiteralInstance(PineValue.EmptyList),
 
-                        new Expression.KernelApplication
+                        Expression.KernelApplicationInstance
                         (
                             function: "skip",
                             input: Expression.ListInstance(
@@ -320,7 +322,7 @@ public class PineVMTests
 
                         Expression.LiteralInstance(PineValue.EmptyBlob),
 
-                        new Expression.KernelApplication
+                        Expression.KernelApplicationInstance
                         (
                             function: "skip",
                             input: Expression.ListInstance(
@@ -364,11 +366,11 @@ public class PineVMTests
                 Expression.ListInstance(
                     [
                         Expression.LiteralInstance(PineValue.EmptyList),
-                        new Expression.KernelApplication
+                        Expression.KernelApplicationInstance
                         (
                             function: "concat",
                             input:
-                            new Expression.KernelApplication
+                            Expression.KernelApplicationInstance
                             (
                                 function: "skip",
                                 input:
@@ -384,11 +386,11 @@ public class PineVMTests
 
                         Expression.LiteralInstance(PineValue.EmptyBlob),
 
-                        new Expression.KernelApplication
+                        Expression.KernelApplicationInstance
                         (
                             function: "concat",
                             input:
-                            new Expression.KernelApplication
+                            Expression.KernelApplicationInstance
                             (
                                 function: "skip",
                                 input:
@@ -621,7 +623,7 @@ public class PineVMTests
                     trueBranch:
                     new Expression.ParseAndEval(
                         encoded:
-                        new Expression.KernelApplication
+                        Expression.KernelApplicationInstance
                             (
                                 function: "skip",
                                 input: Expression.ListInstance(
@@ -678,7 +680,7 @@ public class PineVMTests
                             trueBranch:
                             new Expression.ParseAndEval(
                                 encoded:
-                                new Expression.KernelApplication
+                                Expression.KernelApplicationInstance
                                     (
                                         function: "skip",
                                         input: Expression.ListInstance(
@@ -909,18 +911,18 @@ public class PineVMTests
                  * */
                 expression =
                 (Expression)
-                new Expression.KernelApplication
+                Expression.KernelApplicationInstance
                 (
                     function: nameof(KernelFunction.head),
                     input:
-                    new Expression.KernelApplication
+                    Expression.KernelApplicationInstance
                     (
                         function: "skip",
                         input: Expression.ListInstance(
                             [
                             Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(17)),
 
-                            new Expression.KernelApplication
+                            Expression.KernelApplicationInstance
                             (
                                 function: nameof(KernelFunction.reverse),
                                 input: Expression.EnvironmentInstance
@@ -950,11 +952,11 @@ public class PineVMTests
                  * */
                 expression =
                 (Expression)
-                new Expression.KernelApplication
+                Expression.KernelApplicationInstance
                 (
                     function: nameof(KernelFunction.head),
                     input:
-                    new Expression.KernelApplication
+                    Expression.KernelApplicationInstance
                     (
                         function: "skip",
                         input: Expression.ListInstance(
@@ -967,11 +969,11 @@ public class PineVMTests
                                 Expression.LiteralInstance(
                                     IntegerEncoding.EncodeSignedInteger(21)),
 
-                                new Expression.KernelApplication
+                                Expression.KernelApplicationInstance
                                 (
                                     function: nameof(KernelFunction.head),
                                     input:
-                                    new Expression.KernelApplication
+                                    Expression.KernelApplicationInstance
                                     (
                                         function: "skip",
                                         input: Expression.ListInstance(
@@ -979,7 +981,7 @@ public class PineVMTests
                                             Expression.LiteralInstance(
                                                 IntegerEncoding.EncodeSignedInteger(23)),
 
-                                            new Expression.KernelApplication(
+                                            Expression.KernelApplicationInstance(
                                                 function: nameof(KernelFunction.negate),
                                                 input: Expression.EnvironmentInstance)
                                             ])
@@ -1018,7 +1020,7 @@ public class PineVMTests
                     condition:
                     Expression.ListInstance(
                         [
-                            new Expression.KernelApplication
+                            Expression.KernelApplicationInstance
                             (
                                 function: nameof(KernelFunction.int_mul),
                                 input:
@@ -1029,7 +1031,7 @@ public class PineVMTests
                                         Expression.EnvironmentInstance,
                                     ])
                             ),
-                            new Expression.KernelApplication
+                            Expression.KernelApplicationInstance
                             (
                                 function: nameof(KernelFunction.int_mul),
                                 input:
@@ -1046,7 +1048,7 @@ public class PineVMTests
                     falseBranch:
                     Expression.ConditionalInstance(
                         condition:
-                        new Expression.KernelApplication
+                        Expression.KernelApplicationInstance
                         (
                             function: nameof(KernelFunction.int_mul),
                             input:
@@ -1108,15 +1110,15 @@ public class PineVMTests
             {
                 expression =
                 (Expression)
-                new Expression.KernelApplication(
+                Expression.KernelApplicationInstance(
                     function: "int_add",
                     input:
                     Expression.ListInstance(
                         [
-                            new Expression.KernelApplication(
+                            Expression.KernelApplicationInstance(
                                 function: "head",
                                 input:
-                                new Expression.KernelApplication(
+                                Expression.KernelApplicationInstance(
                                     function: "skip",
                                     input:
                                     Expression.ListInstance(
@@ -1125,13 +1127,13 @@ public class PineVMTests
                                             Expression.EnvironmentInstance,
                                         ]))),
 
-                            new Expression.KernelApplication(
+                            Expression.KernelApplicationInstance(
                                 function: "negate",
                                 input:
-                                new Expression.KernelApplication(
+                                Expression.KernelApplicationInstance(
                                     function: "head",
                                     input:
-                                    new Expression.KernelApplication(
+                                    Expression.KernelApplicationInstance(
                                         function: "skip",
                                         input:
                                         Expression.ListInstance(
@@ -1159,15 +1161,15 @@ public class PineVMTests
             {
                 expression =
                 (Expression)
-                new Expression.KernelApplication(
+                Expression.KernelApplicationInstance(
                     function: nameof(KernelFunction.int_add),
                     input:
                     Expression.ListInstance(
                         [
-                            new Expression.KernelApplication(
+                            Expression.KernelApplicationInstance(
                                 function: "head",
                                 input:
-                                new Expression.KernelApplication(
+                                Expression.KernelApplicationInstance(
                                     function: "skip",
                                     input:
                                     Expression.ListInstance(
@@ -1178,7 +1180,7 @@ public class PineVMTests
                                             Expression.EnvironmentInstance,
                                         ]))),
 
-                            new Expression.KernelApplication(
+                            Expression.KernelApplicationInstance(
                                 function: "int_mul",
                                 input:
                                 Expression.ListInstance(
@@ -1186,10 +1188,10 @@ public class PineVMTests
                                     Expression.LiteralInstance(
                                         IntegerEncoding.EncodeSignedInteger(-1)),
 
-                                    new Expression.KernelApplication(
+                                    Expression.KernelApplicationInstance(
                                         function: "head",
                                         input:
-                                        new Expression.KernelApplication(
+                                        Expression.KernelApplicationInstance(
                                             function: "skip",
                                             input:
                                             Expression.ListInstance(
@@ -1220,12 +1222,12 @@ public class PineVMTests
             {
                 expression =
                 (Expression)
-                new Expression.KernelApplication(
+                Expression.KernelApplicationInstance(
                     function: "equal",
                     input:
                     Expression.ListInstance(
                         [
-                        new Expression.KernelApplication(
+                        Expression.KernelApplicationInstance(
                             function: "head",
                             input: Expression.EnvironmentInstance),
 
@@ -1249,14 +1251,14 @@ public class PineVMTests
             {
                 expression =
                 (Expression)
-                new Expression.KernelApplication(
+                Expression.KernelApplicationInstance(
                     function: nameof(KernelFunction.equal),
                     input:
                     Expression.ListInstance(
                         [
                         Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(17)),
 
-                        new Expression.KernelApplication(
+                        Expression.KernelApplicationInstance(
                             function: nameof(KernelFunction.head),
                             input: Expression.EnvironmentInstance),
                         ])),
@@ -1278,18 +1280,18 @@ public class PineVMTests
             {
                 expression =
                 (Expression)
-                new Expression.KernelApplication(
+                Expression.KernelApplicationInstance(
                     function: "negate",
                     input:
-                    new Expression.KernelApplication(
+                    Expression.KernelApplicationInstance(
                         function: "equal",
                         input:
                         Expression.ListInstance(
                             [
-                            new Expression.KernelApplication(
+                            Expression.KernelApplicationInstance(
                                 function: "head",
                                 input:
-                                new Expression.KernelApplication(
+                                Expression.KernelApplicationInstance(
                                     function: "skip",
                                     input:
                                     Expression.ListInstance(
@@ -1299,10 +1301,10 @@ public class PineVMTests
                                         ])
                                 )),
 
-                            new Expression.KernelApplication(
+                            Expression.KernelApplicationInstance(
                                 function: "head",
                                 input:
-                                new Expression.KernelApplication(
+                                Expression.KernelApplicationInstance(
                                     function: "skip",
                                     input:
                                     Expression.ListInstance(
@@ -1331,15 +1333,15 @@ public class PineVMTests
             {
                 expression =
                 (Expression)
-                new Expression.KernelApplication(
+                Expression.KernelApplicationInstance(
                     function: "int_is_sorted_asc",
                     input:
                     Expression.ListInstance(
                         [
-                        new Expression.KernelApplication(
+                        Expression.KernelApplicationInstance(
                             function: "head",
                             input:
-                            new Expression.KernelApplication(
+                            Expression.KernelApplicationInstance(
                                 function: "skip",
                                 input:
                                 Expression.ListInstance(
@@ -1349,10 +1351,10 @@ public class PineVMTests
                                     ])
                             )),
 
-                        new Expression.KernelApplication(
+                        Expression.KernelApplicationInstance(
                             function: "head",
                             input:
-                            new Expression.KernelApplication(
+                            Expression.KernelApplicationInstance(
                                 function: "skip",
                                 input:
                                 Expression.ListInstance(
@@ -1382,18 +1384,18 @@ public class PineVMTests
             {
                 expression =
                 (Expression)
-                new Expression.KernelApplication(
+                Expression.KernelApplicationInstance(
                     function: "negate",
                     input:
-                    new Expression.KernelApplication(
+                    Expression.KernelApplicationInstance(
                         function: "int_is_sorted_asc",
                         input:
                         Expression.ListInstance(
                             [
-                            new Expression.KernelApplication(
+                            Expression.KernelApplicationInstance(
                                 function: "head",
                                 input:
-                                new Expression.KernelApplication(
+                                Expression.KernelApplicationInstance(
                                     function: "skip",
                                     input:
                                     Expression.ListInstance(
@@ -1403,10 +1405,10 @@ public class PineVMTests
                                         ])
                                 )),
 
-                            new Expression.KernelApplication(
+                            Expression.KernelApplicationInstance(
                                 function: "head",
                                 input:
-                                new Expression.KernelApplication(
+                                Expression.KernelApplicationInstance(
                                     function: "skip",
                                     input:
                                     Expression.ListInstance(
@@ -1435,12 +1437,12 @@ public class PineVMTests
             {
                 expression =
                 (Expression)
-                new Expression.KernelApplication(
+                Expression.KernelApplicationInstance(
                     function: "int_add",
                     input:
                     Expression.ListInstance(
                         [
-                        new Expression.KernelApplication(
+                        Expression.KernelApplicationInstance(
                             function: "head",
                             input: Expression.EnvironmentInstance),
 
@@ -1463,12 +1465,12 @@ public class PineVMTests
             {
                 expression =
                 (Expression)
-                new Expression.KernelApplication(
+                Expression.KernelApplicationInstance(
                     function: "int_mul",
                     input:
                     Expression.ListInstance(
                         [
-                        new Expression.KernelApplication(
+                        Expression.KernelApplicationInstance(
                             function: "head",
                             input: Expression.EnvironmentInstance),
 
@@ -1491,12 +1493,12 @@ public class PineVMTests
             {
                 expression =
                 (Expression)
-                new Expression.KernelApplication
+                Expression.KernelApplicationInstance
                 (
                     function: nameof(KernelFunction.equal),
                     input: Expression.ListInstance(
                         [
-                        new Expression.KernelApplication
+                        Expression.KernelApplicationInstance
                         (
                             function: nameof(KernelFunction.head),
                             input: Expression.EnvironmentInstance
@@ -1524,7 +1526,7 @@ public class PineVMTests
             {
                 expression =
                 (Expression)
-                new Expression.KernelApplication
+                Expression.KernelApplicationInstance
                 (
                     function: nameof(KernelFunction.equal),
                     input: Expression.ListInstance(
@@ -1532,7 +1534,7 @@ public class PineVMTests
                         Expression.LiteralInstance(
                             IntegerEncoding.EncodeSignedInteger(73)),
 
-                        new Expression.KernelApplication
+                        Expression.KernelApplicationInstance
                         (
                             function: nameof(KernelFunction.head),
                             input: Expression.EnvironmentInstance
@@ -1557,12 +1559,12 @@ public class PineVMTests
             {
                 expression =
                 (Expression)
-                new Expression.KernelApplication
+                Expression.KernelApplicationInstance
                 (
                     function: nameof(KernelFunction.equal),
                     input: Expression.ListInstance(
                         [
-                        new Expression.KernelApplication
+                        Expression.KernelApplicationInstance
                         (
                             function: nameof(KernelFunction.length),
                             input: Expression.EnvironmentInstance
@@ -1588,7 +1590,7 @@ public class PineVMTests
             {
                 expression =
                 (Expression)
-                new Expression.KernelApplication
+                Expression.KernelApplicationInstance
                 (
                     function: nameof(KernelFunction.equal),
                     input: Expression.ListInstance(
@@ -1596,7 +1598,7 @@ public class PineVMTests
                         Expression.LiteralInstance(
                             IntegerEncoding.EncodeSignedInteger(13)),
 
-                        new Expression.KernelApplication
+                        Expression.KernelApplicationInstance
                         (
                             function: nameof(KernelFunction.length),
                             input: Expression.EnvironmentInstance
@@ -1619,7 +1621,7 @@ public class PineVMTests
             {
                 expression =
                 (Expression)
-                new Expression.KernelApplication(
+                Expression.KernelApplicationInstance(
                     function: nameof(KernelFunction.int_is_sorted_asc),
                     input: Expression.ListInstance(
                         [
@@ -1644,7 +1646,7 @@ public class PineVMTests
             {
                 expression =
                 (Expression)
-                new Expression.KernelApplication(
+                Expression.KernelApplicationInstance(
                     function: nameof(KernelFunction.int_is_sorted_asc),
                     input: Expression.ListInstance(
                         [
@@ -1669,7 +1671,7 @@ public class PineVMTests
             {
                 expression =
                 (Expression)
-                new Expression.KernelApplication(
+                Expression.KernelApplicationInstance(
                     function: nameof(KernelFunction.int_is_sorted_asc),
                     input: Expression.ListInstance(
                         [
@@ -1703,18 +1705,18 @@ public class PineVMTests
             {
                 expression =
                 (Expression)
-                new Expression.KernelApplication(
+                Expression.KernelApplicationInstance(
                     function: nameof(KernelFunction.int_is_sorted_asc),
                     input: Expression.ListInstance(
                         [
                             Expression.LiteralInstance(
                                 IntegerEncoding.EncodeSignedInteger(23)),
 
-                            new Expression.KernelApplication
+                            Expression.KernelApplicationInstance
                             (
                                 function: nameof(KernelFunction.head),
                                 input:
-                                new Expression.KernelApplication
+                                Expression.KernelApplicationInstance
                                 (
                                     function: nameof(KernelFunction.skip),
                                     input: Expression.ListInstance(
@@ -1722,11 +1724,11 @@ public class PineVMTests
                                         Expression.LiteralInstance(
                                             IntegerEncoding.EncodeSignedInteger(41)),
 
-                                        new Expression.KernelApplication
+                                        Expression.KernelApplicationInstance
                                         (
                                             function: nameof(KernelFunction.head),
                                             input:
-                                            new Expression.KernelApplication
+                                            Expression.KernelApplicationInstance
                                             (
                                                 function: nameof(KernelFunction.skip),
                                                 input: Expression.ListInstance(
@@ -1768,7 +1770,7 @@ public class PineVMTests
             {
                 expression =
                 (Expression)
-                new Expression.KernelApplication(
+                Expression.KernelApplicationInstance(
                     function: nameof(KernelFunction.bit_and),
                     input: Expression.ListInstance(
                         [
@@ -1794,7 +1796,7 @@ public class PineVMTests
             {
                 expression =
                 (Expression)
-                new Expression.KernelApplication(
+                Expression.KernelApplicationInstance(
                     function: nameof(KernelFunction.bit_and),
                     input: Expression.ListInstance(
                         [
@@ -1820,7 +1822,7 @@ public class PineVMTests
             {
                 expression =
                 (Expression)
-                new Expression.KernelApplication(
+                Expression.KernelApplicationInstance(
                     function: nameof(KernelFunction.bit_or),
                     input: Expression.ListInstance(
                         [
@@ -1846,7 +1848,7 @@ public class PineVMTests
             {
                 expression =
                 (Expression)
-                new Expression.KernelApplication(
+                Expression.KernelApplicationInstance(
                     function: nameof(KernelFunction.bit_or),
                     input: Expression.ListInstance(
                         [
@@ -1872,7 +1874,7 @@ public class PineVMTests
             {
                 expression =
                 (Expression)
-                new Expression.KernelApplication(
+                Expression.KernelApplicationInstance(
                     function: nameof(KernelFunction.bit_shift_left),
                     input: Expression.ListInstance(
                         [
@@ -1897,7 +1899,7 @@ public class PineVMTests
             {
                 expression =
                 (Expression)
-                new Expression.KernelApplication(
+                Expression.KernelApplicationInstance(
                     function: nameof(KernelFunction.bit_shift_right),
                     input: Expression.ListInstance(
                         [
@@ -1922,7 +1924,7 @@ public class PineVMTests
             {
                 expression =
                 (Expression)
-                new Expression.KernelApplication(
+                Expression.KernelApplicationInstance(
                     function: nameof(KernelFunction.take),
                     input: Expression.ListInstance(
                         [
@@ -1947,7 +1949,7 @@ public class PineVMTests
             {
                 expression =
                 (Expression)
-                new Expression.KernelApplication(
+                Expression.KernelApplicationInstance(
                     function: nameof(KernelFunction.skip),
                     input: Expression.ListInstance(
                         [
@@ -1972,17 +1974,17 @@ public class PineVMTests
             {
                 expression =
                 (Expression)
-                new Expression.KernelApplication(
+                Expression.KernelApplicationInstance(
                     function: nameof(KernelFunction.int_add),
                     Expression.ListInstance(
                         [
-                            new Expression.KernelApplication
+                            Expression.KernelApplicationInstance
                             (
                                 function: nameof(KernelFunction.concat),
                                 input:
                                 Expression.ListInstance(
                                     [
-                                        new Expression.KernelApplication
+                                        Expression.KernelApplicationInstance
                                         (
                                             function: nameof(KernelFunction.take),
                                             input:
@@ -1996,7 +1998,7 @@ public class PineVMTests
                                                 ])
                                         ),
 
-                                        new Expression.KernelApplication
+                                        Expression.KernelApplicationInstance
                                         (
                                             function: nameof(KernelFunction.head),
                                             input: Expression.EnvironmentInstance
@@ -2024,17 +2026,17 @@ public class PineVMTests
             {
                 expression =
                 (Expression)
-                new Expression.KernelApplication(
+                Expression.KernelApplicationInstance(
                     function: nameof(KernelFunction.int_is_sorted_asc),
                     Expression.ListInstance(
                         [
-                            new Expression.KernelApplication
+                            Expression.KernelApplicationInstance
                             (
                                 function: nameof(KernelFunction.concat),
                                 input:
                                 Expression.ListInstance(
                                     [
-                                        new Expression.KernelApplication
+                                        Expression.KernelApplicationInstance
                                         (
                                             function: nameof(KernelFunction.take),
                                             input:
@@ -2048,7 +2050,7 @@ public class PineVMTests
                                                 ])
                                         ),
 
-                                        new Expression.KernelApplication
+                                        Expression.KernelApplicationInstance
                                         (
                                             function: nameof(KernelFunction.head),
                                             input: Expression.EnvironmentInstance
@@ -2076,20 +2078,20 @@ public class PineVMTests
             {
                 expression =
                 (Expression)
-                new Expression.KernelApplication(
+                Expression.KernelApplicationInstance(
                     function: nameof(KernelFunction.int_is_sorted_asc),
                     Expression.ListInstance(
                         [
                             Expression.LiteralInstance(
                                 IntegerEncoding.EncodeSignedInteger(83)),
 
-                            new Expression.KernelApplication
+                            Expression.KernelApplicationInstance
                             (
                                 function: nameof(KernelFunction.concat),
                                 input:
                                 Expression.ListInstance(
                                     [
-                                        new Expression.KernelApplication
+                                        Expression.KernelApplicationInstance
                                         (
                                             function: nameof(KernelFunction.take),
                                             input:
@@ -2103,7 +2105,7 @@ public class PineVMTests
                                                 ])
                                         ),
 
-                                        new Expression.KernelApplication
+                                        Expression.KernelApplicationInstance
                                         (
                                             function: nameof(KernelFunction.head),
                                             input: Expression.EnvironmentInstance
@@ -2128,20 +2130,20 @@ public class PineVMTests
             {
                 expression =
                 (Expression)
-                new Expression.KernelApplication(
+                Expression.KernelApplicationInstance(
                     function: nameof(KernelFunction.int_is_sorted_asc),
                     Expression.ListInstance(
                         [
                             Expression.LiteralInstance(
                                 IntegerEncoding.EncodeSignedInteger(83)),
 
-                            new Expression.KernelApplication
+                            Expression.KernelApplicationInstance
                             (
                                 function: nameof(KernelFunction.concat),
                                 input:
                                 Expression.ListInstance(
                                     [
-                                        new Expression.KernelApplication
+                                        Expression.KernelApplicationInstance
                                         (
                                             function: nameof(KernelFunction.take),
                                             input:
@@ -2155,7 +2157,7 @@ public class PineVMTests
                                                 ])
                                         ),
 
-                                        new Expression.KernelApplication
+                                        Expression.KernelApplicationInstance
                                         (
                                             function: nameof(KernelFunction.head),
                                             input: Expression.EnvironmentInstance
@@ -2191,7 +2193,7 @@ public class PineVMTests
                 (Expression)
                 Expression.ConditionalInstance(
                     condition:
-                    new Expression.KernelApplication
+                    Expression.KernelApplicationInstance
                     (
                         function: nameof(KernelFunction.int_is_sorted_asc),
                         Expression.ListInstance(
@@ -2199,13 +2201,13 @@ public class PineVMTests
                                 Expression.LiteralInstance(
                                     IntegerEncoding.EncodeSignedInteger(83)),
 
-                                new Expression.KernelApplication
+                                Expression.KernelApplicationInstance
                                 (
                                     function: nameof(KernelFunction.concat),
                                     input:
                                     Expression.ListInstance(
                                         [
-                                            new Expression.KernelApplication
+                                            Expression.KernelApplicationInstance
                                             (
                                                 function: nameof(KernelFunction.take),
                                                 input:
@@ -2219,7 +2221,7 @@ public class PineVMTests
                                                     ])
                                             ),
 
-                                            new Expression.KernelApplication
+                                            Expression.KernelApplicationInstance
                                             (
                                                 function: nameof(KernelFunction.head),
                                                 input: Expression.EnvironmentInstance
@@ -2233,17 +2235,17 @@ public class PineVMTests
                         IntegerEncoding.EncodeSignedInteger(107)),
 
                     trueBranch:
-                    new Expression.KernelApplication(
+                    Expression.KernelApplicationInstance(
                     function: nameof(KernelFunction.int_add),
                     Expression.ListInstance(
                         [
-                            new Expression.KernelApplication
+                            Expression.KernelApplicationInstance
                             (
                                 function: nameof(KernelFunction.concat),
                                 input:
                                 Expression.ListInstance(
                                     [
-                                        new Expression.KernelApplication
+                                        Expression.KernelApplicationInstance
                                         (
                                             function: nameof(KernelFunction.take),
                                             input:
@@ -2257,7 +2259,7 @@ public class PineVMTests
                                                 ])
                                         ),
 
-                                        new Expression.KernelApplication
+                                        Expression.KernelApplicationInstance
                                         (
                                             function: nameof(KernelFunction.head),
                                             input: Expression.EnvironmentInstance
@@ -2297,18 +2299,18 @@ public class PineVMTests
             {
                 expression =
                 (Expression)
-                new Expression.KernelApplication
+                Expression.KernelApplicationInstance
                 (
                     function: nameof(KernelFunction.reverse),
                     input:
-                    new Expression.KernelApplication
+                    Expression.KernelApplicationInstance
                     (
                         function: nameof(KernelFunction.take),
                         input:
                         Expression.ListInstance(
                             [
                             Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(3)),
-                            new Expression.KernelApplication
+                            Expression.KernelApplicationInstance
                             (
                                 function: nameof(KernelFunction.reverse),
                                 input:
@@ -2333,7 +2335,7 @@ public class PineVMTests
             {
                 expression =
                 (Expression)
-                new Expression.KernelApplication
+                Expression.KernelApplicationInstance
                 (
                     function: nameof(KernelFunction.skip),
                     input:
@@ -2341,13 +2343,13 @@ public class PineVMTests
                         [
                         Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(1)),
 
-                        new Expression.KernelApplication
+                        Expression.KernelApplicationInstance
                         (
                             function: nameof(KernelFunction.int_add),
                             input:
                             Expression.ListInstance(
                                 [
-                                    new Expression.KernelApplication
+                                    Expression.KernelApplicationInstance
                                     (
                                         function: nameof(KernelFunction.concat),
                                         input:
@@ -2382,7 +2384,7 @@ public class PineVMTests
             {
                 expression =
                 (Expression)
-                new Expression.KernelApplication(
+                Expression.KernelApplicationInstance(
                     function: nameof(KernelFunction.int_is_sorted_asc),
                     input:
                     Expression.ListInstance(
@@ -2412,7 +2414,7 @@ public class PineVMTests
             {
                 expression =
                 (Expression)
-                new Expression.KernelApplication(
+                Expression.KernelApplicationInstance(
                     function: nameof(KernelFunction.int_is_sorted_asc),
                     input:
                     Expression.ListInstance(
@@ -2442,12 +2444,12 @@ public class PineVMTests
             {
                 expression =
                 (Expression)
-                new Expression.KernelApplication(
+                Expression.KernelApplicationInstance(
                     function: nameof(KernelFunction.equal),
                     input:
                     Expression.ListInstance(
                         [
-                        new Expression.KernelApplication(
+                        Expression.KernelApplicationInstance(
                             function: nameof(KernelFunction.take),
                             input:
                             Expression.ListInstance(
@@ -2476,12 +2478,12 @@ public class PineVMTests
             {
                 expression =
                 (Expression)
-                new Expression.KernelApplication(
+                Expression.KernelApplicationInstance(
                     function: nameof(KernelFunction.equal),
                     input:
                     Expression.ListInstance(
                         [
-                        new Expression.KernelApplication(
+                        Expression.KernelApplicationInstance(
                             function: nameof(KernelFunction.take),
                             input:
                             Expression.ListInstance(

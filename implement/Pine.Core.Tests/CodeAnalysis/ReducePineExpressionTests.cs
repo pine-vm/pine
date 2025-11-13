@@ -36,9 +36,10 @@ public class ReducePineExpressionTests
         evalListItems.Length.Should().Be(2);
 
         // kernel length([x,y]) -> 2
-        var lengthOfList = new Expression.KernelApplication(
-            nameof(KernelFunction.length),
-            list);
+        var lengthOfList =
+            Expression.KernelApplicationInstance(
+                nameof(KernelFunction.length),
+                list);
 
         var lengthValue = ReducePineExpression.TryEvaluateExpressionIndependent(lengthOfList, s_parseCache).IsOkOrNull();
         lengthValue.Should().Be(IntegerEncoding.EncodeSignedInteger(2));
@@ -47,12 +48,14 @@ public class ReducePineExpressionTests
     [Fact]
     public void ReduceExpressionBottomUp_Folds_Length_On_ListLiteral_ToInteger()
     {
-        var expr = new Expression.KernelApplication(
-            nameof(KernelFunction.length),
-            Expression.ListInstance([
-                Expression.LiteralInstance(PineValue.Blob([1])),
-                Expression.LiteralInstance(PineValue.Blob([2]))
-            ]));
+        var expr =
+            Expression.KernelApplicationInstance(
+                nameof(KernelFunction.length),
+                Expression.ListInstance(
+                    [
+                    Expression.LiteralInstance(PineValue.Blob([1])),
+                    Expression.LiteralInstance(PineValue.Blob([2]))
+                    ]));
 
         var reduced = ReducePineExpression.ReduceExpressionBottomUp(expr, s_parseCache);
 
@@ -97,14 +100,16 @@ public class ReducePineExpressionTests
     [Fact]
     public void Transform_ReplacingEnvironmentWithLiteral_RemovesEnvAndReportsNoReference()
     {
-        var expr = Expression.ListInstance([
+        var expr = Expression.ListInstance(
+            [
             Expression.EnvironmentInstance,
-            new Expression.KernelApplication(
+
+            Expression.KernelApplicationInstance(
                 nameof(KernelFunction.head),
                 Expression.LiteralInstance(PineValue.List([
                     PineValue.Blob([1])
                 ])))
-        ]);
+            ]);
 
         var (mapped, referencesOriginalEnv) =
             ReducePineExpression.TransformPineExpressionWithOptionalReplacement(
@@ -123,22 +128,28 @@ public class ReducePineExpressionTests
     [Fact]
     public void TryInferListLengthLowerBounds_SkipConst_OnLiteralList_ReturnsLowerBound()
     {
-        var list = Expression.LiteralInstance(PineValue.List([
-            PineValue.Blob([1]),
-            PineValue.Blob([2]),
-            PineValue.Blob([3]),
-            PineValue.Blob([4]),
-            PineValue.Blob([5])
-        ]));
+        var list =
+            Expression.LiteralInstance(
+                PineValue.List(
+                    [
+                    PineValue.Blob([1]),
+                    PineValue.Blob([2]),
+                    PineValue.Blob([3]),
+                    PineValue.Blob([4]),
+                    PineValue.Blob([5])
+                    ]));
 
-        var skip = new Expression.KernelApplication(
-            nameof(KernelFunction.skip),
-            Expression.ListInstance([
-                Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(2)),
-                list
-            ]));
+        var skip =
+            Expression.KernelApplicationInstance(
+                nameof(KernelFunction.skip),
+                Expression.ListInstance(
+                    [
+                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(2)),
+                    list
+                    ]));
 
         var dummyClass = PineValueClass.CreateEquals(PineValue.EmptyList);
+
         var bounds = ReducePineExpression.EnumerateInferListLengthBounds(skip, dummyClass, s_parseCache).ToArray();
 
         bounds.Select(b => b.lower).Should().Contain(3);
@@ -158,14 +169,16 @@ public class ReducePineExpressionTests
         var falseList = Expression.ListInstance([falseFirst, falseSecond]);
         var trueList = Expression.ListInstance([trueFirst, trueSecond]);
 
-        var conditional = Expression.ConditionalInstance(
-            condition: condition,
-            falseBranch: falseList,
-            trueBranch: trueList);
+        var conditional =
+            Expression.ConditionalInstance(
+                condition: condition,
+                falseBranch: falseList,
+                trueBranch: trueList);
 
-        var root = new Expression.KernelApplication(
-            nameof(KernelFunction.head),
-            conditional);
+        var root =
+            Expression.KernelApplicationInstance(
+                nameof(KernelFunction.head),
+                conditional);
 
         var reduced = ReducePineExpression.ReduceExpressionBottomUp(root, s_parseCache);
 
@@ -187,13 +200,15 @@ public class ReducePineExpressionTests
 
         var listExpr = Expression.ListInstance([i0, i1, i2, i3]);
 
-        var skipArgs = Expression.ListInstance([
-            Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(2)),
-            listExpr
-        ]);
+        var skipArgs =
+            Expression.ListInstance(
+                [
+                Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(2)),
+                listExpr
+                ]);
 
-        var skipApp = new Expression.KernelApplication(nameof(KernelFunction.skip), skipArgs);
-        var root = new Expression.KernelApplication(nameof(KernelFunction.head), skipApp);
+        var skipApp = Expression.KernelApplicationInstance(nameof(KernelFunction.skip), skipArgs);
+        var root = Expression.KernelApplicationInstance(nameof(KernelFunction.head), skipApp);
 
         var reduced = ReducePineExpression.ReduceExpressionBottomUp(root, s_parseCache);
 
@@ -218,19 +233,23 @@ public class ReducePineExpressionTests
         var falseList = Expression.ListInstance([f0, f1, f2]);
         var trueList = Expression.ListInstance([t0, t1, t2]);
 
-        var listConditional = Expression.ConditionalInstance(
-            condition: condition,
-            falseBranch: falseList,
-            trueBranch: trueList);
+        var listConditional =
+            Expression.ConditionalInstance(
+                condition: condition,
+                falseBranch: falseList,
+                trueBranch: trueList);
 
-        var skipArgs = Expression.ListInstance([
-            Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(2)),
-            listConditional
-        ]);
+        var skipArgs =
+            Expression.ListInstance(
+                [
+                Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(2)),
+                listConditional
+                ]);
 
-        var root = new Expression.KernelApplication(
-            nameof(KernelFunction.head),
-            new Expression.KernelApplication(nameof(KernelFunction.skip), skipArgs));
+        var root =
+            Expression.KernelApplicationInstance(
+                nameof(KernelFunction.head),
+                Expression.KernelApplicationInstance(nameof(KernelFunction.skip), skipArgs));
 
         var reduced = ReducePineExpression.ReduceExpressionBottomUp(root, s_parseCache);
 
@@ -247,9 +266,9 @@ public class ReducePineExpressionTests
     {
         // Two conditions referencing environment so the conditional stays
         var condA =
-            new Expression.KernelApplication(
+            Expression.KernelApplicationInstance(
                 nameof(KernelFunction.head),
-                new Expression.KernelApplication(
+                Expression.KernelApplicationInstance(
                     nameof(KernelFunction.skip),
                     Expression.ListInstance([
                         Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(11)),
@@ -257,14 +276,15 @@ public class ReducePineExpressionTests
                 ])));
 
         var condB =
-            new Expression.KernelApplication(
+            Expression.KernelApplicationInstance(
                 nameof(KernelFunction.head),
-                new Expression.KernelApplication(
+                Expression.KernelApplicationInstance(
                     nameof(KernelFunction.skip),
-                    Expression.ListInstance([
+                    Expression.ListInstance(
+                        [
                         Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(13)),
                         Expression.EnvironmentInstance
-                ])));
+                        ])));
 
         // Leaves: one branch with string tag around list, another with literal(list), third with direct list
         var sf0 = Expression.LiteralInstance(PineValue.Blob([101]));
@@ -297,9 +317,10 @@ public class ReducePineExpressionTests
             outer
         ]);
 
-        var root = new Expression.KernelApplication(
-            nameof(KernelFunction.head),
-            new Expression.KernelApplication(nameof(KernelFunction.skip), skipArgs));
+        var root =
+            Expression.KernelApplicationInstance(
+                nameof(KernelFunction.head),
+                Expression.KernelApplicationInstance(nameof(KernelFunction.skip), skipArgs));
 
         var reduced = ReducePineExpression.ReduceExpressionBottomUp(root, s_parseCache);
 
@@ -344,16 +365,22 @@ public class ReducePineExpressionTests
             top
         ]);
 
-        var inner = new Expression.KernelApplication(nameof(KernelFunction.head),
-            new Expression.KernelApplication(nameof(KernelFunction.skip), innerSkipArgs));
+        var inner =
+            Expression.KernelApplicationInstance(
+                nameof(KernelFunction.head),
+                Expression.KernelApplicationInstance(nameof(KernelFunction.skip), innerSkipArgs));
 
-        var outerSkipArgs = Expression.ListInstance([
-            Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(2)),
-            inner
-        ]);
+        var outerSkipArgs =
+            Expression.ListInstance(
+                [
+                Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(2)),
+                inner
+                ]);
 
-        var root = new Expression.KernelApplication(nameof(KernelFunction.head),
-            new Expression.KernelApplication(nameof(KernelFunction.skip), outerSkipArgs));
+        var root =
+            Expression.KernelApplicationInstance(
+                nameof(KernelFunction.head),
+                Expression.KernelApplicationInstance(nameof(KernelFunction.skip), outerSkipArgs));
 
         var reduced = ReducePineExpression.ReduceExpressionBottomUp(root, s_parseCache);
 
@@ -369,9 +396,10 @@ public class ReducePineExpressionTests
         var i2 = Expression.LiteralInstance(PineValue.Blob([3]));
         var listExpr = Expression.ListInstance([i0, i1, i2]);
 
-        var root = new Expression.KernelApplication(
-            nameof(KernelFunction.head),
-            new Expression.KernelApplication(nameof(KernelFunction.reverse), listExpr));
+        var root =
+            Expression.KernelApplicationInstance(
+                nameof(KernelFunction.head),
+                Expression.KernelApplicationInstance(nameof(KernelFunction.reverse), listExpr));
 
         var reduced = ReducePineExpression.ReduceExpressionBottomUp(root, s_parseCache);
         reduced.Should().Be(i2);
@@ -386,16 +414,19 @@ public class ReducePineExpressionTests
         var c = Expression.LiteralInstance(PineValue.Blob([3]));
         var listExpr = Expression.ListInstance([a, b, c]);
 
-        var takeArgs = Expression.ListInstance([
-            Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(2)),
-            listExpr
-        ]);
+        var takeArgs =
+            Expression.ListInstance(
+                [
+                Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(2)),
+                listExpr
+                ]);
 
-        var root = new Expression.KernelApplication(
-            nameof(KernelFunction.head),
-            new Expression.KernelApplication(
-                nameof(KernelFunction.reverse),
-                new Expression.KernelApplication(nameof(KernelFunction.take), takeArgs)));
+        var root =
+            Expression.KernelApplicationInstance(
+                nameof(KernelFunction.head),
+                Expression.KernelApplicationInstance(
+                    nameof(KernelFunction.reverse),
+                    Expression.KernelApplicationInstance(nameof(KernelFunction.take), takeArgs)));
 
         var reduced = ReducePineExpression.ReduceExpressionBottomUp(root, s_parseCache);
         reduced.Should().Be(b);
@@ -412,7 +443,8 @@ public class ReducePineExpressionTests
 
         var listExpr = Expression.ListInstance([a, b, c, d]);
 
-        var reversed = new Expression.KernelApplication(nameof(KernelFunction.reverse), listExpr);
+        var reversed =
+            Expression.KernelApplicationInstance(nameof(KernelFunction.reverse), listExpr);
 
         var takeArgs =
             Expression.ListInstance(
@@ -421,12 +453,19 @@ public class ReducePineExpressionTests
                 reversed
                 ]);
 
-        var takeOnReversed = new Expression.KernelApplication(nameof(KernelFunction.take), takeArgs);
-        var takeLast = new Expression.KernelApplication(nameof(KernelFunction.reverse), takeOnReversed);
+        var takeOnReversed =
+            Expression.KernelApplicationInstance(nameof(KernelFunction.take), takeArgs);
+
+        var takeLast =
+            Expression.KernelApplicationInstance(nameof(KernelFunction.reverse), takeOnReversed);
 
         // head(take-last 2) -> c
-        var root = new Expression.KernelApplication(nameof(KernelFunction.head), takeLast);
-        var reduced = ReducePineExpression.ReduceExpressionBottomUp(root, s_parseCache);
+        var root =
+            Expression.KernelApplicationInstance(nameof(KernelFunction.head), takeLast);
+
+        var reduced =
+            ReducePineExpression.ReduceExpressionBottomUp(root, s_parseCache);
+
         reduced.Should().Be(c);
     }
 
@@ -437,12 +476,13 @@ public class ReducePineExpressionTests
         var condition = Expression.EnvironmentInstance;
 
         var falseList =
-            Expression.LiteralInstance(PineValue.List([
+            Expression.LiteralInstance(PineValue.List(
+                [
                 PineValue.Blob([10]),
                 PineValue.Blob([11]),
                 PineValue.Blob([12]),
                 PineValue.Blob([13])
-        ]));
+                ]));
 
         var trueList =
             Expression.LiteralInstance(PineValue.List([
@@ -452,10 +492,12 @@ public class ReducePineExpressionTests
                 PineValue.Blob([23])
         ]));
 
-        var listConditional = Expression.ConditionalInstance(condition, falseList, trueList);
+        var listConditional =
+            Expression.ConditionalInstance(condition, falseList, trueList);
 
         // take-last 2 -> reverse(take(2, reverse(x)))
-        var rev1 = new Expression.KernelApplication(nameof(KernelFunction.reverse), listConditional);
+        var rev1 =
+            Expression.KernelApplicationInstance(nameof(KernelFunction.reverse), listConditional);
 
         var takeArgs =
             Expression.ListInstance(
@@ -464,8 +506,11 @@ public class ReducePineExpressionTests
                 rev1
                 ]);
 
-        var take = new Expression.KernelApplication(nameof(KernelFunction.take), takeArgs);
-        var takeLast = new Expression.KernelApplication(nameof(KernelFunction.reverse), take);
+        var take =
+            Expression.KernelApplicationInstance(nameof(KernelFunction.take), takeArgs);
+
+        var takeLast =
+            Expression.KernelApplicationInstance(nameof(KernelFunction.reverse), take);
 
         var reduced = ReducePineExpression.ReduceExpressionBottomUp(takeLast, s_parseCache);
 
@@ -514,17 +559,14 @@ public class ReducePineExpressionTests
         var listConditional = Expression.ConditionalInstance(condition, falseList, trueList);
 
         // skip-last 1 -> reverse(skip(1, reverse(x)))
-        var rev1 = new Expression.KernelApplication(nameof(KernelFunction.reverse), listConditional);
+        var rev1 = Expression.KernelApplicationInstance(nameof(KernelFunction.reverse), listConditional);
+        var skipArgs = Expression.ListInstance([
+            Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(1)),
+            rev1
+        ]);
 
-        var skipArgs =
-            Expression.ListInstance(
-                [
-                Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(1)),
-                rev1
-                ]);
-
-        var skip = new Expression.KernelApplication(nameof(KernelFunction.skip), skipArgs);
-        var skipLast = new Expression.KernelApplication(nameof(KernelFunction.reverse), skip);
+        var skip = Expression.KernelApplicationInstance(nameof(KernelFunction.skip), skipArgs);
+        var skipLast = Expression.KernelApplicationInstance(nameof(KernelFunction.reverse), skip);
 
         var reduced = ReducePineExpression.ReduceExpressionBottomUp(skipLast, s_parseCache);
 
