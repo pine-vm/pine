@@ -28,7 +28,7 @@ public class FileStoreHttpServerTests
         {
             FileStore = new FileStoreFromConcurrentDictionary();
 
-            var hostBuilder = new WebHostBuilder()
+            var builder = new WebHostBuilder()
                 .ConfigureServices(services =>
                 {
                     services.AddSingleton(FileStore);
@@ -38,7 +38,7 @@ public class FileStoreHttpServerTests
                     app.UseMiddleware<FileStoreHttpServerMiddleware>();
                 });
 
-            Server = new TestServer(hostBuilder);
+            Server = new TestServer(builder);
             Client = Server.CreateClient();
         }
 

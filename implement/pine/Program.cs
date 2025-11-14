@@ -4,6 +4,7 @@ using McMaster.Extensions.CommandLineUtils;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Pine;
 using Pine.Core;
 using Pine.Core.Addressing;
@@ -335,11 +336,11 @@ public class Program
 
                 Console.WriteLine("Starting web server with admin interface...");
 
-                webHost.Start();
+                webHost.StartAsync().Wait();
 
                 Console.WriteLine("Completed starting the web server with the admin interface at '" + adminInterfaceUrls + "'.");
 
-                webHost.WaitForShutdown();
+                webHost.WaitForShutdownAsync().Wait();
             });
         });
 
@@ -2722,35 +2723,34 @@ public class Program
 
     private static int RunFileStoreHttpServer(IFileStore fileStore, int port, string? authPassword)
     {
-        var hostBuilder = new WebHostBuilder()
-            .UseKestrel(options =>
-            {
-                options.ListenAnyIP(port);
-            })
-            .ConfigureServices(services =>
-            {
-                services.AddSingleton(fileStore);
-                if (authPassword != null)
-                {
-                    // Store password for BasicAuthenticationMiddleware
-                    services.AddSingleton(provider => new BasicAuthenticationConfig(authPassword, "FileStore API"));
-                }
-            })
-            .Configure(app =>
-            {
-                if (authPassword != null)
-                {
-                    app.UseMiddleware<BasicAuthenticationMiddleware>();
-                }
-                app.UseMiddleware<FileStoreHttpServerMiddleware>();
-            });
+        var builder = WebApplication.CreateBuilder();
 
-        using var webHost = hostBuilder.Build();
+        builder.WebHost.UseKestrel(options =>
+        {
+            options.ListenAnyIP(port);
+        });
+
+        builder.Services.AddSingleton(fileStore);
+
+        if (authPassword is not null)
+        {
+            // Store password for BasicAuthenticationMiddleware
+            builder.Services.AddSingleton(provider => new BasicAuthenticationConfig(authPassword, "FileStore API"));
+        }
+
+        using var app = builder.Build();
+
+        if (authPassword is not null)
+        {
+            app.UseMiddleware<BasicAuthenticationMiddleware>();
+        }
+
+        app.UseMiddleware<FileStoreHttpServerMiddleware>();
 
         Console.WriteLine($"Server started. Listening on http://localhost:{port}");
         Console.WriteLine("Press Ctrl+C to stop the server.");
 
-        webHost.Start();
+        app.StartAsync().Wait();
 
         // Wait for shutdown signal
         var cancellationTokenSource = new System.Threading.CancellationTokenSource();
@@ -2770,7 +2770,7 @@ public class Program
         }
 
         Console.WriteLine("Shutting down...");
-        webHost.StopAsync().Wait();
+        app.StopAsync().Wait();
 
         return 0;
     }

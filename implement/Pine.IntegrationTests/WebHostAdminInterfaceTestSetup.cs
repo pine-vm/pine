@@ -1,5 +1,8 @@
 using ElmTime.Platform.WebService;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Pine.Core;
 using Pine.Core.Addressing;
 using Pine.Core.IO;
@@ -13,30 +16,34 @@ namespace Pine.IntegrationTests;
 
 public class WebHostAdminInterfaceTestSetup : IDisposable
 {
-    private static int instanceCounter = 0;
+    private static int s_instanceCounter = 0;
 
-    private readonly int instanceId = Interlocked.Increment(ref instanceCounter);
+    private readonly int _instanceId = Interlocked.Increment(ref s_instanceCounter);
 
-    private string PublicWebHostUrlDefault => "http://localhost:" + (35491 + instanceId);
+    private string PublicWebHostUrlDefault =>
+        "http://localhost:" + (35491 + _instanceId);
 
-    private string AdminWebHostUrlDefault => "http://localhost:" + (19372 + instanceId);
+    private string AdminWebHostUrlDefault =>
+        "http://localhost:" + (19372 + _instanceId);
 
 
-    private readonly string? publicWebHostUrlOverride;
+    private readonly string? _publicWebHostUrlOverride;
 
-    private readonly string? adminWebHostUrlOverride;
+    private readonly string? _adminWebHostUrlOverride;
 
-    public string PublicWebHostUrl => publicWebHostUrlOverride ?? PublicWebHostUrlDefault;
+    public string PublicWebHostUrl =>
+        _publicWebHostUrlOverride ?? PublicWebHostUrlDefault;
 
-    public string AdminWebHostUrl => adminWebHostUrlOverride ?? AdminWebHostUrlDefault;
+    public string AdminWebHostUrl =>
+        _adminWebHostUrlOverride ?? AdminWebHostUrlDefault;
 
-    private readonly string testDirectory;
+    private readonly string _testDirectory;
 
-    private readonly string? adminPassword;
+    private readonly string? _adminPassword;
 
-    private readonly Func<IWebHostBuilder, IWebHostBuilder>? webHostBuilderMap;
+    private readonly Func<WebApplicationBuilder, WebApplicationBuilder>? _webAppBuilderMap;
 
-    public string ProcessStoreDirectory => Path.Combine(testDirectory, "process-store");
+    public string ProcessStoreDirectory => Path.Combine(_testDirectory, "process-store");
 
     private IFileStore DefaultFileStore =>
         new FileStoreFromSystemIOFile(
@@ -49,24 +56,41 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
                 MaxRetryDelay: TimeSpan.FromMilliseconds(1000)
             ));
 
-    private readonly IFileStore fileStore;
+    private readonly IFileStore _fileStore;
 
-    public IWebHost StartWebHost(
+    public WebApplication StartWebHost(
          Func<IFileStore, IFileStore>? processStoreFileStoreMap = null)
     {
-        var webHost =
-            (webHostBuilderMap ?? (builder => builder))
-            (Microsoft.AspNetCore.WebHost.CreateDefaultBuilder()
-            .UseUrls(AdminWebHostUrl)
-            .WithSettingPublicWebHostUrls([PublicWebHostUrl])
-            .WithSettingAdminPassword(adminPassword)
-            .UseStartup<StartupAdminInterface>()
-            .WithProcessStoreFileStore(processStoreFileStoreMap?.Invoke(fileStore) ?? fileStore))
-            .Build();
+        var builder = WebApplication.CreateBuilder();
 
-        webHost.StartAsync().Wait();
+        builder.WebHost.UseUrls(AdminWebHostUrl);
 
-        return webHost;
+        builder.Configuration[Configuration.PublicWebHostUrlsSettingKey] = PublicWebHostUrl;
+        builder.Configuration[Configuration.AdminPasswordSettingKey] = _adminPassword;
+
+        var effectiveFileStore = processStoreFileStoreMap?.Invoke(_fileStore) ?? _fileStore;
+
+        builder.Services.AddSingleton(new FileStoreForProcessStore(effectiveFileStore));
+
+        if (_webAppBuilderMap is not null)
+            builder = _webAppBuilderMap(builder);
+
+        StartupAdminInterface.ConfigureServices(builder.Services);
+
+        var app = builder.Build();
+
+        var startup = new StartupAdminInterface(app.Services.GetRequiredService<ILogger<StartupAdminInterface>>());
+
+        startup.Configure(
+            app,
+            app.Environment,
+            app.Lifetime,
+            app.Services.GetRequiredService<Func<DateTimeOffset>>(),
+            app.Services.GetRequiredService<FileStoreForProcessStore>());
+
+        app.StartAsync().Wait();
+
+        return app;
     }
 
     public static WebHostAdminInterfaceTestSetup Setup(
@@ -78,12 +102,16 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
             adminPassword: adminPassword,
             fileStore: fileStore,
             deployAppAndInitElmState: deployAppAndInitElmState,
-            webHostBuilderMap:
-            builder => builder.WithSettingDateTimeOffsetDelegate(persistentProcessHostDateTime ?? (() => DateTimeOffset.UtcNow)),
+            webAppBuilderMap:
+            builder =>
+            {
+                builder.Services.AddSingleton(persistentProcessHostDateTime ?? (() => DateTimeOffset.UtcNow));
+                return builder;
+            },
             persistentProcessHostDateTime: persistentProcessHostDateTime);
 
     public static WebHostAdminInterfaceTestSetup Setup(
-        Func<IWebHostBuilder, IWebHostBuilder>? webHostBuilderMap,
+        Func<WebApplicationBuilder, WebApplicationBuilder>? webAppBuilderMap,
         string? adminPassword = null,
         IFileStore? fileStore = null,
         PineValue? deployAppAndInitElmState = null,
@@ -98,7 +126,7 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
             adminPassword: adminPassword,
             fileStore: fileStore,
             deployAppAndInitElmState: deployAppAndInitElmState,
-            webHostBuilderMap: webHostBuilderMap,
+            webAppBuilderMap: webAppBuilderMap,
             adminWebHostUrlOverride: adminWebHostUrlOverride,
             publicWebHostUrlOverride: publicWebHostUrlOverride,
             persistentProcessHostDateTime: persistentProcessHostDateTime);
@@ -131,20 +159,20 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
 
     public System.Net.Http.HttpClient SetDefaultRequestHeaderAuthorizeForAdmin(System.Net.Http.HttpClient client)
     {
-        if (adminPassword == null)
+        if (_adminPassword is null)
             return client;
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
             "Basic",
             Convert.ToBase64String(Encoding.UTF8.GetBytes(
-                Configuration.BasicAuthenticationForAdmin(adminPassword))));
+                Configuration.BasicAuthenticationForAdmin(_adminPassword))));
 
         return client;
     }
 
     public void Dispose()
     {
-        Directory.Delete(testDirectory, true);
+        Directory.Delete(_testDirectory, true);
 
         GC.SuppressFinalize(this);
     }
@@ -154,20 +182,20 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
         string? adminPassword,
         IFileStore? fileStore,
         PineValue? deployAppAndInitElmState,
-        Func<IWebHostBuilder, IWebHostBuilder>? webHostBuilderMap,
+        Func<WebApplicationBuilder, WebApplicationBuilder>? webAppBuilderMap,
         string? adminWebHostUrlOverride,
         string? publicWebHostUrlOverride,
         Func<DateTimeOffset>? persistentProcessHostDateTime = null)
     {
-        this.testDirectory = testDirectory;
+        this._testDirectory = testDirectory;
 
         fileStore ??= DefaultFileStore;
 
-        this.adminPassword = adminPassword ?? "notempty";
-        this.fileStore = fileStore;
-        this.webHostBuilderMap = webHostBuilderMap;
-        this.adminWebHostUrlOverride = adminWebHostUrlOverride;
-        this.publicWebHostUrlOverride = publicWebHostUrlOverride;
+        this._adminPassword = adminPassword ?? "notempty";
+        this._fileStore = fileStore;
+        this._webAppBuilderMap = webAppBuilderMap;
+        this._adminWebHostUrlOverride = adminWebHostUrlOverride;
+        this._publicWebHostUrlOverride = publicWebHostUrlOverride;
 
         if (deployAppAndInitElmState is null)
             return;

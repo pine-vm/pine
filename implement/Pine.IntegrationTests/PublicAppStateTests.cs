@@ -49,7 +49,7 @@ public class PublicAppStateTests
                 new ServerAndElmAppConfig(
                     ServerConfig: new WebServiceConfigJson(httpRequestEventSizeLimit: 1_000_000),
                     ProcessHttpRequestAsync: MockProcessRequest,
-                    InitOrMigrateCmds: null,
+                    InitOrMigrateCmds: [],
                     DisableLetsEncrypt: true,
                     DisableHttps: true),
                 GetDateTimeOffset);
@@ -153,7 +153,7 @@ public class PublicAppStateTests
                 new ServerAndElmAppConfig(
                     ServerConfig: new WebServiceConfigJson(httpRequestEventSizeLimit: 50), // 50 bytes limit
                     ProcessHttpRequestAsync: MockProcessRequest,
-                    InitOrMigrateCmds: null,
+                    InitOrMigrateCmds: [],
                     DisableLetsEncrypt: true,
                     DisableHttps: true),
                 GetDateTimeOffset);

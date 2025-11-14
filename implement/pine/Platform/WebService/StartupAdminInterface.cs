@@ -154,7 +154,11 @@ public class StartupAdminInterface
             }
         }
 
-        appLifetime.ApplicationStopping.Register(stopPublicApp);
+        appLifetime.ApplicationStopping.Register(() =>
+        {
+            logger.LogInformation("Application stopping, stopping the public app if running.");
+            stopPublicApp();
+        });
 
         var processStoreWriter =
             new ProcessStoreWriterInFileStore(

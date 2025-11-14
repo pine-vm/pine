@@ -7,6 +7,8 @@ using System.Text;
 using ElmTime.Platform.WebService;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Pine.Core;
 using Pine.Core.Addressing;
 using Pine.Core.Files;
@@ -16,7 +18,7 @@ namespace ElmTime;
 
 public class RunServer
 {
-    public static IWebHost BuildWebHostToRunServer(
+    public static Microsoft.AspNetCore.Builder.WebApplication BuildWebHostToRunServer(
         string? processStorePath,
         string? processStoreReadonlyPath,
         string? adminInterfaceUrls,
@@ -36,7 +38,7 @@ public class RunServer
             Console.WriteLine("Completed deleting the previous process state from '" + processStorePath + "'.");
         }
 
-        IFileStore buildProcessStoreFileStore()
+        IFileStore BuildProcessStoreFileStore()
         {
             if (processStorePath is not null)
             {
@@ -59,14 +61,14 @@ public class RunServer
                 new FileStoreFromWriterAndReader(inMemoryFileStore, inMemoryFileStore);
         }
 
-        var processStoreFileStore = buildProcessStoreFileStore();
+        var processStoreFileStore = BuildProcessStoreFileStore();
 
         if (processStoreReadonlyPath is not null)
         {
             Console.WriteLine("Merging read-only process store from '" + processStoreReadonlyPath + "'.");
 
             processStoreFileStore =
-                processStoreFileStore?.MergeReader(
+                processStoreFileStore.MergeReader(
                     new FileStoreFromSystemIOFile(processStoreReadonlyPath),
                     promoteOnReadFileContentFromSecondary: true);
         }
@@ -112,7 +114,7 @@ public class RunServer
                 };
 
             var initElmAppState =
-                (deletePreviousProcess || processStorePath == null) && copyProcess is null;
+                (deletePreviousProcess || processStorePath is null) && copyProcess is null;
 
             var compositionLogEvent =
                 Platform.WebService.ProcessStoreSupportingMigrations.CompositionLogRecordInFile.CompositionEvent.EventForDeployAppConfig(
@@ -129,18 +131,39 @@ public class RunServer
                 processStoreFileStore.SetFileContent(filePath, fileContent);
         }
 
-        var webHostBuilder =
-            Microsoft.AspNetCore.WebHost.CreateDefaultBuilder()
-                .ConfigureAppConfiguration(builder => builder.AddEnvironmentVariables("APPSETTING_"))
-                .UseUrls(adminInterfaceUrls)
-                .UseStartup<StartupAdminInterface>()
-                .WithSettingPublicWebHostUrls(publicAppUrls)
-                .WithProcessStoreFileStore(processStoreFileStore);
+        var builder = Microsoft.AspNetCore.Builder.WebApplication.CreateBuilder();
+
+        builder.Configuration.AddEnvironmentVariables("APPSETTING_");
+
+        if (adminInterfaceUrls is not null)
+            builder.WebHost.UseUrls(adminInterfaceUrls);
+
+        builder.Services.AddSingleton(new FileStoreForProcessStore(processStoreFileStore));
+
+        if (publicAppUrls is not null)
+        {
+            builder.Configuration[Configuration.PublicWebHostUrlsSettingKey] = string.Join(",", publicAppUrls);
+        }
 
         if (adminPassword is not null)
-            webHostBuilder = webHostBuilder.WithSettingAdminPassword(adminPassword);
+        {
+            builder.Configuration[Configuration.AdminPasswordSettingKey] = adminPassword;
+        }
 
-        return webHostBuilder.Build();
+        StartupAdminInterface.ConfigureServices(builder.Services);
+
+        var app = builder.Build();
+
+        var startup = new StartupAdminInterface(app.Services.GetRequiredService<ILogger<StartupAdminInterface>>());
+
+        startup.Configure(
+            app,
+            app.Environment,
+            app.Lifetime,
+            app.Services.GetRequiredService<Func<DateTimeOffset>>(),
+            app.Services.GetRequiredService<FileStoreForProcessStore>());
+
+        return app;
     }
 
     public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> LoadFilesForRestoreFromPathAndLogToConsole(
@@ -246,7 +269,7 @@ public class RunServer
 
                 var response = sourceHttpClient.GetAsync(httpRequestPath).Result;
 
-                if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                if (response.StatusCode is System.Net.HttpStatusCode.NotFound)
                     return null;
 
                 if (!response.IsSuccessStatusCode)

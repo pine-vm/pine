@@ -3,6 +3,7 @@ using ElmTime.Platform.WebService;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Hosting;
 using Pine.Core;
 using Pine.Core.Addressing;
 using Pine.Core.Files;
@@ -542,43 +543,40 @@ public class WebServiceTests
     {
         const string echoServerUrl = "http://localhost:6789/";
 
-        var echoWebHostBuilder =
-            Microsoft.AspNetCore.WebHost.CreateDefaultBuilder()
-            .Configure(app =>
-            {
-                app.Run(async context =>
-                {
-                    var requestRecord = await Asp.AsInterfaceHttpRequestAsync(context.Request);
+        var echoAppBuilder = WebApplication.CreateBuilder();
+        echoAppBuilder.WebHost.UseUrls(echoServerUrl);
 
-                    var requestRecordSerialFormat =
-                    new TestAppInterface.HttpProxyWebApp.HttpRequest(
-                        method: requestRecord.Method,
-                        uri: requestRecord.Uri,
-                        bodyAsBase64:
-                        Maybe.NothingFromNull(
-                            requestRecord.Body is { } body
-                            ?
-                            Convert.ToBase64String(body.Span)
-                            :
-                            null),
-                        headers:
-                        [..requestRecord.Headers
-                        .Select(h => new TestAppInterface.HttpProxyWebApp.HttpHeader(
-                            name: h.Name,
-                            values: [..h.Values]))
-                        ]);
+        using var echoApp = echoAppBuilder.Build();
 
-                    context.Response.StatusCode = 200;
+        echoApp.Run(async context =>
+        {
+            var requestRecord = await Asp.AsInterfaceHttpRequestAsync(context.Request);
 
-                    await context.Response.WriteAsync(
-                        System.Text.Json.JsonSerializer.Serialize(requestRecordSerialFormat));
-                });
-            })
-            .UseUrls(echoServerUrl);
+            var requestRecordSerialFormat =
+            new TestAppInterface.HttpProxyWebApp.HttpRequest(
+                method: requestRecord.Method,
+                uri: requestRecord.Uri,
+                bodyAsBase64:
+                Maybe.NothingFromNull(
+                    requestRecord.Body is { } body
+                    ?
+                    Convert.ToBase64String(body.Span)
+                    :
+                    null),
+                headers:
+                [..requestRecord.Headers
+                .Select(h => new TestAppInterface.HttpProxyWebApp.HttpHeader(
+                    name: h.Name,
+                    values: [..h.Values]))
+                ]);
 
-        using var echoServer = echoWebHostBuilder.Build();
+            context.Response.StatusCode = 200;
 
-        echoServer.Start();
+            await context.Response.WriteAsync(
+                System.Text.Json.JsonSerializer.Serialize(requestRecordSerialFormat));
+        });
+
+        echoApp.StartAsync().Wait();
 
         using var testSetup =
             WebHostAdminInterfaceTestSetup.Setup(
@@ -824,6 +822,8 @@ public class WebServiceTests
                         StartupAdminInterface.PathApiDeployAndInitAppState,
                         new ByteArrayContent(deploymentZipArchive));
             }
+
+            await server.StopAsync();
         }
 
         foreach (var eventsAndExpectedResponsesBatch in eventsAndExpectedResponsesBatches)
@@ -861,6 +861,8 @@ public class WebServiceTests
                 httpResponseContent.Should().Be(expectedResponse,
                     "server response matches " + expectedResponse);
             }
+
+            await server.StopAsync();
         }
     }
 
@@ -890,14 +892,14 @@ public class WebServiceTests
                     new StringContent(stateToTriggerInvalidMigration, System.Text.Encoding.UTF8));
 
             httpResponse.IsSuccessStatusCode
-                .Should().BeTrue("Set state httpResponse.IsSuccessStatusCode (" + await httpResponse.Content?.ReadAsStringAsync() + ")");
+                .Should().BeTrue("Set state httpResponse.IsSuccessStatusCode (" + await httpResponse.Content.ReadAsStringAsync() + ")");
         }
 
         using (var client = testSetup.BuildPublicAppHttpClient())
         {
             var httpResponse = await client.GetAsync("");
 
-            (await httpResponse.Content?.ReadAsStringAsync())
+            (await httpResponse.Content.ReadAsStringAsync())
                 .Should().Be(stateToTriggerInvalidMigration,
                 "Get same state back.");
         }
@@ -968,14 +970,14 @@ public class WebServiceTests
                     new ByteArrayContent(deploymentZipArchive));
 
             migrateHttpResponse.IsSuccessStatusCode
-                .Should().BeTrue("migrateHttpResponse.IsSuccessStatusCode (" + await migrateHttpResponse.Content?.ReadAsStringAsync() + ")");
+                .Should().BeTrue("migrateHttpResponse.IsSuccessStatusCode (" + await migrateHttpResponse.Content.ReadAsStringAsync() + ")");
         }
 
         using (var client = testSetup.BuildPublicAppHttpClient())
         {
             var httpResponse = await client.GetAsync("");
 
-            (await httpResponse.Content?.ReadAsStringAsync())
+            (await httpResponse.Content.ReadAsStringAsync())
                 .Should().Be(stateNotTriggeringInvalidMigration.Replace("sometext", "sometext8"),
                 "Get expected state from public app, reflecting the mapping coded in the Elm migration code.");
         }
@@ -1212,7 +1214,7 @@ public class WebServiceTests
 
             replicaSetup =
                 WebHostAdminInterfaceTestSetup.Setup(
-                    webHostBuilderMap: null,
+                    webAppBuilderMap: null,
                     adminWebHostUrlOverride: replicaAdminInterfaceUrl,
                     publicWebHostUrlOverride: replicaPublicAppUrl,
                     adminPassword: replicaAdminPassword);
@@ -1224,6 +1226,8 @@ public class WebServiceTests
                 sitePassword: replicaAdminPassword,
                 sourcePath: testSetup.AdminWebHostUrl,
                 sourcePassword: originalHostAdminPassword);
+
+            await server.StopAsync();
         }
 
         using (var replicaHost = replicaSetup.StartWebHost())
@@ -1541,14 +1545,17 @@ public class WebServiceTests
 
         var lastWriteOperation = storeHistoryLessTrailingReduction.Last();
 
-        lastWriteOperation.AppendFileContent?.path.Should().NotBeNull("Last write operation was append");
+        if (lastWriteOperation.AppendFileContent?.path is not { } appendFileContentPath)
+        {
+            throw new InvalidOperationException("Missing append file content path in last write operation.");
+        }
 
         var storeHistoryWithCrash =
             storeHistoryLessTrailingReduction
             .SkipLast(1)
             .Append(new RecordingFileStoreWriter.WriteOperation
             {
-                AppendFileContent = (lastWriteOperation.AppendFileContent.Value.path, Enumerable.Repeat((byte)4, 123).ToArray()),
+                AppendFileContent = (appendFileContentPath, Enumerable.Repeat((byte)4, 123).ToArray()),
             });
 
         var fileStoreReaderAfterCrash =
