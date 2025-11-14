@@ -1615,9 +1615,18 @@ public class WebServiceTests
 
         using var publicAppClient = testSetup.BuildPublicAppHttpClient();
 
-        for (var delay = 0; delay < 5; ++delay)
         {
-            var expectedDelayMilliseconds = delay * 1000;
+            // Warmup
+
+            var httpRequest = new HttpRequestMessage(HttpMethod.Get, "");
+
+            var httpResponse =
+                await publicAppClient.SendAsync(httpRequest);
+        }
+
+        for (var delay = 0; delay < 4; ++delay)
+        {
+            var expectedDelayMilliseconds = delay * 1_000;
 
             var httpRequest = new HttpRequestMessage(HttpMethod.Get, "");
 
@@ -1677,19 +1686,42 @@ public class WebServiceTests
                 },
                 cancellationToken: timeUpdateTaskCancellation.Token);
 
-        for (var delay = 0; delay < 5; ++delay)
+        var httpRequestId = 100;
+
+        static WebServiceInterface.HttpRequestProperties BuildHttpRequestToLongPollingEndpoint(
+            int delayMilliseconds) =>
+            new(
+                Method: "POST",
+                Uri: "/test",
+                Body: null,
+                Headers:
+                [new WebServiceInterface.HttpHeader(
+                    Name: "delay-milliseconds",
+                    Values: [delayMilliseconds.ToString()])]);
+
         {
-            var expectedDelayMilliseconds = delay * 1000;
+            // Warmup
 
             var httpRequest =
-                new WebServiceInterface.HttpRequestProperties(
-                    Method: "POST",
-                    Uri: "/test",
-                    Body: null,
-                    Headers:
-                    [new WebServiceInterface.HttpHeader(
-                        Name: "delay-milliseconds",
-                        Values: [expectedDelayMilliseconds.ToString()])]);
+                BuildHttpRequestToLongPollingEndpoint(delayMilliseconds: 0);
+
+            var httpResponse =
+                await webServiceApp.HttpRequestSendAsync(
+                    new WebServiceInterface.HttpRequestEventStruct
+                    (
+                        HttpRequestId: "r-" + httpRequestId++.ToString(),
+                        PosixTimeMilli: DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                        Request: httpRequest,
+                        RequestContext: new WebServiceInterface.HttpRequestContext(ClientAddress: null)
+                    ));
+        }
+
+        for (var delay = 0; delay < 4; ++delay)
+        {
+            var expectedDelayMilliseconds = delay * 1_000;
+
+            var httpRequest =
+                BuildHttpRequestToLongPollingEndpoint(expectedDelayMilliseconds);
 
             var httpStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
@@ -1697,7 +1729,7 @@ public class WebServiceTests
                 await webServiceApp.HttpRequestSendAsync(
                     new WebServiceInterface.HttpRequestEventStruct
                     (
-                        HttpRequestId: "r-" + DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                        HttpRequestId: "r-" + httpRequestId++.ToString(),
                         PosixTimeMilli: DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
                         Request: httpRequest,
                         RequestContext: new WebServiceInterface.HttpRequestContext(ClientAddress: null)
