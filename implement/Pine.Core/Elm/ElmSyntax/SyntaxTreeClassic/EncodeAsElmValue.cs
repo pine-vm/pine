@@ -820,7 +820,7 @@ internal class EncodeAsElmValue
                 ]);
     }
 
-    private static ElmValue EncodeRange(SyntaxTreeClassic.Range range)
+    private static ElmValue EncodeRange(Range range)
     {
         return
             new ElmValue.ElmRecord(

@@ -992,7 +992,7 @@ public class ElmSyntaxParser
 
                 var moduleNameNode =
                     new Node<ModuleName>(
-                        new SyntaxTreeClassic.Range(firstModuleNamePart.Start, moduleNameParts.Last().End),
+                        new SyntaxTypes.Range(firstModuleNamePart.Start, moduleNameParts.Last().End),
                         [.. moduleNameParts.Select(t => t.Lexeme)]);
 
                 ConsumeAllTrivia();
@@ -1100,7 +1100,7 @@ public class ElmSyntaxParser
                 // Create a Node<IReadOnlyList<string>> for the module name.
                 var moduleNameNode =
                     new Node<ModuleName>(
-                        new SyntaxTreeClassic.Range(firstModuleNamePart.Start, moduleNameParts.Last().End),
+                        new SyntaxTypes.Range(firstModuleNamePart.Start, moduleNameParts.Last().End),
                         [.. moduleNameParts.Select(t => t.Lexeme)]);
 
                 ConsumeAllTrivia();
@@ -1112,7 +1112,7 @@ public class ElmSyntaxParser
                 var moduleNodeValue = new Module.PortModule(moduleData);
 
                 var moduleNode = new Node<Module>(
-                    new SyntaxTreeClassic.Range(portKeyword.Start, exposingNode.Range.End),
+                    new SyntaxTypes.Range(portKeyword.Start, exposingNode.Range.End),
                     moduleNodeValue);
 
                 return moduleNode;

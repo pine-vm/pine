@@ -8,11 +8,9 @@ using Pine.Core.Internal;
 using Pine.Core.PineVM;
 using Pine.Core.PopularEncodings;
 using Pine.Elm;
-using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
-using System.Text;
 
 namespace Pine.IntegrationTests.CodeAnalysis;
 
@@ -27,7 +25,7 @@ public class CodeAnalysisTestHelper
             typeof(KernelFunction),
             typeof(KernelFunctionSpecialized),
             typeof(KernelFunctionFused),
-            typeof(Core.PineVM.PineKernelValues),
+            typeof(PineKernelValues),
             typeof(IReadOnlyDictionary<,>),
             typeof(IntegerEncoding),
             typeof(StringEncoding),
@@ -55,21 +53,11 @@ public class CodeAnalysisTestHelper
         System.Func<DeclQualifiedName, bool> includeDeclaration,
         PineVMParseCache parseCache)
     {
-        var (staticProgram, declsFailed) =
-            Core.CodeAnalysis.CodeAnalysis.ParseAsStaticMonomorphicProgram(
+        return
+            Core.Tests.Elm.ElmCompilerTests.TestCase.ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
                 parsedEnvironment,
-                includeDeclaration: includeDeclaration,
-                parseCache: parseCache)
-            .Extract(err => throw new System.Exception("Failed parsing as static program: " + err));
-
-        foreach (var decl in declsFailed)
-        {
-            throw new System.Exception("Failed to parse declaration " + decl.Key.FullName + ": " + decl.Value);
-        }
-
-        staticProgram.Should().NotBeNull();
-
-        return staticProgram;
+                includeDeclaration,
+                parseCache);
     }
 
     public static (ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedEnv, StaticProgram staticProgram)
@@ -78,57 +66,8 @@ public class CodeAnalysisTestHelper
         System.Func<DeclQualifiedName, bool> includeDeclaration,
         PineVMParseCache parseCache)
     {
-        var elmModulesByNameDict =
-            elmModulesTexts
-            .ToFrozenDictionary(
-                moduleText =>
-                Core.Elm.ElmSyntax.ElmModule.ParseModuleName(moduleText)
-                .Extract(err => throw new System.Exception("Failed parsing module name from module text: " + err)),
-                moduleText => moduleText,
-                comparer: EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
-
-        var elmJsonFile =
-            """
-            {
-                "type": "application",
-                "source-directories": [
-                    "src"
-                ],
-                "elm-version": "0.19.1",
-                "dependencies": {
-                    "direct": {
-                        "elm/core": "1.0.5"
-                    },
-                    "indirect": {
-                    }
-                },
-                "test-dependencies": {
-                    "direct": {
-                    },
-                    "indirect": {
-                    }
-                }
-            }
-            """;
-
         var appCodeTree =
-            BlobTreeWithStringPath.EmptyTree
-            .SetNodeAtPathSorted(
-                ["elm.json"],
-                BlobTreeWithStringPath.Blob(Encoding.UTF8.GetBytes(elmJsonFile)));
-
-        foreach (var (modulePath, moduleText) in elmModulesByNameDict)
-        {
-            var moduleName = modulePath[modulePath.Count - 1];
-
-            IReadOnlyList<string> moduleFilePath =
-                ["src", .. modulePath.SkipLast(1), moduleName + ".elm"];
-
-            appCodeTree =
-                appCodeTree.SetNodeAtPathSorted(
-                    moduleFilePath,
-                    BlobTreeWithStringPath.Blob(Encoding.UTF8.GetBytes(moduleText)));
-        }
+            Core.Tests.Elm.ElmCompilerTests.TestCase.FileTreeFromElmModulesWithoutPackages(elmModulesTexts);
 
         var rootFilePaths =
             appCodeTree.EnumerateBlobsTransitive()

@@ -669,13 +669,21 @@ public static class ElmValueEncoding
     /// </returns>
     public static PineValue ElmCharAsPineValue(ElmValue.ElmChar elmChar)
     {
-        var byte0 = (byte)(elmChar.Value >> 24);
+        return ElmCharAsPineValue(elmChar.Value);
+    }
 
-        var byte1 = (byte)(elmChar.Value >> 16);
+    /// <summary>
+    /// Encodes an Elm char literal code as a 4-byte big-endian <see cref="PineValue.BlobValue"/>.
+    /// </summary>
+    public static PineValue ElmCharAsPineValue(int charCode)
+    {
+        var byte0 = (byte)(charCode >> 24);
 
-        var byte2 = (byte)(elmChar.Value >> 8);
+        var byte1 = (byte)(charCode >> 16);
 
-        var byte3 = (byte)elmChar.Value;
+        var byte2 = (byte)(charCode >> 8);
+
+        var byte3 = (byte)charCode;
 
         if (byte0 is 0 && byte1 is 0)
         {
