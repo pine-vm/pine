@@ -40,10 +40,6 @@ record DelegatingProgressWriter(
 
 public sealed class ProcessLiveRepresentation : IAsyncDisposable
 {
-    private static readonly TimeSpan s_storeReductionIntervalDefault = TimeSpan.FromMinutes(10);
-
-    private readonly Pine.CompilePineToDotNet.CompilerMutableCache _hashCache = new();
-
     private readonly System.Threading.Lock _processLock = new();
 
     private readonly Func<DateTimeOffset> _getDateTimeOffset;
@@ -55,12 +51,6 @@ public sealed class ProcessLiveRepresentation : IAsyncDisposable
     private readonly VolatileProcessHost _volatileProcessHost;
 
     private readonly IProgressWriter _progressWriter;
-
-    private (PineValue state, CompositionLogRecordInFile.CompositionEvent compositionLogEvent, string hashBase16)? _lastAppStatePersisted;
-
-    private StoreAppStateResetAndReductionReport? _lastStoreReduction = null;
-
-    private DateTimeOffset StartTime { init; get; }
 
     private readonly System.Threading.Timer _notifyTimeHasArrivedTimer;
 
@@ -113,7 +103,6 @@ public sealed class ProcessLiveRepresentation : IAsyncDisposable
     {
         _getDateTimeOffset = getDateTimeOffset;
         _progressWriter = progressWriter;
-        StartTime = getDateTimeOffset();
 
         _appConfigParsed = webServiceConfig;
 

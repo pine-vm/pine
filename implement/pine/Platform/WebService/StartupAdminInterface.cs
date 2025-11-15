@@ -557,9 +557,9 @@ public class StartupAdminInterface
             }
         }
 
-        IReadOnlyList<ApiRoute> apiRoutes = null;
+        IReadOnlyList<ApiRoute> apiRoutes = [];
 
-        IEnumerable<Gui.EventToElmApp> handleMessageFromGui(
+        IEnumerable<Gui.EventToElmApp> HandleMessageFromGui(
             Gui.MessageToHost messageFromGui) =>
             messageFromGui switch
             {
@@ -685,7 +685,7 @@ public class StartupAdminInterface
                                 result: Result<string, string>.ok("Successfully applied this composition event to the process.")
                             ));
 
-                            await writeAsHttpResponse(setAppStateResult);
+                            await WriteAsHttpResponse(setAppStateResult);
                         })
                     ),
                     new ApiRoute
@@ -753,7 +753,7 @@ public class StartupAdminInterface
                             {
                                 var guiRequest = await context.Request.ReadFromJsonAsync<Gui.MessageToHost>();
 
-                                var eventsToGui = handleMessageFromGui(guiRequest);
+                                var eventsToGui = HandleMessageFromGui(guiRequest);
 
                                 context.Response.StatusCode = 200;
 
@@ -1049,9 +1049,9 @@ public class StartupAdminInterface
             }
         }
 
-        async System.Threading.Tasks.Task writeAsHttpResponse<ErrT, OkT>(Result<ErrT, OkT> result)
+        async System.Threading.Tasks.Task WriteAsHttpResponse<ErrT, OkT>(Result<ErrT, OkT> result)
         {
-            static string reportAsString(object report)
+            static string ReportAsString(object? report)
             {
                 return report switch
                 {
@@ -1063,7 +1063,10 @@ public class StartupAdminInterface
                 };
             }
 
-            var (statusCode, responseBodyString) = result.Unpack(err => (400, reportAsString(err)), ok => (200, reportAsString(ok)));
+            var (statusCode, responseBodyString) =
+                result.Unpack(
+                    err => (400, ReportAsString(err)),
+                    ok => (200, ReportAsString(ok)));
 
             context.Response.StatusCode = statusCode;
             await context.Response.WriteAsync(responseBodyString);

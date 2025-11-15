@@ -1323,8 +1323,13 @@ public class Program
             var elmJsonFileParsed =
                 System.Text.Json.JsonSerializer.Deserialize<ElmJsonStructure>(elmJsonFile.Bytes.Span);
 
+            if (elmJsonFileParsed?.SourceDirectories is not { } sourceDirs)
+            {
+                return null;
+            }
+
             return
-                [..elmJsonFileParsed?.SourceDirectories
+                [..sourceDirs
                 .Select(flat => flat.Split('/', '\\'))
                 ];
         }

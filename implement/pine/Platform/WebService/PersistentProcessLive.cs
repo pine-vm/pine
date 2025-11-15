@@ -588,7 +588,7 @@ public sealed class PersistentProcessLive : IAsyncDisposable
         var initialProcessRepresentation = new PersistentProcessLiveRepresentationDuringRestore(
             LastCompositionLogRecordHashBase16: null,
             LastAppConfig: null,
-            InitOrMigrateCmds: null,
+            InitOrMigrateCmds: [],
             LastAppState: null);
 
 
@@ -616,7 +616,7 @@ public sealed class PersistentProcessLive : IAsyncDisposable
                             LastAppConfig =
                             new ProcessAppConfig(reductionWithResolvedDependencies.AppConfig),
                             LastAppState = reductionWithResolvedDependencies.ElmAppState,
-                            InitOrMigrateCmds = null
+                            InitOrMigrateCmds = []
                         });
             }
 
@@ -697,7 +697,7 @@ public sealed class PersistentProcessLive : IAsyncDisposable
                 new PersistentProcessLiveRepresentationDuringRestore(
                     LastCompositionLogRecordHashBase16: processBefore.LastCompositionLogRecordHashBase16,
                     LastAppConfig: processBefore.LastAppConfig,
-                    InitOrMigrateCmds: null,
+                    InitOrMigrateCmds: [],
                     LastAppState: setElmAppState);
         }
 
@@ -781,7 +781,7 @@ public sealed class PersistentProcessLive : IAsyncDisposable
                     LastAppConfig =
                         new ProcessAppConfig(PineValueComposition.FromTreeWithStringPath(appConfig)),
                     LastAppState = appConfigParsed.Init.State,
-                    InitOrMigrateCmds = null
+                    InitOrMigrateCmds = []
                 };
         }
 

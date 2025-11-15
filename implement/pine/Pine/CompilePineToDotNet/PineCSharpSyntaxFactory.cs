@@ -34,7 +34,7 @@ public static class PineCSharpSyntaxFactory
         var branchInvocationBlock =
             SyntaxFactory.Block(
                 SyntaxFactory.SeparatedList(
-                    [..prependStatments,
+                    [..prependStatments ?? [],
                     SyntaxFactory.ReturnStatement(branchInvocation.Syntax)
                     ]));
 

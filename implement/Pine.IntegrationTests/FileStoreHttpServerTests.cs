@@ -1,8 +1,8 @@
 using AwesomeAssertions;
 using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Pine.Core.Http;
 using Pine.Core.IO;
 using System;
@@ -18,41 +18,44 @@ namespace Pine.IntegrationTests;
 
 public class FileStoreHttpServerTests
 {
-    private class TestSetup : IDisposable
+    private sealed class TestSetup : IAsyncDisposable
     {
-        public TestServer Server { get; }
-        public HttpClient Client { get; }
-        public IFileStore FileStore { get; }
+        public WebApplication App { get; private set; }
+        public HttpClient Client { get; private set; }
+        public IFileStore FileStore { get; private set; }
 
         public TestSetup()
         {
             FileStore = new FileStoreFromConcurrentDictionary();
 
-            var builder = new WebHostBuilder()
-                .ConfigureServices(services =>
-                {
-                    services.AddSingleton(FileStore);
-                })
-                .Configure(app =>
-                {
-                    app.UseMiddleware<FileStoreHttpServerMiddleware>();
-                });
+            var builder = WebApplication.CreateBuilder();
+            builder.WebHost.UseTestServer();
+            builder.Services.AddSingleton(FileStore);
 
-            Server = new TestServer(builder);
-            Client = Server.CreateClient();
+            var app = builder.Build();
+            app.UseMiddleware<FileStoreHttpServerMiddleware>();
+
+            App = app;
+            app.Start();
+            Client = app.GetTestClient();
         }
 
-        public void Dispose()
+        public async ValueTask DisposeAsync()
         {
             Client?.Dispose();
-            Server?.Dispose();
+
+            if (App is { } app)
+            {
+                await app.StopAsync();
+                await app.DisposeAsync();
+            }
         }
     }
 
     [Fact]
     public async Task GET_files_returns_404_for_nonexistent_file()
     {
-        using var setup = new TestSetup();
+        await using var setup = new TestSetup();
         var response = await setup.Client.GetAsync("/files/nonexistent.txt");
 
         response.StatusCode.Should().Be(System.Net.HttpStatusCode.NotFound);
@@ -62,7 +65,7 @@ public class FileStoreHttpServerTests
     public async Task GET_files_returns_file_content()
     {
         // Arrange
-        using var setup = new TestSetup();
+        await using var setup = new TestSetup();
         var path = ImmutableList.Create("test", "file.txt");
         var content = "Hello, World!"u8.ToArray();
         setup.FileStore.SetFileContent(path, content);
@@ -82,7 +85,7 @@ public class FileStoreHttpServerTests
     public async Task HEAD_files_returns_headers_for_existing_file()
     {
         // Arrange
-        using var setup = new TestSetup();
+        await using var setup = new TestSetup();
         var path = ImmutableList.Create("test", "file.txt");
         var content = "Hello, World!"u8.ToArray();
         setup.FileStore.SetFileContent(path, content);
@@ -100,7 +103,7 @@ public class FileStoreHttpServerTests
     [Fact]
     public async Task HEAD_files_returns_404_for_nonexistent_file()
     {
-        using var setup = new TestSetup();
+        await using var setup = new TestSetup();
         var request = new HttpRequestMessage(HttpMethod.Head, "/files/nonexistent.txt");
         var response = await setup.Client.SendAsync(request);
 
@@ -111,7 +114,7 @@ public class FileStoreHttpServerTests
     public async Task GET_dirs_returns_directory_listing()
     {
         // Arrange
-        using var setup = new TestSetup();
+        await using var setup = new TestSetup();
         setup.FileStore.SetFileContent(ImmutableList.Create("dir1", "file1.txt"), "content1"u8.ToArray());
         setup.FileStore.SetFileContent(ImmutableList.Create("dir1", "file2.txt"), "content2"u8.ToArray());
         setup.FileStore.SetFileContent(ImmutableList.Create("dir1", "subdir", "file3.txt"), "content3"u8.ToArray());
@@ -134,7 +137,7 @@ public class FileStoreHttpServerTests
     public async Task PUT_files_creates_new_file()
     {
         // Arrange
-        using var setup = new TestSetup();
+        await using var setup = new TestSetup();
         var content = "New file content"u8.ToArray();
 
         // Act
@@ -154,7 +157,7 @@ public class FileStoreHttpServerTests
     public async Task PUT_files_replaces_existing_file()
     {
         // Arrange
-        using var setup = new TestSetup();
+        await using var setup = new TestSetup();
         var path = ImmutableList.Create("existing", "file.txt");
         setup.FileStore.SetFileContent(path, "original content"u8.ToArray());
         var newContent = "updated content"u8.ToArray();
@@ -176,7 +179,7 @@ public class FileStoreHttpServerTests
     public async Task POST_files_appends_to_existing_file()
     {
         // Arrange
-        using var setup = new TestSetup();
+        await using var setup = new TestSetup();
         var path = ImmutableList.Create("append", "file.txt");
         var originalContent = "Hello"u8.ToArray();
         setup.FileStore.SetFileContent(path, originalContent);
@@ -203,7 +206,7 @@ public class FileStoreHttpServerTests
     public async Task DELETE_files_removes_existing_file()
     {
         // Arrange
-        using var setup = new TestSetup();
+        await using var setup = new TestSetup();
         var path = ImmutableList.Create("delete", "file.txt");
         setup.FileStore.SetFileContent(path, "content to delete"u8.ToArray());
 
@@ -221,7 +224,7 @@ public class FileStoreHttpServerTests
     [Fact]
     public async Task DELETE_files_returns_404_for_nonexistent_file()
     {
-        using var setup = new TestSetup();
+        await using var setup = new TestSetup();
         var response = await setup.Client.DeleteAsync("/files/nonexistent.txt");
 
         response.StatusCode.Should().Be(System.Net.HttpStatusCode.NotFound);
@@ -231,7 +234,7 @@ public class FileStoreHttpServerTests
     public async Task PUT_files_with_if_none_match_star_fails_when_file_exists()
     {
         // Arrange
-        using var setup = new TestSetup();
+        await using var setup = new TestSetup();
         var path = ImmutableList.Create("existing", "file.txt");
         setup.FileStore.SetFileContent(path, "existing content"u8.ToArray());
         var newContent = "should not be saved"u8.ToArray();
@@ -256,7 +259,7 @@ public class FileStoreHttpServerTests
     public async Task GET_files_with_accept_json_returns_base64_content()
     {
         // Arrange
-        using var setup = new TestSetup();
+        await using var setup = new TestSetup();
         var path = ImmutableList.Create("test", "file.txt");
         var content = "Hello, World!"u8.ToArray();
         setup.FileStore.SetFileContent(path, content);
@@ -278,7 +281,7 @@ public class FileStoreHttpServerTests
     [Fact]
     public async Task GET_dirs_returns_empty_for_nonexistent_directory()
     {
-        using var setup = new TestSetup();
+        await using var setup = new TestSetup();
         var response = await setup.Client.GetAsync("/dirs/nonexistent");
 
         response.StatusCode.Should().Be(System.Net.HttpStatusCode.OK);
@@ -295,7 +298,7 @@ public class FileStoreHttpServerTests
     public async Task POST_files_requires_x_operation_append_header()
     {
         // Arrange
-        using var setup = new TestSetup();
+        await using var setup = new TestSetup();
         var content = "some content"u8.ToArray();
 
         // Act

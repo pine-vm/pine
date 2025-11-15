@@ -129,7 +129,7 @@ public sealed record StaticAppSnapshottingState : IAsyncDisposable
                 serverAndElmAppConfig: new ServerAndElmAppConfig(
                     ServerConfig: serverConfig,
                     ProcessHttpRequestAsync: _process.ProcessHttpRequestAsync,
-                    InitOrMigrateCmds: null,
+                    InitOrMigrateCmds: [],
                     DisableLetsEncrypt: true,
                     DisableHttps: true),
                 getDateTimeOffset: () => DateTimeOffset.UtcNow);
