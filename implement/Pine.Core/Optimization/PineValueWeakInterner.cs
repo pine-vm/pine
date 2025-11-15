@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Pine.Core.Optimization;
@@ -21,9 +22,8 @@ internal static class PineValueWeakInterner
     {
     }
 
-    // Buckets map to a list of weak refs. We lock per-bucket on the list instance.
-    private static readonly ConcurrentDictionary<ListBucketKey, List<WeakReference<PineValue.ListValue>>> s_listBuckets = new();
-    private static readonly ConcurrentDictionary<BlobBucketKey, List<WeakReference<PineValue.BlobValue>>> s_blobBuckets = new();
+    private static readonly ConcurrentDictionary<ListBucketKey, Bucket<PineValue.ListValue>> s_listBuckets = new();
+    private static readonly ConcurrentDictionary<BlobBucketKey, Bucket<PineValue.BlobValue>> s_blobBuckets = new();
 
     // Probabilistic sweeper configuration
     private const int RandomSweepDenominator = 100_000;      // ~0.01% chance per new bucket
@@ -39,26 +39,16 @@ internal static class PineValueWeakInterner
         var bucket =
             s_listBuckets.GetOrAdd(
                 key,
-                valueFactory: _ => new List<WeakReference<PineValue.ListValue>>(capacity: 1));
+                valueFactory: _ => new Bucket<PineValue.ListValue>());
 
-        lock (bucket)
-        {
-            for (var read = 0; read < bucket.Count; read++)
-            {
-                if (!bucket[read].TryGetTarget(out var target))
-                    continue;
+        if (bucket.TryFind(candidate, out var canonical))
+            return canonical;
 
-                if (ReferenceEquals(target, candidate) || target.Equals(candidate))
-                {
-                    return target;
-                }
-            }
+        var winner = bucket.Add(candidate);
 
-            bucket.Add(new WeakReference<PineValue.ListValue>(candidate));
-            MaybeStartSweep(s_listBuckets);
+        MaybeStartSweep(s_listBuckets);
 
-            return candidate;
-        }
+        return winner;
     }
 
     public static PineValue.BlobValue GetOrAdd(PineValue.BlobValue candidate)
@@ -71,26 +61,16 @@ internal static class PineValueWeakInterner
         var bucket =
             s_blobBuckets.GetOrAdd(
                 key,
-                valueFactory: _ => new List<WeakReference<PineValue.BlobValue>>(capacity: 2));
+                valueFactory: _ => new Bucket<PineValue.BlobValue>());
 
-        lock (bucket)
-        {
-            for (var read = 0; read < bucket.Count; read++)
-            {
-                if (!bucket[read].TryGetTarget(out var target))
-                    continue;
+        if (bucket.TryFind(candidate, out var canonical))
+            return canonical;
 
-                if (ReferenceEquals(target, candidate) || target.Equals(candidate))
-                {
-                    return target;
-                }
-            }
+        var winner = bucket.Add(candidate);
 
-            bucket.Add(new WeakReference<PineValue.BlobValue>(candidate));
-            MaybeStartSweep(s_blobBuckets);
+        MaybeStartSweep(s_blobBuckets);
 
-            return candidate;
-        }
+        return winner;
     }
 
     public static PineValue.ListValue? TryGetCanonical(PineValue.ListValue candidate)
@@ -105,21 +85,9 @@ internal static class PineValueWeakInterner
             return null;
         }
 
-        lock (bucket)
-        {
-            for (var read = 0; read < bucket.Count; read++)
-            {
-                if (!bucket[read].TryGetTarget(out var target))
-                    continue;
-
-                if (ReferenceEquals(target, candidate) || target.Equals(candidate))
-                {
-                    return target;
-                }
-            }
-        }
-
-        return null;
+        return bucket.TryFind(candidate, out var canonical)
+            ? canonical
+            : null;
     }
 
     public static void Register(PineValue.ListValue canonical) => _ = GetOrAdd(canonical);
@@ -133,21 +101,9 @@ internal static class PineValueWeakInterner
             return null;
         }
 
-        lock (bucket)
-        {
-            for (var read = 0; read < bucket.Count; read++)
-            {
-                if (!bucket[read].TryGetTarget(out var target))
-                    continue;
-
-                if (ReferenceEquals(target, candidate) || target.Equals(candidate))
-                {
-                    return target;
-                }
-            }
-        }
-
-        return null;
+        return bucket.TryFind(candidate, out var canonical)
+            ? canonical
+            : null;
     }
 
     public static void Register(PineValue.BlobValue canonical) => _ = GetOrAdd(canonical);
@@ -155,7 +111,7 @@ internal static class PineValueWeakInterner
     // --------------- Probabilistic sweeping ---------------
 
     private static void MaybeStartSweep<TKey, TVal>(
-        ConcurrentDictionary<TKey, List<WeakReference<TVal>>> buckets)
+        ConcurrentDictionary<TKey, Bucket<TVal>> buckets)
         where TKey : notnull
         where TVal : class
     {
@@ -175,7 +131,7 @@ internal static class PineValueWeakInterner
     // --------------- Helpers ---------------
 
     private static void SweepRandomSlice<TKey, TVal>(
-        ConcurrentDictionary<TKey, List<WeakReference<TVal>>> buckets,
+        ConcurrentDictionary<TKey, Bucket<TVal>> buckets,
         int maxTake)
         where TKey : notnull
         where TVal : class
@@ -190,36 +146,15 @@ internal static class PineValueWeakInterner
             if (!buckets.TryGetValue(key, out var bucket))
                 return;
 
-            lock (bucket)
+            var nowEmpty = bucket.SweepAndIsEmpty();
+
+            if (!nowEmpty)
+                return;
+
+            if (buckets.TryGetValue(key, out var current) &&
+                ReferenceEquals(current, bucket))
             {
-                var write = 0;
-
-                for (var read = 0; read < bucket.Count; read++)
-                {
-                    if (bucket[read].TryGetTarget(out _))
-                    {
-                        if (write != read)
-                        {
-                            bucket[write] = bucket[read];
-                        }
-
-                        write++;
-                    }
-                }
-
-                if (write is 0)
-                {
-                    if (buckets.TryGetValue(key, out var current) &&
-                        ReferenceEquals(current, bucket))
-                    {
-                        buckets.TryRemove(key, out _);
-                    }
-                }
-                else
-                {
-                    if (write < bucket.Count)
-                        bucket.RemoveRange(write, bucket.Count - write);
-                }
+                buckets.TryRemove(key, out _);
             }
         }
 
@@ -258,6 +193,118 @@ internal static class PineValueWeakInterner
 
             if (taken >= take)
                 break;
+        }
+    }
+
+    private sealed class Bucket<TVal>
+        where TVal : class
+    {
+        private WeakReference<TVal>[] _entries = [];
+        private readonly Lock _gate = new();
+
+        public bool TryFind(TVal candidate, out TVal canonical)
+        {
+            var snapshot = Volatile.Read(ref _entries);
+
+            for (var read = 0; read < snapshot.Length; read++)
+            {
+                var weak = snapshot[read];
+
+                if (!weak.TryGetTarget(out var target))
+                    continue;
+
+                if (ReferenceEquals(target, candidate) || target.Equals(candidate))
+                {
+                    canonical = target;
+                    return true;
+                }
+            }
+
+            canonical = candidate;
+            return false;
+        }
+
+        public TVal Add(TVal candidate)
+        {
+            lock (_gate)
+            {
+                if (TryFindUnlocked(candidate, out var canonical))
+                {
+                    return canonical;
+                }
+
+                var snapshot = _entries;
+                var newEntries = new WeakReference<TVal>[snapshot.Length + 1];
+
+                Array.Copy(snapshot, newEntries, snapshot.Length);
+
+                newEntries[^1] = new WeakReference<TVal>(candidate);
+
+                Volatile.Write(ref _entries, newEntries);
+
+                return candidate;
+            }
+        }
+
+        public bool SweepAndIsEmpty()
+        {
+            lock (_gate)
+            {
+                var snapshot = _entries;
+
+                if (snapshot.Length is 0)
+                    return true;
+
+                var live = new List<WeakReference<TVal>>(snapshot.Length);
+                var hadDead = false;
+
+                for (var read = 0; read < snapshot.Length; read++)
+                {
+                    var entry = snapshot[read];
+
+                    if (entry.TryGetTarget(out _))
+                    {
+                        live.Add(entry);
+                        continue;
+                    }
+
+                    hadDead = true;
+                }
+
+                if (!hadDead)
+                    return false;
+
+                if (live.Count is 0)
+                {
+                    Volatile.Write(ref _entries, []);
+                    return true;
+                }
+
+                Volatile.Write(ref _entries, [.. live]);
+                return false;
+            }
+        }
+
+        private bool TryFindUnlocked(TVal candidate, out TVal canonical)
+        {
+            var snapshot = _entries;
+
+            for (var read = 0; read < snapshot.Length; read++)
+            {
+                var weak = snapshot[read];
+
+                if (!weak.TryGetTarget(out var target))
+                    continue;
+
+                if (ReferenceEquals(target, candidate) || target.Equals(candidate))
+                {
+                    canonical = target;
+                    return true;
+                }
+            }
+
+            canonical = candidate;
+            return false;
         }
     }
 }
