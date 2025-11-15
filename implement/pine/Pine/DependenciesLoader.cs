@@ -141,7 +141,7 @@ public class DependenciesLoader
         return
             hintUrls
             .Aggregate(
-                seed: Result<ImmutableDictionary<string, string>, ReadOnlyMemory<byte>>.err(ImmutableDictionary<string, string>.Empty),
+                seed: Result<ImmutableDictionary<string, string>, ReadOnlyMemory<byte>>.err([]),
                 func: (aggregate, hintUrl) =>
                 {
                     return

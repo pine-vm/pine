@@ -105,7 +105,7 @@ public class PineIRCompiler
         var prior =
             new NodeCompilationResult(
                 Instructions: [],
-                ImmutableDictionary<Expression, int>.Empty);
+                []);
 
         return
             CompileExpressionTransitive(

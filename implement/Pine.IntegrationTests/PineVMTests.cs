@@ -2513,7 +2513,7 @@ public class PineVMTests
             },
         };
 
-        var parseCache = new Core.CodeAnalysis.PineVMParseCache();
+        var parseCache = new PineVMParseCache();
 
         for (var testCaseIndex = 0; testCaseIndex < testCases.Length; ++testCaseIndex)
         {

@@ -258,10 +258,10 @@ public class PGOTests
 
         };
 
-        static long ReportsAverageInstructionCount(IReadOnlyList<PineVM.EvaluationReport> reports) =>
+        static long ReportsAverageInstructionCount(IReadOnlyList<EvaluationReport> reports) =>
             reports.Sum(report => report.InstructionCount) / reports.Count;
 
-        IReadOnlyList<PineVM.EvaluationReport> RunScenariosWithGivenVM(PineVM.PineVM pineVM) =>
+        IReadOnlyList<EvaluationReport> RunScenariosWithGivenVM(PineVM.PineVM pineVM) =>
             [.. usingRecordAccessScenarios
             .Select(scenario =>
             {
@@ -305,7 +305,7 @@ public class PGOTests
 
         nonOptimizedAverageInstructionCount.Should().BeGreaterThan(40);
 
-        var invocationReports = new List<PineVM.EvaluationReport>();
+        var invocationReports = new List<EvaluationReport>();
 
         var profilingVM =
             new PineVM.PineVM(
@@ -860,10 +860,10 @@ public class PGOTests
             },
         };
 
-        static long ReportsAverageInstructionCount(IReadOnlyList<PineVM.EvaluationReport> reports) =>
+        static long ReportsAverageInstructionCount(IReadOnlyList<EvaluationReport> reports) =>
             reports.Sum(report => report.InstructionCount) / reports.Count;
 
-        IReadOnlyList<PineVM.EvaluationReport> RunScenariosWithGivenVM(PineVM.PineVM pineVM) =>
+        IReadOnlyList<EvaluationReport> RunScenariosWithGivenVM(PineVM.PineVM pineVM) =>
             [.. recordUpdateScenarios
             .Select(scenario =>
             {
@@ -908,7 +908,7 @@ public class PGOTests
 
         nonOptimizedAverageInstructionCount.Should().BeGreaterThan(60);
 
-        var invocationReports = new List<PineVM.EvaluationReport>();
+        var invocationReports = new List<EvaluationReport>();
 
         var profilingVM =
             new PineVM.PineVM(
@@ -1264,10 +1264,10 @@ public class PGOTests
             },
         };
 
-        static long ReportsAverageInvocationCount(IReadOnlyList<PineVM.EvaluationReport> reports) =>
+        static long ReportsAverageInvocationCount(IReadOnlyList<EvaluationReport> reports) =>
             reports.Sum(report => report.InvocationCount) / reports.Count;
 
-        PineVM.EvaluationReport RunScenario(
+        EvaluationReport RunScenario(
             ElmValue.ElmList scenarioList,
             int scenarioFunctionId,
             ElmValue.ElmList scenarioExpected,
@@ -1301,7 +1301,7 @@ public class PGOTests
                 .Extract(fromErr: err => throw new Exception("Failed for scenario: " + err));
         }
 
-        IReadOnlyList<PineVM.EvaluationReport> RunScenariosWithGivenVM(PineVM.PineVM pineVM) =>
+        IReadOnlyList<EvaluationReport> RunScenariosWithGivenVM(PineVM.PineVM pineVM) =>
             [.. usageScenarios
             .Select(scenario =>
             RunScenario(
@@ -1315,7 +1315,7 @@ public class PGOTests
         var nonOptimizedScenariosStats =
             RunScenariosWithGivenVM(nonOptimizingPineVM);
 
-        var invocationReports = new List<PineVM.EvaluationReport>();
+        var invocationReports = new List<EvaluationReport>();
 
         var profilingVM =
             new PineVM.PineVM(
@@ -1635,10 +1635,10 @@ public class PGOTests
                 [ElmValueEncoding.ElmValueAsPineValue(list)])
             .Extract(err => throw new Exception(err));
 
-        static long ReportsAverageInvocationCount(IReadOnlyList<PineVM.EvaluationReport> reports) =>
+        static long ReportsAverageInvocationCount(IReadOnlyList<EvaluationReport> reports) =>
             reports.Sum(report => report.InvocationCount) / reports.Count;
 
-        PineVM.EvaluationReport RunScenario(
+        EvaluationReport RunScenario(
             PineValue scenarioDict,
             int scenarioFunctionId,
             ElmValue.ElmList? scenarioExpected,
@@ -1675,7 +1675,7 @@ public class PGOTests
                 .Extract(fromErr: err => throw new Exception("Failed for scenario: " + err));
         }
 
-        IReadOnlyList<PineVM.EvaluationReport> RunScenariosWithGivenVM(PineVM.PineVM pineVM) =>
+        IReadOnlyList<EvaluationReport> RunScenariosWithGivenVM(PineVM.PineVM pineVM) =>
             [.. usageScenarios
             .Select(scenario =>
             RunScenario(
@@ -1689,7 +1689,7 @@ public class PGOTests
         var nonOptimizedScenariosStats =
             RunScenariosWithGivenVM(nonOptimizingPineVM);
 
-        var invocationReports = new List<PineVM.EvaluationReport>();
+        var invocationReports = new List<EvaluationReport>();
 
         var profilingVM =
             new PineVM.PineVM(

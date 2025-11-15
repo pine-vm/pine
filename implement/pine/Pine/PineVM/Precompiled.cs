@@ -3616,7 +3616,7 @@ public class Precompiled
                 (srcBytesBlob.Bytes.Span[offset] << 24) |
                 (srcBytesBlob.Bytes.Span[offset + 1] << 16) |
                 (srcBytesBlob.Bytes.Span[offset + 2] << 8) |
-                (srcBytesBlob.Bytes.Span[offset + 3]);
+                srcBytesBlob.Bytes.Span[offset + 3];
 
             if (!charValuePredicate(currentChar))
             {

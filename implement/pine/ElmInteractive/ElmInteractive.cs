@@ -404,7 +404,7 @@ public class ElmInteractive
             dictionary =
                 dictionaryEntries
                 .Aggregate(
-                    seed: dictionary ?? ImmutableDictionary<string, PineValue>.Empty,
+                    seed: dictionary ?? [],
                     func: (dictionary, entry) =>
                     dictionary.Add(entry.key, ParsePineValueFromJson(entry.value, dictionary)));
         }

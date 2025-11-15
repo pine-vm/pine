@@ -35,7 +35,7 @@ public record CompiledExpression(
             Dependencies: dependencies);
 
     public static readonly ImmutableDictionary<Expression, LetBinding> NoLetBindings =
-        ImmutableDictionary<Expression, LetBinding>.Empty;
+        [];
 
     public CompiledExpression MergeBindings(IReadOnlyDictionary<Expression, LetBinding> bindings) =>
         this

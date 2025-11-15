@@ -47,7 +47,7 @@ public class ExecutableFile
         IReadOnlyDictionary<string, ReadOnlyMemory<byte>>? environmentPathExecutableFiles = null)
     {
         var environmentStringsDict =
-            environmentStrings?.ToImmutableDictionary() ?? ImmutableDictionary<string, string>.Empty;
+            environmentStrings?.ToImmutableDictionary() ?? [];
 
         const string environmentPathContainerDirectoryName = "environment-path-cont";
 
