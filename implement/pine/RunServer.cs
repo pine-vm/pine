@@ -1,18 +1,18 @@
+using ElmTime.Platform.WebService;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Pine.Core.Addressing;
+using Pine.Core.Files;
+using Pine.Core.IO;
+using Pine.Core.PopularEncodings;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
 using System.Text;
-using ElmTime.Platform.WebService;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using Pine.Core;
-using Pine.Core.Addressing;
-using Pine.Core.Files;
-using Pine.Core.IO;
 
 namespace ElmTime;
 
@@ -93,10 +93,10 @@ public class RunServer
                     sourcePath: deployApp).configZipArchive;
 
             var appConfigTree =
-                PineValueComposition.SortedTreeFromSetOfBlobsWithCommonFilePath(
+                FileTree.FromSetOfFilesWithCommonFilePath(
                     ZipArchive.EntriesFromZipArchive(appConfigZipArchive));
 
-            var appConfigComponent = PineValueComposition.FromTreeWithStringPath(appConfigTree);
+            var appConfigComponent = FileTreeEncoding.Encode(appConfigTree);
 
             var processStoreWriter =
                 new Platform.WebService.ProcessStoreSupportingMigrations.ProcessStoreWriterInFileStore(
@@ -187,8 +187,8 @@ public class RunServer
         var zipArchiveEntries = ZipArchive.EntriesFromZipArchive(archive);
 
         return
-            PineValueComposition.ToFlatDictionaryWithPathComparer(
-                PineValueComposition.SortedTreeFromSetOfBlobsWithCommonFilePath(zipArchiveEntries)
+            FileTreeExtensions.ToFlatDictionaryWithPathComparer(
+                FileTree.FromSetOfFilesWithCommonFilePath(zipArchiveEntries)
                 .EnumerateFilesTransitive());
     }
 
@@ -202,7 +202,7 @@ public class RunServer
             LoadFilesForRestoreFromPathAndLogToConsole(sourcePath: sourcePath, sourcePassword: sourcePassword);
 
         var processHistoryTree =
-            PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(restoreFiles);
+            FileTree.FromSetOfFilesWithStringPath(restoreFiles);
 
         var processHistoryComponentHash = PineValueHashTree.ComputeHashNotSorted(processHistoryTree);
         var processHistoryComponentHashBase16 = Convert.ToHexStringLower(processHistoryComponentHash.Span);

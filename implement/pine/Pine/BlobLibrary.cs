@@ -300,7 +300,7 @@ public class BlobLibrary
 
         var blobName = sourceUrl.Split('/', '\\').Last();
 
-        foreach (var extracted in Core.Files.CommonMappings.ExtractTreesFromNamedBlob(blobName, responseContent))
+        foreach (var extracted in CommonMappings.ExtractTreesFromNamedBlob(blobName, responseContent))
             yield return extracted;
     }
 

@@ -1,6 +1,8 @@
 using AwesomeAssertions;
 using Pine.Core;
 using Pine.Core.Elm;
+using Pine.Core.Files;
+using Pine.Core.PopularEncodings;
 using Pine.Elm.Platform;
 using System;
 using System.Linq;
@@ -49,7 +51,7 @@ public class ExampleAppsTests
             ExampleAppValueFromExampleName("minimal-backend-hello-world");
 
         var webAppSourceTree =
-            PineValueComposition.ParseAsTreeWithStringPath(webAppSource)
+            FileTreeEncoding.Parse(webAppSource)
             .Extract(err => throw new Exception("Failed parsing app source files as tree: " + err));
 
         var webServiceConfig =
@@ -143,7 +145,7 @@ public class ExampleAppsTests
             ExampleAppValueFromExampleName("elm-editor");
 
         var webAppSourceTree =
-            PineValueComposition.ParseAsTreeWithStringPath(webAppSource)
+            FileTreeEncoding.Parse(webAppSource)
             .Extract(err => throw new Exception("Failed parsing app source files as tree: " + err));
 
         var webServiceConfig =
@@ -276,12 +278,12 @@ public class ExampleAppsTests
     public void Counter_webapp_Json_adapter()
     {
         var webAppSourceTree =
-            PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(
+            FileTree.FromSetOfFilesWithStringPath(
                 TestSetup.CounterElmWebApp);
 
         var loweringResult =
             ElmTime.ElmAppCompilation.AsCompletelyLoweredElmApp(
-                PineValueComposition.TreeToFlatDictionaryWithPathComparer(webAppSourceTree),
+                FileTreeExtensions.ToFlatDictionaryWithPathComparer(webAppSourceTree),
                 workingDirectoryRelative: [],
                 ElmTime.ElmAppInterfaceConfig.Default);
 
@@ -296,10 +298,10 @@ public class ExampleAppsTests
         }
 
         var loweredTree =
-            PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(loweringOk.Result.CompiledFiles);
+            FileTree.FromSetOfFilesWithStringPath(loweringOk.Result.CompiledFiles);
 
         var loweredTreeValue =
-            PineValueComposition.FromTreeWithStringPath(loweredTree);
+            FileTreeEncoding.Encode(loweredTree);
 
         var webServiceConfig =
             WebServiceInterface.ConfigFromSourceFilesAndEntryFileName(

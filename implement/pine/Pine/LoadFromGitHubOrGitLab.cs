@@ -436,8 +436,8 @@ public static class LoadFromGitHubOrGitLab
         return fromExternalCache switch
         {
             not null => Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>>.ok(
-                PineValueComposition.ToFlatDictionaryWithPathComparer(
-                    PineValueComposition.SortedTreeFromSetOfBlobsWithCommonFilePath(
+                FileTreeExtensions.ToFlatDictionaryWithPathComparer(
+                    FileTree.FromSetOfFilesWithCommonFilePath(
                         ZipArchive.EntriesFromZipArchive(fromExternalCache.Value))
                     .EnumerateFilesTransitive())),
 
@@ -470,7 +470,7 @@ public static class LoadFromGitHubOrGitLab
 
             // Convert from GitCore's IReadOnlyList<string> path format to the expected format
             return Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>>.ok(
-                PineValueComposition.ToFlatDictionaryWithPathComparer(
+                FileTreeExtensions.ToFlatDictionaryWithPathComparer(
                     treeContents.Select(kvp => (path: kvp.Key, blobContent: kvp.Value))));
         }
         catch (Exception e)
@@ -641,9 +641,9 @@ public static class LoadFromGitHubOrGitLab
             }
 
             return
-                PineValueComposition.ToFlatDictionaryWithPathComparer(
+                FileTreeExtensions.ToFlatDictionaryWithPathComparer(
                     Filesystem.GetAllFilesFromDirectory(tempWorkingDirectory)
-                    .Where(predicate: c => c.path?[0] == ".git"));
+                    .Where(predicate: c => c.path?[0] is ".git"));
         }
         catch (Exception e)
         {

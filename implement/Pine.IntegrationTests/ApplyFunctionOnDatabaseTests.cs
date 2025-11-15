@@ -1,8 +1,9 @@
-using ElmTime;
 using AwesomeAssertions;
+using ElmTime;
 using Pine.Core;
 using Pine.Core.Elm;
 using Pine.Core.Json;
+using Pine.Core.PopularEncodings;
 using Pine.Elm.Platform;
 using System;
 using System.Collections.Generic;
@@ -270,7 +271,7 @@ public class ApplyFunctionOnDatabaseTests
     public void List_exposed_functions_sandbox()
     {
         var appConfigTree =
-            PineValueComposition.ParseAsTreeWithStringPath(ElmWebServiceAppTests.CalculatorWebApp)
+            FileTreeEncoding.Parse(ElmWebServiceAppTests.CalculatorWebApp)
             .Extract(err => throw new Exception("Failed parsing app source files as tree: " + err));
 
         var webServiceConfig =

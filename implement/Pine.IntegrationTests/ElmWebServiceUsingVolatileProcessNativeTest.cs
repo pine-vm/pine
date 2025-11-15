@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Pine.Core;
 using Pine.Core.Elm;
+using Pine.Core.PopularEncodings;
 using Pine.Elm.Platform;
 using System;
 using System.Linq;
@@ -43,7 +44,7 @@ public class ElmWebServiceUsingVolatileProcessNativeTest
             ElmWebServiceVolatileProcessNative;
 
         var webAppSourceTree =
-            PineValueComposition.ParseAsTreeWithStringPath(webAppSource)
+            FileTreeEncoding.Parse(webAppSource)
             .Extract(err => throw new Exception("Failed parsing app source files as tree: " + err));
 
         var webServiceConfig =

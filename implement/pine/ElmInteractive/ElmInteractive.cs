@@ -10,7 +10,6 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using System.Text.Json.Serialization;
-using static Pine.Core.PineValueComposition;
 
 namespace ElmTime.ElmInteractive;
 
@@ -464,7 +463,7 @@ public class ElmInteractive
             treeFiltered;
 
         return
-            [.. TreeToFlatDictionaryWithPathComparer(treeWithKernelModules)
+            [.. FileTreeExtensions.ToFlatDictionaryWithPathComparer(treeWithKernelModules)
             .Where(sourceFile => sourceFile.Key.Last().EndsWith(".elm"))
             .Select(appCodeFile => (appCodeFile.Key, appCodeFile.Value, Encoding.UTF8.GetString(appCodeFile.Value.Span)))
             ];
@@ -490,7 +489,7 @@ public class ElmInteractive
                 .Any(sourceDir => filePath.Take(sourceDir.Count).SequenceEqual(sourceDir));
         }
 
-        var sourceFiles = TreeToFlatDictionaryWithPathComparer(sourceTree);
+        var sourceFiles = FileTreeExtensions.ToFlatDictionaryWithPathComparer(sourceTree);
 
         if (sourceFiles.Count is 0)
             return sourceTree;
@@ -507,7 +506,7 @@ public class ElmInteractive
             return sourceTree;
 
         var compilationResult = ElmAppCompilation.AsCompletelyLoweredElmApp(
-            sourceFiles: TreeToFlatDictionaryWithPathComparer(sourceTree),
+            sourceFiles: FileTreeExtensions.ToFlatDictionaryWithPathComparer(sourceTree),
             workingDirectoryRelative: [],
             ElmAppInterfaceConfig.Default with { CompilationRootFilePath = compilationRootFilePath });
 
@@ -522,7 +521,7 @@ public class ElmInteractive
 
                     throw new Exception(errorMessage);
                 },
-                fromOk: compilationOk => SortedTreeFromSetOfBlobsWithStringPath(compilationOk.Result.CompiledFiles));
+                fromOk: compilationOk => FileTree.FromSetOfFilesWithStringPath(compilationOk.Result.CompiledFiles));
     }
 
     public record EvaluatedStruct(

@@ -22,7 +22,7 @@ public class ElmCompiler
     private static readonly ConcurrentDictionary<FileTree, Task<Result<string, ElmCompiler>>> buildCompilerFromSource = new();
 
     static public readonly Lazy<FileTree> CompilerSourceContainerFilesDefault =
-        new(() => PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(
+        new(() => FileTree.FromSetOfFilesWithStringPath(
             LoadElmCompilerSourceCodeFiles()
             .Extract(error => throw new NotImplementedException(nameof(LoadElmCompilerSourceCodeFiles) + ": " + error))));
 
@@ -306,7 +306,7 @@ public class ElmCompiler
         {
             var loweringResult =
                 ElmTime.ElmAppCompilation.AsCompletelyLoweredElmApp(
-                    PineValueComposition.TreeToFlatDictionaryWithPathComparer(appCodeTree),
+                    FileTreeExtensions.ToFlatDictionaryWithPathComparer(appCodeTree),
                     workingDirectoryRelative: [],
                     ElmTime.ElmAppInterfaceConfig.Default
                     with
@@ -327,7 +327,7 @@ public class ElmCompiler
             }
 
             var loweredTree =
-                PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(loweringOk.Result.CompiledFiles);
+                FileTree.FromSetOfFilesWithStringPath(loweringOk.Result.CompiledFiles);
 
             var loweredTreeCleaned =
                 ElmTime.ElmTimeJsonAdapter.CleanUpFromLoweredForJavaScript(loweredTree);

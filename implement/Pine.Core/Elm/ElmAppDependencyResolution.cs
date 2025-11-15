@@ -81,7 +81,7 @@ public class ElmAppDependencyResolution
         }
 
         var sourceFilesDict =
-            PineValueComposition.TreeToFlatDictionaryWithPathComparer(sourceFiles);
+            FileTreeExtensions.ToFlatDictionaryWithPathComparer(sourceFiles);
 
         var sourceFilesFiltered =
             FilterTreeForCompilationRoots(
@@ -293,7 +293,7 @@ public class ElmAppDependencyResolution
                         ??
                         throw new Exception("Parsing elm.json returned null");
 
-                        return (PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(kv.Value), elmJsonParsed);
+                        return (FileTree.FromSetOfFilesWithStringPath(kv.Value), elmJsonParsed);
                     }
                     catch (Exception e)
                     {
@@ -413,7 +413,7 @@ public class ElmAppDependencyResolution
             .ToImmutableArray();
 
         var elmModulesIncluded =
-            Core.Elm.ElmSyntax.ElmModule.ModulesTextOrderedForCompilationByDependencies(
+            ElmModule.ModulesTextOrderedForCompilationByDependencies(
                 rootModulesTexts:
                 [.. rootElmFiles.Select(file => Encoding.UTF8.GetString(file.fileContent.Span))
                 ],

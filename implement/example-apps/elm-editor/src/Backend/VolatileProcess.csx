@@ -14,6 +14,7 @@
 
 using Pine.Core;
 using Pine.Core.Addressing;
+using Pine.Core.PopularEncodings;
 using Pine;
 using System;
 using System.Collections.Generic;
@@ -181,7 +182,7 @@ ResponseStructure GetResponseFromRequest(RequestStructure request)
                         };
                     }
 
-                    var composition = PineValueComposition.FromTreeWithStringPath(loadFromGitOk.tree);
+                    var composition = FileTreeEncoding.Encode(loadFromGitOk.tree);
 
                     var compositionId =
                         Convert.ToHexStringLower(PineValueHashTree.ComputeHash(composition).Span);

@@ -1,7 +1,9 @@
 using ElmTime;
 using ElmTime.Platform.WebService;
 using Pine.Core;
+using Pine.Core.Files;
 using Pine.Core.IO;
+using Pine.Core.PopularEncodings;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -16,7 +18,7 @@ public class TestSetup
 
     public static PineValue AppConfigComponentFromFiles(
         IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> appFiles) =>
-        PineValueComposition.FromTreeWithStringPath(PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(appFiles))!;
+        FileTreeEncoding.Encode(FileTree.FromSetOfFilesWithStringPath(appFiles))!;
 
     public static IEnumerable<(string serializedEvent, string expectedResponse)> CounterProcessTestEventsAndExpectedResponses(
         IEnumerable<(int addition, int expectedResponse)> additionsAndExpectedResponses) =>
@@ -95,11 +97,11 @@ public class TestSetup
 
         var filesFiltered =
             LoadFromLocalFilesystem.RemoveNoiseFromTree(
-                PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(files),
+                FileTree.FromSetOfFilesWithStringPath(files),
                 discardGitDirectory: true);
 
         return
-            PineValueComposition.TreeToFlatDictionaryWithPathComparer(filesFiltered);
+            FileTreeExtensions.ToFlatDictionaryWithPathComparer(filesFiltered);
     }
 
     public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> AsLoweredElmApp(

@@ -2216,7 +2216,7 @@ type alias LoadDependencyStruct =
     {
         var loweringResult =
             ElmAppCompilation.AsCompletelyLoweredElmApp(
-                PineValueComposition.TreeToFlatDictionaryWithPathComparer(sourceFiles),
+                FileTreeExtensions.ToFlatDictionaryWithPathComparer(sourceFiles),
                 workingDirectoryRelative: [],
                 ElmAppInterfaceConfig.Default
                 with
@@ -2237,7 +2237,7 @@ type alias LoadDependencyStruct =
         }
 
         var loweredTree =
-            PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(loweringOk.Result.CompiledFiles);
+            FileTree.FromSetOfFilesWithStringPath(loweringOk.Result.CompiledFiles);
 
         var loweredTreeCleaned =
             ElmTimeJsonAdapter.CleanUpFromLoweredForJavaScript(loweredTree);

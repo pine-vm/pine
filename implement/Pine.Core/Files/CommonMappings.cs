@@ -39,7 +39,7 @@ public class CommonMappings
             try
             {
                 fromZipArchive =
-                    PineValueComposition.SortedTreeFromSetOfBlobsWithCommonFilePath(
+                    FileTree.FromSetOfFilesWithCommonFilePath(
                         ZipArchive.EntriesFromZipArchive(blobContent));
             }
             catch { }

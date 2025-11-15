@@ -1,5 +1,6 @@
 using Pine.Core.Addressing;
 using Pine.Core.Files;
+using Pine.Core.PopularEncodings;
 using System;
 using System.Collections.Generic;
 using System.IO.Compression;
@@ -44,7 +45,8 @@ public partial class BundledElmEnvironments
     /// </returns>
     public static PineValue? BundledElmCompilerCompiledEnvValue()
     {
-        var compiledEnvDict = ReusedInstances.Instance?.BundledDeclarations?.EmbeddedDeclarations;
+        if (ReusedInstances.Instance?.BundledDeclarations?.EmbeddedDeclarations is not { } compiledEnvDict)
+            return null;
 
         return
             compiledEnvDict
@@ -67,7 +69,7 @@ public partial class BundledElmEnvironments
     private static string DictionaryKeyHashPartFromFileTree(FileTree fileTree)
     {
         var pineValue =
-            PineValueComposition.FromTreeWithStringPath(fileTree);
+            FileTreeEncoding.Encode(fileTree);
 
         var hash = PineValueHashTree.ComputeHash(pineValue);
 
@@ -109,7 +111,7 @@ public partial class BundledElmEnvironments
         try
         {
             return Result<string, IReadOnlyDictionary<string, PineValue>>.ok(
-                PopularEncodings.StringNamedPineValueBinaryEncoding.Decode(asMemory).decls);
+                StringNamedPineValueBinaryEncoding.Decode(asMemory).decls);
         }
         catch (Exception e)
         {

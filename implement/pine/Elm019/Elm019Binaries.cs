@@ -88,7 +88,7 @@ public static class Elm019Binaries
         var elmCodeFilesHash =
             Convert.ToHexStringLower(
                 PineValueHashTree.ComputeHashSorted(
-                    PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(elmCodeFiles)).Span);
+                    FileTree.FromSetOfFilesWithStringPath(elmCodeFiles)).Span);
 
         var requestIdentifier = new ElmMakeRequestIdentifier(
             elmCodeFilesHash: elmCodeFilesHash,

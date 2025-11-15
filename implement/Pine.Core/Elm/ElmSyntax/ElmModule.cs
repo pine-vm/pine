@@ -422,7 +422,7 @@ public static partial class ElmModule
             .ToImmutableHashSet(EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
 
         return
-            PineValueComposition.SortedTreeFromSetOfBlobs(
+            FileTree.FromSetOfFiles(
                 [.. originalBlobs
                 .Where(pathAndContent =>
                 filteredModulesPaths.Contains(pathAndContent.path) ||

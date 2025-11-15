@@ -12,7 +12,7 @@ namespace Pine.Core;
 /// It is a choice type with two cases, <see cref="ListValue"/> and <see cref="BlobValue"/>.
 /// <para/>
 /// Other kinds of data, like text, images, or a file system directory, are encoded based on these primitives.
-/// For conversion between the generic value type and common data types, see <see cref="IntegerEncoding"/>, <see cref="StringEncoding"/>, and <see cref="PineValueComposition"/>.
+/// For conversion between the generic value type and common data types, see <see cref="IntegerEncoding"/>, <see cref="StringEncoding"/>, and <see cref="FileTreeEncoding"/>.
 /// <para/>
 /// There is also a standard representation of program code and expressions as Pine values, 
 /// and you can see a reference implementation of this encoding at <see cref="ExpressionEncoding.ParseExpressionFromValue(PineValue)"/>.

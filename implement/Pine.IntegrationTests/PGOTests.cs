@@ -21,7 +21,7 @@ namespace Pine.IntegrationTests;
 
 public class PGOTests
 {
-    static readonly PineVMParseCache ParseCache = new();
+    static readonly PineVMParseCache s_parseCache = new();
 
     [Fact(Skip = "Needs adaptatio and review after IR and VM changes")]
     public void PGO_reduces_Elm_record_access()
@@ -69,7 +69,7 @@ public class PGOTests
                 interactiveEnvironment: interactiveEnvironmentValue,
                 moduleName: "Test",
                 declarationName: "usingRecordAccess",
-                ParseCache)
+                s_parseCache)
             .Extract(err => throw new Exception(err));
 
         var usingRecordAccessScenarios = new[]
@@ -455,7 +455,7 @@ public class PGOTests
                 interactiveEnvironment: interactiveEnvironmentValue,
                 moduleName: "Test",
                 declarationName: "usingRecordUpdate",
-                ParseCache)
+                s_parseCache)
             .Extract(err => throw new Exception(err));
 
         var recordUpdateScenarios = new[]
@@ -1080,7 +1080,7 @@ public class PGOTests
                 interactiveEnvironment: interactiveEnvironmentValue,
                 moduleName: "Test",
                 declarationName: "usingListMap",
-                ParseCache)
+                s_parseCache)
             .Extract(err => throw new Exception(err));
 
         {
@@ -1112,7 +1112,7 @@ public class PGOTests
                         interactiveEnvironment: interactiveEnvironmentValue,
                         moduleName: functionToInspect.moduleName,
                         declarationName: functionToInspect.declarationName,
-                        ParseCache)
+                        s_parseCache)
                     .Extract(err => throw new Exception(err));
 
                 var functionValueHash = PineValueHashTree.ComputeHash(functionValue);
@@ -1505,7 +1505,7 @@ public class PGOTests
                 interactiveEnvironment: interactiveEnvironmentValue,
                 moduleName: "Test",
                 declarationName: "usingDictFold",
-                ParseCache)
+                s_parseCache)
             .Extract(err => throw new Exception(err));
 
         var (_, dictFromListFunction) =
@@ -1513,7 +1513,7 @@ public class PGOTests
                 interactiveEnvironment: interactiveEnvironmentValue,
                 moduleName: "Dict",
                 declarationName: "fromList",
-                ParseCache)
+                s_parseCache)
             .Extract(err => throw new Exception(err));
 
         {
@@ -1550,7 +1550,7 @@ public class PGOTests
                         interactiveEnvironment: interactiveEnvironmentValue,
                         moduleName: functionToInspect.moduleName,
                         declarationName: functionToInspect.declarationName,
-                        ParseCache)
+                        s_parseCache)
                     .Extract(err => throw new Exception(err));
 
                 var functionValueHash = PineValueHashTree.ComputeHash(functionValue);
@@ -1882,11 +1882,11 @@ public class PGOTests
         .ToImmutableArray();
 
         var appCodeTree =
-        PineValueComposition.SortedTreeFromSetOfBlobsWithCommonFilePath(
-            [
-            ("elm.json", Encoding.UTF8.GetBytes(elmJson)),
-    ..elmModulesFiles
-            ]);
+            FileTree.FromSetOfFilesWithCommonFilePath(
+                [
+                ("elm.json", Encoding.UTF8.GetBytes(elmJson)),
+                ..elmModulesFiles
+                ]);
 
         return appCodeTree;
     }

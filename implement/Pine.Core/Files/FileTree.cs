@@ -571,12 +571,82 @@ public abstract record FileTree : IEquatable<FileTree>
                 "Unexpected node type: " + GetType())
         };
 
+    /// <summary>
+    /// Default comparer implementation for directory entry tuples, comparing by the entry name using ordinal comparison.
+    /// </summary>
     private class TreeEntryDefaultComparerClass : IComparer<(string name, FileTree component)>
     {
+        /// <summary>
+        /// Compares two directory entry tuples lexicographically by their <c>name</c> using ordinal string comparison.
+        /// </summary>
+        /// <param name="x">The first entry to compare.</param>
+        /// <param name="y">The second entry to compare.</param>
+        /// <returns>An integer indicating the lexical ordering of the entry names.</returns>
         public int Compare((string name, FileTree component) x, (string name, FileTree component) y)
         {
             return string.CompareOrdinal(x.name, y.name);
         }
+    }
+
+    /// <summary>
+    /// Builds a <see cref="FileTree"/> from a set of files represented by common string paths.
+    /// Each path may contain forward slashes '/' or backslashes '\\' which are treated as separators.
+    /// </summary>
+    /// <param name="filesWithPath">Sequence of (path string, file content) pairs.</param>
+    public static FileTree FromSetOfFilesWithCommonFilePath(
+        IEnumerable<(string path, ReadOnlyMemory<byte> fileContent)> filesWithPath) =>
+        FromSetOfFiles(
+            filesWithPath.Select(fileWithPath =>
+            {
+                var pathElements =
+                    fileWithPath.path.Split("/").SelectMany(pathElement => pathElement.Split(@"\"))
+                        .ToImmutableList();
+
+                return (path: (IReadOnlyList<string>)pathElements, fileWithPath.fileContent);
+            })
+        );
+
+    /// <summary>
+    /// Builds a <see cref="FileTree"/> from a sequence of files where each file has a path represented as a list of strings.
+    /// </summary>
+    /// <typeparam name="PathT">The path type implementing <see cref="IReadOnlyList{T}"/> of <see cref="string"/>.</typeparam>
+    /// <param name="filesWithPath">Sequence of (path, file content) pairs.</param>
+    public static FileTree FromSetOfFilesWithStringPath<PathT>(
+        IEnumerable<(PathT path, ReadOnlyMemory<byte> fileContent)> filesWithPath)
+        where PathT : IReadOnlyList<string>
+        =>
+        FromSetOfFiles(filesWithPath);
+
+    /// <summary>
+    /// Builds a <see cref="FileTree"/> from a dictionary mapping paths to file contents.
+    /// </summary>
+    /// <typeparam name="PathT">The path type implementing <see cref="IReadOnlyList{T}"/> of <see cref="string"/>.</typeparam>
+    /// <param name="filesWithPath">Dictionary mapping paths to file contents.</param>
+    public static FileTree FromSetOfFilesWithStringPath<PathT>(
+        IReadOnlyDictionary<PathT, ReadOnlyMemory<byte>> filesWithPath)
+        where PathT : IReadOnlyList<string>
+        =>
+        FromSetOfFilesWithStringPath(
+            filesWithPath.Select(pathAndFileContent =>
+                (path: pathAndFileContent.Key, fileContent: pathAndFileContent.Value)));
+
+    /// <summary>
+    /// Builds a <see cref="FileTree"/> from a sequence of files where each file has a path represented as a list of strings.
+    /// Paths are added using <see cref="SetNodeAtPathSorted(ReadOnlySpan{string}, FileTree)"/> ensuring deterministic ordering.
+    /// </summary>
+    /// <typeparam name="PathT">The path type implementing <see cref="IReadOnlyList{T}"/> of <see cref="string"/>.</typeparam>
+    /// <param name="filesWithPath">Sequence of (path, file content) pairs.</param>
+    public static FileTree FromSetOfFiles<PathT>(
+        IEnumerable<(PathT path, ReadOnlyMemory<byte> fileContent)> filesWithPath)
+        where PathT : IReadOnlyList<string>
+    {
+        ArgumentNullException.ThrowIfNull(filesWithPath);
+
+        return filesWithPath.Aggregate(
+            seed: EmptyTree,
+            func: (tree, filePathAndContent) =>
+                tree.SetNodeAtPathSorted(filePathAndContent.path,
+                    File(filePathAndContent.fileContent)));
     }
 }
 

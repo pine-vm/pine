@@ -14,6 +14,7 @@ using Pine.Core.Elm.ElmSyntax;
 using Pine.Core.Files;
 using Pine.Core.Http;
 using Pine.Core.IO;
+using Pine.Core.PopularEncodings;
 using Pine.Elm;
 using Pine.Elm.Platform;
 using Pine.PineVM;
@@ -974,7 +975,7 @@ public class Program
                     {
                         var zipEntries = ZipArchive.EntriesFromZipArchive(sourceBlob.Bytes);
 
-                        fileTree = PineValueComposition.SortedTreeFromSetOfBlobsWithCommonFilePath(zipEntries);
+                        fileTree = FileTree.FromSetOfFilesWithCommonFilePath(zipEntries);
                     }
 
                     return fileTree;
@@ -1261,8 +1262,8 @@ public class Program
 
         if (compileResult.compiledAppFiles != null)
         {
-            var compiledTree = PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(compileResult.compiledAppFiles);
-            var compiledFiles = PineValueComposition.TreeToFlatDictionaryWithPathComparer(compiledTree);
+            var compiledTree = FileTree.FromSetOfFilesWithStringPath(compileResult.compiledAppFiles);
+            var compiledFiles = FileTreeExtensions.ToFlatDictionaryWithPathComparer(compiledTree);
 
             var compiledCompositionArchive = ZipArchive.ZipArchiveFromFiles(compiledFiles);
 
@@ -1357,7 +1358,7 @@ public class Program
             }
 
             var sourceFiles =
-                PineValueComposition.TreeToFlatDictionaryWithPathComparer(filteredSourceTree);
+                FileTreeExtensions.ToFlatDictionaryWithPathComparer(filteredSourceTree);
 
             var elmJsonSourceDirectories =
                 readElmJsonSourceDirectories() ?? [];
@@ -1409,8 +1410,8 @@ public class Program
                     {
                         var compiledAppFiles = compilationOk.Result.CompiledFiles;
 
-                        var compiledTree = PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(compiledAppFiles);
-                        var compiledComposition = PineValueComposition.FromTreeWithStringPath(compiledTree);
+                        var compiledTree = FileTree.FromSetOfFilesWithStringPath(compiledAppFiles);
+                        var compiledComposition = FileTreeEncoding.Encode(compiledTree);
                         var compiledCompositionId = Convert.ToHexStringLower(PineValueHashTree.ComputeHash(compiledComposition).Span);
 
                         compilationStopwatch.Stop();
@@ -1582,7 +1583,7 @@ public class Program
                             }))
                             .Select(loadedScenario =>
                             {
-                                var asComposition = PineValueComposition.FromTreeWithStringPath(loadedScenario.component);
+                                var asComposition = FileTreeEncoding.Encode(loadedScenario.component);
 
                                 var hashBase16 = Convert.ToHexStringLower(PineValueHashTree.ComputeHash(asComposition).Span);
 
@@ -1682,7 +1683,7 @@ public class Program
                 ?
                 null
                 :
-                PineValueComposition.Union(contextAppPaths.Select(loadContextAppCodeTreeFromPath!));
+                FileTreeExtensions.Union(contextAppPaths.Select(loadContextAppCodeTreeFromPath!));
 
                 var contextAppModuleNameFilterIncluded =
                     contextAppModuleNameFilterPattern is null
@@ -1872,7 +1873,7 @@ public class Program
                     .LogToActions(Console.WriteLine)
                     .Extract(error => throw new Exception("Failed to load from path '" + sourcePath + "': " + error));
 
-                var composition = PineValueComposition.FromTreeWithStringPath(loadCompositionResult.tree);
+                var composition = FileTreeEncoding.Encode(loadCompositionResult.tree);
 
                 var compositionId = Convert.ToHexStringLower(PineValueHashTree.ComputeHash(composition).Span);
 
@@ -2201,7 +2202,7 @@ public class Program
 
         var makeResult =
             Make(
-                sourceFiles: PineValueComposition.TreeToFlatDictionaryWithPathComparer(loadSourceFilesOk.SourceFiles),
+                sourceFiles: FileTreeExtensions.ToFlatDictionaryWithPathComparer(loadSourceFilesOk.SourceFiles),
                 workingDirectoryRelative: loadSourceFilesOk.WorkingDirectoryRelative,
                 pathToFileWithElmEntryPoint: loadSourceFilesOk.PathToFileWithElmEntryPoint,
                 outputFileName: Path.GetFileName(outputPathArgument),
@@ -2345,7 +2346,7 @@ public class Program
         {
             var sourceFilesWithMergedPackages =
                 ElmAppDependencyResolution.AppCompilationUnitsForEntryPoint(
-                    PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(sourceFilesAfterLowering),
+                    FileTree.FromSetOfFilesWithStringPath(sourceFilesAfterLowering),
                     entryPointFilePath: pathToFileWithElmEntryPoint);
 
             var elmCompilerFromBundle =
@@ -2998,7 +2999,7 @@ public class Program
 
         var compiledCompositionId =
             Convert.ToHexStringLower(
-                PineValueHashTree.ComputeHashSorted(PineValueComposition.SortedTreeFromSetOfBlobsWithCommonFilePath(
+                PineValueHashTree.ComputeHashSorted(FileTree.FromSetOfFilesWithCommonFilePath(
                     ZipArchive.EntriesFromZipArchive(appConfigZipArchive))).Span);
 
         Console.WriteLine("Built app config " + compiledCompositionId + " from " + sourceCompositionId + ".");
@@ -3071,10 +3072,10 @@ public class Program
                         skipWritingComponentSecondTime: true);
 
                 var appConfigTree =
-                    PineValueComposition.SortedTreeFromSetOfBlobsWithCommonFilePath(
+                    FileTree.FromSetOfFilesWithCommonFilePath(
                         ZipArchive.EntriesFromZipArchive(appConfigZipArchive));
 
-                var appConfigComponent = PineValueComposition.FromTreeWithStringPath(appConfigTree);
+                var appConfigComponent = FileTreeEncoding.Encode(appConfigTree);
 
                 processStoreWriter.StoreComponent(appConfigComponent);
 

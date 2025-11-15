@@ -1,4 +1,5 @@
 using Pine.Core.Files;
+using Pine.Core.PopularEncodings;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -578,7 +579,7 @@ public static class PineValueHashTree
     /// Use <see cref="ComputeHashSorted(FileTree)"/> to obtain order-insensitive hashing.
     /// </remarks>
     public static ReadOnlyMemory<byte> ComputeHashNotSorted(FileTree treeNode) =>
-        ComputeHash(PineValueComposition.FromTreeWithStringPath(treeNode));
+        ComputeHash(FileTreeEncoding.Encode(treeNode));
 
     /// <summary>
     /// Finds the first node in <paramref name="pineValue"/> whose hash equals <paramref name="hash"/>.

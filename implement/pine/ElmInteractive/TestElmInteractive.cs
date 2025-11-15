@@ -3,6 +3,7 @@ using Pine.Core;
 using Pine.Core.Addressing;
 using Pine.Core.Files;
 using Pine.Core.Json;
+using Pine.Core.PopularEncodings;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -84,7 +85,7 @@ public class TestElmInteractive
         IConsole console)
     {
         var scenariosTreeComposition =
-            PineValueComposition.FromTreeWithStringPath(scenariosTree);
+            FileTreeEncoding.Encode(scenariosTree);
 
         var scenariosTreeCompositionHash =
             Convert.ToHexStringLower(

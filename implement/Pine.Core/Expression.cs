@@ -176,7 +176,7 @@ public abstract record Expression
                     valueInterpretationString = "int " + intValue;
                 }
 
-                if (PopularEncodings.StringEncoding.StringFromBlobValue(blobValue.Bytes).IsOkOrNull() is { } strValue)
+                if (StringEncoding.StringFromBlobValue(blobValue.Bytes).IsOkOrNull() is { } strValue)
                 {
                     valueInterpretationString = "string \"" + strValue + "\"";
                 }

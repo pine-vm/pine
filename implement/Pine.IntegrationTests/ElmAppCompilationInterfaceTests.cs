@@ -1,9 +1,10 @@
 using AwesomeAssertions;
+using Pine.Core.Files;
+using Pine.Core.PopularEncodings;
+using System;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Net;
-using System;
-using Pine.Core;
 using Xunit;
 
 namespace Pine.IntegrationTests;
@@ -45,7 +46,7 @@ public class ElmAppCompilationInterfaceTests
                 });
 
         var webAppSource =
-            PineValueComposition.FromTreeWithStringPath(PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(webAppSourceFiles));
+            FileTreeEncoding.Encode(FileTree.FromSetOfFilesWithStringPath(webAppSourceFiles));
 
         using var testSetup = WebHostAdminInterfaceTestSetup.Setup(deployAppAndInitElmState: webAppSource);
         using var server = testSetup.StartWebHost();

@@ -1,6 +1,6 @@
 using AwesomeAssertions;
-using Pine.Core;
 using Pine.Core.Addressing;
+using Pine.Core.PopularEncodings;
 using System;
 using System.Collections.Immutable;
 using System.Linq;
@@ -71,7 +71,7 @@ public class LoadCompositionTests
                     })
                     .ToImmutableList();
 
-                var composition = PineValueComposition.FromTreeWithStringPath(loaded.tree);
+                var composition = FileTreeEncoding.Encode(loaded.tree);
                 var compositionId = Convert.ToHexStringLower(PineValueHashTree.ComputeHash(composition).Span);
 
                 compositionId.Should().Be(testCase.expectedCompositionId);

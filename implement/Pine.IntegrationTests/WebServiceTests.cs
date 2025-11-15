@@ -8,6 +8,7 @@ using Pine.Core;
 using Pine.Core.Addressing;
 using Pine.Core.Files;
 using Pine.Core.IO;
+using Pine.Core.PopularEncodings;
 using Pine.Elm.Platform;
 using System;
 using System.Collections.Generic;
@@ -143,8 +144,8 @@ public class WebServiceTests
                 });
 
         var webAppSource =
-            PineValueComposition.FromTreeWithStringPath(
-                PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(webAppSourceFiles));
+            FileTreeEncoding.Encode(
+                FileTree.FromSetOfFilesWithStringPath(webAppSourceFiles));
 
         using var testSetup =
             WebHostAdminInterfaceTestSetup.Setup(deployAppAndInitElmState: webAppSource);
@@ -255,8 +256,8 @@ public class WebServiceTests
             WebHostAdminInterfaceTestSetup.Setup(
                 fileStore: fileStore,
                 deployAppAndInitElmState:
-                PineValueComposition.FromTreeWithStringPath(
-                    PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(deploymentFiles)),
+                FileTreeEncoding.Encode(
+                    FileTree.FromSetOfFilesWithStringPath(deploymentFiles)),
                 persistentProcessHostDateTime: () => persistentProcessHostDateTime);
 
         long expectedSum = 0;
@@ -365,8 +366,8 @@ public class WebServiceTests
                 });
 
         using var testSetup = WebHostAdminInterfaceTestSetup.Setup(
-            deployAppAndInitElmState: PineValueComposition.FromTreeWithStringPath(
-                PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(deploymentFiles)));
+            deployAppAndInitElmState: FileTreeEncoding.Encode(
+                FileTree.FromSetOfFilesWithStringPath(deploymentFiles)));
 
         async System.Threading.Tasks.Task<HttpResponseMessage> PostStringContentToPublicAppAsync(
             string requestContent)
@@ -762,7 +763,7 @@ public class WebServiceTests
             ZipArchive.ZipArchiveFromFiles(TestSetup.CounterElmWebApp);
 
         var deploymentTree =
-            PineValueComposition.SortedTreeFromSetOfBlobsWithCommonFilePath(
+            FileTree.FromSetOfFilesWithCommonFilePath(
                 ZipArchive.EntriesFromZipArchive(deploymentZipArchive).ToImmutableList());
 
         using var testSetup = WebHostAdminInterfaceTestSetup.Setup();
@@ -790,7 +791,7 @@ public class WebServiceTests
                     await getAppConfigResponse.Content.ReadAsByteArrayAsync();
 
                 var responseAppConfigTree =
-                    PineValueComposition.SortedTreeFromSetOfBlobsWithCommonFilePath(
+                    FileTree.FromSetOfFilesWithCommonFilePath(
                         ZipArchive.EntriesFromZipArchive(getAppResponseContent).ToImmutableList());
 
                 PineValueHashTree.ComputeHashSorted(responseAppConfigTree).ToArray()
@@ -1666,7 +1667,7 @@ public class WebServiceTests
             TestSetup.GetElmAppFromSubdirectoryName("http-long-polling");
 
         var appSourceTree =
-            PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(appSourceFiles);
+            FileTree.FromSetOfFilesWithStringPath(appSourceFiles);
 
         var webServiceConfig =
             WebServiceInterface.ConfigFromSourceFilesAndEntryFileName(

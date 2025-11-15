@@ -72,18 +72,18 @@ public static class FileTreeEncoding
     /// </summary>
     public static PineValue Encode(FileTree node)
     {
-        if (node is FileTree.FileNode blob)
+        if (node is FileTree.FileNode file)
         {
-            return PineValue.Blob(blob.Bytes);
+            return PineValue.Blob(file.Bytes);
         }
 
-        if (node is FileTree.DirectoryNode tree)
+        if (node is FileTree.DirectoryNode directory)
         {
-            var encodedItems = new PineValue[tree.Items.Count];
+            var encodedItems = new PineValue[directory.Items.Count];
 
-            for (var itemIndex = 0; itemIndex < tree.Items.Count; itemIndex++)
+            for (var itemIndex = 0; itemIndex < directory.Items.Count; itemIndex++)
             {
-                var (name, component) = tree.Items[itemIndex];
+                var (name, component) = directory.Items[itemIndex];
 
                 encodedItems[itemIndex] =
                     PineValue.List(

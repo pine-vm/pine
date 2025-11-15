@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using System;
 using System.IO;
 using System.Linq;
-using Pine.Core;
 using Pine.Core.IO;
 using Pine.Core.Files;
 
@@ -24,7 +23,7 @@ public static class LoadFromLocalFilesystem
             path,
             ignoreFileOnIOException: ignoreFileOnIOException);
 
-        return PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(blobs);
+        return FileTree.FromSetOfFilesWithStringPath(blobs);
     }
 
     public static FileTree RemoveNoiseFromTree(

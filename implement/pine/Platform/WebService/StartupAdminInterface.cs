@@ -10,6 +10,7 @@ using Pine.Core;
 using Pine.Core.Addressing;
 using Pine.Core.Files;
 using Pine.Core.IO;
+using Pine.Core.PopularEncodings;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -286,7 +287,7 @@ public class StartupAdminInterface
                             IReadOnlyList<string> publicWebHostUrls)
                         {
                             var appConfigTree =
-                                PineValueComposition.ParseAsTreeWithStringPath(processAppConfig.AppConfigComponent)
+                                FileTreeEncoding.Parse(processAppConfig.AppConfigComponent)
                                 .Extract(error => throw new Exception(error.ToString()));
 
                             var appConfigFilesNamesAndContents =
@@ -512,10 +513,10 @@ public class StartupAdminInterface
             }
 
             var deploymentTree =
-                PineValueComposition.SortedTreeFromSetOfBlobsWithCommonFilePath(
+                FileTree.FromSetOfFilesWithCommonFilePath(
                     ZipArchive.EntriesFromZipArchive(deploymentZipArchive));
 
-            var deploymentPineValue = PineValueComposition.FromTreeWithStringPath(deploymentTree);
+            var deploymentPineValue = FileTreeEncoding.Encode(deploymentTree);
 
             var deploymentHashBase16 = Convert.ToHexStringLower(PineValueHashTree.ComputeHash(deploymentPineValue).Span);
 
@@ -604,7 +605,7 @@ public class StartupAdminInterface
 
                             var appConfigHashBase16 = Convert.ToHexStringLower(PineValueHashTree.ComputeHash(appConfig).Span);
 
-                            var appConfigTreeResult = PineValueComposition.ParseAsTreeWithStringPath(appConfig);
+                            var appConfigTreeResult = FileTreeEncoding.Parse(appConfig);
 
                             var appConfigZipArchive =
                             appConfigTreeResult
@@ -612,7 +613,7 @@ public class StartupAdminInterface
                                 fromErr: _ => throw   new Exception("Failed to parse as tree with string path"),
                                 fromOk: appConfigTree =>
                                 ZipArchive.ZipArchiveFromFiles(
-                                    PineValueComposition.TreeToFlatDictionaryWithPathComparer(appConfigTree)));
+                                    FileTreeExtensions.ToFlatDictionaryWithPathComparer(appConfigTree)));
 
                             context.Response.StatusCode = 200;
                             context.Response.Headers.ContentLength = appConfigZipArchive.LongLength;

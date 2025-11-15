@@ -2,6 +2,7 @@ using Pine;
 using Pine.Core;
 using Pine.Core.Addressing;
 using Pine.Core.Files;
+using Pine.Core.PopularEncodings;
 using System;
 
 namespace ElmTime.Platform.WebService;
@@ -31,7 +32,7 @@ public static class BuildConfigurationFromArguments
             :
             sourceTree;
 
-        var filteredSourceComposition = PineValueComposition.FromTreeWithStringPath(filteredSourceTree);
+        var filteredSourceComposition = FileTreeEncoding.Encode(filteredSourceTree);
 
         var filteredSourceCompositionId =
             Convert.ToHexStringLower(PineValueHashTree.ComputeHash(filteredSourceComposition).Span);
@@ -47,10 +48,10 @@ public static class BuildConfigurationFromArguments
     public static byte[] BuildConfigurationZipArchive(PineValue sourceComposition)
     {
         var parseSourceAsTree =
-            PineValueComposition.ParseAsTreeWithStringPath(sourceComposition)
+            FileTreeEncoding.Parse(sourceComposition)
             .Extract(_ => throw new Exception("Failed to map source to tree."));
 
-        var sourceFiles = PineValueComposition.TreeToFlatDictionaryWithPathComparer(parseSourceAsTree);
+        var sourceFiles = FileTreeExtensions.ToFlatDictionaryWithPathComparer(parseSourceAsTree);
 
         return ZipArchive.ZipArchiveFromFiles(sourceFiles);
     }

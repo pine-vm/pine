@@ -486,7 +486,7 @@ public sealed class PersistentProcessLive : IAsyncDisposable
                     if (appConfigComponent is not null && elmAppStateComponent is not null)
                     {
                         var appConfigAsTree =
-                        PineValueComposition.ParseAsTreeWithStringPath(appConfigComponent)
+                        FileTreeEncoding.Parse(appConfigComponent)
                         .Extract(_ => throw new Exception(
                             "Unexpected content of appConfigComponent " + appConfigHash + ": Failed to parse as tree."));
 
@@ -761,7 +761,7 @@ public sealed class PersistentProcessLive : IAsyncDisposable
                 with
                 {
                     LastAppConfig =
-                    new ProcessAppConfig(PineValueComposition.FromTreeWithStringPath(
+                    new ProcessAppConfig(FileTreeEncoding.Encode(
                         deployAppConfigAndMigrateElmAppState)),
 
                     LastAppState = migrateOk.newState,
@@ -780,7 +780,7 @@ public sealed class PersistentProcessLive : IAsyncDisposable
                 with
                 {
                     LastAppConfig =
-                        new ProcessAppConfig(PineValueComposition.FromTreeWithStringPath(appConfig)),
+                        new ProcessAppConfig(FileTreeEncoding.Encode(appConfig)),
                     LastAppState = appConfigParsed.Init.State,
                     InitOrMigrateCmds = []
                 };
@@ -827,7 +827,7 @@ public sealed class PersistentProcessLive : IAsyncDisposable
         ElmAppInterfaceConfig? overrideElmAppInterfaceConfig)
     {
         var appConfigTree =
-            PineValueComposition.ParseAsTreeWithStringPath(deploymentValue)
+            FileTreeEncoding.Parse(deploymentValue)
             .Extract(err => throw new Exception("Failed to parse app config as file tree: " + err));
 
         return WebServiceConfigFromDeployment(appConfigTree, overrideElmAppInterfaceConfig);
@@ -882,7 +882,7 @@ public sealed class PersistentProcessLive : IAsyncDisposable
                 LoadComponentFromValueInFileStructure(valueInFileStructure, cacheFromStore: false);
 
             return
-                PineValueComposition.ParseAsTreeWithStringPath(component)
+                FileTreeEncoding.Parse(component)
                 .Extract(_ => throw new Exception("Failed to load component " + component + " as tree: Failed to parse as tree."));
         }
 

@@ -102,7 +102,7 @@ namespace ElmTime
             var sourceFilesHash =
                 Convert.ToHexStringLower(
                     PineValueHashTree.ComputeHashSorted(
-                        PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(sourceFiles)).Span);
+                        FileTree.FromSetOfFilesWithStringPath(sourceFiles)).Span);
 
             var compilationHash =
                 System.Security.Cryptography.SHA256.HashData(

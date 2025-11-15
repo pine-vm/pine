@@ -1,17 +1,17 @@
 using AwesomeAssertions;
 using ElmTime.Platform.WebService;
 using Microsoft.AspNetCore.Http;
-using Pine.Core;
+using Pine.Core.Files;
 using Pine.Core.IO;
 using Pine.Elm.Platform;
 using Pine.Platform.WebService;
 using System.Collections.Concurrent;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
-using System.Linq;
 
 namespace Pine.IntegrationTests;
 
@@ -27,7 +27,7 @@ public class StaticAppSnapshottingStateTests
 
         var webServiceCompiled =
             WebServiceInterface.CompiledModulesFromSourceFilesAndEntryFileName(
-                PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(TestSetup.CounterElmWebApp),
+                FileTree.FromSetOfFilesWithStringPath(TestSetup.CounterElmWebApp),
                 entryFileName: ["src", "Backend", "Main.elm"]);
 
         var logMessages = new ConcurrentQueue<string>();
@@ -181,7 +181,7 @@ public class StaticAppSnapshottingStateTests
 
         var webServiceCompiled =
             WebServiceInterface.CompiledModulesFromSourceFilesAndEntryFileName(
-                PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(TestSetup.CounterElmWebApp),
+                FileTree.FromSetOfFilesWithStringPath(TestSetup.CounterElmWebApp),
                 entryFileName: ["src", "Backend", "Main.elm"]);
 
         var logMessages = new ConcurrentQueue<string>();
@@ -294,7 +294,7 @@ public class StaticAppSnapshottingStateTests
 
         var webServiceCompiled =
             WebServiceInterface.CompiledModulesFromSourceFilesAndEntryFileName(
-                PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(TestSetup.CrossPropagateHttpHeadersToAndFromBodyElmWebApp),
+                FileTree.FromSetOfFilesWithStringPath(TestSetup.CrossPropagateHttpHeadersToAndFromBodyElmWebApp),
                 entryFileName: ["src", "Backend", "Main.elm"]);
 
         var logMessages = new ConcurrentQueue<string>();
@@ -410,7 +410,7 @@ public class StaticAppSnapshottingStateTests
 
         var webServiceCompiled =
             WebServiceInterface.CompiledModulesFromSourceFilesAndEntryFileName(
-                PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(TestSetup.CounterElmWebApp),
+                FileTree.FromSetOfFilesWithStringPath(TestSetup.CounterElmWebApp),
                 entryFileName: ["src", "Backend", "Main.elm"]);
 
         using var cancellationTokenSource = new CancellationTokenSource();

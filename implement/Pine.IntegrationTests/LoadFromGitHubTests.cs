@@ -191,8 +191,8 @@ public class LoadFromGitHubTests
                 var responseContentBytes = response.Content.ReadAsByteArrayAsync().Result;
 
                 return
-                    PineValueComposition.ToFlatDictionaryWithPathComparer(
-                        PineValueComposition.SortedTreeFromSetOfBlobsWithCommonFilePath(
+                    FileTreeExtensions.ToFlatDictionaryWithPathComparer(
+                        FileTree.FromSetOfFilesWithCommonFilePath(
                             ZipArchive.EntriesFromZipArchive(responseContentBytes))
                         .EnumerateFilesTransitive());
             }

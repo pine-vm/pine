@@ -72,7 +72,7 @@ public class DotNetAssembly
         IReadOnlyList<string> directoryPath,
         Assembly assembly) =>
         LoadTreeFromManifestEmbeddedFileProvider(directoryPath, assembly)
-        .Map(PineValueComposition.TreeToFlatDictionaryWithPathComparer);
+        .Map(FileTreeExtensions.ToFlatDictionaryWithPathComparer);
 
     /// <summary>
     /// Recursively loads a directory tree from the assembly's embedded file provider, retaining hierarchy.

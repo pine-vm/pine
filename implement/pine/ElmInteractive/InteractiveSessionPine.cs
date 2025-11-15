@@ -274,7 +274,7 @@ public class InteractiveSessionPine : IInteractiveSession
         }
 
         var mergedKernelModulesTree =
-            PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(
+            FileTree.FromSetOfFilesWithStringPath(
                 defaultKernelModulesTree.EnumerateFilesTransitive()
                 .Select(blob =>
                 (blob.path,
@@ -290,7 +290,7 @@ public class InteractiveSessionPine : IInteractiveSession
             .ToImmutableArray();
 
         var appFilesAfterKernelModules =
-            PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(
+            FileTree.FromSetOfFilesWithStringPath(
                 appSourceFiles.AppFiles.EnumerateFilesTransitive()
                 .Where(blob =>
                 !mergedKernelModulesTreeBlobs.Any(
