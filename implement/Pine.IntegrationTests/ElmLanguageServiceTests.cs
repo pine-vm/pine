@@ -2,12 +2,15 @@ using AwesomeAssertions;
 using Pine.Core;
 using Pine.Core.Files;
 using Pine.Elm;
+using Pine.Elm.MonacoEditor;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using Xunit;
+
+using LanguageServiceInterface = Pine.Elm.LanguageServiceInterface;
 
 namespace Pine.IntegrationTests;
 
@@ -130,9 +133,9 @@ public class ElmLanguageServiceTests
             elmModuleTextWithSplitSymbol: elmModuleTextMain,
             expectedCompletionItems:
             [
-                new Elm.MonacoEditor.MonacoCompletionItem(
+                new MonacoCompletionItem(
                     Label: "from_alfa",
-                    Kind: new Elm.MonacoEditor.CompletionItemKind.FunctionCompletionItemKind(),
+                    Kind: new CompletionItemKind.FunctionCompletionItemKind(),
                     Documentation: "    from_alfa",
                     InsertText: "from_alfa")
             ]);
@@ -182,9 +185,9 @@ public class ElmLanguageServiceTests
         MutateServiceAddingFiles(mergedWorkspace, languageService);
 
         var hoverRequest =
-            new Elm.LanguageServiceInterface.ProvideHoverRequestStruct(
+            new LanguageServiceInterface.ProvideHoverRequestStruct(
                 FileLocation:
-                new Elm.LanguageServiceInterface.FileLocation.WorkspaceFileLocation(
+                new LanguageServiceInterface.FileLocation.WorkspaceFileLocation(
                     string.Join("/", filePathOpenedInEditor)),
                 PositionLineNumber: beforeCursorLines.Length,
                 PositionColumn: beforeCursorLines.Last().Length);
@@ -211,9 +214,9 @@ public class ElmLanguageServiceTests
 
             var addFileResult =
                 languageServiceState.HandleRequest(
-                new Elm.LanguageServiceInterface.Request.AddWorkspaceFileRequest(
+                new LanguageServiceInterface.Request.AddWorkspaceFileRequest(
                     FilePath: string.Join("/", file.path),
-                    Blob: new Elm.LanguageServiceInterface.FileTreeBlobNode(
+                    Blob: new LanguageServiceInterface.FileTreeBlobNode(
                         AsBase64: asBase64,
                         AsText: asText)));
 
@@ -227,7 +230,7 @@ public class ElmLanguageServiceTests
         IReadOnlyList<string> filePathOpenedInEditor,
         string elmModuleTextBefore,
         string elmModuleTextWithSplitSymbol,
-        IReadOnlyList<Elm.MonacoEditor.MonacoCompletionItem> expectedCompletionItems)
+        IReadOnlyList<MonacoCompletionItem> expectedCompletionItems)
     {
         var split =
             elmModuleTextWithSplitSymbol.Split("✂➕");
@@ -274,7 +277,7 @@ public class ElmLanguageServiceTests
                 new FileTree.FileNode(Encoding.UTF8.GetBytes(elmModuleText)));
 
         var completionItemsRequest =
-            new Elm.LanguageServiceInterface.ProvideCompletionItemsRequestStruct(
+            new LanguageServiceInterface.ProvideCompletionItemsRequestStruct(
                 FilePathOpenedInEditor: string.Join("/", filePathOpenedInEditor),
                 CursorLineNumber: beforeCursorLines.Length,
                 CursorColumn: beforeCursorLines.Last().Length + 1);

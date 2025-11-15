@@ -2,13 +2,13 @@ using Interface = Pine.Elm.LanguageServiceInterface;
 using Pine.Core;
 using Pine.Core.Elm.ElmSyntax;
 using Pine.Core.Elm.Elm019;
+using Pine.Core.Files;
 using Pine.Core.LanguageServerProtocol;
 using Pine.Elm019;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Collections.Immutable;
-using Pine.Core.Files;
 
 namespace Pine.Elm;
 
@@ -16,9 +16,9 @@ public class LanguageServer(
     System.Action<string>? logDelegate,
     IReadOnlyList<string> elmPackagesSearchDirectories)
 {
-    private readonly ConcurrentDictionary<string, string> allSeenDocumentUris = new();
+    private readonly ConcurrentDictionary<string, string> _allSeenDocumentUris = new();
 
-    private readonly ConcurrentDictionary<string, string> clientTextDocumentContents = new();
+    private readonly ConcurrentDictionary<string, string> _clientTextDocumentContents = new();
 
     private IReadOnlyList<WorkspaceFolder> workspaceFolders = [];
 
@@ -360,9 +360,9 @@ public class LanguageServer(
 
         Log("TextDocument_didOpen: " + decodedUri);
 
-        clientTextDocumentContents[decodedUri] = textDocument.Text;
+        _clientTextDocumentContents[decodedUri] = textDocument.Text;
 
-        allSeenDocumentUris[decodedUri] = decodedUri;
+        _allSeenDocumentUris[decodedUri] = decodedUri;
     }
 
     public void TextDocument_didChange(
@@ -371,7 +371,7 @@ public class LanguageServer(
     {
         var textDocumentUri = DocumentUriCleaned(textDocument.Uri);
 
-        allSeenDocumentUris[textDocumentUri] = textDocumentUri;
+        _allSeenDocumentUris[textDocumentUri] = textDocumentUri;
 
         Log(
             "TextDocument_didChange: " + textDocumentUri +
@@ -385,7 +385,7 @@ public class LanguageServer(
 
             if (contentChange.Range is null)
             {
-                clientTextDocumentContents[textDocumentUri] = contentChange.Text;
+                _clientTextDocumentContents[textDocumentUri] = contentChange.Text;
 
                 var linesCount = ElmModule.ModuleLines(contentChange.Text).Count();
 
@@ -408,10 +408,10 @@ public class LanguageServer(
     {
         var decodedUri = DocumentUriCleaned(textDocument.Uri);
 
-        clientTextDocumentContents.TryRemove(decodedUri, out var _);
+        _clientTextDocumentContents.TryRemove(decodedUri, out var _);
 
         Log("TextDocument_didClose: " + decodedUri +
-            " (" + clientTextDocumentContents.Count + " open remaining)");
+            " (" + _clientTextDocumentContents.Count + " open remaining)");
     }
 
     public void Workspace_didChangeWatchedFiles(IReadOnlyList<FileEvent> changesBeforeDecode)
@@ -742,7 +742,7 @@ public class LanguageServer(
 
         Log("TextDocument_formatting: " + textDocumentUri);
 
-        clientTextDocumentContents.TryGetValue(textDocumentUri, out var textDocumentContentBefore);
+        _clientTextDocumentContents.TryGetValue(textDocumentUri, out var textDocumentContentBefore);
 
         var localPathResult = DocumentUriAsLocalPath(textDocumentUri);
 
@@ -802,9 +802,9 @@ public class LanguageServer(
             return [];
         }
 
-        if (clientTextDocumentContents.ContainsKey(textDocumentUri))
+        if (_clientTextDocumentContents.ContainsKey(textDocumentUri))
         {
-            clientTextDocumentContents[textDocumentUri] = newContent;
+            _clientTextDocumentContents[textDocumentUri] = newContent;
         }
 
         var textEdits =
@@ -829,7 +829,7 @@ public class LanguageServer(
                 var binaryClock = System.Diagnostics.Stopwatch.StartNew();
 
                 var elmFormatted =
-                    AVH4ElmFormatBinaries.RunElmFormat(textDocumentContentBefore);
+                    CommonBinaries.AVH4ElmFormatBinaries.RunElmFormat(textDocumentContentBefore);
 
                 binaryClock.Stop();
 
@@ -1270,13 +1270,13 @@ public class LanguageServer(
     {
         var textDocumentUri = DocumentUriCleaned(didSaveParams.TextDocument.Uri);
 
-        allSeenDocumentUris[textDocumentUri] = textDocumentUri;
+        _allSeenDocumentUris[textDocumentUri] = textDocumentUri;
 
         Log("TextDocument_didSave: " + textDocumentUri);
 
         if (didSaveParams.Text is { } text)
         {
-            clientTextDocumentContents[textDocumentUri] = text;
+            _clientTextDocumentContents[textDocumentUri] = text;
         }
 
         var localPathResult = DocumentUriAsLocalPath(textDocumentUri);

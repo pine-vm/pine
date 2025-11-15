@@ -16,6 +16,7 @@ using Pine.Core.Http;
 using Pine.Core.IO;
 using Pine.Core.PopularEncodings;
 using Pine.Elm;
+using Pine.Elm.CommonBinaries;
 using Pine.Elm.Platform;
 using Pine.PineVM;
 using System;

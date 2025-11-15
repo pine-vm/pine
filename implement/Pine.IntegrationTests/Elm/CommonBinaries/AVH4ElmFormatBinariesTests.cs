@@ -1,8 +1,8 @@
 using AwesomeAssertions;
-using Pine.Elm;
+using Pine.Elm.CommonBinaries;
 using Xunit;
 
-namespace Pine.IntegrationTests;
+namespace Pine.IntegrationTests.Elm.CommonBinaries;
 
 public class AVH4ElmFormatBinariesTests
 {

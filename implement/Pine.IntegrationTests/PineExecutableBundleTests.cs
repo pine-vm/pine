@@ -3,6 +3,8 @@ using Pine.Core;
 using Pine.Core.Elm;
 using Xunit;
 
+using ElmCompiler = Pine.Elm.ElmCompiler;
+
 namespace Pine.IntegrationTests;
 
 public class PineExecutableBundleTests
@@ -11,10 +13,10 @@ public class PineExecutableBundleTests
     public void Bundles_default_elm_compiler_bootstrapping()
     {
         var compilerSourceFiles =
-            Elm.ElmCompiler.CompilerSourceFilesDefault.Value;
+            ElmCompiler.CompilerSourceFilesDefault.Value;
 
         var combinedSourceFiles =
-            Elm.ElmCompiler.ElmCompilerFileTreeFromBundledFileTree(compilerSourceFiles);
+            ElmCompiler.ElmCompilerFileTreeFromBundledFileTree(compilerSourceFiles);
 
         var elmCompilerFromBundleValue =
             BundledElmEnvironments.BundledElmEnvironmentFromFileTree(combinedSourceFiles);
@@ -22,13 +24,13 @@ public class PineExecutableBundleTests
         elmCompilerFromBundleValue.Should().NotBeNull();
 
         var elmCompilerFromBundle =
-            Elm.ElmCompiler.ElmCompilerFromEnvValue(elmCompilerFromBundleValue)
+            ElmCompiler.ElmCompilerFromEnvValue(elmCompilerFromBundleValue)
             .Extract(err => throw new System.Exception("Failed parsing compiler from bundled value: " + err));
 
         var freshEnvironment =
-            Elm.ElmCompiler.CompileInteractiveEnvironment(
+            ElmCompiler.CompileInteractiveEnvironment(
                 combinedSourceFiles,
-                rootFilePaths: Elm.ElmCompiler.DefaultCompilerTreeRootModuleFilePaths,
+                rootFilePaths: ElmCompiler.DefaultCompilerTreeRootModuleFilePaths,
                 skipLowering: true,
                 skipFilteringForSourceDirs: true,
                 overrideElmCompiler: elmCompilerFromBundle)
@@ -37,7 +39,7 @@ public class PineExecutableBundleTests
         // Verify bootstrapping...
 
         var elmCompiler =
-            Elm.ElmCompiler.BuildCompilerFromSourceFiles(compilerSourceFiles)
+            ElmCompiler.BuildCompilerFromSourceFiles(compilerSourceFiles)
             .Extract(err => throw new System.Exception(err));
 
         {
@@ -71,7 +73,7 @@ public class PineExecutableBundleTests
             "Elm compiler environment not found in bundled environments");
 
         var elmCompiler =
-            Elm.ElmCompiler.ElmCompilerFromEnvValue(elmCompilerFromBundle)
+            ElmCompiler.ElmCompilerFromEnvValue(elmCompilerFromBundle)
             .Extract(err => throw new System.Exception(err));
 
         var elmModuleText =
@@ -122,10 +124,10 @@ public class PineExecutableBundleTests
     public static PineValue? BundledElmCompilerValue()
     {
         var compilerSourceFiles =
-            Elm.ElmCompiler.CompilerSourceFilesDefault.Value;
+            ElmCompiler.CompilerSourceFilesDefault.Value;
 
         var combinedSourceFiles =
-            Elm.ElmCompiler.ElmCompilerFileTreeFromBundledFileTree(compilerSourceFiles);
+            ElmCompiler.ElmCompilerFileTreeFromBundledFileTree(compilerSourceFiles);
 
         var elmCompilerFromBundleValue =
             BundledElmEnvironments.BundledElmEnvironmentFromFileTree(combinedSourceFiles);

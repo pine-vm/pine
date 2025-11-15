@@ -13,6 +13,8 @@ using Xunit;
 using System.Text.Json;
 using Pine.Core.IO;
 
+using ElmLanguageServer = Pine.Elm.LanguageServer;
+
 namespace Pine.IntegrationTests;
 
 public class ElmLanguageServerTests
@@ -256,7 +258,7 @@ public class ElmLanguageServerTests
 
             try
             {
-                var result = Elm.LanguageServer.ApplyTextEdits(testCase.OriginalText, testCase.Edits);
+                var result = ElmLanguageServer.ApplyTextEdits(testCase.OriginalText, testCase.Edits);
 
                 result.Should().Be(testCase.ExpectedText);
             }
@@ -395,7 +397,7 @@ public class ElmLanguageServerTests
             try
             {
                 var actualEdits =
-                    Elm.LanguageServer.ComputeTextEditsForDocumentFormat(
+                    ElmLanguageServer.ComputeTextEditsForDocumentFormat(
                         testCase.OriginalText,
                         testCase.NewText);
 
@@ -422,7 +424,7 @@ public class ElmLanguageServerTests
                 }
 
                 var resultingText =
-                    Elm.LanguageServer.ApplyTextEdits(testCase.OriginalText, actualEdits);
+                    ElmLanguageServer.ApplyTextEdits(testCase.OriginalText, actualEdits);
 
                 resultingText.Should().Be(testCase.NewText);
 
@@ -455,7 +457,7 @@ public class ElmLanguageServerTests
         var formattedContent =
             "function hello() {\n  console.log('hello');\n}\n\nfunction goodbye() {\n  console.log('goodbye');\n}";
 
-        var edits = Elm.LanguageServer.ComputeTextEditsForDocumentFormat(originalContent, formattedContent);
+        var edits = ElmLanguageServer.ComputeTextEditsForDocumentFormat(originalContent, formattedContent);
 
         // Should return a minimal edit for just the changed line, not a whole document replacement
         edits.Count.Should().BeGreaterThanOrEqualTo(1);
@@ -471,7 +473,7 @@ public class ElmLanguageServerTests
         isWholeDocumentReplacement.Should().BeFalse("formatting should return minimal edits, not whole document replacement");
 
         // Verify the result is correct
-        var result = Elm.LanguageServer.ApplyTextEdits(originalContent, edits);
+        var result = ElmLanguageServer.ApplyTextEdits(originalContent, edits);
         result.Should().Be(formattedContent);
     }
 }

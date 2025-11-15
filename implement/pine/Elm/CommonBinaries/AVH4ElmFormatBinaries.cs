@@ -5,7 +5,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 
-namespace Pine.Elm;
+namespace Pine.Elm.CommonBinaries;
 
 public class AVH4ElmFormatBinaries
 {
@@ -24,7 +24,7 @@ public class AVH4ElmFormatBinaries
             ("364469d9b64866e0595c9c2837eb330eeb1c58269d31567085fa24886b5a46d7",
             @"https://github.com/avh4/elm-format/releases/download/0.8.7/elm-format-0.8.7-mac-x64.tgz"));
 
-    private readonly static Lazy<string> executableFilePathCached = new(() =>
+    private readonly static Lazy<string> s_executableFilePathCached = new(() =>
     {
         /*
          * For now, we assume that the file stays the same for the lifetime of the current process.
@@ -49,7 +49,7 @@ public class AVH4ElmFormatBinaries
 
     public static string RunElmFormat(string moduleTextBefore)
     {
-        var executableFilePath = executableFilePathCached.Value;
+        var executableFilePath = s_executableFilePathCached.Value;
 
         var process = new Process
         {
@@ -76,7 +76,7 @@ public class AVH4ElmFormatBinaries
             leaveOpen: false))
         {
             // Ensure input ends with newline
-            if (!moduleTextBefore.EndsWith("\n"))
+            if (!moduleTextBefore.EndsWith('\n'))
             {
                 moduleTextBefore += "\n";
             }

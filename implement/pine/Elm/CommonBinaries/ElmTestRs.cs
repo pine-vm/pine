@@ -1,5 +1,4 @@
 using ElmTime.Elm019;
-using Pine;
 using Pine.Core;
 using System;
 using System.Collections.Generic;
@@ -7,7 +6,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Runtime.InteropServices;
 
-namespace ElmTime;
+namespace Pine.Elm.CommonBinaries;
 
 public record ElmTestRsReportJsonEntry(
     string @event,
@@ -38,7 +37,8 @@ public record ElmTestRsReportJsonEntryFailureReasonDataEquality(
     string actual,
     string comparison);
 
-public class ElmTestRsReportJsonEntryFailureReasonDataJsonConverter : System.Text.Json.Serialization.JsonConverter<ElmTestRsReportJsonEntryFailureReasonData>
+public class ElmTestRsReportJsonEntryFailureReasonDataJsonConverter :
+    System.Text.Json.Serialization.JsonConverter<ElmTestRsReportJsonEntryFailureReasonData>
 {
     public override ElmTestRsReportJsonEntryFailureReasonData Read(
         ref System.Text.Json.Utf8JsonReader reader,
@@ -92,7 +92,7 @@ public class ElmTestRs
             ("bfe56245ac8648a705366defb8c6cf5d95c721527fcf318f87200c608354e61e",
             @"https://github.com/mpizenberg/elm-test-rs/releases/download/v3.0/elm-test-rs_macos.tar.gz"));
 
-    public static IReadOnlyDictionary<OSPlatform, (string hash, string remoteSource)> DenoExecutableFileByOs =
+    public static readonly IReadOnlyDictionary<OSPlatform, (string hash, string remoteSource)> DenoExecutableFileByOs =
         ImmutableDictionary<OSPlatform, (string hash, string remoteSource)>.Empty
         .Add(
             OSPlatform.Linux,
@@ -182,15 +182,19 @@ public class ElmTestRs
 
     public static ElmTestRsReportJsonEntry DeserializeElmTestRsReportJsonEntry(string json)
     {
-        var serializeOptions = new System.Text.Json.JsonSerializerOptions
-        {
-            NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.AllowReadingFromString
-        };
-
-        serializeOptions.Converters.Add(new ElmTestRsReportJsonEntryFailureReasonDataJsonConverter());
-
-        return System.Text.Json.JsonSerializer.Deserialize<ElmTestRsReportJsonEntry>(json, serializeOptions)!;
+        return System.Text.Json.JsonSerializer.Deserialize<ElmTestRsReportJsonEntry>(json, s_elmTestRsReportJsonSerializerOptions)!;
     }
+
+    private static readonly System.Text.Json.JsonSerializerOptions s_elmTestRsReportJsonSerializerOptions =
+        new()
+        {
+            NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.AllowReadingFromString,
+
+            Converters =
+            {
+                new ElmTestRsReportJsonEntryFailureReasonDataJsonConverter(),
+            }
+        };
 
     public static IReadOnlyList<(IReadOnlyList<(string text, ElmTestRsConsoleOutputColor color)> text, bool? overallSuccess)>
         OutputFromEvent(
@@ -253,7 +257,7 @@ public class ElmTestRs
                 .Concat((@event.labels ?? []).TakeLast(1).Select(label => ("\n✗ " + label, ElmTestRsConsoleOutputColor.RedColor)))
                 .ToImmutableList();
 
-            static IReadOnlyList<string> renderFailureReasonData(ElmTestRsReportJsonEntryFailureReasonData failureReasonData)
+            static IReadOnlyList<string> RenderFailureReasonData(ElmTestRsReportJsonEntryFailureReasonData failureReasonData)
             {
                 if (failureReasonData.Equality is not null)
                 {
@@ -278,14 +282,13 @@ public class ElmTestRs
                 (@event.failures ?? [])
                 .Select(failure => failure.reason?.data)
                 .WhereNotNull()
-                .SelectMany(renderFailureReasonData)
+                .SelectMany(RenderFailureReasonData)
                 .ToImmutableList();
 
             return
                 ([.. textsFromLabels
-                ,
-                    .. textsFromFailures.Select(textFromFailure => ("\n    " + textFromFailure, ElmTestRsConsoleOutputColor.DefaultColor))],
-                    null);
+                , .. textsFromFailures
+                .Select(textFromFailure => ("\n    " + textFromFailure, ElmTestRsConsoleOutputColor.DefaultColor))], null);
         }
 
         return ([], null);
