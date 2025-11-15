@@ -2,6 +2,7 @@ using ElmTime.Platform.WebService.ProcessStoreSupportingMigrations;
 using Pine.Core;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
+using Pine.Core.Files;
 using Pine.Core.IO;
 using Pine.Core.PineVM;
 using Pine.Core.PopularEncodings;
@@ -61,12 +62,12 @@ public sealed class PersistentProcessLive : IAsyncDisposable
     public record struct ReductionWithResolvedDependencies(
         PineValue ElmAppState,
         PineValue AppConfig,
-        BlobTreeWithStringPath AppConfigAsTree);
+        FileTree AppConfigAsTree);
 
     public record struct CompositionEventWithResolvedDependencies(
         PineValue? SetElmAppState = null,
-        BlobTreeWithStringPath? DeployAppConfigAndInitElmAppState = null,
-        BlobTreeWithStringPath? DeployAppConfigAndMigrateElmAppState = null,
+        FileTree? DeployAppConfigAndInitElmAppState = null,
+        FileTree? DeployAppConfigAndMigrateElmAppState = null,
         ApplyFunctionOnLiteralsAndStateEvent? ApplyFunctionOnLiteralsAndState = null);
 
     public record ApplyFunctionOnLiteralsAndStateEvent(
@@ -833,7 +834,7 @@ public sealed class PersistentProcessLive : IAsyncDisposable
     }
 
     public static WebServiceInterface.WebServiceConfig WebServiceConfigFromDeployment(
-        BlobTreeWithStringPath appConfigTree,
+        FileTree appConfigTree,
         ElmAppInterfaceConfig? overrideElmAppInterfaceConfig)
     {
         var compilationRootFilePath =
@@ -874,7 +875,7 @@ public sealed class PersistentProcessLive : IAsyncDisposable
                 JsonSerializer.Serialize(valueInFileStructure));
         }
 
-        BlobTreeWithStringPath LoadComponentFromStoreAndAssertIsTree(
+        FileTree LoadComponentFromStoreAndAssertIsTree(
             ValueInFileStructure valueInFileStructure)
         {
             var component =

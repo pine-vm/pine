@@ -4,6 +4,7 @@ using Pine.Core.Addressing;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.Elm.ElmSyntax;
+using Pine.Core.Files;
 using Pine.Core.PopularEncodings;
 using Pine.Elm;
 using Pine.PineVM;
@@ -1844,7 +1845,7 @@ public class PGOTests
         }
     }
 
-    public static BlobTreeWithStringPath AppCodeTreeForElmModules(
+    public static FileTree AppCodeTreeForElmModules(
     IReadOnlyList<string> elmModuleTexts)
     {
         var compilerProgram = ElmCompiler.CompilerSourceFilesDefault.Value;

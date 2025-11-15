@@ -1,3 +1,4 @@
+using Pine.Core.Files;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -19,8 +20,8 @@ public class RecordingFileStoreWriter : IFileStoreWriter
     /// <summary>
     /// Tuple of the complete history and the latest reduced tree state obtained by applying the history.
     /// </summary>
-    private (ImmutableList<WriteOperation> history, BlobTreeWithStringPath latestVersion) _historyAndReduction =
-        ([], BlobTreeWithStringPath.EmptyTree);
+    private (ImmutableList<WriteOperation> history, FileTree latestVersion) _historyAndReduction =
+        ([], FileTree.EmptyTree);
 
     /// <summary>
     /// Gets the sequence of write operations performed on this instance in order of application.
@@ -114,14 +115,14 @@ public class RecordingFileStoreWriter : IFileStoreWriter
         /// <param name="previousState">The input tree state.</param>
         /// <returns>The new tree reflecting this operation.</returns>
         /// <exception cref="InvalidOperationException">Thrown when appending to a non-blob node.</exception>
-        public BlobTreeWithStringPath Apply(BlobTreeWithStringPath previousState)
+        public FileTree Apply(FileTree previousState)
         {
             if (SetFileContent is { } setFileContent)
             {
                 return
                     previousState.SetNodeAtPathSorted(
                         setFileContent.path,
-                        BlobTreeWithStringPath.Blob(setFileContent.fileContent));
+                        FileTree.File(setFileContent.fileContent));
             }
 
             if (AppendFileContent is { } appendFileContent)
@@ -134,10 +135,10 @@ public class RecordingFileStoreWriter : IFileStoreWriter
                     return
                         previousState.SetNodeAtPathSorted(
                             appendFileContent.path,
-                            BlobTreeWithStringPath.Blob(appendFileContent.fileContent));
+                            FileTree.File(appendFileContent.fileContent));
                 }
 
-                if (previousNode is not BlobTreeWithStringPath.BlobNode previousBlob)
+                if (previousNode is not FileTree.FileNode previousBlob)
                 {
                     throw new InvalidOperationException(
                         "Invalid operation: Cannot append to non-blob node");
@@ -146,7 +147,7 @@ public class RecordingFileStoreWriter : IFileStoreWriter
                 return
                     previousState.SetNodeAtPathSorted(
                         appendFileContent.path,
-                        BlobTreeWithStringPath.Blob(
+                        FileTree.File(
                             BytesConversions.Concat(previousBlob.Bytes.Span, appendFileContent.fileContent.Span)));
             }
 

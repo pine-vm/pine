@@ -1,5 +1,5 @@
 using AwesomeAssertions;
-using Pine.Core;
+using Pine.Core.Files;
 using Pine.Elm;
 using System;
 using System.Collections.Immutable;
@@ -16,7 +16,7 @@ public class ElmInteractiveTests
 
     private static string PathToKernelScenariosDirectory => @"./../../../../test-and-train/elm-interactive-scenarios-kernel";
 
-    public static BlobTreeWithStringPath CompileElmProgramCodeFiles =>
+    public static FileTree CompileElmProgramCodeFiles =>
         ElmCompiler.CompilerSourceContainerFilesDefault.Value;
 
 
@@ -47,7 +47,7 @@ public class ElmInteractiveTests
             .ToImmutableList();
 
         var scenariosTree =
-            BlobTreeWithStringPath.SortedTree(
+            FileTree.SortedDirectory(
                 [.. scenarios
                 .Select(scenario =>
                 (name: scenario.scenarioName,
@@ -57,7 +57,7 @@ public class ElmInteractiveTests
             ElmTime.ElmInteractive.TestElmInteractive.ParseElmInteractiveScenarios(scenariosTree, console);
 
         static ElmTime.ElmInteractive.IInteractiveSession newInteractiveSessionFromAppCode(
-            BlobTreeWithStringPath? appCodeTree) =>
+            FileTree? appCodeTree) =>
             new ElmTime.ElmInteractive.InteractiveSessionPine(
                 compilerSourceFiles: CompileElmProgramCodeFiles,
                 appCodeTree: appCodeTree,
@@ -142,7 +142,7 @@ public class ElmInteractiveTests
 
         var console = (IConsole)StaticConsole.Instance;
 
-        ElmTime.ElmInteractive.IInteractiveSession newInteractiveSessionFromAppCode(BlobTreeWithStringPath? appCodeTree) =>
+        ElmTime.ElmInteractive.IInteractiveSession newInteractiveSessionFromAppCode(FileTree? appCodeTree) =>
             new ElmTime.ElmInteractive.InteractiveSessionPine(
                 compilerSourceFiles: CompileElmProgramCodeFiles,
                 appCodeTree: appCodeTree,

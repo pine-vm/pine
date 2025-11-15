@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Pine.Core;
+using Pine.Core.Files;
 using Pine.Core.IO;
 using Pine.Elm.Platform;
 using System.Collections.Immutable;
@@ -12,7 +13,7 @@ public class ElmCommandLineAppTests
 {
     private static string PathToSimpleAppDirectory => @"./../../../../example-apps/cli-demo";
 
-    public static BlobTreeWithStringPath LoadFromLocalFilesystem(string path) =>
+    public static FileTree LoadFromLocalFilesystem(string path) =>
         PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(
             Filesystem.GetAllFilesFromDirectory(path));
 

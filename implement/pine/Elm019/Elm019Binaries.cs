@@ -1,6 +1,7 @@
 using Pine;
 using Pine.Core;
 using Pine.Core.Addressing;
+using Pine.Core.Files;
 using Pine.Core.IO;
 using System;
 using System.Collections.Generic;
@@ -32,7 +33,7 @@ public static class Elm019Binaries
         new FileStoreFromSystemIOFile(
             Path.Combine(Filesystem.CacheDirectory, "elm-make-result-cache", Program.AppVersionId));
 
-    public record ElmMakeOk(BlobTreeWithStringPath ProducedFiles);
+    public record ElmMakeOk(FileTree ProducedFiles);
 
     /// <inheritdoc cref="ElmMake"/>
     public static Result<string, ElmMakeOk> ElmMakeToJavascript(
@@ -235,7 +236,7 @@ public static class Elm019Binaries
 
             if (1 <= outputFiles.Count)
             {
-                return new ElmMakeOk(BlobTreeWithStringPath.Blob(outputFiles.First().content));
+                return new ElmMakeOk(FileTree.File(outputFiles.First().content));
             }
 
             if (!ElmMakeOutputQualifiesForRetry(standardErrorText: commandResults.processOutput.StandardError))
@@ -330,10 +331,10 @@ public static class Elm019Binaries
         string producedFileBase64);
 
     private static ElmMakeOk AsElmMakeOk(ElmMakeOkJsonStructure cacheEntry) =>
-        new(ProducedFiles: BlobTreeWithStringPath.Blob(Convert.FromBase64String(cacheEntry.producedFileBase64)));
+        new(ProducedFiles: FileTree.File(Convert.FromBase64String(cacheEntry.producedFileBase64)));
 
     private static ElmMakeOkJsonStructure AsJsonStructure(ElmMakeOk cacheEntry) =>
-        cacheEntry.ProducedFiles is not BlobTreeWithStringPath.BlobNode { } blobNode
+        cacheEntry.ProducedFiles is not FileTree.FileNode { } blobNode
         ?
         throw new NotImplementedException("ElmMakeOkJsonStructure: producedFileBase64 is not a blob.")
         :

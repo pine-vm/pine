@@ -8,6 +8,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Collections.Immutable;
+using Pine.Core.Files;
 
 namespace Pine.Elm;
 
@@ -1454,8 +1455,8 @@ public class LanguageServer(
         return null;
     }
 
-    public static BlobTreeWithStringPath MergeIntoFileTree(
-        BlobTreeWithStringPath seed,
+    public static FileTree MergeIntoFileTree(
+        FileTree seed,
         IReadOnlyDictionary<IReadOnlyList<string>, System.ReadOnlyMemory<byte>> dictionary)
     {
         return
@@ -1468,7 +1469,7 @@ public class LanguageServer(
                     return
                         aggregate.SetNodeAtPathSorted(
                             nextFile.Key,
-                            new BlobTreeWithStringPath.BlobNode(nextFile.Value));
+                            new FileTree.FileNode(nextFile.Value));
                 });
     }
 

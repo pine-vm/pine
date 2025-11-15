@@ -1,4 +1,5 @@
 using Pine.Core.Addressing;
+using Pine.Core.Files;
 using System;
 using System.Collections.Generic;
 using System.IO.Compression;
@@ -15,13 +16,13 @@ public partial class BundledElmEnvironments
 {
     /// <summary>
     /// Attempts to retrieve a bundled (embedded) compiled Elm environment corresponding to the provided file tree.
-    /// The lookup uses a deterministic key derived from <paramref name="fileTree"/> via <see cref="DictionaryKeyFromFileTree(BlobTreeWithStringPath)"/>.
+    /// The lookup uses a deterministic key derived from <paramref name="fileTree"/> via <see cref="DictionaryKeyFromFileTree(FileTree)"/>.
     /// </summary>
     /// <param name="fileTree">The source tree describing the Elm project files.</param>
     /// <returns>
     /// The compiled environment as a <see cref="PineValue"/> when available in the embedded declarations; otherwise <c>null</c>.
     /// </returns>
-    public static PineValue? BundledElmEnvironmentFromFileTree(BlobTreeWithStringPath fileTree)
+    public static PineValue? BundledElmEnvironmentFromFileTree(FileTree fileTree)
     {
         if (ReusedInstances.Instance?.BundledDeclarations?.EmbeddedDeclarations is { } embeddedDecls)
         {
@@ -59,11 +60,11 @@ public partial class BundledElmEnvironments
     /// </summary>
     /// <param name="fileTree">The file tree to derive the key from.</param>
     /// <returns>A stable key string suitable for indexing embedded declarations.</returns>
-    public static string DictionaryKeyFromFileTree(BlobTreeWithStringPath fileTree) =>
+    public static string DictionaryKeyFromFileTree(FileTree fileTree) =>
         CompiledEnvDictionaryKeyPrefix +
         DictionaryKeyHashPartFromFileTree(fileTree);
 
-    private static string DictionaryKeyHashPartFromFileTree(BlobTreeWithStringPath fileTree)
+    private static string DictionaryKeyHashPartFromFileTree(FileTree fileTree)
     {
         var pineValue =
             PineValueComposition.FromTreeWithStringPath(fileTree);

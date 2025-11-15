@@ -2,6 +2,7 @@ using Pine.Core;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.Elm.ElmSyntax;
+using Pine.Core.Files;
 using Pine.Core.PineVM;
 using Pine.Core.PopularEncodings;
 using Pine.Elm;
@@ -1260,8 +1261,8 @@ public class ElmTimeJsonAdapter
     /// <summary>
     /// The original lowering implementation added a 'main' declaration to account for DCE.
     /// </summary>
-    public static BlobTreeWithStringPath CleanUpFromLoweredForJavaScript(
-        BlobTreeWithStringPath loweredForJavaScript)
+    public static FileTree CleanUpFromLoweredForJavaScript(
+        FileTree loweredForJavaScript)
     {
         /*
         {-| Support function-level dead code elimination (<https://elm-lang.org/blog/small-assets-without-the-headache>) Elm code needed to inform the Elm compiler about our entry points.
@@ -1284,7 +1285,7 @@ public class ElmTimeJsonAdapter
         var rootFile =
             loweredForJavaScript.GetNodeAtPath(RootFilePath);
 
-        if (rootFile is not BlobTreeWithStringPath.BlobNode rootFileNode)
+        if (rootFile is not FileTree.FileNode rootFileNode)
         {
             throw new System.Exception("Root file not found at " + string.Join("/", RootFilePath));
         }
@@ -1320,7 +1321,7 @@ public class ElmTimeJsonAdapter
             loweredForJavaScript
             .SetNodeAtPathSorted(
                 RootFilePath,
-                new BlobTreeWithStringPath.BlobNode(
+                new FileTree.FileNode(
                     System.Text.Encoding.UTF8.GetBytes(newRootFileText)));
     }
 }

@@ -2,6 +2,7 @@ using Pine.Core;
 using Pine.Core.Addressing;
 using Pine.Core.Elm;
 using Pine.Core.Elm.Elm019;
+using Pine.Core.Files;
 using Pine.Core.PopularEncodings;
 using System;
 using System.Collections.Generic;
@@ -430,7 +431,7 @@ public class ElmInteractive
 
     public static IReadOnlyList<(IReadOnlyList<string> filePath, ReadOnlyMemory<byte> fileContent, string moduleText)>
         ModulesFilePathsAndTextsFromAppCodeTree(
-        BlobTreeWithStringPath appCodeTree,
+        FileTree appCodeTree,
         bool skipLowering,
         IReadOnlySet<IReadOnlyList<string>>? entryPointsFilePaths,
         bool skipFilteringForSourceDirs,
@@ -469,9 +470,9 @@ public class ElmInteractive
             ];
     }
 
-    private static BlobTreeWithStringPath CompileTree(BlobTreeWithStringPath sourceTree)
+    private static FileTree CompileTree(FileTree sourceTree)
     {
-        if (sourceTree.GetNodeAtPath(["elm.json"]) is not BlobTreeWithStringPath.BlobNode elmJsonFile)
+        if (sourceTree.GetNodeAtPath(["elm.json"]) is not FileTree.FileNode elmJsonFile)
             return sourceTree;
 
         var elmJsonFileParsed =

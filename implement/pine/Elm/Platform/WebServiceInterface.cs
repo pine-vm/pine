@@ -7,6 +7,7 @@ using Pine.Core.PineVM;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Pine.Core.Files;
 
 namespace Pine.Elm.Platform;
 
@@ -2195,7 +2196,7 @@ type alias LoadDependencyStruct =
     private static readonly PineVMParseCache s_parseCache = new();
 
     public static WebServiceConfig ConfigFromSourceFilesAndEntryFileName(
-        BlobTreeWithStringPath sourceFiles,
+        FileTree sourceFiles,
         IReadOnlyList<string> entryFileName)
     {
         var compiledModulesValue =
@@ -2210,7 +2211,7 @@ type alias LoadDependencyStruct =
     }
 
     public static PineValue CompiledModulesFromSourceFilesAndEntryFileName(
-        BlobTreeWithStringPath sourceFiles,
+        FileTree sourceFiles,
         IReadOnlyList<string> entryFileName)
     {
         var loweringResult =

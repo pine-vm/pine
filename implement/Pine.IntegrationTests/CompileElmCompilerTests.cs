@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Pine.Core;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
+using Pine.Core.Files;
 using Pine.Core.PineVM;
 using Pine.Core.PopularEncodings;
 using Pine.Elm;
@@ -337,12 +338,12 @@ public class CompileElmCompilerTests
 
         var compilerPackageSourcesFiles =
             compilerPackageSourcesTrees
-            .SelectMany(tree => tree.tree.EnumerateBlobsTransitive())
+            .SelectMany(tree => tree.tree.EnumerateFilesTransitive())
             .Where(blobAtPath =>
             blobAtPath.path.First() == "src" && blobAtPath.path.Last().ToLower().EndsWith(".elm"));
 
         var compilerAppCodeSourceFiles =
-            compilerProgram.EnumerateBlobsTransitive()
+            compilerProgram.EnumerateFilesTransitive()
             .Where(blobAtPath => blobAtPath.path.Last().ToLower().EndsWith(".elm"))
             .ToImmutableArray();
 
@@ -353,14 +354,14 @@ public class CompileElmCompilerTests
         var elmModulesTexts = elmCoreLibraryModulesTexts;
 
         var compilerProgramOnlyElmJson =
-            BlobTreeWithStringPath.FilterNodesByPath(
+            FileTree.FilterNodesByPath(
                 compilerProgram,
                 nodePath => nodePath.SequenceEqual(["elm.json"]));
 
         var allAvailableElmFiles =
             compilerAppCodeSourceFiles
             .Concat(compilerPackageSourcesFiles)
-            .Select(blobAtPath => (blobAtPath, moduleText: Encoding.UTF8.GetString(blobAtPath.blobContent.Span)))
+            .Select(blobAtPath => (blobAtPath, moduleText: Encoding.UTF8.GetString(blobAtPath.fileContent.Span)))
             .ToImmutableArray();
 
         var rootElmFile =
@@ -382,7 +383,7 @@ public class CompileElmCompilerTests
             .Aggregate(
                 seed: compilerProgramOnlyElmJson,
                 func: (aggregate, elmModule) =>
-                aggregate.SetNodeAtPathSorted(elmModule.path, BlobTreeWithStringPath.Blob(elmModule.blobContent)));
+                aggregate.SetNodeAtPathSorted(elmModule.path, FileTree.File(elmModule.fileContent)));
 
         using var compilerInteractiveSession =
             new InteractiveSessionPine(
@@ -667,7 +668,7 @@ public class CompileElmCompilerTests
                 compilerProgramOnlyElmJson
                 .SetNodeAtPathSorted(
                     ["src", .. simpleElmModuleParsed.Key.SkipLast(1), simpleElmModuleParsed.Key.Last() + ".elm"],
-                    BlobTreeWithStringPath.Blob(Encoding.UTF8.GetBytes(simpleElmModuleText)));
+                    FileTree.File(Encoding.UTF8.GetBytes(simpleElmModuleText)));
 
             using var newCompilerInteractiveSession =
                 new InteractiveSessionPine(

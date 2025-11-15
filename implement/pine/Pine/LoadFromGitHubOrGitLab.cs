@@ -328,7 +328,7 @@ public static class LoadFromGitHubOrGitLab
                                 BackToUrl(parsedUrl with { inRepository = partInRepositoryWithCommit(firstParentCommitWithSameTree.hash) });
 
                             // Convert the tree or blob to the expected format
-                            BlobTreeWithStringPath ConvertGitObjectToBlobTree(string objectHash)
+                            FileTree ConvertGitObjectToBlobTree(string objectHash)
                             {
                                 var obj = repository.GetObject(objectHash);
                                 if (obj is null)
@@ -345,14 +345,14 @@ public static class LoadFromGitHubOrGitLab
                                     if (loadedBlobSHA1Base16Lower != expectedSHA)
                                         throw new Exception("Unexpected content for git object : SHA is " + loadedBlobSHA1Base16Lower + " instead of " + expectedSHA);
 
-                                    return BlobTreeWithStringPath.Blob(blobContent);
+                                    return FileTree.File(blobContent);
                                 }
 
                                 if (obj.Type is GitCore.PackFile.ObjectType.Tree)
                                 {
                                     var tree = GitCore.GitObjects.ParseTree(obj.Data);
-                                    return BlobTreeWithStringPath.SortedTree(
-                                        treeContent:
+                                    return FileTree.SortedDirectory(
+                                        directoryContent:
                                             tree.Entries.Select(entry =>
                                                 (entry.Name, ConvertGitObjectToBlobTree(entry.HashBase16)))
                                             .ToImmutableList());
@@ -439,7 +439,7 @@ public static class LoadFromGitHubOrGitLab
                 PineValueComposition.ToFlatDictionaryWithPathComparer(
                     PineValueComposition.SortedTreeFromSetOfBlobsWithCommonFilePath(
                         ZipArchive.EntriesFromZipArchive(fromExternalCache.Value))
-                    .EnumerateBlobsTransitive())),
+                    .EnumerateFilesTransitive())),
 
             _ => localCache.Value
         };
@@ -663,7 +663,7 @@ public static class LoadFromGitHubOrGitLab
     }
 
     public record LoadFromUrlSuccess(
-        BlobTreeWithStringPath tree,
+        FileTree tree,
         string urlInCommit,
         string urlInFirstParentCommitWithSameValueAtThisPath,
         (string hash, CommitContent content) rootCommit,
@@ -672,7 +672,7 @@ public static class LoadFromGitHubOrGitLab
         public ReadOnlyMemory<byte>? AsBlob =>
             tree switch
             {
-                BlobTreeWithStringPath.BlobNode blob => blob.Bytes,
+                FileTree.FileNode blob => blob.Bytes,
                 _ => null
             };
     }

@@ -4,17 +4,18 @@ using System.IO;
 using System.Linq;
 using Pine.Core;
 using Pine.Core.IO;
+using Pine.Core.Files;
 
 namespace Pine;
 
 public static class LoadFromLocalFilesystem
 {
-    public static BlobTreeWithStringPath? LoadSortedTreeFromPath(
+    public static FileTree? LoadSortedTreeFromPath(
         string path,
         Func<IReadOnlyList<string>, IOException, bool>? ignoreFileOnIOException = null)
     {
         if (File.Exists(path))
-            return BlobTreeWithStringPath.Blob(blobContent: File.ReadAllBytes(path));
+            return FileTree.File(content: File.ReadAllBytes(path));
 
         if (!Directory.Exists(path))
             return null;
@@ -26,31 +27,31 @@ public static class LoadFromLocalFilesystem
         return PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(blobs);
     }
 
-    public static BlobTreeWithStringPath RemoveNoiseFromTree(
-        BlobTreeWithStringPath originalTree,
+    public static FileTree RemoveNoiseFromTree(
+        FileTree originalTree,
         bool discardGitDirectory)
     {
-        if (originalTree is not BlobTreeWithStringPath.TreeNode tree)
+        if (originalTree is not FileTree.DirectoryNode tree)
             return originalTree;
 
-        BlobTreeWithStringPath? getValueFromStringName(string name) =>
+        FileTree? getValueFromStringName(string name) =>
             tree.Items.FirstOrDefault(c => c.name == name).component;
 
         var elmJson = getValueFromStringName("elm.json");
 
-        bool keepNode((string name, BlobTreeWithStringPath component) node)
+        bool keepNode((string name, FileTree component) node)
         {
             if (elmJson != null && node.name is "elm-stuff")
                 return false;
 
-            if (discardGitDirectory && node.component is BlobTreeWithStringPath.TreeNode && node.name is ".git")
+            if (discardGitDirectory && node.component is FileTree.DirectoryNode && node.name is ".git")
                 return false;
 
             return true;
         }
 
-        return BlobTreeWithStringPath.SortedTree(
-            treeContent:
+        return FileTree.SortedDirectory(
+            directoryContent:
                 [.. tree.Items
                 .Where(keepNode)
                 .Select(child => (child.name, RemoveNoiseFromTree(child.component, discardGitDirectory)))

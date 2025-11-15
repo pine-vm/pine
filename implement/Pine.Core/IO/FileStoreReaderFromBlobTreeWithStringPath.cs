@@ -1,3 +1,4 @@
+using Pine.Core.Files;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -7,11 +8,11 @@ namespace Pine.Core.IO;
 
 
 /// <summary>
-/// <see cref="IFileStoreReader"/> backed by an immutable <see cref="BlobTreeWithStringPath"/>.
+/// <see cref="IFileStoreReader"/> backed by an immutable <see cref="FileTree"/>.
 /// </summary>
 /// <param name="root">Root tree node representing the file hierarchy.</param>
 public class FileStoreReaderFromBlobTreeWithStringPath(
-    BlobTreeWithStringPath root)
+    FileTree root)
     : IFileStoreReader
 {
     /// <inheritdoc />
@@ -19,7 +20,7 @@ public class FileStoreReaderFromBlobTreeWithStringPath(
     {
         var node = root.GetNodeAtPath(path);
 
-        if (node is BlobTreeWithStringPath.BlobNode blobNode)
+        if (node is FileTree.FileNode blobNode)
         {
             return blobNode.Bytes;
         }
@@ -37,10 +38,10 @@ public class FileStoreReaderFromBlobTreeWithStringPath(
             return [];
         }
 
-        if (directoryNode is BlobTreeWithStringPath.TreeNode directory)
+        if (directoryNode is FileTree.DirectoryNode directory)
         {
             return
-                directory.EnumerateBlobsTransitive()
+                directory.EnumerateFilesTransitive()
                 .Select(blob => blob.path);
         }
 

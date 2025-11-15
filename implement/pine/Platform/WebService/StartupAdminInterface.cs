@@ -290,12 +290,12 @@ public class StartupAdminInterface
                                 .Extract(error => throw new Exception(error.ToString()));
 
                             var appConfigFilesNamesAndContents =
-                                appConfigTree.EnumerateBlobsTransitive();
+                                appConfigTree.EnumerateFilesTransitive();
 
                             var webServiceConfigFile =
                                 appConfigFilesNamesAndContents
                                 .Where(filePathAndContent => WebServiceConfigFilePathAlternatives.Any(configFilePath => filePathAndContent.path.SequenceEqual(configFilePath)))
-                                .Select(filePathAndContent => filePathAndContent.blobContent)
+                                .Select(filePathAndContent => filePathAndContent.fileContent)
                                 .Cast<ReadOnlyMemory<byte>?>()
                                 .FirstOrDefault();
 

@@ -1,5 +1,6 @@
 using Pine.Core;
 using Pine.Core.Elm;
+using Pine.Core.Files;
 using Pine.Core.PopularEncodings;
 using System;
 using System.Collections.Concurrent;
@@ -17,14 +18,14 @@ namespace Pine.Elm;
 
 public class ElmCompiler
 {
-    private static readonly ConcurrentDictionary<BlobTreeWithStringPath, Task<Result<string, ElmCompiler>>> buildCompilerFromSource = new();
+    private static readonly ConcurrentDictionary<FileTree, Task<Result<string, ElmCompiler>>> buildCompilerFromSource = new();
 
-    static public readonly Lazy<BlobTreeWithStringPath> CompilerSourceContainerFilesDefault =
+    static public readonly Lazy<FileTree> CompilerSourceContainerFilesDefault =
         new(() => PineValueComposition.SortedTreeFromSetOfBlobsWithStringPath(
             LoadElmCompilerSourceCodeFiles()
             .Extract(error => throw new NotImplementedException(nameof(LoadElmCompilerSourceCodeFiles) + ": " + error))));
 
-    static public readonly Lazy<BlobTreeWithStringPath> ElmCoreAndKernelModuleFilesDefault =
+    static public readonly Lazy<FileTree> ElmCoreAndKernelModuleFilesDefault =
         new(() =>
         CompilerSourceContainerFilesDefault.Value.GetNodeAtPath(["elm-kernel-modules"])
         ?? throw new Exception("Did not find node elm-kernel-modules"));
@@ -32,20 +33,20 @@ public class ElmCompiler
     static public readonly Lazy<IReadOnlyDictionary<IReadOnlyList<string>, string>> ElmCoreAndKernelModulesByName =
         new(() =>
         ElmCoreAndKernelModuleFilesDefault.Value
-        .EnumerateBlobsTransitive()
+        .EnumerateFilesTransitive()
         .Where(blob => blob.path.Last().EndsWith(".elm", StringComparison.OrdinalIgnoreCase))
         .ToDictionary(
             blobAtPath =>
-            Core.Elm.ElmSyntax.ElmModule.ParseModuleName(Encoding.UTF8.GetString(blobAtPath.blobContent.Span))
+            Core.Elm.ElmSyntax.ElmModule.ParseModuleName(Encoding.UTF8.GetString(blobAtPath.fileContent.Span))
             .Extract(err => throw new Exception(err)),
 
             blobAtPath =>
-            Encoding.UTF8.GetString(blobAtPath.blobContent.Span),
+            Encoding.UTF8.GetString(blobAtPath.fileContent.Span),
 
             comparer:
             EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>()));
 
-    static public readonly Lazy<BlobTreeWithStringPath> CompilerSourceFilesDefault =
+    static public readonly Lazy<FileTree> CompilerSourceFilesDefault =
         new(() => ElmCompilerFileTreeFromBundledFileTree(CompilerSourceContainerFilesDefault.Value));
 
     public static Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>> LoadElmCompilerSourceCodeFiles() =>
@@ -121,7 +122,7 @@ public class ElmCompiler
     }
 
     public static Task<Result<string, ElmCompiler>> GetElmCompilerAsync(
-        BlobTreeWithStringPath compilerSourceFiles)
+        FileTree compilerSourceFiles)
     {
         return buildCompilerFromSource.GetOrAdd(
             compilerSourceFiles,
@@ -135,7 +136,7 @@ public class ElmCompiler
     /// experimenting with modifications to the emit stage.
     /// </summary>
     public static Result<string, ElmCompiler> BuildCompilerFromSourceFiles(
-        BlobTreeWithStringPath compilerSourceFiles,
+        FileTree compilerSourceFiles,
         ElmCompiler? overrideElmCompiler = null)
     {
         var compilerWithPackagesTree =
@@ -153,8 +154,8 @@ public class ElmCompiler
             });
     }
 
-    public static BlobTreeWithStringPath ElmCompilerFileTreeFromBundledFileTree(
-        BlobTreeWithStringPath bundledFileTree) =>
+    public static FileTree ElmCompilerFileTreeFromBundledFileTree(
+        FileTree bundledFileTree) =>
         ElmCompilerFileTreeFromBundledFileTree(
             bundledFileTree,
             rootModuleFileNames: DefaultCompilerTreeRootModuleFilePaths);
@@ -168,8 +169,8 @@ public class ElmCompiler
         ["src", "CompileElmAppMain.elm"],
         ];
 
-    public static BlobTreeWithStringPath ElmCompilerFileTreeFromBundledFileTree(
-        BlobTreeWithStringPath bundledFileTree,
+    public static FileTree ElmCompilerFileTreeFromBundledFileTree(
+        FileTree bundledFileTree,
         IReadOnlyList<IReadOnlyList<string>> rootModuleFileNames)
     {
         var compilerPackageSourcesTrees =
@@ -180,24 +181,24 @@ public class ElmCompiler
 
         var compilerPackageSourcesFiles =
             compilerPackageSourcesTrees
-            .SelectMany(tree => tree.tree.EnumerateBlobsTransitive())
+            .SelectMany(tree => tree.tree.EnumerateFilesTransitive())
             .Where(blobAtPath =>
             blobAtPath.path.First() == "src" && blobAtPath.path.Last().EndsWith(".elm", StringComparison.OrdinalIgnoreCase));
 
         var compilerAppCodeSourceFiles =
-            bundledFileTree.EnumerateBlobsTransitive()
+            bundledFileTree.EnumerateFilesTransitive()
             .Where(blobAtPath => blobAtPath.path.Last().EndsWith(".elm", StringComparison.OrdinalIgnoreCase))
             .ToImmutableArray();
 
         var compilerProgramOnlyElmJson =
-            BlobTreeWithStringPath.FilterNodesByPath(
+            FileTree.FilterNodesByPath(
                 bundledFileTree,
                 nodePath => nodePath.SequenceEqual(["elm.json"]));
 
         var allAvailableElmFiles =
             compilerAppCodeSourceFiles
             .Concat(compilerPackageSourcesFiles)
-            .Select(blobAtPath => (blobAtPath, moduleText: Encoding.UTF8.GetString(blobAtPath.blobContent.Span)))
+            .Select(blobAtPath => (blobAtPath, moduleText: Encoding.UTF8.GetString(blobAtPath.fileContent.Span)))
             .ToImmutableArray();
 
         var rootElmFiles =
@@ -220,13 +221,13 @@ public class ElmCompiler
             .Aggregate(
                 seed: compilerProgramOnlyElmJson,
                 func: (aggregate, elmModule) =>
-                aggregate.SetNodeAtPathSorted(elmModule.path, BlobTreeWithStringPath.Blob(elmModule.blobContent)));
+                aggregate.SetNodeAtPathSorted(elmModule.path, FileTree.File(elmModule.fileContent)));
 
         return compilerWithPackagesTree;
     }
 
     public static Result<string, PineValue> LoadOrCompileInteractiveEnvironment(
-        BlobTreeWithStringPath appCodeTree,
+        FileTree appCodeTree,
         IReadOnlyList<IReadOnlyList<string>> rootFilePaths,
         bool skipLowering,
         ElmCompiler? overrideElmCompiler = null)
@@ -267,7 +268,7 @@ public class ElmCompiler
     }
 
     public static Result<string, PineValue> CompileInteractiveEnvironment(
-        BlobTreeWithStringPath appCodeTree,
+        FileTree appCodeTree,
         IReadOnlyList<IReadOnlyList<string>> rootFilePaths,
         bool skipLowering,
         bool skipFilteringForSourceDirs,
@@ -587,13 +588,13 @@ public class ElmCompiler
                 (err) => throw new Exception("Invalid Elm result value: " + err));
     }
 
-    public static bool CheckIfAppUsesLowering(BlobTreeWithStringPath appCode)
+    public static bool CheckIfAppUsesLowering(FileTree appCode)
     {
         var allAvailableElmFiles =
             appCode
-            .EnumerateBlobsTransitive()
+            .EnumerateFilesTransitive()
             .Where(blobAtPath => blobAtPath.path.Last().EndsWith(".elm", StringComparison.OrdinalIgnoreCase))
-            .Select(blobAtPath => (blobAtPath, moduleText: Encoding.UTF8.GetString(blobAtPath.blobContent.Span)))
+            .Select(blobAtPath => (blobAtPath, moduleText: Encoding.UTF8.GetString(blobAtPath.fileContent.Span)))
             .ToImmutableArray();
 
         foreach (var file in allAvailableElmFiles)

@@ -1,4 +1,5 @@
 using Pine.Core;
+using Pine.Core.Files;
 using Pine.Core.IO;
 using Pine.Elm.Platform;
 using System;
@@ -19,7 +20,7 @@ public class VolatileProcessNative : VolatileProcess, IDisposable
         ReadOnlyMemory<byte> StdErr,
         int? ExitCode);
 
-    private static readonly ConcurrentDictionary<string, IEnumerable<BlobTreeWithStringPath>> loadedTreesFromUrl = new();
+    private static readonly ConcurrentDictionary<string, IEnumerable<FileTree>> loadedTreesFromUrl = new();
 
     private readonly Process process;
 

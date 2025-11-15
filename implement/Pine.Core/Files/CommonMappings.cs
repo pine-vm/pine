@@ -29,12 +29,12 @@ public class CommonMappings
     /// <returns>An enumerable collection of tree structures extracted from the blob content. The collection may contain zero or
     /// more trees, depending on the format and validity of the content.</returns>
 
-    public static IEnumerable<BlobTreeWithStringPath> ExtractTreesFromNamedBlob(
+    public static IEnumerable<FileTree> ExtractTreesFromNamedBlob(
         string blobName,
         ReadOnlyMemory<byte> blobContent)
     {
         {
-            BlobTreeWithStringPath? fromZipArchive = null;
+            FileTree? fromZipArchive = null;
 
             try
             {
@@ -51,7 +51,7 @@ public class CommonMappings
         if (blobName.EndsWith(".tar.gz", StringComparison.OrdinalIgnoreCase) ||
             blobName.EndsWith(".tgz", StringComparison.OrdinalIgnoreCase))
         {
-            BlobTreeWithStringPath? fromTarArchive = null;
+            FileTree? fromTarArchive = null;
 
             try
             {
@@ -76,7 +76,7 @@ public class CommonMappings
                 catch { }
 
                 if (fromGzip is not null)
-                    yield return BlobTreeWithStringPath.Blob(fromGzip.Value);
+                    yield return FileTree.File(fromGzip.Value);
             }
         }
     }

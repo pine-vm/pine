@@ -7,6 +7,7 @@ using Pine.Core;
 using Pine.Core.Addressing;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.DotNet;
+using Pine.Core.Files;
 using Pine.Core.PopularEncodings;
 using Pine.Elm;
 using System.Collections.Generic;
@@ -572,13 +573,13 @@ public class CompilePineToDotNetTests
             try
             {
                 var appCodeTree =
-                    BlobTreeWithStringPath.EmptyTree
+                    FileTree.EmptyTree
                     .SetNodeAtPathSorted(
                         ["elm.json"],
-                        BlobTreeWithStringPath.Blob(Encoding.UTF8.GetBytes(elmJsonFile)))
+                        FileTree.File(Encoding.UTF8.GetBytes(elmJsonFile)))
                     .SetNodeAtPathSorted(
                         ["src", "Common.elm"],
-                        BlobTreeWithStringPath.Blob(Encoding.UTF8.GetBytes(testCase.InputModuleText)));
+                        FileTree.File(Encoding.UTF8.GetBytes(testCase.InputModuleText)));
 
                 var compiledEnv =
                     ElmCompiler.CompileInteractiveEnvironment(

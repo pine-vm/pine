@@ -189,7 +189,7 @@ public class RunServer
         return
             PineValueComposition.ToFlatDictionaryWithPathComparer(
                 PineValueComposition.SortedTreeFromSetOfBlobsWithCommonFilePath(zipArchiveEntries)
-                .EnumerateBlobsTransitive());
+                .EnumerateFilesTransitive());
     }
 
     public static void ReplicateProcessAndLogToConsole(

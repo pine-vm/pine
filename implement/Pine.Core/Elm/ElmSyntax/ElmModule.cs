@@ -1,3 +1,4 @@
+using Pine.Core.Files;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -365,12 +366,12 @@ public static partial class ElmModule
     /// <param name="appCodeTree">Tree containing application code blobs.</param>
     /// <param name="moduleNameIsRootModule">Predicate returning true for module names that should act as compilation roots.</param>
     /// <returns>A new tree containing only required Elm modules and any <c>elm.json</c> files.</returns>
-    public static BlobTreeWithStringPath FilterAppCodeTreeForRootModulesAndDependencies(
-        BlobTreeWithStringPath appCodeTree,
+    public static FileTree FilterAppCodeTreeForRootModulesAndDependencies(
+        FileTree appCodeTree,
         Func<IReadOnlyList<string>, bool> moduleNameIsRootModule)
     {
         var originalBlobs =
-            appCodeTree.EnumerateBlobsTransitive()
+            appCodeTree.EnumerateFilesTransitive()
             .ToImmutableArray();
 
         var allElmModules =
@@ -380,7 +381,7 @@ public static partial class ElmModule
                 {
                     try
                     {
-                        var blobContentAsString = System.Text.Encoding.UTF8.GetString(blobPathAndContent.blobContent.Span);
+                        var blobContentAsString = System.Text.Encoding.UTF8.GetString(blobPathAndContent.fileContent.Span);
 
                         return
                             ParseModuleName(blobContentAsString)

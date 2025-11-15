@@ -50,14 +50,14 @@ public class LoadCompositionTests
                     .result.Extract(error => throw new Exception("Failed to load from path: " + error));
 
                 var inspectComposition =
-                    loaded.tree.EnumerateBlobsTransitive()
+                    loaded.tree.EnumerateFilesTransitive()
                     .Select(blobAtPath =>
                     {
                         string? utf8 = null;
 
                         try
                         {
-                            utf8 = System.Text.Encoding.UTF8.GetString(blobAtPath.blobContent.Span);
+                            utf8 = System.Text.Encoding.UTF8.GetString(blobAtPath.fileContent.Span);
                         }
                         catch { }
 
@@ -65,7 +65,7 @@ public class LoadCompositionTests
                             new
                             {
                                 blobAtPath.path,
-                                blobAtPath.blobContent,
+                                blobAtPath.fileContent,
                                 utf8
                             };
                     })

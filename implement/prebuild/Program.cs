@@ -62,7 +62,7 @@ public class Program
         BuildAndSaveValueDictionary(
             elmCompilers:
             [
-                new KeyValuePair<BlobTreeWithStringPath, PineValue>(
+                new KeyValuePair<Pine.Core.Files.FileTree, PineValue>(
                     elmCompilerValue.sourceFiles, elmCompilerValue.compiled)
                 ]);
 
@@ -92,7 +92,7 @@ public class Program
     }
 
     public static void BuildAndSaveValueDictionary(
-        IEnumerable<KeyValuePair<BlobTreeWithStringPath, PineValue>> elmCompilers)
+        IEnumerable<KeyValuePair<Pine.Core.Files.FileTree, PineValue>> elmCompilers)
     {
         var fromFreshBuild =
             ReusedInstances.BuildPineListValueReusedInstances(
@@ -121,7 +121,7 @@ public class Program
                 System.IO.File.ReadAllBytes(LastTrainedCSharpArchiveFilePath));
     }
 
-    public static (BlobTreeWithStringPath sourceFiles, PineValue compiled) BuildElmCompiler()
+    public static (Pine.Core.Files.FileTree sourceFiles, PineValue compiled) BuildElmCompiler()
     {
         var elmCompilerSource =
             ElmCompiler.CompilerSourceFilesDefault.Value;
@@ -176,7 +176,7 @@ public class Program
     }
 
     public static Result<string, PineValue> BuildElmCompilerFirstIteration(
-        BlobTreeWithStringPath elmCompilerSource)
+        Pine.Core.Files.FileTree elmCompilerSource)
     {
         if (true)
         {
@@ -199,8 +199,8 @@ public class Program
 
             var zipArchive =
                 ZipArchive.ZipArchiveFromFiles(
-                    elmCompilerSource.EnumerateBlobsTransitive()
-                    .Select(entry => (string.Join("/", entry.path), entry.blobContent)));
+                    elmCompilerSource.EnumerateFilesTransitive()
+                    .Select(entry => (string.Join("/", entry.path), entry.fileContent)));
 
             System.IO.File.WriteAllBytes(
                 elmCompilerSourceZipArchivePath,

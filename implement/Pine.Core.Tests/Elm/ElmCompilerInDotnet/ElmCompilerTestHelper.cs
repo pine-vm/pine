@@ -33,7 +33,7 @@ public class ElmCompilerTestHelper
         var appCodeTree = testCase.AsFileTree();
 
         var rootFilePaths =
-            appCodeTree.EnumerateBlobsTransitive()
+            appCodeTree.EnumerateFilesTransitive()
             .Where(b => b.path[^1].EndsWith(".elm"))
             .Select(b => b.path)
             .ToList();

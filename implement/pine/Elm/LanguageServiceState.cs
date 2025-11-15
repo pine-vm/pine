@@ -6,6 +6,7 @@ using Pine.Core.PineVM;
 using Pine.Core.PopularEncodings;
 using System.Collections.Generic;
 using System.Linq;
+using Pine.Core.Files;
 
 namespace Pine.Elm;
 
@@ -410,9 +411,9 @@ public class LanguageServiceState(
     }
 
     public static Interface.FileTreeNode<Interface.FileTreeBlobNode>
-        Workspace(BlobTreeWithStringPath workspace)
+        Workspace(FileTree workspace)
     {
-        if (workspace is BlobTreeWithStringPath.BlobNode blobNode)
+        if (workspace is FileTree.FileNode blobNode)
         {
             string? asText = null;
 
@@ -432,7 +433,7 @@ public class LanguageServiceState(
                         AsText: asText));
         }
 
-        if (workspace is BlobTreeWithStringPath.TreeNode treeNode)
+        if (workspace is FileTree.DirectoryNode treeNode)
         {
             return
                 new Interface.FileTreeNode<Interface.FileTreeBlobNode>.TreeNode(

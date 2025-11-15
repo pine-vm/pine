@@ -1,5 +1,6 @@
 using Pine.Core;
 using Pine.Core.Addressing;
+using Pine.Core.Files;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -10,7 +11,7 @@ namespace Pine;
 public class VolatileProcess
 {
     public static Result<string, ReadOnlyMemory<byte>> LoadBlob(
-        ConcurrentDictionary<string, IEnumerable<BlobTreeWithStringPath>> loadedTreesFromUrl,
+        ConcurrentDictionary<string, IEnumerable<FileTree>> loadedTreesFromUrl,
         Func<byte[], byte[]?>? getFileFromHashSHA256,
         string hashSha256Base16,
         IEnumerable<string> hintUrls)

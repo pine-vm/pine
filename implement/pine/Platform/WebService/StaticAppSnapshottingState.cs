@@ -2,6 +2,7 @@ using ElmTime.Platform.WebService;
 using Microsoft.AspNetCore.Http;
 using Pine.Core;
 using Pine.Core.Addressing;
+using Pine.Core.Files;
 using Pine.Core.IO;
 using Pine.Core.PopularEncodings;
 using Pine.Elm.Platform;
@@ -39,7 +40,7 @@ public sealed record StaticAppSnapshottingState : IAsyncDisposable
     private readonly IImmutableList<string> _appStateSnapshotFilePath;
 
     public static StaticAppSnapshottingState Create(
-        BlobTreeWithStringPath webServiceAppSourceFiles,
+        FileTree webServiceAppSourceFiles,
         WebServiceConfigJson? serverConfig,
         IFileStore fileStore,
         Action<string> logMessage,
@@ -53,7 +54,7 @@ public sealed record StaticAppSnapshottingState : IAsyncDisposable
             cancellationToken: cancellationToken);
 
     public static StaticAppSnapshottingState Create(
-        BlobTreeWithStringPath webServiceAppSourceFiles,
+        FileTree webServiceAppSourceFiles,
         WebServiceConfigJson? serverConfig,
         IReadOnlyList<string> entryFileName,
         IFileStore fileStore,

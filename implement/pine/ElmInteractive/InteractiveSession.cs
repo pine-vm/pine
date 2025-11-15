@@ -1,4 +1,5 @@
 using Pine.Core;
+using Pine.Core.Files;
 using Pine.PineVM;
 using System;
 using System.Collections.Generic;
@@ -12,8 +13,8 @@ public interface IInteractiveSession : IDisposable
     static ElmEngineTypeCLI DefaultImplementation => ElmEngineTypeCLI.Pine;
 
     static IInteractiveSession Create(
-        BlobTreeWithStringPath compilerSourceFiles,
-        BlobTreeWithStringPath? appCodeTree,
+        FileTree compilerSourceFiles,
+        FileTree? appCodeTree,
         ElmEngineType engineType) =>
         engineType switch
         {

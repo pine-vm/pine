@@ -1,5 +1,6 @@
 using ElmTime.Platform.WebService.ProcessStoreSupportingMigrations;
 using Pine.Core;
+using Pine.Core.Files;
 using Pine.Elm.Platform;
 using Pine.PineVM;
 using System;
@@ -63,12 +64,12 @@ public sealed class ProcessLiveRepresentation : IAsyncDisposable
     public record struct ReductionWithResolvedDependencies(
         PineValue ElmAppState,
         PineValue AppConfig,
-        BlobTreeWithStringPath AppConfigAsTree);
+        FileTree AppConfigAsTree);
 
     public record struct CompositionEventWithResolvedDependencies(
         PineValue? SetElmAppState = null,
-        BlobTreeWithStringPath? DeployAppConfigAndInitElmAppState = null,
-        BlobTreeWithStringPath? DeployAppConfigAndMigrateElmAppState = null,
+        FileTree? DeployAppConfigAndInitElmAppState = null,
+        FileTree? DeployAppConfigAndMigrateElmAppState = null,
         ApplyFunctionOnLiteralsAndStateEvent? ApplyFunctionOnLiteralsAndState = null);
 
 

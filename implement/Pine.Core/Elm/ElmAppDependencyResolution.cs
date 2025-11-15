@@ -1,5 +1,6 @@
 using Pine.Core.Elm.Elm019;
 using Pine.Core.Elm.ElmSyntax;
+using Pine.Core.Files;
 using Pine.Elm;
 using System;
 using System.Collections.Generic;
@@ -16,8 +17,8 @@ namespace Pine.Core.Elm;
 /// <param name="AppFiles">The filtered tree of app files relevant to the compilation.</param>
 /// <param name="Packages">The ordered list of packages (files and parsed elm.json) needed for the compilation.</param>
 public record AppCompilationUnits(
-    BlobTreeWithStringPath AppFiles,
-    IReadOnlyList<(BlobTreeWithStringPath files, ElmJsonStructure elmJson)> Packages)
+    FileTree AppFiles,
+    IReadOnlyList<(FileTree files, ElmJsonStructure elmJson)> Packages)
 {
     /// <summary>
     /// Creates an <see cref="AppCompilationUnits"/> instance that contains only the given app code
@@ -26,7 +27,7 @@ public record AppCompilationUnits(
     /// <param name="appCode">The app code files.</param>
     /// <returns>An <see cref="AppCompilationUnits"/> with empty packages.</returns>
     public static AppCompilationUnits WithoutPackages(
-        BlobTreeWithStringPath appCode)
+        FileTree appCode)
     {
         return new AppCompilationUnits(
             appCode,
@@ -56,7 +57,7 @@ public class ElmAppDependencyResolution
     /// <exception cref="Exception">Thrown when the entry file is missing, not a blob, or the module name cannot be parsed.</exception>
     public static (AppCompilationUnits files, IReadOnlyList<string> entryModuleName)
         AppCompilationUnitsForEntryPoint(
-        BlobTreeWithStringPath sourceFiles,
+        FileTree sourceFiles,
         IReadOnlyList<string> entryPointFilePath)
     {
         if (sourceFiles.GetNodeAtPath(entryPointFilePath) is not { } entryFileNode)
@@ -64,7 +65,7 @@ public class ElmAppDependencyResolution
             throw new Exception("Entry file not found: " + string.Join("/", entryPointFilePath));
         }
 
-        if (entryFileNode is not BlobTreeWithStringPath.BlobNode entryFileBlob)
+        if (entryFileNode is not FileTree.FileNode entryFileBlob)
         {
             throw new Exception(
                 "Entry file is not a blob: " + string.Join("/", entryPointFilePath));
@@ -93,11 +94,11 @@ public class ElmAppDependencyResolution
         IReadOnlyList<KeyValuePair<IReadOnlyList<string>, IReadOnlyList<IReadOnlyList<string>>>>
             remainingElmModulesNameAndImports =
             [.. sourceFilesFiltered
-            .EnumerateBlobsTransitive()
+            .EnumerateFilesTransitive()
             .Where(blob => blob.path.Last().EndsWith(".elm", StringComparison.OrdinalIgnoreCase))
             .Select(blob =>
             {
-                var moduleText = Encoding.UTF8.GetString(blob.blobContent.Span);
+                var moduleText = Encoding.UTF8.GetString(blob.fileContent.Span);
 
                 if (ElmModule.ParseModuleName(moduleText).IsOkOrNull() is not { } moduleName)
                 {
@@ -218,7 +219,7 @@ public class ElmAppDependencyResolution
     /// </summary>
     /// <param name="appSourceFiles">Flat dictionary representation of the app source tree.</param>
     /// <returns>A map of package name to its files and parsed elm.json.</returns>
-    public static IReadOnlyDictionary<string, (BlobTreeWithStringPath files, ElmJsonStructure elmJson)>
+    public static IReadOnlyDictionary<string, (FileTree files, ElmJsonStructure elmJson)>
         LoadPackagesForElmApp(
         IReadOnlyDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> appSourceFiles)
     {
@@ -309,15 +310,15 @@ public class ElmAppDependencyResolution
     /// <param name="tree">The complete file tree.</param>
     /// <param name="rootFilePaths">The set of root .elm file paths that should be included.</param>
     /// <returns>A filtered tree that contains only files needed for compilation from the given roots.</returns>
-    public static BlobTreeWithStringPath FilterTreeForCompilationRoots(
-        BlobTreeWithStringPath tree,
+    public static FileTree FilterTreeForCompilationRoots(
+        FileTree tree,
         IReadOnlyList<IReadOnlyList<string>> rootFilePaths)
     {
         var allAvailableElmFiles =
             tree
-            .EnumerateBlobsTransitive()
+            .EnumerateFilesTransitive()
             .Where(blobAtPath => blobAtPath.path.Last().EndsWith(".elm", StringComparison.OrdinalIgnoreCase))
-            .Select(blobAtPath => (blobAtPath, moduleText: Encoding.UTF8.GetString(blobAtPath.blobContent.Span)))
+            .Select(blobAtPath => (blobAtPath, moduleText: Encoding.UTF8.GetString(blobAtPath.fileContent.Span)))
             .ToImmutableArray();
 
         var rootElmFiles =
@@ -337,7 +338,7 @@ public class ElmAppDependencyResolution
             .ToImmutableHashSet(EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
 
         return
-            BlobTreeWithStringPath.FilterNodesByPath(
+            FileTree.FilterNodesByPath(
                 tree,
                 nodePath =>
                 !filePathsExcluded.Contains(nodePath));
@@ -353,8 +354,8 @@ public class ElmAppDependencyResolution
     /// <param name="rootFilePaths">The set of root .elm file paths that should be included.</param>
     /// <param name="skipFilteringForSourceDirs">Whether to skip filtering by source-directories from elm.json.</param>
     /// <returns>A filtered tree that contains only files needed for compilation from the given roots.</returns>
-    public static BlobTreeWithStringPath FilterTreeForCompilationRoots(
-        BlobTreeWithStringPath tree,
+    public static FileTree FilterTreeForCompilationRoots(
+        FileTree tree,
         IReadOnlySet<IReadOnlyList<string>> rootFilePaths,
         bool skipFilteringForSourceDirs)
     {
@@ -370,8 +371,8 @@ public class ElmAppDependencyResolution
         return
             trees
             .Aggregate(
-                seed: BlobTreeWithStringPath.EmptyTree,
-                BlobTreeWithStringPath.MergeBlobs);
+                seed: FileTree.EmptyTree,
+                FileTree.MergeFiles);
     }
 
     /// <summary>
@@ -383,8 +384,8 @@ public class ElmAppDependencyResolution
     /// <param name="rootFilePath">The root .elm file path that should be included.</param>
     /// <param name="skipFilteringForSourceDirs">Whether to skip filtering by source-directories from elm.json.</param>
     /// <returns>A filtered tree that contains only files needed for compilation of the root.</returns>
-    public static BlobTreeWithStringPath FilterTreeForCompilationRoot(
-        BlobTreeWithStringPath tree,
+    public static FileTree FilterTreeForCompilationRoot(
+        FileTree tree,
         IReadOnlyList<string> rootFilePath,
         bool skipFilteringForSourceDirs)
     {
@@ -397,7 +398,7 @@ public class ElmAppDependencyResolution
 
         var allAvailableElmFiles =
             tree
-            .EnumerateBlobsTransitive()
+            .EnumerateFilesTransitive()
             .Where(blobAtPath => blobAtPath.path.Last().EndsWith(".elm", StringComparison.OrdinalIgnoreCase))
             .ToImmutableArray();
 
@@ -414,20 +415,20 @@ public class ElmAppDependencyResolution
         var elmModulesIncluded =
             Core.Elm.ElmSyntax.ElmModule.ModulesTextOrderedForCompilationByDependencies(
                 rootModulesTexts:
-                [.. rootElmFiles.Select(file => Encoding.UTF8.GetString(file.blobContent.Span))
+                [.. rootElmFiles.Select(file => Encoding.UTF8.GetString(file.fileContent.Span))
                 ],
                 availableModulesTexts:
-                [.. availableElmFiles.Select(file => Encoding.UTF8.GetString(file.blobContent.Span))
+                [.. availableElmFiles.Select(file => Encoding.UTF8.GetString(file.fileContent.Span))
                 ]);
 
         var filePathsExcluded =
             allAvailableElmFiles
-            .Where(elmFile => !elmModulesIncluded.Any(included => Encoding.UTF8.GetString(elmFile.blobContent.Span) == included))
+            .Where(elmFile => !elmModulesIncluded.Any(included => Encoding.UTF8.GetString(elmFile.fileContent.Span) == included))
             .Select(elmFile => elmFile.path)
             .ToImmutableHashSet(EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
 
         return
-            BlobTreeWithStringPath.FilterNodesByPath(
+            FileTree.FilterNodesByPath(
                 tree,
                 nodePath =>
                 !filePathsExcluded.Contains(nodePath));
@@ -441,7 +442,7 @@ public class ElmAppDependencyResolution
     /// <param name="rootFilePath">The root .elm file path whose elm.json defines the source-directories.</param>
     /// <returns>A predicate returning true when the path is inside a source-directory.</returns>
     private static Func<IReadOnlyList<string>, bool> BuildPredicateFilePathIsInSourceDirectory(
-        BlobTreeWithStringPath tree,
+        FileTree tree,
         IReadOnlyList<string> rootFilePath)
     {
         if (FindElmJsonForEntryPoint(tree, rootFilePath) is not { } elmJsonForEntryPoint)
@@ -512,13 +513,13 @@ public class ElmAppDependencyResolution
     /// </returns>
     public static (IReadOnlyList<string> filePath, ElmJsonStructure elmJsonParsed)?
         FindElmJsonForEntryPoint(
-        BlobTreeWithStringPath sourceFiles,
+        FileTree sourceFiles,
         IReadOnlyList<string> entryPointFilePath)
     {
         // Collect all elm.json files from the tree, storing each parsed ElmJsonStructure along with its path:
         var elmJsonFiles =
             sourceFiles
-            .EnumerateBlobsTransitive()
+            .EnumerateFilesTransitive()
             .SelectMany(pathAndContent =>
             {
                 if (!pathAndContent.path.Last().EndsWith("elm.json", StringComparison.OrdinalIgnoreCase))
@@ -526,7 +527,7 @@ public class ElmAppDependencyResolution
                     return [];
                 }
 
-                var elmJsonContent = pathAndContent.blobContent;
+                var elmJsonContent = pathAndContent.fileContent;
 
                 try
                 {

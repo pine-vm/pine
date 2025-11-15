@@ -9,7 +9,7 @@ namespace ElmTime.Platform.WebService;
 public static class BuildConfigurationFromArguments
 {
     public static
-        (BlobTreeWithStringPath sourceTree,
+        (FileTree sourceTree,
         string filteredSourceCompositionId,
         byte[] configZipArchive)
         BuildConfigurationZipArchiveFromPath(string sourcePath)

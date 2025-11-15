@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Pine.Core;
+using Pine.Core.Files;
 using Pine.Elm;
 using System;
 using System.Collections.Generic;
@@ -46,7 +47,7 @@ public class ElmLanguageServiceTests
             .Extract(err => throw new Exception(err));
 
         AssertHover(
-            workspace: BlobTreeWithStringPath.EmptyTree,
+            workspace: FileTree.EmptyTree,
             filePathOpenedInEditor: ["src", "Main.elm"],
             elmModuleText,
             expectedHoverText: "    init : State");
@@ -117,10 +118,10 @@ public class ElmLanguageServiceTests
             new PineVM.PineVM(evalCache: pineVMCache.EvalCache);
 
         var workspace =
-            BlobTreeWithStringPath.EmptyTree
+            FileTree.EmptyTree
             .SetNodeAtPathSorted(
                 ["src", "Alfa.elm"],
-                new BlobTreeWithStringPath.BlobNode(Encoding.UTF8.GetBytes(elmModuleTextAlfa)));
+                new FileTree.FileNode(Encoding.UTF8.GetBytes(elmModuleTextAlfa)));
 
         AssertCompletionItems(
             workspace: workspace,
@@ -138,7 +139,7 @@ public class ElmLanguageServiceTests
     }
 
     private static void AssertHover(
-        BlobTreeWithStringPath workspace,
+        FileTree workspace,
         IReadOnlyList<string> filePathOpenedInEditor,
         string elmModuleTextWithSplitSymbol,
         string expectedHoverText)
@@ -172,7 +173,7 @@ public class ElmLanguageServiceTests
             workspace
             .SetNodeAtPathSorted(
                 filePathOpenedInEditor,
-                new BlobTreeWithStringPath.BlobNode(Encoding.UTF8.GetBytes(elmModuleText)));
+                new FileTree.FileNode(Encoding.UTF8.GetBytes(elmModuleText)));
 
         var languageService =
             LanguageServiceState.InitLanguageServiceState()
@@ -198,15 +199,15 @@ public class ElmLanguageServiceTests
     }
 
     private static void MutateServiceAddingFiles(
-        BlobTreeWithStringPath fileTree,
+        FileTree fileTree,
         LanguageServiceState languageServiceState)
     {
 
-        foreach (var file in fileTree.EnumerateBlobsTransitive())
+        foreach (var file in fileTree.EnumerateFilesTransitive())
         {
-            var asText = Encoding.UTF8.GetString(file.blobContent.Span);
+            var asText = Encoding.UTF8.GetString(file.fileContent.Span);
 
-            var asBase64 = Convert.ToBase64String(file.blobContent.Span);
+            var asBase64 = Convert.ToBase64String(file.fileContent.Span);
 
             var addFileResult =
                 languageServiceState.HandleRequest(
@@ -222,7 +223,7 @@ public class ElmLanguageServiceTests
     }
 
     private static void AssertCompletionItems(
-        BlobTreeWithStringPath workspace,
+        FileTree workspace,
         IReadOnlyList<string> filePathOpenedInEditor,
         string elmModuleTextBefore,
         string elmModuleTextWithSplitSymbol,
@@ -244,7 +245,7 @@ public class ElmLanguageServiceTests
             workspace
             .SetNodeAtPathSorted(
                 filePathOpenedInEditor,
-                new BlobTreeWithStringPath.BlobNode(Encoding.UTF8.GetBytes(elmModuleTextBefore)));
+                new FileTree.FileNode(Encoding.UTF8.GetBytes(elmModuleTextBefore)));
 
         MutateServiceAddingFiles(mergedWorkspaceBefore, languageService);
 
@@ -270,7 +271,7 @@ public class ElmLanguageServiceTests
             workspace
             .SetNodeAtPathSorted(
                 filePathOpenedInEditor,
-                new BlobTreeWithStringPath.BlobNode(Encoding.UTF8.GetBytes(elmModuleText)));
+                new FileTree.FileNode(Encoding.UTF8.GetBytes(elmModuleText)));
 
         var completionItemsRequest =
             new Elm.LanguageServiceInterface.ProvideCompletionItemsRequestStruct(

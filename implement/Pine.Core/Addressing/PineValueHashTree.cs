@@ -1,3 +1,4 @@
+using Pine.Core.Files;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -561,22 +562,22 @@ public static class PineValueHashTree
     }
 
     /// <summary>
-    /// Computes a content hash for a <see cref="BlobTreeWithStringPath"/>, after recursively sorting all siblings to obtain a canonical order.
+    /// Computes a content hash for a <see cref="FileTree"/>, after recursively sorting all siblings to obtain a canonical order.
     /// </summary>
     /// <param name="treeNode">The tree to hash.</param>
     /// <returns>The 32-byte SHA-256 hash as <see cref="ReadOnlyMemory{Byte}"/>.</returns>
-    public static ReadOnlyMemory<byte> ComputeHashSorted(BlobTreeWithStringPath treeNode) =>
-        ComputeHashNotSorted(BlobTreeWithStringPath.Sort(treeNode));
+    public static ReadOnlyMemory<byte> ComputeHashSorted(FileTree treeNode) =>
+        ComputeHashNotSorted(FileTree.Sort(treeNode));
 
     /// <summary>
-    /// Computes a content hash for a <see cref="BlobTreeWithStringPath"/> without changing sibling order.
+    /// Computes a content hash for a <see cref="FileTree"/> without changing sibling order.
     /// </summary>
     /// <param name="treeNode">The tree to hash.</param>
     /// <returns>The 32-byte SHA-256 hash as <see cref="ReadOnlyMemory{Byte}"/>.</returns>
     /// <remarks>
-    /// Use <see cref="ComputeHashSorted(BlobTreeWithStringPath)"/> to obtain order-insensitive hashing.
+    /// Use <see cref="ComputeHashSorted(FileTree)"/> to obtain order-insensitive hashing.
     /// </remarks>
-    public static ReadOnlyMemory<byte> ComputeHashNotSorted(BlobTreeWithStringPath treeNode) =>
+    public static ReadOnlyMemory<byte> ComputeHashNotSorted(FileTree treeNode) =>
         ComputeHash(PineValueComposition.FromTreeWithStringPath(treeNode));
 
     /// <summary>

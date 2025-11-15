@@ -418,7 +418,7 @@ public class Program
             return 1;
         }
 
-        if (loadInputDirectoryResult is not Result<string, (BlobTreeWithStringPath tree, LoadCompositionOrigin origin)>.Ok loadOk)
+        if (loadInputDirectoryResult is not Result<string, (FileTree tree, LoadCompositionOrigin origin)>.Ok loadOk)
         {
             throw new Exception(
                 "Unexpected result type: " + loadInputDirectoryResult.GetType());
@@ -428,16 +428,16 @@ public class Program
     }
 
     private static Result<string, int> RunElmAppOnCommandLine(
-        BlobTreeWithStringPath sourceFiles,
+        FileTree sourceFiles,
         IReadOnlyList<string> entryPointFilePath)
     {
-        if (sourceFiles.GetNodeAtPath(entryPointFilePath) is not BlobTreeWithStringPath entryPointNode)
+        if (sourceFiles.GetNodeAtPath(entryPointFilePath) is not FileTree entryPointNode)
         {
             return Result<string, int>.err(
                 "Did not find the entry point '" + string.Join("/", entryPointFilePath) + "' in the input directory.");
         }
 
-        if (entryPointNode is not BlobTreeWithStringPath.BlobNode entryPointBlob)
+        if (entryPointNode is not FileTree.FileNode entryPointBlob)
         {
             return
                 "The entry point module '" + string.Join("/", entryPointFilePath) +
@@ -970,7 +970,7 @@ public class Program
 
                     var fileTree = loadCompositionResult.tree;
 
-                    if (fileTree is BlobTreeWithStringPath.BlobNode sourceBlob)
+                    if (fileTree is FileTree.FileNode sourceBlob)
                     {
                         var zipEntries = ZipArchive.EntriesFromZipArchive(sourceBlob.Bytes);
 
@@ -983,7 +983,7 @@ public class Program
 
                 var aggregateElmModuleFiles =
                 environmentsSourceTrees
-                .SelectMany(tree => tree.EnumerateBlobsTransitive())
+                .SelectMany(tree => tree.EnumerateFilesTransitive())
                 .Where(f => f.path.LastOrDefault()?.EndsWith(".elm", StringComparison.OrdinalIgnoreCase) ?? false)
                 .ToImmutableArray();
 
@@ -1033,7 +1033,7 @@ public class Program
                         overrideElmCompiler: overrideElmCompiler)
                     .Extract(err => throw new Exception("Failed compilation: " + err));
 
-                    return new KeyValuePair<BlobTreeWithStringPath, PineValue>(sourceTree, compiledEnv);
+                    return new KeyValuePair<FileTree, PineValue>(sourceTree, compiledEnv);
                 })
                 .ToImmutableDictionary();
 
@@ -1043,7 +1043,7 @@ public class Program
 
                     var sourceTreeAllFiles =
                     sourceTree
-                    .EnumerateBlobsTransitive()
+                    .EnumerateFilesTransitive()
                     .ToImmutableArray();
 
                     var sourceTreeElmModules =
@@ -1315,7 +1315,7 @@ public class Program
         IReadOnlyList<IReadOnlyList<string>>? readElmJsonSourceDirectories()
         {
             if (loadCompositionResult.tree.GetNodeAtPath(["elm.json"]) is not
-                BlobTreeWithStringPath.BlobNode elmJsonFile)
+                FileTree.FileNode elmJsonFile)
             {
                 return null;
             }
@@ -1347,8 +1347,8 @@ public class Program
 
             var discardedFiles =
                 loadCompositionResult.tree
-                .EnumerateBlobsTransitive()
-                .Where(originalBlob => filteredSourceTree.GetNodeAtPath(originalBlob.path) is not BlobTreeWithStringPath.BlobNode)
+                .EnumerateFilesTransitive()
+                .Where(originalBlob => filteredSourceTree.GetNodeAtPath(originalBlob.path) is not FileTree.FileNode)
                 .ToImmutableArray();
 
             if (0 < discardedFiles.Length)
@@ -1569,16 +1569,16 @@ public class Program
                                 var asTree =
                                 scenariosComposition.Value.result.Extract(error => throw new Exception(error)).tree switch
                                 {
-                                    BlobTreeWithStringPath.TreeNode tree => tree,
+                                    FileTree.DirectoryNode tree => tree,
                                     _ => null
                                 };
 
                                 if (asTree is null)
-                                    return ImmutableList<(string, BlobTreeWithStringPath)>.Empty;
+                                    return ImmutableList<(string, FileTree)>.Empty;
 
                                 return
                                 asTree.Items
-                                .Where(entry => entry.component is BlobTreeWithStringPath.TreeNode scenarioTree);
+                                .Where(entry => entry.component is FileTree.DirectoryNode scenarioTree);
                             }))
                             .Select(loadedScenario =>
                             {
@@ -1602,7 +1602,7 @@ public class Program
                         var elmEngineType = elmEngineOption.parseElmEngineTypeFromOption();
 
                         var aggregateCompositionTree =
-                            BlobTreeWithStringPath.SortedTree(
+                            FileTree.SortedDirectory(
                                 [.. namedDistinctScenarios.Select(scenario => (scenario.Key, scenario.Value.loadedScenario.component))]);
 
                         var parsedScenarios =
@@ -1610,7 +1610,7 @@ public class Program
                             aggregateCompositionTree,
                             console);
 
-                        IInteractiveSession newInteractiveSessionFromAppCode(BlobTreeWithStringPath? appCodeTree)
+                        IInteractiveSession newInteractiveSessionFromAppCode(FileTree? appCodeTree)
                         {
                             return IInteractiveSession.Create(
                                 compilerSourceFiles: compileElmProgramCodeFiles,
@@ -1660,7 +1660,7 @@ public class Program
 
                 var initStepsPath = initStepsOption.Value();
 
-                BlobTreeWithStringPath loadContextAppCodeTreeFromPath(string contextAppPath)
+                FileTree loadContextAppCodeTreeFromPath(string contextAppPath)
                 {
                     return
                     LoadComposition.LoadFromPathResolvingNetworkDependencies(contextAppPath)
@@ -1670,7 +1670,7 @@ public class Program
                         fromErr: error => throw new Exception("Failed to load from path '" + contextAppPath + "': " + error),
                         fromOk: tree =>
                         {
-                            if (!tree.EnumerateBlobsTransitive().Take(1).Any())
+                            if (!tree.EnumerateFilesTransitive().Take(1).Any())
                                 throw new Exception("Found no files under context app path '" + contextAppPath + "'.");
 
                             return tree;
@@ -1727,14 +1727,14 @@ public class Program
                         fromErr: error => throw new Exception("Failed to load from path '" + initStepsPath + "': " + error),
                         fromOk: treeNode =>
                         {
-                            if (!treeNode.EnumerateBlobsTransitive().Take(1).Any())
+                            if (!treeNode.EnumerateFilesTransitive().Take(1).Any())
                                 throw new Exception("Found no files under context app path '" + initStepsPath + "'.");
 
                             return
                             treeNode
                             .Map(
-                                fromBlob: _ => throw new Exception("Unexpected blob"),
-                                fromTree: tree =>
+                                fromFile: _ => throw new Exception("Unexpected blob"),
+                                fromDirectory: tree =>
                                 tree.Select(stepDirectory =>
                                 TestElmInteractive.ParseScenarioStep(stepDirectory.itemValue)
                                 .Extract(fromErr: error => throw new Exception(error)).Submission))
@@ -1891,8 +1891,8 @@ public class Program
                 if (compileZipArchiveOption.HasValue())
                 {
                     var asZipArchive = ZipArchive.ZipArchiveFromFiles(
-                        loadCompositionResult.tree.EnumerateBlobsTransitive()
-                        .Select(entry => (string.Join("/", entry.path), entry.blobContent)));
+                        loadCompositionResult.tree.EnumerateFilesTransitive()
+                        .Select(entry => (string.Join("/", entry.path), entry.fileContent)));
 
                     var defaultFileName = compositionId + ".zip";
 
@@ -2039,8 +2039,8 @@ public class Program
 
             var discardedFiles =
                 loadInputDirectoryOk.tree
-                .EnumerateBlobsTransitive()
-                .Where(originalBlob => filteredSourceTree.GetNodeAtPath(originalBlob.path) is not BlobTreeWithStringPath.BlobNode)
+                .EnumerateFilesTransitive()
+                .Where(originalBlob => filteredSourceTree.GetNodeAtPath(originalBlob.path) is not FileTree.FileNode)
                 .ToImmutableArray();
 
             if (0 < discardedFiles.Length)
@@ -2049,7 +2049,7 @@ public class Program
             }
 
             if (filteredSourceTree.GetNodeAtPath(["elm.json"]) is not
-                BlobTreeWithStringPath.BlobNode elmJsonFile)
+                FileTree.FileNode elmJsonFile)
             {
                 return "Did not find elm.json file in that directory.";
             }
@@ -2161,7 +2161,7 @@ public class Program
                             outerSourceDirectories
                                 .Aggregate(
                                     seed:
-                                    BlobTreeWithStringPath.EmptyTree
+                                    FileTree.EmptyTree
                                         .SetNodeAtPathSorted(workingDirectoryRelative, filteredSourceTree),
                                     func:
                                     (aggregate, nextSourceDir) =>
@@ -2223,7 +2223,7 @@ public class Program
 
         ReadOnlyMemory<byte> ComputeOutputFileContent()
         {
-            if (makeOk.ProducedFiles is BlobTreeWithStringPath.BlobNode blobNode)
+            if (makeOk.ProducedFiles is FileTree.FileNode blobNode)
             {
                 Console.WriteLine(
                     "Make command produced a single blob with " +
@@ -2232,17 +2232,17 @@ public class Program
                 return blobNode.Bytes;
             }
 
-            if (makeOk.ProducedFiles is BlobTreeWithStringPath.TreeNode treeNode)
+            if (makeOk.ProducedFiles is FileTree.DirectoryNode treeNode)
             {
                 var blobs =
-                    treeNode.EnumerateBlobsTransitive()
-                    .Select(entry => (string.Join("/", entry.path), entry.blobContent))
+                    treeNode.EnumerateFilesTransitive()
+                    .Select(entry => (string.Join("/", entry.path), entry.fileContent))
                     .ToImmutableList();
 
                 Console.WriteLine(
                     "Make command produced tree node with " +
                     blobs.Count + " blobs (" +
-                    CommandLineInterface.FormatIntegerForDisplay(blobs.Sum(entry => entry.blobContent.Length)) +
+                    CommandLineInterface.FormatIntegerForDisplay(blobs.Sum(entry => entry.fileContent.Length)) +
                     " aggregate bytes). Packaging these into zip archive...");
 
                 var zipArchive = ZipArchive.ZipArchiveFromFiles(blobs);
@@ -2270,7 +2270,7 @@ public class Program
     }
 
     private record LoadForMakeResult(
-        BlobTreeWithStringPath SourceFiles,
+        FileTree SourceFiles,
         IReadOnlyList<string> WorkingDirectoryRelative,
         IReadOnlyList<string> PathToFileWithElmEntryPoint);
 
@@ -2479,7 +2479,7 @@ public class Program
     {
         if (elmValue is ElmValue.ElmBytes bytesValue)
         {
-            return new Elm019Binaries.ElmMakeOk(ProducedFiles: BlobTreeWithStringPath.Blob(bytesValue.Value));
+            return new Elm019Binaries.ElmMakeOk(ProducedFiles: FileTree.File(bytesValue.Value));
         }
 
         if (elmValue is ElmValue.ElmTag)
@@ -2502,7 +2502,7 @@ public class Program
         return "Unexpected Elm value type: " + elmValue;
     }
 
-    private static Result<string, BlobTreeWithStringPath> ParseAsFileTree(ElmValue elmValue)
+    private static Result<string, FileTree> ParseAsFileTree(ElmValue elmValue)
     {
         /*
          * Type declaration on Elm side looks like this:
@@ -2540,7 +2540,7 @@ public class Program
                 return "Expected Elm bytes value, but got: " + blob;
             }
 
-            return BlobTreeWithStringPath.Blob(bytes.Value);
+            return FileTree.File(bytes.Value);
         }
 
         if (elmTag.TagName.StartsWith("Tree", StringComparison.OrdinalIgnoreCase))
@@ -2555,7 +2555,7 @@ public class Program
                 return "Expected Elm list value, but got: " + elmTag.Arguments[0];
             }
 
-            var children = new (string name, BlobTreeWithStringPath item)[elmList.Items.Count];
+            var children = new (string name, FileTree item)[elmList.Items.Count];
 
             for (var i = 0; i < elmList.Items.Count; ++i)
             {
@@ -2591,7 +2591,7 @@ public class Program
                 children[i] = (name.Value, childTreeOk);
             }
 
-            var treeNode = BlobTreeWithStringPath.NonSortedTree(children);
+            var treeNode = FileTree.NonSortedDirectory(children);
 
             return treeNode;
         }
@@ -2836,7 +2836,7 @@ public class Program
         return (elmEngineOption, parseElmEngineTypeFromOption);
     }
 
-    private static (CommandOption elmCompilerOption, Func<Pine.IConsole, BlobTreeWithStringPath> loadElmCompilerFromOption)
+    private static (CommandOption elmCompilerOption, Func<Pine.IConsole, FileTree> loadElmCompilerFromOption)
         AddElmCompilerOptionOnCommand(CommandLineApplication cmd)
     {
         var defaultCompiler = ElmCompiler.CompilerSourceFilesDefault.Value;
@@ -2848,7 +2848,7 @@ public class Program
                 optionType: CommandOptionType.SingleValue,
                 inherited: true);
 
-        BlobTreeWithStringPath parseElmCompilerFromOption(Pine.IConsole console)
+        FileTree parseElmCompilerFromOption(Pine.IConsole console)
         {
             if (elmCompilerOption?.Value() is { } compilerAsString)
             {
@@ -2920,16 +2920,16 @@ public class Program
         DotNetConsoleWriteLineUsingColor(line, ConsoleColor.Yellow);
     }
 
-    private static (string compositionId, SourceSummaryStructure summary) CompileSourceSummary(BlobTreeWithStringPath sourceTree)
+    private static (string compositionId, SourceSummaryStructure summary) CompileSourceSummary(FileTree sourceTree)
     {
         var compositionId = Convert.ToHexStringLower(PineValueHashTree.ComputeHashSorted(sourceTree).Span);
 
-        var allBlobs = sourceTree.EnumerateBlobsTransitive().ToImmutableList();
+        var allBlobs = sourceTree.EnumerateFilesTransitive().ToImmutableList();
 
         return (compositionId, summary: new SourceSummaryStructure
         (
             numberOfFiles: allBlobs.Count,
-            totalSizeOfFilesContents: allBlobs.Select(blob => blob.blobContent.Length).Sum()
+            totalSizeOfFilesContents: allBlobs.Select(blob => blob.fileContent.Length).Sum()
         ));
     }
 

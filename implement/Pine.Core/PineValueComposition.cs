@@ -1,3 +1,4 @@
+using Pine.Core.Files;
 using Pine.Core.PopularEncodings;
 using System;
 using System.Collections.Generic;
@@ -8,16 +9,16 @@ namespace Pine.Core;
 
 public static class PineValueComposition
 {
-    public static Result<IReadOnlyList<(int index, string name)>, BlobTreeWithStringPath> ParseAsTreeWithStringPath(
+    public static Result<IReadOnlyList<(int index, string name)>, FileTree> ParseAsTreeWithStringPath(
         PineValue composition) =>
         FileTreeEncoding.Parse(composition);
 
 
-    public static PineValue FromTreeWithStringPath(BlobTreeWithStringPath node) =>
+    public static PineValue FromTreeWithStringPath(FileTree node) =>
         FileTreeEncoding.Encode(node);
 
 
-    public static BlobTreeWithStringPath SortedTreeFromSetOfBlobsWithCommonFilePath(
+    public static FileTree SortedTreeFromSetOfBlobsWithCommonFilePath(
         IEnumerable<(string path, ReadOnlyMemory<byte> blobContent)> blobsWithPath) =>
         SortedTreeFromSetOfBlobs(
             blobsWithPath.Select(blobWithPath =>
@@ -30,13 +31,13 @@ public static class PineValueComposition
             })
         );
 
-    public static BlobTreeWithStringPath SortedTreeFromSetOfBlobsWithStringPath<PathT>(
+    public static FileTree SortedTreeFromSetOfBlobsWithStringPath<PathT>(
         IEnumerable<(PathT path, ReadOnlyMemory<byte> blobContent)> blobsWithPath)
         where PathT : IReadOnlyList<string>
         =>
         SortedTreeFromSetOfBlobs(blobsWithPath);
 
-    public static BlobTreeWithStringPath SortedTreeFromSetOfBlobsWithStringPath<PathT>(
+    public static FileTree SortedTreeFromSetOfBlobsWithStringPath<PathT>(
         IReadOnlyDictionary<PathT, ReadOnlyMemory<byte>> blobsWithPath)
         where PathT : IReadOnlyList<string>
         =>
@@ -44,40 +45,40 @@ public static class PineValueComposition
             blobsWithPath.Select(pathAndBlobContent =>
                 (path: pathAndBlobContent.Key, blobContent: pathAndBlobContent.Value)));
 
-    public static BlobTreeWithStringPath SortedTreeFromTree(
-        BlobTreeWithStringPath tree) => BlobTreeWithStringPath.Sort(tree);
+    public static FileTree SortedTreeFromTree(
+        FileTree tree) => FileTree.Sort(tree);
 
-    public static BlobTreeWithStringPath SortedTreeFromSetOfBlobs<PathT>(
+    public static FileTree SortedTreeFromSetOfBlobs<PathT>(
         IEnumerable<(PathT path, ReadOnlyMemory<byte> blobContent)> blobsWithPath)
         where PathT : IReadOnlyList<string>
         =>
         blobsWithPath.Aggregate(
-            seed: BlobTreeWithStringPath.EmptyTree,
+            seed: FileTree.EmptyTree,
             func: (tree, blobPathAndContent) =>
                 tree.SetNodeAtPathSorted(blobPathAndContent.path,
-                    BlobTreeWithStringPath.Blob(blobPathAndContent.blobContent)));
+                    FileTree.File(blobPathAndContent.blobContent)));
 
-    public static BlobTreeWithStringPath Union(IEnumerable<BlobTreeWithStringPath> trees) =>
+    public static FileTree Union(IEnumerable<FileTree> trees) =>
         trees
         .Aggregate(
-            seed: BlobTreeWithStringPath.EmptyTree,
+            seed: FileTree.EmptyTree,
             func: Union);
 
-    public static BlobTreeWithStringPath Union(
-        BlobTreeWithStringPath treeA,
-        BlobTreeWithStringPath treeB) =>
-        treeA.EnumerateBlobsTransitive()
+    public static FileTree Union(
+        FileTree treeA,
+        FileTree treeB) =>
+        treeA.EnumerateFilesTransitive()
         .Aggregate(
             seed: treeB,
             (tree, blobPathAndContent) =>
             tree.SetNodeAtPathSorted(
                 blobPathAndContent.path,
-                BlobTreeWithStringPath.Blob(blobPathAndContent.blobContent)));
+                FileTree.File(blobPathAndContent.fileContent)));
 
     public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>
         TreeToFlatDictionaryWithPathComparer(
-            BlobTreeWithStringPath tree) =>
-        ToFlatDictionaryWithPathComparer(tree.EnumerateBlobsTransitive());
+            FileTree tree) =>
+        ToFlatDictionaryWithPathComparer(tree.EnumerateFilesTransitive());
 
     public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> ToFlatDictionaryWithPathComparer(
         IEnumerable<(IImmutableList<string> filePath, ReadOnlyMemory<byte> fileContent)> filesBeforeSorting) =>

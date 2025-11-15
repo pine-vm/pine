@@ -1,3 +1,4 @@
+using Pine.Core.Files;
 using System;
 using System.Collections.Generic;
 
@@ -15,15 +16,15 @@ public static class FileTreeEncoding
     /// error message pointing to the problematic part of the tree.
     /// </para>
     /// </summary>
-    public static Result<IReadOnlyList<(int index, string name)>, BlobTreeWithStringPath> Parse(
+    public static Result<IReadOnlyList<(int index, string name)>, FileTree> Parse(
         PineValue composition)
     {
         return
             composition switch
             {
                 PineValue.BlobValue compositionAsBlob =>
-                    Result<IReadOnlyList<(int index, string name)>, BlobTreeWithStringPath>.ok(
-                        BlobTreeWithStringPath.Blob(compositionAsBlob.Bytes)),
+                    Result<IReadOnlyList<(int index, string name)>, FileTree>.ok(
+                        FileTree.File(compositionAsBlob.Bytes)),
 
                 PineValue.ListValue compositionAsList =>
                     Parse(compositionAsList),
@@ -34,10 +35,10 @@ public static class FileTreeEncoding
             };
     }
 
-    private static Result<IReadOnlyList<(int index, string name)>, BlobTreeWithStringPath> Parse(
+    private static Result<IReadOnlyList<(int index, string name)>, FileTree> Parse(
         PineValue.ListValue compositionAsList)
     {
-        var parsedItems = new (string name, BlobTreeWithStringPath component)[compositionAsList.Items.Length];
+        var parsedItems = new (string name, FileTree component)[compositionAsList.Items.Length];
 
         for (var itemIndex = 0; itemIndex < compositionAsList.Items.Length; itemIndex++)
         {
@@ -45,38 +46,38 @@ public static class FileTreeEncoding
 
             if (item is not PineValue.ListValue itemAsList || itemAsList.Items.Length is not 2)
             {
-                return Result<IReadOnlyList<(int index, string name)>, BlobTreeWithStringPath>.err([]);
+                return Result<IReadOnlyList<(int index, string name)>, FileTree>.err([]);
             }
 
             if (StringEncoding.StringFromValue(itemAsList.Items.Span[0]).IsOkOrNull() is not { } itemName)
             {
-                return Result<IReadOnlyList<(int index, string name)>, BlobTreeWithStringPath>.err([]);
+                return Result<IReadOnlyList<(int index, string name)>, FileTree>.err([]);
             }
 
             var itemComponent = itemAsList.Items.Span[1];
 
             if (Parse(itemComponent).IsOkOrNull() is not { } itemComponentOk)
             {
-                return Result<IReadOnlyList<(int index, string name)>, BlobTreeWithStringPath>.err([]);
+                return Result<IReadOnlyList<(int index, string name)>, FileTree>.err([]);
             }
 
             parsedItems[itemIndex] = (itemName, itemComponentOk);
         }
 
-        return BlobTreeWithStringPath.SortedTree(parsedItems);
+        return FileTree.SortedDirectory(parsedItems);
     }
 
     /// <summary>
     /// Encode a file tree as a Pine value.
     /// </summary>
-    public static PineValue Encode(BlobTreeWithStringPath node)
+    public static PineValue Encode(FileTree node)
     {
-        if (node is BlobTreeWithStringPath.BlobNode blob)
+        if (node is FileTree.FileNode blob)
         {
             return PineValue.Blob(blob.Bytes);
         }
 
-        if (node is BlobTreeWithStringPath.TreeNode tree)
+        if (node is FileTree.DirectoryNode tree)
         {
             var encodedItems = new PineValue[tree.Items.Count];
 

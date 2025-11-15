@@ -19,7 +19,7 @@ public static class TarArchive
     /// scenarios where the archive is already loaded into memory.</remarks>
     /// <param name="tarArchive">A read-only memory buffer containing the bytes of the TAR archive to be parsed. Must contain a valid TAR archive
     /// format.</param>
-    public static BlobTreeWithStringPath TreeWithStringPathFromTarArchive(ReadOnlyMemory<byte> tarArchive)
+    public static FileTree TreeWithStringPathFromTarArchive(ReadOnlyMemory<byte> tarArchive)
     {
         using var archiveReader =
             SharpCompress.Archives.Tar.TarArchive.Open(new MemoryStream(tarArchive.ToArray()));
@@ -34,7 +34,7 @@ public static class TarArchive
     /// Directory entries in the archive are excluded from the tree.</remarks>
     /// <param name="entries">A collection of TAR archive entries to include in the tree. Only file entries are processed; directory entries
     /// are ignored.</param>
-    public static BlobTreeWithStringPath TreeWithStringPathFromTarArchiveEntries(
+    public static FileTree TreeWithStringPathFromTarArchiveEntries(
         IEnumerable<SharpCompress.Archives.Tar.TarArchiveEntry> entries)
     {
         var treeEntries =
@@ -49,9 +49,9 @@ public static class TarArchive
 
                 var componentBytes = memoryStream.ToArray();
 
-                return (name: tarEntry.Key, component: BlobTreeWithStringPath.Blob(componentBytes));
+                return (name: tarEntry.Key, component: FileTree.File(componentBytes));
             }).ToImmutableList();
 
-        return BlobTreeWithStringPath.SortedTree(treeEntries);
+        return FileTree.SortedDirectory(treeEntries);
     }
 }

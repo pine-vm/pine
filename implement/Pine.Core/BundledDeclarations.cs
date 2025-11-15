@@ -1,4 +1,5 @@
 using Pine.Core.Elm;
+using Pine.Core.Files;
 using Pine.Core.PopularEncodings;
 using System;
 using System.Collections.Generic;
@@ -103,7 +104,7 @@ public record BundledDeclarations(
     /// <param name="otherReusedValues">Additional named <see cref="PineValue"/>s to include in the bundle.</param>
     /// <param name="destinationDirectory">The destination directory. If null or empty, uses the current working directory.</param>
     public static void CompressAndWriteBundleFile(
-        IReadOnlyDictionary<BlobTreeWithStringPath, PineValue> compiledEnvironments,
+        IReadOnlyDictionary<FileTree, PineValue> compiledEnvironments,
         IReadOnlyDictionary<string, PineValue> otherReusedValues,
         string? destinationDirectory)
     {
@@ -126,14 +127,14 @@ public record BundledDeclarations(
 
     /// <summary>
     /// Builds the uncompressed bundle payload for the given compiled environments and other reused values.
-    /// Keys for compiled environments are computed via <see cref="BundledElmEnvironments.DictionaryKeyFromFileTree(BlobTreeWithStringPath)"/>.
+    /// Keys for compiled environments are computed via <see cref="BundledElmEnvironments.DictionaryKeyFromFileTree(FileTree)"/>.
     /// </summary>
     /// <param name="compiledEnvironments">A mapping of source trees to their compiled environment values.</param>
     /// <param name="otherReusedValues">Additional named <see cref="PineValue"/>s to include in the bundle.</param>
     /// <returns>The uncompressed binary payload to embed or compress.</returns>
     /// <exception cref="InvalidOperationException">Thrown if a key collision occurs when building the dictionary.</exception>
     public static (IReadOnlyList<PineValue> componentsWritten, ReadOnlyMemory<byte> fileContent) BuildBundleFile(
-        IReadOnlyDictionary<BlobTreeWithStringPath, PineValue> compiledEnvironments,
+        IReadOnlyDictionary<FileTree, PineValue> compiledEnvironments,
         IReadOnlyDictionary<string, PineValue> otherReusedValues)
     {
         var declarations = otherReusedValues.ToDictionary();

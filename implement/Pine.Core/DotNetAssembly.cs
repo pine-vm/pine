@@ -1,3 +1,4 @@
+using Pine.Core.Files;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -46,7 +47,7 @@ public class DotNetAssembly
         LoadTreeFromManifestEmbeddedFileProvider(directoryPath, assembly)
         .Map(PineValueComposition.TreeToFlatDictionaryWithPathComparer);
 
-    public static Result<string, BlobTreeWithStringPath> LoadTreeFromManifestEmbeddedFileProvider(
+    public static Result<string, FileTree> LoadTreeFromManifestEmbeddedFileProvider(
         IReadOnlyList<string> directoryPath,
         Assembly assembly)
     {
@@ -68,11 +69,11 @@ public class DotNetAssembly
                 LoadTreeFromManifestEmbeddedFileProvider([.. directoryPath, subdirectory], assembly));
     }
 
-    public static Result<string, BlobTreeWithStringPath> LoadTreeFromManifestEmbeddedFileProviderFileInfo(
+    public static Result<string, FileTree> LoadTreeFromManifestEmbeddedFileProviderFileInfo(
         Microsoft.Extensions.FileProviders.IDirectoryContents directoryContents,
-        Func<string, Result<string, BlobTreeWithStringPath>> loadSubdirectory)
+        Func<string, Result<string, FileTree>> loadSubdirectory)
     {
-        static BlobTreeWithStringPath fromFile(Microsoft.Extensions.FileProviders.IFileInfo file)
+        static FileTree fromFile(Microsoft.Extensions.FileProviders.IFileInfo file)
         {
             using var stream = file.CreateReadStream();
 
@@ -80,7 +81,7 @@ public class DotNetAssembly
 
             stream.CopyTo(memoryStream);
 
-            return BlobTreeWithStringPath.Blob(memoryStream.ToArray());
+            return FileTree.File(memoryStream.ToArray());
         }
 
         var treeElementsResults =
@@ -104,7 +105,7 @@ public class DotNetAssembly
             .MapError(err => "Failed for directory " + item.Name + ": " + err)
             .Map(success => (item.Name, success)))
             .ListCombine()
-            .Map(treeElements => BlobTreeWithStringPath.SortedTree(treeElements.ToImmutableList()));
+            .Map(treeElements => FileTree.SortedDirectory(treeElements.ToImmutableList()));
     }
 
     public static ReadOnlyMemory<byte>? GetManifestResourceStreamContentAsBytes(Assembly assembly, string name)

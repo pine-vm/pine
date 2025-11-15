@@ -38,10 +38,10 @@ public class SelfTest
             .Extract(error => throw new Exception("Failed to load from GitHub: " + error));
 
         var loadedFilesNamesAndContents =
-            loadFromGithubResult.tree.EnumerateBlobsTransitive()
+            loadFromGithubResult.tree.EnumerateFilesTransitive()
                 .Select(blobPathAndContent => (
                     fileName: string.Join("/", blobPathAndContent.path),
-                    fileContent: blobPathAndContent.blobContent))
+                    fileContent: blobPathAndContent.fileContent))
                 .ToImmutableArray();
 
         var loadedFilesNamesAndHashes =

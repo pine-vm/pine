@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Pine.Core.Addressing;
+using Pine.Core.Files;
 using Pine.Core.PopularEncodings;
 using System;
 using System.Collections.Generic;
@@ -18,15 +19,15 @@ public class PineValueCompositionTests
         {
             new
             {
-                input = BlobTreeWithStringPath.Blob(new byte[]{0,1,2}),
+                input = FileTree.File(new byte[]{0,1,2}),
                 expectedOutput = PineValue.Blob([0,1,2])
             },
             new
             {
-                input = BlobTreeWithStringPath.SortedTree(
+                input = FileTree.SortedDirectory(
                     [
                         (name: "ABC ä 😀",
-                        component: BlobTreeWithStringPath.Blob(new byte[]{0,1,2,3}) ),
+                        component: FileTree.File(new byte[]{0,1,2,3}) ),
                     ]),
                 expectedOutput = (PineValue)PineValue.List(
                     [
@@ -56,8 +57,8 @@ public class PineValueCompositionTests
                 input =
                 PineValue.Blob([0,1,2]),
 
-                expectedOutput = Result<IReadOnlyList<(int index, string name)>, BlobTreeWithStringPath>.ok(
-                    BlobTreeWithStringPath.Blob(new byte[]{0,1,2}))
+                expectedOutput = Result<IReadOnlyList<(int index, string name)>, FileTree>.ok(
+                    FileTree.File(new byte[]{0,1,2}))
             },
             new
             {
@@ -66,12 +67,12 @@ public class PineValueCompositionTests
                     PineValue.List(
                         PineValue.Blob([0,0,0,68,0,0,0,69,0,0,0,70,0,0,0,32,0,1,243,50]),
                         PineValue.Blob([0,1,2,3]))),
-                expectedOutput = Result<IReadOnlyList<(int index, string name)>, BlobTreeWithStringPath>.ok(
-                    BlobTreeWithStringPath.SortedTree(
-                        treeContent:
+                expectedOutput = Result<IReadOnlyList<(int index, string name)>, FileTree>.ok(
+                    FileTree.SortedDirectory(
+                        directoryContent:
                         [
                             (name: "DEF 🌲",
-                            component: BlobTreeWithStringPath.Blob(new byte[]{0,1,2,3}) ),
+                            component: FileTree.File(new byte[]{0,1,2,3}) ),
                         ])
                 )
             },
@@ -229,50 +230,50 @@ public class PineValueCompositionTests
         {
             new
             {
-                input = BlobTreeWithStringPath.NonSortedTree(
+                input = FileTree.NonSortedDirectory(
                     treeContent:
                     [
-                        ("ba-", BlobTreeWithStringPath.Blob(new byte[]{ 0 })),
-                        ("ba", BlobTreeWithStringPath.Blob(new byte[] { 1 })),
-                        ("bb", BlobTreeWithStringPath.Blob(new byte[] { 2 })),
-                        ("a", BlobTreeWithStringPath.Blob(new byte[] { 3 })),
-                        ("test😃", BlobTreeWithStringPath.Blob(new byte[] { 4 })),
-                        ("testa", BlobTreeWithStringPath.Blob(new byte[] { 5 })),
-                        ("tesz", BlobTreeWithStringPath.Blob(new byte[] { 6 })),
-                        ("", BlobTreeWithStringPath.Blob(new byte[] { 7 })),
-                        ("🌿", BlobTreeWithStringPath.Blob(new byte[] { 8 })),
-                        ("🌲", BlobTreeWithStringPath.Blob(new byte[] { 9 })),
-                        ("c", BlobTreeWithStringPath.NonSortedTree(
+                        ("ba-", FileTree.File(new byte[]{ 0 })),
+                        ("ba", FileTree.File(new byte[] { 1 })),
+                        ("bb", FileTree.File(new byte[] { 2 })),
+                        ("a", FileTree.File(new byte[] { 3 })),
+                        ("test😃", FileTree.File(new byte[] { 4 })),
+                        ("testa", FileTree.File(new byte[] { 5 })),
+                        ("tesz", FileTree.File(new byte[] { 6 })),
+                        ("", FileTree.File(new byte[] { 7 })),
+                        ("🌿", FileTree.File(new byte[] { 8 })),
+                        ("🌲", FileTree.File(new byte[] { 9 })),
+                        ("c", FileTree.NonSortedDirectory(
                             treeContent:
                             ImmutableList.Create(
-                                ("gamma", BlobTreeWithStringPath.Blob(new byte[] { 10 })),
-                                ("alpha", BlobTreeWithStringPath.Blob(new byte[] { 11 }))
+                                ("gamma", FileTree.File(new byte[] { 10 })),
+                                ("alpha", FileTree.File(new byte[] { 11 }))
                                 )
                         )),
-                        ("bA", BlobTreeWithStringPath.Blob(new byte[] { 12 }))
+                        ("bA", FileTree.File(new byte[] { 12 }))
                         ]
                 ),
-                expected = BlobTreeWithStringPath.NonSortedTree(
+                expected = FileTree.NonSortedDirectory(
                     treeContent:
                     [
-                        ("", BlobTreeWithStringPath.Blob(new byte[] { 7 })),
-                        ("a", BlobTreeWithStringPath.Blob(new byte[] { 3 })),
-                        ("bA", BlobTreeWithStringPath.Blob(new byte[] { 12 })),
-                        ("ba", BlobTreeWithStringPath.Blob(new byte[] { 1 })),
-                        ("ba-", BlobTreeWithStringPath.Blob(new byte[] { 0 })),
-                        ("bb", BlobTreeWithStringPath.Blob(new byte[] { 2 })),
-                        ("c", BlobTreeWithStringPath.NonSortedTree(
+                        ("", FileTree.File(new byte[] { 7 })),
+                        ("a", FileTree.File(new byte[] { 3 })),
+                        ("bA", FileTree.File(new byte[] { 12 })),
+                        ("ba", FileTree.File(new byte[] { 1 })),
+                        ("ba-", FileTree.File(new byte[] { 0 })),
+                        ("bb", FileTree.File(new byte[] { 2 })),
+                        ("c", FileTree.NonSortedDirectory(
                             treeContent:
                             [
-                                ("alpha", BlobTreeWithStringPath.Blob(new byte[] { 11 })),
-                                ("gamma", BlobTreeWithStringPath.Blob(new byte[] { 10 }))
+                                ("alpha", FileTree.File(new byte[] { 11 })),
+                                ("gamma", FileTree.File(new byte[] { 10 }))
                                 ]
                         )),
-                        ("testa", BlobTreeWithStringPath.Blob(new byte[] { 5 })),
-                        ("test😃", BlobTreeWithStringPath.Blob(new byte[] { 4 })),
-                        ("tesz", BlobTreeWithStringPath.Blob(new byte[] { 6 })),
-                        ("🌲", BlobTreeWithStringPath.Blob(new byte[] { 9 })),
-                        ("🌿", BlobTreeWithStringPath.Blob(new byte[] { 8 }))
+                        ("testa", FileTree.File(new byte[] { 5 })),
+                        ("test😃", FileTree.File(new byte[] { 4 })),
+                        ("tesz", FileTree.File(new byte[] { 6 })),
+                        ("🌲", FileTree.File(new byte[] { 9 })),
+                        ("🌿", FileTree.File(new byte[] { 8 }))
                         ]
                 ),
             }

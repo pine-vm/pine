@@ -186,8 +186,8 @@ ResponseStructure GetResponseFromRequest(RequestStructure request)
                     var compositionId =
                         Convert.ToHexStringLower(PineValueHashTree.ComputeHash(composition).Span);
 
-                    var blobs =
-                        loadFromGitOk.tree.EnumerateBlobsTransitive()
+                    var files =
+                        loadFromGitOk.tree.EnumerateFilesTransitive()
                         .ToImmutableList();
 
                     var urlInCommit = loadFromGitOk.urlInCommit;
@@ -200,7 +200,7 @@ ResponseStructure GetResponseFromRequest(RequestStructure request)
                         };
                     }
 
-                    var fileCount = blobs.Count();
+                    var fileCount = files.Count();
 
                     if (loadCompositionLimitFileCount < fileCount)
                     {
@@ -208,10 +208,10 @@ ResponseStructure GetResponseFromRequest(RequestStructure request)
                     }
 
                     var aggregateFileSize =
-                        blobs.Sum(file => file.blobContent.Length);
+                        files.Sum(file => file.fileContent.Length);
 
                     var filesBySize =
-                        blobs.OrderByDescending(file => file.blobContent.Length).ToImmutableList();
+                        files.OrderByDescending(file => file.fileContent.Length).ToImmutableList();
 
                     var largestFilesToDisplay =
                         filesBySize.Take(3).ToImmutableList();
@@ -219,7 +219,7 @@ ResponseStructure GetResponseFromRequest(RequestStructure request)
                     if (loadCompositionLimitAggregateFileSize < aggregateFileSize)
                     {
                         var largestFilesDescriptions =
-                            largestFilesToDisplay.Select(file => string.Join("/", file.path) + " (" + file.blobContent.Length + " bytes)");
+                            largestFilesToDisplay.Select(file => string.Join("/", file.path) + " (" + file.fileContent.Length + " bytes)");
 
                         return responseErrorExceedingLimit(
                             "Aggregate file size: " + aggregateFileSize +
@@ -228,7 +228,7 @@ ResponseStructure GetResponseFromRequest(RequestStructure request)
                     }
 
                     var maximumPathLength =
-                        blobs.Max(file => file.path.Sum(pathElement => pathElement.Length));
+                        files.Max(file => file.path.Sum(pathElement => pathElement.Length));
 
                     if (loadCompositionLimitMaximumPathLength < maximumPathLength)
                     {
@@ -236,11 +236,11 @@ ResponseStructure GetResponseFromRequest(RequestStructure request)
                     }
 
                     var filesAsFlatList =
-                        blobs
+                        files
                         .Select(file => new FileWithPath
                         {
                             path = file.path,
-                            contentBase64 = Convert.ToBase64String(file.blobContent.ToArray()),
+                            contentBase64 = Convert.ToBase64String(file.fileContent.ToArray()),
                         })
                         .ToImmutableList();
 

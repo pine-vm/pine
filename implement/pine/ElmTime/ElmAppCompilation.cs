@@ -3,6 +3,7 @@ using Pine.Core;
 using Pine.Core.Addressing;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
+using Pine.Core.Files;
 using Pine.Core.Json;
 using Pine.Core.PopularEncodings;
 using Pine.Elm;
@@ -297,7 +298,7 @@ namespace ElmTime
                                     "Unexpected result type: " + elmMakeResult.GetType());
                             }
 
-                            if (makeOk.ProducedFiles is not BlobTreeWithStringPath.BlobNode blobNode)
+                            if (makeOk.ProducedFiles is not FileTree.FileNode blobNode)
                             {
                                 throw new Exception("Unexpected result type: " + makeOk.ProducedFiles.GetType());
                             }

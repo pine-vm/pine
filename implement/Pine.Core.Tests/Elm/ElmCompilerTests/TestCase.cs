@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
+using Pine.Core.Files;
 using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Linq;
@@ -14,7 +15,7 @@ public record TestCase(
         IReadOnlyList<string> elmModulesTexts) =>
         new(ElmModulesTexts: elmModulesTexts);
 
-    public BlobTreeWithStringPath AsFileTree() =>
+    public FileTree AsFileTree() =>
         FileTreeFromElmModulesWithoutPackages(ElmModulesTexts);
 
 
@@ -42,7 +43,7 @@ public record TestCase(
         }
         """;
 
-    public static BlobTreeWithStringPath FileTreeFromElmModulesWithoutPackages(
+    public static FileTree FileTreeFromElmModulesWithoutPackages(
         IReadOnlyList<string> elmModulesTexts)
     {
         var elmModulesByNameDict =
@@ -55,10 +56,10 @@ public record TestCase(
                 comparer: EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
 
         var appCodeTree =
-            BlobTreeWithStringPath.EmptyTree
+            FileTree.EmptyTree
             .SetNodeAtPathSorted(
                 ["elm.json"],
-                BlobTreeWithStringPath.Blob(Encoding.UTF8.GetBytes(ElmJsonFileDefault)));
+                FileTree.File(Encoding.UTF8.GetBytes(ElmJsonFileDefault)));
 
         foreach (var (modulePath, moduleText) in elmModulesByNameDict)
         {
@@ -70,7 +71,7 @@ public record TestCase(
             appCodeTree =
                 appCodeTree.SetNodeAtPathSorted(
                     moduleFilePath,
-                    BlobTreeWithStringPath.Blob(Encoding.UTF8.GetBytes(moduleText)));
+                    FileTree.File(Encoding.UTF8.GetBytes(moduleText)));
         }
 
         return appCodeTree;

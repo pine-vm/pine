@@ -35,10 +35,10 @@ public class LoadFromGitHubTests
             .Extract(error => throw new Exception("Failed to load from GitHub: " + error));
 
         var loadedFilesNamesAndContents =
-            loadFromGithubResult.tree.EnumerateBlobsTransitive()
+            loadFromGithubResult.tree.EnumerateFilesTransitive()
             .Select(blobPathAndContent => (
                 fileName: string.Join("/", blobPathAndContent.path),
-                fileContent: blobPathAndContent.blobContent))
+                fileContent: blobPathAndContent.fileContent))
             .ToImmutableList();
 
         var loadedFilesNamesAndHashes =
@@ -68,10 +68,10 @@ public class LoadFromGitHubTests
             .Extract(error => throw new Exception("Failed to load from GitHub: " + error));
 
         var loadedFilesNamesAndContents =
-            loadFromGithubResult.tree.EnumerateBlobsTransitive()
+            loadFromGithubResult.tree.EnumerateFilesTransitive()
             .Select(blobPathAndContent => (
                 fileName: string.Join("/", blobPathAndContent.path),
-                fileContent: blobPathAndContent.blobContent))
+                fileContent: blobPathAndContent.fileContent))
             .ToImmutableList();
 
         var loadedFilesNamesAndHashes =
@@ -103,7 +103,7 @@ public class LoadFromGitHubTests
 
         var blobContent =
             loadFromGithubResult.tree
-            .Map(fromBlob: blob => blob, fromTree: _ => throw new Exception("Unexpected tree"));
+            .Map(fromFile: blob => blob, fromDirectory: _ => throw new Exception("Unexpected tree"));
 
         blobContent.Should().NotBeNull("Found blobContent.");
 
@@ -147,10 +147,10 @@ public class LoadFromGitHubTests
             .Extract(error => throw new Exception("Failed to load from GitHub: " + error));
 
         var loadedFilesPathsAndContents =
-            loadFromGithubResult.tree.EnumerateBlobsTransitive()
+            loadFromGithubResult.tree.EnumerateFilesTransitive()
             .Select(blobPathAndContent => (
                 filePath: string.Join("/", blobPathAndContent.path),
-                fileContent: blobPathAndContent.blobContent))
+                fileContent: blobPathAndContent.fileContent))
             .ToImmutableList();
 
         var readmeFile =
@@ -194,7 +194,7 @@ public class LoadFromGitHubTests
                     PineValueComposition.ToFlatDictionaryWithPathComparer(
                         PineValueComposition.SortedTreeFromSetOfBlobsWithCommonFilePath(
                             ZipArchive.EntriesFromZipArchive(responseContentBytes))
-                        .EnumerateBlobsTransitive());
+                        .EnumerateFilesTransitive());
             }
 
             {
@@ -207,7 +207,7 @@ public class LoadFromGitHubTests
 
                 var blobContent =
                     loadFromGitHubResult.tree
-                    .Map(fromBlob: blob => blob, fromTree: _ => throw new Exception("Unexpected tree"));
+                    .Map(fromFile: blob => blob, fromDirectory: _ => throw new Exception("Unexpected tree"));
 
                 blobContent.Should().NotBeNull("Found blobContent.");
 
@@ -229,7 +229,7 @@ public class LoadFromGitHubTests
 
                 var blobContent =
                     loadFromGitHubResult.tree
-                    .Map(fromBlob: blob => blob, fromTree: _ => throw new Exception("Unexpected tree"));
+                    .Map(fromFile: blob => blob, fromDirectory: _ => throw new Exception("Unexpected tree"));
 
                 blobContent.Should().NotBeNull("Found blobContent.");
 

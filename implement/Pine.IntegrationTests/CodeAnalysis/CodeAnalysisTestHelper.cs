@@ -70,7 +70,7 @@ public class CodeAnalysisTestHelper
             Core.Tests.Elm.ElmCompilerTests.TestCase.FileTreeFromElmModulesWithoutPackages(elmModulesTexts);
 
         var rootFilePaths =
-            appCodeTree.EnumerateBlobsTransitive()
+            appCodeTree.EnumerateFilesTransitive()
             .Where(b => b.path[^1].EndsWith(".elm"))
             .Select(b => b.path)
             .ToList();

@@ -1,4 +1,5 @@
 using Pine.Core.CodeAnalysis;
+using Pine.Core.Files;
 using Pine.Core.PopularEncodings;
 using System;
 using System.Collections.Generic;
@@ -21,7 +22,7 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 public class ElmCompiler
 {
     public static Result<string, PineValue> CompileInteractiveEnvironment(
-        BlobTreeWithStringPath appCodeTree,
+        FileTree appCodeTree,
         IReadOnlyList<IReadOnlyList<string>> rootFilePaths)
     {
         /*
@@ -30,7 +31,7 @@ public class ElmCompiler
          */
 
         var elmModuleFiles =
-            appCodeTree.EnumerateBlobsTransitive()
+            appCodeTree.EnumerateFilesTransitive()
             .Where(file => file.path.Last().EndsWith(".elm", StringComparison.OrdinalIgnoreCase))
             .ToImmutableArray();
 
@@ -39,7 +40,7 @@ public class ElmCompiler
         foreach (var moduleFile in elmModuleFiles)
         {
             var moduleText =
-                Encoding.UTF8.GetString(moduleFile.blobContent.Span);
+                Encoding.UTF8.GetString(moduleFile.fileContent.Span);
 
             var parseResult =
                 ElmSyntax.ElmSyntaxParser.ParseModuleText(moduleText);

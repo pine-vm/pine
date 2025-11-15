@@ -3,6 +3,7 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Scripting;
 using Microsoft.CodeAnalysis.Scripting;
 using Pine.Core;
+using Pine.Core.Files;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -195,7 +196,7 @@ public class VolatileProcessCSharp : VolatileProcess
 
         private readonly ConcurrentDictionary<string, IEnumerable<string>> hintUrlsFromAssemblyReference = new();
 
-        private readonly ConcurrentDictionary<string, IEnumerable<BlobTreeWithStringPath>> loadedTreesFromUrl = new();
+        private readonly ConcurrentDictionary<string, IEnumerable<FileTree>> loadedTreesFromUrl = new();
 
         private static readonly ConcurrentDictionary<ResolveReferenceRequest, AssemblyReferenceResolutionReport> resolveReferenceCache =
             new(new ResolveReferenceRequestEqualityComparer());

@@ -1,5 +1,6 @@
 using ElmTime.Platform.WebService;
 using Pine.Core;
+using Pine.Core.Files;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -37,7 +38,7 @@ public class MakeGuiCache
 
         var producedFiles = makeOk.ProducedFiles;
 
-        if (producedFiles is not BlobTreeWithStringPath.BlobNode blobNode)
+        if (producedFiles is not FileTree.FileNode blobNode)
         {
             throw new NotImplementedException(
                 "MakeGuiHtml: Unexpected content in files produced by make: " + producedFiles.GetType());

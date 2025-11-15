@@ -7,6 +7,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using Xunit;
+using Pine.Core.Files;
 
 namespace Pine.IntegrationTests;
 
@@ -169,7 +170,7 @@ public class ProgramCommandMakeTests
                 "MakeGuiHtml: Unexpected result type: " + makeResult.GetType());
         }
 
-        if (makeOk.ProducedFiles is not BlobTreeWithStringPath.BlobNode blobNode)
+        if (makeOk.ProducedFiles is not FileTree.FileNode blobNode)
         {
             throw new NotImplementedException(
                 "MakeGuiHtml: Unexpected content in files produced by make: " + makeResult.GetType());

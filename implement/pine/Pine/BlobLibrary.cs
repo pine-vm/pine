@@ -1,5 +1,6 @@
 using Pine.Core;
 using Pine.Core.Addressing;
+using Pine.Core.Files;
 using Pine.Core.IO;
 using System;
 using System.Collections.Generic;
@@ -279,9 +280,9 @@ public class BlobLibrary
 
     public static IEnumerable<ReadOnlyMemory<byte>> DownloadFromUrlAndExtractBlobs(string sourceUrl) =>
         DownloadFromUrlAndExtractTrees(sourceUrl)
-        .SelectMany(tree => tree.EnumerateBlobsTransitive().Select(blob => blob.blobContent));
+        .SelectMany(tree => tree.EnumerateFilesTransitive().Select(blob => blob.fileContent));
 
-    public static IEnumerable<BlobTreeWithStringPath> DownloadFromUrlAndExtractTrees(string sourceUrl)
+    public static IEnumerable<FileTree> DownloadFromUrlAndExtractTrees(string sourceUrl)
     {
         var httpResponse = DownloadViaHttp(sourceUrl);
 
@@ -295,7 +296,7 @@ public class BlobLibrary
         if (responseContent == null)
             yield break;
 
-        yield return BlobTreeWithStringPath.Blob((ReadOnlyMemory<byte>)responseContent);
+        yield return FileTree.File((ReadOnlyMemory<byte>)responseContent);
 
         var blobName = sourceUrl.Split('/', '\\').Last();
 

@@ -7,7 +7,7 @@ using System.Linq;
 namespace Pine.Core.Files;
 
 /// <summary>
-/// Extension methods for <see cref="BlobTreeWithStringPath"/>.
+/// Extension methods for <see cref="FileTree"/>.
 /// </summary>
 public static class FileTreeExtensions
 {
@@ -15,17 +15,17 @@ public static class FileTreeExtensions
     /// Generates human-readable overviews of a file tree or blob, for use in command-line interfaces or logs.
     /// </summary>
     public static IEnumerable<string> DescribeFileTreeForHumans(
-        BlobTreeWithStringPath composition,
+        FileTree composition,
         bool listFiles,
         string? extractFileName)
     {
-        if (composition is BlobTreeWithStringPath.TreeNode tree)
+        if (composition is FileTree.DirectoryNode tree)
         {
-            var blobs = composition.EnumerateBlobsTransitive().ToImmutableList();
+            var blobs = composition.EnumerateFilesTransitive().ToImmutableList();
 
             yield return
                 "a directory containing " + blobs.Count + " files with an aggregate size of " +
-                CommandLineInterface.FormatIntegerForDisplay(blobs.Sum(blob => (long)blob.blobContent.Length)) + " bytes.";
+                CommandLineInterface.FormatIntegerForDisplay(blobs.Sum(blob => (long)blob.fileContent.Length)) + " bytes.";
 
             if (listFiles)
             {
@@ -35,14 +35,14 @@ public static class FileTreeExtensions
                         "\n",
                         blobs.Select(blobAtPath =>
                         string.Join("/", blobAtPath.path) + " : " +
-                        blobAtPath.blobContent.Length + " bytes, " +
-                        Convert.ToHexStringLower(PineValueHashTree.ComputeHash(PineValue.Blob(blobAtPath.blobContent)).Span)[..10]));
+                        blobAtPath.fileContent.Length + " bytes, " +
+                        Convert.ToHexStringLower(PineValueHashTree.ComputeHash(PineValue.Blob(blobAtPath.fileContent)).Span)[..10]));
             }
 
             yield break;
         }
 
-        if (composition is BlobTreeWithStringPath.BlobNode blob)
+        if (composition is FileTree.FileNode blob)
         {
             yield return "a blob containing " + blob.Bytes.Length + " bytes";
 

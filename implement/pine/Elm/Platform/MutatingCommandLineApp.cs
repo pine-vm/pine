@@ -1,5 +1,6 @@
 using Pine.Core;
 using Pine.Core.Elm;
+using Pine.Core.Files;
 using Pine.Core.PopularEncodings;
 using System;
 using System.Collections.Concurrent;
@@ -150,7 +151,7 @@ public record CommandLineAppConfig(
     private static readonly Core.CodeAnalysis.PineVMParseCache s_parseCache = new();
 
     public static CommandLineAppConfig ConfigFromSourceFilesAndModuleName(
-        BlobTreeWithStringPath sourceFiles,
+        FileTree sourceFiles,
         IReadOnlyList<string> moduleName)
     {
         using var interactiveSession =

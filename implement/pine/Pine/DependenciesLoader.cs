@@ -1,5 +1,6 @@
 using Pine.Core;
 using Pine.Core.Addressing;
+using Pine.Core.Files;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -12,7 +13,7 @@ namespace Pine;
 public class DependenciesLoader
 {
     public static Result<string, ReadOnlyMemory<byte>> ResolveHashReferenceWithoutCache(
-        ConcurrentDictionary<string, IEnumerable<BlobTreeWithStringPath>> loadedTreesFromUrl,
+        ConcurrentDictionary<string, IEnumerable<FileTree>> loadedTreesFromUrl,
         string hashBase16,
         IEnumerable<string> hintUrls,
         Func<byte[], byte[]?>? getFileFromHashSHA256)
@@ -70,7 +71,7 @@ public class DependenciesLoader
     }
 
     public static Result<IReadOnlyDictionary<string, string>, ReadOnlyMemory<byte>> GetBlobFromHashAndHintUrlsCached(
-        ConcurrentDictionary<string, IEnumerable<BlobTreeWithStringPath>> loadedTreesFromUrl,
+        ConcurrentDictionary<string, IEnumerable<FileTree>> loadedTreesFromUrl,
         byte[] hash, IEnumerable<string> hintUrls)
     {
         Result<string, ReadOnlyMemory<byte>> AttemptForUrl(string url)
@@ -97,7 +98,7 @@ public class DependenciesLoader
                 treesFromUrl
                 .Aggregate(
                     seed:
-                    Result<ImmutableList<BlobTreeWithStringPath>, ReadOnlyMemory<byte>>.err([]),
+                    Result<ImmutableList<FileTree>, ReadOnlyMemory<byte>>.err([]),
                     func:
                     (aggregate, tree) =>
                     {
@@ -108,22 +109,22 @@ public class DependenciesLoader
                             err =>
                             {
                                 var matchingBlob =
-                                    tree.EnumerateBlobsTransitive()
-                                    .Select(blobWithPath => blobWithPath.blobContent)
+                                    tree.EnumerateFilesTransitive()
+                                    .Select(blobWithPath => blobWithPath.fileContent)
                                     .Where(BlobLibrary.BlobHasSHA256(hash))
                                     .Cast<ReadOnlyMemory<byte>?>()
                                     .FirstOrDefault();
 
                                 if (matchingBlob != null)
                                 {
-                                    return Result<ImmutableList<BlobTreeWithStringPath>, ReadOnlyMemory<byte>>.ok(matchingBlob.Value);
+                                    return Result<ImmutableList<FileTree>, ReadOnlyMemory<byte>>.ok(matchingBlob.Value);
                                 }
 
                                 return
-                                Result<ImmutableList<BlobTreeWithStringPath>, ReadOnlyMemory<byte>>.err(err.Add(tree));
+                                Result<ImmutableList<FileTree>, ReadOnlyMemory<byte>>.err(err.Add(tree));
                             },
                             fromOk:
-                            ok => Result<ImmutableList<BlobTreeWithStringPath>, ReadOnlyMemory<byte>>.ok(ok));
+                            ok => Result<ImmutableList<FileTree>, ReadOnlyMemory<byte>>.ok(ok));
                     });
 
             return
@@ -155,18 +156,18 @@ public class DependenciesLoader
             .MapError(dict => (IReadOnlyDictionary<string, string>)dict);
     }
 
-    public static string DescribeBlobOrTreeContentsForErrorMessage(BlobTreeWithStringPath tree) =>
+    public static string DescribeBlobOrTreeContentsForErrorMessage(FileTree tree) =>
     tree switch
     {
-        BlobTreeWithStringPath.BlobNode => "is a blob",
+        FileTree.FileNode => "is a blob",
 
         _ => "is a tree:\n" + DescribeTreeContentsForErrorMessage(tree)
     };
 
-    public static string DescribeTreeContentsForErrorMessage(BlobTreeWithStringPath tree) =>
+    public static string DescribeTreeContentsForErrorMessage(FileTree tree) =>
         string.Join("\n",
-            tree.EnumerateBlobsTransitive().Select(blobAtPath =>
+            tree.EnumerateFilesTransitive().Select(blobAtPath =>
             "Found " +
-            Convert.ToHexStringLower(SHA256.HashData(blobAtPath.blobContent.Span)) +
+            Convert.ToHexStringLower(SHA256.HashData(blobAtPath.fileContent.Span)) +
             " at " + string.Join("/", blobAtPath.path)));
 }
