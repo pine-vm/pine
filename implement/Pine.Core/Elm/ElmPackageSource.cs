@@ -115,7 +115,7 @@ public class ElmPackageSource
 
         using var memoryStream = new MemoryStream(zipBytes);
 
-        using var archive = new System.IO.Compression.ZipArchive(memoryStream, ZipArchiveMode.Read);
+        using var archive = new ZipArchive(memoryStream, ZipArchiveMode.Read);
 
         foreach (var entry in archive.Entries)
         {

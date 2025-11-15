@@ -183,7 +183,7 @@ public class ProcessStoreWriterInFileStore(
 
             compositionFileStoreWriter.AppendFileContent(
                 compositionLogFilePath,
-                BytesConversions.Concat<byte>(record, Encoding.UTF8.GetBytes("\n")));
+                BytesConversions.Concat(record, Encoding.UTF8.GetBytes("\n")));
 
             appendSerializedCompositionRecordLastFilePath = compositionLogFilePath;
         }
