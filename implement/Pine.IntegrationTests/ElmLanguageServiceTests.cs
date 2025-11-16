@@ -1,8 +1,10 @@
 using AwesomeAssertions;
 using Pine.Core;
 using Pine.Core.Files;
+using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Elm;
 using Pine.Elm.MonacoEditor;
+using Pine.IntermediateVM;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -114,11 +116,10 @@ public class ElmLanguageServiceTests
             ElmCompiler.ElmCompilerFromEnvValue(elmCompilerFromBundleValue)
             .Extract(err => throw new Exception(err));
 
-        var pineVMCache =
-            new PineVM.PineVMCache();
+        var pineVMCache = new InvocationCache();
 
         var pineVM =
-            new PineVM.PineVM(evalCache: pineVMCache.EvalCache);
+            SetupVM.Create(evalCache: pineVMCache);
 
         var workspace =
             FileTree.EmptyTree

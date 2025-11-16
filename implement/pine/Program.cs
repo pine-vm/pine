@@ -13,11 +13,13 @@ using Pine.Core.Elm.Elm019;
 using Pine.Core.Elm.ElmSyntax;
 using Pine.Core.Files;
 using Pine.Core.Http;
+using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Core.IO;
 using Pine.Core.PopularEncodings;
 using Pine.Elm;
 using Pine.Elm.CommonBinaries;
 using Pine.Elm.Platform;
+using Pine.IntermediateVM;
 using Pine.PineVM;
 using System;
 using System.Collections.Generic;
@@ -137,7 +139,8 @@ public class Program
             var setupGroupCommands =
                 checkedInstallation.executableIsRegisteredOnPath
                 ?
-                Array.Empty<CommandLineApplication>() :
+                Array.Empty<CommandLineApplication>()
+                :
                 [
                     installCommand,
                 ];
@@ -2359,10 +2362,10 @@ public class Program
                 ElmCompiler.ElmCompilerFromEnvValue(elmCompilerFromBundle)
                 .Extract(err => throw new Exception(err));
 
-            var pineVMCache = new PineVMCache();
+            var pineVMCache = new InvocationCache();
 
             var pineVM =
-                new PineVM(evalCache: pineVMCache.EvalCache);
+                SetupVM.Create(evalCache: pineVMCache);
 
             var parseCache = new Pine.Core.CodeAnalysis.PineVMParseCache();
 

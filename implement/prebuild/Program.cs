@@ -4,6 +4,7 @@ using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.Files;
 using Pine.Elm;
+using Pine.IntermediateVM;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -48,7 +49,7 @@ public class Program
                 "Completed building .NET bundle assembly.dll in " +
                 clock.Elapsed.TotalSeconds.ToString("0.00") + " seconds");
 
-            Pine.PineVM.PineVM.PrecompiledLeavesDefault =
+            SetupVM.PrecompiledLeavesDefault =
                 Pine.Core.Bundle.BundledPineToDotnet.LoadFromAssembly(assemblyBytes.ToArray())
                 .Extract(err => throw new Exception("Failed loading from assembly: " + err))
                 .BuildDictionary();

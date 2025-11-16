@@ -3,9 +3,11 @@ using Pine.Core;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.Files;
+using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Core.PineVM;
 using Pine.Core.PopularEncodings;
 using Pine.Elm;
+using Pine.IntermediateVM;
 using Pine.PineVM;
 using System;
 using System.Collections.Generic;
@@ -52,7 +54,7 @@ public class CompileElmCompilerTests
 
         var interactiveEnvironmentValue = interactiveSession.CurrentEnvironmentValue();
 
-        var pineVM = new PineVM.PineVM();
+        var pineVM = SetupVM.Create();
 
         var (_, modByFunction) =
             ElmInteractiveEnvironment.ParseFunctionFromElmModule(
@@ -136,9 +138,9 @@ public class CompileElmCompilerTests
             (await ElmCompiler.GetElmCompilerAsync(compilerProgram))
             .Extract(err => throw new Exception(err));
 
-        var pineVMCache = new PineVMCache();
+        var pineVMCache = new InvocationCache();
 
-        var pineVM = new PineVM.PineVM(pineVMCache.EvalCache);
+        var pineVM = SetupVM.Create(pineVMCache);
 
         var parsedModulePineValue =
             elmCompiler.ParseElmModuleText(elmModuleText, pineVM)
@@ -285,7 +287,7 @@ public class CompileElmCompilerTests
 
         var interactiveEnvironmentValue = interactiveSession.CurrentEnvironmentValue();
 
-        var pineVM = new PineVM.PineVM();
+        var pineVM = SetupVM.Create();
 
         var (_, stringSplitFunction) =
             ElmInteractiveEnvironment.ParseFunctionFromElmModule(
@@ -408,7 +410,7 @@ public class CompileElmCompilerTests
         .Extract(err => throw new Exception(err))
         .InteractiveResponse.DisplayText.Should().Be("4");
 
-        var pineVM = new PineVM.PineVM();
+        var pineVM = SetupVM.Create();
 
         {
             // Test one of the declarations used for interning.

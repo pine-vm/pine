@@ -1,6 +1,6 @@
 using System;
 
-namespace Pine.PineVM;
+namespace Pine.Core.Interpreter.IntermediateVM;
 
 public class InvalidIntermediateCodeException(
     string message,

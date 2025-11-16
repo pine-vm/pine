@@ -15,20 +15,8 @@ public class MutatingWebServiceApp
 {
     private readonly System.Threading.Lock _stateLock = new();
 
-    private record CacheAndVM(
-        PineVMCache PineVMCache,
-        PineVM.PineVM PineVM)
-    {
-        public static CacheAndVM Create()
-        {
-            var pineVMCache = new PineVMCache();
-            var pineVM = new PineVM.PineVM(pineVMCache.EvalCache);
-
-            return new CacheAndVM(pineVMCache, pineVM);
-        }
-    }
-
-    private readonly CacheAndVM _cacheAndVM = CacheAndVM.Create();
+    private readonly PineVMResettingCache _pineVM =
+        PineVMResettingCache.Create(resetCacheEntriesThresholdDefault: null);
 
     private readonly WebServiceInterface.WebServiceConfig _appConfig;
 
@@ -41,7 +29,7 @@ public class MutatingWebServiceApp
     public IReadOnlyList<ApplyUpdateReport<WebServiceInterface.Command>> DequeueApplyFunctionReports() =>
         [.. _applyFunctionReports.DequeueAllEnumerable()];
 
-    public IPineVM PineVM => _cacheAndVM.PineVM;
+    public IPineVM PineVM => _pineVM;
 
     public long? PosixTimeSubscriptionMinimumTime =>
         _appStateAndSubscriptions.subscriptions?.PosixTimeIsPast?.MinimumPosixTimeMilli;
@@ -85,7 +73,7 @@ public class MutatingWebServiceApp
         lock (_stateLock)
         {
             var subscriptions =
-                WebServiceInterface.WebServiceConfig.ParseSubscriptions(_appConfig, appState, _cacheAndVM.PineVM);
+                WebServiceInterface.WebServiceConfig.ParseSubscriptions(_appConfig, appState, _pineVM);
 
             _appStateAndSubscriptions = (appState, subscriptions);
         }
@@ -171,7 +159,7 @@ public class MutatingWebServiceApp
                     updateFunction,
                     updateArgsBeforeState,
                     AppState,
-                    _cacheAndVM.PineVM);
+                    _pineVM);
 
             TrackAppliedFunction(
                 eventResponse,
@@ -182,10 +170,7 @@ public class MutatingWebServiceApp
             {
                 // TODO: Use overlap and warmup to reduce response delays.
 
-                if (_cacheAndVM.PineVMCache.EvalCache.Count > 10_000)
-                {
-                    _cacheAndVM.PineVMCache.EvalCache.Clear();
-                }
+                _pineVM.ResetCacheIfCountExceedsThreshold(10_000);
             }
 
             return eventResponse;

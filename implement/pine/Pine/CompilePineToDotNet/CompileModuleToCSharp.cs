@@ -4,6 +4,7 @@ using Pine.CompilePineToDotNet;
 using Pine.Core;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.DotNet;
+using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Core.PopularEncodings;
 using Pine.PineVM;
 using System.Collections.Generic;

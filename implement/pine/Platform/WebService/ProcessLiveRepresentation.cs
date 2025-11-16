@@ -1,8 +1,9 @@
 using ElmTime.Platform.WebService.ProcessStoreSupportingMigrations;
 using Pine.Core;
 using Pine.Core.Files;
+using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Elm.Platform;
-using Pine.PineVM;
+using Pine.IntermediateVM;
 using System;
 using System.Collections.Generic;
 using System.Text.Json;
@@ -192,9 +193,9 @@ public sealed class ProcessLiveRepresentation : IAsyncDisposable
 
     public Result<string, JsonElement> GetAppStateOnMainBranchAsJson()
     {
-        var pineVMCache = new PineVMCache();
+        var pineVMCache = new InvocationCache();
 
-        var pineVM = new PineVM(pineVMCache.EvalCache);
+        var pineVM = SetupVM.Create(pineVMCache);
 
         return
             GetAppStateOnMainBranchAsJson(pineVM)

@@ -1,12 +1,13 @@
 using AwesomeAssertions;
 using Pine.Core;
 using Pine.Core.CodeAnalysis;
+using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Core.PopularEncodings;
-using Pine.PineVM;
+using Pine.IntermediateVM;
 using System.Collections.Generic;
 using Xunit;
 
-using StackFrameInstructions = Pine.PineVM.StackFrameInstructions;
+using StackFrameInstructions = Pine.Core.Interpreter.IntermediateVM.StackFrameInstructions;
 
 namespace Pine.IntegrationTests;
 
@@ -224,6 +225,7 @@ public class PineVMTests
                                 )
                             ),
                         Expression.EnvironmentInstance)),
+
                 environment =
                 PineValue.List(
                     [
@@ -244,11 +246,12 @@ public class PineVMTests
 
         foreach (var testCase in testCases)
         {
-            var pineVM = new PineVM.PineVM();
+            var pineVM = SetupVM.Create();
 
-            var evaluated = pineVM.EvaluateExpression(
-                testCase.expression,
-                testCase.environment);
+            var evaluated =
+                pineVM.EvaluateExpression(
+                    testCase.expression,
+                    testCase.environment);
 
             evaluated.Should().Be(
                 testCase.expected,

@@ -187,15 +187,15 @@ public class WebHostAdminInterfaceTestSetup : IDisposable
         string? publicWebHostUrlOverride,
         Func<DateTimeOffset>? persistentProcessHostDateTime = null)
     {
-        this._testDirectory = testDirectory;
+        _testDirectory = testDirectory;
 
         fileStore ??= DefaultFileStore;
 
-        this._adminPassword = adminPassword ?? "notempty";
-        this._fileStore = fileStore;
-        this._webAppBuilderMap = webAppBuilderMap;
-        this._adminWebHostUrlOverride = adminWebHostUrlOverride;
-        this._publicWebHostUrlOverride = publicWebHostUrlOverride;
+        _adminPassword = adminPassword ?? "notempty";
+        _fileStore = fileStore;
+        _webAppBuilderMap = webAppBuilderMap;
+        _adminWebHostUrlOverride = adminWebHostUrlOverride;
+        _publicWebHostUrlOverride = publicWebHostUrlOverride;
 
         if (deployAppAndInitElmState is null)
             return;

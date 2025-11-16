@@ -6,6 +6,8 @@ using System.Collections.Generic;
 using System.Linq;
 using Xunit;
 
+using ElmCompilerTestHelper = Pine.Core.Tests.Elm.ElmCompilerInDotnet.ElmCompilerTestHelper;
+
 namespace Pine.IntegrationTests.CodeAnalysis;
 
 public class ParserFastTests
@@ -410,10 +412,10 @@ public class ParserFastTests
             FunctionRecord.ParseFunctionRecordTagged(allPatternDecl.Value, parseCache)
             .Extract(err => throw new Exception("Failed parsing " + nameof(allPatternDecl) + ": " + err));
 
-        var invocationReports = new List<PineVM.EvaluationReport>();
+        var invocationReports = new List<Core.Interpreter.IntermediateVM.EvaluationReport>();
 
         var vm =
-            CodeAnalysisTestHelper.PineVMForProfiling(invocationReports.Add);
+            ElmCompilerTestHelper.PineVMForProfiling(invocationReports.Add);
 
         var applyRunResult =
             ElmInteractiveEnvironment.ApplyFunction(

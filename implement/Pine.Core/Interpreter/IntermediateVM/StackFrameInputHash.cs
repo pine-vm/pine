@@ -1,11 +1,10 @@
-using Pine.Core;
 using Pine.Core.Addressing;
 using Pine.Core.CodeAnalysis;
 using System;
 using System.Collections.Generic;
 using System.Security.Cryptography;
 
-namespace Pine.PineVM;
+namespace Pine.Core.Interpreter.IntermediateVM;
 
 public class StackFrameInputHash
 {

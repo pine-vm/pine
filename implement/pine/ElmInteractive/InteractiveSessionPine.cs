@@ -4,10 +4,12 @@ using Pine.Core.Elm;
 using Pine.Core.Elm.Elm019;
 using Pine.Core.Elm.ElmSyntax;
 using Pine.Core.Files;
+using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Core.IO;
 using Pine.Core.PineVM;
 using Pine.Core.PopularEncodings;
 using Pine.Elm;
+using Pine.IntermediateVM;
 using Pine.PineVM;
 using System;
 using System.Collections.Concurrent;
@@ -20,15 +22,15 @@ namespace ElmTime.ElmInteractive;
 
 public class InteractiveSessionPine : IInteractiveSession
 {
-    private readonly System.Threading.Lock submissionLock = new();
+    private readonly System.Threading.Lock _submissionLock = new();
 
-    private System.Threading.Tasks.Task<Result<string, PineValue>> buildPineEvalContextTask;
+    private System.Threading.Tasks.Task<Result<string, PineValue>> _buildPineEvalContextTask;
 
-    private readonly Result<string, ElmCompiler> buildCompilerResult;
+    private readonly Result<string, ElmCompiler> _buildCompilerResult;
 
-    private readonly IPineVM pineVM;
+    private readonly IPineVM _pineVM;
 
-    private static readonly IPineVM compileEnvPineVM =
+    private static readonly IPineVM s_compileEnvPineVM =
         new LockingPineVM(
             new PineVMWithPersistentCache(
                 new FileStoreFromSystemIOFile(
@@ -121,14 +123,14 @@ public class InteractiveSessionPine : IInteractiveSession
         AppCompilationUnits? appCodeTree,
         bool? overrideSkipLowering,
         IReadOnlyList<IReadOnlyList<string>>? entryPointsFilePaths,
-        (IPineVM pineVM, PineVMCache? pineVMCache) pineVMAndCache)
+        (IPineVM pineVM, InvocationCache? pineVMCache) pineVMAndCache)
     {
-        pineVM = pineVMAndCache.pineVM;
+        _pineVM = pineVMAndCache.pineVM;
 
-        buildCompilerResult =
+        _buildCompilerResult =
             ElmCompiler.GetElmCompilerAsync(compilerSourceFiles).Result;
 
-        buildPineEvalContextTask =
+        _buildPineEvalContextTask =
             System.Threading.Tasks.Task.Run(() =>
             CompileInteractiveEnvironment(
                 appCodeTree: appCodeTree,
@@ -137,30 +139,30 @@ public class InteractiveSessionPine : IInteractiveSession
                 skipFilteringForSourceDirs: false));
     }
 
-    public static (IPineVM, PineVMCache?) BuildPineVM(
+    public static (IPineVM, InvocationCache?) BuildPineVM(
         bool caching,
         DynamicPGOShare? autoPGO,
         PineVM.EvaluationConfig? evaluationConfig = null)
     {
-        var cache = caching ? new PineVMCache() : null;
+        var cache = caching ? new InvocationCache() : null;
 
         return (BuildPineVM(cache, autoPGO, evaluationConfig), cache);
     }
 
     public static IPineVM BuildPineVM(
-        PineVMCache? cache,
+        InvocationCache? cache,
         DynamicPGOShare? autoPGO,
         PineVM.EvaluationConfig? evaluationConfig)
     {
         if (autoPGO is not null)
         {
             return
-                autoPGO.GetVMAutoUpdating(evalCache: cache?.EvalCache);
+                autoPGO.GetVMAutoUpdating(evalCache: cache);
         }
 
         return
-            new PineVM(
-                evalCache: cache?.EvalCache,
+            SetupVM.Create(
+                evalCache: cache,
                 evaluationConfigDefault: evaluationConfig,
                 reportFunctionApplication: null);
     }
@@ -172,15 +174,15 @@ public class InteractiveSessionPine : IInteractiveSession
         IReadOnlyList<IReadOnlyList<string>>? entryPointsFilePaths,
         bool skipFilteringForSourceDirs)
     {
-        if (buildCompilerResult.IsOkOrNull() is not { } elmCompiler)
+        if (_buildCompilerResult.IsOkOrNull() is not { } elmCompiler)
         {
-            if (buildCompilerResult.IsErrOrNull() is { } err)
+            if (_buildCompilerResult.IsErrOrNull() is { } err)
             {
                 return "Failed to build Elm compiler: " + err;
             }
 
             throw new NotImplementedException(
-                "Unexpected compiler result type: " + buildCompilerResult.GetType());
+                "Unexpected compiler result type: " + _buildCompilerResult.GetType());
         }
 
         return
@@ -190,7 +192,7 @@ public class InteractiveSessionPine : IInteractiveSession
                 entryPointsFilePaths: entryPointsFilePaths,
                 skipFilteringForSourceDirs: skipFilteringForSourceDirs,
                 elmCompiler,
-                compileEnvPineVM);
+                s_compileEnvPineVM);
     }
 
     public static Result<string, PineValue>
@@ -206,7 +208,7 @@ public class InteractiveSessionPine : IInteractiveSession
             entryPointsFilePaths: entryPointsFilePaths,
             skipFilteringForSourceDirs: skipFilteringForSourceDirs,
             elmCompiler,
-            compileEnvPineVM);
+            s_compileEnvPineVM);
 
     public static Result<string, PineValue>
         CompileInteractiveEnvironment(
@@ -886,34 +888,34 @@ public class InteractiveSessionPine : IInteractiveSession
         string submission,
         Action<string>? addInspectionLogEntry)
     {
-        lock (submissionLock)
+        lock (_submissionLock)
         {
             var clock = System.Diagnostics.Stopwatch.StartNew();
 
-            void logDuration(string label) =>
+            void LogDuration(string label) =>
                 addInspectionLogEntry?.Invoke(
                     label + " duration: " + CommandLineInterface.FormatIntegerForDisplay(clock.ElapsedMilliseconds) + " ms");
 
-            if (buildCompilerResult.IsErrOrNull() is { } buildCompilerErr)
+            if (_buildCompilerResult.IsErrOrNull() is { } buildCompilerErr)
             {
                 return "Failed to build Elm compiler: " + buildCompilerErr;
             }
 
-            if (buildCompilerResult.IsOkOrNull() is not { } elmCompiler)
+            if (_buildCompilerResult.IsOkOrNull() is not { } elmCompiler)
             {
                 throw new NotImplementedException(
-                    "Unexpected build compiler result type: " + buildCompilerResult.GetType());
+                    "Unexpected build compiler result type: " + _buildCompilerResult.GetType());
             }
 
-            if (buildPineEvalContextTask.Result.IsErrOrNull() is { } buildPineEvalContextErr)
+            if (_buildPineEvalContextTask.Result.IsErrOrNull() is { } buildPineEvalContextErr)
             {
                 return "Failed to build initial Pine eval context: " + buildPineEvalContextErr;
             }
 
-            if (buildPineEvalContextTask.Result.IsOkOrNull() is not { } buildPineEvalContextOk)
+            if (_buildPineEvalContextTask.Result.IsOkOrNull() is not { } buildPineEvalContextOk)
             {
                 throw new NotImplementedException(
-                    "Unexpected build Pine eval context result type: " + buildPineEvalContextTask.Result.GetType());
+                    "Unexpected build Pine eval context result type: " + _buildPineEvalContextTask.Result.GetType());
             }
 
             clock.Restart();
@@ -921,7 +923,7 @@ public class InteractiveSessionPine : IInteractiveSession
             var parseSubmissionResult =
                 ParseInteractiveSubmission(
                     elmCompiler,
-                    pineVM,
+                    _pineVM,
                     submission: submission,
                     addInspectionLogEntry: compileEntry => addInspectionLogEntry?.Invoke("Parse: " + compileEntry));
 
@@ -950,20 +952,20 @@ public class InteractiveSessionPine : IInteractiveSession
                     "Unexpected parse submission as Elm value result type: " + parseSubmissionAsElmValueResult.GetType());
             }
 
-            logDuration("parse");
+            LogDuration("parse");
 
             clock.Restart();
 
             var environmentEncodedForCompiler =
                 elmCompilerCache.EncodeValueForCompiler(buildPineEvalContextOk);
 
-            logDuration("compile - encode environment");
+            LogDuration("compile - encode environment");
 
             clock.Restart();
 
             var compileParsedResult =
                 Pine.Core.CodeAnalysis.ElmInteractiveEnvironment.ApplyFunction(
-                    pineVM,
+                    _pineVM,
                     elmCompiler.CompileParsedInteractiveSubmission,
                     arguments:
                     [
@@ -985,7 +987,7 @@ public class InteractiveSessionPine : IInteractiveSession
                     compileParsedResult.Unpack(err => err, ok => "Not an err");
             }
 
-            logDuration("compile - apply");
+            LogDuration("compile - apply");
 
             clock.Restart();
 
@@ -1003,7 +1005,7 @@ public class InteractiveSessionPine : IInteractiveSession
                     "Unexpected compile parsed ok as Elm value result type: " + compileParsedOkAsElmValueResult.GetType());
             }
 
-            logDuration("compile - decode result");
+            LogDuration("compile - decode result");
 
             clock.Restart();
 
@@ -1031,13 +1033,13 @@ public class InteractiveSessionPine : IInteractiveSession
                     "Unexpected decode expression result type: " + decodeExpressionResult.GetType());
             }
 
-            logDuration("compile - decode expression");
+            LogDuration("compile - decode expression");
 
             clock.Restart();
 
-            var evalResult = pineVM.EvaluateExpression(resultingExpr, buildPineEvalContextOk);
+            var evalResult = _pineVM.EvaluateExpression(resultingExpr, buildPineEvalContextOk);
 
-            logDuration("eval");
+            LogDuration("eval");
 
             if (evalResult.IsErrOrNull() is { } evalErr)
             {
@@ -1063,7 +1065,7 @@ public class InteractiveSessionPine : IInteractiveSession
                     " instead of 2";
             }
 
-            buildPineEvalContextTask = System.Threading.Tasks.Task.FromResult(
+            _buildPineEvalContextTask = System.Threading.Tasks.Task.FromResult(
                 Result<string, PineValue>.ok(evalResultListComponent.Items.Span[0]));
 
             clock.Restart();
@@ -1072,7 +1074,7 @@ public class InteractiveSessionPine : IInteractiveSession
                 ElmInteractive.SubmissionResponseFromResponsePineValue(
                     response: evalResultListComponent.Items.Span[1]);
 
-            logDuration("parse-result");
+            LogDuration("parse-result");
 
             if (parseSubmissionResponseResult.IsErrOrNull() is { } parseSubmissionResponseErr)
             {
@@ -1091,9 +1093,9 @@ public class InteractiveSessionPine : IInteractiveSession
 
     public PineValue CurrentEnvironmentValue()
     {
-        lock (submissionLock)
+        lock (_submissionLock)
         {
-            return buildPineEvalContextTask.Result.Extract(err => throw new Exception(err));
+            return _buildPineEvalContextTask.Result.Extract(err => throw new Exception(err));
         }
     }
 
@@ -1138,11 +1140,11 @@ public class InteractiveSessionPine : IInteractiveSession
         bool enableEvalExprCache)
     {
         var cache =
-            enableEvalExprCache ? new PineVMCache() : null;
+            enableEvalExprCache ? new InvocationCache() : null;
 
         var profilingVM =
             new ProfilingPineVM(
-                evalCache: cache?.EvalCache);
+                evalCache: cache);
 
         var profilingSession = new InteractiveSessionPine(
             compilerSourceFiles: compileElmProgramCodeFiles,
@@ -1172,24 +1174,24 @@ public class InteractiveSessionPine : IInteractiveSession
 
     public class PineVMWithPersistentCache : IPineVM
     {
-        private readonly Dictionary<(Expression, PineValue), PineValue> evalCache = [];
+        private readonly Dictionary<(Expression, PineValue), PineValue> _evalCache = [];
 
-        private readonly Dictionary<EvalCacheEntryKey, PineValue> vmEvalCache = [];
+        private readonly Dictionary<EvalCacheEntryKey, PineValue> _vmEvalCache = [];
 
-        private readonly IPineVM pineVM;
+        private readonly IPineVM _pineVM;
 
-        private readonly IFileStore fileStore;
+        private readonly IFileStore _fileStore;
 
         public PineVMWithPersistentCache(IFileStore fileStore)
         {
-            this.fileStore = fileStore;
+            _fileStore = fileStore;
 
-            pineVM = new PineVM(evalCache: vmEvalCache);
+            _pineVM = SetupVM.Create(evalCache: _vmEvalCache);
         }
 
         public Result<string, PineValue> EvaluateExpression(Expression expression, PineValue environment)
         {
-            if (evalCache.TryGetValue((expression, environment), out var cachedResult))
+            if (_evalCache.TryGetValue((expression, environment), out var cachedResult))
             {
                 return cachedResult;
             }
@@ -1198,11 +1200,11 @@ public class InteractiveSessionPine : IInteractiveSession
 
             try
             {
-                if (fileStore.GetFileContent([fileName]) is { } fileContent)
+                if (_fileStore.GetFileContent([fileName]) is { } fileContent)
                 {
                     var loadedValue = ValueBinaryEncodingClassic.DecodeRoot(fileContent);
 
-                    evalCache[(expression, environment)] = loadedValue;
+                    _evalCache[(expression, environment)] = loadedValue;
 
                     return loadedValue;
                 }
@@ -1212,13 +1214,13 @@ public class InteractiveSessionPine : IInteractiveSession
                 Console.WriteLine("Failed to read or parse cache file: " + e);
             }
 
-            var evalResult = pineVM.EvaluateExpression(expression, environment);
+            var evalResult = _pineVM.EvaluateExpression(expression, environment);
 
-            vmEvalCache.Clear();
+            _vmEvalCache.Clear();
 
             if (evalResult.IsOkOrNull() is { } evalOk)
             {
-                evalCache[(expression, environment)] = evalOk;
+                _evalCache[(expression, environment)] = evalOk;
 
                 System.Threading.Tasks.Task.Run(() =>
                 {
@@ -1232,7 +1234,7 @@ public class InteractiveSessionPine : IInteractiveSession
 
                         var fileContent = stream.ToArray();
 
-                        fileStore.SetFileContent([fileName], fileContent);
+                        _fileStore.SetFileContent([fileName], fileContent);
                     }
                     catch (Exception e)
                     {
@@ -1247,7 +1249,7 @@ public class InteractiveSessionPine : IInteractiveSession
         public string FileNameFromKey(Expression expression, PineValue environment)
         {
             var exprHash =
-                encodedExprCache.GetOrAdd(
+                _encodedExprCache.GetOrAdd(
                     expression,
                     valueFactory:
                     expr => ComputeHash(ExpressionEncoding.EncodeExpressionAsValue(expr)));
@@ -1259,13 +1261,13 @@ public class InteractiveSessionPine : IInteractiveSession
                 Convert.ToHexStringLower(envHash[..8].Span);
         }
 
-        readonly ConcurrentDictionary<Expression, ReadOnlyMemory<byte>> encodedExprCache = new();
+        readonly ConcurrentDictionary<Expression, ReadOnlyMemory<byte>> _encodedExprCache = new();
 
-        readonly ConcurrentPineValueHashCache valueHashCache = new();
+        readonly ConcurrentPineValueHashCache _valueHashCache = new();
 
         public ReadOnlyMemory<byte> ComputeHash(PineValue pineValue)
         {
-            return valueHashCache.GetHash(pineValue);
+            return _valueHashCache.GetHash(pineValue);
         }
     }
 }

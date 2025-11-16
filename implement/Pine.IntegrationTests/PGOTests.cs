@@ -5,9 +5,10 @@ using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.Elm.ElmSyntax;
 using Pine.Core.Files;
+using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Core.PopularEncodings;
 using Pine.Elm;
-using Pine.PineVM;
+using Pine.IntermediateVM;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -261,7 +262,7 @@ public class PGOTests
         static long ReportsAverageInstructionCount(IReadOnlyList<EvaluationReport> reports) =>
             reports.Sum(report => report.InstructionCount) / reports.Count;
 
-        IReadOnlyList<EvaluationReport> RunScenariosWithGivenVM(PineVM.PineVM pineVM) =>
+        IReadOnlyList<EvaluationReport> RunScenariosWithGivenVM(Core.Interpreter.IntermediateVM.PineVM pineVM) =>
             [.. usingRecordAccessScenarios
             .Select(scenario =>
             {
@@ -277,7 +278,7 @@ public class PGOTests
                 pineVM.EvaluateExpressionOnCustomStack(
                     composedArgs.expression,
                     composedArgs.environment,
-                    new PineVM.PineVM.EvaluationConfig(ParseAndEvalCountLimit: 1234))
+                    new Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig(ParseAndEvalCountLimit: 1234))
                 .Map(evalReport =>
                 {
                     evalReport.ReturnValue.Should().Be(scenario.expected);
@@ -292,7 +293,7 @@ public class PGOTests
             })];
 
         var nonOptimizingPineVM =
-            new PineVM.PineVM(
+            SetupVM.Create(
                 disablePrecompiled: true);
 
         var nonOptimizedScenariosStats =
@@ -308,7 +309,7 @@ public class PGOTests
         var invocationReports = new List<EvaluationReport>();
 
         var profilingVM =
-            new PineVM.PineVM(
+            SetupVM.Create(
                 evalCache: null,
                 reportFunctionApplication: invocationReports.Add,
                 disableReductionInCompilation: true,
@@ -388,7 +389,7 @@ public class PGOTests
         }
 
         var optimizedPineVM =
-            new PineVM.PineVM(
+            SetupVM.Create(
                 evalCache: null,
                 reportFunctionApplication: null,
                 compilationEnvClasses: compilationEnvClasses);
@@ -863,7 +864,7 @@ public class PGOTests
         static long ReportsAverageInstructionCount(IReadOnlyList<EvaluationReport> reports) =>
             reports.Sum(report => report.InstructionCount) / reports.Count;
 
-        IReadOnlyList<EvaluationReport> RunScenariosWithGivenVM(PineVM.PineVM pineVM) =>
+        IReadOnlyList<EvaluationReport> RunScenariosWithGivenVM(Core.Interpreter.IntermediateVM.PineVM pineVM) =>
             [.. recordUpdateScenarios
             .Select(scenario =>
             {
@@ -880,7 +881,7 @@ public class PGOTests
                 pineVM.EvaluateExpressionOnCustomStack(
                     composedArgs.expression,
                     composedArgs.environment,
-                    new PineVM.PineVM.EvaluationConfig(ParseAndEvalCountLimit: 1234))
+                    new Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig(ParseAndEvalCountLimit: 1234))
                 .Map(evalReport =>
                 {
                     evalReport.ReturnValue.Should().Be(
@@ -896,7 +897,7 @@ public class PGOTests
                 .Extract(fromErr: err => throw new Exception("Failed for scenario: " + err));
             })];
 
-        var nonOptimizingPineVM = new PineVM.PineVM();
+        var nonOptimizingPineVM = SetupVM.Create();
 
         var nonOptimizedScenariosStats =
             RunScenariosWithGivenVM(nonOptimizingPineVM);
@@ -911,7 +912,7 @@ public class PGOTests
         var invocationReports = new List<EvaluationReport>();
 
         var profilingVM =
-            new PineVM.PineVM(
+            SetupVM.Create(
                 evalCache: null,
                 reportFunctionApplication: invocationReports.Add,
                 disableReductionInCompilation: true);
@@ -990,7 +991,7 @@ public class PGOTests
         }
 
         var optimizedPineVM =
-            new PineVM.PineVM(
+            SetupVM.Create(
                 evalCache: null,
                 reportFunctionApplication: null,
                 compilationEnvClasses: compilationEnvClasses);
@@ -1271,7 +1272,7 @@ public class PGOTests
             ElmValue.ElmList scenarioList,
             int scenarioFunctionId,
             ElmValue.ElmList scenarioExpected,
-            PineVM.PineVM pineVM)
+            Core.Interpreter.IntermediateVM.PineVM pineVM)
         {
             return
                 ElmInteractiveEnvironment.ApplyFunctionArgumentsForEvalExpr(
@@ -1285,7 +1286,7 @@ public class PGOTests
                 pineVM.EvaluateExpressionOnCustomStack(
                     composedArgs.expression,
                     composedArgs.environment,
-                    new PineVM.PineVM.EvaluationConfig(ParseAndEvalCountLimit: 12345))
+                    new Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig(ParseAndEvalCountLimit: 12345))
                 .Map(evalReport =>
                 {
                     evalReport.ReturnValue.Should().Be(
@@ -1301,7 +1302,7 @@ public class PGOTests
                 .Extract(fromErr: err => throw new Exception("Failed for scenario: " + err));
         }
 
-        IReadOnlyList<EvaluationReport> RunScenariosWithGivenVM(PineVM.PineVM pineVM) =>
+        IReadOnlyList<EvaluationReport> RunScenariosWithGivenVM(Core.Interpreter.IntermediateVM.PineVM pineVM) =>
             [.. usageScenarios
             .Select(scenario =>
             RunScenario(
@@ -1310,7 +1311,7 @@ public class PGOTests
                 scenarioExpected: scenario.expected,
                 pineVM: pineVM))];
 
-        var nonOptimizingPineVM = new PineVM.PineVM();
+        var nonOptimizingPineVM = SetupVM.Create();
 
         var nonOptimizedScenariosStats =
             RunScenariosWithGivenVM(nonOptimizingPineVM);
@@ -1318,7 +1319,7 @@ public class PGOTests
         var invocationReports = new List<EvaluationReport>();
 
         var profilingVM =
-            new PineVM.PineVM(
+            SetupVM.Create(
                 evalCache: null,
                 reportFunctionApplication: invocationReports.Add,
                 disableReductionInCompilation: true);
@@ -1329,7 +1330,7 @@ public class PGOTests
             "Collected " + invocationReports.Count + " invocation reports from " +
             usageScenarios.Length + " scenarios.");
 
-        var pineVMCache = new PineVMCache();
+        var pineVMCache = new InvocationCache();
 
         var codeAnalysisStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
@@ -1399,7 +1400,7 @@ public class PGOTests
         }
 
         var optimizedPineVM =
-            new PineVM.PineVM(
+            SetupVM.Create(
                 evalCache: null,
                 reportFunctionApplication: null,
                 compilationEnvClasses: compilationEnvClasses);
@@ -1626,7 +1627,7 @@ public class PGOTests
             },
         };
 
-        var toDictPineVM = new PineVM.PineVM();
+        var toDictPineVM = SetupVM.Create();
 
         PineValue DictFromList(ElmValue.ElmList list) =>
             ElmInteractiveEnvironment.ApplyFunction(
@@ -1642,7 +1643,7 @@ public class PGOTests
             PineValue scenarioDict,
             int scenarioFunctionId,
             ElmValue.ElmList? scenarioExpected,
-            PineVM.PineVM pineVM)
+            Core.Interpreter.IntermediateVM.PineVM pineVM)
         {
             return
                 ElmInteractiveEnvironment.ApplyFunctionArgumentsForEvalExpr(
@@ -1656,7 +1657,7 @@ public class PGOTests
                 pineVM.EvaluateExpressionOnCustomStack(
                     composedArgs.expression,
                     composedArgs.environment,
-                    new PineVM.PineVM.EvaluationConfig(ParseAndEvalCountLimit: 12345))
+                    new Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig(ParseAndEvalCountLimit: 12345))
                 .Map(evalReport =>
                 {
                     if (scenarioExpected is not null)
@@ -1675,7 +1676,7 @@ public class PGOTests
                 .Extract(fromErr: err => throw new Exception("Failed for scenario: " + err));
         }
 
-        IReadOnlyList<EvaluationReport> RunScenariosWithGivenVM(PineVM.PineVM pineVM) =>
+        IReadOnlyList<EvaluationReport> RunScenariosWithGivenVM(Core.Interpreter.IntermediateVM.PineVM pineVM) =>
             [.. usageScenarios
             .Select(scenario =>
             RunScenario(
@@ -1684,7 +1685,7 @@ public class PGOTests
                 scenarioExpected: scenario.expected,
                 pineVM: pineVM))];
 
-        var nonOptimizingPineVM = new PineVM.PineVM();
+        var nonOptimizingPineVM = SetupVM.Create();
 
         var nonOptimizedScenariosStats =
             RunScenariosWithGivenVM(nonOptimizingPineVM);
@@ -1692,7 +1693,7 @@ public class PGOTests
         var invocationReports = new List<EvaluationReport>();
 
         var profilingVM =
-            new PineVM.PineVM(
+            SetupVM.Create(
                 evalCache: null,
                 reportFunctionApplication: invocationReports.Add,
                 disableReductionInCompilation: true);
@@ -1789,7 +1790,7 @@ public class PGOTests
         }
 
         var optimizedPineVM =
-            new PineVM.PineVM(
+            SetupVM.Create(
                 evalCache: null,
                 reportFunctionApplication: null,
                 compilationEnvClasses: compilationEnvClasses);

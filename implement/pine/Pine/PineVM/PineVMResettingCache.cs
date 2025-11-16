@@ -1,5 +1,7 @@
 using Pine.Core;
+using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Core.PineVM;
+using Pine.IntermediateVM;
 
 namespace Pine.PineVM;
 
@@ -9,31 +11,31 @@ namespace Pine.PineVM;
 /// </summary>
 public class PineVMResettingCache : IPineVM
 {
-    private readonly PineVM _pineVM;
+    private readonly Core.Interpreter.IntermediateVM.PineVM _pineVM;
 
-    private readonly PineVMCache _pineVMCache;
+    private readonly InvocationCache _pineVMCache;
 
-    private readonly int _resetCacheEntriesThresold;
+    private readonly int? _resetCacheEntriesThresholdDefault;
 
     private PineVMResettingCache(
-        int resetCacheEntriesThresold)
+        int? resetCacheEntriesThresholdDefault)
     {
-        _resetCacheEntriesThresold = resetCacheEntriesThresold;
+        _resetCacheEntriesThresholdDefault = resetCacheEntriesThresholdDefault;
 
-        _pineVMCache = new PineVMCache();
+        _pineVMCache = [];
 
         _pineVM =
-            new PineVM(evalCache: _pineVMCache.EvalCache);
+            SetupVM.Create(evalCache: _pineVMCache);
     }
 
     /// <summary>
     /// Create an instance for a given reset threshold.
     /// </summary>
     public static PineVMResettingCache Create(
-        int resetCacheEntriesThresold)
+        int? resetCacheEntriesThresholdDefault)
     {
         return new PineVMResettingCache(
-            resetCacheEntriesThresold: resetCacheEntriesThresold);
+            resetCacheEntriesThresholdDefault: resetCacheEntriesThresholdDefault);
     }
 
     public Result<string, PineValue> EvaluateExpression(Expression expression, PineValue environment)
@@ -41,11 +43,24 @@ public class PineVMResettingCache : IPineVM
         var result =
             _pineVM.EvaluateExpression(expression, environment);
 
-        if (_pineVMCache.EvalCache.Count >= _resetCacheEntriesThresold)
+        if (_resetCacheEntriesThresholdDefault is { } threshold)
         {
-            _pineVMCache.EvalCache.Clear();
+            ResetCacheIfCountExceedsThreshold(threshold);
         }
 
         return result;
+    }
+
+    public bool ResetCacheIfCountExceedsThreshold(
+        int threshold)
+    {
+        if (_pineVMCache.Count >= threshold)
+        {
+            _pineVMCache.Clear();
+
+            return true;
+        }
+
+        return false;
     }
 }

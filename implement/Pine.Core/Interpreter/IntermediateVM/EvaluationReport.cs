@@ -1,7 +1,6 @@
-using Pine.Core;
 using System.Collections.Generic;
 
-namespace Pine.PineVM;
+namespace Pine.Core.Interpreter.IntermediateVM;
 
 public record EvaluationReport(
     PineValue ExpressionValue,
@@ -10,6 +9,6 @@ public record EvaluationReport(
     long InstructionCount,
     long InvocationCount,
     long LoopIterationCount,
-    Core.Internal.PineValueInProcess ReturnValue,
+    Internal.PineValueInProcess ReturnValue,
     IReadOnlyList<Expression> StackTrace);
 

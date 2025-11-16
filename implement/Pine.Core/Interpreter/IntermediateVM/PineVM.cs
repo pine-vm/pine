@@ -1,4 +1,3 @@
-using Pine.Core;
 using Pine.Core.Addressing;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Internal;
@@ -12,32 +11,25 @@ using System.Linq;
 
 using KernelFunctionSpecialized = Pine.Core.Internal.KernelFunctionSpecialized;
 
-namespace Pine.PineVM;
-
-
-public record struct EvalCacheEntryKey(
-    PineValue ExprValue,
-    StackFrameInput InvocationInput);
+namespace Pine.Core.Interpreter.IntermediateVM;
 
 public class PineVM : IPineVM
 {
-    public long EvaluateExpressionCount { private set; get; }
-
-    public long FunctionApplicationMaxEnvSize { private set; get; }
-
     private IDictionary<EvalCacheEntryKey, PineValue>? EvalCache { init; get; }
 
-    private readonly EvaluationConfig? evaluationConfigDefault;
+    private readonly EvaluationConfig? _evaluationConfigDefault;
 
-    private readonly Action<EvaluationReport>? reportFunctionApplication;
+    private readonly Action<EvaluationReport>? _reportFunctionApplication;
 
-    private readonly IReadOnlyDictionary<Expression, IReadOnlyList<PineValueClass>>? compilationEnvClasses;
+    private readonly IReadOnlyDictionary<Expression, IReadOnlyList<PineValueClass>>? _compilationEnvClasses;
 
-    private readonly bool disableReductionInCompilation;
+    private readonly bool _disableReductionInCompilation;
 
-    private readonly bool disablePrecompiled;
+    private readonly Func<Expression, PineValueInProcess, PineVMParseCache, Func<PrecompiledResult>?>? _selectPrecompiled = null;
 
-    private readonly bool enableTailRecursionOptimization;
+    private readonly Func<Expression, bool> _skipInlineForExpression;
+
+    private readonly bool _enableTailRecursionOptimization;
 
     public readonly PineVMParseCache ParseCache;
 
@@ -53,62 +45,86 @@ public class PineVM : IPineVM
 
     private readonly IFileStore? _cacheFileStore;
 
-    private static readonly IFileStore s_cacheFileStoreDefault =
-        new FileStoreFromSystemIOFile(Path.Combine(Filesystem.CacheDirectory, "eval"));
+    public static PineVM CreateCustom(
+        IDictionary<EvalCacheEntryKey, PineValue>? evalCache,
+        EvaluationConfig? evaluationConfigDefault,
+        Action<EvaluationReport>? reportFunctionApplication,
+        IReadOnlyDictionary<Expression, IReadOnlyList<PineValueClass>>? compilationEnvClasses,
+        bool disableReductionInCompilation,
+        Func<Expression, PineValueInProcess, PineVMParseCache, Func<PrecompiledResult>?>? selectPrecompiled,
+        Func<Expression, bool> skipInlineForExpression,
+        bool enableTailRecursionOptimization,
+        PineVMParseCache? parseCache,
+        IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>? precompiledLeaves,
+        Action<PineValue, PineValue>? reportEnterPrecompiledLeaf,
+        Action<PineValue, PineValue, PineValue?>? reportExitPrecompiledLeaf,
+        OptimizationParametersSerial? optimizationParametersSerial,
+        IFileStore? cacheFileStore)
+    {
+        return
+            new PineVM(
+                evalCache: evalCache,
+                evaluationConfigDefault: evaluationConfigDefault,
+                reportFunctionApplication: reportFunctionApplication,
+                compilationEnvClasses: compilationEnvClasses,
+                disableReductionInCompilation: disableReductionInCompilation,
+                selectPrecompiled: selectPrecompiled,
+                skipInlineForExpression: skipInlineForExpression,
+                enableTailRecursionOptimization: enableTailRecursionOptimization,
+                parseCache: parseCache,
+                precompiledLeaves: precompiledLeaves,
+                reportEnterPrecompiledLeaf: reportEnterPrecompiledLeaf,
+                reportExitPrecompiledLeaf: reportExitPrecompiledLeaf,
+                optimizationParametersSerial: optimizationParametersSerial,
+                cacheFileStore: cacheFileStore);
 
-    public static IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>? PrecompiledLeavesDefault;
+    }
 
-    public PineVM(
-        IDictionary<EvalCacheEntryKey, PineValue>? evalCache = null,
-        EvaluationConfig? evaluationConfigDefault = null,
-        Action<EvaluationReport>? reportFunctionApplication = null,
-        IReadOnlyDictionary<Expression, IReadOnlyList<PineValueClass>>? compilationEnvClasses = null,
-        bool disableReductionInCompilation = false,
-        bool disablePrecompiled = false,
-        bool enableTailRecursionOptimization = false,
-        PineVMParseCache? parseCache = null,
-        IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>? precompiledLeaves = null,
-        Action<PineValue, PineValue>? reportEnterPrecompiledLeaf = null,
-        Action<PineValue, PineValue, PineValue?>? reportExitPrecompiledLeaf = null,
-        OptimizationParametersSerial? optimizationParametersSerial = null,
-        IFileStore? cacheFileStore = null,
-        IReadOnlyDictionary<PineValue, IReadOnlyList<string>>? expressionsDisplayNames = null)
+    private PineVM(
+        IDictionary<EvalCacheEntryKey, PineValue>? evalCache,
+        EvaluationConfig? evaluationConfigDefault,
+        Action<EvaluationReport>? reportFunctionApplication,
+        IReadOnlyDictionary<Expression, IReadOnlyList<PineValueClass>>? compilationEnvClasses,
+        bool disableReductionInCompilation,
+        Func<Expression, PineValueInProcess, PineVMParseCache, Func<PrecompiledResult>?>? selectPrecompiled,
+        Func<Expression, bool> skipInlineForExpression,
+        bool enableTailRecursionOptimization,
+        PineVMParseCache? parseCache,
+        IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>? precompiledLeaves,
+        Action<PineValue, PineValue>? reportEnterPrecompiledLeaf,
+        Action<PineValue, PineValue, PineValue?>? reportExitPrecompiledLeaf,
+        OptimizationParametersSerial? optimizationParametersSerial,
+        IFileStore? cacheFileStore)
     {
         EvalCache = evalCache;
 
-        this.evaluationConfigDefault = evaluationConfigDefault;
+        _evaluationConfigDefault = evaluationConfigDefault;
 
-        this.reportFunctionApplication = reportFunctionApplication;
+        _reportFunctionApplication = reportFunctionApplication;
 
-        this.compilationEnvClasses = compilationEnvClasses;
+        _compilationEnvClasses = compilationEnvClasses;
 
-        this.disableReductionInCompilation = disableReductionInCompilation;
-        this.disablePrecompiled = disablePrecompiled;
-        this.enableTailRecursionOptimization = enableTailRecursionOptimization;
+        _disableReductionInCompilation = disableReductionInCompilation;
+
+        _selectPrecompiled = selectPrecompiled;
+
+        _skipInlineForExpression = skipInlineForExpression;
+
+        _enableTailRecursionOptimization = enableTailRecursionOptimization;
 
         ParseCache =
             parseCache
             ??
             new PineVMParseCache();
 
-        _precompiledLeaves =
-            precompiledLeaves
-            ??
-            PrecompiledLeavesDefault
-            ??
-            Core.Bundle.BundledPineToDotnet.LoadBundledTask.Result?.BuildDictionary();
-
+        _precompiledLeaves = precompiledLeaves;
         _reportEnterPrecompiledLeaf = reportEnterPrecompiledLeaf;
         _reportExitPrecompiledLeaf = reportExitPrecompiledLeaf;
 
         _optimizationParametersSerial = optimizationParametersSerial;
-
-        _cacheFileStore =
-            cacheFileStore
-            ??
-            s_cacheFileStoreDefault;
     }
 
+    /// <inheritdoc/>
     public Result<string, PineValue> EvaluateExpression(
         Expression expression,
         PineValue environment)
@@ -118,7 +134,7 @@ public class PineVM : IPineVM
                 expression,
                 environment,
                 config:
-                evaluationConfigDefault ?? new EvaluationConfig(ParseAndEvalCountLimit: null));
+                _evaluationConfigDefault ?? new EvaluationConfig(ParseAndEvalCountLimit: null));
 
         if (evalReportResult.IsErrOrNull() is { } err)
         {
@@ -133,49 +149,6 @@ public class PineVM : IPineVM
 
         return evalReport.ReturnValue.Evaluate();
     }
-
-    /*
-     * TODO: Expand the stack frame instruction format so that we can model these specializations
-     * as precompiled stack frames.
-     * That means the stack frame (instruction) model needs to be able to loop (mutate counter in place) and to supply inputs.
-     * */
-    public record ApplyStepwise
-    {
-        public StepResult CurrentStep { private set; get; }
-
-        public ApplyStepwise(StepResult.Continue start)
-        {
-            CurrentStep = start;
-        }
-
-        public void ReturningFromChildFrame(PineValueInProcess frameReturnValue)
-        {
-            if (CurrentStep is StepResult.Continue cont)
-            {
-                CurrentStep = cont.Callback(frameReturnValue);
-            }
-            else
-            {
-                throw new Exception("Returning on frame already completed earlier.");
-            }
-        }
-
-        public abstract record StepResult
-        {
-            public sealed record Continue(
-                Expression Expression,
-                PineValueInProcess EnvironmentValue,
-                Func<PineValueInProcess, StepResult> Callback)
-                : StepResult;
-
-            public sealed record Complete(PineValueInProcess PineValue)
-                : StepResult;
-        }
-    }
-
-    public record struct EnvConstraintItem(
-        ReadOnlyMemory<int> Path,
-        PineValue Value);
 
     readonly Dictionary<Expression, ExpressionEntry> _expressionCompilationDict = [];
 
@@ -233,16 +206,16 @@ public class PineVM : IPineVM
     {
         IReadOnlyList<PineValueClass>? specializations = null;
 
-        compilationEnvClasses?.TryGetValue(rootExpression, out specializations);
+        _compilationEnvClasses?.TryGetValue(rootExpression, out specializations);
 
         bool SkipInlining(Expression expr, PineValueClass? envConstraintId)
         {
-            if (Precompiled.HasPrecompiledForExpression(expr))
+            if (_skipInlineForExpression(expr))
             {
                 return true;
             }
 
-            if (envConstraintId is null && (compilationEnvClasses?.ContainsKey(expr) ?? false))
+            if (envConstraintId is null && (_compilationEnvClasses?.ContainsKey(expr) ?? false))
             {
                 return true;
             }
@@ -255,9 +228,9 @@ public class PineVM : IPineVM
                 rootExpression,
                 specializations ?? [],
                 parseCache: ParseCache,
-                disableReduction: disableReductionInCompilation,
+                disableReduction: _disableReductionInCompilation,
                 skipInlining: SkipInlining,
-                enableTailRecursionOptimization: enableTailRecursionOptimization);
+                enableTailRecursionOptimization: _enableTailRecursionOptimization);
 
         OptimizationParametersSerial.ExpressionConfig? optimizationConfig = null;
 
@@ -311,14 +284,14 @@ public class PineVM : IPineVM
         {
             var currentFrame = stack.Peek();
 
-            if (!disablePrecompiled &&
-                Precompiled.SelectPrecompiled(expression, environmentValue, ParseCache) is { } precompiledDelegate)
+            if (_selectPrecompiled is { } selectPrecompiled &&
+                selectPrecompiled(expression, environmentValue, ParseCache) is { } precompiledDelegate)
             {
                 var precompiledResult = precompiledDelegate();
 
                 switch (precompiledResult)
                 {
-                    case Precompiled.PrecompiledResult.FinalValue finalValue:
+                    case PrecompiledResult.FinalValue finalValue:
 
                         stackFrameCount += finalValue.StackFrameCount;
 
@@ -326,10 +299,9 @@ public class PineVM : IPineVM
 
                         return null;
 
-                    case Precompiled.PrecompiledResult.ContinueParseAndEval continueParseAndEval:
+                    case PrecompiledResult.ContinueParseAndEval continueParseAndEval:
                         {
-                            var contParseResult =
-                                ParseCache.ParseExpression(continueParseAndEval.ExpressionValue);
+                            var contParseResult = ParseCache.ParseExpression(continueParseAndEval.ExpressionValue);
 
                             if (contParseResult.IsErrOrNull() is { } contParseErr)
                             {
@@ -354,7 +326,7 @@ public class PineVM : IPineVM
                                     replaceCurrentFrame: replaceCurrentFrame);
                         }
 
-                    case Precompiled.PrecompiledResult.StepwiseSpecialization specialization:
+                    case PrecompiledResult.StepwiseSpecialization specialization:
                         {
                             var newFrame =
                                 new StackFrame(
@@ -420,7 +392,7 @@ public class PineVM : IPineVM
                 {
                     if (expressionValue is not null && EvalCache is { } evalCache)
                     {
-                        var cacheKey = new EvalCacheEntryKey(ExprValue: expressionValue, stackFrameInput);
+                        var cacheKey = new EvalCacheEntryKey(expressionValue, stackFrameInput);
 
                         if (evalCache.TryGetValue(cacheKey, out var fromCache))
                         {
@@ -433,7 +405,8 @@ public class PineVM : IPineVM
 
                 string? cacheFileName = null;
 
-                if (exprEntry.OptimizationConfig is { } optimizationConfig)
+                if (exprEntry.OptimizationConfig is { } optimizationConfig &&
+                    _cacheFileStore is { } cacheFileStore)
                 {
                     if (optimizationConfig.PersistentCachePredicate?.SatisfiedBy(
                         parameters: instructions.Parameters,
@@ -449,21 +422,29 @@ public class PineVM : IPineVM
                             exprEntry.ExpressionHashBase16[..16] + "_" +
                             stackFrameInputPersistentHash[..16];
 
-                        if (_cacheFileStore?.GetFileContent([cacheFileName]) is { } cachedContent)
+                        if (cacheFileStore.GetFileContent([cacheFileName]) is { } cachedContent)
                         {
-                            var cachedValue =
-                                ValueEncodingFlatDeterministic.DecodeRoot(cachedContent);
-
-                            currentFrame.PushInstructionResult(PineValueInProcess.Create(cachedValue));
-
-                            if (expressionValue is not null && EvalCache is { } evalCache)
+                            try
                             {
-                                var cacheKey = new EvalCacheEntryKey(ExprValue: expressionValue, stackFrameInput);
+                                var cachedValue =
+                                    ValueEncodingFlatDeterministic.DecodeRoot(cachedContent);
 
-                                evalCache.TryAdd(cacheKey, cachedValue);
+                                currentFrame.PushInstructionResult(PineValueInProcess.Create(cachedValue));
+
+                                if (expressionValue is not null && EvalCache is { } evalCache)
+                                {
+                                    var cacheKey = new EvalCacheEntryKey(expressionValue, stackFrameInput);
+
+                                    evalCache.TryAdd(cacheKey, cachedValue);
+                                }
+
+                                return null;
                             }
-
-                            return null;
+                            catch (Exception ex)
+                            {
+                                throw new Exception(
+                                    "Failed to decode cached value for cache file '" + cacheFileName + "'.", ex);
+                            }
                         }
                     }
                 }
@@ -571,7 +552,7 @@ public class PineVM : IPineVM
                     }
                 }
 
-                reportFunctionApplication?.Invoke(
+                _reportFunctionApplication?.Invoke(
                     new EvaluationReport(
                         ExpressionValue: currentFrameExprValue,
                         currentFrame.Expression,
@@ -845,7 +826,7 @@ public class PineVM : IPineVM
 
                             var prevValue = currentFrame.PopTopmostFromStack();
 
-                            PineValueInProcess resultValue = PineValueInProcess.EmptyList;
+                            var resultValue = PineValueInProcess.EmptyList;
 
                             if (indexValue.AsInteger() is { } skipCount)
                             {

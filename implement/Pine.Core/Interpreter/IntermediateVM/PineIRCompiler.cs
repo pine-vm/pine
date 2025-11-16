@@ -1,4 +1,3 @@
-using Pine.Core;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.PineVM;
 using Pine.Core.PopularEncodings;
@@ -8,7 +7,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Numerics;
 
-namespace Pine.PineVM;
+namespace Pine.Core.Interpreter.IntermediateVM;
 
 public class PineIRCompiler
 {
@@ -67,7 +66,7 @@ public class PineIRCompiler
 
         public int? IsAvailableAsLocalIndex(Expression expression)
         {
-            if (Core.CodeAnalysis.CodeAnalysis.TryParseExprAsPathInEnv(expression) is { } path)
+            if (CodeAnalysis.CodeAnalysis.TryParseExprAsPathInEnv(expression) is { } path)
             {
                 for (var i = 0; i < StackFrameParameters.ParamsPaths.Count; ++i)
                 {

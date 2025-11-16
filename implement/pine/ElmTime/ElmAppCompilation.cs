@@ -4,10 +4,11 @@ using Pine.Core.Addressing;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.Files;
+using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Core.Json;
 using Pine.Core.PopularEncodings;
 using Pine.Elm;
-using Pine.PineVM;
+using Pine.IntermediateVM;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -60,10 +61,10 @@ namespace ElmTime
             IReadOnlyList<string> workingDirectoryRelative,
             ElmAppInterfaceConfig interfaceConfig)
         {
-            var pineVMCache = new PineVMCache();
+            var pineVMCache = new InvocationCache();
 
             var pineVM =
-                new PineVM(evalCache: pineVMCache.EvalCache);
+                SetupVM.Create(evalCache: pineVMCache);
 
             var parseCache = new PineVMParseCache();
 

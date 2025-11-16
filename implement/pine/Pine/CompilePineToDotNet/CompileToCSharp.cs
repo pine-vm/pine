@@ -1191,7 +1191,7 @@ public partial class CompileToCSharp
                         "Failed to parse expression from value " +
                         innerExprValueId.ExpressionHashBase16[..8] +
                         ": " + err +
-                        " - expressionValue is " + PineVM.PineVM.DescribeValueForErrorMessage(innerExpressionValue);
+                        " - expressionValue is " + Core.Interpreter.IntermediateVM.PineVM.DescribeValueForErrorMessage(innerExpressionValue);
 
                         var throwSyntax = CoreSyntaxFactory.ThrowParseExpressionException(
                             SyntaxFactory.LiteralExpression(

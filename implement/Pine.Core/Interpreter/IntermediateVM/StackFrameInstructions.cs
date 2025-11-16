@@ -3,7 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace Pine.PineVM;
+namespace Pine.Core.Interpreter.IntermediateVM;
 
 public record StackFrameInstructions(
     StaticFunctionInterface Parameters,

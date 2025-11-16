@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Pine.Core;
+using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Core.PineVM;
 
 namespace Pine.PineVM;
@@ -231,7 +232,7 @@ public class DynamicPGOShare : IDisposable
                 cancellationTokenSource.Token,
                 newCancellationTokenSource.Token);
 
-        var analysisEvalCache = new PineVMCache();
+        var analysisEvalCache = new InvocationCache();
 
         var profilingVM =
             new ProfilingPineVM(

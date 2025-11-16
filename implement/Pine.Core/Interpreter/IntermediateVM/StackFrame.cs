@@ -1,13 +1,10 @@
-using Pine.Core;
 using Pine.Core.Internal;
 using System;
 
-using static Pine.PineVM.PineVM;
-
-namespace Pine.PineVM;
+namespace Pine.Core.Interpreter.IntermediateVM;
 
 
-record StackFrame(
+public record StackFrame(
     PineValue? ExpressionValue,
     Expression Expression,
     StackFrameInstructions Instructions,
@@ -105,7 +102,47 @@ record StackFrame(
     }
 }
 
-record struct StackFrameProfilingBaseline(
+public record struct StackFrameProfilingBaseline(
     long BeginInstructionCount,
     long BeginParseAndEvalCount,
     long BeginStackFrameCount);
+
+
+/*
+ * TODO: Expand the stack frame instruction format so that we can model these specializations
+ * as precompiled stack frames.
+ * That means the stack frame (instruction) model needs to be able to loop (mutate counter in place) and to supply inputs.
+ * */
+public record ApplyStepwise
+{
+    public StepResult CurrentStep { private set; get; }
+
+    public ApplyStepwise(StepResult.Continue start)
+    {
+        CurrentStep = start;
+    }
+
+    public void ReturningFromChildFrame(PineValueInProcess frameReturnValue)
+    {
+        if (CurrentStep is StepResult.Continue cont)
+        {
+            CurrentStep = cont.Callback(frameReturnValue);
+        }
+        else
+        {
+            throw new Exception("Returning on frame already completed earlier.");
+        }
+    }
+
+    public abstract record StepResult
+    {
+        public sealed record Continue(
+            Expression Expression,
+            PineValueInProcess EnvironmentValue,
+            Func<PineValueInProcess, StepResult> Callback)
+            : StepResult;
+
+        public sealed record Complete(PineValueInProcess PineValue)
+            : StepResult;
+    }
+}

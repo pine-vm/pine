@@ -5,6 +5,7 @@ using Pine.Core.Elm;
 using Pine.Core.Json;
 using Pine.Core.PopularEncodings;
 using Pine.Elm.Platform;
+using Pine.IntermediateVM;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -279,7 +280,7 @@ public class ApplyFunctionOnDatabaseTests
                 appConfigTree,
                 ["src", "Backend", "Main.elm"]);
 
-        var pineVM = new PineVM.PineVM();
+        var pineVM = SetupVM.Create();
 
         var webServiceApp =
             new MutatingWebServiceApp(webServiceConfig);

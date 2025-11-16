@@ -1,6 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Pine.Core;
-using Pine.PineVM;
+using Pine.Core.Interpreter.IntermediateVM;
 using System.Collections.Generic;
 using System.Linq;
 

@@ -4,6 +4,7 @@ using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.PopularEncodings;
 using Pine.Elm;
+using Pine.IntermediateVM;
 using System;
 using System.Linq;
 using Xunit;
@@ -297,7 +298,7 @@ public class ElmValueJsonValueEncodingTests
 
         var parseCache = new PineVMParseCache();
 
-        var pineVM = new PineVM.PineVM();
+        var pineVM = SetupVM.Create();
 
         var bundledElmCompilerValue =
             BundledElmEnvironments.BundledElmCompilerCompiledEnvValue();

@@ -1,11 +1,10 @@
-using Pine.Core;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.PineVM;
 using Pine.Core.PopularEncodings;
 using System;
 using System.Collections.Generic;
 
-namespace Pine.PineVM;
+namespace Pine.Core.Interpreter;
 
 
 public class DirectInterpreter(

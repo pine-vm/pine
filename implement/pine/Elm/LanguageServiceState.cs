@@ -99,7 +99,7 @@ public class LanguageServiceState(
 
         var pineVM =
             PineVM.PineVMResettingCache.Create(
-                resetCacheEntriesThresold: 10_000);
+                resetCacheEntriesThresholdDefault: 10_000);
 
         return InitLanguageServiceState(pineVM);
     }

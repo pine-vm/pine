@@ -3,11 +3,12 @@ using Pine.Core;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.Files;
+using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Core.IO;
 using Pine.Core.PineVM;
 using Pine.Core.PopularEncodings;
 using Pine.Elm.Platform;
-using Pine.PineVM;
+using Pine.IntermediateVM;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -582,9 +583,9 @@ public sealed class PersistentProcessLive : IAsyncDisposable
                 firstCompositionLogRecord.CompositionRecord.parentHashBase16;
         }
 
-        var pineVMCache = new PineVMCache();
+        var pineVMCache = new InvocationCache();
 
-        var pineVM = new PineVM(pineVMCache.EvalCache);
+        var pineVM = SetupVM.Create(pineVMCache);
 
         var initialProcessRepresentation = new PersistentProcessLiveRepresentationDuringRestore(
             LastCompositionLogRecordHashBase16: null,
@@ -996,9 +997,9 @@ public sealed class PersistentProcessLive : IAsyncDisposable
     {
         var appStateJsonString = JsonSerializer.Serialize(appState);
 
-        var pineVMCache = new PineVMCache();
+        var pineVMCache = new InvocationCache();
 
-        var pineVM = new PineVM(pineVMCache.EvalCache);
+        var pineVM = SetupVM.Create(pineVMCache);
 
         return
             SetStateOnMainBranchFromJson(
@@ -1053,9 +1054,9 @@ public sealed class PersistentProcessLive : IAsyncDisposable
 
     public Result<string, JsonElement> GetAppStateOnMainBranchAsJson()
     {
-        var pineVMCache = new PineVMCache();
+        var pineVMCache = new InvocationCache();
 
-        var pineVM = new PineVM(pineVMCache.EvalCache);
+        var pineVM = SetupVM.Create(pineVMCache);
 
         return
             GetAppStateOnMainBranchAsJson(pineVM)
@@ -1094,9 +1095,9 @@ public sealed class PersistentProcessLive : IAsyncDisposable
 
             var appState = _processLiveRepresentation.GetAppStateOnMainBranch();
 
-            var pineVMCache = new PineVMCache();
+            var pineVMCache = new InvocationCache();
 
-            var pineVM = new PineVM(pineVMCache.EvalCache);
+            var pineVM = SetupVM.Create(pineVMCache);
 
             var matchingExposedFunction =
                 _appConfigParsed.JsonAdapter.ExposedFunctions

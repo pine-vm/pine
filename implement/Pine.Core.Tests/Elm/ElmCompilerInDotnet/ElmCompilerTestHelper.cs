@@ -1,7 +1,9 @@
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.ElmCompilerInDotnet;
+using Pine.Core.PineVM;
 using Pine.Core.Tests.Elm.ElmCompilerTests;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
@@ -55,5 +57,31 @@ public class ElmCompilerTestHelper
                 parseCache);
 
         return (parsedEnv, staticProgram);
+    }
+
+    /// <summary>
+    /// Create a VM with all optimizations disabled, to support repeatable profiling.
+    /// </summary>
+    public static IPineVM PineVMForProfiling(
+        System.Action<Interpreter.IntermediateVM.EvaluationReport> reportFunctionApplication)
+    {
+        var vm =
+            Interpreter.IntermediateVM.PineVM.CreateCustom(
+                evalCache: null,
+                evaluationConfigDefault: null,
+                reportFunctionApplication: reportFunctionApplication,
+                compilationEnvClasses: null,
+                disableReductionInCompilation: false,
+                selectPrecompiled: null,
+                skipInlineForExpression: _ => false,
+                enableTailRecursionOptimization: false,
+                parseCache: null,
+                precompiledLeaves: ImmutableDictionary<PineValue, System.Func<PineValue, PineValue?>>.Empty,
+                reportEnterPrecompiledLeaf: null,
+                reportExitPrecompiledLeaf: null,
+                optimizationParametersSerial: null,
+                cacheFileStore: null);
+
+        return vm;
     }
 }

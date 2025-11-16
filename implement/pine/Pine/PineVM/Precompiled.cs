@@ -2,9 +2,11 @@ using Pine.Core;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
 using Pine.Core.Internal;
+using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Core.Json;
 using Pine.Core.PineVM;
 using Pine.Core.PopularEncodings;
+using Pine.IntermediateVM;
 using System;
 using System.Buffers.Binary;
 using System.Collections.Concurrent;
@@ -22,23 +24,6 @@ public class Precompiled
      * Using the general environment class model in the first stage of dispatch/linking means that we can use that
      * information to optimize the dispatch at compile time.
      * */
-
-    public abstract record PrecompiledResult
-    {
-        public sealed record FinalValue(
-            PineValue Value,
-            long StackFrameCount)
-            : PrecompiledResult;
-
-        public sealed record ContinueParseAndEval(
-            PineValue EnvironmentValue,
-            PineValue ExpressionValue)
-            : PrecompiledResult;
-
-        public sealed record StepwiseSpecialization(
-            PineVM.ApplyStepwise Stepwise)
-            : PrecompiledResult;
-    }
 
     record PrecompiledEntry(
         PineValueClass EnvConstraint,
@@ -3719,7 +3704,7 @@ public class Precompiled
         var itemsResults = new PineValue[remainingItemsListValue.Items.Length];
         var itemIndex = 0;
 
-        PineVM.ApplyStepwise.StepResult Step(PineValueInProcess itemResultValue)
+        ApplyStepwise.StepResult Step(PineValueInProcess itemResultValue)
         {
             itemsResults[itemIndex] = itemResultValue.Evaluate();
 
@@ -3728,7 +3713,7 @@ public class Precompiled
             if (itemIndex < remainingItemsListValue.Items.Length)
             {
                 return
-                    new PineVM.ApplyStepwise.StepResult.Continue(
+                    new ApplyStepwise.StepResult.Continue(
                         Expression: functionRecord.InnerFunction,
                         EnvironmentValue: EnvironmentForItem(remainingItemsListValue.Items.Span[itemIndex]),
                         Callback: Step);
@@ -3737,14 +3722,14 @@ public class Precompiled
             var resultValue =
                 KernelFunctionSpecialized.concat(mappedReversed, PineValue.List(itemsResults));
 
-            return new PineVM.ApplyStepwise.StepResult.Complete(PineValueInProcess.Create(resultValue));
+            return new ApplyStepwise.StepResult.Complete(PineValueInProcess.Create(resultValue));
         }
 
         return
             () => new PrecompiledResult.StepwiseSpecialization(
-                new PineVM.ApplyStepwise(
+                new ApplyStepwise(
                     start:
-                    new PineVM.ApplyStepwise.StepResult.Continue(
+                    new ApplyStepwise.StepResult.Continue(
                         Expression: functionRecord.InnerFunction,
                         EnvironmentValue: EnvironmentForItem(remainingItemsListValue.Items.Span[itemIndex]),
                         Callback: Step)));
@@ -3806,7 +3791,7 @@ public class Precompiled
         var itemsResults = new PineValue[itemsListValue.Items.Length];
         var itemIndex = 0;
 
-        PineVM.ApplyStepwise.StepResult Step(PineValueInProcess itemResultValue)
+        ApplyStepwise.StepResult Step(PineValueInProcess itemResultValue)
         {
             itemsResults[itemIndex] = itemResultValue.Evaluate();
 
@@ -3815,7 +3800,7 @@ public class Precompiled
             if (itemIndex < itemsListValue.Items.Length)
             {
                 return
-                    new PineVM.ApplyStepwise.StepResult.Continue(
+                    new ApplyStepwise.StepResult.Continue(
                         Expression: functionRecord.InnerFunction,
                         EnvironmentValue: EnvironmentForItem(itemsListValue.Items.Span[itemIndex]),
                         Callback: Step);
@@ -3823,14 +3808,14 @@ public class Precompiled
 
             var concatResult = KernelFunction.concat(PineValue.List(itemsResults));
 
-            return new PineVM.ApplyStepwise.StepResult.Complete(PineValueInProcess.Create(concatResult));
+            return new ApplyStepwise.StepResult.Complete(PineValueInProcess.Create(concatResult));
         }
 
         return
             () => new PrecompiledResult.StepwiseSpecialization(
-                new PineVM.ApplyStepwise(
+                new ApplyStepwise(
                     start:
-                    new PineVM.ApplyStepwise.StepResult.Continue(
+                    new ApplyStepwise.StepResult.Continue(
                         Expression: functionRecord.InnerFunction,
                         EnvironmentValue: EnvironmentForItem(itemsListValue.Items.Span[itemIndex]),
                         Callback: Step)));
@@ -3899,7 +3884,7 @@ public class Precompiled
         var mutatedAggregate = argumentAggregate;
         var itemIndex = 0;
 
-        PineVM.ApplyStepwise.StepResult Step(PineValueInProcess itemResultValue)
+        ApplyStepwise.StepResult Step(PineValueInProcess itemResultValue)
         {
             mutatedAggregate = itemResultValue.Evaluate();
 
@@ -3908,7 +3893,7 @@ public class Precompiled
             if (itemIndex < itemsListValue.Items.Length)
             {
                 return
-                    new PineVM.ApplyStepwise.StepResult.Continue(
+                    new ApplyStepwise.StepResult.Continue(
                         Expression: functionRecord.InnerFunction,
                         EnvironmentValue: EnvironmentForItem(mutatedAggregate, itemsListValue.Items.Span[itemIndex]),
                         Callback: Step);
@@ -3917,7 +3902,7 @@ public class Precompiled
             if (false)
             {
                 var resultFromVM =
-                    new PineVM(
+                    SetupVM.Create(
                         disablePrecompiled: true,
                         disableReductionInCompilation: true)
                     .EvaluateExpression(
@@ -3931,14 +3916,14 @@ public class Precompiled
                 }
             }
 
-            return new PineVM.ApplyStepwise.StepResult.Complete(PineValueInProcess.Create(mutatedAggregate));
+            return new ApplyStepwise.StepResult.Complete(PineValueInProcess.Create(mutatedAggregate));
         }
 
         return
             () => new PrecompiledResult.StepwiseSpecialization(
-                new PineVM.ApplyStepwise(
+                new ApplyStepwise(
                     start:
-                    new PineVM.ApplyStepwise.StepResult.Continue(
+                    new ApplyStepwise.StepResult.Continue(
                         Expression: functionRecord.InnerFunction,
                         EnvironmentValue: EnvironmentForItem(mutatedAggregate, itemsListValue.Items.Span[itemIndex]),
                         Callback: Step)));
@@ -4009,7 +3994,7 @@ public class Precompiled
         var itemIndex = 0;
         var includedItemCount = 0;
 
-        PineVM.ApplyStepwise.StepResult Step(PineValueInProcess itemResultValue)
+        ApplyStepwise.StepResult Step(PineValueInProcess itemResultValue)
         {
             if (PineValueInProcess.AreEqual(itemResultValue, PineValueInProcess.KernelTrueValue))
             {
@@ -4023,7 +4008,7 @@ public class Precompiled
             if (itemIndex < itemsList.Items.Length)
             {
                 return
-                    new PineVM.ApplyStepwise.StepResult.Continue(
+                    new ApplyStepwise.StepResult.Continue(
                         Expression: functionRecord.InnerFunction,
                         EnvironmentValue: EnvironmentForItem(itemsList.Items.Span[itemIndex]),
                         Callback: Step);
@@ -4034,14 +4019,14 @@ public class Precompiled
                     accumulatedReversed,
                     PineValue.List(includedItems[..includedItemCount]));
 
-            return new PineVM.ApplyStepwise.StepResult.Complete(PineValueInProcess.Create(resultValue));
+            return new ApplyStepwise.StepResult.Complete(PineValueInProcess.Create(resultValue));
         }
 
         return
             () => new PrecompiledResult.StepwiseSpecialization(
-                new PineVM.ApplyStepwise(
+                new ApplyStepwise(
                     start:
-                    new PineVM.ApplyStepwise.StepResult.Continue(
+                    new ApplyStepwise.StepResult.Continue(
                         Expression: functionRecord.InnerFunction,
                         EnvironmentValue: EnvironmentForItem(itemsList.Items.Span[itemIndex]),
                         Callback: Step)));
@@ -4131,7 +4116,7 @@ public class Precompiled
 
         var includedItemCount = 0;
 
-        PineVM.ApplyStepwise.StepResult Step(PineValueInProcess itemResultValue)
+        ApplyStepwise.StepResult Step(PineValueInProcess itemResultValue)
         {
             var itemResultValueTag =
                 PineValueInProcess.ValueFromPathOrNull(itemResultValue, [0]);
@@ -4158,7 +4143,7 @@ public class Precompiled
             if (itemIndex < itemsList.Items.Length)
             {
                 return
-                    new PineVM.ApplyStepwise.StepResult.Continue(
+                    new ApplyStepwise.StepResult.Continue(
                         Expression: functionRecord.InnerFunction,
                         EnvironmentValue: EnvironmentForItem(itemsList.Items.Span[itemIndex]),
                         Callback: Step);
@@ -4169,14 +4154,14 @@ public class Precompiled
                     accumulatedReversed,
                     PineValue.List(includedItems[..includedItemCount]));
 
-            return new PineVM.ApplyStepwise.StepResult.Complete(PineValueInProcess.Create(resultValue));
+            return new ApplyStepwise.StepResult.Complete(PineValueInProcess.Create(resultValue));
         }
 
         return
             () => new PrecompiledResult.StepwiseSpecialization(
-                new PineVM.ApplyStepwise(
+                new ApplyStepwise(
                     start:
-                    new PineVM.ApplyStepwise.StepResult.Continue(
+                    new ApplyStepwise.StepResult.Continue(
                         Expression: functionRecord.InnerFunction,
                         EnvironmentValue: EnvironmentForItem(itemsList.Items.Span[itemIndex]),
                         Callback: Step)));
@@ -4239,11 +4224,11 @@ public class Precompiled
 
         var itemIndex = 0;
 
-        PineVM.ApplyStepwise.StepResult Step(PineValueInProcess itemResultValue)
+        ApplyStepwise.StepResult Step(PineValueInProcess itemResultValue)
         {
             if (!PineValueInProcess.AreEqual(itemResultValue, PineValueInProcess.KernelTrueValue))
             {
-                return new PineVM.ApplyStepwise.StepResult.Complete(PineValueInProcess.KernelFalseValue);
+                return new ApplyStepwise.StepResult.Complete(PineValueInProcess.KernelFalseValue);
             }
 
             ++itemIndex;
@@ -4251,21 +4236,21 @@ public class Precompiled
             if (itemIndex < itemsListValue.Items.Length)
             {
                 return
-                    new PineVM.ApplyStepwise.StepResult.Continue(
+                    new ApplyStepwise.StepResult.Continue(
                         Expression: functionRecord.InnerFunction,
                         EnvironmentValue: EnvironmentForItem(itemsListValue.Items.Span[itemIndex]),
                         Callback: Step);
             }
 
             return
-                new PineVM.ApplyStepwise.StepResult.Complete(PineValueInProcess.KernelTrueValue);
+                new ApplyStepwise.StepResult.Complete(PineValueInProcess.KernelTrueValue);
         }
 
         return
             () => new PrecompiledResult.StepwiseSpecialization(
-                new PineVM.ApplyStepwise(
+                new ApplyStepwise(
                     start:
-                    new PineVM.ApplyStepwise.StepResult.Continue(
+                    new ApplyStepwise.StepResult.Continue(
                         Expression: functionRecord.InnerFunction,
                         EnvironmentValue: EnvironmentForItem(itemsListValue.Items.Span[itemIndex]),
                         Callback: Step)));
@@ -4328,11 +4313,11 @@ public class Precompiled
 
         var itemIndex = 0;
 
-        PineVM.ApplyStepwise.StepResult Step(PineValueInProcess itemResultValue)
+        ApplyStepwise.StepResult Step(PineValueInProcess itemResultValue)
         {
             if (PineValueInProcess.AreEqual(itemResultValue, PineValueInProcess.KernelTrueValue))
             {
-                return new PineVM.ApplyStepwise.StepResult.Complete(PineValueInProcess.KernelTrueValue);
+                return new ApplyStepwise.StepResult.Complete(PineValueInProcess.KernelTrueValue);
             }
 
             ++itemIndex;
@@ -4340,21 +4325,21 @@ public class Precompiled
             if (itemIndex < itemsListValue.Items.Length)
             {
                 return
-                    new PineVM.ApplyStepwise.StepResult.Continue(
+                    new ApplyStepwise.StepResult.Continue(
                         Expression: functionRecordOk.InnerFunction,
                         EnvironmentValue: EnvironmentForItem(itemsListValue.Items.Span[itemIndex]),
                         Callback: Step);
             }
 
             return
-                new PineVM.ApplyStepwise.StepResult.Complete(PineValueInProcess.KernelFalseValue);
+                new ApplyStepwise.StepResult.Complete(PineValueInProcess.KernelFalseValue);
         }
 
         return
             () => new PrecompiledResult.StepwiseSpecialization(
-                new PineVM.ApplyStepwise(
+                new ApplyStepwise(
                     start:
-                    new PineVM.ApplyStepwise.StepResult.Continue(
+                    new ApplyStepwise.StepResult.Continue(
                         Expression: functionRecordOk.InnerFunction,
                         EnvironmentValue: EnvironmentForItem(itemsListValue.Items.Span[itemIndex]),
                         Callback: Step)));
@@ -5724,14 +5709,14 @@ public class Precompiled
 
         var consumedArgsCount = 0;
 
-        PineVM.ApplyStepwise.StepResult Step(PineValueInProcess itemResultValue)
+        ApplyStepwise.StepResult Step(PineValueInProcess itemResultValue)
         {
             var remainingArgsCount =
                 rootArgumentsList.Items.Length - consumedArgsCount;
 
             if (remainingArgsCount is 0)
             {
-                return new PineVM.ApplyStepwise.StepResult.Complete(itemResultValue);
+                return new ApplyStepwise.StepResult.Complete(itemResultValue);
             }
 
             if (!PineValueInProcess.AreEqual(itemResultValue.GetElementAt(0), s_elmCompilerFunctionTagValue))
@@ -5746,7 +5731,7 @@ public class Precompiled
                     consumedArgsCount += 1;
 
                     return
-                        new PineVM.ApplyStepwise.StepResult.Continue(
+                        new ApplyStepwise.StepResult.Continue(
                             Expression: expression,
                             EnvironmentValue: PineValueInProcess.Create(rootArgumentsList.Items.Span[currentArgIndex]),
                             Callback: Step);
@@ -5824,7 +5809,7 @@ public class Precompiled
                     if (parseResult.IsOkOrNull() is { } expression)
                     {
                         return
-                            new PineVM.ApplyStepwise.StepResult.Continue(
+                            new ApplyStepwise.StepResult.Continue(
                                 Expression: expression,
                                 EnvironmentValue: newEnvironmentValue,
                                 Callback: Step);
@@ -5864,7 +5849,7 @@ public class Precompiled
                         ]);
 
                 return
-                    new PineVM.ApplyStepwise.StepResult.Complete(
+                    new ApplyStepwise.StepResult.Complete(
                         newFunctionRecordTaggedValue);
             }
         }
@@ -5872,7 +5857,7 @@ public class Precompiled
         var firstStepResult =
             Step(PineValueInProcess.Create(rootTaggedFunctionRecordList));
 
-        if (firstStepResult is PineVM.ApplyStepwise.StepResult.Complete completeResult)
+        if (firstStepResult is ApplyStepwise.StepResult.Complete completeResult)
         {
             return
                 () => new PrecompiledResult.FinalValue(
@@ -5880,7 +5865,7 @@ public class Precompiled
                     StackFrameCount: 0);
         }
 
-        if (firstStepResult is not PineVM.ApplyStepwise.StepResult.Continue firstContinue)
+        if (firstStepResult is not ApplyStepwise.StepResult.Continue firstContinue)
         {
             throw new NotImplementedException(
                 "Unexpected StepResult variant: " + firstStepResult.GetType().FullName);
@@ -5888,7 +5873,7 @@ public class Precompiled
 
         return
             () => new PrecompiledResult.StepwiseSpecialization(
-                new PineVM.ApplyStepwise(
+                new ApplyStepwise(
                     start:
                     firstContinue));
     }

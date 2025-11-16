@@ -1,10 +1,9 @@
-using Pine.Core;
 using Pine.Core.Addressing;
 using Pine.Core.PopularEncodings;
 using System;
 using System.Collections.Generic;
 
-namespace Pine.PineVM;
+namespace Pine.Core.Interpreter.IntermediateVM;
 
 public record ExecutionErrorReport(
     Expression FrameExpression,

@@ -2,7 +2,9 @@ using AwesomeAssertions;
 using AwesomeAssertions.Execution;
 using Pine.Core;
 using Pine.Core.Elm;
+using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Elm;
+using Pine.IntermediateVM;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -24,13 +26,13 @@ public class ParseElmModuleTextToPineValueTests
 
     private static readonly Core.CodeAnalysis.PineVMParseCache s_pineVMParseCache = new();
 
-    private static PineVM.PineVM CreateVMWithCache()
+    private static Core.Interpreter.IntermediateVM.PineVM CreateVMWithCache()
     {
-        var pineVMCache = new PineVM.PineVMCache();
+        var pineVMCache = new InvocationCache();
 
         var pineVM =
-            new PineVM.PineVM(
-                evalCache: pineVMCache.EvalCache,
+            SetupVM.Create(
+                evalCache: pineVMCache,
                 parseCache: s_pineVMParseCache);
 
         return pineVM;

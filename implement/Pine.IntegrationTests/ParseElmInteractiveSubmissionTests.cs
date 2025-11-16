@@ -1,7 +1,9 @@
 using AwesomeAssertions;
 using Pine.Core;
 using Pine.Core.Elm;
+using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Elm;
+using Pine.IntermediateVM;
 using System;
 using Xunit;
 
@@ -91,10 +93,10 @@ public class ParseElmInteractiveSubmissionTests
             ElmCompiler.ElmCompilerFromEnvValue(elmCompilerFromBundle)
             .Extract(err => throw new Exception(err));
 
-        var pineVMCache = new PineVM.PineVMCache();
+        var pineVMCache = new InvocationCache();
 
         var pineVM =
-            new PineVM.PineVM(evalCache: pineVMCache.EvalCache);
+            SetupVM.Create(evalCache: pineVMCache);
 
         return elmCompiler.ParseElmInteractiveSubmissionText(submissionText, pineVM);
     }

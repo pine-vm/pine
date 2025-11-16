@@ -1,14 +1,16 @@
-using Pine.Core;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Internal;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
-using static Pine.PineVM.PineVM;
 
-namespace Pine.PineVM;
+namespace Pine.Core.Interpreter.IntermediateVM;
 
+
+public record struct EnvConstraintItem(
+    ReadOnlyMemory<int> Path,
+    PineValue Value);
 
 public record ExpressionCompilation(
     StackFrameInstructions Generic,
@@ -700,12 +702,12 @@ public record ExpressionCompilation(
                 findReplacement:
                 descendant =>
                 {
-                    if (Core.CodeAnalysis.CodeAnalysis.TryParseAsLiteral(descendant) is { } literal)
+                    if (CodeAnalysis.CodeAnalysis.TryParseAsLiteral(descendant) is { } literal)
                     {
                         return Expression.LiteralInstance(literal);
                     }
 
-                    if (Core.CodeAnalysis.CodeAnalysis.TryParseExprAsPathInEnv(descendant) is { } pathInEnv)
+                    if (CodeAnalysis.CodeAnalysis.TryParseExprAsPathInEnv(descendant) is { } pathInEnv)
                     {
                         if (envConstraintId.TryGetValue(pathInEnv) is { } value)
                         {

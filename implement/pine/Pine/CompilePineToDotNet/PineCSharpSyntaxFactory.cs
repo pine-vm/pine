@@ -442,7 +442,7 @@ public static class PineCSharpSyntaxFactory
 
     public static ExpressionSyntax DescribeValueForErrorMessageExpression(
         ExpressionSyntax pineValueExprSyntax) =>
-        InvocationExpressionOnPineVMClass(nameof(PineVM.PineVM.DescribeValueForErrorMessage))
+        InvocationExpressionOnPineVMClass(nameof(Core.Interpreter.IntermediateVM.PineVM.DescribeValueForErrorMessage))
         .WithArgumentList(
             SyntaxFactory.ArgumentList(
                 SyntaxFactory.SingletonSeparatedList(

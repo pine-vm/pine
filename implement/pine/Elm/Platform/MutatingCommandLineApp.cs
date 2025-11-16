@@ -2,6 +2,7 @@ using Pine.Core;
 using Pine.Core.Elm;
 using Pine.Core.Files;
 using Pine.Core.PopularEncodings;
+using Pine.PineVM;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -24,9 +25,8 @@ public class MutatingCommandLineApp
 
     private readonly ConcurrentQueue<ReadOnlyMemory<byte>> _stdErr = new();
 
-    private readonly PineVM.PineVMCache _pineVMCache = new();
-
-    private readonly PineVM.PineVM _pineVM;
+    private readonly PineVMResettingCache _pineVM =
+        PineVMResettingCache.Create(resetCacheEntriesThresholdDefault: 10_000);
 
     private readonly CommandLineAppConfig _appConfig;
 
@@ -43,8 +43,6 @@ public class MutatingCommandLineApp
         CommandLineAppConfig.CommandLineAppInitEnvironment environment)
     {
         _appConfig = appConfig;
-
-        _pineVM = new PineVM.PineVM(_pineVMCache.EvalCache);
 
         (_appState, var initResponse) =
             CommandLineAppConfig.Init(

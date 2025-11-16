@@ -1,11 +1,14 @@
 using Pine.Core;
 using Pine.Core.CodeAnalysis;
+using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Core.PineVM;
 using Pine.Core.PopularEncodings;
+using Pine.IntermediateVM;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+
 using ExpressionUsageRecord = System.Collections.Generic.Dictionary<Pine.Core.PineValue, Pine.PineVM.ExpressionEnvUsageRecord>;
 
 namespace Pine.PineVM;
@@ -82,17 +85,17 @@ public class ProfilingPineVM
 
     public ProfilingPineVM(
         IDictionary<EvalCacheEntryKey, PineValue>? evalCache = null,
-        PineVMCache? analysisEvalCache = null)
+        InvocationCache? analysisEvalCache = null)
     {
         ConcurrentDictionary<Expression, CodeAnalysis.ExprAnalysis> exprAnalysisMutatedCache = new();
 
         var analysisVM =
-            new PineVM(
-                evalCache: analysisEvalCache?.EvalCache,
+            SetupVM.Create(
+                evalCache: analysisEvalCache,
                 precompiledLeaves: ImmutableDictionary<PineValue, System.Func<PineValue, PineValue?>>.Empty);
 
         PineVM =
-            new PineVM(
+            SetupVM.Create(
                 evalCache: evalCache,
                 reportFunctionApplication:
                 funcApplReport =>
@@ -175,7 +178,7 @@ public class ProfilingPineVM
         PineValueClass environment,
         ConcurrentDictionary<Expression, CodeAnalysis.ExprAnalysis> exprAnalysisMutatedCache,
         PineVMParseCache parseCache,
-        PineVM evalVM)
+        Core.Interpreter.IntermediateVM.PineVM evalVM)
     {
         var analysisResult =
             CodeAnalysis.AnalyzeExpressionUsageRecursive(

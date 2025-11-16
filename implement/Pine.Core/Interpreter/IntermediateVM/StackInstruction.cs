@@ -1,10 +1,9 @@
-using Pine.Core;
 using Pine.Core.PopularEncodings;
 using System;
 using System.Collections.Generic;
 using System.Numerics;
 
-namespace Pine.PineVM;
+namespace Pine.Core.Interpreter.IntermediateVM;
 
 /*
  * As in the Pine language, the value representing True for conditional jumps is (Blob [4]).

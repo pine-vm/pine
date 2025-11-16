@@ -135,7 +135,7 @@ public class CompileToAssembly
             typeof(Func<>),
             typeof(BigInteger),
             typeof(IImmutableList<>),
-            typeof(PineVM.PineVM)
+            typeof(Core.Interpreter.IntermediateVM.PineVM)
         };
 
         var typesAssembliesLocations =

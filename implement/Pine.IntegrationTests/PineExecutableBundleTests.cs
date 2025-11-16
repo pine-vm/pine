@@ -1,6 +1,8 @@
 using AwesomeAssertions;
 using Pine.Core;
 using Pine.Core.Elm;
+using Pine.Core.Interpreter.IntermediateVM;
+using Pine.IntermediateVM;
 using Xunit;
 
 using ElmCompiler = Pine.Elm.ElmCompiler;
@@ -85,10 +87,10 @@ public class PineExecutableBundleTests
             
             """;
 
-        var pineVMCache = new PineVM.PineVMCache();
+        var pineVMCache = new InvocationCache();
 
         var pineVM =
-            new PineVM.PineVM(evalCache: pineVMCache.EvalCache);
+            SetupVM.Create(evalCache: pineVMCache);
 
         var parseResult =
             elmCompiler.ParseElmModuleText(elmModuleText, pineVM);
