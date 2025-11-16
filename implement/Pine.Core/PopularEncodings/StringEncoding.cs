@@ -8,7 +8,8 @@ namespace Pine.Core.PopularEncodings;
 /// Encoding of strings as Pine values and parsing Pine values as strings.
 /// 
 /// <para>
-/// This is the same encoding used for the tags distinguishing Pine expression variants and kernel function names.
+/// The string encoding uses four bytes (32 bits) per Unicode code point, in big-endian order.
+/// This is the encoding used for file names and directory names in <see cref="FileTreeEncoding"/>.
 /// </para>
 /// <para>
 /// Frontend languages like Elm might use different representations of strings.
@@ -16,7 +17,7 @@ namespace Pine.Core.PopularEncodings;
 /// </summary>
 public static class StringEncoding
 {
-    private static readonly FrozenDictionary<string, PineValue> ReusedInstances =
+    private static readonly FrozenDictionary<string, PineValue> s_reusedInstances =
         PopularValues.PopularStrings
         .ToFrozenDictionary(
             keySelector: s => s,
@@ -29,7 +30,7 @@ public static class StringEncoding
             elementSelector: ValueFromString_2024);
 
     private static readonly FrozenDictionary<PineValue, string> s_reusedStringFromValue =
-        ReusedInstances
+        s_reusedInstances
         .ToFrozenDictionary(
             keySelector: kvp => kvp.Value,
             elementSelector: kvp => kvp.Key);
@@ -45,7 +46,7 @@ public static class StringEncoding
     /// </summary>
     public static PineValue ValueFromString(string str)
     {
-        if (ReusedInstances?.TryGetValue(str, out var reusedStringValue) ?? false && reusedStringValue is not null)
+        if (s_reusedInstances?.TryGetValue(str, out var reusedStringValue) ?? false && reusedStringValue is not null)
             return reusedStringValue;
 
         return BlobValueFromString(str);
@@ -232,13 +233,23 @@ public static class StringEncoding
         return Result<string, string>.ok(stringBuilder.ToString());
     }
 
-    // https://stackoverflow.com/questions/687359/how-would-you-get-an-array-of-unicode-code-points-from-a-net-string/28155130#28155130
+    /// <summary>
+    /// Converts the specified string to a list of Unicode code points.
+    /// </summary>
+    /// <remarks>Each code point in the returned list corresponds to a single Unicode character, including
+    /// those represented by surrogate pairs. The method does not validate the input for invalid surrogate
+    /// sequences.</remarks>
+    /// <param name="str">The string to convert. May contain surrogate pairs representing supplementary Unicode characters.</param>
     public static IReadOnlyList<int> ToCodePoints(string str)
     {
+        // https://stackoverflow.com/questions/687359/how-would-you-get-an-array-of-unicode-code-points-from-a-net-string/28155130#28155130
+
         var codePoints = new List<int>(str.Length);
+
         for (var i = 0; i < str.Length; i++)
         {
             codePoints.Add(char.ConvertToUtf32(str, i));
+
             if (char.IsHighSurrogate(str[i]))
                 i += 1;
         }
