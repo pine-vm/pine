@@ -45,7 +45,7 @@ public static class ExpressionEncoding
             EncodeChoiceTypeVariantAsPineValue(
                 "StringTag",
                 PineValue.List(
-                    [StringEncoding.BlobValueFromString(stringTag.Tag),
+                    [StringEncoding.ValueFromString(stringTag.Tag),
                     EncodeExpressionAsValue(stringTag.Tagged)
                     ])),
 
@@ -262,7 +262,7 @@ public static class ExpressionEncoding
             "KernelApplication",
             PineValue.List(
                 [
-                StringEncoding.BlobValueFromString(kernelApplicationExpression.Function),
+                StringEncoding.ValueFromString(kernelApplicationExpression.Function),
                 EncodeExpressionAsValue(kernelApplicationExpression.Input)
                 ]));
 
@@ -563,7 +563,7 @@ public static class ExpressionEncoding
     private static PineValue.ListValue EncodeChoiceTypeVariantAsPineValue(string tagName, PineValue tagArguments) =>
         PineValue.List(
             [
-                StringEncoding.BlobValueFromString(tagName),
+                StringEncoding.ValueFromString(tagName),
                 tagArguments,
             ]);
 

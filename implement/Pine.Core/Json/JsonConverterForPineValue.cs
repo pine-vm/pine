@@ -79,7 +79,7 @@ public class JsonConverterForPineValue : JsonConverter<PineValue>
                     reader.GetString() ??
                     throw new JsonException("Expected non-null string value for property " + propertyName);
 
-                var pineValue = StringEncoding.BlobValueFromString(propertyValue);
+                var pineValue = StringEncoding.ValueFromString(propertyValue);
 
                 reader.Read();
 
