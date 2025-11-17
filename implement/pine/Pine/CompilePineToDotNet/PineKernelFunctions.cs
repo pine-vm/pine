@@ -1,7 +1,7 @@
 using Microsoft.CodeAnalysis;
 using Pine.Core;
+using Pine.Core.CommonEncodings;
 using Pine.Core.DotNet;
-using Pine.Core.PopularEncodings;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;

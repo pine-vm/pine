@@ -2,7 +2,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Pine.Core.CodeAnalysis;
-using Pine.Core.PopularEncodings;
+using Pine.Core.CommonEncodings;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;

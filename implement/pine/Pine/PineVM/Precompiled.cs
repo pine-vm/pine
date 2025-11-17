@@ -1,11 +1,11 @@
 using Pine.Core;
 using Pine.Core.CodeAnalysis;
+using Pine.Core.CommonEncodings;
 using Pine.Core.Elm;
 using Pine.Core.Internal;
 using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Core.Json;
 using Pine.Core.PineVM;
-using Pine.Core.PopularEncodings;
 using Pine.IntermediateVM;
 using System;
 using System.Buffers.Binary;

@@ -1,7 +1,7 @@
 using Pine.Core;
+using Pine.Core.CommonEncodings;
 using Pine.Core.Elm;
 using Pine.Core.Files;
-using Pine.Core.PopularEncodings;
 using Pine.PineVM;
 using System;
 using System.Collections.Concurrent;

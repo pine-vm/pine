@@ -1,6 +1,6 @@
 using Pine.Core.CodeAnalysis;
+using Pine.Core.CommonEncodings;
 using Pine.Core.PineVM;
-using Pine.Core.PopularEncodings;
 using System;
 using System.Collections.Generic;
 

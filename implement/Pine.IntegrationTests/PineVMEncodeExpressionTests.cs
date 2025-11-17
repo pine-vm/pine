@@ -1,6 +1,6 @@
 using AwesomeAssertions;
 using Pine.Core;
-using Pine.Core.PopularEncodings;
+using Pine.Core.CommonEncodings;
 using Xunit;
 
 namespace Pine.IntegrationTests;

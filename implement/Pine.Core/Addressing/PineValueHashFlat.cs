@@ -1,3 +1,4 @@
+using Pine.Core.CommonEncodings;
 using System;
 using System.Security.Cryptography;
 
@@ -18,7 +19,7 @@ public class PineValueHashFlat
     {
         using var stream = new System.IO.MemoryStream();
 
-        PopularEncodings.ValueEncodingFlatDeterministic.Encode(stream, value);
+        ValueEncodingFlatDeterministic.Encode(stream, value);
 
         var encodingBytes = stream.ToArray();
 

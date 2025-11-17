@@ -2,8 +2,8 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Pine.Core;
+using Pine.Core.CommonEncodings;
 using Pine.Core.DotNet;
-using Pine.Core.PopularEncodings;
 using System;
 using System.Collections.Generic;
 

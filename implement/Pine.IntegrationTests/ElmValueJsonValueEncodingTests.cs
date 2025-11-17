@@ -1,8 +1,8 @@
 using AwesomeAssertions;
 using Pine.Core;
 using Pine.Core.CodeAnalysis;
+using Pine.Core.CommonEncodings;
 using Pine.Core.Elm;
-using Pine.Core.PopularEncodings;
 using Pine.Elm;
 using Pine.IntermediateVM;
 using System;

@@ -1,7 +1,7 @@
 using ElmTime;
 using Pine.Core;
 using Pine.Core.CodeAnalysis;
-using Pine.Core.PopularEncodings;
+using Pine.Core.CommonEncodings;
 using Pine.Core.Elm;
 using Pine.Core.PineVM;
 using System;

@@ -1,10 +1,10 @@
 using Interface = Pine.Elm.LanguageServiceInterface;
 using Pine.Core;
 using Pine.Core.CodeAnalysis;
+using Pine.Core.CommonEncodings;
 using Pine.Core.Elm;
 using Pine.Core.Files;
 using Pine.Core.PineVM;
-using Pine.Core.PopularEncodings;
 using System.Collections.Generic;
 using System.Linq;
 

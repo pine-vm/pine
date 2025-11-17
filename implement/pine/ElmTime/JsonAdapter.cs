@@ -1,10 +1,10 @@
 using Pine.Core;
 using Pine.Core.CodeAnalysis;
+using Pine.Core.CommonEncodings;
 using Pine.Core.Elm;
 using Pine.Core.Elm.ElmSyntax;
 using Pine.Core.Files;
 using Pine.Core.PineVM;
-using Pine.Core.PopularEncodings;
 using Pine.Elm;
 using Pine.PineVM;
 using System.Collections.Generic;

@@ -1,4 +1,4 @@
-using Pine.Core.PopularEncodings;
+using Pine.Core.CommonEncodings;
 using Pine.Core.Elm;
 using Pine.PineVM;
 using System.Collections.Frozen;

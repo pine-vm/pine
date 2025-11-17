@@ -1,6 +1,6 @@
 using AwesomeAssertions;
+using Pine.Core.CommonEncodings;
 using Pine.Core.Files;
-using Pine.Core.PopularEncodings;
 using System;
 using System.Collections.Immutable;
 using System.Linq;

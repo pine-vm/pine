@@ -3,7 +3,7 @@ using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace Pine.Core.PopularEncodings;
+namespace Pine.Core.CommonEncodings;
 
 /// <summary>
 /// Functions to encode and decode <see cref="PineValue"/> instances 

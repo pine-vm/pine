@@ -14,7 +14,7 @@
 
 using Pine.Core;
 using Pine.Core.Addressing;
-using Pine.Core.PopularEncodings;
+using Pine.Core.CommonEncodings;
 using Pine;
 using System;
 using System.Collections.Generic;

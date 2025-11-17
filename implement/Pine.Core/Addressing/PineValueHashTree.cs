@@ -1,5 +1,5 @@
+using Pine.Core.CommonEncodings;
 using Pine.Core.Files;
-using Pine.Core.PopularEncodings;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;

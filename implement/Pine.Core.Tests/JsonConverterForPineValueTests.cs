@@ -1,6 +1,6 @@
 using AwesomeAssertions;
+using Pine.Core.CommonEncodings;
 using Pine.Core.Json;
-using Pine.Core.PopularEncodings;
 using System.Text.Json;
 using Xunit;
 

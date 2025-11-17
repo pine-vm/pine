@@ -1,8 +1,8 @@
 using Pine.Core;
+using Pine.Core.CommonEncodings;
 using Pine.Core.DotNet;
 using Pine.Core.Elm;
 using Pine.Core.Files;
-using Pine.Core.PopularEncodings;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;

@@ -1,9 +1,9 @@
 using ElmTime;
 using ElmTime.Platform.WebService;
 using Pine.Core;
+using Pine.Core.CommonEncodings;
 using Pine.Core.Files;
 using Pine.Core.IO;
-using Pine.Core.PopularEncodings;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;

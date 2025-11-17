@@ -1,4 +1,4 @@
-using Pine.Core.PopularEncodings;
+using Pine.Core.CommonEncodings;
 using System;
 
 namespace Pine.Core.CodeAnalysis;

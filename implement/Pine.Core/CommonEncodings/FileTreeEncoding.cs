@@ -2,7 +2,7 @@ using Pine.Core.Files;
 using System;
 using System.Collections.Generic;
 
-namespace Pine.Core.PopularEncodings;
+namespace Pine.Core.CommonEncodings;
 
 /// <summary>
 /// Encoding file trees as Pine values and parsing Pine values as file trees.

@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 
-namespace Pine.Core.PopularEncodings;
+namespace Pine.Core.CommonEncodings;
 
 /// <summary>
 /// Wraps binary encoding of PineValues (<see cref="ValueBinaryEncodingClassic"/>) to model a

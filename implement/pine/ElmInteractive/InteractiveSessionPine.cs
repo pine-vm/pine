@@ -1,5 +1,6 @@
 using Pine.Core;
 using Pine.Core.Addressing;
+using Pine.Core.CommonEncodings;
 using Pine.Core.Elm;
 using Pine.Core.Elm.Elm019;
 using Pine.Core.Elm.ElmSyntax;
@@ -7,7 +8,6 @@ using Pine.Core.Files;
 using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Core.IO;
 using Pine.Core.PineVM;
-using Pine.Core.PopularEncodings;
 using Pine.Elm;
 using Pine.IntermediateVM;
 using Pine.PineVM;
