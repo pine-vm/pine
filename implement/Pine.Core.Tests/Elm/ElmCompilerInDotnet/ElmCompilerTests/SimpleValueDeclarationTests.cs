@@ -22,6 +22,7 @@ public class SimpleValueDeclarationTests
         var (parsedEnv, staticProgram) =
             ElmCompilerTestHelper.StaticProgramFromElmModules(
                 [elmModuleText],
+                disableInlining: true,
                 includeDeclaration: _ => true,
                 parseCache: parseCache);
 
@@ -53,6 +54,7 @@ public class SimpleValueDeclarationTests
         var (parsedEnv, staticProgram) =
             ElmCompilerTestHelper.StaticProgramFromElmModules(
                 [elmModuleText],
+                disableInlining: true,
                 includeDeclaration: _ => true,
                 parseCache: parseCache);
 
@@ -85,6 +87,7 @@ public class SimpleValueDeclarationTests
         var (parsedEnv, staticProgram) =
             ElmCompilerTestHelper.StaticProgramFromElmModules(
                 [elmModuleText],
+                disableInlining: true,
                 includeDeclaration: _ => true,
                 parseCache: parseCache);
 
@@ -117,6 +120,7 @@ public class SimpleValueDeclarationTests
         var (parsedEnv, staticProgram) =
             ElmCompilerTestHelper.StaticProgramFromElmModules(
                 [elmModuleText],
+                disableInlining: true,
                 includeDeclaration: _ => true,
                 parseCache: parseCache);
 

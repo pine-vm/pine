@@ -13,6 +13,7 @@ public class ElmCompilerTestHelper
     public static (ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedEnv, StaticProgram staticProgram)
         StaticProgramFromElmModules(
         IReadOnlyList<string> elmModulesTexts,
+        bool disableInlining,
         System.Func<DeclQualifiedName, bool> includeDeclaration,
         PineVMParseCache parseCache)
     {
@@ -22,6 +23,7 @@ public class ElmCompilerTestHelper
         return
             StaticProgramFromTestCase(
                 testCase,
+                disableInlining: disableInlining,
                 includeDeclaration,
                 parseCache);
     }
@@ -29,6 +31,7 @@ public class ElmCompilerTestHelper
     public static (ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedEnv, StaticProgram staticProgram)
         StaticProgramFromTestCase(
         TestCase testCase,
+        bool disableInlining,
         System.Func<DeclQualifiedName, bool> includeDeclaration,
         PineVMParseCache parseCache)
     {
@@ -43,7 +46,8 @@ public class ElmCompilerTestHelper
         var compiledEnv =
             ElmCompiler.CompileInteractiveEnvironment(
                 appCodeTree,
-                rootFilePaths: rootFilePaths)
+                rootFilePaths: rootFilePaths,
+                disableInlining: disableInlining)
             .Extract(err => throw new System.Exception(err));
 
         var parsedEnv =
