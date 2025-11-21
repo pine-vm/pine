@@ -5,7 +5,7 @@ namespace Pine.Core.Elm.ElmSyntax.SyntaxTreeClassic;
 
 using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
 
-internal class EncodeAsElmValue
+public class EncodeAsElmValue
 {
     public static ElmValue EncodeFile(File file)
     {

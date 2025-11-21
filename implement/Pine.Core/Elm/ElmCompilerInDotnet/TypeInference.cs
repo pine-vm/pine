@@ -203,7 +203,7 @@ public static class TypeInference
         // Function application - infer from the function's return type
         if (expression is SyntaxTypes.Expression.Application application &&
             application.Arguments.Count >= 2 &&
-            application.Arguments[0].Value is SyntaxTypes.Expression.FunctionOrValue funcRef)
+            application.Arguments[0].Value is SyntaxTypes.Expression.FunctionOrValue)
         {
             // For now, we can't easily look up the return type of the called function
             // without access to the full compilation context

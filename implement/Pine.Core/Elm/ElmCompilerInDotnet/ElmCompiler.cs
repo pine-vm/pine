@@ -44,11 +44,8 @@ public class ElmCompiler
             .ToImmutableArray();
 
         // First pass: Parse all modules and collect function declarations
-        var parsedModules =
-            new List<(IReadOnlyList<string> moduleName, string moduleNameFlattened, SyntaxTypes.File parsedModule)>();
-
-        var allFunctions =
-            new Dictionary<string, (string moduleName, string functionName, SyntaxTypes.Declaration.FunctionDeclaration declaration)>();
+        var parsedModulesBeforeCanonicalize =
+            new List<SyntaxTypes.File>();
 
         foreach (var moduleFile in elmModuleFiles)
         {
@@ -77,11 +74,60 @@ public class ElmCompiler
             var moduleNameFlattened =
                 string.Join(".", moduleName);
 
-            parsedModules.Add((moduleName, moduleNameFlattened, parseModuleOk));
+            parsedModulesBeforeCanonicalize.Add(parseModuleOk);
+        }
 
-            // Collect function declarations
+        var canonicalizationResult =
+            Canonicalization.Canonicalize(parsedModulesBeforeCanonicalize);
+
+        {
+            if (canonicalizationResult.IsErrOrNull() is { } err)
+            {
+                return err;
+            }
+        }
+
+        if (canonicalizationResult.IsOkOrNull() is not { } canonicalizedModulesDict)
+        {
+            throw new NotImplementedException(
+                "Unexpected result type: " + canonicalizationResult.GetType().Name);
+        }
+
+        // Check if any module has canonicalization errors
+        var moduleErrors = new List<string>();
+        foreach (var (moduleName, moduleResult) in canonicalizedModulesDict)
+        {
+            if (moduleResult.IsErrOrNull() is { } moduleErr)
+            {
+                var moduleNameStr = string.Join(".", moduleName);
+                moduleErrors.Add($"In module {moduleNameStr}:\n{moduleErr}");
+            }
+        }
+
+        if (moduleErrors.Any())
+        {
+            return string.Join("\n\n", moduleErrors);
+        }
+
+        // Extract all successfully canonicalized modules
+        var canonicalizedModules = canonicalizedModulesDict
+            .Select(kvp => kvp.Value.IsOkOrNull())
+            .WhereNotNull()
+            .ToList();
+
+        var allFunctions =
+            new Dictionary<string, (string moduleName, string functionName, SyntaxTypes.Declaration.FunctionDeclaration declaration)>();
+
+        foreach (var elmModuleSyntax in canonicalizedModules)
+        {
+            var moduleName =
+                SyntaxTypes.Module.GetModuleName(elmModuleSyntax.ModuleDefinition.Value).Value;
+
+            var moduleNameFlattened =
+                string.Join(".", moduleName);
+
             var declarations =
-                parseModuleOk.Declarations
+                elmModuleSyntax.Declarations
                 .Select(declNode => declNode.Value)
                 .OfType<SyntaxTypes.Declaration.FunctionDeclaration>();
 
@@ -107,8 +153,11 @@ public class ElmCompiler
         // Second pass: Compile each module with access to all functions
         var compiledModuleEntries = new List<PineValue>();
 
-        foreach (var (moduleName, moduleNameFlattened, parsedModule) in parsedModules)
+        foreach (var parsedModule in canonicalizedModules)
         {
+            var moduleNameFlattened =
+                string.Join('.', SyntaxTypes.Module.GetModuleName(parsedModule.ModuleDefinition.Value).Value);
+
             var moduleValue = CompileModule(parsedModule, moduleNameFlattened, compilationContext);
 
             var namedModuleEntry =
@@ -451,7 +500,11 @@ public class ElmCompiler
                     // Environment structure: [0] = function list, [1] = parameter list
                     return BuildPathToParameter(paramIndex);
                 }
+            }
 
+            if (functionOrValue.ModuleName.Count is 1 &&
+                functionOrValue.ModuleName[0] is "Basics")
+            {
                 if (functionOrValue.Name is "True")
                 {
                     return Expression.LiteralInstance(
@@ -583,10 +636,11 @@ public class ElmCompiler
                     context,
                     dependencyLayout);
 
-            return Expression.ConditionalInstance(
-                condition: condition,
-                falseBranch: falseBranch,
-                trueBranch: trueBranch);
+            return
+                Expression.ConditionalInstance(
+                    condition: condition,
+                    falseBranch: falseBranch,
+                    trueBranch: trueBranch);
         }
 
         throw new NotImplementedException(
