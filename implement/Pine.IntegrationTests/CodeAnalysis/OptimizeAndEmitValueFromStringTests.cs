@@ -195,7 +195,7 @@ public class OptimizeAndEmitValueFromStringTests
                                         KernelFunction.concat(
                                             Test.blobBytesFromChars(
                                                 PineValue.EmptyList,
-                                                Global_Anonymous.zzz_anon_bef7232d_3c2bb8d5(
+                                                Global_Anonymous.zzz_anon_2badf312_841a88e3(
                                                     CommonReusedValues.Blob_Int_0,
                                                     PineValue.EmptyList,
                                                     PineValueExtension.ValueFromPathOrEmptyList(
@@ -212,7 +212,7 @@ public class OptimizeAndEmitValueFromStringTests
             """"
             public static class Global_Anonymous
             {
-                public static PineValue zzz_anon_bef7232d_3c2bb8d5(
+                public static PineValue zzz_anon_2badf312_841a88e3(
                     PineValue param_1_0,
                     PineValue param_1_1,
                     PineValue param_1_2)
@@ -257,7 +257,7 @@ public class OptimizeAndEmitValueFromStringTests
                 }
 
 
-                public static PineValue zzz_anon_f8cc3fb0_cbcb2ff6(
+                public static PineValue zzz_anon_6dc95117_ab4922f9(
                     PineValue param_1_0,
                     PineValue param_1_1,
                     PineValue param_1_2)
@@ -279,15 +279,15 @@ public class OptimizeAndEmitValueFromStringTests
                         if (KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(local_000, local_param_1_0))
                         {
                             PineValue local_001 =
-                                Global_Anonymous.zzz_anon_f8cc3fb0_cbcb2ff6(local_param_1_0, local_000, CommonReusedValues.Blob_Int_0);
+                                Global_Anonymous.zzz_anon_6dc95117_ab4922f9(local_param_1_0, local_000, CommonReusedValues.Blob_Int_0);
 
                             return
                                 KernelFunctionSpecialized.int_add(
                                     KernelFunctionSpecialized.int_mul(16, local_001),
-                                    Global_Anonymous.zzz_anon_f8cc3fb0_cbcb2ff6(
+                                    Global_Anonymous.zzz_anon_6dc95117_ab4922f9(
                                         KernelFunctionSpecialized.int_add(
                                             local_param_1_0,
-                                            KernelFunctionSpecialized.int_mul(local_001, local_000, -1)),
+                                            KernelFunctionSpecialized.int_mul(local_001, local_param_1_1, -16)),
                                         local_param_1_1,
                                         CommonReusedValues.Blob_Int_0));
                         }

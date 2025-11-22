@@ -1577,6 +1577,14 @@ inlineDeclBlockIfSimple blockDecls expression =
                 )
                 (expression :: List.map Tuple.second blockDecls)
 
+        blockDeclsToConsider : List ( String, Expression )
+        blockDeclsToConsider =
+            List.filter
+                (\( declName, declExpr ) ->
+                    FirCompiler.containsAnyFunctionApplicationExpression declExpr
+                )
+                blockDecls
+
         refsBlockDeclMoreThanOnce : Bool
         refsBlockDeclMoreThanOnce =
             List.any
@@ -1594,7 +1602,7 @@ inlineDeclBlockIfSimple blockDecls expression =
                     in
                     appearanceCount > 1
                 )
-                blockDecls
+                blockDeclsToConsider
     in
     {-
        There is no need to check for recursive references in the block declarations separately,

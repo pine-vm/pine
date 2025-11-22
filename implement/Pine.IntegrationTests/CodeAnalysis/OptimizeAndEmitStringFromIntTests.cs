@@ -54,7 +54,7 @@ public class OptimizeAndEmitStringFromIntTests
                                 PineValue.List(
                                     [
                                         KernelFunction.concat(
-                                            Global_Anonymous.zzz_anon_0f6e756a_a4f70149(param_1_0))
+                                            Global_Anonymous.zzz_anon_0f6e756a_cd8ec059(param_1_0))
                                     ])
                             ]);
                 }
@@ -66,25 +66,25 @@ public class OptimizeAndEmitStringFromIntTests
             """"
             public static class Global_Anonymous
             {
-                public static PineValue zzz_anon_0f6e756a_a4f70149(PineValue param_1_0)
+                public static PineValue zzz_anon_0f6e756a_cd8ec059(PineValue param_1_0)
                 {
                     if (KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(0, param_1_0))
                     {
-                        return Global_Anonymous.zzz_anon_12af8dcc_650df00b(param_1_0);
+                        return Global_Anonymous.zzz_anon_12af8dcc_24a48553(param_1_0);
                     }
 
                     return
                         KernelFunctionFused.ListPrependItem(
                             itemToPrepend: CommonReusedValues.Blob_Char_hyphen,
                             suffix:
-                            Global_Anonymous.zzz_anon_12af8dcc_650df00b(
+                            Global_Anonymous.zzz_anon_12af8dcc_24a48553(
                                 KernelFunction.negate(param_1_0)));
                 }
 
 
-                public static PineValue zzz_anon_12af8dcc_650df00b(PineValue param_1_0)
+                public static PineValue zzz_anon_12af8dcc_24a48553(PineValue param_1_0)
                 {
-                    return Global_Anonymous.zzz_anon_632693ae_2f148225(param_1_0, PineValue.EmptyList);
+                    return Global_Anonymous.zzz_anon_632693ae_d06ccc62(param_1_0, PineValue.EmptyList);
                 }
 
 
@@ -153,7 +153,7 @@ public class OptimizeAndEmitStringFromIntTests
                 }
 
 
-                public static PineValue zzz_anon_632693ae_2f148225(
+                public static PineValue zzz_anon_632693ae_d06ccc62(
                     PineValue param_1_0,
                     PineValue param_1_1)
                 {
@@ -203,7 +203,7 @@ public class OptimizeAndEmitStringFromIntTests
                 }
 
 
-                public static PineValue zzz_anon_f8cc3fb0_cbcb2ff6(
+                public static PineValue zzz_anon_6dc95117_ab4922f9(
                     PineValue param_1_0,
                     PineValue param_1_1,
                     PineValue param_1_2)
@@ -225,15 +225,15 @@ public class OptimizeAndEmitStringFromIntTests
                         if (KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(local_000, local_param_1_0))
                         {
                             PineValue local_001 =
-                                Global_Anonymous.zzz_anon_f8cc3fb0_cbcb2ff6(local_param_1_0, local_000, CommonReusedValues.Blob_Int_0);
+                                Global_Anonymous.zzz_anon_6dc95117_ab4922f9(local_param_1_0, local_000, CommonReusedValues.Blob_Int_0);
 
                             return
                                 KernelFunctionSpecialized.int_add(
                                     KernelFunctionSpecialized.int_mul(16, local_001),
-                                    Global_Anonymous.zzz_anon_f8cc3fb0_cbcb2ff6(
+                                    Global_Anonymous.zzz_anon_6dc95117_ab4922f9(
                                         KernelFunctionSpecialized.int_add(
                                             local_param_1_0,
-                                            KernelFunctionSpecialized.int_mul(local_001, local_000, -1)),
+                                            KernelFunctionSpecialized.int_mul(local_001, local_param_1_1, -16)),
                                         local_param_1_1,
                                         CommonReusedValues.Blob_Int_0));
                         }

@@ -977,7 +977,8 @@ public class CodeAnalysisTests
                             (Pine_kernel.int_add
                                 [ param_1_0
                                 , Pine_kernel.int_mul
-                                    [ Test.idivHelper
+                                    [ -17
+                                    , Test.idivHelper
                                         param_1_0
                                         (Pine_kernel.int_mul
                                             [ param_1_1
@@ -985,11 +986,7 @@ public class CodeAnalysisTests
                                             ]
                                         )
                                         0
-                                    , Pine_kernel.int_mul
-                                        [ param_1_1
-                                        , 17
-                                        ]
-                                    , -1
+                                    , param_1_1
                                     ]
                                 ]
                             )
@@ -1404,7 +1401,7 @@ public class CodeAnalysisTests
                                     (Pine_kernel.head
                                         (Pine_kernel.skip
                                             [ 1
-                                            , zzz_anon_ea679199_b65beb0f
+                                            , zzz_anon_ea679199_24f2a3d1
                                                 param_1_0
                                                 param_1_1
                                                 param_1_2
@@ -1417,7 +1414,7 @@ public class CodeAnalysisTests
                         Pine_kernel.equal
                             [ RBNode_elm_builtin
                             , Pine_kernel.head
-                                (zzz_anon_ea679199_b65beb0f
+                                (zzz_anon_ea679199_24f2a3d1
                                     param_1_0
                                     param_1_1
                                     param_1_2)
@@ -1434,7 +1431,7 @@ public class CodeAnalysisTests
                               , Pine_kernel.head
                                   (Pine_kernel.skip
                                       [ 1
-                                      , zzz_anon_ea679199_b65beb0f
+                                      , zzz_anon_ea679199_24f2a3d1
                                           param_1_0
                                           param_1_1
                                           param_1_2
@@ -1448,7 +1445,7 @@ public class CodeAnalysisTests
                               , Pine_kernel.head
                                   (Pine_kernel.skip
                                       [ 1
-                                      , zzz_anon_ea679199_b65beb0f
+                                      , zzz_anon_ea679199_24f2a3d1
                                           param_1_0
                                           param_1_1
                                           param_1_2
@@ -1462,7 +1459,7 @@ public class CodeAnalysisTests
                               , Pine_kernel.head
                                   (Pine_kernel.skip
                                       [ 1
-                                      , zzz_anon_ea679199_b65beb0f
+                                      , zzz_anon_ea679199_24f2a3d1
                                           param_1_0
                                           param_1_1
                                           param_1_2
@@ -1476,7 +1473,7 @@ public class CodeAnalysisTests
                               , Pine_kernel.head
                                   (Pine_kernel.skip
                                       [ 1
-                                      , zzz_anon_ea679199_b65beb0f
+                                      , zzz_anon_ea679199_24f2a3d1
                                           param_1_0
                                           param_1_1
                                           param_1_2
@@ -1488,7 +1485,7 @@ public class CodeAnalysisTests
                     ]
 
                 else
-                    zzz_anon_ea679199_b65beb0f
+                    zzz_anon_ea679199_24f2a3d1
                         param_1_0
                         param_1_1
                         param_1_2
@@ -1642,7 +1639,7 @@ public class CodeAnalysisTests
                     ]
 
 
-            zzz_anon_ea679199_b65beb0f param_1_0 param_1_1 param_1_2 =
+            zzz_anon_ea679199_24f2a3d1 param_1_0 param_1_1 param_1_2 =
                 if
                     Pine_kernel.equal
                         [ RBEmpty_elm_builtin
@@ -1677,7 +1674,7 @@ public class CodeAnalysisTests
                             param_1_2[1][0]
                             param_1_2[1][1]
                             param_1_2[1][2]
-                            (zzz_anon_ea679199_b65beb0f
+                            (zzz_anon_ea679199_24f2a3d1
                                 param_1_0
                                 param_1_1
                                 param_1_2[1][3])
@@ -1715,7 +1712,7 @@ public class CodeAnalysisTests
                             param_1_2[1][1]
                             param_1_2[1][2]
                             param_1_2[1][3]
-                            (zzz_anon_ea679199_b65beb0f
+                            (zzz_anon_ea679199_24f2a3d1
                                 param_1_0
                                 param_1_1
                                 param_1_2[1][4])

@@ -52,7 +52,7 @@ public class OptimizeAndEmitDictInsertTests
                     PineValue param_1_2)
                 {
                     PineValue local_003 =
-                        Global_Anonymous.zzz_anon_ea679199_b65beb0f(param_1_0, param_1_1, param_1_2);
+                        Global_Anonymous.zzz_anon_ea679199_24f2a3d1(param_1_0, param_1_1, param_1_2);
 
                     PineValue local_004 =
                         PineValueExtension.ValueFromPathOrEmptyList(
@@ -611,7 +611,7 @@ public class OptimizeAndEmitDictInsertTests
                 }
 
 
-                public static PineValue zzz_anon_ea679199_b65beb0f(
+                public static PineValue zzz_anon_ea679199_24f2a3d1(
                     PineValue param_1_0,
                     PineValue param_1_1,
                     PineValue param_1_2)
@@ -663,7 +663,7 @@ public class OptimizeAndEmitDictInsertTests
                                     PineValueExtension.ValueFromPathOrEmptyList(
                                         local_003,
                                         [2]),
-                                    Global_Anonymous.zzz_anon_ea679199_b65beb0f(
+                                    Global_Anonymous.zzz_anon_ea679199_24f2a3d1(
                                         param_1_0,
                                         param_1_1,
                                         PineValueExtension.ValueFromPathOrEmptyList(
@@ -711,7 +711,7 @@ public class OptimizeAndEmitDictInsertTests
                                     PineValueExtension.ValueFromPathOrEmptyList(
                                         local_003,
                                         [3]),
-                                    Global_Anonymous.zzz_anon_ea679199_b65beb0f(
+                                    Global_Anonymous.zzz_anon_ea679199_24f2a3d1(
                                         param_1_0,
                                         param_1_1,
                                         PineValueExtension.ValueFromPathOrEmptyList(

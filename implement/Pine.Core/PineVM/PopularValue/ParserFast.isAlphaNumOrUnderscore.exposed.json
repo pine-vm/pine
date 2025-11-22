@@ -5,107 +5,55 @@
       { "BlobAsString": "Conditional" },
       [
         [
-          { "BlobAsString": "ParseAndEval" },
+          { "BlobAsString": "Conditional" },
           [
             [
-              { "BlobAsString": "Literal" },
+              { "BlobAsString": "KernelApplication" },
               [
+                { "BlobAsString": "int_is_sorted_asc" },
                 [
-                  { "BlobAsString": "Conditional" },
+                  { "BlobAsString": "List" },
                   [
                     [
-                      { "BlobAsString": "KernelApplication" },
                       [
-                        { "BlobAsString": "int_is_sorted_asc" },
+                        { "BlobAsString": "Literal" },
+                        [ 65 ]
+                      ],
+                      [
+                        { "BlobAsString": "KernelApplication" },
                         [
-                          { "BlobAsString": "List" },
+                          { "BlobAsString": "concat" },
                           [
+                            { "BlobAsString": "List" },
                             [
                               [
-                                { "BlobAsString": "Literal" },
-                                [ 65 ]
-                              ],
-                              [
-                                { "BlobAsString": "KernelApplication" },
                                 [
-                                  { "BlobAsString": "head" },
-                                  [
-                                    { "BlobAsString": "KernelApplication" },
-                                    [
-                                      { "BlobAsString": "skip" },
-                                      [
-                                        { "BlobAsString": "List" },
-                                        [
-                                          [
-                                            [
-                                              { "BlobAsString": "Literal" },
-                                              [ 1 ]
-                                            ],
-                                            [
-                                              { "BlobAsString": "KernelApplication" },
-                                              [
-                                                { "BlobAsString": "head" },
-                                                [
-                                                  { "BlobAsString": "Environment" },
-                                                  []
-                                                ]
-                                              ]
-                                            ]
-                                          ]
-                                        ]
-                                      ]
-                                    ]
-                                  ]
-                                ]
-                              ],
-                              [
-                                { "BlobAsString": "Literal" },
-                                [ 90 ]
-                              ]
-                            ]
-                          ]
-                        ]
-                      ]
-                    ],
-                    [
-                      { "BlobAsString": "Conditional" },
-                      [
-                        [
-                          { "BlobAsString": "KernelApplication" },
-                          [
-                            { "BlobAsString": "int_is_sorted_asc" },
-                            [
-                              { "BlobAsString": "List" },
-                              [
+                                  { "BlobAsString": "Literal" },
+                                  [ { "AsBase64": "BA==" } ]
+                                ],
                                 [
+                                  { "BlobAsString": "KernelApplication" },
                                   [
-                                    { "BlobAsString": "Literal" },
-                                    [ 97 ]
-                                  ],
-                                  [
-                                    { "BlobAsString": "KernelApplication" },
+                                    { "BlobAsString": "head" },
                                     [
-                                      { "BlobAsString": "head" },
+                                      { "BlobAsString": "KernelApplication" },
                                       [
-                                        { "BlobAsString": "KernelApplication" },
+                                        { "BlobAsString": "head" },
                                         [
-                                          { "BlobAsString": "skip" },
+                                          { "BlobAsString": "KernelApplication" },
                                           [
-                                            { "BlobAsString": "List" },
+                                            { "BlobAsString": "skip" },
                                             [
+                                              { "BlobAsString": "List" },
                                               [
                                                 [
-                                                  { "BlobAsString": "Literal" },
-                                                  [ 1 ]
-                                                ],
-                                                [
-                                                  { "BlobAsString": "KernelApplication" },
                                                   [
-                                                    { "BlobAsString": "head" },
-                                                    [
-                                                      { "BlobAsString": "Environment" },
-                                                      []
-                                                    ]
+                                                    { "BlobAsString": "Literal" },
+                                                    [ 1 ]
+                                                  ],
+                                                  [
+                                                    { "BlobAsString": "Environment" },
+                                                    []
                                                   ]
                                                 ]
                                               ]
@@ -114,160 +62,73 @@
                                         ]
                                       ]
                                     ]
-                                  ],
-                                  [
-                                    { "BlobAsString": "Literal" },
-                                    [ 122 ]
                                   ]
                                 ]
                               ]
                             ]
                           ]
-                        ],
-                        [
-                          { "BlobAsString": "KernelApplication" },
-                          [
-                            { "BlobAsString": "int_is_sorted_asc" },
-                            [
-                              { "BlobAsString": "List" },
-                              [
-                                [
-                                  [
-                                    { "BlobAsString": "Literal" },
-                                    [ 48 ]
-                                  ],
-                                  [
-                                    { "BlobAsString": "KernelApplication" },
-                                    [
-                                      { "BlobAsString": "head" },
-                                      [
-                                        { "BlobAsString": "KernelApplication" },
-                                        [
-                                          { "BlobAsString": "skip" },
-                                          [
-                                            { "BlobAsString": "List" },
-                                            [
-                                              [
-                                                [
-                                                  { "BlobAsString": "Literal" },
-                                                  [ 1 ]
-                                                ],
-                                                [
-                                                  { "BlobAsString": "KernelApplication" },
-                                                  [
-                                                    { "BlobAsString": "head" },
-                                                    [
-                                                      { "BlobAsString": "Environment" },
-                                                      []
-                                                    ]
-                                                  ]
-                                                ]
-                                              ]
-                                            ]
-                                          ]
-                                        ]
-                                      ]
-                                    ]
-                                  ],
-                                  [
-                                    { "BlobAsString": "Literal" },
-                                    [ 57 ]
-                                  ]
-                                ]
-                              ]
-                            ]
-                          ]
-                        ],
-                        [
-                          { "BlobAsString": "Literal" },
-                          [ { "AsBase64": "BA==" } ]
                         ]
+                      ],
+                      [
+                        { "BlobAsString": "Literal" },
+                        [ 90 ]
                       ]
-                    ],
-                    [
-                      { "BlobAsString": "Literal" },
-                      [ { "AsBase64": "BA==" } ]
                     ]
                   ]
                 ]
               ]
             ],
             [
-              { "BlobAsString": "List" },
+              { "BlobAsString": "Conditional" },
               [
                 [
+                  { "BlobAsString": "KernelApplication" },
                   [
-                    { "BlobAsString": "List" },
+                    { "BlobAsString": "int_is_sorted_asc" },
                     [
+                      { "BlobAsString": "List" },
                       [
                         [
-                          { "BlobAsString": "KernelApplication" },
                           [
-                            { "BlobAsString": "head" },
-                            [
-                              { "BlobAsString": "KernelApplication" },
-                              [
-                                { "BlobAsString": "head" },
-                                [
-                                  { "BlobAsString": "KernelApplication" },
-                                  [
-                                    { "BlobAsString": "skip" },
-                                    [
-                                      { "BlobAsString": "List" },
-                                      [
-                                        [
-                                          [
-                                            { "BlobAsString": "Literal" },
-                                            [ 1 ]
-                                          ],
-                                          [
-                                            { "BlobAsString": "Environment" },
-                                            []
-                                          ]
-                                        ]
-                                      ]
-                                    ]
-                                  ]
-                                ]
-                              ]
-                            ]
-                          ]
-                        ],
-                        [
-                          { "BlobAsString": "KernelApplication" },
+                            { "BlobAsString": "Literal" },
+                            [ 97 ]
+                          ],
                           [
-                            { "BlobAsString": "concat" },
+                            { "BlobAsString": "KernelApplication" },
                             [
-                              { "BlobAsString": "List" },
+                              { "BlobAsString": "concat" },
                               [
+                                { "BlobAsString": "List" },
                                 [
                                   [
-                                    { "BlobAsString": "Literal" },
-                                    [ { "AsBase64": "BA==" } ]
-                                  ],
-                                  [
-                                    { "BlobAsString": "KernelApplication" },
                                     [
-                                      { "BlobAsString": "head" },
+                                      { "BlobAsString": "Literal" },
+                                      [ { "AsBase64": "BA==" } ]
+                                    ],
+                                    [
+                                      { "BlobAsString": "KernelApplication" },
                                       [
-                                        { "BlobAsString": "KernelApplication" },
+                                        { "BlobAsString": "head" },
                                         [
-                                          { "BlobAsString": "head" },
+                                          { "BlobAsString": "KernelApplication" },
                                           [
-                                            { "BlobAsString": "KernelApplication" },
+                                            { "BlobAsString": "head" },
                                             [
-                                              { "BlobAsString": "skip" },
+                                              { "BlobAsString": "KernelApplication" },
                                               [
-                                                { "BlobAsString": "List" },
+                                                { "BlobAsString": "skip" },
                                                 [
+                                                  { "BlobAsString": "List" },
                                                   [
                                                     [
-                                                      { "BlobAsString": "Literal" },
-                                                      [ 1 ]
-                                                    ],
-                                                    [
-                                                      { "BlobAsString": "Environment" },
-                                                      []
+                                                      [
+                                                        { "BlobAsString": "Literal" },
+                                                        [ 1 ]
+                                                      ],
+                                                      [
+                                                        { "BlobAsString": "Environment" },
+                                                        []
+                                                      ]
                                                     ]
                                                   ]
                                                 ]
@@ -281,17 +142,96 @@
                                 ]
                               ]
                             ]
+                          ],
+                          [
+                            { "BlobAsString": "Literal" },
+                            [ 122 ]
                           ]
                         ]
                       ]
                     ]
-                  ],
-                  [
-                    { "BlobAsString": "Literal" },
-                    [ [] ]
                   ]
+                ],
+                [
+                  { "BlobAsString": "KernelApplication" },
+                  [
+                    { "BlobAsString": "int_is_sorted_asc" },
+                    [
+                      { "BlobAsString": "List" },
+                      [
+                        [
+                          [
+                            { "BlobAsString": "Literal" },
+                            [ 48 ]
+                          ],
+                          [
+                            { "BlobAsString": "KernelApplication" },
+                            [
+                              { "BlobAsString": "concat" },
+                              [
+                                { "BlobAsString": "List" },
+                                [
+                                  [
+                                    [
+                                      { "BlobAsString": "Literal" },
+                                      [ { "AsBase64": "BA==" } ]
+                                    ],
+                                    [
+                                      { "BlobAsString": "KernelApplication" },
+                                      [
+                                        { "BlobAsString": "head" },
+                                        [
+                                          { "BlobAsString": "KernelApplication" },
+                                          [
+                                            { "BlobAsString": "head" },
+                                            [
+                                              { "BlobAsString": "KernelApplication" },
+                                              [
+                                                { "BlobAsString": "skip" },
+                                                [
+                                                  { "BlobAsString": "List" },
+                                                  [
+                                                    [
+                                                      [
+                                                        { "BlobAsString": "Literal" },
+                                                        [ 1 ]
+                                                      ],
+                                                      [
+                                                        { "BlobAsString": "Environment" },
+                                                        []
+                                                      ]
+                                                    ]
+                                                  ]
+                                                ]
+                                              ]
+                                            ]
+                                          ]
+                                        ]
+                                      ]
+                                    ]
+                                  ]
+                                ]
+                              ]
+                            ]
+                          ],
+                          [
+                            { "BlobAsString": "Literal" },
+                            [ 57 ]
+                          ]
+                        ]
+                      ]
+                    ]
+                  ]
+                ],
+                [
+                  { "BlobAsString": "Literal" },
+                  [ { "AsBase64": "BA==" } ]
                 ]
               ]
+            ],
+            [
+              { "BlobAsString": "Literal" },
+              [ { "AsBase64": "BA==" } ]
             ]
           ]
         ],

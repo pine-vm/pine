@@ -436,6 +436,29 @@
                                       ]
                                     }
                                   ]
+                                },
+                                {
+                                  "KernelApplication": [
+                                    "head",
+                                    {
+                                      "KernelApplication": [
+                                        "skip",
+                                        {
+                                          "List": [
+                                            [
+                                              { "Literal": [ 16 ] },
+                                              {
+                                                "KernelApplication": [
+                                                  "head",
+                                                  { "Environment": [] }
+                                                ]
+                                              }
+                                            ]
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
                                 }
                               ]
                             ]

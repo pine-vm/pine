@@ -13,6 +13,7 @@ module FirCompiler exposing
     , ParsedFunctionValue(..)
     , attemptReduceParseAndEvalExpressionRecursive
     , buildRecordOfPartiallyAppliedFunction
+    , containsAnyFunctionApplicationExpression
     , countListElementsExpression
     , emitDeclarationBlock
     , emitExpression
@@ -2669,6 +2670,47 @@ listFunctionAppExpressions expr =
 
         PineFunctionApplicationExpression _ argument ->
             listFunctionAppExpressions argument
+
+
+containsAnyFunctionApplicationExpression : Expression -> Bool
+containsAnyFunctionApplicationExpression expression =
+    case expression of
+        FunctionApplicationExpression _ _ ->
+            True
+
+        LiteralExpression _ ->
+            False
+
+        ListExpression list ->
+            List.any containsAnyFunctionApplicationExpression list
+
+        KernelApplicationExpression _ argument ->
+            containsAnyFunctionApplicationExpression argument
+
+        ConditionalExpression condition falseBranch trueBranch ->
+            containsAnyFunctionApplicationExpression condition
+                || containsAnyFunctionApplicationExpression falseBranch
+                || containsAnyFunctionApplicationExpression trueBranch
+
+        FunctionExpression _ functionBody ->
+            containsAnyFunctionApplicationExpression functionBody
+
+        ReferenceExpression _ _ ->
+            False
+
+        DeclarationBlockExpression declarations innerExpression ->
+            List.any
+                (\( _, declExpr ) ->
+                    containsAnyFunctionApplicationExpression declExpr
+                )
+                declarations
+                || containsAnyFunctionApplicationExpression innerExpression
+
+        StringTagExpression _ tagged ->
+            containsAnyFunctionApplicationExpression tagged
+
+        PineFunctionApplicationExpression _ argument ->
+            containsAnyFunctionApplicationExpression argument
 
 
 inlineLocalReferences : List ( String, Expression ) -> Expression -> Expression

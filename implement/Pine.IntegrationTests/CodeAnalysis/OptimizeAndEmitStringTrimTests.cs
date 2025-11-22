@@ -56,7 +56,7 @@ public class OptimizeAndEmitStringTrimTests
                                     [
                                         KernelFunctionFused.TakeAndSkip(
                                             skipCountValue:
-                                            Global_Anonymous.zzz_anon_449d95bc_da6f86d5(CommonReusedValues.Blob_Int_0, local_000),
+                                            Global_Anonymous.zzz_anon_7b433b8b_d4fe90b2(CommonReusedValues.Blob_Int_0, local_000),
                                             takeCountValue:
                                             Global_Anonymous.zzz_anon_627f403e_dca18c16(
                                                 KernelFunction.length(local_000),
@@ -73,44 +73,6 @@ public class OptimizeAndEmitStringTrimTests
             """"
             public static class Global_Anonymous
             {
-                public static PineValue zzz_anon_449d95bc_da6f86d5(
-                    PineValue param_1_0,
-                    PineValue param_1_1)
-                {
-                    PineValue local_param_1_0 =
-                        param_1_0;
-
-                    PineValue local_param_1_1 =
-                        param_1_1;
-
-                    while (true)
-                    {
-                        PineValue local_000 =
-                            KernelFunctionFused.SkipAndTake(takeCount: 4, skipCountValue: local_param_1_0, argument: local_param_1_1);
-
-                        if (KernelFunctionSpecialized.length_as_int(local_000) == 0)
-                        {
-                            return local_param_1_0;
-                        }
-
-                        if (Global_Anonymous.zzz_anon_d97a2014_dda26649(local_000) == PineKernelValues.TrueValue)
-                        {
-                            {
-                                PineValue local_param_1_0_temp =
-                                    KernelFunctionSpecialized.int_add(4, local_param_1_0);
-
-                                local_param_1_0 =
-                                    local_param_1_0_temp;
-                            }
-
-                            continue;
-                        }
-
-                        return local_param_1_0;
-                    }
-                }
-
-
                 public static PineValue zzz_anon_627f403e_dca18c16(
                     PineValue param_1_0,
                     PineValue param_1_1)
@@ -138,6 +100,44 @@ public class OptimizeAndEmitStringTrimTests
                             {
                                 PineValue local_param_1_0_temp =
                                     KernelFunctionSpecialized.int_add(-4, local_param_1_0);
+
+                                local_param_1_0 =
+                                    local_param_1_0_temp;
+                            }
+
+                            continue;
+                        }
+
+                        return local_param_1_0;
+                    }
+                }
+
+
+                public static PineValue zzz_anon_7b433b8b_d4fe90b2(
+                    PineValue param_1_0,
+                    PineValue param_1_1)
+                {
+                    PineValue local_param_1_0 =
+                        param_1_0;
+
+                    PineValue local_param_1_1 =
+                        param_1_1;
+
+                    while (true)
+                    {
+                        PineValue local_000 =
+                            KernelFunctionFused.SkipAndTake(takeCount: 4, skipCountValue: local_param_1_0, argument: local_param_1_1);
+
+                        if (KernelFunctionSpecialized.length_as_int(local_000) == 0)
+                        {
+                            return local_param_1_0;
+                        }
+
+                        if (Global_Anonymous.zzz_anon_d97a2014_dda26649(local_000) == PineKernelValues.TrueValue)
+                        {
+                            {
+                                PineValue local_param_1_0_temp =
+                                    KernelFunctionSpecialized.int_add(4, local_param_1_0);
 
                                 local_param_1_0 =
                                     local_param_1_0_temp;
