@@ -93,6 +93,12 @@ public class BytesConversions
     /// </summary>
     public static ReadOnlyMemory<T> Concat<T>(IReadOnlyList<ReadOnlyMemory<T>> list)
     {
+        if (list.Count is 0)
+            return ReadOnlyMemory<T>.Empty;
+
+        if (list.Count is 1)
+            return list[0];
+
         var aggregateLength = 0;
 
         for (var i = 0; i < list.Count; ++i)
