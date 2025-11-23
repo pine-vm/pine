@@ -2236,20 +2236,7 @@ tryReduceFunctionRecordViaInlining (ParsedFunctionValue innerFuncValue outerFunc
                         findExprReplacement origSubexpr =
                             case origSubexpr of
                                 -- Check for match of adaptivePartialApplicationExpression
-                                Pine.ParseAndEvalExpression encodedExpr (Pine.ListExpression [ applicationFunctionExpr, appliedFuncExpr, argsExpr ]) ->
-                                    let
-                                        argsCount : Int
-                                        argsCount =
-                                            case argsExpr of
-                                                Pine.ListExpression argsList ->
-                                                    List.length argsList
-
-                                                Pine.LiteralExpression (Pine.ListValue argsList) ->
-                                                    List.length argsList
-
-                                                _ ->
-                                                    0
-                                    in
+                                Pine.ParseAndEvalExpression encodedExpr (Pine.ListExpression [ applicationFunctionExpr, appliedFuncExpr, newArgsExpr ]) ->
                                     if
                                         (encodedExpr == applyAdaptiveExpectedExpr)
                                             && (applicationFunctionExpr == applyAdaptiveExpectedExpr)
@@ -2258,38 +2245,61 @@ tryReduceFunctionRecordViaInlining (ParsedFunctionValue innerFuncValue outerFunc
                                             Just funcValueResolved ->
                                                 case parseFunctionRecordFromValueTagged funcValueResolved of
                                                     Ok (ParsedFunctionValue _ innerFuncParseExpr innerParamCount (ParsedFunctionEnvFunctions innerEnvFuncItems) innerArgsEarlier) ->
-                                                        case innerFuncParseExpr () of
-                                                            Ok appliedFuncInnerExpr ->
-                                                                if
-                                                                    (List.length innerArgsEarlier == 0)
-                                                                        && (innerParamCount == argsCount)
-                                                                then
-                                                                    let
-                                                                        mappedEnvironment =
-                                                                            Pine.ListExpression
-                                                                                [ Pine.LiteralExpression (Pine.ListValue innerEnvFuncItems)
-                                                                                , argsExpr
-                                                                                ]
+                                                        let
+                                                            innerArgsEarlierExprs : List Pine.Expression
+                                                            innerArgsEarlierExprs =
+                                                                List.map Pine.LiteralExpression innerArgsEarlier
 
-                                                                        findReplacementForExpression expression =
-                                                                            case expression of
-                                                                                Pine.EnvironmentExpression ->
-                                                                                    Just mappedEnvironment
+                                                            maybeAggregateArgs : Maybe (List Pine.Expression)
+                                                            maybeAggregateArgs =
+                                                                case newArgsExpr of
+                                                                    Pine.ListExpression argsList ->
+                                                                        Just (List.concat [ innerArgsEarlierExprs, argsList ])
 
-                                                                                _ ->
-                                                                                    Nothing
+                                                                    Pine.LiteralExpression (Pine.ListValue argsItemsValues) ->
+                                                                        let
+                                                                            argsItemsExprs =
+                                                                                List.map Pine.LiteralExpression argsItemsValues
+                                                                        in
+                                                                        Just (List.concat [ innerArgsEarlierExprs, argsItemsExprs ])
 
-                                                                        ( innerExprMapped, _ ) =
-                                                                            transformPineExpressionWithOptionalReplacement
-                                                                                findReplacementForExpression
-                                                                                appliedFuncInnerExpr
-                                                                    in
-                                                                    Just innerExprMapped
+                                                                    _ ->
+                                                                        Nothing
+                                                        in
+                                                        case maybeAggregateArgs of
+                                                            Just aggregateArgsExprItems ->
+                                                                if innerParamCount == List.length aggregateArgsExprItems then
+                                                                    case innerFuncParseExpr () of
+                                                                        Ok appliedFuncInnerExpr ->
+                                                                            let
+                                                                                mappedEnvironment =
+                                                                                    Pine.ListExpression
+                                                                                        [ Pine.LiteralExpression (Pine.ListValue innerEnvFuncItems)
+                                                                                        , Pine.ListExpression aggregateArgsExprItems
+                                                                                        ]
+
+                                                                                findReplacementForExpression expression =
+                                                                                    case expression of
+                                                                                        Pine.EnvironmentExpression ->
+                                                                                            Just mappedEnvironment
+
+                                                                                        _ ->
+                                                                                            Nothing
+
+                                                                                ( innerExprMapped, _ ) =
+                                                                                    transformPineExpressionWithOptionalReplacement
+                                                                                        findReplacementForExpression
+                                                                                        appliedFuncInnerExpr
+                                                                            in
+                                                                            Just innerExprMapped
+
+                                                                        Err _ ->
+                                                                            Nothing
 
                                                                 else
                                                                     Nothing
 
-                                                            Err _ ->
+                                                            Nothing ->
                                                                 Nothing
 
                                                     Err _ ->
