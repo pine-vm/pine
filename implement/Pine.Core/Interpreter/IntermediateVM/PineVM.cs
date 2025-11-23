@@ -33,6 +33,8 @@ public class PineVM : IPineVM
 
     public readonly PineVMParseCache ParseCache;
 
+    private readonly Dictionary<Expression, PineValue> _encodeExpressionCache = [];
+
     private readonly IReadOnlyDictionary<PineValue, Func<PineValue, PineValue?>>? _precompiledLeaves;
 
     private readonly Action<PineValue, PineValue>? _reportEnterPrecompiledLeaf;
@@ -234,8 +236,7 @@ public class PineVM : IPineVM
 
         OptimizationParametersSerial.ExpressionConfig? optimizationConfig = null;
 
-        var exprValue =
-            ExpressionEncoding.EncodeExpressionAsValue(rootExpression);
+        var exprValue = EncodeExpressionAsValue(rootExpression);
 
         var (exprHashBytes, _) =
             PineValueHashFlat.ComputeHashForValue(exprValue);
@@ -301,7 +302,7 @@ public class PineVM : IPineVM
 
                     case PrecompiledResult.ContinueParseAndEval continueParseAndEval:
                         {
-                            var contParseResult = ParseCache.ParseExpression(continueParseAndEval.ExpressionValue);
+                            var contParseResult = ParseExpression(continueParseAndEval.ExpressionValue);
 
                             if (contParseResult.IsErrOrNull() is { } contParseErr)
                             {
@@ -568,8 +569,7 @@ public class PineVM : IPineVM
 
             if (stack.Count is 0)
             {
-                var rootExprValue =
-                    ExpressionEncoding.EncodeExpressionAsValue(rootExpression);
+                var rootExprValue = EncodeExpressionAsValue(rootExpression);
 
                 return new EvaluationReport(
                     ExpressionValue: rootExprValue,
@@ -1477,7 +1477,7 @@ public class PineVM : IPineVM
                                 {
                                     var stackTraceHashes =
                                         CompileStackTrace(100)
-                                        .Select(expr => s_mutableCacheValueHash.GetHash(ExpressionEncoding.EncodeExpressionAsValue(expr)))
+                                        .Select(expr => s_mutableCacheValueHash.GetHash(EncodeExpressionAsValue(expr)))
                                         .ToArray();
 
                                     return
@@ -1498,7 +1498,7 @@ public class PineVM : IPineVM
                             var replaceCurrentFrame =
                                 followingInstruction.Kind is StackInstructionKind.Return;
 
-                            var parseResult = ParseCache.ParseExpression(expressionValue);
+                            var parseResult = ParseExpression(expressionValue);
 
                             if (parseResult.IsErrOrNull() is { } parseErr)
                             {
@@ -1902,6 +1902,34 @@ public class PineVM : IPineVM
                     errorReport);
             }
         }
+    }
+
+    private PineValue EncodeExpressionAsValue(Expression expression)
+    {
+        if (_encodeExpressionCache.TryGetValue(expression, out var cachedValue))
+        {
+            return (PineValue.ListValue)cachedValue;
+        }
+
+        var expressionValue =
+            ExpressionEncoding.EncodeExpressionAsValue(expression);
+
+        _encodeExpressionCache[expression] = expressionValue;
+
+        return expressionValue;
+    }
+
+    private Result<string, Expression> ParseExpression(PineValue expressionValue)
+    {
+        var fromCache =
+            ParseCache.ParseExpression(expressionValue);
+
+        if (fromCache.IsOkOrNull() is { } parseOk)
+        {
+            _encodeExpressionCache[parseOk] = expressionValue;
+        }
+
+        return fromCache;
     }
 
     public static string DescribeValueForErrorMessage(PineValue pineValue) =>
