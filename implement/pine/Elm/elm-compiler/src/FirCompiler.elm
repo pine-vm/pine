@@ -2208,6 +2208,9 @@ tryReduceFunctionRecordViaInlining (ParsedFunctionValue innerFuncValue outerFunc
                         Just [ 0, envFuncIndex ] ->
                             List.head (List.drop envFuncIndex outerEnvFunctions)
 
+                        Just [ 1, argIndex ] ->
+                            List.head (List.drop argIndex outerArgsEarlier)
+
                         _ ->
                             Nothing
     in

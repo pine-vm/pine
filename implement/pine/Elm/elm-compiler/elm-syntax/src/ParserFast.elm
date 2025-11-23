@@ -3569,20 +3569,20 @@ ifFollowedByWhileValidateMapWithRangeWithoutLinebreak toResult firstIsOkay after
                 s0ColInt =
                     s0Col
 
-                firstOffset : Int
-                firstOffset =
-                    isSubCharWithoutLinebreak firstIsOkay s0Offset s0SrcBytes
+                nextCharBytes : Int
+                nextCharBytes =
+                    Pine_kernel.take
+                        [ 4
+                        , Pine_kernel.skip [ s0Offset, s0SrcBytes ]
+                        ]
             in
-            if firstOffset == -1 then
-                Bad False (ExpectingCharSatisfyingPredicate s0Row s0Col)
-
-            else
+            if firstIsOkay nextCharBytes then
                 let
                     s1 : State
                     s1 =
                         skipWhileWithoutLinebreakHelp
                             afterFirstIsOkay
-                            firstOffset
+                            (Pine_kernel.int_add [ s0Offset, 4 ])
                             s0Row
                             (Pine_kernel.int_add [ s0ColInt, 1 ])
                             s0SrcBytes
@@ -3621,6 +3621,9 @@ ifFollowedByWhileValidateMapWithRangeWithoutLinebreak toResult firstIsOkay after
 
                 else
                     Bad False (ExpectingStringSatisfyingPredicate s0Row (Pine_kernel.int_add [ s0ColInt, 1 ]))
+
+            else
+                Bad False (ExpectingCharSatisfyingPredicate s0Row s0Col)
         )
 
 
@@ -3636,20 +3639,20 @@ ifFollowedByWhileWithoutLinebreak firstIsOkay afterFirstIsOkay =
                 sColInt =
                     sCol
 
-                firstOffset : Int
-                firstOffset =
-                    isSubCharWithoutLinebreak firstIsOkay sOffset sSrcBytes
+                nextCharBytes : Int
+                nextCharBytes =
+                    Pine_kernel.take
+                        [ 4
+                        , Pine_kernel.skip [ sOffset, sSrcBytes ]
+                        ]
             in
-            if firstOffset == -1 then
-                Bad False (ExpectingCharSatisfyingPredicate sRow sCol)
-
-            else
+            if firstIsOkay nextCharBytes then
                 let
                     s1 : State
                     s1 =
                         skipWhileWithoutLinebreakHelp
                             afterFirstIsOkay
-                            firstOffset
+                            (Pine_kernel.int_add [ sOffset, 4 ])
                             sRow
                             (sColInt + 1)
                             sSrcBytes
@@ -3673,6 +3676,9 @@ ifFollowedByWhileWithoutLinebreak firstIsOkay afterFirstIsOkay =
                             ]
                 in
                 Good (String nameSliceBytes) s1
+
+            else
+                Bad False (ExpectingCharSatisfyingPredicate sRow sCol)
         )
 
 
@@ -3685,20 +3691,20 @@ ifFollowedByWhileMapWithRangeWithoutLinebreak rangeAndConsumedStringToRes firstI
     Parser
         (\(PState s0SrcBytes s0Offset s0Indent s0Row s0Col) ->
             let
-                firstOffset : Int
-                firstOffset =
-                    isSubCharWithoutLinebreak firstIsOkay s0Offset s0SrcBytes
+                nextCharBytes : Int
+                nextCharBytes =
+                    Pine_kernel.take
+                        [ 4
+                        , Pine_kernel.skip [ s0Offset, s0SrcBytes ]
+                        ]
             in
-            if firstOffset == -1 then
-                Bad False (ExpectingCharSatisfyingPredicate s0Row s0Col)
-
-            else
+            if firstIsOkay nextCharBytes then
                 let
                     s1 : State
                     s1 =
                         skipWhileWithoutLinebreakHelp
                             afterFirstIsOkay
-                            firstOffset
+                            (Pine_kernel.int_add [ s0Offset, 4 ])
                             s0Row
                             (Pine_kernel.int_add [ s0Col, 1 ])
                             s0SrcBytes
@@ -3733,6 +3739,9 @@ ifFollowedByWhileMapWithRangeWithoutLinebreak rangeAndConsumedStringToRes firstI
                         (String consumedBytes)
                     )
                     s1
+
+            else
+                Bad False (ExpectingCharSatisfyingPredicate s0Row s0Col)
         )
 
 
