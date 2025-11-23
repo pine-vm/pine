@@ -18,6 +18,7 @@ module FirCompiler exposing
     , emitDeclarationBlock
     , emitExpression
     , emitExpressionInDeclarationBlock
+    , emitFunctionRecordAsValueTagged
     , emitWrapperForPartialApplication
     , emitWrapperForPartialApplicationZero
     , equalCondition
@@ -39,6 +40,8 @@ module FirCompiler exposing
     , pineKernel_Head
     , pineKernel_Head_Pine
     , recursionDomainsFromDeclarationDependencies
+    , tryReduceFunctionRecord
+    , tryReduceFunctionRecordViaInlining
     )
 
 import Common
@@ -2173,6 +2176,291 @@ updateRecordOfPartiallyAppliedFunction config =
             , config.parameterCountExpression
             , config.getEnvFunctionsExpression
             , config.argumentsAlreadyCollectedExpression
+            ]
+        ]
+
+
+tryReduceFunctionRecord : ParsedFunctionValue -> Maybe ParsedFunctionValue
+tryReduceFunctionRecord functionRecord =
+    case tryReduceFunctionRecordViaInlining functionRecord of
+        Just reduced ->
+            Just (reduceFunctionRecordRemovingUnusedEnvFunctions reduced)
+
+        Nothing ->
+            Nothing
+
+
+tryReduceFunctionRecordViaInlining : ParsedFunctionValue -> Maybe ParsedFunctionValue
+tryReduceFunctionRecordViaInlining (ParsedFunctionValue innerFuncValue outerFuncParseExpr outerParamCount (ParsedFunctionEnvFunctions outerEnvFunctions) outerArgsEarlier) =
+    let
+        adaptiveAppValue : Pine.Value
+        adaptiveAppValue =
+            adaptivePartialApplicationRecursiveValue ()
+
+        tryResolveValueFromInnerExpr : Pine.Expression -> Maybe Pine.Value
+        tryResolveValueFromInnerExpr expr =
+            case expr of
+                Pine.LiteralExpression v ->
+                    Just v
+
+                _ ->
+                    case Pine.tryParseExprAsPathInExpr Pine.environmentExpr expr [] of
+                        Just [ 0, envFuncIndex ] ->
+                            List.head (List.drop envFuncIndex outerEnvFunctions)
+
+                        _ ->
+                            Nothing
+    in
+    case Common.listIndexOf adaptiveAppValue outerEnvFunctions of
+        Nothing ->
+            Nothing
+
+        Just adaptiveAppIndex ->
+            let
+                applyAdaptiveExpectedExpr : Pine.Expression
+                applyAdaptiveExpectedExpr =
+                    Pine.buildExprSkipHeadPathInExpr
+                        Pine.environmentExpr
+                        [ 0, adaptiveAppIndex ]
+            in
+            case outerFuncParseExpr () of
+                Err _ ->
+                    Nothing
+
+                Ok innerExpr ->
+                    let
+                        findExprReplacement : Pine.Expression -> Maybe Pine.Expression
+                        findExprReplacement origSubexpr =
+                            case origSubexpr of
+                                -- Check for match of adaptivePartialApplicationExpression
+                                Pine.ParseAndEvalExpression encodedExpr (Pine.ListExpression [ applicationFunctionExpr, appliedFuncExpr, argsExpr ]) ->
+                                    let
+                                        argsCount : Int
+                                        argsCount =
+                                            case argsExpr of
+                                                Pine.ListExpression argsList ->
+                                                    List.length argsList
+
+                                                Pine.LiteralExpression (Pine.ListValue argsList) ->
+                                                    List.length argsList
+
+                                                _ ->
+                                                    0
+                                    in
+                                    if
+                                        (encodedExpr == applyAdaptiveExpectedExpr)
+                                            && (applicationFunctionExpr == applyAdaptiveExpectedExpr)
+                                    then
+                                        case tryResolveValueFromInnerExpr appliedFuncExpr of
+                                            Just funcValueResolved ->
+                                                case parseFunctionRecordFromValueTagged funcValueResolved of
+                                                    Ok (ParsedFunctionValue _ innerFuncParseExpr innerParamCount (ParsedFunctionEnvFunctions innerEnvFuncItems) innerArgsEarlier) ->
+                                                        case innerFuncParseExpr () of
+                                                            Ok appliedFuncInnerExpr ->
+                                                                if
+                                                                    (List.length innerArgsEarlier == 0)
+                                                                        && (innerParamCount == argsCount)
+                                                                then
+                                                                    let
+                                                                        mappedEnvironment =
+                                                                            Pine.ListExpression
+                                                                                [ Pine.LiteralExpression (Pine.ListValue innerEnvFuncItems)
+                                                                                , argsExpr
+                                                                                ]
+
+                                                                        findReplacementForExpression expression =
+                                                                            case expression of
+                                                                                Pine.EnvironmentExpression ->
+                                                                                    Just mappedEnvironment
+
+                                                                                _ ->
+                                                                                    Nothing
+
+                                                                        ( innerExprMapped, _ ) =
+                                                                            transformPineExpressionWithOptionalReplacement
+                                                                                findReplacementForExpression
+                                                                                appliedFuncInnerExpr
+                                                                    in
+                                                                    Just innerExprMapped
+
+                                                                else
+                                                                    Nothing
+
+                                                            Err _ ->
+                                                                Nothing
+
+                                                    Err _ ->
+                                                        Nothing
+
+                                            Nothing ->
+                                                Nothing
+
+                                    else
+                                        Nothing
+
+                                Pine.ParseAndEvalExpression encodedExpr anyEnv ->
+                                    Nothing
+
+                                _ ->
+                                    Nothing
+
+                        innerExprAfterReplacement : Pine.Expression
+                        innerExprAfterReplacement =
+                            case
+                                transformPineExpressionWithOptionalReplacement
+                                    findExprReplacement
+                                    innerExpr
+                            of
+                                ( replacedExpr, _ ) ->
+                                    replacedExpr
+                    in
+                    if innerExprAfterReplacement == innerExpr then
+                        Nothing
+
+                    else
+                        let
+                            newExpr : Pine.Expression
+                            newExpr =
+                                innerExprAfterReplacement
+                                    |> searchForExpressionReductionRecursive 5
+                                    |> reduceExpressionToLiteralIfIndependent
+
+                            newExprEncodedAsValue : Pine.Value
+                            newExprEncodedAsValue =
+                                Pine.encodeExpressionAsValue newExpr
+                        in
+                        Just
+                            (ParsedFunctionValue
+                                newExprEncodedAsValue
+                                (always (Ok newExpr))
+                                outerParamCount
+                                (ParsedFunctionEnvFunctions outerEnvFunctions)
+                                outerArgsEarlier
+                            )
+
+
+reduceFunctionRecordRemovingUnusedEnvFunctions :
+    ParsedFunctionValue
+    -> ParsedFunctionValue
+reduceFunctionRecordRemovingUnusedEnvFunctions ((ParsedFunctionValue innerFunctionValue parseInnerExpr paramCount (ParsedFunctionEnvFunctions envFunctions) argsCollected) as origFunctionRecord) =
+    let
+        allPathsIntoEnvironment : List (List Int)
+        allPathsIntoEnvironment =
+            case parseInnerExpr () of
+                Err _ ->
+                    []
+
+                Ok innerExpr ->
+                    listPathsIntoEnvironment innerExpr
+
+        usesAllEnvFunctions : Bool
+        usesAllEnvFunctions =
+            List.any
+                (\path ->
+                    case path of
+                        [] ->
+                            True
+
+                        [ 0 ] ->
+                            True
+
+                        _ ->
+                            False
+                )
+                allPathsIntoEnvironment
+    in
+    if usesAllEnvFunctions then
+        origFunctionRecord
+
+    else
+        let
+            usedEnvFunctionIndices : List Int
+            usedEnvFunctionIndices =
+                allPathsIntoEnvironment
+                    |> List.concatMap
+                        (\path ->
+                            case path of
+                                0 :: envFuncIndex :: [] ->
+                                    [ envFuncIndex ]
+
+                                _ ->
+                                    []
+                        )
+                    |> Common.listUnique
+
+            envFunctionsFiltered : List Pine.Value
+            envFunctionsFiltered =
+                List.indexedMap
+                    (\index envFuncValue ->
+                        ( index, envFuncValue )
+                    )
+                    envFunctions
+                    |> List.map
+                        (\( index, origValue ) ->
+                            if List.member index usedEnvFunctionIndices then
+                                ( index, origValue )
+
+                            else
+                                ( index, Pine.BlobValue [] )
+                        )
+                    |> List.map Tuple.second
+        in
+        ParsedFunctionValue
+            innerFunctionValue
+            parseInnerExpr
+            paramCount
+            (ParsedFunctionEnvFunctions envFunctionsFiltered)
+            argsCollected
+
+
+listPathsIntoEnvironment : Pine.Expression -> List (List Int)
+listPathsIntoEnvironment expr =
+    case Pine.tryParseExprAsPathInExpr Pine.environmentExpr expr [] of
+        Just path ->
+            [ path ]
+
+        Nothing ->
+            case expr of
+                Pine.LiteralExpression _ ->
+                    []
+
+                Pine.ListExpression list ->
+                    List.concatMap listPathsIntoEnvironment list
+
+                Pine.ParseAndEvalExpression encodedExpr envExpr ->
+                    List.concat
+                        [ listPathsIntoEnvironment encodedExpr
+                        , listPathsIntoEnvironment envExpr
+                        ]
+
+                Pine.KernelApplicationExpression _ argument ->
+                    listPathsIntoEnvironment argument
+
+                Pine.ConditionalExpression condition falseBranch trueBranch ->
+                    List.concat
+                        [ listPathsIntoEnvironment condition
+                        , listPathsIntoEnvironment falseBranch
+                        , listPathsIntoEnvironment trueBranch
+                        ]
+
+                Pine.EnvironmentExpression ->
+                    []
+
+                Pine.StringTagExpression _ tagged ->
+                    listPathsIntoEnvironment tagged
+
+
+emitFunctionRecordAsValueTagged :
+    ParsedFunctionValue
+    -> Pine.Value
+emitFunctionRecordAsValueTagged (ParsedFunctionValue innerFunctionValue _ parameterCount (ParsedFunctionEnvFunctions envFunctions) argumentsAlreadyCollected) =
+    Pine.ListValue
+        [ Pine.stringAsValue_Function
+        , Pine.ListValue
+            [ innerFunctionValue
+            , Pine.valueFromInt parameterCount
+            , Pine.ListValue envFunctions
+            , Pine.ListValue argumentsAlreadyCollected
             ]
         ]
 

@@ -4493,7 +4493,13 @@ emitRecursionDomain { exposedDeclarationsNames, allModuleDeclarations, importedF
                                                                         ++ err
                                                                     )
 
-                                                            Ok wrappedForExpose ->
+                                                            Ok wrappedForExposeBeforeReduce ->
+                                                                let
+                                                                    wrappedForExpose : Pine.Value
+                                                                    wrappedForExpose =
+                                                                        attemptReduceBlockDeclFunction
+                                                                            wrappedForExposeBeforeReduce
+                                                                in
                                                                 Ok (( declName, wrappedForExpose ) :: aggregate)
 
                                     else
@@ -4547,10 +4553,63 @@ attemptReduceBlockDecl (FirCompiler.EmitDeclarationBlockResult _ _ envFunctionsE
                         )
 
                 Err _ ->
-                    blockDecl
+                        blockDecl
 
         _ ->
             blockDecl
+
+
+attemptReduceBlockDeclFunction : Pine.Value -> Pine.Value
+attemptReduceBlockDeclFunction originalDeclValue =
+    case tryParseAsSimpleTaggedFunction originalDeclValue of
+        Nothing ->
+            originalDeclValue
+
+        Just ( functionRecord, buildReplacement ) ->
+            case FirCompiler.tryReduceFunctionRecord functionRecord of
+                Nothing ->
+                    originalDeclValue
+
+                Just reducedFunctionRecord ->
+                    let
+                        replacementValue =
+                            buildReplacement reducedFunctionRecord
+                    in
+                    replacementValue
+
+
+tryParseAsSimpleTaggedFunction : Pine.Value -> Maybe ( FirCompiler.ParsedFunctionValue, FirCompiler.ParsedFunctionValue -> Pine.Value )
+tryParseAsSimpleTaggedFunction value =
+    case FirCompiler.parseFunctionRecordFromValueTagged value of
+        Ok parsedFunctionValue ->
+            Just
+                ( parsedFunctionValue
+                , FirCompiler.emitFunctionRecordAsValueTagged
+                )
+
+        Err _ ->
+            {-
+               A pattern for example found at <https://github.com/pine-vm/pine/blob/487af9e812834419545703e5c8fd8bd6b5391f1d/implement/pine/Elm/elm-compiler/elm-syntax/src/ParserFast.elm#L2648-L2688>
+               The declaration value is a choice type tag constructor containing a function record.
+            -}
+            case value of
+                Pine.ListValue [ tagValue, Pine.ListValue [ functionRecordValue ] ] ->
+                    case FirCompiler.parseFunctionRecordFromValueTagged functionRecordValue of
+                        Err _ ->
+                            Nothing
+
+                        Ok parsedFunctionValue ->
+                            Just
+                                ( parsedFunctionValue
+                                , \pfv ->
+                                    Pine.ListValue
+                                        [ tagValue
+                                        , Pine.ListValue [ FirCompiler.emitFunctionRecordAsValueTagged pfv ]
+                                        ]
+                                )
+
+                _ ->
+                    Nothing
 
 
 splitEmittedFunctionsToInline :

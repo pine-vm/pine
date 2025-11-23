@@ -27,6 +27,44 @@ listFind predicate list =
                 listFind predicate rest
 
 
+listIndexOf : a -> List a -> Maybe Int
+listIndexOf item list =
+    listIndexOfHelper 0 item list
+
+
+listIndexOfHelper : Int -> a -> List a -> Maybe Int
+listIndexOfHelper index item list =
+    case list of
+        [] ->
+            Nothing
+
+        first :: rest ->
+            if first == item then
+                Just index
+
+            else
+                listIndexOfHelper (index + 1) item rest
+
+
+listFindIndex : (a -> Bool) -> List a -> Maybe Int
+listFindIndex predicate list =
+    listFindIndexHelper 0 predicate list
+
+
+listFindIndexHelper : Int -> (a -> Bool) -> List a -> Maybe Int
+listFindIndexHelper index predicate list =
+    case list of
+        [] ->
+            Nothing
+
+        first :: rest ->
+            if predicate first then
+                Just index
+
+            else
+                listFindIndexHelper (index + 1) predicate rest
+
+
 assocListGet : key -> List ( key, value ) -> Maybe value
 assocListGet key list =
     case list of

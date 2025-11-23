@@ -10,6 +10,7 @@ module Pine exposing
     , bigIntFromValue
     , blobBytesFromChar
     , blobValueFromBigInt
+    , buildExprSkipHeadPathInExpr
     , computeValueFromString
     , countValueContent
     , displayStringFromPineError
@@ -29,6 +30,7 @@ module Pine exposing
     , stringAsValue_Literal
     , stringFromValue
     , trueValue
+    , tryParseExprAsPathInExpr
     , valueFromBigInt
     , valueFromBool
     , valueFromChar
@@ -1696,6 +1698,57 @@ countListValueContent ( nodeCount, byteCount ) items =
                 , byteCount + itemByteCount
                 )
                 remaining
+
+
+buildExprSkipHeadPathInExpr : Expression -> List Int -> Expression
+buildExprSkipHeadPathInExpr expr path =
+    case path of
+        [] ->
+            expr
+
+        index :: rest ->
+            let
+                skipExpr =
+                    if index < 1 then
+                        expr
+
+                    else
+                        KernelApplicationExpression
+                            "skip"
+                            (LiteralExpression (computeValueFromInt index))
+            in
+            KernelApplicationExpression
+                "head"
+                (buildExprSkipHeadPathInExpr skipExpr rest)
+
+
+tryParseExprAsPathInExpr : Expression -> Expression -> List Int -> Maybe (List Int)
+tryParseExprAsPathInExpr expr currentExpr path =
+    case currentExpr of
+        KernelApplicationExpression functionName inputExpr ->
+            case functionName of
+                "head" ->
+                    case inputExpr of
+                        KernelApplicationExpression "skip" (ListExpression [ LiteralExpression skipValue, restExpr ]) ->
+                            case intFromValue skipValue of
+                                Ok skipInt ->
+                                    tryParseExprAsPathInExpr expr restExpr (skipInt :: path)
+
+                                Err _ ->
+                                    Nothing
+
+                        _ ->
+                            tryParseExprAsPathInExpr expr inputExpr (0 :: path)
+
+                _ ->
+                    Nothing
+
+        _ ->
+            if currentExpr == expr then
+                Just path
+
+            else
+                Nothing
 
 
 encodeUnionToPineValue : Value -> Value -> Value
