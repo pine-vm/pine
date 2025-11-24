@@ -60,7 +60,20 @@ jobs:
           pine --version
 
       - name: Install elm-test-rs
-        run: npm install -g elm-test-rs
+        run: |
+          set -euo pipefail
+          # Download the tarball
+          curl -L https://github.com/mpizenberg/elm-test-rs/releases/download/v3.0.1/elm-test-rs_linux.tar.gz \
+              -o "$RUNNER_TEMP/elm-test-rs.tar.gz"
+
+          # Create a directory for extraction
+          mkdir -p "$RUNNER_TEMP/elm-test-rs"
+
+          # Extract the binary
+          tar -xzf "$RUNNER_TEMP/elm-test-rs.tar.gz" -C "$RUNNER_TEMP/elm-test-rs"
+
+          # Add the directory to the system PATH
+          echo "$RUNNER_TEMP/elm-test-rs" >> "$GITHUB_PATH"
 
       - name: Check elm-test-rs installation
         run: elm-test-rs --version
