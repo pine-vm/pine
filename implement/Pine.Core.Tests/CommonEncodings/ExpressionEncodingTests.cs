@@ -1,14 +1,13 @@
 using AwesomeAssertions;
-using Pine.Core;
 using Pine.Core.CommonEncodings;
 using Xunit;
 
-namespace Pine.IntegrationTests;
+namespace Pine.Core.Tests.CommonEncodings;
 
-public class PineVMEncodeExpressionTests
+public class ExpressionEncodingTests
 {
     [Fact]
-    public void TestExpressionEncodeDecodeSymmetry()
+    public void ExpressionEncoding_Decoding_Symmetry()
     {
         var testCases = new Expression[]
         {
