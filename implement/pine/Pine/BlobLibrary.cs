@@ -18,7 +18,7 @@ public class BlobLibrary
 {
     public static Func<Func<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>?>, Func<ReadOnlyMemory<byte>, ReadOnlyMemory<byte>?>>? OverrideGetBlobWithSHA256;
 
-    private static readonly string cacheDirectory = Path.Combine(Filesystem.CacheDirectory, "blob-library");
+    private static readonly string s_cacheDirectory = Path.Combine(Filesystem.CacheDirectory, "blob-library");
 
     private static string ContainerUrl => "https://kalmit.blob.core.windows.net/blob-library";
 
@@ -29,7 +29,7 @@ public class BlobLibrary
         var hashAndRemoteSource =
             dict.FirstOrDefault(c => RuntimeInformation.IsOSPlatform(c.Key)).Value;
 
-        if (hashAndRemoteSource.hash == null)
+        if (hashAndRemoteSource.hash is null)
             throw new Exception("Unknown OS: " + RuntimeInformation.OSDescription);
 
         var hash = Convert.FromHexString(hashAndRemoteSource.hash);
@@ -48,7 +48,7 @@ public class BlobLibrary
                 ??
                 GetBlobWithSHA256Cached(sha256)?.content;
 
-            if (blobCandidate == null)
+            if (blobCandidate is null)
                 return null;
 
             if (!(PineValueHashTree.ComputeHash(PineValue.Blob(blobCandidate.Value)).Span.SequenceEqual(sha256.Span) ||
@@ -77,7 +77,7 @@ public class BlobLibrary
 
         var fileName = Convert.ToHexStringLower(sha256.ToArray());
 
-        var cacheFilePath = Path.Combine(cacheDirectory, sha256DirectoryName, fileName);
+        var cacheFilePath = Path.Combine(s_cacheDirectory, sha256DirectoryName, fileName);
 
         var blobHasExpectedSHA256 = BlobHasSHA256(sha256);
 
@@ -91,20 +91,21 @@ public class BlobLibrary
         catch
         { }
 
-        string url(bool useUppercaseForHash) =>
+        string Url(bool useUppercaseForHash) =>
             ContainerUrl + "/" + sha256DirectoryName + "/" +
             (useUppercaseForHash ? fileName.ToUpperInvariant() : fileName);
 
-        if (getIfNotCached != null)
+        if (getIfNotCached is { } getIfNotCachedDelegate)
         {
-            var fromExplicitSource = getIfNotCached();
-
-            if (fromExplicitSource != null && blobHasExpectedSHA256(fromExplicitSource.Value))
-                return tryUpdateCacheAndContinueFromBlob(fromExplicitSource.Value);
+            if (getIfNotCachedDelegate() is { } fromExplicitSource &&
+                blobHasExpectedSHA256(fromExplicitSource))
+            {
+                return TryUpdateCacheAndContinueFromBlob(fromExplicitSource);
+            }
         }
 
         (ReadOnlyMemory<byte> content, string cacheFilePath)
-            tryUpdateCacheAndContinueFromBlob(ReadOnlyMemory<byte> responseContent)
+            TryUpdateCacheAndContinueFromBlob(ReadOnlyMemory<byte> responseContent)
         {
             if (!blobHasExpectedSHA256(responseContent))
             {
@@ -126,9 +127,9 @@ public class BlobLibrary
         }
 
         (ReadOnlyMemory<byte> content, string cacheFilePath)?
-            tryUpdateCacheAndContinueFromHttpResponse(HttpResponseMessage httpResponse)
+            TryUpdateCacheAndContinueFromHttpResponse(HttpResponseMessage httpResponse)
         {
-            if (httpResponse.StatusCode == HttpStatusCode.NotFound)
+            if (httpResponse.StatusCode is HttpStatusCode.NotFound)
                 return null;
 
             if (!httpResponse.IsSuccessStatusCode)
@@ -141,23 +142,23 @@ public class BlobLibrary
 
             var responseContent = httpResponse.Content.ReadAsByteArrayAsync().Result;
 
-            return tryUpdateCacheAndContinueFromBlob(responseContent);
+            return TryUpdateCacheAndContinueFromBlob(responseContent);
         }
 
-        var httpResponse = DownloadViaHttp(url(false));
+        var httpResponse = DownloadViaHttp(Url(false));
 
-        if (httpResponse.StatusCode == HttpStatusCode.NotFound)
+        if (httpResponse.StatusCode is HttpStatusCode.NotFound)
         {
             //  2020-05-01 Maintain backward compatibility for now: Try for the file name using uppercase letters.
 
             try
             {
-                return tryUpdateCacheAndContinueFromHttpResponse(DownloadViaHttp(url(true)));
+                return TryUpdateCacheAndContinueFromHttpResponse(DownloadViaHttp(Url(true)));
             }
             catch { }
         }
 
-        return tryUpdateCacheAndContinueFromHttpResponse(httpResponse);
+        return TryUpdateCacheAndContinueFromHttpResponse(httpResponse);
     }
 
     public static Result<string, ReadOnlyMemory<byte>> DownloadBlobViaHttpGetResponseBody(string sourceUrl) =>
@@ -293,7 +294,7 @@ public class BlobLibrary
 
         var responseContent = httpResponse.Content.ReadAsByteArrayAsync().Result;
 
-        if (responseContent == null)
+        if (responseContent is null)
             yield break;
 
         yield return FileTree.File((ReadOnlyMemory<byte>)responseContent);

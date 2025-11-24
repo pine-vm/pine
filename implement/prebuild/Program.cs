@@ -223,7 +223,7 @@ public class Program
             {
                 StartInfo = new System.Diagnostics.ProcessStartInfo
                 {
-                    FileName = executableFilePathCached.Value,
+                    FileName = s_executableFilePathCached.Value,
                     WorkingDirectory = Environment.CurrentDirectory,
                     Arguments = processArguments,
                     RedirectStandardInput = true,
@@ -305,18 +305,18 @@ public class Program
         ImmutableDictionary<OSPlatform, (string hash, string remoteSource)>.Empty
         .Add(
             OSPlatform.Linux,
-            ("db7034cf78b17773a3718d9156d07f77a33852526468d3181142c8ac9c035062",
-            @"https://github.com/pine-vm/pine/releases/download/v0.4.9/pine-bin-v0.4.9-linux-x64.zip"))
+            ("63844343516257983fae09726580477f01a099232dfa74bc11a1927010d161ac",
+            @"https://github.com/pine-vm/pine/releases/download/v0.4.24/pine-bin-v0.4.24-linux-x64.zip"))
         .Add(
             OSPlatform.Windows,
-            ("eb109da9ee7f6049f1bfd44721254050f0c130f5f1472c05abcee1db0b642c16",
-            @"https://github.com/pine-vm/pine/releases/download/v0.4.9/pine-bin-v0.4.9-win-x64.zip"))
+            ("b616305ae05eb73437874c898cda7be1421851420da8d374e7cbb53be5c9fd6c",
+            @"https://github.com/pine-vm/pine/releases/download/v0.4.24/pine-bin-v0.4.24-win-x64.zip"))
         .Add(
             OSPlatform.OSX,
-            ("9d2f9b720a973c5111603d8a07ccd4d5d8d5c86fa2d9a34d40cf0472f94d161c",
-            @"https://github.com/pine-vm/pine/releases/download/v0.4.9/pine-bin-v0.4.9-osx-x64.zip"));
+            ("34f0abf678f9d2b0f55aadf1f6c24a97b8a70c273f65f5dbf52e5bc342519c84",
+            @"https://github.com/pine-vm/pine/releases/download/v0.4.24/pine-bin-v0.4.24-osx-x64.zip"));
 
-    private readonly static Lazy<string> executableFilePathCached = new(() =>
+    private readonly static Lazy<string> s_executableFilePathCached = new(() =>
     {
         /*
          * For now, we assume that the file stays the same for the lifetime of the current process.
@@ -327,7 +327,7 @@ public class Program
         var executableFile =
             BlobLibrary.LoadFileForCurrentOs(ExecutableFileByOs)
             ??
-            throw new Exception("Failed to load elm-format executable file");
+            throw new Exception("Failed to load Pine executable file");
 
         if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
