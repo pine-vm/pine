@@ -394,7 +394,7 @@ public class StaticAppSnapshottingStateTests
         var addedValues = GetHeaderValues("X-Added-Request");
 
         addedValues.Should().NotBeNull();
-        addedValues!.Should().Contain("added-value");
+        addedValues.Should().Contain("added-value");
 
         HasHeader("X-Remove-Me").Should().BeFalse("prepareRequest should remove header before app");
 

@@ -297,7 +297,7 @@ public class ElmInteractive
             if (dictionary.ContainsKey(mappedForTransport))
                 return;
 
-            if (valuesUsedMultipleTimes!.ContainsKey(mappedForTransport))
+            if (valuesUsedMultipleTimes.ContainsKey(mappedForTransport))
             {
                 dictionary[mappedForTransport] = keyIndex++.ToString();
                 return;

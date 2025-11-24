@@ -232,12 +232,12 @@ public class ApplyFunctionOnDatabaseTests
         applyCalculatorOperationFunctionDescription.Should().NotBeNull();
         customUsageReportFunctionDescription.Should().NotBeNull();
 
-        applyCalculatorOperationFunctionDescription!.returnType.Should().BeEquivalentTo(
+        applyCalculatorOperationFunctionDescription.returnType.Should().BeEquivalentTo(
             new ElmTime.StateShim.InterfaceToHost.ExposedFunctionReturnTypeDescription(
                 sourceCodeText: "Backend.State.State",
                 containsAppStateType: true));
 
-        applyCalculatorOperationFunctionDescription!.parameters.Should().BeEquivalentTo(
+        applyCalculatorOperationFunctionDescription.parameters.Should().BeEquivalentTo(
             [
                 new ElmTime.StateShim.InterfaceToHost.ExposedFunctionParameterDescription(
                     patternSourceCodeText: "operation",
@@ -249,12 +249,12 @@ public class ApplyFunctionOnDatabaseTests
                     typeIsAppStateType: true)
             ]);
 
-        customUsageReportFunctionDescription!.returnType.Should().BeEquivalentTo(
+        customUsageReportFunctionDescription.returnType.Should().BeEquivalentTo(
             new ElmTime.StateShim.InterfaceToHost.ExposedFunctionReturnTypeDescription(
                 sourceCodeText: "CustomUsageReport",
                 containsAppStateType: false));
 
-        customUsageReportFunctionDescription!.parameters.Should().BeEquivalentTo(
+        customUsageReportFunctionDescription.parameters.Should().BeEquivalentTo(
             [
                 new ElmTime.StateShim.InterfaceToHost.ExposedFunctionParameterDescription(
                     patternSourceCodeText: "customArgument",

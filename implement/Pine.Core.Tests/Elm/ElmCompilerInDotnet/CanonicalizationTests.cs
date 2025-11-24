@@ -225,7 +225,7 @@ public class CanonicalizationTests
         var signature = getNameFunc.Function.Signature;
         signature.Should().NotBeNull();
 
-        var typeAnnotation = signature!.Value.TypeAnnotation.Value;
+        var typeAnnotation = signature.Value.TypeAnnotation.Value;
         typeAnnotation.Should().BeOfType<TypeAnnotation.FunctionTypeAnnotation>();
         var funcType = (TypeAnnotation.FunctionTypeAnnotation)typeAnnotation;
 
@@ -302,7 +302,7 @@ public class CanonicalizationTests
         // Also check the type annotation
         var signature = isActiveFunc.Function.Signature;
         signature.Should().NotBeNull();
-        var funcType = (TypeAnnotation.FunctionTypeAnnotation)signature!.Value.TypeAnnotation.Value;
+        var funcType = (TypeAnnotation.FunctionTypeAnnotation)signature.Value.TypeAnnotation.Value;
         var argType = (TypeAnnotation.Typed)funcType.ArgumentType.Value;
         var (moduleName, name) = argType.TypeName.Value;
         moduleName.Should().Equal(["Types"]);
@@ -359,7 +359,7 @@ public class CanonicalizationTests
         var signature = getUserNameFunc.Function.Signature;
         signature.Should().NotBeNull();
 
-        var typeAnnotation = signature!.Value.TypeAnnotation.Value;
+        var typeAnnotation = signature.Value.TypeAnnotation.Value;
         typeAnnotation.Should().BeOfType<TypeAnnotation.FunctionTypeAnnotation>();
         var funcType = (TypeAnnotation.FunctionTypeAnnotation)typeAnnotation;
 
@@ -726,7 +726,7 @@ public class CanonicalizationTests
         var signature = processFunc.Function.Signature;
         signature.Should().NotBeNull();
 
-        var funcType = (TypeAnnotation.FunctionTypeAnnotation)signature!.Value.TypeAnnotation.Value;
+        var funcType = (TypeAnnotation.FunctionTypeAnnotation)signature.Value.TypeAnnotation.Value;
         var argType = (TypeAnnotation.Typed)funcType.ArgumentType.Value;
 
         // Should be Optional (not Maybe)
@@ -790,7 +790,7 @@ public class CanonicalizationTests
         var helperSignature = helperFunc.Signature;
         helperSignature.Should().NotBeNull();
 
-        var helperFuncType = (TypeAnnotation.FunctionTypeAnnotation)helperSignature!.Value.TypeAnnotation.Value;
+        var helperFuncType = (TypeAnnotation.FunctionTypeAnnotation)helperSignature.Value.TypeAnnotation.Value;
         var helperArgType = (TypeAnnotation.Typed)helperFuncType.ArgumentType.Value;
 
         // Should be MyType resolved to Test module

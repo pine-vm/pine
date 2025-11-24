@@ -338,5 +338,5 @@ public static class Elm019Binaries
         ?
         throw new NotImplementedException("ElmMakeOkJsonStructure: producedFileBase64 is not a blob.")
         :
-        new(producedFileBase64: Convert.ToBase64String(blobNode.Bytes.Span)!);
+        new(producedFileBase64: Convert.ToBase64String(blobNode.Bytes.Span));
 }

@@ -130,7 +130,7 @@ public class FileStoreHttpServerTests
         var result = JsonSerializer.Deserialize<DirectoryListingResponse>(responseContent, JsonSerializerOptions.Web);
 
         result.Should().NotBeNull();
-        result!.Entries.Should().NotBeEmpty();
+        result.Entries.Should().NotBeEmpty();
     }
 
     [Fact]
@@ -150,7 +150,7 @@ public class FileStoreHttpServerTests
         // Verify file was created
         var storedContent = setup.FileStore.GetFileContent(ImmutableList.Create("new", "file.txt"));
         storedContent.Should().NotBeNull();
-        storedContent!.Value.ToArray().Should().BeEquivalentTo(content);
+        storedContent.Value.ToArray().Should().BeEquivalentTo(content);
     }
 
     [Fact]
@@ -172,7 +172,7 @@ public class FileStoreHttpServerTests
         // Verify file was updated
         var storedContent = setup.FileStore.GetFileContent(path);
         storedContent.Should().NotBeNull();
-        storedContent!.Value.ToArray().Should().BeEquivalentTo(newContent);
+        storedContent.Value.ToArray().Should().BeEquivalentTo(newContent);
     }
 
     [Fact]
@@ -199,7 +199,7 @@ public class FileStoreHttpServerTests
         // Verify file was appended
         var storedContent = setup.FileStore.GetFileContent(path);
         storedContent.Should().NotBeNull();
-        Encoding.UTF8.GetString(storedContent!.Value.Span).Should().Be("Hello World");
+        Encoding.UTF8.GetString(storedContent.Value.Span).Should().Be("Hello World");
     }
 
     [Fact]
@@ -291,7 +291,7 @@ public class FileStoreHttpServerTests
         var result = JsonSerializer.Deserialize<DirectoryListingResponse>(responseContent, JsonSerializerOptions.Web);
 
         result.Should().NotBeNull();
-        result!.Entries.Should().BeEmpty();
+        result.Entries.Should().BeEmpty();
     }
 
     [Fact]

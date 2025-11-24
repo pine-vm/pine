@@ -233,7 +233,7 @@ public class ValueBinaryEncodingClassicTests
                 encoded64Stream.Write(bytes);
             }
 
-            encode64Method!.Invoke(null, [testCase, (System.Action<System.ReadOnlySpan<byte>>)Write64, 0L, null]);
+            encode64Method.Invoke(null, [testCase, (System.Action<System.ReadOnlySpan<byte>>)Write64, 0L, null]);
 
             var encoded64 = encoded64Stream.ToArray();
 

@@ -126,7 +126,7 @@ public partial class BundledElmEnvironments
         stream.CopyTo(grow);
 
         if (grow.TryGetBuffer(out var seg2))
-            return new ReadOnlyMemory<byte>(seg2.Array!, seg2.Offset, seg2.Count);
+            return new ReadOnlyMemory<byte>(seg2.Array, seg2.Offset, seg2.Count);
 
         return grow.ToArray().AsMemory();
     }

@@ -2866,7 +2866,7 @@ public class Program
                     .tree;
             }
 
-            return ElmCompiler.CompilerSourceFilesDefault.Value!;
+            return ElmCompiler.CompilerSourceFilesDefault.Value;
         }
 
         return (elmCompilerOption, parseElmCompilerFromOption);

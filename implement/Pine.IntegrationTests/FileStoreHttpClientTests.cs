@@ -84,7 +84,7 @@ public class FileStoreHttpClientTests
 
         // Assert
         content.Should().NotBeNull();
-        content!.Value.ToArray().Should().BeEquivalentTo(expectedContent);
+        content.Value.ToArray().Should().BeEquivalentTo(expectedContent);
     }
 
     [Fact]
@@ -117,7 +117,7 @@ public class FileStoreHttpClientTests
         // Assert
         var storedContent = setup.ServerFileStore.GetFileContent(path);
         storedContent.Should().NotBeNull();
-        storedContent!.Value.ToArray().Should().BeEquivalentTo(content);
+        storedContent.Value.ToArray().Should().BeEquivalentTo(content);
     }
 
     [Fact]
@@ -135,7 +135,7 @@ public class FileStoreHttpClientTests
         // Assert
         var storedContent = setup.ServerFileStore.GetFileContent(path);
         storedContent.Should().NotBeNull();
-        storedContent!.Value.ToArray().Should().BeEquivalentTo(newContent);
+        storedContent.Value.ToArray().Should().BeEquivalentTo(newContent);
     }
 
     [Fact]
@@ -155,7 +155,7 @@ public class FileStoreHttpClientTests
         // Assert
         var storedContent = setup.ServerFileStore.GetFileContent(path);
         storedContent.Should().NotBeNull();
-        Encoding.UTF8.GetString(storedContent!.Value.Span).Should().Be("Hello World");
+        Encoding.UTF8.GetString(storedContent.Value.Span).Should().Be("Hello World");
     }
 
     [Fact]
@@ -177,7 +177,7 @@ public class FileStoreHttpClientTests
         // Assert
         var storedContent = setup.ServerFileStore.GetFileContent(path);
         storedContent.Should().NotBeNull();
-        Encoding.UTF8.GetString(storedContent!.Value.Span).Should().Be("New content via append");
+        Encoding.UTF8.GetString(storedContent.Value.Span).Should().Be("New content via append");
     }
 
     [Fact]
@@ -248,7 +248,7 @@ public class FileStoreHttpClientTests
         response.IsSuccessStatusCode.Should().BeTrue();
         var storedContent = setup.ServerFileStore.GetFileContent(path);
         storedContent.Should().NotBeNull();
-        storedContent!.Value.ToArray().Should().BeEquivalentTo(content);
+        storedContent.Value.ToArray().Should().BeEquivalentTo(content);
     }
 
     [Fact]
@@ -275,7 +275,7 @@ public class FileStoreHttpClientTests
         response.IsSuccessStatusCode.Should().BeTrue();
         var storedContent = setup.ServerFileStore.GetFileContent(path);
         storedContent.Should().NotBeNull();
-        Encoding.UTF8.GetString(storedContent!.Value.Span).Should().Be("Hello World");
+        Encoding.UTF8.GetString(storedContent.Value.Span).Should().Be("Hello World");
     }
 
     [Fact]

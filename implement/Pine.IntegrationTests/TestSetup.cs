@@ -18,7 +18,7 @@ public class TestSetup
 
     public static PineValue AppConfigComponentFromFiles(
         IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> appFiles) =>
-        FileTreeEncoding.Encode(FileTree.FromSetOfFilesWithStringPath(appFiles))!;
+        FileTreeEncoding.Encode(FileTree.FromSetOfFilesWithStringPath(appFiles));
 
     public static IEnumerable<(string serializedEvent, string expectedResponse)> CounterProcessTestEventsAndExpectedResponses(
         IEnumerable<(int addition, int expectedResponse)> additionsAndExpectedResponses) =>

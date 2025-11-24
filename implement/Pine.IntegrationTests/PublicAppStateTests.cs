@@ -113,12 +113,12 @@ public class PublicAppStateTests
             // Verify request details
             receivedRequests.TryDequeue(out var firstRequest).Should().BeTrue();
             firstRequest.Should().NotBeNull();
-            firstRequest!.Request.Method.Should().Be("GET");
+            firstRequest.Request.Method.Should().Be("GET");
             firstRequest.Request.Uri.Should().Contain("/test");
 
             receivedRequests.TryDequeue(out var secondRequest).Should().BeTrue();
             secondRequest.Should().NotBeNull();
-            secondRequest!.Request.Method.Should().Be("POST");
+            secondRequest.Request.Method.Should().Be("POST");
             secondRequest.Request.Uri.Should().Contain("/api/test");
             secondRequest.Request.Body.Should().NotBeNull();
         }
