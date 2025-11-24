@@ -23,6 +23,7 @@ jobs:
         dist.nuget.org,
         symbols.nuget.org,
         www.nuget.org,
+        package.elm-lang.org,
         crl3.digicert.com,
         ocsp.digicert.com,
         pine-vm.org,
