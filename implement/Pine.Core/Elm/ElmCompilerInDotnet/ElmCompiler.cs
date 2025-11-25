@@ -372,6 +372,22 @@ public class ElmCompiler
                         // Skip Pine_kernel functions
                         if (funcRef.ModuleName.Count is 1 && context.PineKernelModuleNames.Contains(funcRef.ModuleName[0]))
                         {
+                            // Still recurse into arguments
+                            foreach (var arg in application.Arguments)
+                            {
+                                AnalyzeExpression(arg.Value);
+                            }
+                            break;
+                        }
+
+                        // Skip choice type tag constructors
+                        if (ElmValueEncoding.StringIsValidTagName(funcRef.Name))
+                        {
+                            // Still recurse into arguments
+                            foreach (var arg in application.Arguments)
+                            {
+                                AnalyzeExpression(arg.Value);
+                            }
                             break;
                         }
 
@@ -500,6 +516,15 @@ public class ElmCompiler
                     // Environment structure: [0] = function list, [1] = parameter list
                     return BuildPathToParameter(paramIndex);
                 }
+
+                // Check if it's a choice type tag (starts with uppercase letter)
+                if (ElmValueEncoding.StringIsValidTagName(functionOrValue.Name))
+                {
+                    // This is a choice type constructor with no arguments
+                    // Emit as: [tagName, []]
+                    return Expression.LiteralInstance(
+                        ElmValueEncoding.TagAsPineValue(functionOrValue.Name, []));
+                }
             }
 
             if (functionOrValue.ModuleName.Count is 1 &&
@@ -516,6 +541,16 @@ public class ElmCompiler
                     return Expression.LiteralInstance(
                         EmitBooleanLiteral(false));
                 }
+            }
+
+            // After canonicalization, tags have a module name but are still recognized
+            // by having an uppercase first letter
+            if (ElmValueEncoding.StringIsValidTagName(functionOrValue.Name))
+            {
+                // This is a choice type constructor with no arguments (from any module)
+                // Emit as: [tagName, []]
+                return Expression.LiteralInstance(
+                    ElmValueEncoding.TagAsPineValue(functionOrValue.Name, []));
             }
         }
 
@@ -691,9 +726,42 @@ public class ElmCompiler
                 compiledInput);
         }
 
-        // Check if this is a function application
+        // Check if this is a function application or choice type tag application
         if (firstArg is SyntaxTypes.Expression.FunctionOrValue funcRef)
         {
+            // Check if this is a choice type tag application (starts with uppercase)
+            // Tags are identified by having a valid tag name (starting with uppercase letter)
+            if (ElmValueEncoding.StringIsValidTagName(funcRef.Name))
+            {
+                // This is a choice type constructor with arguments
+                // Compile as: [tagName, [arg1, arg2, ...]]
+                var tagNameValue = Expression.LiteralInstance(StringEncoding.ValueFromString(funcRef.Name));
+
+                // Compile all arguments (excluding the tag name which is the first element)
+                var compiledArguments = new List<Expression>();
+                for (var i = 1; i < application.Arguments.Count; i++)
+                {
+                    var arg = application.Arguments[i].Value;
+                    var compiledArg =
+                        CompileExpression(
+                            arg,
+                            parameterNames,
+                            parameterTypes,
+                            currentModuleName,
+                            currentFunctionName,
+                            context,
+                            dependencyLayout);
+                    compiledArguments.Add(compiledArg);
+                }
+
+                // Create the tag structure: [tagName, [args...]]
+                return Expression.ListInstance(
+                    [
+                        tagNameValue,
+                        Expression.ListInstance(compiledArguments)
+                    ]);
+            }
+
             // Determine the qualified name of the function being called
             string qualifiedFunctionName;
 
