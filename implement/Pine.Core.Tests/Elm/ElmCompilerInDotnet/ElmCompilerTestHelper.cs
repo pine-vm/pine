@@ -67,10 +67,10 @@ public class ElmCompilerTestHelper
     /// Create a VM with all optimizations disabled, to support repeatable profiling.
     /// </summary>
     public static IPineVM PineVMForProfiling(
-        System.Action<Interpreter.IntermediateVM.EvaluationReport> reportFunctionApplication)
+        System.Action<Core.Interpreter.IntermediateVM.EvaluationReport> reportFunctionApplication)
     {
         var vm =
-            Interpreter.IntermediateVM.PineVM.CreateCustom(
+            Core.Interpreter.IntermediateVM.PineVM.CreateCustom(
                 evalCache: null,
                 evaluationConfigDefault: null,
                 reportFunctionApplication: reportFunctionApplication,

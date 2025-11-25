@@ -1,15 +1,13 @@
 using AwesomeAssertions;
-using Pine.Core;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
 using Pine.Core.Interpreter.IntermediateVM;
-using Pine.IntermediateVM;
 using System.Collections.Generic;
 using Xunit;
 
 using StackFrameInstructions = Pine.Core.Interpreter.IntermediateVM.StackFrameInstructions;
 
-namespace Pine.IntegrationTests;
+namespace Pine.Core.Tests.Interpreter.IntermediateVM;
 
 public class PineVMTests
 {
@@ -406,7 +404,22 @@ public class PineVMTests
 
         foreach (var testCase in testCases)
         {
-            var pineVM = SetupVM.Create();
+            var pineVM =
+                Core.Interpreter.IntermediateVM.PineVM.CreateCustom(
+                    evalCache: null,
+                    evaluationConfigDefault: null,
+                    reportFunctionApplication: null,
+                    compilationEnvClasses: null,
+                    disableReductionInCompilation: false,
+                    selectPrecompiled: null,
+                    skipInlineForExpression: _ => false,
+                    enableTailRecursionOptimization: false,
+                    parseCache: null,
+                    precompiledLeaves: null,
+                    reportEnterPrecompiledLeaf: null,
+                    reportExitPrecompiledLeaf: null,
+                    optimizationParametersSerial: null,
+                    cacheFileStore: null);
 
             var evaluated =
                 pineVM.EvaluateExpression(
