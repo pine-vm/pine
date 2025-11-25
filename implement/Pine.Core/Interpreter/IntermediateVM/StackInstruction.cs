@@ -66,9 +66,18 @@ public enum StackInstructionKind
     Concat_Binary,
 
     /// <summary>
-    /// Prepends the top value from the stack to the list from the second value on the stack.
+    /// Prepends multiple items from the stack to the list on the stack.
+    /// Pops <see cref="StackInstruction.TakeCount"/> items from the stack,
+    /// then pops the target list, and pushes the result of prepending those items to the list.
     /// </summary>
-    Prepend_List_Item_Binary,
+    Prepend_List_Items,
+
+    /// <summary>
+    /// Appends multiple items from the stack to the list on the stack.
+    /// Pops the target list first, then pops <see cref="StackInstruction.TakeCount"/> items from the stack,
+    /// and pushes the result of appending those items to the list.
+    /// </summary>
+    Append_List_Items,
 
     /// <summary>
     /// Slice the third value from the stack,
@@ -424,8 +433,11 @@ public record StackInstruction(
     public static readonly StackInstruction Concat_Binary =
         new(StackInstructionKind.Concat_Binary);
 
-    public static readonly StackInstruction Prepend_List_Item_Binary =
-        new(StackInstructionKind.Prepend_List_Item_Binary);
+    public static StackInstruction Prepend_List_Items(int takeCount) =>
+        new(StackInstructionKind.Prepend_List_Items, TakeCount: takeCount);
+
+    public static StackInstruction Append_List_Items(int takeCount) =>
+        new(StackInstructionKind.Append_List_Items, TakeCount: takeCount);
 
     public static readonly StackInstruction Equal_Binary =
         new(StackInstructionKind.Equal_Binary);
@@ -636,11 +648,27 @@ public record StackInstruction(
                     PushCount: 1,
                     []),
 
-            StackInstructionKind.Prepend_List_Item_Binary =>
+            StackInstructionKind.Prepend_List_Items =>
                 new InstructionDetails(
-                    PopCount: 2,
+                    PopCount:
+                    (instruction.TakeCount
+                    ?? throw new Exception(
+                        "Missing TakeCount for Prepend_List_Items instruction")) + 1,
                     PushCount: 1,
-                    []),
+                    [instruction.TakeCount?.ToString()
+                    ?? throw new Exception(
+                        "Missing TakeCount for Prepend_List_Items instruction")]),
+
+            StackInstructionKind.Append_List_Items =>
+                new InstructionDetails(
+                    PopCount:
+                    (instruction.TakeCount
+                    ?? throw new Exception(
+                        "Missing TakeCount for Append_List_Items instruction")) + 1,
+                    PushCount: 1,
+                    [instruction.TakeCount?.ToString()
+                    ?? throw new Exception(
+                        "Missing TakeCount for Append_List_Items instruction")]),
 
             StackInstructionKind.Slice_Skip_Var_Take_Var =>
                 new InstructionDetails(

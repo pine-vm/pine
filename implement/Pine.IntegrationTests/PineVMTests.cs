@@ -242,6 +242,166 @@ public class PineVMTests
                 expected =
                 Result<string, PineValue>.ok(IntegerEncoding.EncodeSignedInteger(41))
             },
+
+            // Test Prepend_List_Items: prepend single item to a list
+            new
+            {
+                expression =
+                (Expression)
+                Expression.KernelApplicationInstance
+                (
+                    input:
+                    Expression.ListInstance(
+                        [
+                            Expression.ListInstance(
+                                [
+                                    Expression.LiteralInstance(
+                                        IntegerEncoding.EncodeSignedInteger(99)),
+                                ]),
+
+                            Expression.EnvironmentInstance,
+                        ]),
+                    function: "concat"
+                ),
+                environment =
+                PineValue.List(
+                    [
+                    IntegerEncoding.EncodeSignedInteger(1),
+                    IntegerEncoding.EncodeSignedInteger(2),
+                    IntegerEncoding.EncodeSignedInteger(3),
+                    ]),
+
+                expected = Result<string, PineValue>.ok(PineValue.List(
+                    [
+                        IntegerEncoding.EncodeSignedInteger(99),
+                        IntegerEncoding.EncodeSignedInteger(1),
+                        IntegerEncoding.EncodeSignedInteger(2),
+                        IntegerEncoding.EncodeSignedInteger(3),
+                    ]))
+            },
+
+            // Test Prepend_List_Items: prepend multiple items to a list
+            new
+            {
+                expression =
+                (Expression)
+                Expression.KernelApplicationInstance
+                (
+                    input:
+                    Expression.ListInstance(
+                        [
+                            Expression.ListInstance(
+                                [
+                                    Expression.LiteralInstance(
+                                        IntegerEncoding.EncodeSignedInteger(10)),
+
+                                    Expression.LiteralInstance(
+                                        IntegerEncoding.EncodeSignedInteger(20)),
+
+                                    Expression.LiteralInstance(
+                                        IntegerEncoding.EncodeSignedInteger(30)),
+                                ]),
+
+                            Expression.EnvironmentInstance,
+                        ]),
+                    function: "concat"
+                ),
+                environment =
+                PineValue.List(
+                    [
+                    IntegerEncoding.EncodeSignedInteger(1),
+                    IntegerEncoding.EncodeSignedInteger(2),
+                    ]),
+
+                expected = Result<string, PineValue>.ok(PineValue.List(
+                    [
+                        IntegerEncoding.EncodeSignedInteger(10),
+                        IntegerEncoding.EncodeSignedInteger(20),
+                        IntegerEncoding.EncodeSignedInteger(30),
+                        IntegerEncoding.EncodeSignedInteger(1),
+                        IntegerEncoding.EncodeSignedInteger(2),
+                    ]))
+            },
+
+            // Test Append_List_Items: append single item to a list
+            new
+            {
+                expression =
+                (Expression)
+                Expression.KernelApplicationInstance
+                (
+                    input:
+                    Expression.ListInstance(
+                        [
+                            Expression.EnvironmentInstance,
+
+                            Expression.ListInstance(
+                                [
+                                    Expression.LiteralInstance(
+                                        IntegerEncoding.EncodeSignedInteger(99)),
+                                ]),
+                        ]),
+                    function: "concat"
+                ),
+                environment =
+                PineValue.List(
+                    [
+                    IntegerEncoding.EncodeSignedInteger(1),
+                    IntegerEncoding.EncodeSignedInteger(2),
+                    IntegerEncoding.EncodeSignedInteger(3),
+                    ]),
+
+                expected = Result<string, PineValue>.ok(PineValue.List(
+                    [
+                        IntegerEncoding.EncodeSignedInteger(1),
+                        IntegerEncoding.EncodeSignedInteger(2),
+                        IntegerEncoding.EncodeSignedInteger(3),
+                        IntegerEncoding.EncodeSignedInteger(99),
+                    ]))
+            },
+
+            // Test Append_List_Items: append multiple items to a list
+            new
+            {
+                expression =
+                (Expression)
+                Expression.KernelApplicationInstance
+                (
+                    input:
+                    Expression.ListInstance(
+                        [
+                            Expression.EnvironmentInstance,
+
+                            Expression.ListInstance(
+                                [
+                                    Expression.LiteralInstance(
+                                        IntegerEncoding.EncodeSignedInteger(10)),
+
+                                    Expression.LiteralInstance(
+                                        IntegerEncoding.EncodeSignedInteger(20)),
+
+                                    Expression.LiteralInstance(
+                                        IntegerEncoding.EncodeSignedInteger(30)),
+                                ]),
+                        ]),
+                    function: "concat"
+                ),
+                environment =
+                PineValue.List(
+                    [
+                    IntegerEncoding.EncodeSignedInteger(1),
+                    IntegerEncoding.EncodeSignedInteger(2),
+                    ]),
+
+                expected = Result<string, PineValue>.ok(PineValue.List(
+                    [
+                        IntegerEncoding.EncodeSignedInteger(1),
+                        IntegerEncoding.EncodeSignedInteger(2),
+                        IntegerEncoding.EncodeSignedInteger(10),
+                        IntegerEncoding.EncodeSignedInteger(20),
+                        IntegerEncoding.EncodeSignedInteger(30),
+                    ]))
+            },
         };
 
         foreach (var testCase in testCases)
@@ -2510,6 +2670,160 @@ public class PineVMTests
 
                         StackInstruction.Starts_With_Const_At_Offset_Var(
                             PineValue.Blob([123])),
+
+                        StackInstruction.Return,
+                    ])
+            },
+
+            // Test case for Prepend_List_Items with a single item
+            new
+            {
+                expression =
+                (Expression)
+                Expression.KernelApplicationInstance(
+                    function: nameof(KernelFunction.concat),
+                    input:
+                    Expression.ListInstance(
+                        [
+                        Expression.ListInstance(
+                            [
+                            Expression.LiteralInstance(
+                                IntegerEncoding.EncodeSignedInteger(42)),
+                            ]),
+                        Expression.EnvironmentInstance,
+                        ])),
+
+                expected =
+                WithGenericParameters(
+                    [
+                        StackInstruction.Push_Literal(
+                            IntegerEncoding.EncodeSignedInteger(42)),
+
+                        StackInstruction.Local_Get(0),
+
+                        StackInstruction.Prepend_List_Items(1),
+
+                        StackInstruction.Return,
+                    ])
+            },
+
+            // Test case for Prepend_List_Items with multiple items
+            new
+            {
+                expression =
+                (Expression)
+                Expression.KernelApplicationInstance(
+                    function: nameof(KernelFunction.concat),
+                    input:
+                    Expression.ListInstance(
+                        [
+                        Expression.ListInstance(
+                            [
+                            Expression.LiteralInstance(
+                                IntegerEncoding.EncodeSignedInteger(1)),
+
+                            Expression.LiteralInstance(
+                                IntegerEncoding.EncodeSignedInteger(2)),
+
+                            Expression.LiteralInstance(
+                                IntegerEncoding.EncodeSignedInteger(3)),
+                            ]),
+                        Expression.EnvironmentInstance,
+                        ])),
+
+                expected =
+                WithGenericParameters(
+                    [
+                        StackInstruction.Push_Literal(
+                            IntegerEncoding.EncodeSignedInteger(1)),
+
+                        StackInstruction.Push_Literal(
+                            IntegerEncoding.EncodeSignedInteger(2)),
+
+                        StackInstruction.Push_Literal(
+                            IntegerEncoding.EncodeSignedInteger(3)),
+
+                        StackInstruction.Local_Get(0),
+
+                        StackInstruction.Prepend_List_Items(3),
+
+                        StackInstruction.Return,
+                    ])
+            },
+
+            // Test case for Append_List_Items with a single item
+            new
+            {
+                expression =
+                (Expression)
+                Expression.KernelApplicationInstance(
+                    function: nameof(KernelFunction.concat),
+                    input:
+                    Expression.ListInstance(
+                        [
+                        Expression.EnvironmentInstance,
+
+                        Expression.ListInstance(
+                            [
+                            Expression.LiteralInstance(
+                                IntegerEncoding.EncodeSignedInteger(42)),
+                            ]),
+                        ])),
+
+                expected =
+                WithGenericParameters(
+                    [
+                        StackInstruction.Local_Get(0),
+
+                        StackInstruction.Push_Literal(
+                            IntegerEncoding.EncodeSignedInteger(42)),
+
+                        StackInstruction.Append_List_Items(1),
+
+                        StackInstruction.Return,
+                    ])
+            },
+
+            // Test case for Append_List_Items with multiple items
+            new
+            {
+                expression =
+                (Expression)
+                Expression.KernelApplicationInstance(
+                    function: nameof(KernelFunction.concat),
+                    input:
+                    Expression.ListInstance(
+                        [
+                        Expression.EnvironmentInstance,
+
+                        Expression.ListInstance(
+                            [
+                            Expression.LiteralInstance(
+                                IntegerEncoding.EncodeSignedInteger(1)),
+
+                            Expression.LiteralInstance(
+                                IntegerEncoding.EncodeSignedInteger(2)),
+
+                            Expression.LiteralInstance(
+                                IntegerEncoding.EncodeSignedInteger(3)),
+                            ]),
+                        ])),
+
+                expected =
+                WithGenericParameters(
+                    [
+                        StackInstruction.Local_Get(0),
+
+                        StackInstruction.Push_Literal(
+                            IntegerEncoding.EncodeSignedInteger(1)),
+
+                        StackInstruction.Push_Literal(
+                            IntegerEncoding.EncodeSignedInteger(2)),
+
+                        StackInstruction.Push_Literal(
+                            IntegerEncoding.EncodeSignedInteger(3)),
+
+                        StackInstruction.Append_List_Items(3),
 
                         StackInstruction.Return,
                     ])

@@ -1007,18 +1007,61 @@ public class PineVM : IPineVM
                             continue;
                         }
 
-                    case StackInstructionKind.Prepend_List_Item_Binary:
+                    case StackInstructionKind.Prepend_List_Items:
                         {
-                            var right = currentFrame.PopTopmostFromStack();
-                            var left = currentFrame.PopTopmostFromStack();
+                            var itemsCount =
+                                currentInstruction.TakeCount
+                                ??
+                                throw new Exception("Invalid operation form: Missing take count for Prepend_List_Items");
+
+                            // Pop the target list first (it's on top after the items)
+                            var targetList = currentFrame.PopTopmostFromStack();
+
+                            // Pop items in reverse order (last pushed is first popped)
+                            var items = new PineValueInProcess[itemsCount];
+                            for (var i = 0; i < itemsCount; ++i)
+                            {
+                                items[itemsCount - i - 1] = currentFrame.PopTopmostFromStack();
+                            }
 
                             var resultValue = PineValueInProcess.EmptyList;
 
-                            if (right.IsList())
+                            if (targetList.IsList())
                             {
                                 resultValue =
                                     PineValueInProcess.ConcatBinary(
-                                        PineValueInProcess.CreateList([left]), right);
+                                        PineValueInProcess.CreateList(items), targetList);
+                            }
+
+                            currentFrame.PushInstructionResult(resultValue);
+
+                            continue;
+                        }
+
+                    case StackInstructionKind.Append_List_Items:
+                        {
+                            var itemsCount =
+                                currentInstruction.TakeCount
+                                ??
+                                throw new Exception("Invalid operation form: Missing take count for Append_List_Items");
+
+                            // Pop items in reverse order (last pushed is first popped)
+                            var items = new PineValueInProcess[itemsCount];
+                            for (var i = 0; i < itemsCount; ++i)
+                            {
+                                items[itemsCount - i - 1] = currentFrame.PopTopmostFromStack();
+                            }
+
+                            // Pop the target list (it was pushed first)
+                            var targetList = currentFrame.PopTopmostFromStack();
+
+                            var resultValue = PineValueInProcess.EmptyList;
+
+                            if (targetList.IsList())
+                            {
+                                resultValue =
+                                    PineValueInProcess.ConcatBinary(
+                                        targetList, PineValueInProcess.CreateList(items));
                             }
 
                             currentFrame.PushInstructionResult(resultValue);

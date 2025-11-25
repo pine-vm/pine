@@ -1168,25 +1168,59 @@ public class PineIRCompiler
         {
             if (listExpr.Items.Count is 2)
             {
-                if (listExpr.Items[0] is Expression.List leftListExpr && leftListExpr.Items.Count is 1)
+                // Check if left side is a list expression - emit Prepend_List_Items
+                if (listExpr.Items[0] is Expression.List leftListExpr && leftListExpr.Items.Count > 0)
                 {
-                    var afterLeft =
-                        CompileExpressionTransitive(
-                            leftListExpr.Items[0],
-                            context,
-                            prior,
-                            parseCache);
+                    // Push items in order (first to last)
+                    var afterLeftItems = prior;
+                    for (var i = 0; i < leftListExpr.Items.Count; ++i)
+                    {
+                        afterLeftItems =
+                            CompileExpressionTransitive(
+                                leftListExpr.Items[i],
+                                context,
+                                afterLeftItems,
+                                parseCache);
+                    }
 
                     var afterRight =
                         CompileExpressionTransitive(
                             listExpr.Items[1],
                             context,
-                            afterLeft,
+                            afterLeftItems,
                             parseCache);
 
                     return
                         afterRight
-                        .AppendInstruction(StackInstruction.Prepend_List_Item_Binary);
+                        .AppendInstruction(StackInstruction.Prepend_List_Items(leftListExpr.Items.Count));
+                }
+
+                // Check if right side is a list expression - emit Append_List_Items
+                if (listExpr.Items[1] is Expression.List rightListExpr && rightListExpr.Items.Count > 0)
+                {
+                    // Push the target list first
+                    var afterLeft =
+                        CompileExpressionTransitive(
+                            listExpr.Items[0],
+                            context,
+                            prior,
+                            parseCache);
+
+                    // Then push items in order (first to last)
+                    var afterRightItems = afterLeft;
+                    for (var i = 0; i < rightListExpr.Items.Count; ++i)
+                    {
+                        afterRightItems =
+                            CompileExpressionTransitive(
+                                rightListExpr.Items[i],
+                                context,
+                                afterRightItems,
+                                parseCache);
+                    }
+
+                    return
+                        afterRightItems
+                        .AppendInstruction(StackInstruction.Append_List_Items(rightListExpr.Items.Count));
                 }
             }
 
