@@ -527,7 +527,7 @@ public static class LoadFromGitHubOrGitLab
 
             // Extract branch name from canonical name (e.g., "refs/heads/main" -> "main")
             var branchName = referenceCanonicalName.StartsWith("refs/heads/")
-                ? referenceCanonicalName.Substring("refs/heads/".Length)
+                ? referenceCanonicalName["refs/heads/".Length..]
                 : referenceCanonicalName;
 
             if (branchName == "HEAD")

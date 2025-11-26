@@ -27,7 +27,7 @@ public class TarGZipArchiveTests
         var extractedBytes = extractedFile.Value.ToArray();
         var expectedBytes = new byte[] { 72, 101, 108, 108, 111 };
         extractedBytes.Length.Should().Be(expectedBytes.Length);
-        for (int i = 0; i < expectedBytes.Length; i++)
+        for (var i = 0; i < expectedBytes.Length; i++)
         {
             extractedBytes[i].Should().Be(expectedBytes[i]);
         }
@@ -62,7 +62,7 @@ public class TarGZipArchiveTests
             var extractedBytes = extractedByPath[pathString].ToArray();
             var expectedBytes = value.ToArray();
             extractedBytes.Length.Should().Be(expectedBytes.Length);
-            for (int i = 0; i < expectedBytes.Length; i++)
+            for (var i = 0; i < expectedBytes.Length; i++)
             {
                 extractedBytes[i].Should().Be(expectedBytes[i]);
             }
@@ -90,7 +90,7 @@ public class TarGZipArchiveTests
     {
         // Create files with repetitive content that compresses well
         var repetitiveContent = new byte[10000];
-        for (int i = 0; i < repetitiveContent.Length; i++)
+        for (var i = 0; i < repetitiveContent.Length; i++)
         {
             repetitiveContent[i] = (byte)(i % 10);
         }
@@ -139,7 +139,7 @@ public class TarGZipArchiveTests
             var extractedBytes = extractedByPath[pathString].ToArray();
             var expectedBytes = value.ToArray();
             extractedBytes.Length.Should().Be(expectedBytes.Length);
-            for (int i = 0; i < expectedBytes.Length; i++)
+            for (var i = 0; i < expectedBytes.Length; i++)
             {
                 extractedBytes[i].Should().Be(expectedBytes[i]);
             }

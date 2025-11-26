@@ -157,7 +157,7 @@ public class FileStoreHttpServer(IFileStore fileStore)
     private async Task HandlePutFileAsync(HttpContext context, IImmutableList<string> pathSegments)
     {
         var existingContent = _fileStore.GetFileContent(pathSegments);
-        bool fileExists = existingContent != null;
+        var fileExists = existingContent != null;
 
         // Handle If-None-Match: * (create only)
         var ifNoneMatch = context.Request.Headers["If-None-Match"].FirstOrDefault();
