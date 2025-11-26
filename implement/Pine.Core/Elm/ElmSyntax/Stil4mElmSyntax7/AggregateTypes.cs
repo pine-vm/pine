@@ -7,7 +7,7 @@ using System.Collections.Generic;
 
 using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
 
-namespace Pine.Core.Elm.ElmSyntax.SyntaxTreeClassic;
+namespace Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 
 /// <summary>
 /// Wrapper pairing a value with its source range in the parsed text.

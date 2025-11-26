@@ -9,7 +9,7 @@ using System.Linq;
 using System.Numerics;
 using System.Text;
 
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.SyntaxTreeClassic;
+using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 

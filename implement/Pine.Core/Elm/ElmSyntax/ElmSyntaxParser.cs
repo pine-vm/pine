@@ -1,4 +1,4 @@
-using Pine.Core.Elm.ElmSyntax.SyntaxTreeClassic;
+using Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -6,7 +6,7 @@ using System.Text;
 
 using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
 
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.SyntaxTreeClassic;
+using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 
 namespace Pine.Core.Elm.ElmSyntax;
 

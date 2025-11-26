@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.SyntaxTreeClassic;
+using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 

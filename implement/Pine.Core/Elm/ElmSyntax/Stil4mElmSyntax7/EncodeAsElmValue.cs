@@ -1,7 +1,7 @@
 using System;
 using System.Linq;
 
-namespace Pine.Core.Elm.ElmSyntax.SyntaxTreeClassic;
+namespace Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 
 using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
 

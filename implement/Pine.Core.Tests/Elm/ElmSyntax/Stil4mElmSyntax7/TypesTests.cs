@@ -1,14 +1,14 @@
 using AwesomeAssertions;
 using Xunit;
-using Pine.Core.Elm.ElmSyntax.SyntaxTreeClassic;
+using Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 
 using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
 
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.SyntaxTreeClassic;
+using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 
-namespace Pine.Core.Tests.Elm.ElmSyntax;
+namespace Pine.Core.Tests.Elm.ElmSyntax.Stil4mElmSyntax7;
 
-public class SyntaxTreeClassicTypesTests
+public class TypesTests
 {
     [Fact]
     public void Node_value_equality()
