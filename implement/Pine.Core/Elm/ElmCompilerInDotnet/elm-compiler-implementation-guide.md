@@ -5,8 +5,9 @@
 To compile a function application from Elm syntax, we use the 'ParseAndEval' expression variant of the Pine language. This expression creates a new environment for evaluating an expression, similar to the 'eval' functions found in other languages, such as Python. Since there are no symbolic references in Pine, we transport any other functions that the called function depends on into this new environment.
 For example, a recursive function, when calling itself via 'ParseAndEval', composes the new environment so that it also contains a representation of the function itself in encoded form, to enable continuing recursion in the non-terminating branch.
 
+### Full Function Applications
 
-Beyond the pure necessity to forward all program code into the child environments, we also follow the following pattern to compile Elm function applications, as a convention:
+For function applications where the number of arguments equals the number of parameters of the function (non-partial application), we use the following pattern to compile Elm function applications, as a convention:
 The environment is a list with two items. The first item of this list contains a list of all the encoded functions needed for further function applications. The second item in the list contains the arguments from the source Elm code.
 
 The following example illustrates the pattern using a concrete recursive function:

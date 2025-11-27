@@ -3,10 +3,10 @@
 Some apps and workloads cannot yet migrate from JavaScript. We can group the blockers into two categories: Coverage of language elements and kernel code and runtime efficiency.
 In the case of BotLab apps, this usage of JavaScript limits performance and UX with long response times.
 
-For apps already running on PineVM, runtime efficiency improved a lot in 2024, but there is still a lot to do even to reach the level of efficiency we have with JavaScript in V8. The challenges of improving efficiency in PineVM are partially due to the support of meta-programming and multiple frontend languages and partially due to the high aspirations for simplicity.
+For apps already running on PineVM, runtime efficiency improved a lot in 2024, but there is still a lot to do even to reach the level of efficiency we have with JavaScript in V8. The challenges of improving efficiency in PineVM are partially due to the support of meta-programming and multiple frontend languages, and partially due to the goals for metaprogramming and virtualization.
 2023 saw the development of the first compiler from Pine to C#, but that design ultimately turned out to be unfit. Currently, the default execution path uses a stack-machine bytecode interpreter.
 
-In light of the challenges in implementing profiling, analysis, and compilers for Pine, taking a shortcut to get a partial solution faster is tempting. As an intermediate solution, we could add a compiler that does not support the metaprogramming parts and is limited to the Elm programming language.
+In light of the challenges in implementing profiling, analysis, and compilers for Pine, taking a shortcut to get a partial solution faster is tempting. As an intermediate solution, we could add a compiler that does not support the metaprogramming and virtualization parts and is limited to the Elm programming language.
 
 ## Coverage
 
