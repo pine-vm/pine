@@ -93,7 +93,8 @@ public class RenderingTests
 
 
                 main =
-                    text "Hello, World!"
+                    text
+                        "Hello, World!"
 
 
                 beta =
@@ -342,7 +343,9 @@ public class RenderingTests
 
 
             decl =
-                [ func 13 71
+                [ func
+                    13
+                    71
                 ]
 
             """",
@@ -362,7 +365,9 @@ public class RenderingTests
 
 
             decl =
-                func 13 17
+                func
+                    13
+                    17
 
             """",
 
@@ -371,7 +376,9 @@ public class RenderingTests
 
 
             decl =
-                func other 17
+                func
+                    other
+                    17
 
             """",
 
@@ -468,7 +475,8 @@ public class RenderingTests
 
             decl : Maybe Int
             decl =
-                Just 71
+                Just
+                    71
 
             """",
 
@@ -520,8 +528,10 @@ public class RenderingTests
                     first :: ((second :: rest) as tail) ->
                         [ second
                         , first
-                        , List.reverse tail
-                        , List.reverse rest
+                        , List.reverse
+                            tail
+                        , List.reverse
+                            rest
                         ]
 
             """",
@@ -542,6 +552,103 @@ public class RenderingTests
 
             """",
 
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                let
+                    b =
+                        13
+
+                    a =
+                        41
+                in
+                c
+                    a
+                    b
+
+            """",
+
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                let
+                    b =
+                        13
+
+                    a =
+                        41
+                in
+                let
+                    d =
+                        a
+                            b
+                            17
+                in
+                e
+                    d
+                    43
+
+            """",
+
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                let
+                    ( a, b ) =
+                        c
+                            41
+                            13
+                in
+                c
+                    a
+                    b
+
+            """",
+
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                let
+                    ( a, b ) =
+                        c
+                            41
+                            13
+                in
+                if a < b then
+                    a
+
+                else
+                    b
+
+            """",
+
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                let
+                    a : Maybe Int
+                    a =
+                        Just
+                            5
+                in
+                case a of
+                    Just value ->
+                        value + 2
+
+                    Nothing ->
+                        0
+
+            """",
             """"
             module Test exposing (..)
 

@@ -647,6 +647,9 @@ public class Rendering
             Expression.IfBlock =>
                 ExpressionComplexity.Complex,
 
+            Expression.LetExpression =>
+                ExpressionComplexity.Complex,
+
             Expression.OperatorApplication opApp when OperatorApplicationNeedsMultiLine(opApp) =>
                 ExpressionComplexity.Complex,
 
@@ -678,42 +681,11 @@ public class Rendering
 
     /// <summary>
     /// Determines if an application expression needs multi-line rendering.
+    /// Function applications are always laid out over multiple lines, so that each argument comes with a line break.
     /// </summary>
-    private static bool ApplicationNeedsMultiLine(Expression.Application app)
-    {
-        // Check if the function is a lambda with a complex body (possibly wrapped in parentheses)
-        var funcExpr = UnwrapParentheses(app.Arguments[0].Value);
-
-        if (funcExpr is Expression.LambdaExpression lambda &&
-            LambdaBodyNeedsMultiLine(lambda.Lambda.Expression.Value))
-        {
-            return true;
-        }
-
-        // If only one argument (besides the function), check if it needs multi-line
-        if (app.Arguments.Count is 2)
-        {
-            var arg = app.Arguments[1].Value;
-
-            // A list argument with nested applications should trigger multi-line
-            if (arg is Expression.ListExpr listExpr && ListNeedsMultiLine(listExpr))
-                return true;
-
-            // A parenthesized operator application should trigger multi-line
-            if (UnwrapParentheses(arg) is Expression.OperatorApplication)
-                return true;
-
-            return false;
-        }
-
-        // With 2+ arguments, go multi-line if any argument is not simple
-        for (var i = 1; i < app.Arguments.Count; i++)
-        {
-            if (!IsSimpleExpression(app.Arguments[i].Value))
-                return true;
-        }
-        return false;
-    }
+    private static bool ApplicationNeedsMultiLine(Expression.Application app) =>
+        // Multi-line when there are actual arguments (Arguments[0] is the function, Arguments[1..] are actual arguments)
+        app.Arguments.Count > 1;
 
     /// <summary>
     /// Determines if a lambda body needs multi-line rendering.
@@ -806,6 +778,7 @@ public class Rendering
             Expression.CaseExpression caseExpr => RenderMultiLineCaseExpression(caseExpr.CaseBlock, config, indent),
             Expression.OperatorApplication opApp => RenderMultiLineOperatorApplication(opApp, config, indent),
             Expression.IfBlock ifBlock => RenderMultiLineIfBlock(ifBlock, config, indent),
+            Expression.LetExpression letExpr => RenderMultiLineLetExpression(letExpr.Value, config, indent),
             _ => [new IndentedLine(indentSpaces, RenderExpression(expression))]
         };
     }
@@ -892,8 +865,8 @@ public class Rendering
                 yield return new IndentedLine(indentSpaces, prefix + RenderExpression(nestedList));
                 break;
 
-            case Expression.Application app when ApplicationHasListArgument(app):
-                // Application with list argument - render multi-line
+            case Expression.Application app:
+                // Applications with actual arguments are rendered multi-line with each argument on its own line
                 yield return new IndentedLine(indentSpaces, prefix + RenderExpression(app.Arguments[0].Value));
                 for (var j = 1; j < app.Arguments.Count; j++)
                 {
@@ -1083,6 +1056,93 @@ public class Rendering
             {
                 yield return line;
             }
+        }
+    }
+
+    private static IEnumerable<IndentedLine> RenderMultiLineLetExpression(Expression.LetBlock letBlock, Config config, int indent)
+    {
+        var indentSpaces = indent * 4;
+
+        // Render "let"
+        yield return new IndentedLine(indentSpaces, "let");
+
+        // Render declarations
+        for (var i = 0; i < letBlock.Declarations.Count; i++)
+        {
+            var decl = letBlock.Declarations[i].Value;
+
+            // Add blank line between declarations (except before the first one)
+            if (i > 0)
+            {
+                yield return IndentedLine.Empty;
+            }
+
+            foreach (var line in RenderLetDeclarationLines(decl, config, indent + 1))
+            {
+                yield return line;
+            }
+        }
+
+        // Render "in"
+        yield return new IndentedLine(indentSpaces, "in");
+
+        // Render the body expression
+        foreach (var line in RenderExpressionLines(letBlock.Expression.Value, config, indent))
+        {
+            yield return line;
+        }
+    }
+
+    private static IEnumerable<IndentedLine> RenderLetDeclarationLines(Expression.LetDeclaration letDecl, Config config, int indent)
+    {
+        var indentSpaces = indent * 4;
+
+        switch (letDecl)
+        {
+            case Expression.LetDeclaration.LetFunction letFunc:
+                {
+                    // Render signature if present
+                    if (letFunc.Function.Signature is { } signature)
+                    {
+                        yield return new IndentedLine(indentSpaces, RenderSignature(signature.Value, config));
+                    }
+
+                    var impl = letFunc.Function.Declaration.Value;
+                    var header = impl.Name.Value;
+
+                    if (impl.Arguments.Count > 0)
+                    {
+                        header += " " + string.Join(" ", impl.Arguments.Select(a => RenderPattern(a.Value)));
+                    }
+
+                    header += " =";
+
+                    yield return new IndentedLine(indentSpaces, header);
+
+                    // Render the expression body
+                    foreach (var line in RenderExpressionLines(impl.Expression.Value, config, indent + 1))
+                    {
+                        yield return line;
+                    }
+                }
+                break;
+
+            case Expression.LetDeclaration.LetDestructuring letDestr:
+                {
+                    var header = RenderPattern(letDestr.Pattern.Value) + " =";
+
+                    yield return new IndentedLine(indentSpaces, header);
+
+                    // Render the expression body
+                    foreach (var line in RenderExpressionLines(letDestr.Expression.Value, config, indent + 1))
+                    {
+                        yield return line;
+                    }
+                }
+                break;
+
+            default:
+                throw new NotImplementedException($"Unknown let declaration type: {letDecl.GetType().Name}");
         }
     }
 
