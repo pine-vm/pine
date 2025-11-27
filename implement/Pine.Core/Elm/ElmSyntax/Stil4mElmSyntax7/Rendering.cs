@@ -36,7 +36,8 @@ public class Rendering
     }
 
     public record Config(
-        LineBreakingConfig LineBreaking);
+        LineBreakingConfig LineBreaking,
+        Func<QualifiedNameRef, QualifiedNameRef>? MapQualifiedName);
 
     public abstract record LineBreakingConfig()
     {
@@ -59,8 +60,27 @@ public class Rendering
     /// </para>
     /// </summary>
     public static Config ConfigNormalizeAllLocations(
-        LineBreakingConfig lineBreaking) =>
-        new(LineBreaking: lineBreaking);
+        LineBreakingConfig lineBreaking,
+        Func<QualifiedNameRef, QualifiedNameRef>? mapQualifiedName = null) =>
+        new(
+            LineBreaking: lineBreaking,
+            MapQualifiedName: mapQualifiedName);
+
+    /// <summary>
+    /// Do not use any location information from the given nodes, but normalize
+    /// all locations for a consistent layout.
+    /// 
+    /// <para>
+    /// The output should be stable with the use of elm-format.
+    /// </para>
+    /// </summary>
+    public static Config ConfigNormalizeAllLocations(
+        LineBreakingConfig lineBreaking,
+        IReadOnlyDictionary<QualifiedNameRef, QualifiedNameRef> mapQualifiedName) =>
+        new(
+            LineBreaking: lineBreaking,
+            MapQualifiedName: qn =>
+            mapQualifiedName.TryGetValue(qn, out var mapped) ? mapped : qn);
 
     public static string ToString(
         File file,
@@ -286,7 +306,7 @@ public class Rendering
         switch (declaration)
         {
             case Declaration.CustomTypeDeclaration customType:
-                foreach (var line in RenderCustomTypeLines(customType.TypeDeclaration, comments))
+                foreach (var line in RenderCustomTypeLines(customType.TypeDeclaration, config, comments))
                 {
                     yield return line;
                 }
@@ -309,13 +329,13 @@ public class Rendering
                 RenderFunctionLines(funcDecl.Function, config),
 
             Declaration.CustomTypeDeclaration customType =>
-                RenderCustomTypeLines(customType.TypeDeclaration),
+                RenderCustomTypeLines(customType.TypeDeclaration, config),
 
             Declaration.AliasDeclaration aliasDecl =>
-                RenderAliasLines(aliasDecl.TypeAlias),
+                RenderAliasLines(aliasDecl.TypeAlias, config),
 
             Declaration.PortDeclaration portDecl =>
-                RenderPortLines(portDecl.Signature),
+                RenderPortLines(portDecl.Signature, config),
 
             Declaration.InfixDeclaration infixDecl =>
                 [new IndentedLine(0, RenderInfix(infixDecl.Infix))],
@@ -333,9 +353,9 @@ public class Rendering
             yield return new IndentedLine(0, documentation.Value);
         }
 
-        if (function.Signature is not null)
+        if (function.Signature is { } signature)
         {
-            yield return new IndentedLine(0, RenderSignature(function.Signature.Value));
+            yield return new IndentedLine(0, RenderSignature(signature.Value, config));
         }
 
         var impl = function.Declaration.Value;
@@ -356,31 +376,39 @@ public class Rendering
         }
     }
 
-    private static string RenderSignature(Signature signature) =>
-        $"{signature.Name.Value} : {RenderTypeAnnotation(signature.TypeAnnotation.Value)}";
+    private static string RenderSignature(
+        Signature signature,
+        Config config) =>
+        $"{signature.Name.Value} : {RenderTypeAnnotation(signature.TypeAnnotation.Value, config)}";
 
-    private static string RenderTypeAnnotation(TypeAnnotation typeAnnotation)
+    private static string RenderTypeAnnotation(
+        TypeAnnotation typeAnnotation,
+        Config config)
     {
         return typeAnnotation switch
         {
             TypeAnnotation.GenericType generic => generic.Name,
 
             TypeAnnotation.Typed typed =>
-            RenderTypedAnnotation(typed),
+            RenderTypedAnnotation(typed, config),
 
             TypeAnnotation.Unit => "()",
 
             TypeAnnotation.Tupled tupled =>
-            "( " + string.Join(", ", tupled.TypeAnnotations.Select(t => RenderTypeAnnotation(t.Value))) + " )",
+            "( " + string.Join(", ", tupled.TypeAnnotations.Select(t => RenderTypeAnnotation(t.Value, config))) + " )",
 
             TypeAnnotation.Record record =>
-            RenderRecordDefinition(record.RecordDefinition),
+            RenderRecordDefinition(record.RecordDefinition, config),
 
             TypeAnnotation.GenericRecord genericRecord =>
-            "{ " + genericRecord.GenericName.Value + " | " + RenderRecordFields(genericRecord.RecordDefinition.Value) + " }",
+            "{ " + genericRecord.GenericName.Value +
+            " | " +
+            RenderRecordFields(genericRecord.RecordDefinition.Value, config) + " }",
 
             TypeAnnotation.FunctionTypeAnnotation funcType =>
-            RenderTypeAnnotationParenthesizedForFunction(funcType.ArgumentType.Value) + " -> " + RenderTypeAnnotation(funcType.ReturnType.Value),
+            RenderTypeAnnotationParenthesizedForFunction(funcType.ArgumentType.Value, config) +
+            " -> " +
+            RenderTypeAnnotation(funcType.ReturnType.Value, config),
 
             _ =>
             throw new NotImplementedException(
@@ -388,65 +416,90 @@ public class Rendering
         };
     }
 
-    private static string RenderTypedAnnotation(TypeAnnotation.Typed typed)
+    private static string RenderTypedAnnotation(
+        TypeAnnotation.Typed typed,
+        Config config)
     {
-        var (moduleName, name) = typed.TypeName.Value;
-        var typeName = moduleName.Count > 0
-            ? RenderModuleName(moduleName) + "." + name
-            : name;
+        var originalQualifiedName =
+            new QualifiedNameRef(
+                ModuleName: typed.TypeName.Value.ModuleName,
+                Name: typed.TypeName.Value.Name);
+
+        var mappedQualifiedName =
+            config.MapQualifiedName is { } mapQualifiedName
+            ?
+            mapQualifiedName(originalQualifiedName)
+            :
+            originalQualifiedName;
+
+        var typeName =
+            mappedQualifiedName.ModuleName.Count > 0
+            ?
+            RenderModuleName(mappedQualifiedName.ModuleName) + "." + mappedQualifiedName.Name
+            :
+            mappedQualifiedName.Name;
 
         if (typed.TypeArguments.Count is 0)
             return typeName;
 
-        return typeName + " " + string.Join(" ", typed.TypeArguments.Select(a => RenderTypeAnnotationParenthesized(a.Value)));
+        return typeName + " " + string.Join(" ", typed.TypeArguments.Select(a => RenderTypeAnnotationParenthesized(a.Value, config)));
     }
 
-    private static string RenderTypeAnnotationParenthesized(TypeAnnotation typeAnnotation)
+    private static string RenderTypeAnnotationParenthesized(
+        TypeAnnotation typeAnnotation,
+        Config config)
     {
         // Wrap complex types in parentheses
         return typeAnnotation switch
         {
             TypeAnnotation.FunctionTypeAnnotation =>
-            "(" + RenderTypeAnnotation(typeAnnotation) + ")",
+            "(" + RenderTypeAnnotation(typeAnnotation, config) + ")",
 
             TypeAnnotation.Typed typed when typed.TypeArguments.Count > 0 =>
-            "(" + RenderTypeAnnotation(typeAnnotation) + ")",
+            "(" + RenderTypeAnnotation(typeAnnotation, config) + ")",
 
             _ =>
-            RenderTypeAnnotation(typeAnnotation)
+            RenderTypeAnnotation(typeAnnotation, config)
         };
     }
 
-    private static string RenderTypeAnnotationParenthesizedForFunction(TypeAnnotation typeAnnotation)
+    private static string RenderTypeAnnotationParenthesizedForFunction(
+        TypeAnnotation typeAnnotation,
+        Config config)
     {
         // Only wrap function types in parentheses when they appear as arguments to a function type
         return typeAnnotation switch
         {
             TypeAnnotation.FunctionTypeAnnotation =>
-            "(" + RenderTypeAnnotation(typeAnnotation) + ")",
+            "(" + RenderTypeAnnotation(typeAnnotation, config) + ")",
 
             _ =>
-            RenderTypeAnnotation(typeAnnotation)
+            RenderTypeAnnotation(typeAnnotation, config)
         };
     }
 
-    private static string RenderRecordDefinition(RecordDefinition recordDefinition)
+    private static string RenderRecordDefinition(
+        RecordDefinition recordDefinition,
+        Config config)
     {
         if (recordDefinition.Fields.Count is 0)
             return "{}";
 
-        return "{ " + RenderRecordFields(recordDefinition) + " }";
+        return "{ " + RenderRecordFields(recordDefinition, config) + " }";
     }
 
-    private static string RenderRecordFields(RecordDefinition recordDefinition) =>
+    private static string RenderRecordFields(
+        RecordDefinition recordDefinition,
+        Config config) =>
         string.Join(", ", recordDefinition.Fields.Select(f =>
-            f.Value.FieldName.Value + " : " + RenderTypeAnnotation(f.Value.FieldType.Value)));
+            f.Value.FieldName.Value + " : " + RenderTypeAnnotation(f.Value.FieldType.Value, config)));
 
     /// <summary>
     /// Renders a custom type declaration with optional comments between constructors.
     /// </summary>
     private static IEnumerable<IndentedLine> RenderCustomTypeLines(
         TypeStruct typeStruct,
+        Config config,
         IReadOnlyList<Node<string>>? comments = null)
     {
         if (typeStruct.Documentation is { } documentation)
@@ -477,7 +530,7 @@ public class Rendering
 
             if (constructor.Value.Arguments.Count > 0)
             {
-                constructorStr += " " + string.Join(" ", constructor.Value.Arguments.Select(a => RenderTypeAnnotationParenthesized(a.Value)));
+                constructorStr += " " + string.Join(" ", constructor.Value.Arguments.Select(a => RenderTypeAnnotationParenthesized(a.Value, config)));
             }
 
             yield return new IndentedLine(4, prefix + constructorStr);
@@ -503,7 +556,9 @@ public class Rendering
         }
     }
 
-    private static IEnumerable<IndentedLine> RenderAliasLines(TypeAlias typeAlias)
+    private static IEnumerable<IndentedLine> RenderAliasLines(
+        TypeAlias typeAlias,
+        Config config)
     {
         if (typeAlias.Documentation is not null)
         {
@@ -519,12 +574,14 @@ public class Rendering
         header += " =";
 
         yield return new IndentedLine(0, header);
-        yield return new IndentedLine(4, RenderTypeAnnotation(typeAlias.TypeAnnotation.Value));
+        yield return new IndentedLine(4, RenderTypeAnnotation(typeAlias.TypeAnnotation.Value, config));
     }
 
-    private static IEnumerable<IndentedLine> RenderPortLines(Signature signature)
+    private static IEnumerable<IndentedLine> RenderPortLines(
+        Signature signature,
+        Config config)
     {
-        yield return new IndentedLine(0, "port " + RenderSignature(signature));
+        yield return new IndentedLine(0, "port " + RenderSignature(signature, config));
     }
 
     private static string RenderInfix(Infix infix)
@@ -1192,7 +1249,9 @@ public class Rendering
                 string.Join(", ", recordUpdate.Fields.Select(f =>
                     f.Value.fieldName.Value + " = " + RenderExpression(f.Value.valueExpr.Value))) + " }",
 
-            _ => throw new NotImplementedException($"Unknown expression type: {expression.GetType().Name}")
+            _ =>
+            throw new NotImplementedException(
+                $"Unknown expression type: {expression.GetType().Name}")
         };
     }
 

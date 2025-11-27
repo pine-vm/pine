@@ -829,6 +829,30 @@ public record QualifiedNameRef(
 
         return hash.ToHashCode();
     }
+
+    /// <summary>
+    /// Creates a new instance of <see cref="QualifiedNameRef"/> from a fully qualified name string, splitting it into
+    /// module and name components.
+    /// </summary>
+    public static QualifiedNameRef FromFullName(string fullName)
+    {
+        var parts = fullName.Split('.');
+
+        if (parts.Length is 0)
+            throw new System.ArgumentException("Full name cannot be empty", nameof(fullName));
+
+
+        var moduleName =
+            parts.Length > 1
+            ?
+            parts[..^1]
+            :
+            [];
+
+        var name = parts[^1];
+
+        return new QualifiedNameRef(moduleName, name);
+    }
 }
 
 /// <summary>
@@ -924,6 +948,29 @@ public abstract record Expression
             hash.Add(Name);
 
             return hash.ToHashCode();
+        }
+
+        /// <summary>
+        /// Creates a new instance of <see cref="FunctionOrValue"/> from a fully qualified name, splitting the name into
+        /// module and value components.
+        /// </summary>
+        public static FunctionOrValue FromFullName(string fullName)
+        {
+            var parts = fullName.Split('.');
+
+            if (parts.Length is 0)
+                throw new System.ArgumentException("Full name cannot be empty", nameof(fullName));
+
+            var value = parts[0];
+
+            var moduleName =
+                parts.Length > 1
+                ?
+                parts[..^1]
+                :
+                [];
+
+            return new FunctionOrValue(moduleName, value);
         }
     }
 

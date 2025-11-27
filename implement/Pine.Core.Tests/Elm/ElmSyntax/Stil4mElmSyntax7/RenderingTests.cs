@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Pine.Core.Elm.ElmSyntax;
+using Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 using System.Collections.Generic;
 using Xunit;
 
@@ -7,12 +8,12 @@ namespace Pine.Core.Tests.Elm.ElmSyntax.Stil4mElmSyntax7;
 
 public class RenderingTests
 {
-    private static readonly Core.Elm.ElmSyntax.Stil4mElmSyntax7.Rendering.Config s_renderingDefaultConfig =
-        Core.Elm.ElmSyntax.Stil4mElmSyntax7.Rendering.ConfigNormalizeAllLocations(
-            Core.Elm.ElmSyntax.Stil4mElmSyntax7.Rendering.LineBreakingConfig.SnapshotTestsDefault);
+    private static readonly Rendering.Config s_renderingDefaultConfig =
+        Rendering.ConfigNormalizeAllLocations(
+            Rendering.LineBreakingConfig.SnapshotTestsDefault);
 
-    private static string RenderDefault(Core.Elm.ElmSyntax.Stil4mElmSyntax7.File file) =>
-        Core.Elm.ElmSyntax.Stil4mElmSyntax7.Rendering.ToString(
+    private static string RenderDefault(File file) =>
+        Rendering.ToString(
             file,
             s_renderingDefaultConfig);
 
@@ -20,14 +21,14 @@ public class RenderingTests
     public void ToString_EmptyFile()
     {
         var file =
-            new Core.Elm.ElmSyntax.Stil4mElmSyntax7.File(
+            new File(
                 ModuleDefinition:
-                NodeWithRangeZero<Core.Elm.ElmSyntax.Stil4mElmSyntax7.Module>(
-                    new Core.Elm.ElmSyntax.Stil4mElmSyntax7.Module.NormalModule(
-                        ModuleData: new Core.Elm.ElmSyntax.Stil4mElmSyntax7.DefaultModuleData(
+                NodeWithRangeZero<Module>(
+                    new Module.NormalModule(
+                        ModuleData: new DefaultModuleData(
                             ModuleName: NodeWithRangeZero((IReadOnlyList<string>)["Test"]),
-                            ExposingList: NodeWithRangeZero<Core.Elm.ElmSyntax.Stil4mElmSyntax7.Exposing>(
-                                new Core.Elm.ElmSyntax.Stil4mElmSyntax7.Exposing.All(s_fakeRangeZero))
+                            ExposingList: NodeWithRangeZero<Exposing>(
+                                new Exposing.All(s_fakeRangeZero))
                     )
                 )),
                 Imports: [],
@@ -626,12 +627,82 @@ public class RenderingTests
         }
     }
 
-    private static Core.Elm.ElmSyntax.Stil4mElmSyntax7.Node<T> NodeWithRangeZero<T>(T value) =>
+    [Fact]
+    public void Supports_mapping_qualified_names()
+    {
+        var inputModuleText =
+            """
+            module Test exposing (..)
+
+            a : Basics.Int
+            a =
+                aa
+
+
+            b : String.String
+            b =
+                bb
+
+
+            c : Char.Char
+            c =
+                cc
+
+            """;
+
+        var expectedModuleText =
+            """"
+            module Test exposing (..)
+            
+            
+            a : Int
+            a =
+                aa
+
+
+            b : String
+            b =
+                bb
+
+
+            c : Char
+            c =
+                cc
+
+
+            """";
+
+        var parsed =
+            ElmSyntaxParser.ParseModuleText(inputModuleText)
+            .Extract(err => throw new System.Exception("Parsing failed: " + err.ToString()));
+
+        var namesMap =
+            new Dictionary<QualifiedNameRef, QualifiedNameRef>
+            {
+                [QualifiedNameRef.FromFullName("Basics.Int")] = QualifiedNameRef.FromFullName("Int"),
+                [QualifiedNameRef.FromFullName("String.String")] = QualifiedNameRef.FromFullName("String"),
+                [QualifiedNameRef.FromFullName("Char.Char")] = QualifiedNameRef.FromFullName("Char"),
+            };
+
+        var renderConfig =
+            Rendering.ConfigNormalizeAllLocations(
+                Rendering.LineBreakingConfig.SnapshotTestsDefault,
+                mapQualifiedName: namesMap);
+
+        var rendered =
+            Rendering.ToString(
+                parsed,
+                renderConfig);
+
+        rendered.Trim().Should().Be(expectedModuleText.Trim());
+    }
+
+    private static Node<T> NodeWithRangeZero<T>(T value) =>
         new(Range: s_fakeRangeZero, Value: value);
 
-    private static readonly Core.Elm.ElmSyntax.Stil4mElmSyntax7.Location s_fakeLocationZero =
+    private static readonly Location s_fakeLocationZero =
         new(Row: 0, Column: 0);
 
-    private static readonly Core.Elm.ElmSyntax.Stil4mElmSyntax7.Range s_fakeRangeZero =
+    private static readonly Range s_fakeRangeZero =
         new(Start: s_fakeLocationZero, End: s_fakeLocationZero);
 }
