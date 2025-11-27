@@ -692,6 +692,28 @@ public class RenderingTests
             """",
 
             """"
+            module App exposing (..)
+
+
+            result =
+                combine
+                    (\a ->
+                        Pine_kernel.int_add
+                            [ a
+                            , 1
+                            ]
+                    )
+                    ((\b ->
+                        Pine_kernel.int_multiply
+                            [ b
+                            , 2
+                            ]
+                     )
+                        3
+                    )
+            """",
+
+            """"
             module Test exposing (..)
 
 

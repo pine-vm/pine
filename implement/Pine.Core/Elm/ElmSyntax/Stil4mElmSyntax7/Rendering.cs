@@ -656,6 +656,9 @@ public class Rendering
             Expression.LambdaExpression lambda when LambdaBodyNeedsMultiLine(lambda.Lambda.Expression.Value) =>
                 ExpressionComplexity.Complex,
 
+            Expression.ParenthesizedExpression paren =>
+                GetExpressionComplexity(paren.Expression.Value, config),
+
             _ =>
                 ExpressionComplexity.Simple
         };
@@ -693,6 +696,7 @@ public class Rendering
     private static bool LambdaBodyNeedsMultiLine(Expression body) =>
         body switch
         {
+            Expression.Application app => ApplicationNeedsMultiLine(app),
             Expression.ListExpr listExpr => ListNeedsMultiLine(listExpr),
             Expression.RecordExpr recordExpr => RecordNeedsMultiLine(recordExpr),
             Expression.CaseExpression => true,
@@ -779,6 +783,7 @@ public class Rendering
             Expression.OperatorApplication opApp => RenderMultiLineOperatorApplication(opApp, config, indent),
             Expression.IfBlock ifBlock => RenderMultiLineIfBlock(ifBlock, config, indent),
             Expression.LetExpression letExpr => RenderMultiLineLetExpression(letExpr.Value, config, indent),
+            Expression.ParenthesizedExpression paren => RenderMultiLineParenthesizedExpression(paren, config, indent),
             _ => [new IndentedLine(indentSpaces, RenderExpression(expression))]
         };
     }
@@ -822,10 +827,18 @@ public class Rendering
             for (var i = 1; i < app.Arguments.Count; i++)
             {
                 var arg = app.Arguments[i].Value;
-                if (arg is Expression.ListExpr listExpr && ListNeedsMultiLine(listExpr))
+                if (arg is Expression.ListExpr listExpr && listExpr.Elements.Count > 0)
                 {
-                    // Render list multi-line
+                    // Render non-empty lists multi-line
                     foreach (var line in RenderMultiLineList(listExpr, config, indent + 1))
+                    {
+                        yield return line;
+                    }
+                }
+                else if (GetExpressionComplexity(arg, config) is ExpressionComplexity.Complex)
+                {
+                    // Render complex expressions multi-line
+                    foreach (var line in RenderMultiLine(arg, config, indent + 1))
                     {
                         yield return line;
                     }
@@ -836,6 +849,89 @@ public class Rendering
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Renders a parenthesized expression in multi-line format.
+    /// Handles cases like ((\b -> ...) 3) where the inner expression is a lambda application.
+    /// </summary>
+    private static IEnumerable<IndentedLine> RenderMultiLineParenthesizedExpression(
+        Expression.ParenthesizedExpression paren,
+        Config config,
+        int indent)
+    {
+        var indentSpaces = indent * 4;
+        var innerExpr = paren.Expression.Value;
+
+        // Check if the inner expression is an application where the function is a lambda with multi-line body
+        if (innerExpr is Expression.Application innerApp)
+        {
+            var funcExpr = UnwrapParentheses(innerApp.Arguments[0].Value);
+
+            if (funcExpr is Expression.LambdaExpression lambda && LambdaBodyNeedsMultiLine(lambda.Lambda.Expression.Value))
+            {
+                // Render: ((\param -> body) arg)
+                // Format:
+                // ((\param ->
+                //     body
+                //  )
+                //     arg
+                // )
+
+                var lambdaHeader = "((\\" + string.Join(" ", lambda.Lambda.Arguments.Select(a => RenderPattern(a.Value))) + " ->";
+                yield return new IndentedLine(indentSpaces, lambdaHeader);
+
+                // Render lambda body multi-line
+                foreach (var line in RenderMultiLine(lambda.Lambda.Expression.Value, config, indent + 1))
+                {
+                    yield return line;
+                }
+
+                // Inner closing paren with 1-space indent
+                yield return new IndentedLine(indentSpaces + 1, ")");
+
+                // Render arguments on subsequent lines with 4-space indent
+                for (var i = 1; i < innerApp.Arguments.Count; i++)
+                {
+                    yield return new IndentedLine(indentSpaces + 4, RenderExpressionParenthesizedIfNeeded(innerApp.Arguments[i].Value));
+                }
+
+                // Outer closing paren
+                yield return new IndentedLine(indentSpaces, ")");
+                yield break;
+            }
+        }
+
+        // Check if the inner expression is a lambda with multi-line body
+        if (innerExpr is Expression.LambdaExpression simpleLambda && LambdaBodyNeedsMultiLine(simpleLambda.Lambda.Expression.Value))
+        {
+            // Render: (\param -> body)
+            // Format:
+            // (\param ->
+            //     body
+            // )
+
+            var lambdaHeader = "(\\" + string.Join(" ", simpleLambda.Lambda.Arguments.Select(a => RenderPattern(a.Value))) + " ->";
+            yield return new IndentedLine(indentSpaces, lambdaHeader);
+
+            // Render lambda body multi-line
+            foreach (var line in RenderMultiLine(simpleLambda.Lambda.Expression.Value, config, indent + 1))
+            {
+                yield return line;
+            }
+
+            // Closing paren
+            yield return new IndentedLine(indentSpaces, ")");
+            yield break;
+        }
+
+        // Default: wrap the inner multi-line expression in parentheses
+        yield return new IndentedLine(indentSpaces, "(");
+        foreach (var line in RenderMultiLine(innerExpr, config, indent))
+        {
+            yield return line;
+        }
+        yield return new IndentedLine(indentSpaces, ")");
     }
 
     /// <summary>
