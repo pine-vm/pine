@@ -3364,6 +3364,9 @@ exprProvenToBeInt knownTypes expr =
                 Just (Elm.Syntax.TypeAnnotation.Typed (Elm.Syntax.Node.Node _ ( [], "Int" )) []) ->
                     True
 
+                Just (Elm.Syntax.TypeAnnotation.Typed (Elm.Syntax.Node.Node _ ( [ "Basics" ], "Int" )) []) ->
+                    True
+
                 _ ->
                     False
 
@@ -3443,6 +3446,9 @@ exprProvenToBeString knownTypes expr =
                 Just (Elm.Syntax.TypeAnnotation.Typed (Elm.Syntax.Node.Node _ ( [], "String" )) []) ->
                     True
 
+                Just (Elm.Syntax.TypeAnnotation.Typed (Elm.Syntax.Node.Node _ ( [ "String" ], "String" )) []) ->
+                    True
+
                 _ ->
                     False
 
@@ -3481,6 +3487,9 @@ exprProvenToBeChar knownTypes expr =
         Elm.Syntax.Expression.FunctionOrValue [] localName ->
             case Common.assocListGet localName knownTypes of
                 Just (Elm.Syntax.TypeAnnotation.Typed (Elm.Syntax.Node.Node _ ( [], "Char" )) []) ->
+                    True
+
+                Just (Elm.Syntax.TypeAnnotation.Typed (Elm.Syntax.Node.Node _ ( [ "Char" ], "Char" )) []) ->
                     True
 
                 _ ->
@@ -4553,7 +4562,7 @@ attemptReduceBlockDecl (FirCompiler.EmitDeclarationBlockResult _ _ envFunctionsE
                         )
 
                 Err _ ->
-                        blockDecl
+                    blockDecl
 
         _ ->
             blockDecl
