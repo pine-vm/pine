@@ -801,7 +801,7 @@ public class Rendering
         if (funcExpr is Expression.LambdaExpression lambda && LambdaBodyNeedsMultiLine(lambda.Lambda.Expression.Value))
         {
             // Render lambda with multi-line body
-            var lambdaHeader = "(\\" + string.Join(" ", lambda.Lambda.Arguments.Select(a => RenderPattern(a.Value))) + " ->";
+            var lambdaHeader = "(" + RenderLambdaHeader(lambda.Lambda);
             yield return new IndentedLine(indentSpaces, lambdaHeader);
 
             // Render lambda body multi-line
@@ -864,7 +864,7 @@ public class Rendering
         var innerExpr = paren.Expression.Value;
 
         // Check if the inner expression is an application where the function is a lambda with multi-line body
-        if (innerExpr is Expression.Application innerApp)
+        if (innerExpr is Expression.Application innerApp && innerApp.Arguments.Count > 0)
         {
             var funcExpr = UnwrapParentheses(innerApp.Arguments[0].Value);
 
@@ -878,7 +878,7 @@ public class Rendering
                 //     arg
                 // )
 
-                var lambdaHeader = "((\\" + string.Join(" ", lambda.Lambda.Arguments.Select(a => RenderPattern(a.Value))) + " ->";
+                var lambdaHeader = "((" + RenderLambdaHeader(lambda.Lambda);
                 yield return new IndentedLine(indentSpaces, lambdaHeader);
 
                 // Render lambda body multi-line
@@ -911,7 +911,7 @@ public class Rendering
             //     body
             // )
 
-            var lambdaHeader = "(\\" + string.Join(" ", simpleLambda.Lambda.Arguments.Select(a => RenderPattern(a.Value))) + " ->";
+            var lambdaHeader = "(" + RenderLambdaHeader(simpleLambda.Lambda);
             yield return new IndentedLine(indentSpaces, lambdaHeader);
 
             // Render lambda body multi-line
@@ -933,6 +933,12 @@ public class Rendering
         }
         yield return new IndentedLine(indentSpaces, ")");
     }
+
+    /// <summary>
+    /// Renders the header portion of a lambda expression (params and arrow).
+    /// </summary>
+    private static string RenderLambdaHeader(LambdaStruct lambda) =>
+        "\\" + string.Join(" ", lambda.Arguments.Select(a => RenderPattern(a.Value))) + " ->";
 
     /// <summary>
     /// Renders a single list element, handling both simple and complex cases.
