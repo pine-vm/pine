@@ -36,6 +36,24 @@ public class CanonicalizationTests
             .Extract(err => throw new System.Exception($"Module {string.Join(".", moduleName)} has errors: " + err));
     }
 
+    private static File CanonicalizeAndGetSingleModule(
+        IReadOnlyList<string> elmModulesTexts,
+        IReadOnlyList<string> moduleName)
+    {
+        var parsedModules =
+            elmModulesTexts
+            .Select(text =>
+                ElmSyntaxParser.ParseModuleText(text)
+                .Extract(err => throw new System.Exception("Failed parsing: " + err)))
+            .ToList();
+
+        var canonicalizeResult =
+            Canonicalization.Canonicalize(parsedModules);
+
+        return
+            GetCanonicalizedModule(canonicalizeResult, [.. moduleName]);
+    }
+
     [Fact]
     public void Expands_reference_to_local_function_declaration()
     {
@@ -1054,5 +1072,185 @@ public class CanonicalizationTests
         helperRef.Should().Be(new SyntaxTypes.Expression.FunctionOrValue(
             ModuleName: ["Module1"],
             Name: "helper"));
+    }
+
+    [Fact]
+    public void Distinguishes_type_name_from_choice_type_tag_name_exposing_all()
+    {
+        var nodeModuleText =
+            """"
+            module Node exposing (..)
+
+
+            type alias Range = {}
+
+            type Node a
+                = Node Range a
+            """";
+
+        var appModuleText =
+            """"
+            module App exposing (..)
+            
+            import Node exposing (..)
+
+
+            decl : Node Int
+            decl =
+                Node {} 5
+
+
+            """";
+
+        var expectedAppModuleText =
+            """"
+            module App exposing (..)
+
+
+            decl : Node.Node Basics.Int
+            decl =
+                Node.Node
+                    {}
+                    5
+
+            """";
+
+        var appModuleCanonicalized =
+            CanonicalizeAndGetSingleModule(
+                elmModulesTexts:
+                [nodeModuleText, appModuleText],
+                moduleName: ["App"]);
+
+        var renderedAppModule =
+            Rendering.ToString(
+                appModuleCanonicalized,
+                Rendering.ConfigNormalizeAllLocations(lineBreaking: Rendering.LineBreakingConfig.SnapshotTestsDefault));
+
+        renderedAppModule.Trim().Should().Be(
+            expectedAppModuleText.Trim());
+    }
+
+    [Fact]
+    public void Distinguishes_type_name_from_choice_type_tag_name_exposing_named()
+    {
+        var nodeModuleText =
+            """"
+            module Node exposing (..)
+
+
+            type alias Range = {}
+
+            type Node a
+                = Node Range a
+            """";
+
+        var appModuleText =
+            """"
+            module App exposing (..)
+            
+            import Node exposing (Node(..))
+
+
+            decl : Node Int
+            decl =
+                Node {} 5
+
+            """";
+
+        var expectedAppModuleText =
+            """"
+            module App exposing (..)
+
+
+            decl : Node.Node Basics.Int
+            decl =
+                Node.Node
+                    {}
+                    5
+
+            """";
+
+        var appModuleCanonicalized =
+            CanonicalizeAndGetSingleModule(
+                elmModulesTexts:
+                [nodeModuleText, appModuleText],
+                moduleName: ["App"]);
+
+        var renderedAppModule =
+            Rendering.ToString(
+                appModuleCanonicalized,
+                Rendering.ConfigNormalizeAllLocations(lineBreaking: Rendering.LineBreakingConfig.SnapshotTestsDefault));
+
+        renderedAppModule.Trim().Should().Be(
+            expectedAppModuleText.Trim());
+    }
+
+    [Fact]
+    public void Distinguishing_between_type_name_and_choice_type_tag_name_depends_on_context()
+    {
+        var alfaModuleText =
+            """"
+            module Alfa exposing (..)
+
+
+            type alias Range = {}
+
+            type ChoiceType a
+                = Node Range a
+
+            """";
+
+        var betaModuleText =
+            """"
+            module Beta exposing (..)
+
+
+            type alias Range = {}
+
+            type Node a
+                = SomeTag Range a
+
+            """";
+
+        var appModuleText =
+            """"
+            module App exposing (..)
+            
+            import Alfa exposing (ChoiceType(..))
+            import Beta exposing (Node(..))
+
+
+            decl : Node Int
+            decl =
+                Node {} 5
+
+            """";
+
+        var expectedAppModuleText =
+            """"
+            module App exposing (..)
+
+
+            decl : Beta.Node Basics.Int
+            decl =
+                Alfa.Node
+                    {}
+                    5
+
+            """";
+
+        var appModuleCanonicalized =
+            CanonicalizeAndGetSingleModule(
+                elmModulesTexts:
+                [alfaModuleText, betaModuleText, appModuleText],
+                moduleName: ["App"]);
+
+        var renderedAppModule =
+            Rendering.ToString(
+                appModuleCanonicalized,
+                Rendering.ConfigNormalizeAllLocations(lineBreaking: Rendering.LineBreakingConfig.SnapshotTestsDefault));
+
+        renderedAppModule.Trim().Should().Be(
+            expectedAppModuleText.Trim());
     }
 }

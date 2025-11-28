@@ -18,23 +18,27 @@ public class Canonicalization
     /// <summary>
     /// Tracks module exports including type-to-constructor relationships for proper name resolution.
     /// </summary>
-    /// <param name="AllExports">Set of all exported names from the module.</param>
+    /// <param name="TypeExports">Set of exported type names (custom types and type aliases).</param>
+    /// <param name="ValueExports">Set of exported value names (functions and constructors).</param>
     /// <param name="TypeConstructors">Mapping from type names to their associated value constructors.</param>
     private record ModuleExports(
-        ImmutableHashSet<string> AllExports,
+        ImmutableHashSet<string> TypeExports,
+        ImmutableHashSet<string> ValueExports,
         ImmutableDictionary<string, ImmutableList<string>> TypeConstructors);
 
     /// <summary>
     /// Encapsulates the context required for canonicalization, including imports, aliases, and declaration scopes.
     /// </summary>
     /// <param name="CurrentModuleName">The name of the module being canonicalized.</param>
-    /// <param name="ImportMap">Map of imported names to their source modules.</param>
+    /// <param name="TypeImportMap">Map of imported type names to their source modules.</param>
+    /// <param name="ValueImportMap">Map of imported value names (functions, constructors) to their source modules.</param>
     /// <param name="AliasMap">Map of module aliases to their actual module names.</param>
     /// <param name="ModuleLevelDeclarations">Top-level declarations in the current module (functions, types, constructors).</param>
     /// <param name="LocalDeclarations">Local variable bindings from patterns, function parameters, let expressions, etc.</param>
     private record CanonicalizationContext(
         ModuleName CurrentModuleName,
-        ImmutableDictionary<string, ImmutableList<ModuleName>> ImportMap,
+        ImmutableDictionary<string, ImmutableList<ModuleName>> TypeImportMap,
+        ImmutableDictionary<string, ImmutableList<ModuleName>> ValueImportMap,
         ImmutableDictionary<string, ModuleName> AliasMap,
         ImmutableHashSet<string> ModuleLevelDeclarations,
         ImmutableHashSet<string> LocalDeclarations)
@@ -129,14 +133,16 @@ public class Canonicalization
             var currentModuleName =
                 SyntaxTypes.Module.GetModuleName(module.ModuleDefinition.Value).Value;
 
-            // Build import map and alias map for this module
-            var (importMap, aliasMap) = BuildImportMaps(module.Imports, moduleExportsMap);
+            // Build import maps and alias map for this module
+            var (typeImportMap, valueImportMap, aliasMap) = BuildImportMaps(module.Imports, moduleExportsMap);
 
             // Build set of module-level declarations (top-level names declared in this module)
             var moduleLevelDeclarations = BuildLocalDeclarations(module);
 
-            // Check for clashing imports
-            var clashErrors = DetectImportClashes(importMap);
+            // Check for clashing imports in both namespaces
+            var typeClashErrors = DetectImportClashes(typeImportMap, "Type");
+            var valueClashErrors = DetectImportClashes(valueImportMap, "Value");
+            var clashErrors = typeClashErrors.Concat(valueClashErrors).ToList();
 
             if (clashErrors.Any())
             {
@@ -148,7 +154,8 @@ public class Canonicalization
             // Create canonicalization context for this module
             var context = new CanonicalizationContext(
                 CurrentModuleName: currentModuleName,
-                ImportMap: importMap,
+                TypeImportMap: typeImportMap,
+                ValueImportMap: valueImportMap,
                 AliasMap: aliasMap,
                 ModuleLevelDeclarations: moduleLevelDeclarations,
                 LocalDeclarations: ImmutableHashSet<string>.Empty);
@@ -248,7 +255,8 @@ public class Canonicalization
             var moduleName =
                 string.Join(".", SyntaxTypes.Module.GetModuleName(module.ModuleDefinition.Value).Value);
 
-            var exportsBuilder = ImmutableHashSet.CreateBuilder<string>();
+            var typeExportsBuilder = ImmutableHashSet.CreateBuilder<string>();
+            var valueExportsBuilder = ImmutableHashSet.CreateBuilder<string>();
 
             var typeConstructorsBuilder = ImmutableDictionary.CreateBuilder<string, ImmutableList<string>>();
 
@@ -312,19 +320,19 @@ public class Canonicalization
                     switch (decl.Value)
                     {
                         case SyntaxTypes.Declaration.FunctionDeclaration funcDecl:
-                            exportsBuilder.Add(funcDecl.Function.Declaration.Value.Name.Value);
+                            valueExportsBuilder.Add(funcDecl.Function.Declaration.Value.Name.Value);
                             break;
 
                         case SyntaxTypes.Declaration.CustomTypeDeclaration typeDecl:
                             var typeName = typeDecl.TypeDeclaration.Name.Value;
-                            exportsBuilder.Add(typeName);
+                            typeExportsBuilder.Add(typeName);
 
                             var constructorsBuilder = ImmutableList.CreateBuilder<string>();
 
                             foreach (var ctor in typeDecl.TypeDeclaration.Constructors)
                             {
                                 var ctorName = ctor.Value.Name.Value;
-                                exportsBuilder.Add(ctorName);
+                                valueExportsBuilder.Add(ctorName);
                                 constructorsBuilder.Add(ctorName);
                             }
 
@@ -332,15 +340,15 @@ public class Canonicalization
                             break;
 
                         case SyntaxTypes.Declaration.AliasDeclaration aliasDecl:
-                            exportsBuilder.Add(aliasDecl.TypeAlias.Name.Value);
+                            typeExportsBuilder.Add(aliasDecl.TypeAlias.Name.Value);
                             break;
 
                         case SyntaxTypes.Declaration.InfixDeclaration infixDecl:
-                            exportsBuilder.Add(infixDecl.Infix.Operator.Value);
+                            valueExportsBuilder.Add(infixDecl.Infix.Operator.Value);
                             break;
 
                         case SyntaxTypes.Declaration.PortDeclaration portDecl:
-                            exportsBuilder.Add(portDecl.Signature.Name.Value);
+                            valueExportsBuilder.Add(portDecl.Signature.Name.Value);
                             break;
 
                         default:
@@ -359,20 +367,20 @@ public class Canonicalization
                     switch (expose)
                     {
                         case SyntaxTypes.TopLevelExpose.InfixExpose infixExpose:
-                            exportsBuilder.Add(infixExpose.Name);
+                            valueExportsBuilder.Add(infixExpose.Name);
                             break;
 
                         case SyntaxTypes.TopLevelExpose.FunctionExpose funcExpose:
-                            exportsBuilder.Add(funcExpose.Name);
+                            valueExportsBuilder.Add(funcExpose.Name);
                             break;
 
                         case SyntaxTypes.TopLevelExpose.TypeOrAliasExpose typeOrAlias:
-                            exportsBuilder.Add(typeOrAlias.Name);
+                            typeExportsBuilder.Add(typeOrAlias.Name);
                             break;
 
                         case SyntaxTypes.TopLevelExpose.TypeExpose typeExpose:
                             var exposedTypeName = typeExpose.ExposedType.Name;
-                            exportsBuilder.Add(exposedTypeName);
+                            typeExportsBuilder.Add(exposedTypeName);
 
                             // If exposing constructors (..), add them
                             if (typeExpose.ExposedType.Open is not null &&
@@ -383,7 +391,7 @@ public class Canonicalization
                                 foreach (var ctor in customTypeDecl.TypeDeclaration.Constructors)
                                 {
                                     var ctorName = ctor.Value.Name.Value;
-                                    exportsBuilder.Add(ctorName);
+                                    valueExportsBuilder.Add(ctorName);
                                     constructorsBuilder.Add(ctorName);
                                 }
                                 typeConstructorsBuilder[exposedTypeName] = constructorsBuilder.ToImmutable();
@@ -398,17 +406,20 @@ public class Canonicalization
             }
 
             exportsMapBuilder[moduleName] =
-                new ModuleExports(exportsBuilder.ToImmutable(), typeConstructorsBuilder.ToImmutable());
+                new ModuleExports(typeExportsBuilder.ToImmutable(), valueExportsBuilder.ToImmutable(), typeConstructorsBuilder.ToImmutable());
         }
 
         return exportsMapBuilder.ToImmutable();
     }
 
-    private static (ImmutableDictionary<string, ImmutableList<ModuleName>>, ImmutableDictionary<string, ModuleName>) BuildImportMaps(
+    private static (ImmutableDictionary<string, ImmutableList<ModuleName>>, ImmutableDictionary<string, ImmutableList<ModuleName>>, ImmutableDictionary<string, ModuleName>) BuildImportMaps(
         IReadOnlyList<SyntaxTypes.Node<SyntaxTypes.Import>> imports,
         ImmutableDictionary<string, ModuleExports> moduleExportsMap)
     {
-        var importMap =
+        var typeImportMap =
+            ImmutableDictionary<string, ImmutableList<ModuleName>>.Empty.ToBuilder();
+
+        var valueImportMap =
             ImmutableDictionary<string, ImmutableList<ModuleName>>.Empty.ToBuilder();
 
         var aliasMap =
@@ -440,14 +451,26 @@ public class Canonicalization
                 // Handle 'exposing (..)' 
                 if (moduleExportsMap.TryGetValue(moduleNameStr, out var moduleExports))
                 {
-                    foreach (var exportedName in moduleExports.AllExports)
+                    // Add type exports to type import map
+                    foreach (var exportedTypeName in moduleExports.TypeExports)
                     {
-                        if (!importMap.TryGetValue(exportedName, out var value))
+                        if (!typeImportMap.TryGetValue(exportedTypeName, out var value))
                         {
                             value = [];
-                            importMap[exportedName] = value;
+                            typeImportMap[exportedTypeName] = value;
                         }
-                        importMap[exportedName] = value.Add(moduleName);
+                        typeImportMap[exportedTypeName] = value.Add(moduleName);
+                    }
+
+                    // Add value exports to value import map
+                    foreach (var exportedValueName in moduleExports.ValueExports)
+                    {
+                        if (!valueImportMap.TryGetValue(exportedValueName, out var value))
+                        {
+                            value = [];
+                            valueImportMap[exportedValueName] = value;
+                        }
+                        valueImportMap[exportedValueName] = value.Add(moduleName);
                     }
                 }
                 continue;
@@ -458,26 +481,50 @@ public class Canonicalization
                 foreach (var exposeNode in explicitExposing.Nodes)
                 {
                     var expose = exposeNode.Value;
-                    var names = GetExposedNames(expose, moduleNameStr, moduleExportsMap);
 
-                    foreach (var name in names)
+                    // Get type and value names separately
+                    var (typeNames, valueNames) = GetExposedNamesByNamespace(expose, moduleNameStr, moduleExportsMap);
+
+                    foreach (var name in typeNames)
                     {
-                        if (!importMap.TryGetValue(name, out var value))
+                        if (!typeImportMap.TryGetValue(name, out var value))
                         {
                             value = [];
-                            importMap[name] = value;
+                            typeImportMap[name] = value;
                         }
 
-                        importMap[name] = value.Add(moduleName);
+                        // Avoid adding the same module name multiple times for the same name
+                        if (!value.Any(m => m.SequenceEqual(moduleName)))
+                        {
+                            typeImportMap[name] = value.Add(moduleName);
+                        }
+                    }
+
+                    foreach (var name in valueNames)
+                    {
+                        if (!valueImportMap.TryGetValue(name, out var value))
+                        {
+                            value = [];
+                            valueImportMap[name] = value;
+                        }
+
+                        // Avoid adding the same module name multiple times for the same name
+                        if (!value.Any(m => m.SequenceEqual(moduleName)))
+                        {
+                            valueImportMap[name] = value.Add(moduleName);
+                        }
                     }
                 }
             }
         }
 
-        // Add core type mappings
-        var importMapWithCoreTypes = AddCoreTypeMappings(importMap.ToImmutable());
+        // Add core type mappings to type import map
+        var typeImportMapWithCoreTypes = AddCoreTypeMappings(typeImportMap.ToImmutable());
 
-        return (importMapWithCoreTypes, aliasMap.ToImmutable());
+        // Add core value mappings to value import map
+        var valueImportMapWithCoreValues = AddCoreValueMappings(valueImportMap.ToImmutable());
+
+        return (typeImportMapWithCoreTypes, valueImportMapWithCoreValues, aliasMap.ToImmutable());
     }
 
     private static ImmutableDictionary<string, ImmutableList<ModuleName>> AddCoreTypeMappings(
@@ -490,10 +537,7 @@ public class Canonicalization
             ["Float"] = ["Basics"],
             ["Bool"] = ["Basics"],
             ["Never"] = ["Basics"],
-
-            // Basics module value constructors
-            ["True"] = ["Basics"],
-            ["False"] = ["Basics"],
+            ["Order"] = ["Basics"],
 
             // String module
             ["Char"] = ["Char"],
@@ -503,7 +547,6 @@ public class Canonicalization
             ["List"] = ["List"],
             ["Maybe"] = ["Maybe"],
             ["Result"] = ["Result"],
-            ["Order"] = ["Basics"],
 
             // Platform types
             ["Program"] = ["Platform"],
@@ -525,56 +568,89 @@ public class Canonicalization
         return result;
     }
 
-    private static IEnumerable<string> GetExposedNames(
+    private static ImmutableDictionary<string, ImmutableList<ModuleName>> AddCoreValueMappings(
+        ImmutableDictionary<string, ImmutableList<ModuleName>> importMap)
+    {
+        var coreValues = ImmutableDictionary.CreateRange(new Dictionary<string, ModuleName>
+        {
+            // Basics module value constructors
+            ["True"] = ["Basics"],
+            ["False"] = ["Basics"],
+
+            // Order constructors
+            ["LT"] = ["Basics"],
+            ["EQ"] = ["Basics"],
+            ["GT"] = ["Basics"],
+        });
+
+        var result = importMap;
+
+        foreach (var (valueName, moduleName) in coreValues)
+        {
+            if (!result.ContainsKey(valueName))
+            {
+                result = result.Add(valueName, [moduleName]);
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Returns type names and value names separately for an exposed item.
+    /// </summary>
+    private static (IReadOnlyList<string> TypeNames, IReadOnlyList<string> ValueNames) GetExposedNamesByNamespace(
         SyntaxTypes.TopLevelExpose expose,
         string moduleName,
         ImmutableDictionary<string, ModuleExports> moduleExportsMap)
     {
         return expose switch
         {
+            // Infix operators are values
             SyntaxTypes.TopLevelExpose.InfixExpose infixExpose =>
-                [infixExpose.Name],
+                ([], [infixExpose.Name]),
 
+            // Functions are values
             SyntaxTypes.TopLevelExpose.FunctionExpose functionExpose =>
-                [functionExpose.Name],
+                ([], [functionExpose.Name]),
 
+            // Type or alias without constructors - type name only
             SyntaxTypes.TopLevelExpose.TypeOrAliasExpose typeOrAliasExpose =>
-                [typeOrAliasExpose.Name],
+                ([typeOrAliasExpose.Name], []),
 
+            // Type with constructors - type name as type, constructors as values
             SyntaxTypes.TopLevelExpose.TypeExpose typeExpose =>
-                // Handle Status(..) syntax - expose type name and all constructors
-                GetTypeExposeNames(typeExpose, moduleName, moduleExportsMap),
+                GetTypeExposeNamesByNamespace(typeExpose, moduleName, moduleExportsMap),
 
             _ => throw new NotImplementedException(
-                $"Unhandled TopLevelExpose type in GetExposedNames: {expose.GetType().Name}")
+                $"Unhandled TopLevelExpose type in GetExposedNamesByNamespace: {expose.GetType().Name}")
         };
     }
 
-    private static IEnumerable<string> GetTypeExposeNames(
+    private static (IReadOnlyList<string> TypeNames, IReadOnlyList<string> ValueNames) GetTypeExposeNamesByNamespace(
         SyntaxTypes.TopLevelExpose.TypeExpose typeExpose,
         string moduleName,
         ImmutableDictionary<string, ModuleExports> moduleExportsMap)
     {
         var typeName = typeExpose.ExposedType.Name;
-
-        // Always include the type name itself
-        yield return typeName;
+        var typeNames = new List<string> { typeName };
+        var valueNames = new List<string>();
 
         // If Open is not null, it means we have Status(..) syntax - expose all constructors of this type
         if (typeExpose.ExposedType.Open is not null &&
             moduleExportsMap.TryGetValue(moduleName, out var moduleExports) &&
             moduleExports.TypeConstructors.TryGetValue(typeName, out var constructors))
         {
-            // Yield only the constructors that belong to this specific type
-            foreach (var constructor in constructors)
-            {
-                yield return constructor;
-            }
+            // Constructors go to value namespace
+            valueNames.AddRange(constructors);
         }
+
+        return (typeNames, valueNames);
     }
 
-    private static ModuleName DetectImportClashes(
-        ImmutableDictionary<string, ImmutableList<ModuleName>> importMap)
+    private static IReadOnlyList<string> DetectImportClashes(
+        ImmutableDictionary<string, ImmutableList<ModuleName>> importMap,
+        string namespaceDescription)
     {
         var errors = new List<string>();
 
@@ -586,7 +662,7 @@ public class Canonicalization
                     sources.Select(m => string.Join(".", m));
 
                 errors.Add(
-                    $"Name '{name}' is exposed by multiple imports: {string.Join(", ", moduleNames)}");
+                    $"{namespaceDescription} name '{name}' is exposed by multiple imports: {string.Join(", ", moduleNames)}");
             }
         }
 
@@ -972,7 +1048,7 @@ public class Canonicalization
                 name,
                 typed.TypeName.Range,
                 context.CurrentModuleName,
-                context.ImportMap,
+                context.TypeImportMap,
                 context.AliasMap,
                 localVariables,
                 context.ModuleLevelDeclarations);
@@ -1154,7 +1230,7 @@ public class Canonicalization
                 funcOrValue.Name,
                 range,
                 context.CurrentModuleName,
-                context.ImportMap,
+                context.ValueImportMap,
                 context.AliasMap,
                 context.LocalDeclarations,
                 context.ModuleLevelDeclarations);
@@ -1505,7 +1581,7 @@ public class Canonicalization
                 qualifiedName.Name,
                 range,
                 context.CurrentModuleName,
-                context.ImportMap,
+                context.ValueImportMap,
                 context.AliasMap,
                 context.LocalDeclarations,
                 context.ModuleLevelDeclarations);
