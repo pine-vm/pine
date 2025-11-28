@@ -42,6 +42,7 @@ public static class PopularValues
 
         "Pine",
         "pine",
+        "Pine_builtin",
         "Pine_kernel",
 
         "Elm",

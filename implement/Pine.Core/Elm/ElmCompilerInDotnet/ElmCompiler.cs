@@ -25,6 +25,7 @@ public class ElmCompiler
     private static readonly FrozenSet<string> s_pineKernelModuleNamesDefault =
         FrozenSet.Create(
             [
+            "Pine_builtin",
             "Pine_kernel",
             ]);
 

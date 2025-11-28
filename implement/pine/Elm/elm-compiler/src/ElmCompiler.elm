@@ -1284,6 +1284,18 @@ compileElmSyntaxApplication stack appliedFunctionElmSyntax argumentsElmSyntax =
                                                 continueWithDefaultApplication ()
                             in
                             case moduleName of
+                                [ "Pine_builtin" ] ->
+                                    case arguments of
+                                        [ singleArgumentExpression ] ->
+                                            Ok
+                                                (KernelApplicationExpression
+                                                    declName
+                                                    singleArgumentExpression
+                                                )
+
+                                        _ ->
+                                            Err "Invalid argument list for builtin application: Wrap arguments into a single list expression"
+
                                 [ "Pine_kernel" ] ->
                                     case arguments of
                                         [ singleArgumentExpression ] ->
@@ -3343,6 +3355,9 @@ functionCannotReturnSetOrDict ( moduleName, localName ) =
                 [ "Pine_kernel" ] ->
                     True
 
+                [ "Pine_builtin" ] ->
+                    True
+
                 _ ->
                     False
 
@@ -3537,6 +3552,10 @@ functionProvenToReturnInt ( moduleName, localName ) =
 
         ( [ "Pine_kernel" ], "length" ) ->
             -- Possibly another stage has already mapped from 'List.length' to 'Pine_kernel.length'.
+            Just 1
+
+        ( [ "Pine_builtin" ], "length" ) ->
+            -- Possibly another stage has already mapped from 'List.length' to 'Pine_builtin.length'.
             Just 1
 
         ( [ "Dict" ], "size" ) ->
