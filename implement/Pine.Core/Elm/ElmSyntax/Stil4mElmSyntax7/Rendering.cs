@@ -824,29 +824,9 @@ public class Rendering
             // Render function on first line
             yield return new IndentedLine(indentSpaces, RenderExpression(app.Arguments[0].Value));
             // Render arguments on subsequent lines with extra indentation
-            for (var i = 1; i < app.Arguments.Count; i++)
+            foreach (var line in RenderApplicationArguments(app.Arguments, 1, config, indent + 1))
             {
-                var arg = app.Arguments[i].Value;
-                if (arg is Expression.ListExpr listExpr && listExpr.Elements.Count > 0)
-                {
-                    // Render non-empty lists multi-line
-                    foreach (var line in RenderMultiLineList(listExpr, config, indent + 1))
-                    {
-                        yield return line;
-                    }
-                }
-                else if (GetExpressionComplexity(arg, config) is ExpressionComplexity.Complex)
-                {
-                    // Render complex expressions multi-line
-                    foreach (var line in RenderMultiLine(arg, config, indent + 1))
-                    {
-                        yield return line;
-                    }
-                }
-                else
-                {
-                    yield return new IndentedLine(indentSpaces + 4, RenderExpressionParenthesizedIfNeeded(arg));
-                }
+                yield return line;
             }
         }
     }
@@ -925,6 +905,28 @@ public class Rendering
             yield break;
         }
 
+        // Check if the inner expression is a regular application (not a lambda)
+        if (innerExpr is Expression.Application regularApp && regularApp.Arguments.Count > 1)
+        {
+            // Render: (FuncName arg1 arg2)
+            // Format:
+            // (FuncName
+            //     arg1
+            //     arg2
+            // )
+
+            yield return new IndentedLine(indentSpaces, "(" + RenderExpression(regularApp.Arguments[0].Value));
+
+            // Render arguments on subsequent lines with extra indentation
+            foreach (var line in RenderApplicationArguments(regularApp.Arguments, 1, config, indent + 1))
+            {
+                yield return line;
+            }
+
+            yield return new IndentedLine(indentSpaces, ")");
+            yield break;
+        }
+
         // Default: wrap the inner multi-line expression in parentheses
         yield return new IndentedLine(indentSpaces, "(");
         foreach (var line in RenderMultiLine(innerExpr, config, indent))
@@ -932,6 +934,44 @@ public class Rendering
             yield return line;
         }
         yield return new IndentedLine(indentSpaces, ")");
+    }
+
+    /// <summary>
+    /// Renders application arguments on subsequent lines with extra indentation.
+    /// Used by both RenderMultiLineApplication and RenderMultiLineParenthesizedExpression.
+    /// </summary>
+    private static IEnumerable<IndentedLine> RenderApplicationArguments(
+        IReadOnlyList<Node<Expression>> arguments,
+        int startIndex,
+        Config config,
+        int indent)
+    {
+        var indentSpaces = indent * 4;
+
+        for (var i = startIndex; i < arguments.Count; i++)
+        {
+            var arg = arguments[i].Value;
+            if (arg is Expression.ListExpr listExpr && listExpr.Elements.Count > 0)
+            {
+                // Render non-empty lists multi-line
+                foreach (var line in RenderMultiLineList(listExpr, config, indent))
+                {
+                    yield return line;
+                }
+            }
+            else if (GetExpressionComplexity(arg, config) is ExpressionComplexity.Complex)
+            {
+                // Render complex expressions multi-line
+                foreach (var line in RenderMultiLine(arg, config, indent))
+                {
+                    yield return line;
+                }
+            }
+            else
+            {
+                yield return new IndentedLine(indentSpaces, RenderExpressionParenthesizedIfNeeded(arg));
+            }
+        }
     }
 
     /// <summary>

@@ -714,6 +714,38 @@ public class RenderingTests
             """",
 
             """"
+            module App exposing (..)
+
+
+            decl : Parser InfixDirection
+            decl =
+                ParserFast.Bad
+                    Basics.False
+                    (ParserFast.ExpectingOneOf
+                        firstX
+                        secondX
+                        []
+                    )
+
+            """",
+
+            """"
+            module App exposing (..)
+
+
+            decl : Parser InfixDirection
+            decl =
+                let
+                    (ParserFast.Parser attemptFirst) =
+                        ParserFast.keyword
+                            "right"
+                            Infix.Right
+                in
+                123
+
+            """",
+
+            """"
             module Test exposing (..)
 
 
