@@ -123,11 +123,6 @@ We don't have to return the same value here. We can also use the migration to ma
 
 Here is another example, almost as simple, with the back-end state just a primitive type, migrating from an `Int` to a `String`: <https://github.com/pine-vm/pine/blob/ba36482db83001b3ede203a92e56d31a30356b16/implement/test-elm-time/test-elm-apps/migrate-from-int-to-string-builder-web-app/src/Backend/MigrateState.elm>
 
-### `web-service.json`
-
-The `web-service.json` file is where we can configure the acquisition of SSL certificates and rate-limiting of HTTP requests to the backend app.
-Since these features are optional to use, in the simplest case, this file is not present at all.
-
 ## Running a Server With an Pine Database
 
 At the beginning of this guide, we ran a server and deployed an app in a single command. But combining these two operations is not necessary. Deployments are part of the process history, which means the last deployment follows from the state of the process store. (To learn more about the persistence, see [persistence-of-application-state-in-pine.md](./persistence-of-application-state-in-pine.md))
@@ -222,42 +217,4 @@ Alternatively, use a [docker volume](https://docs.docker.com/storage/volumes/) t
 ```powershell
 docker  run  --mount source=your-docker-volume-name,destination=/pine/process-store  -p 80:80  -p 4000:4000  ghcr.io/pine-vm/pine
 ```
-
-## Support HTTPS
-
-The Pine web host supports HTTPS. Thanks to the [`FluffySpoon.AspNet.LetsEncrypt`](https://github.com/ffMathy/FluffySpoon.AspNet.LetsEncrypt) project, it can automatically get an SSL certificate from [Let's Encrypt](https://letsencrypt.org/). To configure this, add a `letsEncryptOptions` property to the `web-service.json` file as follows:
-```json
-{
-    "letsEncryptOptions": {
-        "Domains": [
-            "your-domain.com"
-        ],
-        "Email": "youremailaddress@gmail.com",
-        "CertificateSigningRequest": {
-            "CountryName": "Germany",
-            "State": "DE",
-            "Locality": "DE",
-            "Organization": "Organization",
-            "OrganizationUnit": "Organization Unit"
-        },
-        "UseStaging": true
-    }
-}
-```
-
-When you have started a container like this, the application emits log entries indicating the progress with getting the SSL certificate:
-```
-FluffySpoon.AspNet.LetsEncrypt.ILetsEncryptRenewalService[0]
-Ordering LetsEncrypt certificate for domains your-domain.com.
-FluffySpoon.AspNet.LetsEncrypt.ILetsEncryptRenewalService[0]
-Validating all pending order authorizations.
-[...]
-Certificate persisted for later use.
-```
-In case you restart the app, you can see a log entry like this:
-```
-A persisted non-expired LetsEncrypt certificate was found and will be used.
-```
-
-As long as the `UseStaging` property is set to `true`, the app gets the SSL certificate from the [Let's Encrypt Staging Environment](https://letsencrypt.org/docs/staging-environment/). This way you can experiment without the risk of running into the stricter production rate-limits of Let's Encrypt. You can test with a web-browser that the SSL certificate successfully arrives on the client side. When this works, switch from staging to production SSL certificates by setting the `UseStaging` property to `false`.
 

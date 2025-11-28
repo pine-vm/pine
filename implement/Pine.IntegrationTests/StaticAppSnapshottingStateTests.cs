@@ -1,5 +1,4 @@
 using AwesomeAssertions;
-using ElmTime.Platform.WebService;
 using Microsoft.AspNetCore.Http;
 using Pine.Core.Files;
 using Pine.Core.IO;
@@ -42,7 +41,6 @@ public class StaticAppSnapshottingStateTests
             await using var appInstance =
                 StaticAppSnapshottingState.Create(
                     webServiceCompiledModules: webServiceCompiled,
-                    serverConfig: null,
                     fileStore: fileStore,
                     logMessage: LogMessage,
                     cancellationToken: cancellationTokenSource.Token);
@@ -89,7 +87,6 @@ public class StaticAppSnapshottingStateTests
             await using var appInstance =
                 StaticAppSnapshottingState.Create(
                     webServiceCompiledModules: webServiceCompiled,
-                    serverConfig: null,
                     fileStore: fileStore,
                     logMessage: LogMessage,
                     cancellationToken: cancellationTokenSource.Token);
@@ -135,7 +132,6 @@ public class StaticAppSnapshottingStateTests
             await using var appInstance =
                 StaticAppSnapshottingState.Create(
                     webServiceCompiledModules: webServiceCompiled,
-                    serverConfig: null,
                     fileStore: fileStore,
                     logMessage: LogMessage,
                     cancellationToken: cancellationTokenSource.Token);
@@ -177,8 +173,6 @@ public class StaticAppSnapshottingStateTests
         var fileStoreDict = new FileStoreFromConcurrentDictionary();
         var fileStore = new FileStoreFromWriterAndReader(fileStoreDict, fileStoreDict);
 
-        var serverConfig = new WebServiceConfigJson(httpRequestEventSizeLimit: 10_000);
-
         var webServiceCompiled =
             WebServiceInterface.CompiledModulesFromSourceFilesAndEntryFileName(
                 FileTree.FromSetOfFilesWithStringPath(TestSetup.CounterElmWebApp),
@@ -192,7 +186,6 @@ public class StaticAppSnapshottingStateTests
         await using var appInstance =
             StaticAppSnapshottingState.Create(
                 webServiceCompiledModules: webServiceCompiled,
-                serverConfig: serverConfig,
                 fileStore: fileStore,
                 logMessage: LogMessage,
                 cancellationToken: cancellationTokenSource.Token);
@@ -235,7 +228,7 @@ public class StaticAppSnapshottingStateTests
             context.Request.Path = "/";
             context.Request.ContentType = "text/plain";
 
-            var largeContent = new string('x', 10_000);
+            var largeContent = new string('x', StaticAppSnapshottingState.HttpRequestEventSizeLimitDefault + 1_000);
 
             var requestJson =
                 System.Text.Json.JsonSerializer.Serialize(
@@ -305,7 +298,6 @@ public class StaticAppSnapshottingStateTests
         await using var appInstance =
             StaticAppSnapshottingState.Create(
                 webServiceCompiledModules: webServiceCompiled,
-                serverConfig: null,
                 fileStore: fileStore,
                 logMessage: LogMessage,
                 cancellationToken: cancellationTokenSource.Token);
@@ -418,7 +410,6 @@ public class StaticAppSnapshottingStateTests
         await using var appInstance =
             StaticAppSnapshottingState.Create(
                 webServiceCompiledModules: webServiceCompiled,
-                serverConfig: null,
                 fileStore: fileStore,
                 logMessage: _ => { },
                 cancellationToken: cancellationTokenSource.Token);

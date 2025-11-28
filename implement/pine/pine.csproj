@@ -39,7 +39,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="certes" Version="3.0.4" />
     <PackageReference Include="GitCore" Version="0.2.2" />
     <PackageReference Include="McMaster.Extensions.CommandLineUtils" Version="4.1.1" />
     <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="10.0.0" />
@@ -55,12 +54,6 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Gui\elm\**" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Reference Include="FluffySpoon.AspNet.EncryptWeMust">
-      <HintPath>./../lib/FluffySpoon.AspNet.EncryptWeMust.dll</HintPath>
-    </Reference>
   </ItemGroup>
 
 </Project>

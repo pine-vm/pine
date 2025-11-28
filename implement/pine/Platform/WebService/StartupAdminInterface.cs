@@ -98,11 +98,7 @@ public class StartupAdminInterface
 
     public record PublicHostProcess(
         PersistentProcessLive ProcessLiveRepresentation,
-        AspHostConfig AspHostConfig,
         IHost WebHost);
-
-    public record AspHostConfig(
-        bool DisableHttps);
 
     public void Configure(
         IApplicationBuilder app,
@@ -120,15 +116,6 @@ public class StartupAdminInterface
 
         var adminPassword = configuration?.GetValue<string>(Configuration.AdminPasswordSettingKey);
 
-        var disableLetsEncrypt =
-            configuration?.GetValue<string>(Configuration.DisableLetsEncryptSettingKey)
-            ?.Equals("true", StringComparison.InvariantCultureIgnoreCase);
-
-        var disableHttps =
-            configuration?.GetValue<string>(Configuration.DisableHttpsSettingKey)
-            ?.Equals("true", StringComparison.InvariantCultureIgnoreCase)
-            ?? false;
-
         object avoidConcurrencyLock = new();
 
         var processStoreFileStore = processStoreForFileStore.fileStore;
@@ -137,7 +124,7 @@ public class StartupAdminInterface
 
         System.Threading.CancellationTokenSource applicationStoppingCancellationTokenSource = new();
 
-        void stopPublicApp()
+        void StopPublicApp()
         {
             applicationStoppingCancellationTokenSource.Cancel();
 
@@ -158,7 +145,7 @@ public class StartupAdminInterface
         appLifetime.ApplicationStopping.Register(() =>
         {
             logger.LogInformation("Application stopping, stopping the public app if running.");
-            stopPublicApp();
+            StopPublicApp();
         });
 
         var processStoreWriter =
@@ -168,90 +155,11 @@ public class StartupAdminInterface
                 processStoreFileStore,
                 skipWritingComponentSecondTime: true);
 
-        void startPublicApp()
-        {
-            var aspHostConfig = BuildCurrentAspHostConfig(logger);
-
-            startPublicAppLessRestartForHttps(aspHostConfig);
-
-            if (aspHostConfig.DisableHttps)
-            {
-                /*
-                 * Workaround for the issue of ASP.NET crashing discovered during the incident in March.
-                 * TODO: Review: Consider moving the certificate out of the versioned web service config.
-                 * */
-
-                System.Threading.Tasks.Task.Run(() =>
-                {
-                    System.Threading.Thread.Sleep(TimeSpan.FromSeconds(100));
-
-                    logger.LogInformation(
-                        "Last start of public interface had HTTPS disabled. Checking if we can enable HTTPS now...");
-
-                    var newConfig = BuildCurrentAspHostConfig(logger);
-
-                    if (!newConfig.DisableHttps)
-                    {
-                        logger.LogInformation(
-                            "Looks like we can enable HTTPS now, restarting the public interface...");
-
-                        startPublicAppLessRestartForHttps(
-                            aspHostConfig
-                            with
-                            {
-                                DisableHttps = false
-                            });
-                    }
-                });
-            }
-        }
-
-        AspHostConfig BuildCurrentAspHostConfig(ILogger? logger)
-        {
-            var letsEncryptRenewalServiceCertificateCompleted =
-                FluffySpoon.AspNet.EncryptWeMust.Certes.LetsEncryptRenewalService.Certificate is { };
-
-            logger?.LogInformation(
-                "letsEncryptRenewalServiceCertificateCompleted: {completed}",
-                letsEncryptRenewalServiceCertificateCompleted);
-
-            var aspWouldCrashOnConfiguringHttpsEndpoint =
-                /*
-                 * Adapt to crashes observed 2024-03-23:
-                 * 
-                warn: Microsoft.AspNetCore.Hosting.Diagnostics[15]
-                        Overriding HTTP_PORTS '8080' and HTTPS_PORTS ''. Binding to values defined by URLS instead 'http://*;https://*'.
-                fail: Microsoft.Extensions.Hosting.Internal.Host[11]
-                        Hosting failed to start
-                        System.InvalidOperationException: Unable to configure HTTPS endpoint. No server certificate was specified, and the default developer certificate could not be found or is out of date.
-                        To generate a developer certificate run 'dotnet dev-certs https'. To trust the certificate (Windows and macOS only) run 'dotnet dev-certs https --trust'.
-                        For more information on configuring HTTPS see https://go.microsoft.com/fwlink/?linkid=848054.
-                            at Microsoft.AspNetCore.Hosting.ListenOptionsHttpsExtensions.UseHttps(ListenOptions listenOptions, Action`1 configureOptions)
-                            at Microsoft.AspNetCore.Server.Kestrel.Core.Internal.AddressBinder.AddressesStrategy.BindAsync(AddressBindContext context, CancellationToken cancellationToken)
-                            at Microsoft.AspNetCore.Server.Kestrel.Core.Internal.AddressBinder.BindAsync(ListenOptions[] listenOptions, AddressBindContext context, Func`2 useHttps, CancellationToken cancellationToken)
-                            at Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServerImpl.BindAsync(CancellationToken cancellationToken)
-                            at Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServerImpl.StartAsync[TContext](IHttpApplication`1 application, CancellationToken cancellationToken)
-                            at Microsoft.AspNetCore.Hosting.GenericWebHostService.StartAsync(CancellationToken cancellationToken)
-                            at Microsoft.Extensions.Hosting.Internal.Host.<StartAsync>b__15_1(IHostedService service, CancellationToken token)
-                            at Microsoft.Extensions.Hosting.Internal.Host.ForeachService[T](IEnumerable`1 services, CancellationToken token, Boolean concurrent, Boolean abortOnFirstException, List`1 exceptions, Func`3 operation)
-
-                For discussion of crashes following race condition like this, see:
-                https://github.com/natemcmaster/LettuceEncrypt/issues/293
-
-                 * */
-                !letsEncryptRenewalServiceCertificateCompleted;
-
-            var aspHostConfig = new AspHostConfig(
-                DisableHttps: disableHttps || aspWouldCrashOnConfiguringHttpsEndpoint);
-
-            return aspHostConfig;
-        }
-
-        void startPublicAppLessRestartForHttps(AspHostConfig aspHostConfig)
+        void StartPublicApp()
         {
             lock (avoidConcurrencyLock)
             {
-                stopPublicApp();
+                StopPublicApp();
 
                 applicationStoppingCancellationTokenSource = new();
 
@@ -283,7 +191,6 @@ public class StartupAdminInterface
 
                         WebApplication buildWebApplication(
                             ProcessAppConfig processAppConfig,
-                            AspHostConfig aspHostConfig,
                             IReadOnlyList<string> publicWebHostUrls)
                         {
                             var appConfigTree =
@@ -300,21 +207,10 @@ public class StartupAdminInterface
                                 .Cast<ReadOnlyMemory<byte>?>()
                                 .FirstOrDefault();
 
-                            var webServiceConfig =
-                                webServiceConfigFile is null
-                                ?
-                                null
-                                :
-                                System.Text.Json.JsonSerializer.Deserialize<WebServiceConfigJson>(
-                                    Encoding.UTF8.GetString(webServiceConfigFile.Value.Span));
-
                             var serverAndElmAppConfig =
                                 new ServerAndElmAppConfig(
-                                    ServerConfig: webServiceConfig,
                                     ProcessHttpRequestAsync: processLiveRepresentation.ProcessHttpRequestAsync,
-                                    InitOrMigrateCmds: restoreProcessOk.initOrMigrateCmds,
-                                    DisableLetsEncrypt: disableLetsEncrypt,
-                                    DisableHttps: disableHttps);
+                                    InitOrMigrateCmds: restoreProcessOk.initOrMigrateCmds);
 
                             var publicAppState =
                             new PublicAppState(
@@ -335,9 +231,7 @@ public class StartupAdminInterface
                                 publicAppState.Build(
                                     appBuilder,
                                     logger,
-                                    publicWebHostUrls: publicWebHostUrls,
-                                    disableLetsEncrypt: disableLetsEncrypt,
-                                    disableHttps: aspHostConfig.DisableHttps);
+                                    publicWebHostUrls: publicWebHostUrls);
 
                             if (env.IsDevelopment())
                             {
@@ -353,7 +247,6 @@ public class StartupAdminInterface
 
                             var webHost = buildWebApplication(
                                 lastAppConfig,
-                                aspHostConfig,
                                 publicWebHostUrls: publicWebHostUrls);
 
                             webHost.StartAsync(appLifetime.ApplicationStopping).Wait();
@@ -363,7 +256,6 @@ public class StartupAdminInterface
 
                             publicAppHost = new PublicHostProcess(
                                 ProcessLiveRepresentation: processLiveRepresentation,
-                                AspHostConfig: aspHostConfig,
                                 WebHost: webHost);
                         }
 
@@ -382,7 +274,7 @@ public class StartupAdminInterface
              * 
              * By keeping the admin interface running despite such failures, we can deploy an adapted version of the Elm app to fix the issue.
              * */
-            startPublicApp();
+            StartPublicApp();
         }
         catch (Exception e)
         {
@@ -397,8 +289,8 @@ public class StartupAdminInterface
                 adminPassword: adminPassword,
                 getPublicAppHost: () => publicAppHost,
                 avoidConcurrencyLock: avoidConcurrencyLock,
-                startPublicApp: startPublicApp,
-                stopPublicApp: stopPublicApp));
+                startPublicApp: StartPublicApp,
+                stopPublicApp: StopPublicApp));
     }
 
     private static RequestDelegate AdminInterfaceRun(

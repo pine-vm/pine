@@ -47,11 +47,8 @@ public class PublicAppStateTests
             new PublicAppState(
                 serverAndElmAppConfig:
                 new ServerAndElmAppConfig(
-                    ServerConfig: new WebServiceConfigJson(httpRequestEventSizeLimit: 1_000_000),
                     ProcessHttpRequestAsync: MockProcessRequest,
-                    InitOrMigrateCmds: [],
-                    DisableLetsEncrypt: true,
-                    DisableHttps: true),
+                    InitOrMigrateCmds: []),
                 GetDateTimeOffset);
 
         // Build minimal WebApplication manually
@@ -71,13 +68,7 @@ public class PublicAppStateTests
         var app = builder.Build();
 
         // Wire up the HttpRequestHandler using minimal API
-        app.Run(async context =>
-        {
-            await Asp.MiddlewareFromWebServiceConfig(
-                serverConfig: null, // No server config for this test
-                context,
-                async () => await httpRequestHandler.HandleRequestAsync(context));
-        });
+        app.Run(httpRequestHandler.HandleRequestAsync);
 
         // Start the app on a specific port to avoid conflicts
         var testPort = 5000 + new Random().Next(1000, 9999);
@@ -151,11 +142,8 @@ public class PublicAppStateTests
             new PublicAppState(
                 serverAndElmAppConfig:
                 new ServerAndElmAppConfig(
-                    ServerConfig: new WebServiceConfigJson(httpRequestEventSizeLimit: 50), // 50 bytes limit
                     ProcessHttpRequestAsync: MockProcessRequest,
-                    InitOrMigrateCmds: [],
-                    DisableLetsEncrypt: true,
-                    DisableHttps: true),
+                    InitOrMigrateCmds: []),
                 GetDateTimeOffset);
 
         var builder = WebApplication.CreateBuilder();
@@ -165,10 +153,7 @@ public class PublicAppStateTests
 
         var app = builder.Build();
 
-        app.Run(async context =>
-        {
-            await httpRequestHandler.HandleRequestAsync(context);
-        });
+        app.Run(httpRequestHandler.HandleRequestAsync);
 
         var testPort = 5000 + new Random().Next(1000, 9999);
         app.Urls.Add($"http://localhost:{testPort}");
@@ -180,7 +165,11 @@ public class PublicAppStateTests
             using var httpClient = new HttpClient();
 
             // Send a request that exceeds the size limit
-            var largeContent = new StringContent(new string('x', 1000), Encoding.UTF8, "text/plain");
+            var largeContent =
+                new StringContent(
+                    new string('x', PublicAppState.HttpRequestEventSizeLimitDefault + 1_000),
+                    Encoding.UTF8, "text/plain");
+
             var response = await httpClient.PostAsync($"{baseUrl}/test", largeContent);
 
             // Should get 413 Request Entity Too Large

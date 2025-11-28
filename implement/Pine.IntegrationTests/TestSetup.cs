@@ -1,5 +1,4 @@
 using ElmTime;
-using ElmTime.Platform.WebService;
 using Pine.Core;
 using Pine.Core.CommonEncodings;
 using Pine.Core.Files;
@@ -65,20 +64,6 @@ public class TestSetup
 
     public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> VolatileProcessNativeWebApp =>
        GetElmAppFromSubdirectoryName("volatile-process-native");
-
-    public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> WithWebServiceConfigJson(
-        IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> originalDeploymentFiles,
-        WebServiceConfigJson jsonStructure)
-    {
-        return
-            jsonStructure == null ?
-            originalDeploymentFiles.RemoveRange(StartupAdminInterface.WebServiceConfigFilePathAlternatives)
-            :
-            originalDeploymentFiles
-            .SetItem(
-                StartupAdminInterface.WebServiceConfigFilePathDefault,
-                System.Text.Encoding.UTF8.GetBytes(System.Text.Json.JsonSerializer.Serialize(jsonStructure)));
-    }
 
     public static IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>> GetElmAppFromSubdirectoryName(
         string directoryName) => GetElmAppFromDirectoryPath(Path.Combine(PathToTestElmApps, directoryName));

@@ -1,4 +1,3 @@
-using FluffySpoon.AspNet.EncryptWeMust;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -8,7 +7,6 @@ using Microsoft.Extensions.Logging;
 using Pine.Elm.Platform;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading.Tasks;
 
 namespace ElmTime.Platform.WebService;
@@ -21,43 +19,18 @@ public class PublicAppState(
 
     public readonly System.Threading.CancellationTokenSource ApplicationStoppingCancellationTokenSource = new();
 
+    public const int HttpRequestEventSizeLimitDefault = 1_000_000;
+
     public WebApplication Build(
         WebApplicationBuilder appBuilder,
         ILogger logger,
-        IReadOnlyList<string> publicWebHostUrls,
-        bool? disableLetsEncrypt,
-        bool disableHttps)
+        IReadOnlyList<string> publicWebHostUrls)
     {
         appBuilder.Services.AddLogging(logging =>
         {
             logging.AddConsole();
             logging.AddDebug();
         });
-
-        var enableUseFluffySpoonLetsEncrypt =
-            serverAndElmAppConfig.ServerConfig?.letsEncryptOptions is not null && !(disableLetsEncrypt ?? false);
-
-        var canUseHttps =
-            enableUseFluffySpoonLetsEncrypt;
-
-        var publicWebHostUrlsFilteredForHttps =
-            canUseHttps && !disableHttps
-            ?
-            publicWebHostUrls
-            :
-            [.. publicWebHostUrls.Where(url => !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))];
-
-        logger.LogInformation(
-            "disableLetsEncrypt: {disableLetsEncrypt}", disableLetsEncrypt?.ToString() ?? "null");
-
-        logger.LogInformation(
-            "enableUseFluffySpoonLetsEncrypt: {enableUseFluffySpoonLetsEncrypt}", enableUseFluffySpoonLetsEncrypt);
-
-        logger.LogInformation(
-            "canUseHttps: {canUseHttps}", canUseHttps);
-
-        logger.LogInformation(
-            "disableHttps: {disableHttps}", disableHttps);
 
         var webHostBuilder =
             appBuilder.WebHost
@@ -68,15 +41,10 @@ public class PublicAppState(
             {
                 ConfigureServices(serverAndElmAppConfig, services, logger);
             })
-            .UseUrls([.. publicWebHostUrlsFilteredForHttps])
+            .UseUrls([.. publicWebHostUrls])
             .WithSettingDateTimeOffsetDelegate(getDateTimeOffset);
 
         var app = appBuilder.Build();
-
-        if (enableUseFluffySpoonLetsEncrypt)
-        {
-            app.UseFluffySpoonLetsEncrypt();
-        }
 
         app.UseResponseCompression();
 
@@ -86,13 +54,7 @@ public class PublicAppState(
             app.Logger?.LogInformation("Public app noticed ApplicationStopping.");
         });
 
-        app.Run(async context =>
-        {
-            await Asp.MiddlewareFromWebServiceConfig(
-                serverAndElmAppConfig.ServerConfig,
-                context,
-                () => HandleRequestAsync(context));
-        });
+        app.Run(HandleRequestAsync);
 
         return app;
     }
@@ -107,28 +69,6 @@ public class PublicAppState(
             options.EnableForHttps = true;
         });
 
-        if (serverAndElmAppConfig.ServerConfig?.letsEncryptOptions is not { } letsEncryptOptions)
-        {
-            logger.LogInformation("I did not find 'letsEncryptOptions' in the configuration. I continue without Let's Encrypt.");
-        }
-        else
-        {
-            if (serverAndElmAppConfig.DisableLetsEncrypt ?? false)
-            {
-                logger.LogInformation(
-                    "I found 'letsEncryptOptions' in the configuration, but 'disableLetsEncrypt' is set to true. I continue without Let's Encrypt.");
-            }
-            else
-            {
-                logger.LogInformation(
-                    "I found 'letsEncryptOptions' in the configuration: {letsEncryptOptions}",
-                    System.Text.Json.JsonSerializer.Serialize(letsEncryptOptions));
-                services.AddFluffySpoonLetsEncrypt(letsEncryptOptions);
-                services.AddFluffySpoonLetsEncryptFileCertificatePersistence();
-                services.AddFluffySpoonLetsEncryptMemoryChallengePersistence();
-            }
-        }
-
         Asp.ConfigureServices(services);
     }
 
@@ -142,7 +82,7 @@ public class PublicAppState(
                 await Asp.AsInterfaceHttpRequestAsync(context.Request),
                 new WebServiceInterface.HttpRequestContext(
                     ClientAddress: context.Connection.RemoteIpAddress?.ToString()),
-                httpRequestEventSizeLimit: serverAndElmAppConfig.ServerConfig?.httpRequestEventSizeLimit,
+                httpRequestEventSizeLimit: HttpRequestEventSizeLimitDefault,
                 ApplicationStoppingCancellationTokenSource.Token);
 
         await Asp.SendHttpResponseAsync(context, report.Response);
@@ -260,8 +200,5 @@ public class PublicAppState(
 }
 
 public record ServerAndElmAppConfig(
-    WebServiceConfigJson? ServerConfig,
     Func<WebServiceInterface.HttpRequestEventStruct, Task<WebServiceInterface.HttpResponse>> ProcessHttpRequestAsync,
-    IReadOnlyList<WebServiceInterface.Command> InitOrMigrateCmds,
-    bool? DisableLetsEncrypt,
-    bool DisableHttps);
+    IReadOnlyList<WebServiceInterface.Command> InitOrMigrateCmds);

@@ -197,12 +197,12 @@ public class WebServiceTests
         }
     }
 
-    [Fact]
+    [Fact(Skip = "Rate limits currently not implemented")]
     public void Web_host_rate_limits_requests_before_reaching_persistent_process()
     {
-        const int requestBatchSize = 100;
-        const int minimumNumberOfRequestsInFastBatchExpectedToBeBlockedByRateLimit = 85;
-        const int rateLimitWindowSize = 10;
+        const int RequestBatchSize = 100;
+        const int MinimumNumberOfRequestsInFastBatchExpectedToBeBlockedByRateLimit = 85;
+        const int RateLimitWindowSize = 10;
 
         var fileStoreWriter = new RecordingFileStoreWriter();
 
@@ -230,27 +230,17 @@ public class WebServiceTests
         var requestsBatches =
             Enumerable.Range(0, 3)
             .Select(batchIndex =>
-                Enumerable.Range(0, requestBatchSize)
+                Enumerable.Range(0, RequestBatchSize)
                 .Select(indexInBatch =>
                 new
                 {
                     batchIndex,
                     indexInBatch,
-                    addition = batchIndex * requestBatchSize + indexInBatch
+                    addition = batchIndex * RequestBatchSize + indexInBatch
                 }).ToList())
                 .ToList();
 
-        var deploymentFiles =
-            TestSetup.WithWebServiceConfigJson(
-                TestSetup.CounterElmWebApp,
-                new WebServiceConfigJson
-                (
-                    singleRateLimitWindowPerClientIPv4Address: new RateLimitWindow
-                    (
-                        windowSizeInMs: 1000 * rateLimitWindowSize,
-                        limit: rateLimitWindowSize
-                    )
-                ));
+        var deploymentFiles = TestSetup.CounterElmWebApp;
 
         using var testSetup =
             WebHostAdminInterfaceTestSetup.Setup(
@@ -282,7 +272,7 @@ public class WebServiceTests
             return response;
         }
 
-        IEnumerable<HttpResponseMessage> whereStatusCodeTooManyRequests(
+        IEnumerable<HttpResponseMessage> WhereStatusCodeTooManyRequests(
             IEnumerable<HttpResponseMessage> httpResponses) =>
             httpResponses.Where(httpResponse => httpResponse.StatusCode == HttpStatusCode.TooManyRequests);
 
@@ -296,7 +286,7 @@ public class WebServiceTests
                     return PostStringContentToPublicAppAsync(processEvent.addition).Result;
                 }).ToList();
 
-            whereStatusCodeTooManyRequests(firstBatchHttpResponses).Count()
+            WhereStatusCodeTooManyRequests(firstBatchHttpResponses).Count()
             .Should().Be(0, "No HTTP response from the first batch has status code 'Too Many Requests'.");
         }
 
@@ -313,8 +303,8 @@ public class WebServiceTests
                     return PostStringContentToPublicAppAsync(processEvent.addition).Result;
                 }).ToList();
 
-            whereStatusCodeTooManyRequests(secondBatchHttpResponses).Count()
-            .Should().BeGreaterThan(minimumNumberOfRequestsInFastBatchExpectedToBeBlockedByRateLimit,
+            WhereStatusCodeTooManyRequests(secondBatchHttpResponses).Count()
+            .Should().BeGreaterThan(MinimumNumberOfRequestsInFastBatchExpectedToBeBlockedByRateLimit,
                 "At least this many requests in the fast batch are expected to be answered with status code 'Too Many Requests'.");
         }
 
@@ -323,10 +313,10 @@ public class WebServiceTests
 
         storeAppendCountDuringSecondBatch.Should()
             .BeLessThan(
-            requestBatchSize / 2,
+            RequestBatchSize / 2,
             "Not all events from the second batch have been stored.");
 
-        letTimePassInPersistentProcessHost(TimeSpan.FromSeconds(rateLimitWindowSize));
+        letTimePassInPersistentProcessHost(TimeSpan.FromSeconds(RateLimitWindowSize));
 
         var storeAppendCountBeforeThirdBatch =
             fileStoreHistoryCountAppendOperations();
@@ -340,7 +330,7 @@ public class WebServiceTests
                     return PostStringContentToPublicAppAsync(processEvent.addition).Result;
                 }).ToList();
 
-            whereStatusCodeTooManyRequests(thirdBatchHttpResponses).Count()
+            WhereStatusCodeTooManyRequests(thirdBatchHttpResponses).Count()
             .Should().Be(0, "No HTTP response from the third batch has status code 'Too Many Requests'.");
         }
 
@@ -348,22 +338,16 @@ public class WebServiceTests
             fileStoreHistoryCountAppendOperations();
 
         storeAppendCountAfterThirdBatch.Should()
-            .BeGreaterThanOrEqualTo(storeAppendCountBeforeThirdBatch + requestBatchSize,
+            .BeGreaterThanOrEqualTo(storeAppendCountBeforeThirdBatch + RequestBatchSize,
             "All events from the third batch have been stored.");
     }
 
-    [Fact]
+    [Fact(Skip = "HTTP request size limits currently not implemented")]
     public async System.Threading.Tasks.Task Web_host_limits_http_request_size()
     {
-        const int requestSizeLimit = 20_000;
+        const int RequestSizeLimit = 20_000;
 
-        var deploymentFiles =
-            TestSetup.WithWebServiceConfigJson(
-                TestSetup.StringBuilderElmWebApp,
-                new WebServiceConfigJson
-                {
-                    httpRequestEventSizeLimit = requestSizeLimit,
-                });
+        var deploymentFiles = TestSetup.StringBuilderElmWebApp;
 
         using var testSetup = WebHostAdminInterfaceTestSetup.Setup(
             deployAppAndInitElmState: FileTreeEncoding.Encode(
@@ -384,13 +368,13 @@ public class WebServiceTests
 
         var sufficientlySmallRequestContentSize =
             // Consider overhead from base64 encoding plus additional properties of an HTTP request.
-            requestSizeLimit / 4 * 3 - 2000;
+            RequestSizeLimit / 4 * 3 - 2000;
 
         (await PostStringContentToPublicAppAsync(
             "small enough content" + new string('_', sufficientlySmallRequestContentSize))).StatusCode.Should()
             .Be(HttpStatusCode.OK, "Receive OK status code for sufficiently small request.");
 
-        (await PostStringContentToPublicAppAsync("too large content" + new string('_', requestSizeLimit))).StatusCode.Should()
+        (await PostStringContentToPublicAppAsync("too large content" + new string('_', RequestSizeLimit))).StatusCode.Should()
             .Be(HttpStatusCode.RequestEntityTooLarge, "Receive non-OK status code for too large request.");
     }
 

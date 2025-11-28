@@ -16,10 +16,6 @@ public static class Configuration
 
     public static string PublicWebHostUrlsSettingKey => "publicWebHostUrls";
 
-    public static string DisableLetsEncryptSettingKey => "disableLetsEncrypt";
-
-    public static string DisableHttpsSettingKey => "disableHttps";
-
     public static string[] PublicWebHostUrlsDefault => ["http://*", "https://*"];
 
     /// <summary>

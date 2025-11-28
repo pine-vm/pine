@@ -2,7 +2,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.Extensions.DependencyInjection;
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -15,67 +14,8 @@ namespace ElmTime.Platform.WebService;
 /// </summary>
 public static class Asp
 {
-    private class ClientsRateLimitStateContainer
-    {
-        public readonly ConcurrentDictionary<string, IMutableRateLimit> RateLimitFromClientId = new();
-    }
-
     public static void ConfigureServices(IServiceCollection services)
     {
-        services.AddSingleton(new ClientsRateLimitStateContainer());
-    }
-
-    public static async Task MiddlewareFromWebServiceConfig(
-        WebServiceConfigJson? serverConfig, HttpContext context, Func<Task> next) =>
-        await RateLimitMiddlewareFromWebServiceConfig(serverConfig, context, next);
-
-    private static async Task RateLimitMiddlewareFromWebServiceConfig(
-        WebServiceConfigJson? serverConfig,
-        HttpContext context,
-        Func<Task> next)
-    {
-        const string DefaultClientId = "MapToIPv4-failed";
-
-        string ClientId()
-        {
-            try
-            {
-                return context.Connection.RemoteIpAddress?.MapToIPv4().ToString() ?? DefaultClientId;
-            }
-            catch
-            {
-                return DefaultClientId;
-            }
-        }
-
-        var rateLimitFromClientId =
-            context.RequestServices.GetService<ClientsRateLimitStateContainer>()?.RateLimitFromClientId;
-
-        var clientRateLimitState =
-            rateLimitFromClientId?
-            .GetOrAdd(ClientId(), _ => BuildRateLimitContainerForClient(serverConfig));
-
-        if (clientRateLimitState?.AttemptPass(Configuration.GetDateTimeOffset(context).ToUnixTimeMilliseconds()) ?? true)
-        {
-            await next.Invoke();
-            return;
-        }
-
-        context.Response.StatusCode = 429;
-        await context.Response.WriteAsync("");
-    }
-
-    private static IMutableRateLimit BuildRateLimitContainerForClient(WebServiceConfigJson? jsonStructure)
-    {
-        if (jsonStructure?.singleRateLimitWindowPerClientIPv4Address is not { } singleRateLimitWindowPerClientIPv4Address)
-            return new MutableRateLimitAlwaysPassing();
-
-        return new RateLimitMutableContainer(new RateLimitStateSingleWindow
-        (
-            limit: singleRateLimitWindowPerClientIPv4Address.limit,
-            windowSize: singleRateLimitWindowPerClientIPv4Address.windowSizeInMs,
-            passes: []
-        ));
     }
 
     public static async Task<Pine.Elm.Platform.WebServiceInterface.HttpRequestProperties>

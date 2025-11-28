@@ -21,11 +21,11 @@ namespace Pine.Platform.WebService;
 /// </summary>
 public sealed record StaticAppSnapshottingState : IAsyncDisposable
 {
+    public const int HttpRequestEventSizeLimitDefault = 1_000_000;
+
     private readonly ProcessLiveRepresentation _process;
 
     private readonly PublicAppState _publicAppState;
-
-    private readonly WebServiceConfigJson? _serverConfig;
 
     private readonly IFileStore _fileStore;
 
@@ -41,13 +41,11 @@ public sealed record StaticAppSnapshottingState : IAsyncDisposable
 
     public static StaticAppSnapshottingState Create(
         FileTree webServiceAppSourceFiles,
-        WebServiceConfigJson? serverConfig,
         IFileStore fileStore,
         Action<string> logMessage,
         CancellationToken cancellationToken) =>
         Create(
             webServiceAppSourceFiles,
-            serverConfig: serverConfig,
             entryFileName: ["src", "Backend", "Main.elm"],
             fileStore: fileStore,
             logMessage: logMessage,
@@ -55,7 +53,6 @@ public sealed record StaticAppSnapshottingState : IAsyncDisposable
 
     public static StaticAppSnapshottingState Create(
         FileTree webServiceAppSourceFiles,
-        WebServiceConfigJson? serverConfig,
         IReadOnlyList<string> entryFileName,
         IFileStore fileStore,
         Action<string> logMessage,
@@ -69,7 +66,6 @@ public sealed record StaticAppSnapshottingState : IAsyncDisposable
         return
             new StaticAppSnapshottingState(
                 webServiceCompiledModules,
-                serverConfig,
                 fileStore,
                 logMessage,
                 cancellationToken);
@@ -77,7 +73,6 @@ public sealed record StaticAppSnapshottingState : IAsyncDisposable
 
     public static StaticAppSnapshottingState Create(
         PineValue webServiceCompiledModules,
-        WebServiceConfigJson? serverConfig,
         IFileStore fileStore,
         Action<string> logMessage,
         CancellationToken cancellationToken)
@@ -85,7 +80,6 @@ public sealed record StaticAppSnapshottingState : IAsyncDisposable
         return
             new StaticAppSnapshottingState(
                 webServiceCompiledModules,
-                serverConfig,
                 fileStore,
                 logMessage,
                 cancellationToken);
@@ -93,13 +87,11 @@ public sealed record StaticAppSnapshottingState : IAsyncDisposable
 
     public StaticAppSnapshottingState(
         PineValue webServiceCompiledModules,
-        WebServiceConfigJson? serverConfig,
         IFileStore fileStore,
         Action<string> logMessage,
         CancellationToken cancellationToken)
     {
         _fileStore = fileStore;
-        _serverConfig = serverConfig;
 
         _webServiceAppHash =
             Convert.ToHexStringLower(PineValueHashTree.ComputeHash(webServiceCompiledModules).Span);
@@ -128,11 +120,8 @@ public sealed record StaticAppSnapshottingState : IAsyncDisposable
         _publicAppState =
             new PublicAppState(
                 serverAndElmAppConfig: new ServerAndElmAppConfig(
-                    ServerConfig: serverConfig,
                     ProcessHttpRequestAsync: _process.ProcessHttpRequestAsync,
-                    InitOrMigrateCmds: [],
-                    DisableLetsEncrypt: true,
-                    DisableHttps: true),
+                    InitOrMigrateCmds: []),
                 getDateTimeOffset: () => DateTimeOffset.UtcNow);
 
         logMessage(
@@ -209,7 +198,7 @@ public sealed record StaticAppSnapshottingState : IAsyncDisposable
                             httpRequestProperties,
                             new WebServiceInterface.HttpRequestContext(
                                 ClientAddress: context.Connection.RemoteIpAddress?.ToString()),
-                            httpRequestEventSizeLimit: _serverConfig?.httpRequestEventSizeLimit,
+                            httpRequestEventSizeLimit: HttpRequestEventSizeLimitDefault,
                             cancellationToken: context.RequestAborted).Result;
 
                     var httpResponse = processReport.Response;
