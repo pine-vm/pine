@@ -183,9 +183,19 @@ public class DynamicPGOShare : IDisposable
 
             while (completedCompilations.LastOrDefault() == lastCompletedCompilation)
             {
-                cancellationToken.ThrowIfCancellationRequested();
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    return;
+                }
 
-                Task.Delay(TimeSpan.FromSeconds(1), cancellationToken).Wait();
+                try
+                {
+                    Task.Delay(TimeSpan.FromSeconds(1), cancellationToken).Wait();
+                }
+                catch (AggregateException ex) when (ex.Flatten().InnerExceptions.OfType<TaskCanceledException>().Any())
+                {
+                    return;
+                }
             }
         }, cancellationToken);
 
