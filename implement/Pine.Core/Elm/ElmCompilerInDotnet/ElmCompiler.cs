@@ -810,15 +810,15 @@ public class ElmCompiler
             // Build reference to the encoded function at environment[0][functionIndex]
             // Start with environment
             var functionRef =
-                CodeAnalysis.CodeAnalysis.BuildExpressionForPathInExpression(
-                    Expression.EnvironmentInstance,
-                    [0, functionIndex]);
+                ExpressionBuilder.BuildExpressionForPathInExpression(
+                    [0, functionIndex],
+                    Expression.EnvironmentInstance);
 
             // Get the function list from current environment for the new environment
             var functionList =
-                CodeAnalysis.CodeAnalysis.BuildExpressionForPathInExpression(
-                    Expression.EnvironmentInstance,
-                    [0]);
+                ExpressionBuilder.BuildExpressionForPathInExpression(
+                    [0],
+                    Expression.EnvironmentInstance);
 
             // Construct environment for the function call: [functionList, [argument]]
             var callEnvironment =
@@ -933,9 +933,9 @@ public class ElmCompiler
         // [1] = parameters list
 
         return
-            CodeAnalysis.CodeAnalysis.BuildExpressionForPathInExpression(
-                Expression.EnvironmentInstance,
-                [1, parameterIndex]);
+            ExpressionBuilder.BuildExpressionForPathInExpression(
+                [1, parameterIndex],
+                Expression.EnvironmentInstance);
     }
 
     private static PineValue EmitPlainValueDeclaration(PineValue value)

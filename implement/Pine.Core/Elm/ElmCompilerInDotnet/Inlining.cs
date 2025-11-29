@@ -954,7 +954,7 @@ public class Inlining
 
         public int GetHashCode((ModuleName ModuleName, string FunctionName) obj)
         {
-            var hash = new System.HashCode();
+            var hash = new HashCode();
 
             foreach (var part in obj.ModuleName)
             {

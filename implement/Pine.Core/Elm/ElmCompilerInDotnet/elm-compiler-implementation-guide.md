@@ -42,5 +42,12 @@ Because of the direct recursion, the calling function happens to be the called f
 ]
 ```
 
-Following this pattern guarantees that common tooling for inspection and profiling can parse and analyze the invocations. We also use these tools to derive symbols for pseudo-functions rendered as part of snapshot tests.
+Following this pattern ensures that common inspection and profiling tooling can parse and analyze the invocations. We also use these tools to derive symbols for pseudo-functions rendered as part of snapshot tests.
 
+### Function Values And Partial Application
+
+The Elm programming language supports closures and partial application. When a function (with remaining parameters) escapes a scope as a value, the Elm compiler emits a representation of this partially applied function that allows adding more arguments sometime later.
+
+For function applications where the function is a value of unknown origin, the Elm compiler emits an expression that adds the given arguments using a form that allows for generic partial application. It emits this partial application as `ParseAndEvalExpression`, where the `Environment` contains the argument value. (If the Elm application expression contains multiple arguments, the compiler nests this pattern recursively)
+
+When emitting a function value, the compiler creates a corresponding wrapper matching the number of parameters. On application of the last argument, the wrapper uses an environment structure as described in the 'Full Function Applications' section.
