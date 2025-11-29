@@ -495,6 +495,144 @@ public class PartialApplicationWrapperTests
 
     #endregion
 
+    #region ParseFunctionRecord with Nested Wrapper Tests
+
+    [Fact]
+    public void ParseFunctionRecord_ZeroParameters_ParsesCorrectly()
+    {
+        var expectedResult = PineValue.Blob([42, 43]);
+        var innerExpression = Expression.LiteralInstance(expectedResult);
+
+        var functionValue =
+            PartialApplicationWrapper.EmitFunctionValue(
+                innerExpression,
+                parameterCount: 0,
+                envFunctions: []);
+
+        // Parse the nested wrapper form
+        var parseResult = FunctionRecord.ParseFunctionRecordTagged(functionValue, s_parseCache);
+
+        parseResult.IsOkOrNull().Should().NotBeNull();
+        var record = parseResult.IsOkOrNull()!;
+
+        record.ParameterCount.Should().Be(0);
+        record.EnvFunctions.Length.Should().Be(0);
+        record.ArgumentsAlreadyCollected.Length.Should().Be(0);
+    }
+
+    [Fact]
+    public void ParseFunctionRecord_SingleParameter_ParsesCorrectly()
+    {
+        var innerExpression = BuildExpressionForPathInEnvironment([1, 0]);
+
+        var functionValue =
+            PartialApplicationWrapper.EmitFunctionValue(
+                innerExpression,
+                parameterCount: 1,
+                envFunctions: []);
+
+        // Parse the nested wrapper form
+        var parseResult = FunctionRecord.ParseFunctionRecordTagged(functionValue, s_parseCache);
+
+        parseResult.IsOkOrNull().Should().NotBeNull();
+        var record = parseResult.IsOkOrNull()!;
+
+        record.ParameterCount.Should().Be(1);
+        record.EnvFunctions.Length.Should().Be(0);
+        record.ArgumentsAlreadyCollected.Length.Should().Be(0);
+    }
+
+    [Fact]
+    public void ParseFunctionRecord_SingleParameter_WithEnvFunctions_ParsesParameterCount()
+    {
+        var envFunc0 = PineValue.Blob([100]);
+        var envFunc1 = PineValue.Blob([200]);
+
+        var innerExpression = Expression.ListInstance(
+            [
+            BuildExpressionForPathInEnvironment([0, 0]),
+            BuildExpressionForPathInEnvironment([0, 1]),
+            BuildExpressionForPathInEnvironment([1, 0])
+            ]);
+
+        var functionValue =
+            PartialApplicationWrapper.EmitFunctionValue(
+                innerExpression,
+                parameterCount: 1,
+                envFunctions: [envFunc0, envFunc1]);
+
+        // Parse the nested wrapper form
+        var parseResult = FunctionRecord.ParseFunctionRecordTagged(functionValue, s_parseCache);
+
+        parseResult.IsOkOrNull().Should().NotBeNull();
+        var record = parseResult.IsOkOrNull()!;
+
+        // Verify parameter count is correctly parsed
+        record.ParameterCount.Should().Be(1);
+        record.ArgumentsAlreadyCollected.Length.Should().Be(0);
+
+        // Note: env functions parsing from nested wrapper form requires traversing to innermost level
+        // The current implementation extracts env functions from the outermost level
+        record.EnvFunctions.Length.Should().Be(2);
+        record.EnvFunctions.Span[0].Should().Be(envFunc0);
+        record.EnvFunctions.Span[1].Should().Be(envFunc1);
+    }
+
+    [Fact]
+    public void ParseFunctionRecord_TwoParameters_ParsesParameterCount()
+    {
+        var innerExpression = Expression.ListInstance(
+            [
+            BuildExpressionForPathInEnvironment([1, 0]),
+            BuildExpressionForPathInEnvironment([1, 1])
+            ]);
+
+        var functionValue =
+            PartialApplicationWrapper.EmitFunctionValue(
+                innerExpression,
+                parameterCount: 2,
+                envFunctions: []);
+
+        // Parse the nested wrapper form
+        var parseResult = FunctionRecord.ParseFunctionRecordTagged(functionValue, s_parseCache);
+
+        parseResult.IsOkOrNull().Should().NotBeNull();
+        var record = parseResult.IsOkOrNull()!;
+
+        record.ParameterCount.Should().Be(2);
+        record.EnvFunctions.Length.Should().Be(0);
+        record.ArgumentsAlreadyCollected.Length.Should().Be(0);
+    }
+
+    [Fact]
+    public void ParseFunctionRecord_ThreeParameters_ParsesParameterCount()
+    {
+        var innerExpression = Expression.ListInstance(
+            [
+            BuildExpressionForPathInEnvironment([1, 0]),
+            BuildExpressionForPathInEnvironment([1, 1]),
+            BuildExpressionForPathInEnvironment([1, 2])
+            ]);
+
+        var functionValue =
+            PartialApplicationWrapper.EmitFunctionValue(
+                innerExpression,
+                parameterCount: 3,
+                envFunctions: []);
+
+        // Parse the nested wrapper form
+        var parseResult = FunctionRecord.ParseFunctionRecordTagged(functionValue, s_parseCache);
+
+        parseResult.IsOkOrNull().Should().NotBeNull();
+        var record = parseResult.IsOkOrNull()!;
+
+        record.ParameterCount.Should().Be(3);
+        record.EnvFunctions.Length.Should().Be(0);
+        record.ArgumentsAlreadyCollected.Length.Should().Be(0);
+    }
+
+    #endregion
+
     #region Helper Methods
 
     private static Expression BuildExpressionForPathInEnvironment(
