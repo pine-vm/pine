@@ -37,6 +37,9 @@ public static class IntegerEncoding
         [..Enumerable.Range(0, 10_000)
         .Select(range => EncodeUnsignedInteger(range).Extract(err => throw new Exception(err)))];
 
+    private static readonly IReadOnlyList<PineValue> s_reusedValueFromSignedIntegerPositive =
+        [.. Enumerable.Range(0, 10_000).Select(range => EncodeSignedInteger(range))];
+
     /// <summary>
     /// Returns a reused instance of a <see cref="PineValue"/> encoding <paramref name="integer"/> in unsigned form.
     /// <para>
@@ -84,6 +87,18 @@ public static class IntegerEncoding
     /// </summary>
     public static PineValue EncodeSignedInteger(System.Numerics.BigInteger integer)
     {
+        if (integer > long.MinValue && integer < long.MaxValue)
+        {
+            var asLong = (long)integer;
+
+            if (s_reusedValueFromSignedIntegerPositive is { } reusedPositive &&
+                0 <= asLong &&
+                asLong < reusedPositive.Count)
+            {
+                return reusedPositive[(int)asLong];
+            }
+        }
+
         var absoluteValue = System.Numerics.BigInteger.Abs(integer);
 
         var signByte =
