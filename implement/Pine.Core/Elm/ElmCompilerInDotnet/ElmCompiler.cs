@@ -258,11 +258,23 @@ public class ElmCompiler
         // Build parameter name mapping: parameter names to their indices
         var parameterNames = new Dictionary<string, int>();
 
+        // Build local bindings for pattern-matched parameters
+        var localBindings = new Dictionary<string, Expression>();
+
         for (var i = 0; i < arguments.Count; i++)
         {
-            if (arguments[i].Value is SyntaxTypes.Pattern.VarPattern varPattern)
+            var argPattern = arguments[i].Value;
+
+            if (argPattern is SyntaxTypes.Pattern.VarPattern varPattern)
             {
                 parameterNames[varPattern.Name] = i;
+            }
+            else
+            {
+                // For non-VarPattern arguments, extract bindings from the pattern
+                // The scrutinee is the parameter at index i
+                var paramExpr = BuildPathToParameter(i);
+                ExtractPatternBindingsRecursive(argPattern, paramExpr, localBindings);
             }
         }
 
@@ -288,7 +300,7 @@ public class ElmCompiler
             ParameterTypes: parameterTypes,
             CurrentModuleName: currentModuleName,
             CurrentFunctionName: functionName,
-            LocalBindings: null,
+            LocalBindings: localBindings.Count > 0 ? localBindings : null,
             DependencyLayout: dependencyLayout,
             ModuleCompilationContext: context);
 
@@ -1323,6 +1335,44 @@ public class ElmCompiler
                 }
                 break;
 
+            case SyntaxTypes.Pattern.NamedPattern namedPattern:
+                // Named patterns (choice type tags) are represented as: [tagName, [arg1, arg2, ...]]
+                // Arguments are in scrutinee[1] which is a list
+                if (namedPattern.Arguments.Count > 0)
+                {
+                    var argsListExpr = GetListElementExpression(scrutinee, 1);
+
+                    for (var i = 0; i < namedPattern.Arguments.Count; i++)
+                    {
+                        var argPattern = namedPattern.Arguments[i].Value;
+                        var argExpr = GetListElementExpression(argsListExpr, i);
+                        ExtractPatternBindingsRecursive(argPattern, argExpr, bindings);
+                    }
+                }
+                break;
+
+            case SyntaxTypes.Pattern.RecordPattern recordPattern:
+                // Records are encoded as: ["Elm_Record", [[[fieldName1, value1], [fieldName2, value2], ...]]]
+                // The fields list is at scrutinee[1][0]
+                var fieldsListExpr = GetListElementExpression(GetListElementExpression(scrutinee, 1), 0);
+
+                // Get the field names from the pattern, sorted alphabetically (matching record encoding order)
+                var patternFieldNames = recordPattern.Fields
+                    .Select(f => f.Value)
+                    .OrderBy(name => name, StringComparer.Ordinal)
+                    .ToList();
+
+                // For each field, bind the value from the corresponding position
+                for (var i = 0; i < patternFieldNames.Count; i++)
+                {
+                    var fieldName = patternFieldNames[i];
+                    // Each field entry is [fieldName, fieldValue], so we get element at index i, then get [1] for value
+                    var fieldEntryExpr = GetListElementExpression(fieldsListExpr, i);
+                    var fieldValueExpr = GetListElementExpression(fieldEntryExpr, 1);
+                    bindings[fieldName] = fieldValueExpr;
+                }
+                break;
+
             case SyntaxTypes.Pattern.AllPattern:
             case SyntaxTypes.Pattern.IntPattern:
                 // These patterns don't introduce bindings
@@ -1478,6 +1528,104 @@ public class ElmCompiler
             return combinedCondition;
         }
 
+        // TuplePattern matches a tuple/list with specific elements
+        if (pattern is SyntaxTypes.Pattern.TuplePattern tuplePattern)
+        {
+            // Optimization: if all elements are constants, use a single equality check
+            if (IsConstantPattern(tuplePattern))
+            {
+                var patternValue = PatternToConstantValue(tuplePattern);
+
+                return ApplyBuiltinEqualBinary(scrutinee, Expression.LiteralInstance(patternValue));
+            }
+
+            // Check length then each element
+            var lengthCheckExpr = ApplyBuiltinLength(scrutinee);
+            var expectedLength = Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(tuplePattern.Elements.Count));
+            var lengthCondition = ApplyBuiltinEqualBinary(lengthCheckExpr, expectedLength);
+
+            Expression combinedCondition = lengthCondition;
+
+            for (var i = 0; i < tuplePattern.Elements.Count; i++)
+            {
+                var elementPattern = tuplePattern.Elements[i].Value;
+                var elementExpr = GetListElementExpression(scrutinee, i);
+
+                var elementCondition = CompilePatternCondition(elementPattern, elementExpr);
+
+                if (elementCondition is not null)
+                {
+                    combinedCondition =
+                        Expression.ConditionalInstance(
+                            condition: elementCondition,
+                            trueBranch: combinedCondition,
+                            falseBranch: Expression.LiteralInstance(KernelFunction.ValueFromBool(false)));
+                }
+            }
+
+            return combinedCondition;
+        }
+
+        // NamedPattern matches a choice type tag with arguments
+        if (pattern is SyntaxTypes.Pattern.NamedPattern namedPattern)
+        {
+            var tagName = namedPattern.Name.Name;
+
+            // Optimization: if all arguments are constants, use a single equality check
+            if (IsConstantPattern(namedPattern))
+            {
+                var patternValue = PatternToConstantValue(namedPattern);
+
+                return ApplyBuiltinEqualBinary(scrutinee, Expression.LiteralInstance(patternValue));
+            }
+
+            // Tags are represented as: [tagName, [arg1, arg2, ...]]
+            // First check the tag name at scrutinee[0]
+            var tagNameExpr = GetListElementExpression(scrutinee, 0);
+            var expectedTagName = Expression.LiteralInstance(StringEncoding.ValueFromString(tagName));
+            var tagNameCondition = ApplyBuiltinEqualBinary(tagNameExpr, expectedTagName);
+
+            Expression combinedCondition = tagNameCondition;
+
+            // If there are arguments, check each one
+            if (namedPattern.Arguments.Count > 0)
+            {
+                // Arguments are in scrutinee[1] which is a list
+                var argsListExpr = GetListElementExpression(scrutinee, 1);
+
+                // Check the number of arguments
+                var argsLengthExpr = ApplyBuiltinLength(argsListExpr);
+                var expectedArgsLength = Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(namedPattern.Arguments.Count));
+                var argsLengthCondition = ApplyBuiltinEqualBinary(argsLengthExpr, expectedArgsLength);
+
+                combinedCondition =
+                    Expression.ConditionalInstance(
+                        condition: argsLengthCondition,
+                        trueBranch: combinedCondition,
+                        falseBranch: Expression.LiteralInstance(KernelFunction.ValueFromBool(false)));
+
+                // Check each argument pattern
+                for (var i = 0; i < namedPattern.Arguments.Count; i++)
+                {
+                    var argPattern = namedPattern.Arguments[i].Value;
+                    var argExpr = GetListElementExpression(argsListExpr, i);
+
+                    var argCondition = CompilePatternCondition(argPattern, argExpr);
+
+                    if (argCondition is not null)
+                    {
+                        combinedCondition =
+                            Expression.ConditionalInstance(
+                                condition: argCondition,
+                                trueBranch: combinedCondition,
+                                falseBranch: Expression.LiteralInstance(KernelFunction.ValueFromBool(false)));
+                    }
+                }
+            }
+
+            return combinedCondition;
+        }
+
         throw new NotImplementedException(
             $"Pattern type not yet supported: {pattern.GetType().Name}");
     }
@@ -1489,6 +1637,8 @@ public class ElmCompiler
     /// - IntPattern: integer literals
     /// - ListPattern: when all elements are constant patterns
     /// - ParenthesizedPattern: when the inner pattern is constant
+    /// - TuplePattern: when all elements are constant patterns
+    /// - NamedPattern: when all arguments are constant patterns
     /// </summary>
     private static bool IsConstantPattern(SyntaxTypes.Pattern pattern)
     {
@@ -1498,6 +1648,10 @@ public class ElmCompiler
             SyntaxTypes.Pattern.ParenthesizedPattern p => IsConstantPattern(p.Pattern.Value),
             SyntaxTypes.Pattern.ListPattern listPattern =>
                 listPattern.Elements.All(e => IsConstantPattern(e.Value)),
+            SyntaxTypes.Pattern.TuplePattern tuplePattern =>
+                tuplePattern.Elements.All(e => IsConstantPattern(e.Value)),
+            SyntaxTypes.Pattern.NamedPattern namedPattern =>
+                namedPattern.Arguments.All(e => IsConstantPattern(e.Value)),
             // Variable patterns and other patterns are not constant
             _ => false
         };
@@ -1519,6 +1673,17 @@ public class ElmCompiler
             SyntaxTypes.Pattern.ListPattern listPattern =>
                 PineValue.List(
                     listPattern.Elements
+                    .Select(e => PatternToConstantValue(e.Value))
+                    .ToArray()),
+            SyntaxTypes.Pattern.TuplePattern tuplePattern =>
+                PineValue.List(
+                    tuplePattern.Elements
+                    .Select(e => PatternToConstantValue(e.Value))
+                    .ToArray()),
+            SyntaxTypes.Pattern.NamedPattern namedPattern =>
+                ElmValueEncoding.TagAsPineValue(
+                    namedPattern.Name.Name,
+                    namedPattern.Arguments
                     .Select(e => PatternToConstantValue(e.Value))
                     .ToArray()),
             _ => throw new InvalidOperationException(
