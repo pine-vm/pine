@@ -158,7 +158,7 @@ public class Canonicalization
                 ValueImportMap: valueImportMap,
                 AliasMap: aliasMap,
                 ModuleLevelDeclarations: moduleLevelDeclarations,
-                LocalDeclarations: ImmutableHashSet<string>.Empty);
+                LocalDeclarations: []);
 
             // Canonicalize declarations and collect errors
             var canonicalizedDeclarationsWithErrors =

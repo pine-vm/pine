@@ -274,7 +274,12 @@ public class ElmCompiler
                 // For non-VarPattern arguments, extract bindings from the pattern
                 // The scrutinee is the parameter at index i
                 var paramExpr = BuildPathToParameter(i);
-                ExtractPatternBindingsRecursive(argPattern, paramExpr, localBindings);
+                // Analyze the pattern and merge bindings (ignoring the condition)
+                var analysis = AnalyzePatternRecursive(argPattern, paramExpr);
+                foreach (var kvp in analysis.Bindings)
+                {
+                    localBindings[kvp.Key] = kvp.Value;
+                }
             }
         }
 
@@ -1273,115 +1278,449 @@ public class ElmCompiler
     }
 
     /// <summary>
-    /// Extract variable bindings from a pattern and return expressions to access their values.
+    /// Represents a condition tree for pattern matching.
+    /// The tree structure allows representing conjunctions (AND) and item predicates
+    /// (conditions on sub-items accessed via a path).
     /// </summary>
-    private static Dictionary<string, Expression> ExtractPatternBindings(
+    private abstract record PatternCondition
+    {
+        /// <summary>
+        /// Always matches - no condition needed.
+        /// </summary>
+        public sealed record Always : PatternCondition;
+
+        /// <summary>
+        /// Equality check: scrutinee equals a specific value.
+        /// </summary>
+        public sealed record ValueEquals(Expression Expected) : PatternCondition;
+
+        /// <summary>
+        /// Length check: scrutinee has exactly the specified length.
+        /// </summary>
+        public sealed record LengthEquals(int ExpectedLength) : PatternCondition;
+
+        /// <summary>
+        /// Non-empty check: scrutinee is not empty (length > 0).
+        /// </summary>
+        public sealed record NotEmpty : PatternCondition;
+
+        /// <summary>
+        /// Conjunction of multiple conditions - all must match.
+        /// </summary>
+        public sealed record Conjunction(IReadOnlyList<PatternCondition> Conditions) : PatternCondition;
+
+        /// <summary>
+        /// Condition on a sub-item accessed by an accessor function.
+        /// </summary>
+        public sealed record ItemCondition(
+            Func<Expression, Expression> Accessor,
+            PatternCondition SubCondition) : PatternCondition;
+    }
+
+    /// <summary>
+    /// Result of analyzing a pattern: bindings and condition.
+    /// Bindings are immutable - each pattern analysis returns its own bindings.
+    /// </summary>
+    private record PatternAnalysis(
+        ImmutableDictionary<string, Expression> Bindings,
+        PatternCondition Condition)
+    {
+        /// <summary>
+        /// Empty analysis with no bindings and always-matching condition.
+        /// </summary>
+        public static PatternAnalysis Empty { get; } =
+            new([], new PatternCondition.Always());
+
+        /// <summary>
+        /// Creates an analysis with just a condition and no bindings.
+        /// </summary>
+        public static PatternAnalysis WithCondition(PatternCondition condition) =>
+            new([], condition);
+
+        /// <summary>
+        /// Creates an analysis with a single binding and always-matching condition.
+        /// </summary>
+        public static PatternAnalysis WithBinding(string name, Expression value) =>
+            new(ImmutableDictionary<string, Expression>.Empty.Add(name, value), new PatternCondition.Always());
+    }
+
+    /// <summary>
+    /// Analyzes a pattern and returns both variable bindings and the condition tree.
+    /// This method performs a single traversal of the pattern structure.
+    /// All bindings are collected immutably without mutable parameters.
+    /// </summary>
+    private static PatternAnalysis AnalyzePattern(
         SyntaxTypes.Pattern pattern,
         Expression scrutinee)
     {
-        var bindings = new Dictionary<string, Expression>();
-
-        ExtractPatternBindingsRecursive(pattern, scrutinee, bindings);
-
-        return bindings;
+        return AnalyzePatternRecursive(pattern, scrutinee);
     }
 
-    private static void ExtractPatternBindingsRecursive(
+    /// <summary>
+    /// Recursively analyzes a pattern, returning bindings and condition tree.
+    /// </summary>
+    private static PatternAnalysis AnalyzePatternRecursive(
         SyntaxTypes.Pattern pattern,
-        Expression scrutinee,
-        Dictionary<string, Expression> bindings)
+        Expression scrutinee)
     {
         switch (pattern)
         {
+            case SyntaxTypes.Pattern.AllPattern:
+                // AllPattern (_) matches everything - no condition needed, no bindings
+                return PatternAnalysis.Empty;
+
             case SyntaxTypes.Pattern.VarPattern varPattern:
                 // Variable pattern binds the entire scrutinee to the variable name
-                bindings[varPattern.Name] = scrutinee;
-                break;
+                return PatternAnalysis.WithBinding(varPattern.Name, scrutinee);
 
             case SyntaxTypes.Pattern.ParenthesizedPattern parenthesizedPattern:
                 // Parenthesized pattern just wraps another pattern - unwrap and recurse
-                ExtractPatternBindingsRecursive(parenthesizedPattern.Pattern.Value, scrutinee, bindings);
-                break;
+                return AnalyzePatternRecursive(parenthesizedPattern.Pattern.Value, scrutinee);
 
-            case SyntaxTypes.Pattern.UnConsPattern unConsPattern:
-                // For head :: tail pattern:
-                // - head binds to head(scrutinee)
-                // - tail binds to skip([1, scrutinee])
-                var headExpr = ApplyBuiltinHead(scrutinee);
-                var tailExpr = ApplyBuiltinSkip(1, scrutinee);
-
-                ExtractPatternBindingsRecursive(unConsPattern.Head.Value, headExpr, bindings);
-                ExtractPatternBindingsRecursive(unConsPattern.Tail.Value, tailExpr, bindings);
-                break;
+            case SyntaxTypes.Pattern.IntPattern intPattern:
+                // Integer pattern matches a specific integer value - no bindings
+                return PatternAnalysis.WithCondition(new PatternCondition.ValueEquals(
+                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(intPattern.Value))));
 
             case SyntaxTypes.Pattern.ListPattern listPattern:
-                // For list patterns like [a, b, c], bind each element
-                for (var i = 0; i < listPattern.Elements.Count; i++)
-                {
-                    var elementPattern = listPattern.Elements[i].Value;
-                    var elementExpr = GetListElementExpression(scrutinee, i);
-                    ExtractPatternBindingsRecursive(elementPattern, elementExpr, bindings);
-                }
-                break;
+                return AnalyzeListPattern(listPattern, scrutinee);
+
+            case SyntaxTypes.Pattern.UnConsPattern unConsPattern:
+                return AnalyzeUnConsPattern(unConsPattern, scrutinee);
 
             case SyntaxTypes.Pattern.TuplePattern tuplePattern:
-                // Tuples in Elm are represented as lists in Pine
-                // For tuple patterns like (a, b, c), bind each element by index
-                for (var i = 0; i < tuplePattern.Elements.Count; i++)
-                {
-                    var elementPattern = tuplePattern.Elements[i].Value;
-                    var elementExpr = GetListElementExpression(scrutinee, i);
-                    ExtractPatternBindingsRecursive(elementPattern, elementExpr, bindings);
-                }
-                break;
+                return AnalyzeTuplePattern(tuplePattern, scrutinee);
 
             case SyntaxTypes.Pattern.NamedPattern namedPattern:
-                // Named patterns (choice type tags) are represented as: [tagName, [arg1, arg2, ...]]
-                // Arguments are in scrutinee[1] which is a list
-                if (namedPattern.Arguments.Count > 0)
-                {
-                    var argsListExpr = GetListElementExpression(scrutinee, 1);
-
-                    for (var i = 0; i < namedPattern.Arguments.Count; i++)
-                    {
-                        var argPattern = namedPattern.Arguments[i].Value;
-                        var argExpr = GetListElementExpression(argsListExpr, i);
-                        ExtractPatternBindingsRecursive(argPattern, argExpr, bindings);
-                    }
-                }
-                break;
+                return AnalyzeNamedPattern(namedPattern, scrutinee);
 
             case SyntaxTypes.Pattern.RecordPattern recordPattern:
-                // Records are encoded as: ["Elm_Record", [[[fieldName1, value1], [fieldName2, value2], ...]]]
-                // The fields list is at scrutinee[1][0]
-                var fieldsListExpr = GetListElementExpression(GetListElementExpression(scrutinee, 1), 0);
-
-                // Get the field names from the pattern, sorted alphabetically (matching record encoding order)
-                var patternFieldNames = recordPattern.Fields
-                    .Select(f => f.Value)
-                    .OrderBy(name => name, StringComparer.Ordinal)
-                    .ToList();
-
-                // For each field, bind the value from the corresponding position
-                for (var i = 0; i < patternFieldNames.Count; i++)
-                {
-                    var fieldName = patternFieldNames[i];
-                    // Each field entry is [fieldName, fieldValue], so we get element at index i, then get [1] for value
-                    var fieldEntryExpr = GetListElementExpression(fieldsListExpr, i);
-                    var fieldValueExpr = GetListElementExpression(fieldEntryExpr, 1);
-                    bindings[fieldName] = fieldValueExpr;
-                }
-                break;
-
-            case SyntaxTypes.Pattern.AllPattern:
-            case SyntaxTypes.Pattern.IntPattern:
-                // These patterns don't introduce bindings
-                break;
+                return AnalyzeRecordPattern(recordPattern, scrutinee);
 
             default:
-                // Other patterns not yet supported for binding extraction
-                break;
+                throw new NotImplementedException(
+                    $"Pattern type not yet supported: {pattern.GetType().Name}");
         }
+    }
+
+    private static PatternAnalysis AnalyzeListPattern(
+        SyntaxTypes.Pattern.ListPattern listPattern,
+        Expression scrutinee)
+    {
+        // Empty list pattern
+        if (listPattern.Elements.Count == 0)
+        {
+            return PatternAnalysis.WithCondition(new PatternCondition.LengthEquals(0));
+        }
+
+        // Optimization: if all elements are constants, use a single equality check
+        if (IsConstantPattern(listPattern))
+        {
+            var patternValue = PatternToConstantValue(listPattern);
+            return PatternAnalysis.WithCondition(
+                new PatternCondition.ValueEquals(Expression.LiteralInstance(patternValue)));
+        }
+
+        // For non-constant patterns, check length then each element
+        var conditions = new List<PatternCondition>
+        {
+            new PatternCondition.LengthEquals(listPattern.Elements.Count)
+        };
+
+        var allBindings = ImmutableDictionary<string, Expression>.Empty;
+
+        for (var i = 0; i < listPattern.Elements.Count; i++)
+        {
+            var elementPattern = listPattern.Elements[i].Value;
+            var elementExpr = GetListElementExpression(scrutinee, i);
+
+            // Analyze element pattern and collect bindings
+            var elementAnalysis = AnalyzePatternRecursive(elementPattern, elementExpr);
+            allBindings = allBindings.SetItems(elementAnalysis.Bindings);
+
+            if (elementAnalysis.Condition is not PatternCondition.Always)
+            {
+                var index = i; // Capture for closure
+                conditions.Add(new PatternCondition.ItemCondition(
+                    s => GetListElementExpression(s, index),
+                    elementAnalysis.Condition));
+            }
+        }
+
+        var finalCondition = conditions.Count == 1
+            ? conditions[0]
+            : new PatternCondition.Conjunction(conditions);
+
+        return new PatternAnalysis(allBindings, finalCondition);
+    }
+
+    private static PatternAnalysis AnalyzeUnConsPattern(
+        SyntaxTypes.Pattern.UnConsPattern unConsPattern,
+        Expression scrutinee)
+    {
+        // Get head and tail expressions
+        var headExpr = ApplyBuiltinHead(scrutinee);
+        var tailExpr = ApplyBuiltinSkip(1, scrutinee);
+
+        // Analyze head and tail patterns
+        var headAnalysis = AnalyzePatternRecursive(unConsPattern.Head.Value, headExpr);
+        var tailAnalysis = AnalyzePatternRecursive(unConsPattern.Tail.Value, tailExpr);
+
+        // Merge bindings from head and tail
+        var allBindings = ImmutableDictionary<string, Expression>.Empty
+            .SetItems(headAnalysis.Bindings)
+            .SetItems(tailAnalysis.Bindings);
+
+        var conditions = new List<PatternCondition>
+        {
+            new PatternCondition.NotEmpty()
+        };
+
+        if (headAnalysis.Condition is not PatternCondition.Always)
+        {
+            conditions.Add(new PatternCondition.ItemCondition(
+                ApplyBuiltinHead,
+                headAnalysis.Condition));
+        }
+
+        if (tailAnalysis.Condition is not PatternCondition.Always)
+        {
+            conditions.Add(new PatternCondition.ItemCondition(
+                s => ApplyBuiltinSkip(1, s),
+                tailAnalysis.Condition));
+        }
+
+        var finalCondition = conditions.Count == 1
+            ? conditions[0]
+            : new PatternCondition.Conjunction(conditions);
+
+        return new PatternAnalysis(allBindings, finalCondition);
+    }
+
+    private static PatternAnalysis AnalyzeTuplePattern(
+        SyntaxTypes.Pattern.TuplePattern tuplePattern,
+        Expression scrutinee)
+    {
+        // Optimization: if all elements are constants, use a single equality check
+        if (IsConstantPattern(tuplePattern))
+        {
+            var patternValue = PatternToConstantValue(tuplePattern);
+            return PatternAnalysis.WithCondition(
+                new PatternCondition.ValueEquals(Expression.LiteralInstance(patternValue)));
+        }
+
+        // Check length then each element
+        var conditions = new List<PatternCondition>
+        {
+            new PatternCondition.LengthEquals(tuplePattern.Elements.Count)
+        };
+
+        var allBindings = ImmutableDictionary<string, Expression>.Empty;
+
+        for (var i = 0; i < tuplePattern.Elements.Count; i++)
+        {
+            var elementPattern = tuplePattern.Elements[i].Value;
+            var elementExpr = GetListElementExpression(scrutinee, i);
+
+            // Analyze element pattern and collect bindings
+            var elementAnalysis = AnalyzePatternRecursive(elementPattern, elementExpr);
+            allBindings = allBindings.SetItems(elementAnalysis.Bindings);
+
+            if (elementAnalysis.Condition is not PatternCondition.Always)
+            {
+                var index = i; // Capture for closure
+                conditions.Add(new PatternCondition.ItemCondition(
+                    s => GetListElementExpression(s, index),
+                    elementAnalysis.Condition));
+            }
+        }
+
+        var finalCondition = conditions.Count == 1
+            ? conditions[0]
+            : new PatternCondition.Conjunction(conditions);
+
+        return new PatternAnalysis(allBindings, finalCondition);
+    }
+
+    private static PatternAnalysis AnalyzeNamedPattern(
+        SyntaxTypes.Pattern.NamedPattern namedPattern,
+        Expression scrutinee)
+    {
+        var tagName = namedPattern.Name.Name;
+
+        // Optimization: if all arguments are constants, use a single equality check
+        if (IsConstantPattern(namedPattern))
+        {
+            var patternValue = PatternToConstantValue(namedPattern);
+            return PatternAnalysis.WithCondition(
+                new PatternCondition.ValueEquals(Expression.LiteralInstance(patternValue)));
+        }
+
+        // Tags are represented as: [tagName, [arg1, arg2, ...]]
+        // First check the tag name at scrutinee[0]
+        var expectedTagName = Expression.LiteralInstance(StringEncoding.ValueFromString(tagName));
+        var conditions = new List<PatternCondition>
+        {
+            new PatternCondition.ItemCondition(
+                s => GetListElementExpression(s, 0),
+                new PatternCondition.ValueEquals(expectedTagName))
+        };
+
+        var allBindings = ImmutableDictionary<string, Expression>.Empty;
+
+        // If there are arguments, check each one
+        if (namedPattern.Arguments.Count > 0)
+        {
+            // Arguments are in scrutinee[1] which is a list
+            var argsListExpr = GetListElementExpression(scrutinee, 1);
+
+            // Check the number of arguments
+            conditions.Add(new PatternCondition.ItemCondition(
+                s => GetListElementExpression(s, 1),
+                new PatternCondition.LengthEquals(namedPattern.Arguments.Count)));
+
+            // Check each argument pattern
+            for (var i = 0; i < namedPattern.Arguments.Count; i++)
+            {
+                var argPattern = namedPattern.Arguments[i].Value;
+                var argExpr = GetListElementExpression(argsListExpr, i);
+
+                // Analyze argument pattern and collect bindings
+                var argAnalysis = AnalyzePatternRecursive(argPattern, argExpr);
+                allBindings = allBindings.SetItems(argAnalysis.Bindings);
+
+                if (argAnalysis.Condition is not PatternCondition.Always)
+                {
+                    var index = i; // Capture for closure
+                    conditions.Add(new PatternCondition.ItemCondition(
+                        s => GetListElementExpression(GetListElementExpression(s, 1), index),
+                        argAnalysis.Condition));
+                }
+            }
+        }
+
+        var finalCondition = conditions.Count == 1
+            ? conditions[0]
+            : new PatternCondition.Conjunction(conditions);
+
+        return new PatternAnalysis(allBindings, finalCondition);
+    }
+
+    private static PatternAnalysis AnalyzeRecordPattern(
+        SyntaxTypes.Pattern.RecordPattern recordPattern,
+        Expression scrutinee)
+    {
+        // Records are encoded as: ["Elm_Record", [[[fieldName1, value1], [fieldName2, value2], ...]]]
+        // The fields list is at scrutinee[1][0]
+        var fieldsListExpr = GetListElementExpression(GetListElementExpression(scrutinee, 1), 0);
+
+        // Get the field names from the pattern, sorted alphabetically (matching record encoding order)
+        var patternFieldNames = recordPattern.Fields
+            .Select(f => f.Value)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToList();
+
+        // Build bindings dictionary immutably
+        var bindings = ImmutableDictionary<string, Expression>.Empty;
+        for (var i = 0; i < patternFieldNames.Count; i++)
+        {
+            var fieldName = patternFieldNames[i];
+            // Each field entry is [fieldName, fieldValue], so we get element at index i, then get [1] for value
+            var fieldEntryExpr = GetListElementExpression(fieldsListExpr, i);
+            var fieldValueExpr = GetListElementExpression(fieldEntryExpr, 1);
+            bindings = bindings.Add(fieldName, fieldValueExpr);
+        }
+
+        // Record pattern doesn't add conditions (it just binds fields)
+        return new PatternAnalysis(bindings, new PatternCondition.Always());
+    }
+
+    /// <summary>
+    /// Compiles a condition tree into an Expression that evaluates to a boolean.
+    /// </summary>
+    private static Expression? CompileConditionToExpression(
+        PatternCondition condition,
+        Expression scrutinee)
+    {
+        switch (condition)
+        {
+            case PatternCondition.Always:
+                return null;
+
+            case PatternCondition.ValueEquals equals:
+                return ApplyBuiltinEqualBinary(scrutinee, equals.Expected);
+
+            case PatternCondition.LengthEquals lengthEquals:
+                var lengthExpr = ApplyBuiltinLength(scrutinee);
+                var expectedLength = Expression.LiteralInstance(
+                    IntegerEncoding.EncodeSignedInteger(lengthEquals.ExpectedLength));
+                return ApplyBuiltinEqualBinary(lengthExpr, expectedLength);
+
+            case PatternCondition.NotEmpty:
+                var lengthExprForNotEmpty = ApplyBuiltinLength(scrutinee);
+                var zeroLiteral = Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(0));
+                // Check if list is not empty: (length == 0) == false
+                var isEmptyCondition = ApplyBuiltinEqualBinary(lengthExprForNotEmpty, zeroLiteral);
+                return ApplyBuiltinEqualBinary(
+                    isEmptyCondition,
+                    Expression.LiteralInstance(KernelFunction.ValueFromBool(false)));
+
+            case PatternCondition.ItemCondition itemCondition:
+                var subScrutinee = itemCondition.Accessor(scrutinee);
+                return CompileConditionToExpression(itemCondition.SubCondition, subScrutinee);
+
+            case PatternCondition.Conjunction conjunction:
+                return CompileConjunction(conjunction.Conditions, scrutinee);
+
+            default:
+                throw new NotImplementedException(
+                    $"Condition type not yet supported: {condition.GetType().Name}");
+        }
+    }
+
+    /// <summary>
+    /// Compiles a conjunction of conditions into nested conditional expressions.
+    /// </summary>
+    private static Expression? CompileConjunction(
+        IReadOnlyList<PatternCondition> conditions,
+        Expression scrutinee)
+    {
+        Expression? result = null;
+
+        foreach (var condition in conditions)
+        {
+            var conditionExpr = CompileConditionToExpression(condition, scrutinee);
+
+            if (conditionExpr is null)
+                continue;
+
+            if (result is null)
+            {
+                result = conditionExpr;
+            }
+            else
+            {
+                // Chain conditions: if conditionExpr then result else false
+                result =
+                    Expression.ConditionalInstance(
+                        condition: conditionExpr,
+                        trueBranch: result,
+                        falseBranch: Expression.LiteralInstance(KernelFunction.ValueFromBool(false)));
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Extract variable bindings from a pattern and return expressions to access their values.
+    /// </summary>
+    private static IReadOnlyDictionary<string, Expression> ExtractPatternBindings(
+        SyntaxTypes.Pattern pattern,
+        Expression scrutinee)
+    {
+        var analysis = AnalyzePattern(pattern, scrutinee);
+        return analysis.Bindings;
     }
 
     /// <summary>
@@ -1401,233 +1740,16 @@ public class ElmCompiler
         return ApplyBuiltinHead(skipExpr);
     }
 
+    /// <summary>
+    /// Compiles a pattern's condition by analyzing it and converting the condition tree to an Expression.
+    /// This method uses the unified pattern analysis to avoid duplicating logic.
+    /// </summary>
     private static Expression? CompilePatternCondition(
         SyntaxTypes.Pattern pattern,
         Expression scrutinee)
     {
-        // AllPattern (_) matches everything - no condition needed, always matches
-        if (pattern is SyntaxTypes.Pattern.AllPattern)
-        {
-            return null;
-        }
-
-        // VarPattern matches everything and binds the value - no condition needed
-        if (pattern is SyntaxTypes.Pattern.VarPattern)
-        {
-            return null;
-        }
-
-        // ParenthesizedPattern just wraps another pattern - unwrap and recurse
-        if (pattern is SyntaxTypes.Pattern.ParenthesizedPattern parenthesizedPattern)
-        {
-            return CompilePatternCondition(parenthesizedPattern.Pattern.Value, scrutinee);
-        }
-
-        // IntPattern matches a specific integer value
-        if (pattern is SyntaxTypes.Pattern.IntPattern intPattern)
-        {
-            var intLiteral =
-                Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(intPattern.Value));
-
-            return ApplyBuiltinEqualBinary(scrutinee, intLiteral);
-        }
-
-        // ListPattern matches a list with specific elements
-        if (pattern is SyntaxTypes.Pattern.ListPattern listPattern)
-        {
-            // Empty list pattern []: use length check for efficiency.
-            // This also correctly matches empty blobs, which type checking will eventually prevent.
-            if (listPattern.Elements.Count == 0)
-            {
-                var lengthExpr = ApplyBuiltinLength(scrutinee);
-                var zeroLiteral = Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(0));
-
-                return ApplyBuiltinEqualBinary(lengthExpr, zeroLiteral);
-            }
-
-            // Optimization: if all elements are constants, use a single equality check
-            if (IsConstantPattern(listPattern))
-            {
-                var patternValue = PatternToConstantValue(listPattern);
-
-                return ApplyBuiltinEqualBinary(scrutinee, Expression.LiteralInstance(patternValue));
-            }
-
-            // For non-constant patterns, check length then each element
-            var lengthCheckExpr = ApplyBuiltinLength(scrutinee);
-            var expectedLength = Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(listPattern.Elements.Count));
-            var lengthCondition = ApplyBuiltinEqualBinary(lengthCheckExpr, expectedLength);
-
-            Expression combinedCondition = lengthCondition;
-
-            for (var i = 0; i < listPattern.Elements.Count; i++)
-            {
-                var elementPattern = listPattern.Elements[i].Value;
-                var elementExpr = GetListElementExpression(scrutinee, i);
-
-                var elementCondition = CompilePatternCondition(elementPattern, elementExpr);
-
-                if (elementCondition is not null)
-                {
-                    // Chain conditions: if elementCondition then combinedCondition else false
-                    combinedCondition =
-                        Expression.ConditionalInstance(
-                            condition: elementCondition,
-                            trueBranch: combinedCondition,
-                            falseBranch: Expression.LiteralInstance(KernelFunction.ValueFromBool(false)));
-                }
-            }
-
-            return combinedCondition;
-        }
-
-        // UnConsPattern (head :: tail) matches non-empty list with head matching headPattern
-        if (pattern is SyntaxTypes.Pattern.UnConsPattern unConsPattern)
-        {
-            // First check: length > 0 (list is not empty)
-            var lengthExpr = ApplyBuiltinLength(scrutinee);
-            var zeroLiteral = Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(0));
-
-            // Check if list is not empty: (length == 0) == false
-            var isEmptyCondition = ApplyBuiltinEqualBinary(lengthExpr, zeroLiteral);
-            var isNotEmptyCondition = ApplyBuiltinEqualBinary(
-                isEmptyCondition,
-                Expression.LiteralInstance(KernelFunction.ValueFromBool(false)));
-
-            // Get head and tail expressions
-            var headExpr = ApplyBuiltinHead(scrutinee);
-            var tailExpr = ApplyBuiltinSkip(1, scrutinee);
-
-            // Check head pattern condition
-            var headCondition = CompilePatternCondition(unConsPattern.Head.Value, headExpr);
-
-            // Check tail pattern condition
-            var tailCondition = CompilePatternCondition(unConsPattern.Tail.Value, tailExpr);
-
-            // Combine all conditions
-            Expression combinedCondition = isNotEmptyCondition;
-
-            if (headCondition is not null)
-            {
-                combinedCondition =
-                    Expression.ConditionalInstance(
-                        condition: combinedCondition,
-                        trueBranch: headCondition,
-                        falseBranch: Expression.LiteralInstance(KernelFunction.ValueFromBool(false)));
-            }
-
-            if (tailCondition is not null)
-            {
-                combinedCondition =
-                    Expression.ConditionalInstance(
-                        condition: combinedCondition,
-                        trueBranch: tailCondition,
-                        falseBranch: Expression.LiteralInstance(KernelFunction.ValueFromBool(false)));
-            }
-
-            return combinedCondition;
-        }
-
-        // TuplePattern matches a tuple/list with specific elements
-        if (pattern is SyntaxTypes.Pattern.TuplePattern tuplePattern)
-        {
-            // Optimization: if all elements are constants, use a single equality check
-            if (IsConstantPattern(tuplePattern))
-            {
-                var patternValue = PatternToConstantValue(tuplePattern);
-
-                return ApplyBuiltinEqualBinary(scrutinee, Expression.LiteralInstance(patternValue));
-            }
-
-            // Check length then each element
-            var lengthCheckExpr = ApplyBuiltinLength(scrutinee);
-            var expectedLength = Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(tuplePattern.Elements.Count));
-            var lengthCondition = ApplyBuiltinEqualBinary(lengthCheckExpr, expectedLength);
-
-            Expression combinedCondition = lengthCondition;
-
-            for (var i = 0; i < tuplePattern.Elements.Count; i++)
-            {
-                var elementPattern = tuplePattern.Elements[i].Value;
-                var elementExpr = GetListElementExpression(scrutinee, i);
-
-                var elementCondition = CompilePatternCondition(elementPattern, elementExpr);
-
-                if (elementCondition is not null)
-                {
-                    combinedCondition =
-                        Expression.ConditionalInstance(
-                            condition: elementCondition,
-                            trueBranch: combinedCondition,
-                            falseBranch: Expression.LiteralInstance(KernelFunction.ValueFromBool(false)));
-                }
-            }
-
-            return combinedCondition;
-        }
-
-        // NamedPattern matches a choice type tag with arguments
-        if (pattern is SyntaxTypes.Pattern.NamedPattern namedPattern)
-        {
-            var tagName = namedPattern.Name.Name;
-
-            // Optimization: if all arguments are constants, use a single equality check
-            if (IsConstantPattern(namedPattern))
-            {
-                var patternValue = PatternToConstantValue(namedPattern);
-
-                return ApplyBuiltinEqualBinary(scrutinee, Expression.LiteralInstance(patternValue));
-            }
-
-            // Tags are represented as: [tagName, [arg1, arg2, ...]]
-            // First check the tag name at scrutinee[0]
-            var tagNameExpr = GetListElementExpression(scrutinee, 0);
-            var expectedTagName = Expression.LiteralInstance(StringEncoding.ValueFromString(tagName));
-            var tagNameCondition = ApplyBuiltinEqualBinary(tagNameExpr, expectedTagName);
-
-            Expression combinedCondition = tagNameCondition;
-
-            // If there are arguments, check each one
-            if (namedPattern.Arguments.Count > 0)
-            {
-                // Arguments are in scrutinee[1] which is a list
-                var argsListExpr = GetListElementExpression(scrutinee, 1);
-
-                // Check the number of arguments
-                var argsLengthExpr = ApplyBuiltinLength(argsListExpr);
-                var expectedArgsLength = Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(namedPattern.Arguments.Count));
-                var argsLengthCondition = ApplyBuiltinEqualBinary(argsLengthExpr, expectedArgsLength);
-
-                combinedCondition =
-                    Expression.ConditionalInstance(
-                        condition: argsLengthCondition,
-                        trueBranch: combinedCondition,
-                        falseBranch: Expression.LiteralInstance(KernelFunction.ValueFromBool(false)));
-
-                // Check each argument pattern
-                for (var i = 0; i < namedPattern.Arguments.Count; i++)
-                {
-                    var argPattern = namedPattern.Arguments[i].Value;
-                    var argExpr = GetListElementExpression(argsListExpr, i);
-
-                    var argCondition = CompilePatternCondition(argPattern, argExpr);
-
-                    if (argCondition is not null)
-                    {
-                        combinedCondition =
-                            Expression.ConditionalInstance(
-                                condition: argCondition,
-                                trueBranch: combinedCondition,
-                                falseBranch: Expression.LiteralInstance(KernelFunction.ValueFromBool(false)));
-                    }
-                }
-            }
-
-            return combinedCondition;
-        }
-
-        throw new NotImplementedException(
-            $"Pattern type not yet supported: {pattern.GetType().Name}");
+        var analysis = AnalyzePatternRecursive(pattern, scrutinee);
+        return CompileConditionToExpression(analysis.Condition, scrutinee);
     }
 
     /// <summary>
