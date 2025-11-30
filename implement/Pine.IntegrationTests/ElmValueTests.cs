@@ -80,7 +80,7 @@ public class ElmValueTests
                 ElmValue.Integer(31),
                     ElmValue.Integer(37),
                     ElmValue.Integer(39)]),
-                    "[31,37,39]"),
+                    "[ 31, 37, 39 ]"),
 
                 (new ElmValue.ElmRecord([
                 ("alfa", ElmValue.Integer(1)),
@@ -129,7 +129,7 @@ public class ElmValueTests
                     ElmValue.Integer(1),
                     ElmValue.StringInstance("Hello"),
                     ]),
-                "(1,\"Hello\")"),
+                "(1, \"Hello\")"),
             ];
 
         foreach (var (elmValue, expectedExpression) in testCases)

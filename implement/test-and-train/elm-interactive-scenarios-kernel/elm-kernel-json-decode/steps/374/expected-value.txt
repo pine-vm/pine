@@ -1,1 +1,1 @@
-Ok (ArrayValue [IntValue 37,IntValue 39])
+Ok (ArrayValue [ IntValue 37, IntValue 39 ])

@@ -1,1 +1,1 @@
-[Nothing,Just "beta",Just "alpha"]
+[ Nothing, Just "beta", Just "alpha" ]

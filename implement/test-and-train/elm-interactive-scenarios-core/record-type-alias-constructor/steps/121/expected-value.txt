@@ -1,1 +1,1 @@
-{ alfa = [11,17], beta = "hello world", gamma = 123 }
+{ alfa = [ 11, 17 ], beta = "hello world", gamma = 123 }

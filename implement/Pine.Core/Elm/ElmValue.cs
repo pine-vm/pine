@@ -743,12 +743,16 @@ public abstract record ElmValue
                 ("'" + RenderCharAsElmExpression(charValue.Value) + "'", needsParens: false),
 
                 ElmList list =>
+                list.Items.Count is 0
+                ?
+                ("[]", needsParens: false)
+                :
                 ElmListItemsLookLikeTupleItems(list.Items) ?? false
                 ?
-                ("(" + string.Join(",", list.Items.Select(item => RenderAsElmExpression(item).expressionString)) + ")",
+                ("(" + string.Join(", ", list.Items.Select(item => RenderAsElmExpression(item).expressionString)) + ")",
                 needsParens: false)
                 :
-                ("[" + string.Join(",", list.Items.Select(item => RenderAsElmExpression(item).expressionString)) + "]",
+                ("[ " + string.Join(", ", list.Items.Select(item => RenderAsElmExpression(item).expressionString)) + " ]",
                 needsParens: false),
 
                 ElmString stringValue =>

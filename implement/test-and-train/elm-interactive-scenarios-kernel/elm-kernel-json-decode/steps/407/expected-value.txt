@@ -1,1 +1,1 @@
-Ok (ObjectValue [("gamma",IntValue 73),("alfa",IntValue 41),("beta",IntValue 71)])
+Ok (ObjectValue [ ("gamma", IntValue 73), ("alfa", IntValue 41), ("beta", IntValue 71) ])

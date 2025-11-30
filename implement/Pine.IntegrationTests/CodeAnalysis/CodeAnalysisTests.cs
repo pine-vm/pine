@@ -360,7 +360,7 @@ public class CodeAnalysisTests
                         param_1_2
 
                 else
-                    [0,-1]
+                    [ 0, -1 ]
             """"
             .Trim());
     }

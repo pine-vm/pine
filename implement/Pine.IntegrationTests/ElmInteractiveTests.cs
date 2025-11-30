@@ -181,7 +181,7 @@ public class ElmInteractiveTests
                     fromErr: err => throw new Exception(err),
                     fromOk: ok => ok.InteractiveResponse.DisplayText);
 
-            responseDisplayText.Should().Be("""["123","34567834567"]""");
+            responseDisplayText.Should().Be("""[ "123", "34567834567" ]""");
         }
     }
 }

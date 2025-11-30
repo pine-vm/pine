@@ -1,1 +1,1 @@
-[["alpha","beta","gamma"],["alpha","beta","gamma"],["beta","gamma"],["gamma"]]
+[ [ "alpha", "beta", "gamma" ], [ "alpha", "beta", "gamma" ], [ "beta", "gamma" ], [ "gamma" ] ]

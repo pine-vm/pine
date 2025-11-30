@@ -1,1 +1,1 @@
-Err [{ col = 1, problem = ExpectingNumber, row = 1 }]
+Err [ { col = 1, problem = ExpectingNumber, row = 1 } ]
