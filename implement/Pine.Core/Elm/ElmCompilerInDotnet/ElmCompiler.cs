@@ -486,7 +486,8 @@ public class ElmCompiler
         string currentModuleName,
         string? currentFunctionName,
         CompilationContext context,
-        IReadOnlyList<string> dependencyLayout)
+        IReadOnlyList<string> dependencyLayout,
+        IReadOnlyDictionary<string, Expression>? localBindings = null)
     {
         if (expression is SyntaxTypes.Expression.Integer integerLiteral)
         {
@@ -510,6 +511,13 @@ public class ElmCompiler
         {
             if (functionOrValue.ModuleName.Count is 0)
             {
+                // Check if it's a local binding from pattern matching first
+                if (localBindings is not null &&
+                    localBindings.TryGetValue(functionOrValue.Name, out var bindingExpr))
+                {
+                    return bindingExpr;
+                }
+
                 // Check if it's a parameter reference
                 if (parameterNames.TryGetValue(functionOrValue.Name, out var paramIndex))
                 {
@@ -565,7 +573,8 @@ public class ElmCompiler
                     currentModuleName,
                     currentFunctionName,
                     context,
-                    dependencyLayout);
+                    dependencyLayout,
+                    localBindings);
         }
 
         if (expression is SyntaxTypes.Expression.ListExpr listExpr)
@@ -580,7 +589,8 @@ public class ElmCompiler
                     currentModuleName,
                     currentFunctionName,
                     context,
-                    dependencyLayout))
+                    dependencyLayout,
+                    localBindings))
                 .ToList();
 
             return Expression.ListInstance(compiledElements);
@@ -596,7 +606,8 @@ public class ElmCompiler
                     currentModuleName,
                     currentFunctionName,
                     context,
-                    dependencyLayout);
+                    dependencyLayout,
+                    localBindings);
         }
 
         if (expression is SyntaxTypes.Expression.ParenthesizedExpression parenthesized)
@@ -611,7 +622,8 @@ public class ElmCompiler
                     currentModuleName,
                     currentFunctionName,
                     context,
-                    dependencyLayout);
+                    dependencyLayout,
+                    localBindings);
         }
 
         if (expression is SyntaxTypes.Expression.Negation negation)
@@ -631,7 +643,8 @@ public class ElmCompiler
                     currentModuleName,
                     currentFunctionName,
                     context,
-                    dependencyLayout);
+                    dependencyLayout,
+                    localBindings);
 
             var negativeOne = Expression.LiteralInstance(EmitIntegerLiteral(-1));
 
@@ -650,7 +663,8 @@ public class ElmCompiler
                     currentModuleName,
                     currentFunctionName,
                     context,
-                    dependencyLayout);
+                    dependencyLayout,
+                    localBindings);
 
             var trueBranch =
                 CompileExpression(
@@ -660,7 +674,8 @@ public class ElmCompiler
                     currentModuleName,
                     currentFunctionName,
                     context,
-                    dependencyLayout);
+                    dependencyLayout,
+                    localBindings);
 
             var falseBranch =
                 CompileExpression(
@@ -670,13 +685,27 @@ public class ElmCompiler
                     currentModuleName,
                     currentFunctionName,
                     context,
-                    dependencyLayout);
+                    dependencyLayout,
+                    localBindings);
 
             return
                 Expression.ConditionalInstance(
                     condition: condition,
                     falseBranch: falseBranch,
                     trueBranch: trueBranch);
+        }
+
+        if (expression is SyntaxTypes.Expression.CaseExpression caseExpression)
+        {
+            return
+                CompileCaseExpression(
+                    caseExpression.CaseBlock,
+                    parameterNames,
+                    parameterTypes,
+                    currentModuleName,
+                    currentFunctionName,
+                    context,
+                    dependencyLayout);
         }
 
         throw new NotImplementedException(
@@ -691,7 +720,8 @@ public class ElmCompiler
         string currentModuleName,
         string? currentFunctionName,
         CompilationContext context,
-        IReadOnlyList<string> dependencyLayout)
+        IReadOnlyList<string> dependencyLayout,
+        IReadOnlyDictionary<string, Expression>? localBindings = null)
     {
         if (application.Arguments.Count < 2)
         {
@@ -720,7 +750,8 @@ public class ElmCompiler
                     currentModuleName,
                     currentFunctionName,
                     context,
-                    dependencyLayout);
+                    dependencyLayout,
+                    localBindings);
 
             return Expression.KernelApplicationInstance(
                 kernelFunctionName,
@@ -751,7 +782,8 @@ public class ElmCompiler
                             currentModuleName,
                             currentFunctionName,
                             context,
-                            dependencyLayout);
+                            dependencyLayout,
+                            localBindings);
                     compiledArguments.Add(compiledArg);
                 }
 
@@ -805,7 +837,8 @@ public class ElmCompiler
                     currentModuleName,
                     currentFunctionName,
                     context,
-                    dependencyLayout);
+                    dependencyLayout,
+                    localBindings);
 
             // Build reference to the encoded function at environment[0][functionIndex]
             // Start with environment
@@ -845,7 +878,8 @@ public class ElmCompiler
         string currentModuleName,
         string? currentFunctionName,
         CompilationContext context,
-        IReadOnlyList<string> dependencyLayout)
+        IReadOnlyList<string> dependencyLayout,
+        IReadOnlyDictionary<string, Expression>? localBindings = null)
     {
         // Use type inference to determine the operation type
         var expressionType =
@@ -863,10 +897,10 @@ public class ElmCompiler
             if (operatorApp.Operator is "-")
             {
                 var leftCompiled =
-                    CompileExpression(operatorApp.Left.Value, parameterNames, parameterTypes, currentModuleName, currentFunctionName, context, dependencyLayout);
+                    CompileExpression(operatorApp.Left.Value, parameterNames, parameterTypes, currentModuleName, currentFunctionName, context, dependencyLayout, localBindings);
 
                 var rightCompiled =
-                    CompileExpression(operatorApp.Right.Value, parameterNames, parameterTypes, currentModuleName, currentFunctionName, context, dependencyLayout);
+                    CompileExpression(operatorApp.Right.Value, parameterNames, parameterTypes, currentModuleName, currentFunctionName, context, dependencyLayout, localBindings);
 
                 // Create: -1 * rightCompiled
                 var negatedRight = Expression.KernelApplicationInstance(
@@ -900,7 +934,8 @@ public class ElmCompiler
                         currentModuleName,
                         currentFunctionName,
                         context,
-                        dependencyLayout);
+                        dependencyLayout,
+                        localBindings);
 
                 var rightCompiled =
                     CompileExpression(
@@ -910,7 +945,8 @@ public class ElmCompiler
                         currentModuleName,
                         currentFunctionName,
                         context,
-                        dependencyLayout);
+                        dependencyLayout,
+                        localBindings);
 
                 // Create a list with both operands
                 var operandsList = Expression.ListInstance([leftCompiled, rightCompiled]);
@@ -924,6 +960,409 @@ public class ElmCompiler
 
         throw new NotImplementedException(
             $"Operator '{operatorApp.Operator}' is not yet supported in this temporary implementation");
+    }
+
+    private static Expression CompileCaseExpression(
+        SyntaxTypes.CaseBlock caseBlock,
+        IReadOnlyDictionary<string, int> parameterNames,
+        IReadOnlyDictionary<string, TypeInference.InferredType> parameterTypes,
+        string currentModuleName,
+        string? currentFunctionName,
+        CompilationContext context,
+        IReadOnlyList<string> dependencyLayout)
+    {
+        // Compile the scrutinee (the expression being matched)
+        var scrutinee =
+            CompileExpression(
+                caseBlock.Expression.Value,
+                parameterNames,
+                parameterTypes,
+                currentModuleName,
+                currentFunctionName,
+                context,
+                dependencyLayout);
+
+        // Compile cases from bottom to top, creating nested conditionals
+        // The last case becomes the default/else branch
+        // We initialize with null and expect to always replace it through the fold.
+        // For well-formed Elm code with exhaustive pattern matching, this should always be replaced.
+        Expression? result = null;
+
+        // Process cases in reverse order to build the conditional chain
+        for (var i = caseBlock.Cases.Count - 1; i >= 0; i--)
+        {
+            var caseItem = caseBlock.Cases[i];
+            var pattern = caseItem.Pattern.Value;
+
+            // Extract bindings from the pattern
+            var patternBindings = ExtractPatternBindings(pattern, scrutinee);
+
+            // Compile the case expression body with the pattern bindings
+            var caseBody =
+                CompileExpression(
+                    caseItem.Expression.Value,
+                    parameterNames,
+                    parameterTypes,
+                    currentModuleName,
+                    currentFunctionName,
+                    context,
+                    dependencyLayout,
+                    localBindings: patternBindings.Count > 0 ? patternBindings : null);
+
+            // Generate condition based on pattern type
+            var conditionExpr = CompilePatternCondition(pattern, scrutinee);
+
+            if (conditionExpr is null)
+            {
+                // AllPattern (_) or VarPattern - catch-all, this becomes the default branch
+                result = caseBody;
+            }
+            else
+            {
+                // Create a conditional: if (pattern matches) then caseBody else result
+                // If result is null, this means we don't have a fallback yet - use caseBody as both branches
+                // (This handles the case when the first pattern in reverse order is not a catch-all)
+                result =
+                    Expression.ConditionalInstance(
+                        condition: conditionExpr,
+                        trueBranch: caseBody,
+                        falseBranch: result ?? caseBody);
+            }
+        }
+
+        // After processing all cases, result should be non-null if patterns are exhaustive
+        if (result is null)
+        {
+            throw new InvalidOperationException(
+                "Case expression has no patterns - this should not happen with well-formed Elm code");
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Extract variable bindings from a pattern and return expressions to access their values.
+    /// </summary>
+    private static Dictionary<string, Expression> ExtractPatternBindings(
+        SyntaxTypes.Pattern pattern,
+        Expression scrutinee)
+    {
+        var bindings = new Dictionary<string, Expression>();
+
+        ExtractPatternBindingsRecursive(pattern, scrutinee, bindings);
+
+        return bindings;
+    }
+
+    private static void ExtractPatternBindingsRecursive(
+        SyntaxTypes.Pattern pattern,
+        Expression scrutinee,
+        Dictionary<string, Expression> bindings)
+    {
+        switch (pattern)
+        {
+            case SyntaxTypes.Pattern.VarPattern varPattern:
+                // Variable pattern binds the entire scrutinee to the variable name
+                bindings[varPattern.Name] = scrutinee;
+                break;
+
+            case SyntaxTypes.Pattern.ParenthesizedPattern parenthesizedPattern:
+                // Parenthesized pattern just wraps another pattern - unwrap and recurse
+                ExtractPatternBindingsRecursive(parenthesizedPattern.Pattern.Value, scrutinee, bindings);
+                break;
+
+            case SyntaxTypes.Pattern.UnConsPattern unConsPattern:
+                // For head :: tail pattern:
+                // - head binds to head(scrutinee)
+                // - tail binds to skip([1, scrutinee])
+                var headExpr =
+                    Expression.KernelApplicationInstance(
+                        nameof(KernelFunction.head),
+                        scrutinee);
+
+                var tailExpr =
+                    Expression.KernelApplicationInstance(
+                        nameof(KernelFunction.skip),
+                        Expression.ListInstance(
+                            [
+                                Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(1)),
+                                scrutinee
+                            ]));
+
+                ExtractPatternBindingsRecursive(unConsPattern.Head.Value, headExpr, bindings);
+                ExtractPatternBindingsRecursive(unConsPattern.Tail.Value, tailExpr, bindings);
+                break;
+
+            case SyntaxTypes.Pattern.ListPattern listPattern:
+                // For list patterns like [a, b, c], bind each element
+                for (var i = 0; i < listPattern.Elements.Count; i++)
+                {
+                    var elementPattern = listPattern.Elements[i].Value;
+                    var elementExpr = GetListElementExpression(scrutinee, i);
+                    ExtractPatternBindingsRecursive(elementPattern, elementExpr, bindings);
+                }
+                break;
+
+            case SyntaxTypes.Pattern.AllPattern:
+            case SyntaxTypes.Pattern.IntPattern:
+                // These patterns don't introduce bindings
+                break;
+
+            default:
+                // Other patterns not yet supported for binding extraction
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Get an expression that extracts the element at the given index from a list.
+    /// Uses skip followed by head: head(skip([index, list]))
+    /// </summary>
+    private static Expression GetListElementExpression(Expression listExpr, int index)
+    {
+        if (index == 0)
+        {
+            return Expression.KernelApplicationInstance(
+                nameof(KernelFunction.head),
+                listExpr);
+        }
+
+        // For index > 0: head(skip([index, list]))
+        var skipExpr =
+            Expression.KernelApplicationInstance(
+                nameof(KernelFunction.skip),
+                Expression.ListInstance(
+                    [
+                        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(index)),
+                        listExpr
+                    ]));
+
+        return Expression.KernelApplicationInstance(
+            nameof(KernelFunction.head),
+            skipExpr);
+    }
+
+    private static Expression? CompilePatternCondition(
+        SyntaxTypes.Pattern pattern,
+        Expression scrutinee)
+    {
+        // AllPattern (_) matches everything - no condition needed, always matches
+        if (pattern is SyntaxTypes.Pattern.AllPattern)
+        {
+            return null;
+        }
+
+        // VarPattern matches everything and binds the value - no condition needed
+        if (pattern is SyntaxTypes.Pattern.VarPattern)
+        {
+            return null;
+        }
+
+        // ParenthesizedPattern just wraps another pattern - unwrap and recurse
+        if (pattern is SyntaxTypes.Pattern.ParenthesizedPattern parenthesizedPattern)
+        {
+            return CompilePatternCondition(parenthesizedPattern.Pattern.Value, scrutinee);
+        }
+
+        // IntPattern matches a specific integer value
+        if (pattern is SyntaxTypes.Pattern.IntPattern intPattern)
+        {
+            var intLiteral =
+                Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(intPattern.Value));
+
+            return
+                Expression.KernelApplicationInstance(
+                    nameof(KernelFunction.equal),
+                    Expression.ListInstance([scrutinee, intLiteral]));
+        }
+
+        // ListPattern matches a list with specific elements
+        if (pattern is SyntaxTypes.Pattern.ListPattern listPattern)
+        {
+            // Empty list pattern []: use length check for efficiency.
+            // This also correctly matches empty blobs, which type checking will eventually prevent.
+            if (listPattern.Elements.Count == 0)
+            {
+                var lengthExpr =
+                    Expression.KernelApplicationInstance(
+                        nameof(KernelFunction.length),
+                        scrutinee);
+
+                var zeroLiteral =
+                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(0));
+
+                return
+                    Expression.KernelApplicationInstance(
+                        nameof(KernelFunction.equal),
+                        Expression.ListInstance([lengthExpr, zeroLiteral]));
+            }
+
+            // Optimization: if all elements are constants, use a single equality check
+            if (IsConstantPattern(listPattern))
+            {
+                var patternValue = PatternToConstantValue(listPattern);
+
+                return
+                    Expression.KernelApplicationInstance(
+                        nameof(KernelFunction.equal),
+                        Expression.ListInstance([scrutinee, Expression.LiteralInstance(patternValue)]));
+            }
+
+            // For non-constant patterns, check length then each element
+            var lengthCheckExpr =
+                Expression.KernelApplicationInstance(
+                    nameof(KernelFunction.length),
+                    scrutinee);
+
+            var expectedLength =
+                Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(listPattern.Elements.Count));
+
+            var lengthCondition =
+                Expression.KernelApplicationInstance(
+                    nameof(KernelFunction.equal),
+                    Expression.ListInstance([lengthCheckExpr, expectedLength]));
+
+            Expression combinedCondition = lengthCondition;
+
+            for (var i = 0; i < listPattern.Elements.Count; i++)
+            {
+                var elementPattern = listPattern.Elements[i].Value;
+                var elementExpr = GetListElementExpression(scrutinee, i);
+
+                var elementCondition = CompilePatternCondition(elementPattern, elementExpr);
+
+                if (elementCondition is not null)
+                {
+                    // Chain conditions: if elementCondition then combinedCondition else false
+                    combinedCondition =
+                        Expression.ConditionalInstance(
+                            condition: elementCondition,
+                            trueBranch: combinedCondition,
+                            falseBranch: Expression.LiteralInstance(KernelFunction.ValueFromBool(false)));
+                }
+            }
+
+            return combinedCondition;
+        }
+
+        // UnConsPattern (head :: tail) matches non-empty list with head matching headPattern
+        if (pattern is SyntaxTypes.Pattern.UnConsPattern unConsPattern)
+        {
+            // First check: length > 0 (list is not empty)
+            var lengthExpr =
+                Expression.KernelApplicationInstance(
+                    nameof(KernelFunction.length),
+                    scrutinee);
+
+            var zeroLiteral =
+                Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(0));
+
+            // Check if list is not empty: (length == 0) == false
+            var isEmptyCondition =
+                Expression.KernelApplicationInstance(
+                    nameof(KernelFunction.equal),
+                    Expression.ListInstance([lengthExpr, zeroLiteral]));
+
+            var isNotEmptyCondition =
+                Expression.KernelApplicationInstance(
+                    nameof(KernelFunction.equal),
+                    Expression.ListInstance(
+                        [
+                            isEmptyCondition,
+                            Expression.LiteralInstance(KernelFunction.ValueFromBool(false))
+                        ]));
+
+            // Get head and tail expressions
+            var headExpr =
+                Expression.KernelApplicationInstance(
+                    nameof(KernelFunction.head),
+                    scrutinee);
+
+            var tailExpr =
+                Expression.KernelApplicationInstance(
+                    nameof(KernelFunction.skip),
+                    Expression.ListInstance(
+                        [
+                            Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(1)),
+                            scrutinee
+                        ]));
+
+            // Check head pattern condition
+            var headCondition = CompilePatternCondition(unConsPattern.Head.Value, headExpr);
+
+            // Check tail pattern condition
+            var tailCondition = CompilePatternCondition(unConsPattern.Tail.Value, tailExpr);
+
+            // Combine all conditions
+            Expression combinedCondition = isNotEmptyCondition;
+
+            if (headCondition is not null)
+            {
+                combinedCondition =
+                    Expression.ConditionalInstance(
+                        condition: combinedCondition,
+                        trueBranch: headCondition,
+                        falseBranch: Expression.LiteralInstance(KernelFunction.ValueFromBool(false)));
+            }
+
+            if (tailCondition is not null)
+            {
+                combinedCondition =
+                    Expression.ConditionalInstance(
+                        condition: combinedCondition,
+                        trueBranch: tailCondition,
+                        falseBranch: Expression.LiteralInstance(KernelFunction.ValueFromBool(false)));
+            }
+
+            return combinedCondition;
+        }
+
+        throw new NotImplementedException(
+            $"Pattern type not yet supported: {pattern.GetType().Name}");
+    }
+
+    /// <summary>
+    /// Check if a pattern contains only constant values (no variable bindings).
+    /// Constant patterns can be optimized to a single equality comparison.
+    /// Supported constant pattern types:
+    /// - IntPattern: integer literals
+    /// - ListPattern: when all elements are constant patterns
+    /// - ParenthesizedPattern: when the inner pattern is constant
+    /// </summary>
+    private static bool IsConstantPattern(SyntaxTypes.Pattern pattern)
+    {
+        return pattern switch
+        {
+            SyntaxTypes.Pattern.IntPattern => true,
+            SyntaxTypes.Pattern.ParenthesizedPattern p => IsConstantPattern(p.Pattern.Value),
+            SyntaxTypes.Pattern.ListPattern listPattern =>
+                listPattern.Elements.All(e => IsConstantPattern(e.Value)),
+            // Variable patterns and other patterns are not constant
+            _ => false
+        };
+    }
+
+    /// <summary>
+    /// Convert a constant pattern to its corresponding PineValue.
+    /// Precondition: <see cref="IsConstantPattern"/> must return true for the pattern.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Thrown when the pattern is not a constant pattern.</exception>
+    private static PineValue PatternToConstantValue(SyntaxTypes.Pattern pattern)
+    {
+        return pattern switch
+        {
+            SyntaxTypes.Pattern.IntPattern intPattern =>
+                IntegerEncoding.EncodeSignedInteger(intPattern.Value),
+            SyntaxTypes.Pattern.ParenthesizedPattern p =>
+                PatternToConstantValue(p.Pattern.Value),
+            SyntaxTypes.Pattern.ListPattern listPattern =>
+                PineValue.List(
+                    listPattern.Elements
+                    .Select(e => PatternToConstantValue(e.Value))
+                    .ToArray()),
+            _ => throw new InvalidOperationException(
+                $"Pattern type is not constant: {pattern.GetType().Name}")
+        };
     }
 
     private static Expression BuildPathToParameter(int parameterIndex)
