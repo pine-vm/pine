@@ -626,9 +626,7 @@ public class ElmCompiler
 
             var negativeOne = Expression.LiteralInstance(EmitIntegerLiteral(-1));
 
-            return Expression.KernelApplicationInstance(
-                nameof(KernelFunction.int_mul),
-                Expression.ListInstance([negativeOne, innerExpression]));
+            return ApplyBuiltinIntMul([negativeOne, innerExpression]);
         }
 
         if (expression is SyntaxTypes.Expression.IfBlock ifBlock)
@@ -660,6 +658,14 @@ public class ElmCompiler
             return
                 CompileCaseExpression(
                     caseExpression.CaseBlock,
+                    context);
+        }
+
+        if (expression is SyntaxTypes.Expression.LetExpression letExpression)
+        {
+            return
+                CompileLetExpression(
+                    letExpression.Value,
                     context);
         }
 
@@ -828,27 +834,17 @@ public class ElmCompiler
                     CompileExpression(operatorApp.Right.Value, context);
 
                 // Create: -1 * rightCompiled
-                var negatedRight = Expression.KernelApplicationInstance(
-                    nameof(KernelFunction.int_mul),
-                    Expression.ListInstance([
+                var negatedRight = ApplyBuiltinIntMul(
+                    [
                         Expression.LiteralInstance(EmitIntegerLiteral(-1)),
                         rightCompiled
-                    ]));
+                    ]);
 
                 // Create: leftCompiled + negatedRight
-                return Expression.KernelApplicationInstance(
-                    nameof(KernelFunction.int_add),
-                    Expression.ListInstance([leftCompiled, negatedRight]));
+                return ApplyBuiltinIntAdd([leftCompiled, negatedRight]);
             }
 
-            var kernelFunctionName = operatorApp.Operator switch
-            {
-                "+" => nameof(KernelFunction.int_add),
-                "*" => nameof(KernelFunction.int_mul),
-                _ => null
-            };
-
-            if (kernelFunctionName is not null)
+            if (operatorApp.Operator is "+" or "*")
             {
                 // Compile the operands
                 var leftCompiled =
@@ -861,18 +857,340 @@ public class ElmCompiler
                         operatorApp.Right.Value,
                         context);
 
-                // Create a list with both operands
-                var operandsList = Expression.ListInstance([leftCompiled, rightCompiled]);
-
-                // Return the kernel application
-                return Expression.KernelApplicationInstance(
-                    kernelFunctionName,
-                    operandsList);
+                return operatorApp.Operator switch
+                {
+                    "+" => ApplyBuiltinIntAdd([leftCompiled, rightCompiled]),
+                    "*" => ApplyBuiltinIntMul([leftCompiled, rightCompiled]),
+                    _ => throw new NotImplementedException()
+                };
             }
         }
 
         throw new NotImplementedException(
             $"Operator '{operatorApp.Operator}' is not yet supported in this temporary implementation");
+    }
+
+    private static Expression CompileLetExpression(
+        SyntaxTypes.Expression.LetBlock letBlock,
+        ExpressionCompilationContext context)
+    {
+        // Collect all bindings from let declarations
+        // For simplicity, we process declarations in order and allow later declarations
+        // to reference earlier ones. For out-of-order references, we use a two-pass approach:
+        // 1. First collect all names to know what's being bound
+        // 2. Then compile declarations with all names available
+
+        // Build up the local bindings dictionary, starting with any existing bindings
+        var newBindings = new Dictionary<string, Expression>();
+
+        if (context.LocalBindings is { } existingBindings)
+        {
+            foreach (var kvp in existingBindings)
+            {
+                newBindings[kvp.Key] = kvp.Value;
+            }
+        }
+
+        // For out-of-order declarations, we need to sort by dependencies
+        // First, collect all declaration names and their dependencies
+        var declarations = letBlock.Declarations;
+        var declarationInfos = new List<(int index, HashSet<string> names, HashSet<string> deps)>();
+
+        for (var i = 0; i < declarations.Count; i++)
+        {
+            var decl = declarations[i].Value;
+            var names = new HashSet<string>();
+            var deps = new HashSet<string>();
+
+            switch (decl)
+            {
+                case SyntaxTypes.Expression.LetDeclaration.LetFunction letFunc:
+                    var funcName = letFunc.Function.Declaration.Value.Name.Value;
+                    names.Add(funcName);
+                    CollectExpressionReferences(letFunc.Function.Declaration.Value.Expression.Value, deps);
+                    break;
+
+                case SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestructuring:
+                    CollectPatternNames(letDestructuring.Pattern.Value, names);
+                    CollectExpressionReferences(letDestructuring.Expression.Value, deps);
+                    break;
+            }
+
+            declarationInfos.Add((i, names, deps));
+        }
+
+        // Collect all names being bound in this let block
+        var allBoundNames = new HashSet<string>();
+
+        foreach (var info in declarationInfos)
+        {
+            foreach (var name in info.names)
+            {
+                allBoundNames.Add(name);
+            }
+        }
+
+        // Topological sort of declarations based on dependencies within this let block
+        var sortedIndices = TopologicalSortDeclarations(declarationInfos, allBoundNames);
+
+        // Create a context that includes placeholder bindings for all let-bound names
+        // This allows forward references to work
+        var letContext = context with { LocalBindings = newBindings };
+
+        // Process declarations in topologically sorted order
+        foreach (var idx in sortedIndices)
+        {
+            var decl = declarations[idx].Value;
+
+            switch (decl)
+            {
+                case SyntaxTypes.Expression.LetDeclaration.LetFunction letFunc:
+                    // For now, treat let functions as simple value bindings
+                    // (local functions with parameters would need more complex handling)
+                    var funcName = letFunc.Function.Declaration.Value.Name.Value;
+                    var funcBody = letFunc.Function.Declaration.Value.Expression.Value;
+
+                    // If the function has parameters, we need special handling
+                    var funcArgs = letFunc.Function.Declaration.Value.Arguments;
+
+                    if (funcArgs.Count == 0)
+                    {
+                        // Zero-parameter function: just compile the body
+                        var compiledBody = CompileExpression(funcBody, letContext);
+                        newBindings[funcName] = compiledBody;
+                    }
+                    else
+                    {
+                        throw new NotImplementedException(
+                            "Let functions with parameters are not yet supported");
+                    }
+                    break;
+
+                case SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestructuring:
+                    // Compile the expression being destructured
+                    var destructuredExpr = CompileExpression(letDestructuring.Expression.Value, letContext);
+
+                    // Extract bindings from the pattern
+                    var patternBindings = ExtractPatternBindings(letDestructuring.Pattern.Value, destructuredExpr);
+
+                    foreach (var kvp in patternBindings)
+                    {
+                        newBindings[kvp.Key] = kvp.Value;
+                    }
+                    break;
+            }
+
+            // Note: newBindings is mutated in place, so letContext.LocalBindings
+            // automatically includes the new bindings for subsequent declarations
+        }
+
+        // Compile the body expression with all let bindings available
+        return CompileExpression(letBlock.Expression.Value, letContext);
+    }
+
+    private static void CollectPatternNames(
+        SyntaxTypes.Pattern pattern,
+        HashSet<string> names)
+    {
+        switch (pattern)
+        {
+            case SyntaxTypes.Pattern.VarPattern varPattern:
+                names.Add(varPattern.Name);
+                break;
+
+            case SyntaxTypes.Pattern.TuplePattern tuplePattern:
+                foreach (var elem in tuplePattern.Elements)
+                {
+                    CollectPatternNames(elem.Value, names);
+                }
+                break;
+
+            case SyntaxTypes.Pattern.ParenthesizedPattern parenthesized:
+                CollectPatternNames(parenthesized.Pattern.Value, names);
+                break;
+
+            case SyntaxTypes.Pattern.ListPattern listPattern:
+                foreach (var elem in listPattern.Elements)
+                {
+                    CollectPatternNames(elem.Value, names);
+                }
+                break;
+
+            case SyntaxTypes.Pattern.UnConsPattern unConsPattern:
+                CollectPatternNames(unConsPattern.Head.Value, names);
+                CollectPatternNames(unConsPattern.Tail.Value, names);
+                break;
+
+                // Other patterns don't bind names or are not supported
+        }
+    }
+
+    private static void CollectExpressionReferences(
+        SyntaxTypes.Expression expression,
+        HashSet<string> refs)
+    {
+        switch (expression)
+        {
+            case SyntaxTypes.Expression.FunctionOrValue funcOrVal:
+                if (funcOrVal.ModuleName.Count == 0)
+                {
+                    refs.Add(funcOrVal.Name);
+                }
+                break;
+
+            case SyntaxTypes.Expression.Application app:
+                // Analyze all arguments including the function being applied (first element)
+                foreach (var arg in app.Arguments)
+                {
+                    CollectExpressionReferences(arg.Value, refs);
+                }
+                break;
+
+            case SyntaxTypes.Expression.ListExpr listExpr:
+                foreach (var elem in listExpr.Elements)
+                {
+                    CollectExpressionReferences(elem.Value, refs);
+                }
+                break;
+
+            case SyntaxTypes.Expression.OperatorApplication opApp:
+                CollectExpressionReferences(opApp.Left.Value, refs);
+                CollectExpressionReferences(opApp.Right.Value, refs);
+                break;
+
+            case SyntaxTypes.Expression.ParenthesizedExpression paren:
+                CollectExpressionReferences(paren.Expression.Value, refs);
+                break;
+
+            case SyntaxTypes.Expression.Negation neg:
+                CollectExpressionReferences(neg.Expression.Value, refs);
+                break;
+
+            case SyntaxTypes.Expression.IfBlock ifBlock:
+                CollectExpressionReferences(ifBlock.Condition.Value, refs);
+                CollectExpressionReferences(ifBlock.ThenBlock.Value, refs);
+                CollectExpressionReferences(ifBlock.ElseBlock.Value, refs);
+                break;
+
+            case SyntaxTypes.Expression.LetExpression letExpr:
+                // Collect names bound in this let block to exclude from refs
+                var localNames = new HashSet<string>();
+                foreach (var decl in letExpr.Value.Declarations)
+                {
+                    switch (decl.Value)
+                    {
+                        case SyntaxTypes.Expression.LetDeclaration.LetFunction letFunc:
+                            localNames.Add(letFunc.Function.Declaration.Value.Name.Value);
+                            break;
+
+                        case SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr:
+                            CollectPatternNames(letDestr.Pattern.Value, localNames);
+                            break;
+                    }
+                }
+
+                // Collect refs from declaration expressions
+                var innerRefs = new HashSet<string>();
+                foreach (var decl in letExpr.Value.Declarations)
+                {
+                    switch (decl.Value)
+                    {
+                        case SyntaxTypes.Expression.LetDeclaration.LetFunction letFunc:
+                            CollectExpressionReferences(letFunc.Function.Declaration.Value.Expression.Value, innerRefs);
+                            break;
+
+                        case SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr:
+                            CollectExpressionReferences(letDestr.Expression.Value, innerRefs);
+                            break;
+                    }
+                }
+                CollectExpressionReferences(letExpr.Value.Expression.Value, innerRefs);
+
+                // Add refs that are not locally bound
+                foreach (var innerRef in innerRefs)
+                {
+                    if (!localNames.Contains(innerRef))
+                    {
+                        refs.Add(innerRef);
+                    }
+                }
+                break;
+
+                // Other expression types don't contain references or are simple literals
+        }
+    }
+
+    private static List<int> TopologicalSortDeclarations(
+        List<(int index, HashSet<string> names, HashSet<string> deps)> declarations,
+        HashSet<string> allBoundNames)
+    {
+        // Build a dependency graph between declarations
+        var declarationCount = declarations.Count;
+        var inDegree = new int[declarationCount];
+        var dependents = new List<int>[declarationCount];
+
+        for (var i = 0; i < declarationCount; i++)
+        {
+            dependents[i] = new List<int>();
+        }
+
+        // For each declaration, find which other declarations it depends on
+        for (var i = 0; i < declarationCount; i++)
+        {
+            var deps = declarations[i].deps;
+
+            for (var j = 0; j < declarationCount; j++)
+            {
+                if (i == j) continue;
+
+                var otherNames = declarations[j].names;
+
+                // Check if declaration i depends on declaration j
+                if (deps.Overlaps(otherNames))
+                {
+                    // i depends on j, so j must come before i
+                    inDegree[i]++;
+                    dependents[j].Add(i);
+                }
+            }
+        }
+
+        // Kahn's algorithm for topological sort
+        var result = new List<int>();
+        var queue = new Queue<int>();
+
+        for (var i = 0; i < declarationCount; i++)
+        {
+            if (inDegree[i] == 0)
+            {
+                queue.Enqueue(i);
+            }
+        }
+
+        while (queue.Count > 0)
+        {
+            var current = queue.Dequeue();
+            result.Add(current);
+
+            foreach (var dependent in dependents[current])
+            {
+                inDegree[dependent]--;
+
+                if (inDegree[dependent] == 0)
+                {
+                    queue.Enqueue(dependent);
+                }
+            }
+        }
+
+        // If not all declarations were processed, there's a cycle
+        if (result.Count != declarationCount)
+        {
+            throw new InvalidOperationException(
+                "Circular dependency detected in let declarations");
+        }
+
+        return result;
     }
 
     private static Expression CompileCaseExpression(
@@ -977,19 +1295,8 @@ public class ElmCompiler
                 // For head :: tail pattern:
                 // - head binds to head(scrutinee)
                 // - tail binds to skip([1, scrutinee])
-                var headExpr =
-                    Expression.KernelApplicationInstance(
-                        nameof(KernelFunction.head),
-                        scrutinee);
-
-                var tailExpr =
-                    Expression.KernelApplicationInstance(
-                        nameof(KernelFunction.skip),
-                        Expression.ListInstance(
-                            [
-                                Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(1)),
-                                scrutinee
-                            ]));
+                var headExpr = ApplyBuiltinHead(scrutinee);
+                var tailExpr = ApplyBuiltinSkip(1, scrutinee);
 
                 ExtractPatternBindingsRecursive(unConsPattern.Head.Value, headExpr, bindings);
                 ExtractPatternBindingsRecursive(unConsPattern.Tail.Value, tailExpr, bindings);
@@ -1000,6 +1307,17 @@ public class ElmCompiler
                 for (var i = 0; i < listPattern.Elements.Count; i++)
                 {
                     var elementPattern = listPattern.Elements[i].Value;
+                    var elementExpr = GetListElementExpression(scrutinee, i);
+                    ExtractPatternBindingsRecursive(elementPattern, elementExpr, bindings);
+                }
+                break;
+
+            case SyntaxTypes.Pattern.TuplePattern tuplePattern:
+                // Tuples in Elm are represented as lists in Pine
+                // For tuple patterns like (a, b, c), bind each element by index
+                for (var i = 0; i < tuplePattern.Elements.Count; i++)
+                {
+                    var elementPattern = tuplePattern.Elements[i].Value;
                     var elementExpr = GetListElementExpression(scrutinee, i);
                     ExtractPatternBindingsRecursive(elementPattern, elementExpr, bindings);
                 }
@@ -1024,24 +1342,13 @@ public class ElmCompiler
     {
         if (index == 0)
         {
-            return Expression.KernelApplicationInstance(
-                nameof(KernelFunction.head),
-                listExpr);
+            return ApplyBuiltinHead(listExpr);
         }
 
         // For index > 0: head(skip([index, list]))
-        var skipExpr =
-            Expression.KernelApplicationInstance(
-                nameof(KernelFunction.skip),
-                Expression.ListInstance(
-                    [
-                        Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(index)),
-                        listExpr
-                    ]));
+        var skipExpr = ApplyBuiltinSkip(index, listExpr);
 
-        return Expression.KernelApplicationInstance(
-            nameof(KernelFunction.head),
-            skipExpr);
+        return ApplyBuiltinHead(skipExpr);
     }
 
     private static Expression? CompilePatternCondition(
@@ -1072,10 +1379,7 @@ public class ElmCompiler
             var intLiteral =
                 Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(intPattern.Value));
 
-            return
-                Expression.KernelApplicationInstance(
-                    nameof(KernelFunction.equal),
-                    Expression.ListInstance([scrutinee, intLiteral]));
+            return ApplyBuiltinEqualBinary(scrutinee, intLiteral);
         }
 
         // ListPattern matches a list with specific elements
@@ -1085,18 +1389,10 @@ public class ElmCompiler
             // This also correctly matches empty blobs, which type checking will eventually prevent.
             if (listPattern.Elements.Count == 0)
             {
-                var lengthExpr =
-                    Expression.KernelApplicationInstance(
-                        nameof(KernelFunction.length),
-                        scrutinee);
+                var lengthExpr = ApplyBuiltinLength(scrutinee);
+                var zeroLiteral = Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(0));
 
-                var zeroLiteral =
-                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(0));
-
-                return
-                    Expression.KernelApplicationInstance(
-                        nameof(KernelFunction.equal),
-                        Expression.ListInstance([lengthExpr, zeroLiteral]));
+                return ApplyBuiltinEqualBinary(lengthExpr, zeroLiteral);
             }
 
             // Optimization: if all elements are constants, use a single equality check
@@ -1104,25 +1400,13 @@ public class ElmCompiler
             {
                 var patternValue = PatternToConstantValue(listPattern);
 
-                return
-                    Expression.KernelApplicationInstance(
-                        nameof(KernelFunction.equal),
-                        Expression.ListInstance([scrutinee, Expression.LiteralInstance(patternValue)]));
+                return ApplyBuiltinEqualBinary(scrutinee, Expression.LiteralInstance(patternValue));
             }
 
             // For non-constant patterns, check length then each element
-            var lengthCheckExpr =
-                Expression.KernelApplicationInstance(
-                    nameof(KernelFunction.length),
-                    scrutinee);
-
-            var expectedLength =
-                Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(listPattern.Elements.Count));
-
-            var lengthCondition =
-                Expression.KernelApplicationInstance(
-                    nameof(KernelFunction.equal),
-                    Expression.ListInstance([lengthCheckExpr, expectedLength]));
+            var lengthCheckExpr = ApplyBuiltinLength(scrutinee);
+            var expectedLength = Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(listPattern.Elements.Count));
+            var lengthCondition = ApplyBuiltinEqualBinary(lengthCheckExpr, expectedLength);
 
             Expression combinedCondition = lengthCondition;
 
@@ -1151,43 +1435,18 @@ public class ElmCompiler
         if (pattern is SyntaxTypes.Pattern.UnConsPattern unConsPattern)
         {
             // First check: length > 0 (list is not empty)
-            var lengthExpr =
-                Expression.KernelApplicationInstance(
-                    nameof(KernelFunction.length),
-                    scrutinee);
-
-            var zeroLiteral =
-                Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(0));
+            var lengthExpr = ApplyBuiltinLength(scrutinee);
+            var zeroLiteral = Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(0));
 
             // Check if list is not empty: (length == 0) == false
-            var isEmptyCondition =
-                Expression.KernelApplicationInstance(
-                    nameof(KernelFunction.equal),
-                    Expression.ListInstance([lengthExpr, zeroLiteral]));
-
-            var isNotEmptyCondition =
-                Expression.KernelApplicationInstance(
-                    nameof(KernelFunction.equal),
-                    Expression.ListInstance(
-                        [
-                            isEmptyCondition,
-                            Expression.LiteralInstance(KernelFunction.ValueFromBool(false))
-                        ]));
+            var isEmptyCondition = ApplyBuiltinEqualBinary(lengthExpr, zeroLiteral);
+            var isNotEmptyCondition = ApplyBuiltinEqualBinary(
+                isEmptyCondition,
+                Expression.LiteralInstance(KernelFunction.ValueFromBool(false)));
 
             // Get head and tail expressions
-            var headExpr =
-                Expression.KernelApplicationInstance(
-                    nameof(KernelFunction.head),
-                    scrutinee);
-
-            var tailExpr =
-                Expression.KernelApplicationInstance(
-                    nameof(KernelFunction.skip),
-                    Expression.ListInstance(
-                        [
-                            Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(1)),
-                            scrutinee
-                        ]));
+            var headExpr = ApplyBuiltinHead(scrutinee);
+            var tailExpr = ApplyBuiltinSkip(1, scrutinee);
 
             // Check head pattern condition
             var headCondition = CompilePatternCondition(unConsPattern.Head.Value, headExpr);
@@ -1278,6 +1537,68 @@ public class ElmCompiler
                 [1, parameterIndex],
                 Expression.EnvironmentInstance);
     }
+
+    #region Builtin Helper Functions
+
+    /// <summary>
+    /// Apply the builtin 'skip' function with a constant count.
+    /// Equivalent to: Pine_kernel.skip [ count, expr ]
+    /// </summary>
+    private static Expression ApplyBuiltinSkip(int count, Expression expr) =>
+        Expression.KernelApplicationInstance(
+            nameof(KernelFunction.skip),
+            Expression.ListInstance(
+                [
+                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(count)),
+                    expr
+                ]));
+
+    /// <summary>
+    /// Apply the builtin 'head' function.
+    /// Equivalent to: Pine_kernel.head expr
+    /// </summary>
+    private static Expression ApplyBuiltinHead(Expression expr) =>
+        Expression.KernelApplicationInstance(
+            nameof(KernelFunction.head),
+            expr);
+
+    /// <summary>
+    /// Apply the builtin 'equal' function for binary comparison.
+    /// Equivalent to: Pine_kernel.equal [ left, right ]
+    /// </summary>
+    private static Expression ApplyBuiltinEqualBinary(Expression left, Expression right) =>
+        Expression.KernelApplicationInstance(
+            nameof(KernelFunction.equal),
+            Expression.ListInstance([left, right]));
+
+    /// <summary>
+    /// Apply the builtin 'length' function.
+    /// Equivalent to: Pine_kernel.length expr
+    /// </summary>
+    private static Expression ApplyBuiltinLength(Expression expr) =>
+        Expression.KernelApplicationInstance(
+            nameof(KernelFunction.length),
+            expr);
+
+    /// <summary>
+    /// Apply the builtin 'int_add' function.
+    /// Equivalent to: Pine_kernel.int_add operands
+    /// </summary>
+    private static Expression ApplyBuiltinIntAdd(IReadOnlyList<Expression> operands) =>
+        Expression.KernelApplicationInstance(
+            nameof(KernelFunction.int_add),
+            Expression.ListInstance(operands));
+
+    /// <summary>
+    /// Apply the builtin 'int_mul' function.
+    /// Equivalent to: Pine_kernel.int_mul operands
+    /// </summary>
+    private static Expression ApplyBuiltinIntMul(IReadOnlyList<Expression> operands) =>
+        Expression.KernelApplicationInstance(
+            nameof(KernelFunction.int_mul),
+            Expression.ListInstance(operands));
+
+    #endregion
 
     private static PineValue EmitPlainValueDeclaration(PineValue value)
     {
