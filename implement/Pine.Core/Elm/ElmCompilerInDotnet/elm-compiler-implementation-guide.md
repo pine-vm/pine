@@ -51,3 +51,19 @@ The Elm programming language supports closures and partial application. When a f
 For function applications where the function is a value of unknown origin, the Elm compiler emits an expression that adds the given arguments using a form that allows for generic partial application. It emits this partial application as `ParseAndEvalExpression`, where the `Environment` contains the argument value. (If the Elm application expression contains multiple arguments, the compiler nests this pattern recursively)
 
 When emitting a function value, the compiler creates a corresponding wrapper matching the number of parameters. On application of the last argument, the wrapper uses an environment structure as described in the 'Full Function Applications' section.
+
+## Extensible Records
+
+The Elm language supports records that can be extended with additional fields, often called “extensible records” or “row polymorphism.”
+Instead of only using fixed shapes like `{ name : String, age : Int }`, Elm also allows types such as `{ r | name : String }`, which means “any record that has at least a name : String field, plus possibly more fields collected in r.” This feature lets a function say, in its type, “I need these fields, but I do not care what else is in the record.”
+
+The compiler monomorphizes functions that accept extensible records. This monomorphization has the following implications:
+
++ When emitting a record access or record update, the concrete record fields are known because of prior type-inference, which allows the compiler to use an index to access the field value.
++ The compiler does not support entry points accepting extensible records. If the application author selects such a function as a compilation entry point, the compiler issues an error message.
+
+## Encoding of Elm Values as Pine Values
+
+For lists and tuples, the Elm compiler emits Pine lists. This mapping means that a function rendering an Elm representation of Pine values will display tuples as lists unless it has additional type information.
+For composite values like records or choice type tags, the Elm compiler emits Pine values conforming to the encoding from the `ElmValueEncoding.cs` file as the reference.
+
