@@ -146,7 +146,7 @@ public class ElmCompiler
 
         // Create compilation context with all available functions and a cache
         var compilationContext =
-            new CompilationContext(
+            new ModuleCompilationContext(
                 allFunctions,
                 CompiledFunctionsCache: [],
                 PineKernelModuleNames: s_pineKernelModuleNamesDefault);
@@ -183,7 +183,7 @@ public class ElmCompiler
     private static PineValue CompileModule(
         SyntaxTypes.File parsedModule,
         string currentModuleName,
-        CompilationContext context)
+        ModuleCompilationContext context)
     {
         var declarations =
             parsedModule.Declarations
@@ -215,10 +215,19 @@ public class ElmCompiler
         }
      * */
 
-    private record CompilationContext(
+    private record ModuleCompilationContext(
         IReadOnlyDictionary<string, (string moduleName, string functionName, SyntaxTypes.Declaration.FunctionDeclaration declaration)> AllFunctions,
         Dictionary<string, PineValue> CompiledFunctionsCache,
         FrozenSet<string> PineKernelModuleNames);
+
+    private record ExpressionCompilationContext(
+        IReadOnlyDictionary<string, int> ParameterNames,
+        IReadOnlyDictionary<string, TypeInference.InferredType> ParameterTypes,
+        string CurrentModuleName,
+        string? CurrentFunctionName,
+        IReadOnlyDictionary<string, Expression>? LocalBindings,
+        IReadOnlyList<string> DependencyLayout,
+        ModuleCompilationContext ModuleCompilationContext);
 
     private record ElmModuleInCompilation(
         IReadOnlyList<(string declName, PineValue)> FunctionDeclarations);
@@ -226,7 +235,7 @@ public class ElmCompiler
     private static PineValue CompileFunctionDeclaration(
         SyntaxTypes.Declaration.FunctionDeclaration functionDeclaration,
         string currentModuleName,
-        CompilationContext context)
+        ModuleCompilationContext context)
     {
         var functionName =
             functionDeclaration.Function.Declaration.Value.Name.Value;
@@ -273,16 +282,21 @@ public class ElmCompiler
 
         dependencyLayout.AddRange(dependencies);
 
+        // Create expression compilation context
+        var expressionContext = new ExpressionCompilationContext(
+            ParameterNames: parameterNames,
+            ParameterTypes: parameterTypes,
+            CurrentModuleName: currentModuleName,
+            CurrentFunctionName: functionName,
+            LocalBindings: null,
+            DependencyLayout: dependencyLayout,
+            ModuleCompilationContext: context);
+
         // Compile the function body with knowledge of the dependency layout
         var compiledBodyExpression =
             CompileExpression(
                 functionBody,
-                parameterNames,
-                parameterTypes,
-                currentModuleName,
-                functionName,
-                context,
-                dependencyLayout);
+                expressionContext);
 
         // For zero-parameter functions, check if it's a simple literal value
         if (compiledBodyExpression is Expression.Literal literalExpr)
@@ -357,7 +371,7 @@ public class ElmCompiler
     private static List<string> AnalyzeFunctionDependencies(
         SyntaxTypes.Expression expression,
         string currentModuleName,
-        CompilationContext context)
+        ModuleCompilationContext context)
     {
         var dependencies = new HashSet<string>();
 
@@ -481,13 +495,7 @@ public class ElmCompiler
 
     private static Expression CompileExpression(
         SyntaxTypes.Expression expression,
-        IReadOnlyDictionary<string, int> parameterNames,
-        IReadOnlyDictionary<string, TypeInference.InferredType> parameterTypes,
-        string currentModuleName,
-        string? currentFunctionName,
-        CompilationContext context,
-        IReadOnlyList<string> dependencyLayout,
-        IReadOnlyDictionary<string, Expression>? localBindings = null)
+        ExpressionCompilationContext context)
     {
         if (expression is SyntaxTypes.Expression.Integer integerLiteral)
         {
@@ -512,14 +520,14 @@ public class ElmCompiler
             if (functionOrValue.ModuleName.Count is 0)
             {
                 // Check if it's a local binding from pattern matching first
-                if (localBindings is not null &&
+                if (context.LocalBindings is { } localBindings &&
                     localBindings.TryGetValue(functionOrValue.Name, out var bindingExpr))
                 {
                     return bindingExpr;
                 }
 
                 // Check if it's a parameter reference
-                if (parameterNames.TryGetValue(functionOrValue.Name, out var paramIndex))
+                if (context.ParameterNames.TryGetValue(functionOrValue.Name, out var paramIndex))
                 {
                     // Generate environment path for parameter: [1, paramIndex]
                     // Environment structure: [0] = function list, [1] = parameter list
@@ -568,13 +576,7 @@ public class ElmCompiler
             return
                 CompileApplication(
                     application,
-                    parameterNames,
-                    parameterTypes,
-                    currentModuleName,
-                    currentFunctionName,
-                    context,
-                    dependencyLayout,
-                    localBindings);
+                    context);
         }
 
         if (expression is SyntaxTypes.Expression.ListExpr listExpr)
@@ -584,13 +586,7 @@ public class ElmCompiler
                 .Select(elem =>
                 CompileExpression(
                     elem.Value,
-                    parameterNames,
-                    parameterTypes,
-                    currentModuleName,
-                    currentFunctionName,
-                    context,
-                    dependencyLayout,
-                    localBindings))
+                    context))
                 .ToList();
 
             return Expression.ListInstance(compiledElements);
@@ -601,13 +597,7 @@ public class ElmCompiler
             return
                 CompileOperatorApplication(
                     operatorApp,
-                    parameterNames,
-                    parameterTypes,
-                    currentModuleName,
-                    currentFunctionName,
-                    context,
-                    dependencyLayout,
-                    localBindings);
+                    context);
         }
 
         if (expression is SyntaxTypes.Expression.ParenthesizedExpression parenthesized)
@@ -617,13 +607,7 @@ public class ElmCompiler
             return
                 CompileExpression(
                     parenthesized.Expression.Value,
-                    parameterNames,
-                    parameterTypes,
-                    currentModuleName,
-                    currentFunctionName,
-                    context,
-                    dependencyLayout,
-                    localBindings);
+                    context);
         }
 
         if (expression is SyntaxTypes.Expression.Negation negation)
@@ -638,13 +622,7 @@ public class ElmCompiler
             var innerExpression =
                 CompileExpression(
                     negation.Expression.Value,
-                    parameterNames,
-                    parameterTypes,
-                    currentModuleName,
-                    currentFunctionName,
-                    context,
-                    dependencyLayout,
-                    localBindings);
+                    context);
 
             var negativeOne = Expression.LiteralInstance(EmitIntegerLiteral(-1));
 
@@ -658,35 +636,17 @@ public class ElmCompiler
             var condition =
                 CompileExpression(
                     ifBlock.Condition.Value,
-                    parameterNames,
-                    parameterTypes,
-                    currentModuleName,
-                    currentFunctionName,
-                    context,
-                    dependencyLayout,
-                    localBindings);
+                    context);
 
             var trueBranch =
                 CompileExpression(
                     ifBlock.ThenBlock.Value,
-                    parameterNames,
-                    parameterTypes,
-                    currentModuleName,
-                    currentFunctionName,
-                    context,
-                    dependencyLayout,
-                    localBindings);
+                    context);
 
             var falseBranch =
                 CompileExpression(
                     ifBlock.ElseBlock.Value,
-                    parameterNames,
-                    parameterTypes,
-                    currentModuleName,
-                    currentFunctionName,
-                    context,
-                    dependencyLayout,
-                    localBindings);
+                    context);
 
             return
                 Expression.ConditionalInstance(
@@ -700,12 +660,7 @@ public class ElmCompiler
             return
                 CompileCaseExpression(
                     caseExpression.CaseBlock,
-                    parameterNames,
-                    parameterTypes,
-                    currentModuleName,
-                    currentFunctionName,
-                    context,
-                    dependencyLayout);
+                    context);
         }
 
         throw new NotImplementedException(
@@ -715,13 +670,7 @@ public class ElmCompiler
 
     private static Expression CompileApplication(
         SyntaxTypes.Expression.Application application,
-        IReadOnlyDictionary<string, int> parameterNames,
-        IReadOnlyDictionary<string, TypeInference.InferredType> parameterTypes,
-        string currentModuleName,
-        string? currentFunctionName,
-        CompilationContext context,
-        IReadOnlyList<string> dependencyLayout,
-        IReadOnlyDictionary<string, Expression>? localBindings = null)
+        ExpressionCompilationContext context)
     {
         if (application.Arguments.Count < 2)
         {
@@ -734,7 +683,7 @@ public class ElmCompiler
 
         if (firstArg is SyntaxTypes.Expression.FunctionOrValue kernelFunc &&
             kernelFunc.ModuleName.Count is 1 &&
-            context.PineKernelModuleNames.Contains(kernelFunc.ModuleName[0]))
+            context.ModuleCompilationContext.PineKernelModuleNames.Contains(kernelFunc.ModuleName[0]))
         {
             // This is a kernel function application
             var kernelFunctionName = kernelFunc.Name;
@@ -745,13 +694,7 @@ public class ElmCompiler
             var compiledInput =
                 CompileExpression(
                     kernelInput,
-                    parameterNames,
-                    parameterTypes,
-                    currentModuleName,
-                    currentFunctionName,
-                    context,
-                    dependencyLayout,
-                    localBindings);
+                    context);
 
             return Expression.KernelApplicationInstance(
                 kernelFunctionName,
@@ -777,13 +720,7 @@ public class ElmCompiler
                     var compiledArg =
                         CompileExpression(
                             arg,
-                            parameterNames,
-                            parameterTypes,
-                            currentModuleName,
-                            currentFunctionName,
-                            context,
-                            dependencyLayout,
-                            localBindings);
+                            context);
                     compiledArguments.Add(compiledArg);
                 }
 
@@ -806,14 +743,14 @@ public class ElmCompiler
             else
             {
                 // Function from the same module
-                qualifiedFunctionName = currentModuleName + "." + funcRef.Name;
+                qualifiedFunctionName = context.CurrentModuleName + "." + funcRef.Name;
             }
 
             // Find the index of this function in the dependency layout
             var functionIndex = -1;
-            for (var i = 0; i < dependencyLayout.Count; i++)
+            for (var i = 0; i < context.DependencyLayout.Count; i++)
             {
-                if (dependencyLayout[i] == qualifiedFunctionName)
+                if (context.DependencyLayout[i] == qualifiedFunctionName)
                 {
                     functionIndex = i;
                     break;
@@ -832,13 +769,7 @@ public class ElmCompiler
             var compiledArgument =
                 CompileExpression(
                     argument,
-                    parameterNames,
-                    parameterTypes,
-                    currentModuleName,
-                    currentFunctionName,
-                    context,
-                    dependencyLayout,
-                    localBindings);
+                    context);
 
             // Build reference to the encoded function at environment[0][functionIndex]
             // Start with environment
@@ -873,17 +804,11 @@ public class ElmCompiler
 
     private static Expression CompileOperatorApplication(
         SyntaxTypes.Expression.OperatorApplication operatorApp,
-        IReadOnlyDictionary<string, int> parameterNames,
-        IReadOnlyDictionary<string, TypeInference.InferredType> parameterTypes,
-        string currentModuleName,
-        string? currentFunctionName,
-        CompilationContext context,
-        IReadOnlyList<string> dependencyLayout,
-        IReadOnlyDictionary<string, Expression>? localBindings = null)
+        ExpressionCompilationContext context)
     {
         // Use type inference to determine the operation type
         var expressionType =
-            TypeInference.InferExpressionType(operatorApp, parameterNames, parameterTypes);
+            TypeInference.InferExpressionType(operatorApp, context.ParameterNames, context.ParameterTypes);
 
         if (expressionType is TypeInference.InferredType.IntType)
         {
@@ -897,10 +822,10 @@ public class ElmCompiler
             if (operatorApp.Operator is "-")
             {
                 var leftCompiled =
-                    CompileExpression(operatorApp.Left.Value, parameterNames, parameterTypes, currentModuleName, currentFunctionName, context, dependencyLayout, localBindings);
+                    CompileExpression(operatorApp.Left.Value, context);
 
                 var rightCompiled =
-                    CompileExpression(operatorApp.Right.Value, parameterNames, parameterTypes, currentModuleName, currentFunctionName, context, dependencyLayout, localBindings);
+                    CompileExpression(operatorApp.Right.Value, context);
 
                 // Create: -1 * rightCompiled
                 var negatedRight = Expression.KernelApplicationInstance(
@@ -929,24 +854,12 @@ public class ElmCompiler
                 var leftCompiled =
                     CompileExpression(
                         operatorApp.Left.Value,
-                        parameterNames,
-                        parameterTypes,
-                        currentModuleName,
-                        currentFunctionName,
-                        context,
-                        dependencyLayout,
-                        localBindings);
+                        context);
 
                 var rightCompiled =
                     CompileExpression(
                         operatorApp.Right.Value,
-                        parameterNames,
-                        parameterTypes,
-                        currentModuleName,
-                        currentFunctionName,
-                        context,
-                        dependencyLayout,
-                        localBindings);
+                        context);
 
                 // Create a list with both operands
                 var operandsList = Expression.ListInstance([leftCompiled, rightCompiled]);
@@ -964,23 +877,13 @@ public class ElmCompiler
 
     private static Expression CompileCaseExpression(
         SyntaxTypes.CaseBlock caseBlock,
-        IReadOnlyDictionary<string, int> parameterNames,
-        IReadOnlyDictionary<string, TypeInference.InferredType> parameterTypes,
-        string currentModuleName,
-        string? currentFunctionName,
-        CompilationContext context,
-        IReadOnlyList<string> dependencyLayout)
+        ExpressionCompilationContext context)
     {
         // Compile the scrutinee (the expression being matched)
         var scrutinee =
             CompileExpression(
                 caseBlock.Expression.Value,
-                parameterNames,
-                parameterTypes,
-                currentModuleName,
-                currentFunctionName,
-                context,
-                dependencyLayout);
+                context);
 
         // Compile cases from bottom to top, creating nested conditionals
         // The last case becomes the default/else branch
@@ -997,17 +900,16 @@ public class ElmCompiler
             // Extract bindings from the pattern
             var patternBindings = ExtractPatternBindings(pattern, scrutinee);
 
+            // Create a new context with updated local bindings for the case body
+            var caseContext = patternBindings.Count > 0
+                ? context with { LocalBindings = patternBindings }
+                : context;
+
             // Compile the case expression body with the pattern bindings
             var caseBody =
                 CompileExpression(
                     caseItem.Expression.Value,
-                    parameterNames,
-                    parameterTypes,
-                    currentModuleName,
-                    currentFunctionName,
-                    context,
-                    dependencyLayout,
-                    localBindings: patternBindings.Count > 0 ? patternBindings : null);
+                    caseContext);
 
             // Generate condition based on pattern type
             var conditionExpr = CompilePatternCondition(pattern, scrutinee);
