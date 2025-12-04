@@ -8,18 +8,18 @@ namespace Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 public class Rendering
 {
     /// <summary>
-    /// Represents a line with an indent count (in spaces) and content.
+    /// Represents a line with an indent level (where each level is 4 spaces) and content.
     /// The indent is stored separately to allow efficient string building at the root.
     /// </summary>
     public readonly record struct IndentedLine(
-        int IndentSpaces,
+        int IndentLevel,
         string Content)
     {
         public static readonly IndentedLine Empty =
             new(0, "");
 
-        public IndentedLine IndentFurther(int additionalSpaces) =>
-            new(IndentSpaces + additionalSpaces, Content);
+        public IndentedLine IndentFurther(int additionalLevels) =>
+            new(IndentLevel + additionalLevels, Content);
     }
 
     /// <summary>
@@ -100,10 +100,11 @@ public class Rendering
 
             isFirst = false;
 
-            // Append indent spaces and content in one go
-            if (line.IndentSpaces > 0)
+            // Append indent spaces (4 spaces per level) and content in one go
+            var indentSpaces = line.IndentLevel * 4;
+            if (indentSpaces > 0)
             {
-                sb.Append(' ', line.IndentSpaces);
+                sb.Append(' ', indentSpaces);
             }
 
             sb.Append(line.Content);
@@ -232,9 +233,9 @@ public class Rendering
                         "( " :
                         ", ";
 
-                    yield return new IndentedLine(4, prefix + RenderTopLevelExpose(explicit_.Nodes[i].Value));
+                    yield return new IndentedLine(1, prefix + RenderTopLevelExpose(explicit_.Nodes[i].Value));
                 }
-                yield return new IndentedLine(4, ")");
+                yield return new IndentedLine(1, ")");
             }
             else
             {
@@ -533,7 +534,7 @@ public class Rendering
                 constructorStr += " " + string.Join(" ", constructor.Value.Arguments.Select(a => RenderTypeAnnotationParenthesized(a.Value, config)));
             }
 
-            yield return new IndentedLine(4, prefix + constructorStr);
+            yield return new IndentedLine(1, prefix + constructorStr);
 
             // Render comments between constructors if provided
             if (comments is not null)
@@ -550,7 +551,7 @@ public class Rendering
 
                 foreach (var comment in constructorComments)
                 {
-                    yield return new IndentedLine(8, comment.Value);
+                    yield return new IndentedLine(2, comment.Value);
                 }
             }
         }
@@ -574,7 +575,7 @@ public class Rendering
         header += " =";
 
         yield return new IndentedLine(0, header);
-        yield return new IndentedLine(4, RenderTypeAnnotation(typeAlias.TypeAnnotation.Value, config));
+        yield return new IndentedLine(1, RenderTypeAnnotation(typeAlias.TypeAnnotation.Value, config));
     }
 
     private static IEnumerable<IndentedLine> RenderPortLines(
@@ -617,7 +618,7 @@ public class Rendering
         }
         else
         {
-            yield return new IndentedLine(indent * 4, RenderExpression(expression));
+            yield return new IndentedLine(indent, RenderExpression(expression));
         }
     }
 
@@ -772,8 +773,6 @@ public class Rendering
     /// </summary>
     private static IEnumerable<IndentedLine> RenderMultiLine(Expression expression, Config config, int indent)
     {
-        var indentSpaces = indent * 4;
-
         return expression switch
         {
             Expression.Application app => RenderMultiLineApplication(app, config, indent),
@@ -784,7 +783,7 @@ public class Rendering
             Expression.IfBlock ifBlock => RenderMultiLineIfBlock(ifBlock, config, indent),
             Expression.LetExpression letExpr => RenderMultiLineLetExpression(letExpr.Value, config, indent),
             Expression.ParenthesizedExpression paren => RenderMultiLineParenthesizedExpression(paren, config, indent),
-            _ => [new IndentedLine(indentSpaces, RenderExpression(expression))]
+            _ => [new IndentedLine(indent, RenderExpression(expression))]
         };
     }
 
@@ -793,8 +792,6 @@ public class Rendering
     /// </summary>
     private static IEnumerable<IndentedLine> RenderMultiLineApplication(Expression.Application app, Config config, int indent)
     {
-        var indentSpaces = indent * 4;
-
         // Check if function is a lambda with multi-line body (possibly wrapped in parentheses)
         var funcExpr = UnwrapParentheses(app.Arguments[0].Value);
 
@@ -802,7 +799,7 @@ public class Rendering
         {
             // Render lambda with multi-line body
             var lambdaHeader = "(" + RenderLambdaHeader(lambda.Lambda);
-            yield return new IndentedLine(indentSpaces, lambdaHeader);
+            yield return new IndentedLine(indent, lambdaHeader);
 
             // Render lambda body multi-line
             foreach (var line in RenderMultiLine(lambda.Lambda.Expression.Value, config, indent + 1))
@@ -811,18 +808,18 @@ public class Rendering
             }
 
             // Closing paren on its own line
-            yield return new IndentedLine(indentSpaces, ")");
+            yield return new IndentedLine(indent, ")");
 
             // Render arguments on subsequent lines
             for (var i = 1; i < app.Arguments.Count; i++)
             {
-                yield return new IndentedLine(indentSpaces + 4, RenderExpressionParenthesizedIfNeeded(app.Arguments[i].Value));
+                yield return new IndentedLine(indent + 1, RenderExpressionParenthesizedIfNeeded(app.Arguments[i].Value));
             }
         }
         else
         {
             // Render function on first line
-            yield return new IndentedLine(indentSpaces, RenderExpression(app.Arguments[0].Value));
+            yield return new IndentedLine(indent, RenderExpression(app.Arguments[0].Value));
             // Render arguments on subsequent lines with extra indentation
             foreach (var line in RenderApplicationArguments(app.Arguments, 1, config, indent + 1))
             {
@@ -840,7 +837,6 @@ public class Rendering
         Config config,
         int indent)
     {
-        var indentSpaces = indent * 4;
         var innerExpr = paren.Expression.Value;
 
         // Check if the inner expression is an application where the function is a lambda with multi-line body
@@ -859,7 +855,7 @@ public class Rendering
                 // )
 
                 var lambdaHeader = "((" + RenderLambdaHeader(lambda.Lambda);
-                yield return new IndentedLine(indentSpaces, lambdaHeader);
+                yield return new IndentedLine(indent, lambdaHeader);
 
                 // Render lambda body multi-line
                 foreach (var line in RenderMultiLine(lambda.Lambda.Expression.Value, config, indent + 1))
@@ -867,17 +863,17 @@ public class Rendering
                     yield return line;
                 }
 
-                // Inner closing paren with 1-space indent
-                yield return new IndentedLine(indentSpaces + 1, ")");
+                // Inner closing paren with 1-space indent (add the extra space to content)
+                yield return new IndentedLine(indent, " )");
 
                 // Render arguments on subsequent lines with 4-space indent
                 for (var i = 1; i < innerApp.Arguments.Count; i++)
                 {
-                    yield return new IndentedLine(indentSpaces + 4, RenderExpressionParenthesizedIfNeeded(innerApp.Arguments[i].Value));
+                    yield return new IndentedLine(indent + 1, RenderExpressionParenthesizedIfNeeded(innerApp.Arguments[i].Value));
                 }
 
                 // Outer closing paren
-                yield return new IndentedLine(indentSpaces, ")");
+                yield return new IndentedLine(indent, ")");
                 yield break;
             }
         }
@@ -892,7 +888,7 @@ public class Rendering
             // )
 
             var lambdaHeader = "(" + RenderLambdaHeader(simpleLambda.Lambda);
-            yield return new IndentedLine(indentSpaces, lambdaHeader);
+            yield return new IndentedLine(indent, lambdaHeader);
 
             // Render lambda body multi-line
             foreach (var line in RenderMultiLine(simpleLambda.Lambda.Expression.Value, config, indent + 1))
@@ -901,7 +897,7 @@ public class Rendering
             }
 
             // Closing paren
-            yield return new IndentedLine(indentSpaces, ")");
+            yield return new IndentedLine(indent, ")");
             yield break;
         }
 
@@ -915,7 +911,7 @@ public class Rendering
             //     arg2
             // )
 
-            yield return new IndentedLine(indentSpaces, "(" + RenderExpression(regularApp.Arguments[0].Value));
+            yield return new IndentedLine(indent, "(" + RenderExpression(regularApp.Arguments[0].Value));
 
             // Render arguments on subsequent lines with extra indentation
             foreach (var line in RenderApplicationArguments(regularApp.Arguments, 1, config, indent + 1))
@@ -923,17 +919,17 @@ public class Rendering
                 yield return line;
             }
 
-            yield return new IndentedLine(indentSpaces, ")");
+            yield return new IndentedLine(indent, ")");
             yield break;
         }
 
         // Default: wrap the inner multi-line expression in parentheses
-        yield return new IndentedLine(indentSpaces, "(");
+        yield return new IndentedLine(indent, "(");
         foreach (var line in RenderMultiLine(innerExpr, config, indent))
         {
             yield return line;
         }
-        yield return new IndentedLine(indentSpaces, ")");
+        yield return new IndentedLine(indent, ")");
     }
 
     /// <summary>
@@ -946,8 +942,6 @@ public class Rendering
         Config config,
         int indent)
     {
-        var indentSpaces = indent * 4;
-
         for (var i = startIndex; i < arguments.Count; i++)
         {
             var arg = arguments[i].Value;
@@ -969,7 +963,7 @@ public class Rendering
             }
             else
             {
-                yield return new IndentedLine(indentSpaces, RenderExpressionParenthesizedIfNeeded(arg));
+                yield return new IndentedLine(indent, RenderExpressionParenthesizedIfNeeded(arg));
             }
         }
     }
@@ -990,8 +984,6 @@ public class Rendering
         int indent,
         string prefix)
     {
-        var indentSpaces = indent * 4;
-
         switch (element)
         {
             case Expression.ListExpr nestedList when ListContainsComplexExpression(nestedList):
@@ -1004,12 +996,12 @@ public class Rendering
 
             case Expression.ListExpr nestedList:
                 // Simple nested list - render inline
-                yield return new IndentedLine(indentSpaces, prefix + RenderExpression(nestedList));
+                yield return new IndentedLine(indent, prefix + RenderExpression(nestedList));
                 break;
 
             case Expression.Application app:
                 // Applications with actual arguments are rendered multi-line with each argument on its own line
-                yield return new IndentedLine(indentSpaces, prefix + RenderExpression(app.Arguments[0].Value));
+                yield return new IndentedLine(indent, prefix + RenderExpression(app.Arguments[0].Value));
                 for (var j = 1; j < app.Arguments.Count; j++)
                 {
                     var arg = app.Arguments[j].Value;
@@ -1024,12 +1016,12 @@ public class Rendering
                         }
                         else
                         {
-                            yield return new IndentedLine(indentSpaces + 4, RenderExpression(argListExpr));
+                            yield return new IndentedLine(indent + 1, RenderExpression(argListExpr));
                         }
                     }
                     else
                     {
-                        yield return new IndentedLine(indentSpaces + 4, RenderExpressionParenthesizedIfNeeded(arg));
+                        yield return new IndentedLine(indent + 1, RenderExpressionParenthesizedIfNeeded(arg));
                     }
                 }
                 break;
@@ -1044,7 +1036,7 @@ public class Rendering
 
             default:
                 // Simple element - render inline
-                yield return new IndentedLine(indentSpaces, prefix + RenderExpression(element));
+                yield return new IndentedLine(indent, prefix + RenderExpression(element));
                 break;
         }
     }
@@ -1054,8 +1046,6 @@ public class Rendering
     /// </summary>
     private static IEnumerable<IndentedLine> RenderMultiLineList(Expression.ListExpr listExpr, Config config, int indent)
     {
-        var indentSpaces = indent * 4;
-
         for (var i = 0; i < listExpr.Elements.Count; i++)
         {
             var item = listExpr.Elements[i].Value;
@@ -1067,15 +1057,13 @@ public class Rendering
             }
         }
 
-        yield return new IndentedLine(indentSpaces, "]");
+        yield return new IndentedLine(indent, "]");
     }
 
     private static IEnumerable<IndentedLine> RenderMultiLineIfBlock(Expression.IfBlock ifBlock, Config config, int indent)
     {
-        var indentSpaces = indent * 4;
-
         // Render "if condition then"
-        yield return new IndentedLine(indentSpaces, "if " + RenderExpression(ifBlock.Condition.Value) + " then");
+        yield return new IndentedLine(indent, "if " + RenderExpression(ifBlock.Condition.Value) + " then");
 
         // Render then branch with extra indent
         foreach (var line in RenderExpressionLines(ifBlock.ThenBlock.Value, config, indent + 1))
@@ -1090,7 +1078,7 @@ public class Rendering
             yield return IndentedLine.Empty;
 
             // Render "else if condition then"
-            yield return new IndentedLine(indentSpaces, "else if " + RenderExpression(elseIfBlock.Condition.Value) + " then");
+            yield return new IndentedLine(indent, "else if " + RenderExpression(elseIfBlock.Condition.Value) + " then");
 
             // Render then branch with extra indent
             foreach (var line in RenderExpressionLines(elseIfBlock.ThenBlock.Value, config, indent + 1))
@@ -1105,7 +1093,7 @@ public class Rendering
                 // Blank line before else if
                 yield return IndentedLine.Empty;
 
-                yield return new IndentedLine(indentSpaces, "else if " + RenderExpression(nextElseIf.Condition.Value) + " then");
+                yield return new IndentedLine(indent, "else if " + RenderExpression(nextElseIf.Condition.Value) + " then");
 
                 foreach (var line in RenderExpressionLines(nextElseIf.ThenBlock.Value, config, indent + 1))
                 {
@@ -1117,7 +1105,7 @@ public class Rendering
 
             // Final else branch
             yield return IndentedLine.Empty;
-            yield return new IndentedLine(indentSpaces, "else");
+            yield return new IndentedLine(indent, "else");
             foreach (var line in RenderExpressionLines(currentElse, config, indent + 1))
             {
                 yield return line;
@@ -1127,7 +1115,7 @@ public class Rendering
         {
             // Simple else branch
             yield return IndentedLine.Empty;
-            yield return new IndentedLine(indentSpaces, "else");
+            yield return new IndentedLine(indent, "else");
             foreach (var line in RenderExpressionLines(ifBlock.ElseBlock.Value, config, indent + 1))
             {
                 yield return line;
@@ -1144,13 +1132,11 @@ public class Rendering
         }
 
         // Render operator and right side with extra indentation
-        yield return new IndentedLine(indent * 4 + 4, opApp.Operator + " " + RenderExpression(opApp.Right.Value));
+        yield return new IndentedLine(indent + 1, opApp.Operator + " " + RenderExpression(opApp.Right.Value));
     }
 
     private static IEnumerable<IndentedLine> RenderMultiLineRecord(Expression.RecordExpr recordExpr, Config config, int indent)
     {
-        var indentSpaces = indent * 4;
-
         for (var i = 0; i < recordExpr.Fields.Count; i++)
         {
             var field = recordExpr.Fields[i].Value;
@@ -1160,7 +1146,7 @@ public class Rendering
             // Check if the field value needs multi-line rendering
             if (GetExpressionComplexity(fieldValue, config) is ExpressionComplexity.Complex)
             {
-                yield return new IndentedLine(indentSpaces, prefix + field.fieldName.Value + " =");
+                yield return new IndentedLine(indent, prefix + field.fieldName.Value + " =");
                 foreach (var line in RenderExpressionLines(fieldValue, config, indent + 1))
                 {
                     yield return line;
@@ -1168,18 +1154,16 @@ public class Rendering
             }
             else
             {
-                yield return new IndentedLine(indentSpaces, prefix + field.fieldName.Value + " = " + RenderExpression(fieldValue));
+                yield return new IndentedLine(indent, prefix + field.fieldName.Value + " = " + RenderExpression(fieldValue));
             }
         }
 
-        yield return new IndentedLine(indentSpaces, "}");
+        yield return new IndentedLine(indent, "}");
     }
 
     private static IEnumerable<IndentedLine> RenderMultiLineCaseExpression(CaseBlock caseBlock, Config config, int indent)
     {
-        var indentSpaces = indent * 4;
-
-        yield return new IndentedLine(indentSpaces, "case " + RenderExpression(caseBlock.Expression.Value) + " of");
+        yield return new IndentedLine(indent, "case " + RenderExpression(caseBlock.Expression.Value) + " of");
 
         for (var i = 0; i < caseBlock.Cases.Count; i++)
         {
@@ -1191,7 +1175,7 @@ public class Rendering
                 yield return IndentedLine.Empty;
             }
 
-            yield return new IndentedLine(indentSpaces + 4, RenderPattern(caseItem.Pattern.Value) + " ->");
+            yield return new IndentedLine(indent + 1, RenderPattern(caseItem.Pattern.Value) + " ->");
 
             // Render the case expression body
             foreach (var line in RenderExpressionLines(caseItem.Expression.Value, config, indent + 2))
@@ -1203,10 +1187,8 @@ public class Rendering
 
     private static IEnumerable<IndentedLine> RenderMultiLineLetExpression(Expression.LetBlock letBlock, Config config, int indent)
     {
-        var indentSpaces = indent * 4;
-
         // Render "let"
-        yield return new IndentedLine(indentSpaces, "let");
+        yield return new IndentedLine(indent, "let");
 
         // Render declarations
         for (var i = 0; i < letBlock.Declarations.Count; i++)
@@ -1226,7 +1208,7 @@ public class Rendering
         }
 
         // Render "in"
-        yield return new IndentedLine(indentSpaces, "in");
+        yield return new IndentedLine(indent, "in");
 
         // Render the body expression
         foreach (var line in RenderExpressionLines(letBlock.Expression.Value, config, indent))
@@ -1237,8 +1219,6 @@ public class Rendering
 
     private static IEnumerable<IndentedLine> RenderLetDeclarationLines(Expression.LetDeclaration letDecl, Config config, int indent)
     {
-        var indentSpaces = indent * 4;
-
         switch (letDecl)
         {
             case Expression.LetDeclaration.LetFunction letFunc:
@@ -1246,7 +1226,7 @@ public class Rendering
                     // Render signature if present
                     if (letFunc.Function.Signature is { } signature)
                     {
-                        yield return new IndentedLine(indentSpaces, RenderSignature(signature.Value, config));
+                        yield return new IndentedLine(indent, RenderSignature(signature.Value, config));
                     }
 
                     var impl = letFunc.Function.Declaration.Value;
@@ -1259,7 +1239,7 @@ public class Rendering
 
                     header += " =";
 
-                    yield return new IndentedLine(indentSpaces, header);
+                    yield return new IndentedLine(indent, header);
 
                     // Render the expression body
                     foreach (var line in RenderExpressionLines(impl.Expression.Value, config, indent + 1))
@@ -1273,7 +1253,7 @@ public class Rendering
                 {
                     var header = RenderPattern(letDestr.Pattern.Value) + " =";
 
-                    yield return new IndentedLine(indentSpaces, header);
+                    yield return new IndentedLine(indent, header);
 
                     // Render the expression body
                     foreach (var line in RenderExpressionLines(letDestr.Expression.Value, config, indent + 1))
@@ -1293,8 +1273,6 @@ public class Rendering
     /// </summary>
     private static IEnumerable<IndentedLine> RenderRecordInList(Expression.RecordExpr recordExpr, Config config, int indent, string prefix)
     {
-        var indentSpaces = indent * 4;
-
         for (var i = 0; i < recordExpr.Fields.Count; i++)
         {
             var field = recordExpr.Fields[i].Value;
@@ -1304,7 +1282,7 @@ public class Rendering
             // Check if the field value needs multi-line rendering
             if (GetExpressionComplexity(fieldValue, config) is ExpressionComplexity.Complex)
             {
-                yield return new IndentedLine(indentSpaces, fieldPrefix + field.fieldName.Value + " =");
+                yield return new IndentedLine(indent, fieldPrefix + field.fieldName.Value + " =");
                 foreach (var line in RenderExpressionLines(fieldValue, config, indent + 2))
                 {
                     yield return line;
@@ -1312,11 +1290,11 @@ public class Rendering
             }
             else
             {
-                yield return new IndentedLine(indentSpaces, fieldPrefix + field.fieldName.Value + " = " + RenderExpression(fieldValue));
+                yield return new IndentedLine(indent, fieldPrefix + field.fieldName.Value + " = " + RenderExpression(fieldValue));
             }
         }
 
-        yield return new IndentedLine(indentSpaces, "  }");
+        yield return new IndentedLine(indent, "  }");
     }
 
     /// <summary>
@@ -1324,8 +1302,6 @@ public class Rendering
     /// </summary>
     private static IEnumerable<IndentedLine> RenderNestedMultiLineList(Expression.ListExpr nestedList, int outerIndent, string outerPrefix)
     {
-        var outerIndentSpaces = outerIndent * 4;
-
         for (var i = 0; i < nestedList.Elements.Count; i++)
         {
             var item = nestedList.Elements[i].Value;
@@ -1336,39 +1312,42 @@ public class Rendering
                 // First item of nested list
                 if (item is Expression.Application app && ApplicationHasListArgument(app))
                 {
-                    yield return new IndentedLine(outerIndentSpaces, outerPrefix + innerPrefix + RenderExpression(app.Arguments[0].Value));
+                    yield return new IndentedLine(outerIndent, outerPrefix + innerPrefix + RenderExpression(app.Arguments[0].Value));
                     // Application arguments get extra indent
                     for (var j = 1; j < app.Arguments.Count; j++)
                     {
-                        yield return new IndentedLine(outerIndentSpaces + outerPrefix.Length + innerPrefix.Length + 4, RenderExpressionParenthesizedIfNeeded(app.Arguments[j].Value));
+                        // Extra spaces from prefix lengths are added to content
+                        var extraSpaces = new string(' ', outerPrefix.Length + innerPrefix.Length);
+                        yield return new IndentedLine(outerIndent + 1, extraSpaces + RenderExpressionParenthesizedIfNeeded(app.Arguments[j].Value));
                     }
                 }
                 else
                 {
-                    yield return new IndentedLine(outerIndentSpaces, outerPrefix + innerPrefix + RenderExpression(item));
+                    yield return new IndentedLine(outerIndent, outerPrefix + innerPrefix + RenderExpression(item));
                 }
             }
             else
             {
-                // Subsequent items of nested list (indented 2 more spaces)
-                var nestedIndent = outerIndentSpaces + 2;
+                // Subsequent items of nested list (indented 2 more spaces from base indent)
                 if (item is Expression.Application app && ApplicationHasListArgument(app))
                 {
-                    yield return new IndentedLine(nestedIndent, innerPrefix + RenderExpression(app.Arguments[0].Value));
+                    yield return new IndentedLine(outerIndent, "  " + innerPrefix + RenderExpression(app.Arguments[0].Value));
                     for (var j = 1; j < app.Arguments.Count; j++)
                     {
-                        yield return new IndentedLine(nestedIndent + innerPrefix.Length + 4, RenderExpressionParenthesizedIfNeeded(app.Arguments[j].Value));
+                        // Extra spaces from prefix length are added to content
+                        var extraSpaces = new string(' ', 2 + innerPrefix.Length);
+                        yield return new IndentedLine(outerIndent + 1, extraSpaces + RenderExpressionParenthesizedIfNeeded(app.Arguments[j].Value));
                     }
                 }
                 else
                 {
-                    yield return new IndentedLine(nestedIndent, innerPrefix + RenderExpression(item));
+                    yield return new IndentedLine(outerIndent, "  " + innerPrefix + RenderExpression(item));
                 }
             }
         }
 
         // Close nested list (indented 2 more spaces from outer)
-        yield return new IndentedLine(outerIndentSpaces + 2, "]");
+        yield return new IndentedLine(outerIndent, "  ]");
     }
 
     private static string RenderExpression(Expression expression)
