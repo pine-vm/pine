@@ -1,6 +1,5 @@
 using ElmTime.Elm019;
 using ElmTime.ElmInteractive;
-using McMaster.Extensions.CommandLineUtils;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
@@ -24,6 +23,7 @@ using Pine.PineVM;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.CommandLine;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -51,350 +51,383 @@ public class Program
         LoadFromGitHubOrGitLab.RepositoryFilesPartialForCommitCacheDefault =
             new CacheByFileName(new FileStoreFromSystemIOFile(Path.Combine(Filesystem.CacheDirectory, "git", "partial-for-commit", "zip")));
 
-        var app = new CommandLineApplication
+        var rootCommand = new RootCommand("Pine: Elm DevTools and runtime\nTo get help or report an issue, see https://github.com/pine-vm/pine/discussions");
+
+        // Custom -v version option that shows "pine X.X.X" format
+        var versionOption = new Option<bool>("-v")
         {
-            Name = "pine",
-            Description = "Pine: Elm DevTools and runtime\nTo get help or report an issue, see https://github.com/pine-vm/pine/discussions",
-            HelpTextGenerator =
-            new McMaster.Extensions.CommandLineUtils.HelpText.DefaultHelpTextGenerator { SortCommandsByName = false }
+            Description = "Show version information"
         };
+        rootCommand.Add(versionOption);
 
-        app.VersionOption(template: "-v|--version", shortFormVersion: "pine " + AppVersionId);
+        // Install command
+        var installCommand = CreateInstallCommand();
+        rootCommand.Add(installCommand);
 
-        var installCommand = app.Command("install", installCommand =>
+        // Core commands
+        rootCommand.Add(CreateSelfTestCommand());
+        rootCommand.Add(CreateRunCommand());
+        rootCommand.Add(CreateRunServerCommand());
+        rootCommand.Add(CreateDeployCommand());
+        rootCommand.Add(CreateCopyAppStateCommand());
+        rootCommand.Add(CreateCopyProcessCommand());
+        rootCommand.Add(CreateListFunctionsCommand());
+        rootCommand.Add(CreateApplyFunctionCommand());
+        rootCommand.Add(CreateTruncateProcessHistoryCommand());
+        rootCommand.Add(CreateInteractiveCommand(dynamicPGOShare));
+        rootCommand.Add(CreateCompileCommand());
+        rootCommand.Add(CreateElmTestRsCommand());
+        rootCommand.Add(CreateMakeCommand());
+        rootCommand.Add(CreateDescribeCommand());
+        rootCommand.Add(CreateRunCacheServerCommand());
+        rootCommand.Add(CreateRunFileServerCommand());
+        rootCommand.Add(CreateCompileInteractiveEnvCommand());
+        rootCommand.Add(CreateLanguageServerCommand());
+        rootCommand.Add(CreateUserSecretsCommand());
+        rootCommand.Add(CreateHelpCommand(rootCommand));
+
+        // Root command handler (show help when no command specified)
+        rootCommand.SetAction((parseResult) =>
         {
-            var (commandName, checkInstallation) = CheckIfExecutableIsRegisteredOnPath();
+            var showVersion = parseResult.GetValue(versionOption);
 
-            installCommand.Description = "Install the '" + commandName + "' command for the current user account.";
-            installCommand.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
-
-            installCommand.OnExecute(() =>
+            if (showVersion)
             {
-                checkInstallation().registerExecutableDirectoryOnPath();
-            });
-        });
-
-        AddSelfTestCommand(app);
-
-        var runCommand = AddRunCommand(app);
-        var runServerCommand = AddRunServerCommand(app);
-
-        var deployCommand = AddDeployCommand(app);
-        var copyAppStateCommand = AddCopyAppStateCommand(app);
-        var copyProcessCommand = AddCopyProcessCommand(app);
-        var listFunctionsCommand = AddListFunctionsCommand(app);
-        var applyFunctionCommand = AddApplyFunctionCommand(app);
-        var truncateProcessHistoryCommand = AddTruncateProcessHistoryCommand(app);
-
-        var interactiveCommand = AddInteractiveCommand(app, dynamicPGOShare);
-        var compileCommand = AddCompileCommand(app);
-        var elmTestRsCommand = AddElmTestRsCommand(app);
-        var makeCommand = AddMakeCommand(app);
-        var describeCommand = AddDescribeCommand(app);
-
-        var runCacheServerCmd = AddRunCacheServerCmd(app);
-        var runFileServerCmd = AddRunFileServerCommand(app);
-
-        var compileInteractiveEnvCommand = AddCompileInteractiveEnvCommand(app);
-        var lspCommand = AddLanguageServerCommand(app);
-
-        app.Command("user-secrets", userSecretsCmd =>
-        {
-            userSecretsCmd.Description = "Manage passwords for accessing the admin interfaces of servers.";
-            userSecretsCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
-
-            userSecretsCmd.Command("store", storeCmd =>
-            {
-                storeCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
-
-                var siteArgument = storeCmd.Argument("site", "Site where to use this secret as password.", multipleValues: false).IsRequired(allowEmptyStrings: false);
-                var passwordArgument = storeCmd.Argument("password", "Password to use for authentication.", multipleValues: false).IsRequired(allowEmptyStrings: false);
-
-                storeCmd.OnExecute(() =>
-                {
-                    UserSecrets.StorePasswordForSite(siteArgument.Value!, passwordArgument.Value!);
-                });
-            });
-
-            userSecretsCmd.OnExecute(() =>
-            {
-                Console.WriteLine("Please specify a subcommand.");
-                userSecretsCmd.ShowHelp();
-
-                return 1;
-            });
-        });
-
-        var helpCmd = app.Command("help", helpCmd =>
-        {
-            helpCmd.Description = "Explain available commands and how to use the command-line interface.";
-            helpCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
-
-            var allOption = helpCmd.Option("--all", "List all commands", CommandOptionType.NoValue);
-
-            allOption.ShortName = "a";
-
-            var checkedInstallation = CheckIfExecutableIsRegisteredOnPath().checkInstallation();
-
-            var setupGroupCommands =
-                checkedInstallation.executableIsRegisteredOnPath
-                ?
-                Array.Empty<CommandLineApplication>()
-                :
-                [
-                    installCommand,
-                ];
-
-            var commonCmdGroups = new[]
-            {
-                new
-                {
-                    title = "Set up your development environment:",
-                    commands = setupGroupCommands,
-                },
-                new
-                {
-                    title = "Develop and learn:",
-                    commands = new[]
-                    {
-                        interactiveCommand,
-                        compileCommand,
-                        elmTestRsCommand,
-                        makeCommand,
-                        describeCommand,
-                    }
-                },
-                new
-                {
-                    title = "Run apps, operate servers and maintain live systems:",
-                    commands = new[]
-                    {
-                        runCommand,
-                        runServerCommand,
-                        deployCommand,
-                        copyAppStateCommand,
-                        copyProcessCommand,
-                        listFunctionsCommand,
-                        applyFunctionCommand,
-                        truncateProcessHistoryCommand,
-                        runFileServerCmd,
-                    }
-                },
-            }
-            .Where(group => 0 < group.commands.Length)
-            .Select(group => new
-            {
-                group.title,
-                commands = group.commands.Select(cmd =>
-                new
-                {
-                    nameColumn = (cmd.FullName ?? cmd.Name)!,
-                    descriptionColumn = cmd.Description,
-                }).ToImmutableList(),
-            });
-
-            foreach (var topLevelCmd in app.Commands)
-            {
-                var cmdPrimaryName = topLevelCmd.Names.FirstOrDefault()!;
-
-                helpCmd.Command(cmdPrimaryName, helpForAppCmd =>
-                {
-                    foreach (var additionalName in topLevelCmd.Names.Except([cmdPrimaryName]))
-                        helpForAppCmd.AddName(additionalName);
-
-                    CommandExtension.ConfigureHelpCommandForCommand(helpForAppCmd, topLevelCmd);
-                });
-            }
-
-            helpCmd.OnExecute(() =>
-            {
-                if (allOption.HasValue())
-                {
-                    app.ShowHelp();
-
-                    return 0;
-                }
-
-                var longestCmdNameLength =
-                    commonCmdGroups.SelectMany(group => group.commands)
-                    .Max(cmd => cmd.nameColumn.Length);
-
-                var cmdDescriptionIndent = longestCmdNameLength + 4;
-
-                var groupsTexts =
-                    commonCmdGroups
-                    .Select(group =>
-                        group.title + "\n" +
-                        string.Join("\n", group.commands.Select(cmd =>
-                        "   " +
-                        cmd.nameColumn + new string(' ', cmdDescriptionIndent - cmd.nameColumn.Length) +
-                        cmd.descriptionColumn)));
-
-                var elmFsCommandName = CheckIfExecutableIsRegisteredOnPath().commandName;
-
-                var overviewText =
-                    string.Join(
-                        "\n\n",
-                        app.Description,
-                        "Usage: " + elmFsCommandName + " [command] [options]",
-                        "These are common pine commands used in various situations:",
-                        string.Join("\n\n", groupsTexts),
-                        "'" + elmFsCommandName + " help -a' lists available subcommands.\nSee '" + elmFsCommandName + " help <command>' to read about a specific subcommand.");
-
-                Console.WriteLine(overviewText);
-
+                Console.WriteLine("pine " + AppVersionId);
                 return 0;
-            });
-        });
+            }
 
-        app.OnExecute(() =>
-        {
-            helpCmd.Execute();
+            // Show help when no command is specified
+            ShowCustomHelp(rootCommand);
 
             return 0;
         });
 
-        int ExecuteAndGuideInCaseOfException()
+        var parseResult = rootCommand.Parse(args);
+        return parseResult.Invoke();
+    }
+
+    private static Command CreateInstallCommand()
+    {
+        var (commandName, checkInstallation) = CheckIfExecutableIsRegisteredOnPath();
+
+        var command = new Command("install", "Install the '" + commandName + "' command for the current user account.");
+
+        command.SetAction((parseResult) =>
         {
-            try
+            checkInstallation().registerExecutableDirectoryOnPath();
+        });
+
+        return command;
+    }
+
+    private static Command CreateUserSecretsCommand()
+    {
+        var command = new Command("user-secrets", "Manage passwords for accessing the admin interfaces of servers.");
+
+        var siteArgument = new Argument<string>("site");
+
+        var passwordArgument = new Argument<string>("password");
+
+        var storeCommand = new Command("store", "Store a password for a site");
+        storeCommand.Add(siteArgument);
+        storeCommand.Add(passwordArgument);
+
+        storeCommand.SetAction((parseResult) =>
+        {
+            var site = parseResult.GetValue(siteArgument);
+            var password = parseResult.GetValue(passwordArgument);
+
+            UserSecrets.StorePasswordForSite(site, password);
+
+            return 0;
+        });
+
+        command.Add(storeCommand);
+
+        command.SetAction((parseResult) =>
+        {
+            Console.WriteLine("Please specify a subcommand.");
+            Console.WriteLine("Available subcommands:");
+            Console.WriteLine("  store - Store a password for a site");
+        });
+
+        return command;
+    }
+
+    private static Command CreateHelpCommand(RootCommand rootCommand)
+    {
+        var command = new Command("help", "Explain available commands and how to use the command-line interface.");
+
+        var allOption = new Option<bool>("--all", ["-a"])
+        {
+            Description = "Show all commands including hidden ones"
+        };
+
+        command.Add(allOption);
+
+        command.SetAction((parseResult) =>
+        {
+            var showAll = parseResult.GetValue(allOption);
+
+            if (showAll)
             {
-                return app.Execute(args);
+                ShowAllCommands(rootCommand);
             }
-            catch (CommandParsingException ex)
+            else
             {
-                var message = ex.Message;
+                ShowCustomHelp(rootCommand);
+            }
 
-                if (ex is UnrecognizedCommandParsingException uex && uex.NearestMatches.Any())
-                {
-                    message = message?.TrimEnd() + "\nDid you mean '" + uex.NearestMatches.FirstOrDefault() + "'?";
-                }
+            return 0;
+        });
 
-                DotNetConsoleWriteProblemCausingAbort(message);
+        return command;
+    }
 
-                return 430;
+    private static void ShowCustomHelp(RootCommand rootCommand)
+    {
+        var checkedInstallation = CheckIfExecutableIsRegisteredOnPath().checkInstallation();
+        var elmFsCommandName = CheckIfExecutableIsRegisteredOnPath().commandName;
+
+        // Optional short descriptions for overview display
+        // When null, uses the command's full Description property
+        var shortDescriptions = new Dictionary<string, string?>
+        {
+            ["install"] = "Install the command for the current user account.",
+            ["interactive"] = null,
+            ["compile"] = "Compile app source code.",
+            ["elm-test-rs"] = "Compile and run tests.",
+            ["make"] = "Compile Elm code.",
+            ["describe"] = "Describe a composition.",
+            ["run"] = null,
+            ["run-server"] = "Run a server with a web-based admin interface.",
+            ["deploy"] = "Deploy an app to an Elm backend process.",
+            ["copy-app-state"] = "Copy the state of an Elm backend app.",
+            ["copy-process"] = "Copy all files needed to restore a process.",
+            ["list-functions"] = "List the functions exposed by an Elm app.",
+            ["apply-function"] = "Apply an Elm function on a database.",
+            ["truncate-process-history"] = "Remove parts of the process history.",
+            ["run-file-server"] = null,
+        };
+
+        var commandsByName = rootCommand.Subcommands.ToDictionary(c => c.Name, c => c);
+
+        string GetDisplayDescription(string commandName)
+        {
+            if (!commandsByName.TryGetValue(commandName, out var command))
+                return "";
+
+            // Use short description if provided, otherwise fall back to full description
+            return shortDescriptions.TryGetValue(commandName, out var shortDesc) && shortDesc != null
+                ? shortDesc
+                : command.Description ?? "";
+        }
+
+        var setupGroupCommandNames = new List<string>();
+        if (!checkedInstallation.executableIsRegisteredOnPath)
+        {
+            setupGroupCommandNames.Add("install");
+        }
+
+        var developCommandNames = new List<string>
+        {
+            "interactive",
+            "compile",
+            "elm-test-rs",
+            "make",
+            "describe",
+        };
+
+        var operateCommandNames = new List<string>
+        {
+            "run",
+            "run-server",
+            "deploy",
+            "copy-app-state",
+            "copy-process",
+            "list-functions",
+            "apply-function",
+            "truncate-process-history",
+            "run-file-server",
+        };
+
+        Console.WriteLine(rootCommand.Description);
+        Console.WriteLine($"\nUsage: {elmFsCommandName} [command] [options]");
+        Console.WriteLine("\nThese are common pine commands used in various situations:");
+
+        if (setupGroupCommandNames.Any())
+        {
+            Console.WriteLine("\nSet up your development environment:");
+            foreach (var name in setupGroupCommandNames)
+            {
+                Console.WriteLine($"   {name,-30} {GetDisplayDescription(name)}");
             }
         }
 
-        return ExecuteAndGuideInCaseOfException();
+        Console.WriteLine("\nDevelop and learn:");
+        foreach (var name in developCommandNames)
+        {
+            Console.WriteLine($"   {name,-30} {GetDisplayDescription(name)}");
+        }
+
+        Console.WriteLine("\nRun apps, operate servers and maintain live systems:");
+        foreach (var name in operateCommandNames)
+        {
+            Console.WriteLine($"   {name,-30} {GetDisplayDescription(name)}");
+        }
+
+        Console.WriteLine($"\n'{elmFsCommandName} help -a' lists available subcommands.");
+        Console.WriteLine($"See '{elmFsCommandName} help <command>' to read about a specific subcommand.");
     }
 
-    private static CommandLineApplication AddSelfTestCommand(CommandLineApplication app) =>
-        app.Command("self-test", selfTestCommand =>
-        {
-            selfTestCommand.Description = "Tests integration of native dependencies";
-            selfTestCommand.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
+    private static void ShowAllCommands(RootCommand rootCommand)
+    {
+        Console.WriteLine(rootCommand.Description);
+        Console.WriteLine($"\nUsage: pine [command] [options]");
+        Console.WriteLine("\nCommands:");
 
-            selfTestCommand.OnExecute(() =>
-            {
-                return Test.SelfTest.RunAllTestsAndPrintToConsole();
-            });
+        foreach (var command in rootCommand.Subcommands.OrderBy(c => c.Name))
+        {
+            Console.WriteLine($"  {command.Name,-25} {command.Description}");
+        }
+
+        Console.WriteLine("\nOptions:");
+        foreach (var option in rootCommand.Options)
+        {
+            var aliases = string.Join(", ", option.Aliases);
+            Console.WriteLine($"  {aliases,-25} {option.Description}");
+        }
+    }
+
+    private static Command CreateSelfTestCommand()
+    {
+        var command = new Command("self-test", "Tests integration of native dependencies");
+
+        command.SetAction((parseResult) =>
+        {
+            return Test.SelfTest.RunAllTestsAndPrintToConsole();
         });
 
-    private static CommandLineApplication AddRunServerCommand(
-        CommandLineApplication app) =>
-        app.Command("run-server", runServerCommand =>
+        return command;
+    }
+
+    private static Command CreateRunServerCommand()
+    {
+        var command = new Command("run-server", "Run a server with a web-based admin interface. The HTTP API supports deployments, migrations, and other operations to manage your app.");
+
+        var adminUrlsDefault = "http://*:" + AdminInterfaceDefaultPort;
+
+        var processStoreOption = new Option<string?>("--process-store");
+
+        var processStoreReadonlyOption = new Option<string?>("--process-store-readonly");
+
+        var deletePreviousProcessOption = new Option<bool>("--delete-previous-process");
+
+        var adminUrlsOption = new Option<string?>("--admin-urls")
         {
-            runServerCommand.Description = "Run a server with a web-based admin interface. The HTTP API supports deployments, migrations, and other operations to manage your app.";
-            runServerCommand.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
+            Description = "Defaults to '" + adminUrlsDefault + "'."
+        };
 
-            var adminUrlsDefault = "http://*:" + AdminInterfaceDefaultPort;
+        var adminPasswordOption = new Option<string?>("--admin-password");
 
-            var processStoreOption =
-            runServerCommand.Option(
-                "--process-store",
-                "Directory in the file system to contain the process store.",
-                CommandOptionType.SingleValue);
+        var publicAppUrlsOption = new Option<string?>("--public-urls")
+        {
+            Description = "Defaults to '" + string.Join(",", PublicWebHostUrlsDefault) + "'."
+        };
 
-            var processStoreReadonlyOption =
-            runServerCommand.Option(
-                "--process-store-readonly",
-                "If the primary process store is empty at startup, the system will try to replicate from this location.",
-                CommandOptionType.SingleValue);
+        var copyProcessOption = new Option<string?>("--copy-process");
 
-            var deletePreviousProcessOption = runServerCommand.Option("--delete-previous-process", "Delete the previous backend process found in the given store. If you don't use this option, the server restores the process from the persistent store on startup.", CommandOptionType.NoValue);
-            var adminUrlsOption = runServerCommand.Option("--admin-urls", "URLs for the admin interface. The default is " + adminUrlsDefault + ".", CommandOptionType.SingleValue);
-            var adminPasswordOption = runServerCommand.Option("--admin-password", "Password for the admin interface at '--admin-urls'.", CommandOptionType.SingleValue);
-            var publicAppUrlsOption = runServerCommand.Option("--public-urls", "URLs to serve the public app from. The default is '" + string.Join(",", PublicWebHostUrlsDefault) + "'.", CommandOptionType.SingleValue);
-            var copyProcessOption = runServerCommand.Option("--copy-process", "Path to a process to copy. Can be a URL to an admin interface of a server or a path to an archive containing files representing the process state. This option also implies '--delete-previous-process'.", CommandOptionType.SingleValue);
-            var deployOption = runServerCommand.Option("--deploy", "Path to an app to deploy on startup, analogous to the 'source' path on the `deploy` command. Can be combined with '--copy-process'.", CommandOptionType.SingleValue);
+        var deployOption = new Option<string?>("--deploy");
 
-            runServerCommand.OnExecute(() =>
-            {
-                var processStorePath = processStoreOption.Value();
+        command.Add(processStoreOption);
+        command.Add(processStoreReadonlyOption);
+        command.Add(deletePreviousProcessOption);
+        command.Add(adminUrlsOption);
+        command.Add(adminPasswordOption);
+        command.Add(publicAppUrlsOption);
+        command.Add(copyProcessOption);
+        command.Add(deployOption);
 
-                var publicAppUrls =
-                    publicAppUrlsOption.Value()?.Split(',').Select(url => url.Trim()).ToArray() ??
-                    PublicWebHostUrlsDefault;
+        command.SetAction((parseResult) =>
+        {
+            var processStorePath = parseResult.GetValue(processStoreOption);
+            var processStoreReadonlyPath = parseResult.GetValue(processStoreReadonlyOption);
+            var deletePreviousProcess = parseResult.GetValue(deletePreviousProcessOption);
+            var adminUrls = parseResult.GetValue(adminUrlsOption);
+            var adminPassword = parseResult.GetValue(adminPasswordOption);
+            var publicUrls = parseResult.GetValue(publicAppUrlsOption);
+            var copyProcess = parseResult.GetValue(copyProcessOption);
+            var deploy = parseResult.GetValue(deployOption);
 
-                var adminInterfaceUrls = adminUrlsOption.Value() ?? adminUrlsDefault;
+            var publicAppUrls =
+                publicUrls?.Split(',').Select(url => url.Trim()).ToArray() ??
+                PublicWebHostUrlsDefault;
 
-                var webHost =
-                RunServer.BuildWebHostToRunServer(
-                    processStorePath: processStorePath,
-                    processStoreReadonlyPath: processStoreReadonlyOption.Value(),
-                    adminInterfaceUrls: adminInterfaceUrls,
-                    adminPassword: adminPasswordOption.Value(),
-                    publicAppUrls: publicAppUrls,
-                    deletePreviousProcess: deletePreviousProcessOption.HasValue(),
-                    copyProcess: copyProcessOption.Value(),
-                    deployApp: deployOption.Value());
+            var adminInterfaceUrls = adminUrls ?? adminUrlsDefault;
 
-                Console.WriteLine("Starting web server with admin interface...");
+            var webHost =
+            RunServer.BuildWebHostToRunServer(
+                processStorePath: processStorePath,
+                processStoreReadonlyPath: processStoreReadonlyPath,
+                adminInterfaceUrls: adminInterfaceUrls,
+                adminPassword: adminPassword,
+                publicAppUrls: publicAppUrls,
+                deletePreviousProcess: deletePreviousProcess,
+                copyProcess: copyProcess,
+                deployApp: deploy);
 
-                webHost.StartAsync().Wait();
+            Console.WriteLine("Starting web server with admin interface...");
 
-                Console.WriteLine("Completed starting the web server with the admin interface at '" + adminInterfaceUrls + "'.");
+            webHost.StartAsync().Wait();
 
-                webHost.WaitForShutdownAsync().Wait();
-            });
+            Console.WriteLine("Completed starting the web server with the admin interface at '" + adminInterfaceUrls + "'.");
+
+            webHost.WaitForShutdownAsync().Wait();
+
+            return 0;
         });
 
-    private static CommandLineApplication AddRunCommand(
-        CommandLineApplication app) =>
-        app.Command("run", runCommand =>
+        return command;
+    }
+
+    private static Command CreateRunCommand()
+    {
+        var command = new Command("run", "Run an Elm app.");
+
+        var entryPointArgument = new Argument<string>("entry-point-module");
+
+        var inputDirectoryOption = new Option<string?>("--input-directory");
+
+        command.Add(entryPointArgument);
+        command.Add(inputDirectoryOption);
+
+        command.SetAction((parseResult) =>
         {
-            runCommand.Description = "Run an Elm app.";
-            runCommand.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
+            var entryPoint = parseResult.GetValue(entryPointArgument);
+            var inputDirectory = parseResult.GetValue(inputDirectoryOption);
 
-            var entryPointArgument =
-            runCommand.Argument(
-                "entry-point-module",
-                "Path to the Elm module containing the program declaration.")
-            .IsRequired(allowEmptyStrings: false);
+            var actualInputDirectory = inputDirectory ?? Environment.CurrentDirectory;
 
-            var inputDirectoryOption =
-            runCommand.Option(
-                "--input-directory",
-                "Specify the input directory containing the Elm files. Defaults to the current working directory.",
-                CommandOptionType.SingleValue);
-
-            runCommand.OnExecute(() =>
+            try
             {
-                var entryPoint =
-                entryPointArgument.Value ??
-                throw new Exception("Missing argument for entry point Elm module file");
-
-                var entryPointFilePath = entryPoint.Split(['/', '\\']);
-
-                var inputDirectory = inputDirectoryOption.Value() ?? Environment.CurrentDirectory;
-
-                try
+                return
+                RunElmAppOnCommandLine(actualInputDirectory, entryPoint)
+                .Extract(err =>
                 {
-                    return
-                    RunElmAppOnCommandLine(inputDirectory, entryPoint)
-                    .Extract(err =>
-                    {
-                        Console.Error.WriteLine(err);
-                        return -1;
-                    });
-                }
-                catch (Exception ex)
-                {
-                    Console.Error.WriteLine("Failed to run app with runtime exception: " + ex);
-                    return -2;
-                }
-            });
+                    Console.Error.WriteLine(err);
+                    return -1;
+                });
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine("Failed to run app with runtime exception: " + ex);
+                return -2;
+            }
         });
+
+        return command;
+    }
 
     private static Result<string, int> RunElmAppOnCommandLine(
         string inputDirectory,
@@ -423,13 +456,13 @@ public class Program
             return 1;
         }
 
-        if (loadInputDirectoryResult is not Result<string, (FileTree tree, LoadCompositionOrigin origin)>.Ok loadOk)
+        if (loadInputDirectoryResult.IsOkOrNullable() is not { } loadOk)
         {
             throw new Exception(
                 "Unexpected result type: " + loadInputDirectoryResult.GetType());
         }
 
-        return RunElmAppOnCommandLine(loadOk.Value.tree, entryPointFilePath);
+        return RunElmAppOnCommandLine(loadOk.tree, entryPointFilePath);
     }
 
     private static Result<string, int> RunElmAppOnCommandLine(
@@ -562,563 +595,622 @@ public class Program
         }
     }
 
-    private static CommandLineApplication AddDeployCommand(CommandLineApplication app) =>
-        app.Command("deploy", deployCommand =>
+    private static Command CreateDeployCommand()
+    {
+        var command = new Command("deploy", "Deploy an app to an Elm backend process. Deployment implies migration from the previous app state if not specified otherwise.");
+
+        var sourceArgument = new Argument<string>("source");
+
+        var siteArgument = new Argument<string>("process-site");
+
+        var sitePasswordOption = new Option<string?>("--site-password");
+
+        var initAppStateOption = new Option<bool>("--init-app-state");
+
+        command.Add(sourceArgument);
+        command.Add(siteArgument);
+        command.Add(sitePasswordOption);
+        command.Add(initAppStateOption);
+
+        command.SetAction((parseResult) =>
         {
-            deployCommand.Description = "Deploy an app to an Elm backend process. Deployment implies migration from the previous app state if not specified otherwise.";
-            deployCommand.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
+            var source = parseResult.GetValue(sourceArgument);
+            var site = parseResult.GetValue(siteArgument);
+            var sitePassword = parseResult.GetValue(sitePasswordOption);
+            var initAppState = parseResult.GetValue(initAppStateOption);
 
-            var sourceArgument = deployCommand.Argument("source", "Path to the app program code to deploy.").IsRequired(allowEmptyStrings: false);
+            var actualPassword = sitePassword ?? UserSecrets.LoadPasswordForSite(site);
 
-            var siteArgument = ProcessSiteArgumentOnCommand(deployCommand);
-            var passwordFromSite = SitePasswordFromSiteFromOptionOnCommandOrFromSettings(deployCommand);
+            var deployReport =
+                DeployApp(
+                    sourcePath: source,
+                    site: site,
+                    siteDefaultPassword: actualPassword,
+                    initElmAppState: initAppState,
+                    promptForPasswordOnConsole: true);
 
-            var initAppStateOption = deployCommand.Option("--init-app-state", "Do not attempt to migrate the Elm app state but use the state from the init function.", CommandOptionType.NoValue);
+            WriteReportToFileInReportDirectory(
+                reportContent: System.Text.Json.JsonSerializer.Serialize(
+                    deployReport,
+                    reportJsonSerializerOptions),
+                reportKind: "deploy.json");
 
-            deployCommand.OnExecute(() =>
-            {
-                var site = siteArgument.Value!;
-                var sitePassword = passwordFromSite(site);
-
-                var deployReport =
-                    DeployApp(
-                        sourcePath: sourceArgument.Value!,
-                        site: site,
-                        siteDefaultPassword: sitePassword,
-                        initElmAppState: initAppStateOption.HasValue(),
-                        promptForPasswordOnConsole: true);
-
-                WriteReportToFileInReportDirectory(
-                    reportContent: System.Text.Json.JsonSerializer.Serialize(
-                        deployReport,
-                        reportJsonSerializerOptions),
-                    reportKind: "deploy.json");
-            });
+            return 0;
         });
 
-    private static CommandLineApplication AddCopyAppStateCommand(CommandLineApplication app) =>
-        app.Command("copy-app-state", copyAppStateCommand =>
+        return command;
+    }
+
+    private static Command CreateCopyAppStateCommand()
+    {
+        var command = new Command("copy-app-state", "Copy the state of an Elm backend app.");
+
+        var sourceArgument = new Argument<string>("source");
+
+        var destinationArgument = new Argument<string?>("destination")
         {
-            copyAppStateCommand.Description = "Copy the state of an Elm backend app.";
-            copyAppStateCommand.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
+            Arity = ArgumentArity.ZeroOrOne
+        };
 
-            var sourceArgument = copyAppStateCommand.Argument("source", "Can be a URL to an admin interface or a file with a serialized representation.").IsRequired(allowEmptyStrings: false);
-            var destinationArgument = copyAppStateCommand.Argument("destination", "Can be a URL to an admin interface or a file path.");
+        var sourcePasswordOption = new Option<string?>("--source-password");
 
-            var passwordFromSource = SitePasswordFromSiteFromOptionOnCommandOrFromSettings(copyAppStateCommand, "source");
-            var passwordFromDestination = SitePasswordFromSiteFromOptionOnCommandOrFromSettings(copyAppStateCommand, "destination");
+        var destinationPasswordOption = new Option<string?>("--destination-password");
 
-            copyAppStateCommand.OnExecute(() =>
+        command.Add(sourceArgument);
+        command.Add(destinationArgument);
+        command.Add(sourcePasswordOption);
+        command.Add(destinationPasswordOption);
+
+        command.SetAction((parseResult) =>
+        {
+            var source = parseResult.GetValue(sourceArgument);
+            var destination = parseResult.GetValue(destinationArgument);
+            var sourcePassword = parseResult.GetValue(sourcePasswordOption);
+            var destinationPassword = parseResult.GetValue(destinationPasswordOption);
+
+            var actualSourcePassword = sourcePassword ?? UserSecrets.LoadPasswordForSite(source);
+            var actualDestinationPassword = destination != null ? (destinationPassword ?? UserSecrets.LoadPasswordForSite(destination)) : null;
+
+            var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+            var report = CopyElmAppState(
+                source: source,
+                sourceDefaultPassword: actualSourcePassword,
+                destination: destination,
+                destinationDefaultPassword: actualDestinationPassword)
+            with
             {
-                var source = sourceArgument.Value!;
-                var sourcePassword = passwordFromSource(source);
+                totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds
+            };
 
-                var destination = destinationArgument.Value;
-                var destinationPassword = passwordFromDestination(destination);
+            WriteReportToFileInReportDirectory(
+                reportContent: System.Text.Json.JsonSerializer.Serialize(
+                    report,
+                    reportJsonSerializerOptions),
+                reportKind: "copy-app-state.json");
 
-                var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
+            return 0;
+        });
 
-                var report = CopyElmAppState(
-                    source: source,
-                    sourceDefaultPassword: sourcePassword,
-                    destination: destination,
-                    destinationDefaultPassword: destinationPassword)
-                with
+        return command;
+    }
+
+    private static Command CreateCopyProcessCommand()
+    {
+        var command = new Command("copy-process", "Copy all files needed to restore a process and store them in a zip archive.");
+
+        var siteArgument = new Argument<string>("process-site");
+
+        var sitePasswordOption = new Option<string?>("--site-password");
+
+        command.Add(siteArgument);
+        command.Add(sitePasswordOption);
+
+        command.SetAction((parseResult) =>
+        {
+            var site = parseResult.GetValue(siteArgument);
+            var sitePassword = parseResult.GetValue(sitePasswordOption);
+
+            var actualSite = MapSiteForCommandLineArgument(site);
+            var actualPassword = sitePassword ?? UserSecrets.LoadPasswordForSite(actualSite);
+
+            actualPassword =
+                AttemptHttpRequest(
+                () => new System.Net.Http.HttpRequestMessage { RequestUri = new Uri(actualSite) },
+                defaultPassword: actualPassword,
+                promptForPasswordOnConsole: true).Result.enteredPassword ?? actualPassword;
+
+            Console.WriteLine("Begin reading process history from '" + actualSite + "' ...");
+
+            var (files, lastCompositionLogRecordHashBase16) =
+                RunServer.ReadFilesForRestoreProcessFromAdminInterface(actualSite, actualPassword!);
+
+            Console.WriteLine("Completed reading files to restore process " + lastCompositionLogRecordHashBase16 + ". Read " + files.Count + " files from '" + actualSite + "'.");
+
+            var zipArchive = ZipArchive.ZipArchiveFromFiles(files);
+
+            var fileName = "process-" + lastCompositionLogRecordHashBase16 + ".zip";
+            var filePath = Path.Combine(Environment.CurrentDirectory, fileName);
+
+            File.WriteAllBytes(filePath, zipArchive);
+
+            Console.WriteLine("Saved process archive to file '" + filePath + "'.");
+
+            return 0;
+        });
+
+        return command;
+    }
+
+    private static Command CreateListFunctionsCommand()
+    {
+        var command = new Command("list-functions", "List the functions exposed by an Elm app for application on a database.");
+
+        var siteArgument = new Argument<string>("process-site");
+
+        var sitePasswordOption = new Option<string?>("--site-password");
+
+        command.Add(siteArgument);
+        command.Add(sitePasswordOption);
+
+        command.SetAction((parseResult) =>
+        {
+            var site = parseResult.GetValue(siteArgument);
+            var sitePassword = parseResult.GetValue(sitePasswordOption);
+
+            var actualPassword = sitePassword ?? UserSecrets.LoadPasswordForSite(site);
+
+            var listFunctionsResult =
+                ListFunctions(
+                    site: site,
+                    siteDefaultPassword: actualPassword,
+                    promptForPasswordOnConsole: true);
+
+            var console = (Pine.IConsole)StaticConsole.Instance;
+
+            return
+            listFunctionsResult
+            // For now, only show functions with a normal module prefix
+            .Map(functions => functions.Where(f => f.functionName.Contains('.')).ToImmutableList())
+            .Unpack(
+                fromErr:
+                err =>
                 {
-                    totalTimeSpentMilli = (int)totalStopwatch.ElapsedMilliseconds
-                };
+                    console.WriteLine("Failed to list functions at " + site + ": " + err, Pine.IConsole.TextColor.Red);
 
-                WriteReportToFileInReportDirectory(
-                    reportContent: System.Text.Json.JsonSerializer.Serialize(
-                        report,
-                        reportJsonSerializerOptions),
-                    reportKind: "copy-app-state.json");
-            });
-        });
-
-    private static CommandLineApplication AddCopyProcessCommand(CommandLineApplication app) =>
-        app.Command("copy-process", copyProcessCommand =>
-        {
-            copyProcessCommand.Description = "Copy all files needed to restore a process and store them in a zip archive.";
-            copyProcessCommand.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
-
-            var siteArgument = ProcessSiteArgumentOnCommand(copyProcessCommand);
-            var passwordFromSite = SitePasswordFromSiteFromOptionOnCommandOrFromSettings(copyProcessCommand);
-
-            copyProcessCommand.OnExecute(() =>
-            {
-                var site = MapSiteForCommandLineArgument(siteArgument.Value!);
-                var sitePassword = passwordFromSite(site);
-
-                sitePassword =
-                    AttemptHttpRequest(
-                    () => new System.Net.Http.HttpRequestMessage { RequestUri = new Uri(site) },
-                    defaultPassword: sitePassword,
-                    promptForPasswordOnConsole: true).Result.enteredPassword ?? sitePassword;
-
-                Console.WriteLine("Begin reading process history from '" + site + "' ...");
-
-                var (files, lastCompositionLogRecordHashBase16) =
-                    RunServer.ReadFilesForRestoreProcessFromAdminInterface(site, sitePassword!);
-
-                Console.WriteLine("Completed reading files to restore process " + lastCompositionLogRecordHashBase16 + ". Read " + files.Count + " files from '" + site + "'.");
-
-                var zipArchive = ZipArchive.ZipArchiveFromFiles(files);
-
-                var fileName = "process-" + lastCompositionLogRecordHashBase16 + ".zip";
-                var filePath = Path.Combine(Environment.CurrentDirectory, fileName);
-
-                File.WriteAllBytes(filePath, zipArchive);
-
-                Console.WriteLine("Saved process archive to file '" + filePath + "'.");
-            });
-        });
-
-    private static CommandLineApplication AddListFunctionsCommand(CommandLineApplication app) =>
-        app.Command("list-functions", listFunctionsCommand =>
-        {
-            listFunctionsCommand.Description = "List the functions exposed by an Elm app for application on a database.";
-            listFunctionsCommand.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
-
-            var siteArgument = ProcessSiteArgumentOnCommand(listFunctionsCommand);
-            var passwordFromSite = SitePasswordFromSiteFromOptionOnCommandOrFromSettings(listFunctionsCommand);
-
-            listFunctionsCommand.OnExecute(() =>
-            {
-                var site = siteArgument.Value!;
-                var sitePassword = passwordFromSite(site);
-
-                var listFunctionsResult =
-                    ListFunctions(
-                        site: site,
-                        siteDefaultPassword: sitePassword,
-                        promptForPasswordOnConsole: true);
-
-                var console = (Pine.IConsole)StaticConsole.Instance;
-
-                return
-                listFunctionsResult
-                // For now, only show functions with a normal module prefix
-                .Map(functions => functions.Where(f => f.functionName.Contains('.')).ToImmutableList())
-                .Unpack(
-                    fromErr:
-                    err =>
-                    {
-                        console.WriteLine("Failed to list functions at " + site + ": " + err, Pine.IConsole.TextColor.Red);
-
-                        return 2;
-                    },
-                    fromOk:
-                    functions =>
-                    {
-                        static string describeFunction(
-                            StateShim.InterfaceToHost.NamedExposedFunction databaseFunction)
-                        {
-                            var commentOnReturnType =
-                            "-- (return type " +
-                            (databaseFunction.functionDescription.returnType.containsAppStateType ?
-                            "contains app state type" : "does not contain app state type")
-                            + ")";
-
-                            return
-                            "Function " + databaseFunction.functionName +
-                            " has " + databaseFunction.functionDescription.parameters.Count + " parameters:\n" +
-                            databaseFunction.functionName.Split('.').LastOrDefault(databaseFunction.functionName) + " :\n" +
-                            string.Join("\n",
-                            string.Join("", databaseFunction.functionDescription.parameters.Select(p => p.typeSourceCodeText)
-                            .Concat([
-                                databaseFunction.functionDescription.returnType.sourceCodeText +
-                                " " + commentOnReturnType])
-                            .Intersperse("\n-> "))
-                            .Split("\n")
-                            .Select(line => "    " + line));
-                        }
-
-                        console.WriteLine(
-                            "Site " + site + " exposes " + functions.Count + " database functions:\n----------\n" +
-                            string.Join("\n\n", functions.Select(describeFunction)) +
-                            "\n----------\n");
-
-                        return 0;
-                    });
-            });
-        });
-
-    private static CommandLineApplication AddApplyFunctionCommand(CommandLineApplication app) =>
-        app.Command("apply-function", applyFunctionCommand =>
-        {
-            applyFunctionCommand.Description = "Apply an Elm function on a database containing the state of an Elm app.";
-            applyFunctionCommand.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
-
-            var siteArgument = ProcessSiteArgumentOnCommand(applyFunctionCommand);
-            var passwordFromSite = SitePasswordFromSiteFromOptionOnCommandOrFromSettings(applyFunctionCommand);
-            var functionNameArgument = applyFunctionCommand.Argument("function-name", "Name of the function to apply.").IsRequired();
-            var argumentOption = applyFunctionCommand.Option(
-                "--argument",
-                "an argument for the function, encoded as JSON. Can be either a literal or a file name.",
-                optionType: CommandOptionType.MultipleValue);
-
-            var commitResultingStateOption = applyFunctionCommand.Option(
-                "--commit-resulting-state",
-                "If the applied function returns a new application state, this option enables committing that new state to the database.",
-                CommandOptionType.NoValue);
-
-            applyFunctionCommand.OnExecute(() =>
-            {
-                var site = siteArgument.Value!;
-                var sitePassword = passwordFromSite(site);
-
-                var serializedArgumentsJson = argumentOption.Values.Select(LoadArgumentFromUserInterfaceAsJsonOrFileTextContext).ToImmutableList();
-
-                var applyFunctionReport =
-                    ApplyFunction(
-                        site: site,
-                        functionName: functionNameArgument.Value,
-                        serializedArgumentsJson: serializedArgumentsJson,
-                        commitResultingState: commitResultingStateOption.HasValue(),
-                        siteDefaultPassword: sitePassword,
-                        promptForPasswordOnConsole: true);
-
-                WriteReportToFileInReportDirectory(
-                    reportContent: System.Text.Json.JsonSerializer.Serialize(
-                        applyFunctionReport,
-                        reportJsonSerializerOptions),
-                    reportKind: "apply-function.json");
-            });
-        });
-
-    private static CommandLineApplication AddLanguageServerCommand(CommandLineApplication app) =>
-        app.Command("lang-server", langServerCommand =>
-        {
-            langServerCommand.AddName("lsp");
-
-            langServerCommand.Description = "Language server for Elm development environments.";
-
-            /*
-             * TODO: Consider log details for unrecognized args to make integration with tools easier.
-             * */
-            langServerCommand.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
-
-            var logFileDirOption =
-            langServerCommand.Option("--log-dir", "Directory to create a new log file in", CommandOptionType.SingleValue);
-
-            var stdioOption =
-            /*
-             * The client in VSCode extension sample was observed to add this option automatically:
-             * https://github.com/microsoft/vscode-extension-samples/tree/7ce43a47d7a53935b093a0e10fc490ea6a3cec32/lsp-sample
-             * */
-            langServerCommand.Option(
-                "--stdio",
-                "Use standard input and standard output streams for communication",
-                CommandOptionType.NoValue);
-
-            langServerCommand.OnExecute(() =>
-            {
-                var logFileDirFromOption = logFileDirOption.Value();
-
-                static string? logFileDirFromEnv()
+                    return 2;
+                },
+                fromOk:
+                functions =>
                 {
-                    if (LogFileDirFromEnvironmentVariable() is not { } general)
+                    static string describeFunction(
+                        StateShim.InterfaceToHost.NamedExposedFunction databaseFunction)
                     {
-                        return null;
+                        var commentOnReturnType =
+                        "-- (return type " +
+                        (databaseFunction.functionDescription.returnType.containsAppStateType ?
+                        "contains app state type" : "does not contain app state type")
+                        + ")";
+
+                        return
+                        "Function " + databaseFunction.functionName +
+                        " has " + databaseFunction.functionDescription.parameters.Count + " parameters:\n" +
+                        databaseFunction.functionName.Split('.').LastOrDefault(databaseFunction.functionName) + " :\n" +
+                        string.Join("\n",
+                        string.Join("", databaseFunction.functionDescription.parameters.Select(p => p.typeSourceCodeText)
+                        .Concat([
+                            databaseFunction.functionDescription.returnType.sourceCodeText +
+                            " " + commentOnReturnType])
+                        .Intersperse("\n-> "))
+                        .Split("\n")
+                        .Select(line => "    " + line));
                     }
 
-                    return Path.Combine(general, "lang-server");
-                }
+                    console.WriteLine(
+                        "Site " + site + " exposes " + functions.Count + " database functions:\n----------\n" +
+                        string.Join("\n\n", functions.Select(describeFunction)) +
+                        "\n----------\n");
 
-                IReadOnlyList<string> logFileDirs =
-                [.. new[]
-                {
-                    logFileDirFromOption,
-                    logFileDirFromEnv()
-                }.WhereNotNull()
-                ];
-
-                List<Stream> logFileStreams = [];
-
-                var logFileName =
-                DateTimeOffset.UtcNow.ToString("yyyy-MM-dd-HH-mm-ss") + "-" + Environment.ProcessId + ".log";
-
-                Console.Error.WriteLine(
-                    "Got " + logFileDirs.Count + " log file directories: " +
-                    string.Join(", ", logFileDirs));
-
-                foreach (var logFileDir in logFileDirs)
-                {
-                    var logFilePath = Path.Combine(logFileDir, logFileName);
-
-                    Console.Error.WriteLine("Creating log file at " + logFilePath);
-
-                    Directory.CreateDirectory(logFileDir);
-
-                    logFileStreams.Add(
-                        new FileStream(path: logFilePath, FileMode.Create, FileAccess.ReadWrite, FileShare.Read));
-                }
-
-                void log(string content)
-                {
-                    var timeText = DateTimeOffset.UtcNow.ToString("HH-mm-ss.fff");
-
-                    var lineContent = timeText + ": " + content;
-
-                    Console.Error.WriteLine(lineContent);
-
-                    foreach (var logFileStream in logFileStreams)
-                    {
-                        logFileStream.Write(Encoding.UTF8.GetBytes(lineContent + "\n"));
-                        logFileStream.Flush();
-                    }
-                }
-
-                AppDomain.CurrentDomain.UnhandledException += (sender, args) =>
-                {
-                    log("Unhandled exception: " + args.ExceptionObject);
-                };
-
-                System.Threading.Tasks.TaskScheduler.UnobservedTaskException += (sender, args) =>
-                {
-                    log("Unobserved task exception: " + args.Exception);
-                };
-
-                log("Pine version " + AppVersionId + " starting language server...");
-
-                var languageServer =
-                new LanguageServer(
-                    logDelegate: log,
-                    elmPackagesSearchDirectories:
-                    [Path.Combine(Elm019Binaries.GetElmHomeDirectory(), "0.19.1", "packages")]);
-
-                var rpcHandler =
-                    new StreamJsonRpc.HeaderDelimitedMessageHandler(
-                        sendingStream: Console.OpenStandardOutput(),
-                        receivingStream: Console.OpenStandardInput(),
-                        formatter: LanguageServerRpcTarget.JsonRpcMessageFormatterDefault());
-
-                var jsonRpcTarget = new LanguageServerRpcTarget(languageServer, LogDelegate: log);
-
-                using var jsonRpc = new StreamJsonRpc.JsonRpc(
-                    rpcHandler,
-                    target: jsonRpcTarget);
-
-                jsonRpcTarget.JsonRpc = jsonRpc;
-
-                jsonRpc.StartListening();
-
-                while (true)
-                {
-                    System.Threading.Thread.Sleep(TimeSpan.FromSeconds(1));
-                }
-            });
+                    return 0;
+                });
         });
+
+        return command;
+    }
+
+    private static Command CreateApplyFunctionCommand()
+    {
+        var command = new Command("apply-function", "Apply an Elm function on a database containing the state of an Elm app.");
+
+        var siteArgument = new Argument<string>("process-site");
+
+        var functionNameArgument = new Argument<string>("function-name");
+
+        var sitePasswordOption = new Option<string?>("--site-password");
+
+        var argumentOption = new Option<string[]>("--argument")
+        {
+            AllowMultipleArgumentsPerToken = true,
+            Arity = ArgumentArity.ZeroOrMore
+        };
+
+        var commitResultingStateOption = new Option<bool>("--commit-resulting-state");
+
+        command.Add(siteArgument);
+        command.Add(functionNameArgument);
+        command.Add(sitePasswordOption);
+        command.Add(argumentOption);
+        command.Add(commitResultingStateOption);
+
+        command.SetAction((parseResult) =>
+        {
+            var site = parseResult.GetValue(siteArgument);
+            var functionName = parseResult.GetValue(functionNameArgument);
+            var sitePassword = parseResult.GetValue(sitePasswordOption);
+            var arguments = parseResult.GetValue(argumentOption);
+            var commitResultingState = parseResult.GetValue(commitResultingStateOption);
+
+            var actualPassword = sitePassword ?? UserSecrets.LoadPasswordForSite(site);
+
+            var serializedArgumentsJson = arguments.Select(LoadArgumentFromUserInterfaceAsJsonOrFileTextContext).ToImmutableList();
+
+            var applyFunctionReport =
+                ApplyFunction(
+                    site: site,
+                    functionName: functionName,
+                    serializedArgumentsJson: serializedArgumentsJson,
+                    commitResultingState: commitResultingState,
+                    siteDefaultPassword: actualPassword,
+                    promptForPasswordOnConsole: true);
+
+            WriteReportToFileInReportDirectory(
+                reportContent: System.Text.Json.JsonSerializer.Serialize(
+                    applyFunctionReport,
+                    reportJsonSerializerOptions),
+                reportKind: "apply-function.json");
+
+            return 0;
+        });
+
+        return command;
+    }
+
+    private static Command CreateLanguageServerCommand()
+    {
+        var command = new Command("lang-server", "Language server for Elm development environments.")
+        {
+            Aliases = { "lsp" }
+        };
+
+        /*
+         * TODO: Consider log details for unrecognized args to make integration with tools easier.
+         * */
+
+        var logFileDirOption = new Option<string?>("--log-dir");
+
+        var stdioOption =
+        /*
+         * The client in VSCode extension sample was observed to add this option automatically:
+         * https://github.com/microsoft/vscode-extension-samples/tree/7ce43a47d7a53935b093a0e10fc490ea6a3cec32/lsp-sample
+         * */
+        new Option<bool>("--stdio");
+
+        command.Add(logFileDirOption);
+        command.Add(stdioOption);
+
+        command.SetAction((parseResult) =>
+        {
+            var logFileDirFromOption = parseResult.GetValue(logFileDirOption);
+
+            static string? LogFileDirFromEnv()
+            {
+                if (LogFileDirFromEnvironmentVariable() is not { } general)
+                {
+                    return null;
+                }
+
+                return Path.Combine(general, "lang-server");
+            }
+
+            IReadOnlyList<string> logFileDirs =
+            [.. new[]
+            {
+                logFileDirFromOption,
+                LogFileDirFromEnv()
+            }.WhereNotNull()
+            ];
+
+            List<Stream> logFileStreams = [];
+
+            var logFileName =
+            DateTimeOffset.UtcNow.ToString("yyyy-MM-dd-HH-mm-ss") + "-" + Environment.ProcessId + ".log";
+
+            Console.Error.WriteLine(
+                "Got " + logFileDirs.Count + " log file directories: " +
+                string.Join(", ", logFileDirs));
+
+            foreach (var logFileDir in logFileDirs)
+            {
+                var logFilePath = Path.Combine(logFileDir, logFileName);
+
+                Console.Error.WriteLine("Creating log file at " + logFilePath);
+
+                Directory.CreateDirectory(logFileDir);
+
+                logFileStreams.Add(
+                    new FileStream(path: logFilePath, FileMode.Create, FileAccess.ReadWrite, FileShare.Read));
+            }
+
+            void Log(string content)
+            {
+                var timeText = DateTimeOffset.UtcNow.ToString("HH-mm-ss.fff");
+
+                var lineContent = timeText + ": " + content;
+
+                Console.Error.WriteLine(lineContent);
+
+                foreach (var logFileStream in logFileStreams)
+                {
+                    logFileStream.Write(Encoding.UTF8.GetBytes(lineContent + "\n"));
+                    logFileStream.Flush();
+                }
+            }
+
+            AppDomain.CurrentDomain.UnhandledException += (sender, args) =>
+            {
+                Log("Unhandled exception: " + args.ExceptionObject);
+            };
+
+            System.Threading.Tasks.TaskScheduler.UnobservedTaskException += (sender, args) =>
+            {
+                Log("Unobserved task exception: " + args.Exception);
+            };
+
+            Log("Pine version " + AppVersionId + " starting language server...");
+
+            var languageServer =
+            new LanguageServer(
+                logDelegate: Log,
+                elmPackagesSearchDirectories:
+                [Path.Combine(Elm019Binaries.GetElmHomeDirectory(), "0.19.1", "packages")]);
+
+            var rpcHandler =
+                new StreamJsonRpc.HeaderDelimitedMessageHandler(
+                    sendingStream: Console.OpenStandardOutput(),
+                    receivingStream: Console.OpenStandardInput(),
+                    formatter: LanguageServerRpcTarget.JsonRpcMessageFormatterDefault());
+
+            var jsonRpcTarget = new LanguageServerRpcTarget(languageServer, LogDelegate: Log);
+
+            using var jsonRpc = new StreamJsonRpc.JsonRpc(
+                rpcHandler,
+                target: jsonRpcTarget);
+
+            jsonRpcTarget.JsonRpc = jsonRpc;
+
+            jsonRpc.StartListening();
+
+            while (true)
+            {
+                System.Threading.Thread.Sleep(TimeSpan.FromSeconds(1));
+            }
+
+            return 0;
+        });
+
+        return command;
+    }
 
     static string? LogFileDirFromEnvironmentVariable() =>
         Environment.GetEnvironmentVariable("PINE_LOG_DIR");
 
-    private static CommandLineApplication AddCompileInteractiveEnvCommand(CommandLineApplication app) =>
-        app.Command("compile-interactive-env", compileCommand =>
-        {
-            compileCommand.Description = "Compile an interactive environment from Elm modules into a Pine value";
-            compileCommand.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
+    private static Command CreateCompileInteractiveEnvCommand()
+    {
+        var command = new Command("compile-interactive-env", "Compile an interactive environment from Elm modules into a Pine value");
 
-            var envSourceOption =
-            compileCommand.Option(
-                template: "--env-source",
-                description: "Source to load Elm modules from.",
-                optionType: CommandOptionType.MultipleValue);
-
-            var outputCompactBuildOption =
-            compileCommand.Option(
-                template: "--output-compact-build",
-                description: "File path to save a compact build JSON containing the compiled environments.",
-                optionType: CommandOptionType.SingleOrNoValue);
-
-            var rootModuleFilePathOption =
-            compileCommand.Option(
-                template: "--root-file-path",
-                description: "Path to a file to use as the root to filter modules to include.",
-                optionType: CommandOptionType.MultipleValue);
-
-            var skipLoweringOption =
-            compileCommand.Option(
-                "--skip-lowering",
-                description: "Skip the lowering of CompilationInterface modules.",
-                optionType: CommandOptionType.NoValue);
-
-            var gzipOption =
-            compileCommand.Option(
-                "--gzip",
-                description: "Apply gzip compression",
-                optionType: CommandOptionType.NoValue);
-
-            var overrideCompilerOption =
-            compileCommand.Option(
-                "--override-compiler",
-                description: "Load the Elm compiler from the specified source",
-                optionType: CommandOptionType.SingleValue);
-
-            compileCommand.OnExecute(() =>
+        var envSourceOption =
+            new Option<string[]>("--env-source")
             {
-                IReadOnlyList<IReadOnlyList<string>> rootFilePaths =
-                    [..(rootModuleFilePathOption.Values ?? [])
-                    .WhereNotNull()
-                    .Select(flat => flat.Split('/', '\\'))
-                    ];
+                AllowMultipleArgumentsPerToken = true,
+                Arity = ArgumentArity.ZeroOrMore
+            };
 
-                var environmentsSourceTrees =
-                envSourceOption.Values
-                .Select(sourcePath =>
+        var outputCompactBuildOption =
+            new Option<string?>("--output-compact-build")
+            {
+                Arity = ArgumentArity.ZeroOrOne
+            };
+
+        var rootModuleFilePathOption =
+            new Option<string[]>("--root-file-path")
+            {
+                AllowMultipleArgumentsPerToken = true,
+                Arity = ArgumentArity.ZeroOrMore
+            };
+
+        var skipLoweringOption = new Option<bool>("--skip-lowering");
+
+        var gzipOption = new Option<bool>("--gzip");
+
+        var overrideCompilerOption = new Option<string?>("--override-compiler");
+
+        command.Add(envSourceOption);
+        command.Add(outputCompactBuildOption);
+        command.Add(rootModuleFilePathOption);
+        command.Add(skipLoweringOption);
+        command.Add(gzipOption);
+        command.Add(overrideCompilerOption);
+
+        command.SetAction((parseResult) =>
+        {
+            var envSources = parseResult.GetValue(envSourceOption);
+            var outputCompactBuild = parseResult.GetValue(outputCompactBuildOption);
+            var rootModuleFilePaths = parseResult.GetValue(rootModuleFilePathOption);
+            var skipLowering = parseResult.GetValue(skipLoweringOption);
+            var gzip = parseResult.GetValue(gzipOption);
+            var overrideCompiler = parseResult.GetValue(overrideCompilerOption);
+
+            IReadOnlyList<IReadOnlyList<string>> rootFilePaths =
+                [..(rootModuleFilePaths ?? [])
+                .WhereNotNull()
+                .Select(flat => flat.Split('/', '\\'))
+                ];
+
+            var environmentsSourceTrees =
+            envSources
+            .Select(sourcePath =>
+            {
+                var loadCompositionResult =
+                    LoadComposition.LoadFromPathResolvingNetworkDependencies(sourcePath)
+                    .LogToActions(Console.WriteLine)
+                    .Extract(error => throw new Exception("Failed to load from path '" + sourcePath + "': " + error));
+
+                var fileTree = loadCompositionResult.tree;
+
+                if (fileTree is FileTree.FileNode sourceBlob)
                 {
-                    var loadCompositionResult =
-                        LoadComposition.LoadFromPathResolvingNetworkDependencies(sourcePath)
-                        .LogToActions(Console.WriteLine)
-                        .Extract(error => throw new Exception("Failed to load from path '" + sourcePath + "': " + error));
+                    var zipEntries = ZipArchive.EntriesFromZipArchive(sourceBlob.Bytes);
 
-                    var fileTree = loadCompositionResult.tree;
-
-                    if (fileTree is FileTree.FileNode sourceBlob)
-                    {
-                        var zipEntries = ZipArchive.EntriesFromZipArchive(sourceBlob.Bytes);
-
-                        fileTree = FileTree.FromSetOfFilesWithCommonFilePath(zipEntries);
-                    }
-
-                    return fileTree;
-                })
-                .ToImmutableArray();
-
-                var aggregateElmModuleFiles =
-                environmentsSourceTrees
-                .SelectMany(tree => tree.EnumerateFilesTransitive())
-                .Where(f => f.path.LastOrDefault()?.EndsWith(".elm", StringComparison.OrdinalIgnoreCase) ?? false)
-                .ToImmutableArray();
-
-                Console.WriteLine(
-                    "Loaded " + environmentsSourceTrees.Length + " source trees with " +
-                    aggregateElmModuleFiles.Length + " aggregate Elm module files.");
-
-                var skipLowering = skipLoweringOption.HasValue();
-
-                Console.WriteLine(
-                    "Compiling with lowering " +
-                    (skipLowering ? "disabled" : "enabled"));
-
-                Console.WriteLine(
-                    "Limiting the compilation to " + rootFilePaths.Count + " root files: " +
-                    string.Join(
-                        ", ",
-                        rootFilePaths.Select(path => string.Join("/", path))));
-
-                ElmCompiler? overrideElmCompiler = null;
-
-                if (overrideCompilerOption.Value() is { } overrideCompilerPath)
-                {
-                    Console.WriteLine("Using Elm compiler from " + overrideCompilerPath);
-
-                    overrideElmCompiler =
-                    ElmCompiler.LoadCompilerFromBundleFile(overrideCompilerPath)
-                    .Extract(err => throw new Exception("Failed to load Elm compiler from " + overrideCompilerPath + ": " + err));
-
-                    var elmCompilerHash =
-                    new ConcurrentPineValueHashCache()
-                    .GetHash(overrideElmCompiler.CompilerEnvironment);
-
-                    Console.WriteLine(
-                        "Loaded Elm compiler with hash " + Convert.ToHexStringLower(elmCompilerHash.Span)[..8]);
+                    fileTree = FileTree.FromSetOfFilesWithCommonFilePath(zipEntries);
                 }
 
-                var compiledEnvironments =
-                environmentsSourceTrees
-                .Select(sourceTree =>
-                {
-                    var compiledEnv =
-                    ElmCompiler.LoadOrCompileInteractiveEnvironment(
-                        sourceTree,
-                        rootFilePaths: rootFilePaths,
-                        skipLowering: skipLowering,
-                        overrideElmCompiler: overrideElmCompiler)
-                    .Extract(err => throw new Exception("Failed compilation: " + err));
+                return fileTree;
+            })
+            .ToImmutableArray();
 
-                    return new KeyValuePair<FileTree, PineValue>(sourceTree, compiledEnv);
-                })
-                .ToImmutableDictionary();
+            var aggregateElmModuleFiles =
+            environmentsSourceTrees
+            .SelectMany(tree => tree.EnumerateFilesTransitive())
+            .Where(f => f.path.LastOrDefault()?.EndsWith(".elm", StringComparison.OrdinalIgnoreCase) ?? false)
+            .ToImmutableArray();
 
-                foreach (var (sourceTree, compiledEnv) in compiledEnvironments)
-                {
-                    var sourceTreeHash = PineValueHashTree.ComputeHashSorted(sourceTree);
+            Console.WriteLine(
+                "Loaded " + environmentsSourceTrees.Length + " source trees with " +
+                aggregateElmModuleFiles.Length + " aggregate Elm module files.");
 
-                    var sourceTreeAllFiles =
-                    sourceTree
-                    .EnumerateFilesTransitive()
-                    .ToImmutableArray();
+            Console.WriteLine(
+                "Compiling with lowering " +
+                (skipLowering ? "disabled" : "enabled"));
 
-                    var sourceTreeElmModules =
-                    sourceTreeAllFiles
-                    .Where(f => f.path?.Last().EndsWith(".elm", StringComparison.OrdinalIgnoreCase) ?? false)
-                    .ToImmutableArray();
+            Console.WriteLine(
+                "Limiting the compilation to " + rootFilePaths.Count + " root files: " +
+                string.Join(
+                    ", ",
+                    rootFilePaths.Select(path => string.Join("/", path))));
 
-                    var environmentNodesCount =
-                    compiledEnv is PineValue.ListValue compiledEnvList
-                    ?
-                    compiledEnvList.NodesCount
-                    :
-                    0;
+            ElmCompiler? overrideElmCompiler = null;
 
-                    Console.WriteLine(
-                        "Compiled source tree " + Convert.ToHexStringLower(sourceTreeHash.Span)[..8] +
-                        " containing " + sourceTreeAllFiles.Length +
-                        " files and " + sourceTreeElmModules.Length +
-                        " Elm modules into environment with " +
-                        CommandLineInterface.FormatIntegerForDisplay(environmentNodesCount) + " nodes.");
-                }
+            if (overrideCompiler is { } overrideCompilerPath)
+            {
+                Console.WriteLine("Using Elm compiler from " + overrideCompilerPath);
 
-                var (allComponents, bundleResourceFile) =
-                    BundledDeclarations.BuildBundleFile(
-                        compiledEnvironments: compiledEnvironments,
-                        otherReusedValues: ImmutableDictionary<string, PineValue>.Empty);
+                overrideElmCompiler =
+                ElmCompiler.LoadCompilerFromBundleFile(overrideCompilerPath)
+                .Extract(err => throw new Exception("Failed to load Elm compiler from " + overrideCompilerPath + ": " + err));
+
+                var elmCompilerHash =
+                new ConcurrentPineValueHashCache()
+                .GetHash(overrideElmCompiler.CompilerEnvironment);
 
                 Console.WriteLine(
-                    "Built bundle containing " +
+                    "Loaded Elm compiler with hash " + Convert.ToHexStringLower(elmCompilerHash.Span)[..8]);
+            }
+
+            var compiledEnvironments =
+            environmentsSourceTrees
+            .Select(sourceTree =>
+            {
+                var compiledEnv =
+                ElmCompiler.LoadOrCompileInteractiveEnvironment(
+                    sourceTree,
+                    rootFilePaths: rootFilePaths,
+                    skipLowering: skipLowering,
+                    overrideElmCompiler: overrideElmCompiler)
+                .Extract(err => throw new Exception("Failed compilation: " + err));
+
+                return new KeyValuePair<FileTree, PineValue>(sourceTree, compiledEnv);
+            })
+            .ToImmutableDictionary();
+
+            foreach (var (sourceTree, compiledEnv) in compiledEnvironments)
+            {
+                var sourceTreeHash = PineValueHashTree.ComputeHashSorted(sourceTree);
+
+                var sourceTreeAllFiles =
+                sourceTree
+                .EnumerateFilesTransitive()
+                .ToImmutableArray();
+
+                var sourceTreeElmModules =
+                sourceTreeAllFiles
+                .Where(f => f.path?.Last().EndsWith(".elm", StringComparison.OrdinalIgnoreCase) ?? false)
+                .ToImmutableArray();
+
+                var environmentNodesCount =
+                compiledEnv is PineValue.ListValue compiledEnvList
+                ?
+                compiledEnvList.NodesCount
+                :
+                0;
+
+                Console.WriteLine(
+                    "Compiled source tree " + Convert.ToHexStringLower(sourceTreeHash.Span)[..8] +
+                    " containing " + sourceTreeAllFiles.Length +
+                    " files and " + sourceTreeElmModules.Length +
+                    " Elm modules into environment with " +
+                    CommandLineInterface.FormatIntegerForDisplay(environmentNodesCount) + " nodes.");
+            }
+
+            var (allComponents, bundleResourceFile) =
+                BundledDeclarations.BuildBundleFile(
+                    compiledEnvironments: compiledEnvironments,
+                    otherReusedValues: ImmutableDictionary<string, PineValue>.Empty);
+
+            Console.WriteLine(
+                "Built bundle containing " +
+                CommandLineInterface.FormatIntegerForDisplay(allComponents.Count) +
+                " component entries in " +
+                CommandLineInterface.FormatIntegerForDisplay(bundleResourceFile.Length) + " bytes.");
+
+            var fileContent = bundleResourceFile;
+
+            if (gzip)
+            {
+                fileContent = BundledDeclarations.CompressResourceFile(fileContent);
+
+                Console.WriteLine(
+                    "Applied gzip and compressed from " +
+                    CommandLineInterface.FormatIntegerForDisplay(bundleResourceFile.Length) +
+                    " to " +
+                    CommandLineInterface.FormatIntegerForDisplay(fileContent.Length) + " bytes");
+            }
+
+            if (outputCompactBuild != null)
+            {
+                var destFilePath = outputCompactBuild.Length > 0 ? outputCompactBuild : "compact-build.bin";
+
+                if (Path.GetDirectoryName(destFilePath) is { } destDirectory && destDirectory.Length is not 0)
+                {
+                    Directory.CreateDirectory(destDirectory);
+                }
+
+                File.WriteAllBytes(
+                    destFilePath,
+                    fileContent.ToArray());
+
+                Console.WriteLine(
+                    "Saved compact build with " +
                     CommandLineInterface.FormatIntegerForDisplay(allComponents.Count) +
                     " component entries in " +
-                    CommandLineInterface.FormatIntegerForDisplay(bundleResourceFile.Length) + " bytes.");
+                    CommandLineInterface.FormatIntegerForDisplay(fileContent.Length) +
+                    " bytes to " + destFilePath);
+            }
 
-                var fileContent = bundleResourceFile;
-
-                if (gzipOption.HasValue())
-                {
-                    fileContent = BundledDeclarations.CompressResourceFile(fileContent);
-
-                    Console.WriteLine(
-                        "Applied gzip and compressed from " +
-                        CommandLineInterface.FormatIntegerForDisplay(bundleResourceFile.Length) +
-                        " to " +
-                        CommandLineInterface.FormatIntegerForDisplay(fileContent.Length) + " bytes");
-                }
-
-                if (outputCompactBuildOption.HasValue())
-                {
-                    var destFilePath = outputCompactBuildOption.Value();
-
-                    if (Path.GetDirectoryName(destFilePath) is { } destDirectory && destDirectory.Length is not 0)
-                    {
-                        Directory.CreateDirectory(destDirectory);
-                    }
-
-                    File.WriteAllBytes(
-                        destFilePath,
-                        fileContent.ToArray());
-
-                    Console.WriteLine(
-                        "Saved compact build with " +
-                        CommandLineInterface.FormatIntegerForDisplay(allComponents.Count) +
-                        " component entries in " +
-                        CommandLineInterface.FormatIntegerForDisplay(fileContent.Length) +
-                        " bytes to " + destFilePath);
-                }
-
-                return 0;
-            });
+            return 0;
         });
+
+        return command;
+    }
 
     private static string LoadArgumentFromUserInterfaceAsJsonOrFileTextContext(string argumentFromCLI)
     {
@@ -1133,131 +1225,148 @@ public class Program
         return File.ReadAllText(argumentFromCLI);
     }
 
-    private static CommandLineApplication AddTruncateProcessHistoryCommand(CommandLineApplication app) =>
-        app.Command("truncate-process-history", truncateProcessHistoryCommand =>
+    private static Command CreateTruncateProcessHistoryCommand()
+    {
+        var command = new Command("truncate-process-history", "Remove parts of the process history that are not needed to restore the process.");
+
+        var siteArgument = new Argument<string>("process-site");
+
+        var sitePasswordOption = new Option<string?>("--site-password");
+
+        command.Add(siteArgument);
+        command.Add(sitePasswordOption);
+
+        command.SetAction((parseResult) =>
         {
-            truncateProcessHistoryCommand.Description = "Remove parts of the process history that are not needed to restore the process.";
-            truncateProcessHistoryCommand.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
+            var site = parseResult.GetValue(siteArgument);
+            var sitePassword = parseResult.GetValue(sitePasswordOption);
 
-            var siteArgument = ProcessSiteArgumentOnCommand(truncateProcessHistoryCommand);
-            var passwordFromSite = SitePasswordFromSiteFromOptionOnCommandOrFromSettings(truncateProcessHistoryCommand);
+            var actualPassword = sitePassword ?? UserSecrets.LoadPasswordForSite(site);
 
-            truncateProcessHistoryCommand.OnExecute(() =>
-            {
-                var site = siteArgument.Value!;
-                var sitePassword = passwordFromSite(site);
+            var report =
+                TruncateProcessHistory(
+                    site: site,
+                    siteDefaultPassword: actualPassword,
+                    promptForPasswordOnConsole: true);
 
-                var report =
-                    TruncateProcessHistory(
-                        site: site,
-                        siteDefaultPassword: sitePassword,
-                        promptForPasswordOnConsole: true);
+            WriteReportToFileInReportDirectory(
+                reportContent: System.Text.Json.JsonSerializer.Serialize(
+                    report,
+                    reportJsonSerializerOptions),
+                reportKind: "truncate-process-history.json");
 
-                WriteReportToFileInReportDirectory(
-                    reportContent: System.Text.Json.JsonSerializer.Serialize(
-                        report,
-                        reportJsonSerializerOptions),
-                    reportKind: "truncate-process-history.json");
-            });
+            return 0;
         });
 
-    private static CommandLineApplication AddCompileCommand(CommandLineApplication app) =>
-        app.Command("compile", compileCommand =>
+        return command;
+    }
+
+    private static Command CreateCompileCommand()
+    {
+        var command = new Command("compile", "Compile app source code the same way as would be done when deploying a web service.");
+
+        var sourceArgument = new Argument<string>("source");
+
+        command.Add(sourceArgument);
+
+        command.SetAction((parseResult) =>
         {
-            compileCommand.Description = "Compile app source code the same way as would be done when deploying a web service.";
-            compileCommand.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
+            var source = parseResult.GetValue(sourceArgument);
 
-            var sourceArgument = compileCommand.Argument("source", "Path to the app program code to compile.").IsRequired(allowEmptyStrings: false);
+            var compileReport = CompileAppAndSaveCompositionToZipArchive(source).report;
 
-            compileCommand.OnExecute(() =>
-            {
-                var compileReport = CompileAppAndSaveCompositionToZipArchive(sourceArgument.Value!).report;
+            WriteReportToFileInReportDirectory(
+                reportContent: System.Text.Json.JsonSerializer.Serialize(
+                    compileReport,
+                    reportJsonSerializerOptions),
+                reportKind: "compile.json");
 
-                WriteReportToFileInReportDirectory(
-                    reportContent: System.Text.Json.JsonSerializer.Serialize(
-                        compileReport,
-                        reportJsonSerializerOptions),
-                    reportKind: "compile.json");
-            });
+            return 0;
         });
 
-    private static CommandLineApplication AddElmTestRsCommand(CommandLineApplication app) =>
-        app.Command("elm-test-rs", elmTestRsCommand =>
+        return command;
+    }
+
+    private static Command CreateElmTestRsCommand()
+    {
+        var command = new Command("elm-test-rs", "Compile and run tests using the interface of elm-test-rs. The compilation integrates interfaces such as SourceFiles.");
+
+        var sourceArgument = new Argument<string?>("source")
         {
-            elmTestRsCommand.Description = "Compile and run tests using the interface of elm-test-rs. The compilation integrates interfaces such as SourceFiles.";
-            elmTestRsCommand.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
+            Arity = ArgumentArity.ZeroOrOne
+        };
 
-            var sourceArgument = elmTestRsCommand.Argument("source", "path to the Elm project containing the tests to run");
+        var elmTestRsOutputOption = new Option<string?>("--elm-test-rs-output");
 
-            var elmTestRsOutputOption =
-                elmTestRsCommand.Option(
-                    "--elm-test-rs-output",
-                    "Where to save the output (via stdout and stderr) from the elm-test-rs tool.",
-                    CommandOptionType.SingleValue);
+        command.Add(sourceArgument);
+        command.Add(elmTestRsOutputOption);
 
-            elmTestRsCommand.OnExecute(() =>
+        command.SetAction((parseResult) =>
+        {
+            var source = parseResult.GetValue(sourceArgument);
+            var elmTestRsOutput = parseResult.GetValue(elmTestRsOutputOption);
+
+            var elmTestResult = CompileAndElmTestRs(source: source ?? Environment.CurrentDirectory);
+
+            static void saveTextToFileAndReportToConsole(string filePath, string text)
             {
-                var elmTestResult = CompileAndElmTestRs(source: sourceArgument.Value ?? Environment.CurrentDirectory);
+                filePath = Path.GetFullPath(filePath);
 
-                static void saveTextToFileAndReportToConsole(string filePath, string text)
+                Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
+
+                File.WriteAllText(filePath, text ?? "", Encoding.UTF8);
+                Console.WriteLine("Saved " + text?.Length + " characters to " + filePath);
+            }
+
+            if (elmTestRsOutput != null)
+            {
+                saveTextToFileAndReportToConsole(elmTestRsOutput + ".stdout", elmTestResult.ProcessOutput.StandardOutput ?? "");
+                saveTextToFileAndReportToConsole(elmTestRsOutput + ".stderr", elmTestResult.ProcessOutput.StandardError ?? "");
+            }
+
+            if (0 < elmTestResult.ProcessOutput.StandardError?.Length)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine(elmTestResult.ProcessOutput.StandardError);
+                Console.ResetColor();
+            }
+
+            var eventsOutputs =
+                ElmTestRs.OutputFromEvent(elmTestResult.ParseOutputResult);
+
+            foreach (var eventOutput in eventsOutputs)
+            {
+                if (eventOutput.text.Any())
+                    Console.WriteLine("");
+
+                foreach (var coloredText in eventOutput.text)
                 {
-                    filePath = Path.GetFullPath(filePath);
-
-                    Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
-
-                    File.WriteAllText(filePath, text ?? "", Encoding.UTF8);
-                    Console.WriteLine("Saved " + text?.Length + " characters to " + filePath);
-                }
-
-                var elmTestRsOutput = elmTestRsOutputOption.Value();
-
-                if (elmTestRsOutput != null)
-                {
-                    saveTextToFileAndReportToConsole(elmTestRsOutput + ".stdout", elmTestResult.ProcessOutput.StandardOutput ?? "");
-                    saveTextToFileAndReportToConsole(elmTestRsOutput + ".stderr", elmTestResult.ProcessOutput.StandardError ?? "");
-                }
-
-                if (0 < elmTestResult.ProcessOutput.StandardError?.Length)
-                {
-                    Console.ForegroundColor = ConsoleColor.Red;
-                    Console.WriteLine(elmTestResult.ProcessOutput.StandardError);
-                    Console.ResetColor();
-                }
-
-                var eventsOutputs =
-                    ElmTestRs.OutputFromEvent(elmTestResult.ParseOutputResult);
-
-                foreach (var eventOutput in eventsOutputs)
-                {
-                    if (eventOutput.text.Any())
-                        Console.WriteLine("");
-
-                    foreach (var coloredText in eventOutput.text)
+                    switch (coloredText.color)
                     {
-                        switch (coloredText.color)
-                        {
-                            case ElmTestRsConsoleOutputColor.RedColor:
-                                Console.ForegroundColor = ConsoleColor.Red;
-                                break;
-                            case ElmTestRsConsoleOutputColor.GreenColor:
-                                Console.ForegroundColor = ConsoleColor.Green;
-                                break;
-                            default:
-                                Console.ResetColor();
-                                break;
-                        }
-
-                        Console.Write(coloredText.text);
+                        case ElmTestRsConsoleOutputColor.RedColor:
+                            Console.ForegroundColor = ConsoleColor.Red;
+                            break;
+                        case ElmTestRsConsoleOutputColor.GreenColor:
+                            Console.ForegroundColor = ConsoleColor.Green;
+                            break;
+                        default:
+                            Console.ResetColor();
+                            break;
                     }
+
+                    Console.Write(coloredText.text);
                 }
+            }
 
-                Console.WriteLine("");
+            Console.WriteLine("");
 
-                // TODO: Report more details on timing.
+            // TODO: Report more details on timing.
 
-                return elmTestResult.ProcessOutput.ExitCode;
-            });
+            return elmTestResult.ProcessOutput.ExitCode;
         });
+
+        return command;
+    }
 
     private static (CompileAppReport report, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>? compiledAppFiles)
         CompileAppAndSaveCompositionToZipArchive(string sourcePath)
@@ -1444,531 +1553,121 @@ public class Program
         }
     }
 
-    private static CommandLineApplication AddInteractiveCommand(
-        CommandLineApplication app,
-        DynamicPGOShare? dynamicPGOShare) =>
-        app.Command("interactive", interactiveCommand =>
+    private static Command CreateDescribeCommand()
+    {
+        var command = new Command("describe", "Describe the artifact at the given location. Valid locations can also be URLs into git repositories or paths in the local file system.");
+
+        var sourcePathParameter = new Argument<string>("source-path");
+
+        var listBlobsOption = new Option<bool>("--list-blobs");
+
+        var compileZipArchiveOption = new Option<string?>("--compile-zip-archive")
         {
-            interactiveCommand.AddName("repl");
+            Arity = ArgumentArity.ZeroOrOne
+        };
 
-            interactiveCommand.Description = "Enter environment for interactive exploration and composition of Elm programs.";
+        command.Add(sourcePathParameter);
+        command.Add(listBlobsOption);
+        command.Add(compileZipArchiveOption);
 
-            var contextAppOption =
-                interactiveCommand
-                .Option(
-                    template: "--context-app",
-                    description: "Path to an app to use as context. The Elm modules from this app will be available in the interactive environment.",
-                    optionType: CommandOptionType.MultipleValue);
+        command.SetAction((parseResult) =>
+        {
+            var sourcePath = parseResult.GetValue(sourcePathParameter);
+            var listBlobs = parseResult.GetValue(listBlobsOption);
+            var compileZipArchive = parseResult.GetValue(compileZipArchiveOption);
 
-            var contextAppModuleNameFilterOption =
-                interactiveCommand
-                .Option(
-                    template: "--context-app-module-name-filter",
-                    description: "Filter on module names to apply on modules loaded via the '--context-app' option.",
-                    optionType: CommandOptionType.SingleValue);
+            var loadCompositionResult =
+                LoadComposition.LoadFromPathResolvingNetworkDependencies(sourcePath)
+                .LogToActions(Console.WriteLine)
+                .Extract(error => throw new Exception("Failed to load from path '" + sourcePath + "': " + error));
 
-            var initStepsOption =
-                interactiveCommand
-                .Option(
-                    template: "--init-steps",
-                    description: "Path to a list of submissions to start the session with.",
-                    optionType: CommandOptionType.SingleValue);
+            var composition = FileTreeEncoding.Encode(loadCompositionResult.tree);
 
-            var enableInspectionOption =
-                interactiveCommand
-                .Option(
-                    template: "--enable-inspection",
-                    description: "Display additional information to inspect the implementation.",
-                    optionType: CommandOptionType.NoValue);
+            var compositionId = Convert.ToHexStringLower(PineValueHashTree.ComputeHash(composition).Span);
 
-            var elmCompilerOption = AddElmCompilerOptionOnCommand(interactiveCommand);
+            Console.WriteLine("Loaded composition " + compositionId + " from '" + sourcePath + "'.");
 
-            var elmEngineOption = AddElmEngineOptionOnCommand(
-                dynamicPGOShare: null,
-                interactiveCommand,
-                defaultFromEnvironmentVariablePrefix: "interactive",
-                defaultEngineConsideringEnvironmentVariable:
-                fromEnv => fromEnv ?? IInteractiveSession.DefaultImplementation);
+            var compositionDescription =
+                string.Join(
+                    "\n",
+                    FileTreeExtensions.DescribeFileTreeForHumans(
+                        loadCompositionResult.tree,
+                        listFiles: listBlobs,
+                        extractFileName: sourcePath.Split('\\', '/').Last()));
 
-            var submitOption =
-                interactiveCommand.Option(
-                    template: "--submit",
-                    description: "Option to submit a string as if entered during the interactive session.",
-                    optionType: CommandOptionType.MultipleValue);
+            Console.WriteLine("Composition " + compositionId + " is " + compositionDescription);
 
-            var saveToFileOption =
-                interactiveCommand
-                .Option(
-                    template: "--save-to-file",
-                    description: "Path to a file to save the session state to, after compiling context app and initial submissions.",
-                    optionType: CommandOptionType.SingleValue);
-
-            var testCommand =
-                interactiveCommand.Command("test", testCommand =>
-                {
-                    testCommand.Description = "Test the interactive automatically with given scenarios and reports timings.";
-
-                    var scenarioOption =
-                        testCommand
-                        .Option(
-                            template: "--scenario",
-                            description: "Test an interactive scenario from the given path. The scenario specifies the submissions and can also specify expectations.",
-                            optionType: CommandOptionType.MultipleValue);
-
-                    var scenariosOption =
-                        testCommand
-                        .Option(
-                            template: "--scenarios",
-                            description: "Test a list of interactive scenarios from the given directory. Each scenario specifies the submissions and can also specify expectations.",
-                            optionType: CommandOptionType.MultipleValue);
-
-                    testCommand.OnExecute(() =>
-                    {
-                        var console = (Pine.IConsole)StaticConsole.Instance;
-
-                        var scenarioSources = scenarioOption.Values;
-                        var scenariosSources = scenariosOption.Values;
-
-                        console.WriteLine("Got " + scenarioSources.Count + " source(s) for an individual scenario to load...");
-                        console.WriteLine("Got " + scenariosSources.Count + " source(s) for a directory of scenarios to load...");
-
-                        var scenarioLoadResults =
-                            scenarioSources
-                            .ToImmutableDictionary(
-                                scenarioSource => scenarioSource!,
-                                scenarioSource => LoadComposition.LoadFromPathResolvingNetworkDependencies(scenarioSource!).LogToList());
-
-                        var scenariosLoadResults =
-                            scenariosSources
-                            .ToImmutableDictionary(
-                                scenariosSource => scenariosSource!,
-                                scenariosSource => LoadComposition.LoadFromPathResolvingNetworkDependencies(scenariosSource!).LogToList());
-
-                        var failedLoads =
-                        scenarioLoadResults.Concat(scenariosLoadResults)
-                        .Where(r => !r.Value.result.IsOk())
-                        .ToImmutableList();
-
-                        if (!failedLoads.IsEmpty)
-                        {
-                            var failedLoad = failedLoads.First();
-
-                            console.WriteLine(
-                                string.Join(
-                                    "\n",
-                                        "Failed to load from " + failedLoad.Key + ":",
-                                        string.Join("\n", failedLoad.Value.log),
-                                        failedLoad.Value.result.Unpack(fromErr: error => error, fromOk: _ => throw new NotImplementedException())),
-                                color: Pine.IConsole.TextColor.Red);
-
-                            return;
-                        }
-
-                        var namedDistinctScenarios =
-                            scenarioLoadResults
-                            .Select(scenarioLoadResult =>
-                            (name: scenarioLoadResult.Key.Split('/', '\\').Last(),
-                            component: scenarioLoadResult.Value.result.Extract(error => throw new Exception(error)).tree))
-                            .Concat(scenariosLoadResults.SelectMany(scenariosComposition =>
-                            {
-                                var asTree =
-                                scenariosComposition.Value.result.Extract(error => throw new Exception(error)).tree switch
-                                {
-                                    FileTree.DirectoryNode tree => tree,
-                                    _ => null
-                                };
-
-                                if (asTree is null)
-                                    return ImmutableList<(string, FileTree)>.Empty;
-
-                                return
-                                asTree.Items
-                                .Where(entry => entry.component is FileTree.DirectoryNode scenarioTree);
-                            }))
-                            .Select(loadedScenario =>
-                            {
-                                var asComposition = FileTreeEncoding.Encode(loadedScenario.component);
-
-                                var hashBase16 = Convert.ToHexStringLower(PineValueHashTree.ComputeHash(asComposition).Span);
-
-                                return new
-                                {
-                                    loadedScenario,
-                                    asComposition,
-                                    hashBase16
-                                };
-                            })
-                            .DistinctBy(loadedScenario => loadedScenario.hashBase16)
-                            .ToImmutableDictionary(
-                                keySelector: scenario => scenario.loadedScenario.name + "-" + scenario.hashBase16[..10],
-                                elementSelector: scenario => scenario);
-
-                        var compileElmProgramCodeFiles = elmCompilerOption.loadElmCompilerFromOption(console);
-                        var elmEngineType = elmEngineOption.parseElmEngineTypeFromOption();
-
-                        var aggregateCompositionTree =
-                            FileTree.SortedDirectory(
-                                [.. namedDistinctScenarios.Select(scenario => (scenario.Key, scenario.Value.loadedScenario.component))]);
-
-                        var parsedScenarios =
-                        TestElmInteractive.ParseElmInteractiveScenarios(
-                            aggregateCompositionTree,
-                            console);
-
-                        IInteractiveSession newInteractiveSessionFromAppCode(FileTree? appCodeTree)
-                        {
-                            return IInteractiveSession.Create(
-                                compilerSourceFiles: compileElmProgramCodeFiles,
-                                appCodeTree: appCodeTree,
-                                elmEngineType);
-                        }
-
-                        var interactiveConfig = new InteractiveSessionConfig(
-                            CompilerId:
-                            Convert.ToHexStringLower(PineValueHashTree.ComputeHashSorted(compileElmProgramCodeFiles).Span)[..8],
-                            newInteractiveSessionFromAppCode);
-
-                        {
-                            var warmupStopwatch = System.Diagnostics.Stopwatch.StartNew();
-
-                            using var session = interactiveConfig.SessionFromAppCode(null);
-
-                            session.Submit("1 + 3");
-
-                            console.WriteLine(
-                                "Warmup completed in " +
-                                warmupStopwatch.Elapsed.TotalSeconds.ToString("0.##") + " seconds.");
-                        }
-
-                        var scenariosResults =
-                        TestElmInteractive.TestElmInteractiveScenarios(
-                            parsedScenarios,
-                            interactiveConfig,
-                            console: console,
-                            asyncLogDelegate: null);
-                    });
-                });
-
-            interactiveCommand.OnExecute(() =>
+            if (compileZipArchive != null)
             {
-                var console = (Pine.IConsole)StaticConsole.Instance;
+                var asZipArchive = ZipArchive.ZipArchiveFromFiles(
+                    loadCompositionResult.tree.EnumerateFilesTransitive()
+                    .Select(entry => (string.Join("/", entry.path), entry.fileContent)));
 
-                var compileElmProgramCodeFiles = elmCompilerOption.loadElmCompilerFromOption(console);
-                var elmEngineType = elmEngineOption.parseElmEngineTypeFromOption();
+                var defaultFileName = compositionId + ".zip";
 
-                console.WriteLine(
-                    "---- Elm Interactive v" + AppVersionId + " ----");
+                var destinationPath = compileZipArchive.Length > 0 ? compileZipArchive : defaultFileName;
 
-                var contextAppPaths = contextAppOption.Values;
+                if (Directory.Exists(destinationPath))
+                    destinationPath = Path.Combine(destinationPath, defaultFileName);
 
-                var contextAppModuleNameFilterPattern = contextAppModuleNameFilterOption.Value();
+                File.WriteAllBytes(destinationPath, asZipArchive);
+                Console.WriteLine("Saved " + compositionId[..10] + " to " + destinationPath);
+            }
 
-                var initStepsPath = initStepsOption.Value();
-
-                FileTree loadContextAppCodeTreeFromPath(string contextAppPath)
-                {
-                    return
-                    LoadComposition.LoadFromPathResolvingNetworkDependencies(contextAppPath)
-                    .LogToActions(console.WriteLine)
-                    .Map(loaded => loaded.tree)
-                    .Unpack(
-                        fromErr: error => throw new Exception("Failed to load from path '" + contextAppPath + "': " + error),
-                        fromOk: tree =>
-                        {
-                            if (!tree.EnumerateFilesTransitive().Take(1).Any())
-                                throw new Exception("Found no files under context app path '" + contextAppPath + "'.");
-
-                            return tree;
-                        });
-                }
-
-                var contextAppCodeTreeBeforeFilter =
-                contextAppPaths is null
-                ?
-                null
-                :
-                FileTreeExtensions.Union(contextAppPaths.Select(loadContextAppCodeTreeFromPath!));
-
-                var contextAppModuleNameFilterIncluded =
-                    contextAppModuleNameFilterPattern is null
-                    ?
-                    []
-                    :
-                    contextAppModuleNameFilterPattern
-                    .Split(',')
-                    .Select(moduleName => moduleName.ToLowerInvariant())
-                    .ToImmutableHashSet();
-
-                bool contextAppModuleNameFilter(IReadOnlyList<string> moduleName)
-                {
-                    if (contextAppModuleNameFilterPattern is null)
-                        return true;
-
-                    var flatModuleName = string.Join('.', moduleName).ToLowerInvariant();
-
-                    return contextAppModuleNameFilterIncluded.Contains(flatModuleName);
-                }
-
-                var contextAppCodeTree =
-                contextAppCodeTreeBeforeFilter is null
-                ?
-                null
-                :
-                ElmModule.FilterAppCodeTreeForRootModulesAndDependencies(
-                    contextAppCodeTreeBeforeFilter,
-                    moduleNameIsRootModule: contextAppModuleNameFilter);
-
-                var initStepsSubmission =
-                initStepsPath switch
-                {
-                    null =>
-                    [],
-
-                    not null =>
-                    LoadComposition.LoadFromPathResolvingNetworkDependencies(initStepsPath)
-                    .LogToActions(console.WriteLine)
-                    .Map(loaded => loaded.tree)
-                    .Unpack(
-                        fromErr: error => throw new Exception("Failed to load from path '" + initStepsPath + "': " + error),
-                        fromOk: treeNode =>
-                        {
-                            if (!treeNode.EnumerateFilesTransitive().Take(1).Any())
-                                throw new Exception("Found no files under context app path '" + initStepsPath + "'.");
-
-                            return
-                            treeNode
-                            .Map(
-                                fromFile: _ => throw new Exception("Unexpected blob"),
-                                fromDirectory: tree =>
-                                tree.Select(stepDirectory =>
-                                TestElmInteractive.ParseScenarioStep(stepDirectory.itemValue)
-                                .Extract(fromErr: error => throw new Exception(error)).Submission))
-                                .ToImmutableList();
-                        })
-                };
-
-                using var interactiveSession = IInteractiveSession.Create(
-                    compilerSourceFiles: compileElmProgramCodeFiles,
-                    appCodeTree: contextAppCodeTree,
-                    engineType: elmEngineType);
-
-                string? processSubmission(string submission)
-                {
-                    if (!(0 < submission?.Trim()?.Length))
-                        return null;
-
-                    var evalStopwatch = System.Diagnostics.Stopwatch.StartNew();
-
-                    var evalResult = interactiveSession.Submit(submission);
-
-                    evalStopwatch.Stop();
-
-                    return
-                    evalResult
-                    .Unpack(
-                        fromErr: error =>
-                        {
-                            console.WriteLine("Failed to evaluate: " + error);
-                            return submission;
-                        },
-                        fromOk: evalOk =>
-                        {
-                            if (enableInspectionOption.HasValue())
-                            {
-                                console.WriteLine(
-                                    "Processing this submission took " +
-                                    CommandLineInterface.FormatIntegerForDisplay(evalStopwatch.ElapsedMilliseconds) + " ms.");
-
-                                console.WriteLine(
-                                    "Inspection log has " + (evalOk.InspectionLog?.Count ?? 0) + " entries:\n" +
-                                    string.Join("\n", evalOk.InspectionLog.EmptyIfNull()));
-                            }
-
-                            console.WriteLine(evalOk.InteractiveResponse.DisplayText);
-
-                            return submission;
-                        });
-                }
-
-                var promptPrefix = "> ";
-
-                var allSubmissionsFromArguments =
-                initStepsSubmission
-                .Concat(submitOption.Values.EmptyIfNull()).WhereNotNull()
-                .ToImmutableList();
-
-                if (0 < allSubmissionsFromArguments.Count)
-                {
-                    console.WriteLine(allSubmissionsFromArguments.Count + " initial submission(s) from arguments in total...");
-                }
-
-                foreach (var submission in allSubmissionsFromArguments)
-                {
-                    console.WriteLine(promptPrefix + submission);
-
-                    processSubmission(submission);
-                }
-
-                if (saveToFileOption.Value() is { } saveToFile)
-                {
-                    console.WriteLine("Got option to save session state to " + saveToFile + "...");
-
-                    if (interactiveSession is not InteractiveSessionPine pineSession)
-                    {
-                        console.WriteLine("Cannot save session state for this engine type: " + interactiveSession.GetType().Name);
-                    }
-                    else
-                    {
-                        var sessionState = pineSession.CurrentEnvironmentValue();
-
-                        var (environmentJson, _) =
-                        ElmInteractive.ElmInteractive.FromPineValueBuildingDictionary(
-                            sessionState,
-                            ElmInteractive.ElmInteractive.CompilationCache.Empty);
-
-                        var environmentJsonString =
-                            System.Text.Json.JsonSerializer.Serialize(environmentJson.json,
-                                options: ElmInteractive.ElmInteractive.compilerInterfaceJsonSerializerOptions);
-
-                        File.WriteAllText(saveToFile, environmentJsonString);
-
-                        console.WriteLine(
-                            "Saved session state to " + saveToFile + ", as JSON with total length of " +
-                            environmentJsonString.Length);
-                    }
-                }
-
-                ReadLine.HistoryEnabled = true;
-
-                while (true)
-                {
-                    var submission = ReadLine.Read(promptPrefix);
-
-                    processSubmission(submission);
-                }
-            });
+            return 0;
         });
 
-    private static CommandLineApplication AddDescribeCommand(CommandLineApplication app) =>
-        app.Command("describe", describeCommand =>
+        return command;
+    }
+
+    private static Command CreateMakeCommand()
+    {
+        var command = new Command("make", "Compile Elm code into JavaScript, HTML, or other files.");
+
+        var entryPointElmFileArgument = new Argument<string>("path-to-elm-file");
+
+        var outputOption = new Option<string?>("--output");
+
+        var inputDirectoryOption = new Option<string?>("--input-directory");
+
+        var debugOption = new Option<bool>("--debug");
+
+        var optimizeOption = new Option<bool>("--optimize");
+
+        command.Add(entryPointElmFileArgument);
+        command.Add(outputOption);
+        command.Add(inputDirectoryOption);
+        command.Add(debugOption);
+        command.Add(optimizeOption);
+
+        command.SetAction((parseResult) =>
         {
-            describeCommand.Description = "Describe the artifact at the given location. Valid locations can also be URLs into git repositories or paths in the local file system.";
-            describeCommand.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
+            var entryPoint = parseResult.GetValue(entryPointElmFileArgument);
+            var output = parseResult.GetValue(outputOption);
+            var inputDirectory = parseResult.GetValue(inputDirectoryOption);
+            var debug = parseResult.GetValue(debugOption);
+            var optimize = parseResult.GetValue(optimizeOption);
 
-            var sourcePathParameter =
-                describeCommand
-                .Argument("source-path", "Path to the artifact. This can be a local directory or a URL.")
-                .IsRequired(allowEmptyStrings: false, errorMessage: "The source argument is missing. From where should I load the artifact?");
+            var actualInputDirectory = inputDirectory ?? Environment.CurrentDirectory;
+            var actualOutput = output ?? "make-default-output.html";
 
-            var listBlobsOption =
-                describeCommand.Option("--list-blobs", "List blobs in the artifact", CommandOptionType.NoValue);
-
-            var compileZipArchiveOption =
-            describeCommand.Option(
-                "--compile-zip-archive", "Bundle the composition into a zip-archive.",
-                CommandOptionType.SingleOrNoValue);
-
-            describeCommand.OnExecute(() =>
-            {
-                var sourcePath = sourcePathParameter.Value!;
-
-                var loadCompositionResult =
-                    LoadComposition.LoadFromPathResolvingNetworkDependencies(sourcePath)
-                    .LogToActions(Console.WriteLine)
-                    .Extract(error => throw new Exception("Failed to load from path '" + sourcePath + "': " + error));
-
-                var composition = FileTreeEncoding.Encode(loadCompositionResult.tree);
-
-                var compositionId = Convert.ToHexStringLower(PineValueHashTree.ComputeHash(composition).Span);
-
-                Console.WriteLine("Loaded composition " + compositionId + " from '" + sourcePath + "'.");
-
-                var compositionDescription =
-                    string.Join(
-                        "\n",
-                        FileTreeExtensions.DescribeFileTreeForHumans(
-                            loadCompositionResult.tree,
-                            listFiles: listBlobsOption.HasValue(),
-                            extractFileName: sourcePath.Split('\\', '/').Last()));
-
-                Console.WriteLine("Composition " + compositionId + " is " + compositionDescription);
-
-                if (compileZipArchiveOption.HasValue())
-                {
-                    var asZipArchive = ZipArchive.ZipArchiveFromFiles(
-                        loadCompositionResult.tree.EnumerateFilesTransitive()
-                        .Select(entry => (string.Join("/", entry.path), entry.fileContent)));
-
-                    var defaultFileName = compositionId + ".zip";
-
-                    var destinationPath = compileZipArchiveOption.Value() ?? defaultFileName;
-
-                    if (Directory.Exists(destinationPath))
-                        destinationPath = Path.Combine(destinationPath, defaultFileName);
-
-                    File.WriteAllBytes(destinationPath, asZipArchive);
-                    Console.WriteLine("Saved " + compositionId[..10] + " to " + destinationPath);
-                }
-
-                return 0;
-            });
+            return ElmMakeCommandExecute(
+                inputDirectory: actualInputDirectory,
+                entryPointElmFile: entryPoint,
+                outputPathArgument: actualOutput,
+                enableDebug: debug,
+                enableOptimize: optimize);
         });
 
-    private static CommandLineApplication AddMakeCommand(CommandLineApplication app) =>
-        app.Command("make", makeCommand =>
-        {
-            makeCommand.Description = "Compile Elm code into JavaScript, HTML, or other files.";
-            makeCommand.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
-
-            var entryPointElmFileArgument =
-            makeCommand.Argument("path-to-elm-file", "path to the Elm module file to compile")
-            .IsRequired(allowEmptyStrings: false);
-
-            var outputOption =
-            makeCommand.Option(
-                "--output",
-                "Specify the name of the resulting HTML or JavaScript file.",
-                CommandOptionType.SingleValue);
-
-            var inputDirectoryOption =
-            makeCommand.Option(
-                "--input-directory",
-                "Specify the input directory containing the Elm files. Defaults to the current working directory.",
-                CommandOptionType.SingleValue);
-
-            var debugOption =
-            makeCommand.Option(
-                "--debug",
-                description: "Turn on the time-travelling debugger.",
-                CommandOptionType.NoValue);
-
-            var optimizeOption =
-            makeCommand.Option(
-                "--optimize",
-                description: "Turn on optimizations to make code smaller and faster.",
-                CommandOptionType.NoValue);
-
-            makeCommand.OnExecute(() =>
-            {
-                var inputDirectory = inputDirectoryOption.Value() ?? Environment.CurrentDirectory;
-
-                var outputPathArgument = outputOption.Value() ?? "make-default-output.html";
-
-                return ElmMakeCommandExecute(
-                    inputDirectory: inputDirectory,
-                    entryPointElmFileArgument: entryPointElmFileArgument,
-                    outputPathArgument: outputPathArgument,
-                    debugOption: debugOption,
-                    optimizeOption: optimizeOption);
-            });
-        });
+        return command;
+    }
 
     private static int ElmMakeCommandExecute(
         string inputDirectory,
-        CommandArgument entryPointElmFileArgument,
+        string entryPointElmFile,
         string outputPathArgument,
-        CommandOption debugOption,
-        CommandOption optimizeOption)
+        bool enableDebug,
+        bool enableOptimize)
     {
         var loadInputDirectoryFailedFiles =
             new Dictionary<IReadOnlyList<string>, IOException>(
@@ -1984,13 +1683,11 @@ public class Program
                 })
             .LogToActions(Console.WriteLine);
 
-        var elmMakeCommandOptions =
-            new[] { debugOption, optimizeOption }
-            .SelectMany(optionToForward =>
-            optionToForward.HasValue() ?
-            ["--" + optionToForward.LongName] :
-            Array.Empty<string>())
-            .ToImmutableList();
+        var elmMakeCommandOptions = new List<string>();
+        if (enableDebug)
+            elmMakeCommandOptions.Add("--debug");
+        if (enableOptimize)
+            elmMakeCommandOptions.Add("--optimize");
 
         var elmMakeCommandAppendix = string.Join(" ", elmMakeCommandOptions);
 
@@ -2075,7 +1772,7 @@ public class Program
                 .Where(relativeSourceDir => 0 < relativeSourceDir.ParentLevel)
                 .ToImmutableList();
 
-            var pathToElmFile = entryPointElmFileArgument.Value;
+            var pathToElmFile = entryPointElmFile;
 
             if (string.IsNullOrEmpty(pathToElmFile))
             {
@@ -2215,7 +1912,7 @@ public class Program
         if (makeResult.IsErrOrNull() is { } makeErr)
         {
             DotNetConsoleWriteProblemCausingAbort(
-                "Failed to make " + entryPointElmFileArgument.Value + ":\n" + makeErr);
+                "Failed to make " + entryPointElmFile + ":\n" + makeErr);
 
             return 20;
         }
@@ -2604,132 +2301,122 @@ public class Program
         return "Unexpected Elm tag value type: " + elmTag;
     }
 
-    private static CommandLineApplication AddRunCacheServerCmd(CommandLineApplication app) =>
-        app.Command("run-cache-server", runCacheServerCmd =>
+    private static Command CreateRunCacheServerCommand()
+    {
+        var command = new Command("run-cache-server", "Run an HTTP server to cache popular parts of git repositories.")
         {
-            runCacheServerCmd.Description = "Run an HTTP server to cache popular parts of git repositories.";
-            runCacheServerCmd.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
-            runCacheServerCmd.ShowInHelpText = false;
+            Hidden = true  // Equivalent to ShowInHelpText = false
+        };
 
-            var gitCloneUrlPrefixOption =
-                runCacheServerCmd
-                .Option("--git-clone-prefix", "Prefix of URL from which git cloning is enabled.", CommandOptionType.MultipleValue);
+        var gitCloneUrlPrefixOption = new Option<string[]>("--git-clone-prefix")
+        {
+            AllowMultipleArgumentsPerToken = true,
+            Arity = ArgumentArity.ZeroOrMore
+        };
 
-            var urlOption =
-                runCacheServerCmd
-                .Option("--url", "URL for the HTTP server", CommandOptionType.MultipleValue);
+        var urlOption = new Option<string[]>("--url")
+        {
+            AllowMultipleArgumentsPerToken = true,
+            Arity = ArgumentArity.ZeroOrMore
+        };
 
-            var fileCacheDirectoryOption =
-                runCacheServerCmd
-                .Option("--file-cache-directory", "Directory in the file system to store cache entries.", CommandOptionType.SingleValue);
+        var fileCacheDirectoryOption = new Option<string>("--file-cache-directory");
 
-            runCacheServerCmd.OnExecute(() =>
-            {
-                var urls = urlOption.Values!;
-                var gitCloneUrlPrefixes = gitCloneUrlPrefixOption.Values!;
-                var fileCacheDirectory = fileCacheDirectoryOption.Value()!;
+        command.Add(gitCloneUrlPrefixOption);
+        command.Add(urlOption);
+        command.Add(fileCacheDirectoryOption);
 
-                Console.WriteLine("Starting HTTP server with git cache...");
+        command.SetAction((parseResult) =>
+        {
+            var urls = parseResult.GetValue(urlOption);
+            var gitCloneUrlPrefixes = parseResult.GetValue(gitCloneUrlPrefixOption);
+            var fileCacheDirectory = parseResult.GetValue(fileCacheDirectoryOption);
 
-                var serverTask = GitPartialForCommitServer.Run(
-                    urls: urls!,
-                    gitCloneUrlPrefixes: gitCloneUrlPrefixes!,
-                    fileCacheDirectory: fileCacheDirectory);
+            Console.WriteLine("Starting HTTP server with git cache...");
 
-                Console.WriteLine("Completed starting HTTP server with git cache at '" + string.Join(", ", urls) + "'.");
+            var serverTask = GitPartialForCommitServer.Run(
+                urls: urls!,
+                gitCloneUrlPrefixes: gitCloneUrlPrefixes!,
+                fileCacheDirectory: fileCacheDirectory);
 
-                serverTask.Wait();
-            });
+            Console.WriteLine("Completed starting HTTP server with git cache at '" + string.Join(", ", urls) + "'.");
+
+            serverTask.Wait();
+
+            return 0;
         });
 
-    private static CommandLineApplication AddRunFileServerCommand(CommandLineApplication app) =>
-        app.Command("run-file-server", runFileServerCommand =>
+        return command;
+    }
+
+    private static Command CreateRunFileServerCommand()
+    {
+        var command = new Command("run-file-server", "Run an HTTP server that provides a REST API for file operations.");
+
+        var storeOption = new Option<string?>("--store");
+
+        var portOption = new Option<int?>("--port");
+
+        var authPasswordOption = new Option<string?>("--auth-password");
+
+        command.Add(storeOption);
+        command.Add(portOption);
+        command.Add(authPasswordOption);
+
+        command.SetAction((parseResult) =>
         {
-            runFileServerCommand.Description = "Run an HTTP server that provides a REST API for file operations.";
-            runFileServerCommand.UnrecognizedArgumentHandling = UnrecognizedArgumentHandling.Throw;
+            var store = parseResult.GetValue(storeOption);
+            var port = parseResult.GetValue(portOption);
+            var authPassword = parseResult.GetValue(authPasswordOption);
 
-            var storeOption = runFileServerCommand.Option(
-                "--store",
-                "Local directory path to use as the file store. If not present, an in-memory store will be used.",
-                CommandOptionType.MultipleValue);
-
-            var portOption = runFileServerCommand.Option(
-                "--port",
-                "HTTP port for the server. Defaults to 8080.",
-                CommandOptionType.SingleValue);
-
-            var authPasswordOption = runFileServerCommand.Option(
-                "--auth-password",
-                "Password for Basic authentication. If present, all HTTP requests will require authentication.",
-                CommandOptionType.SingleValue);
-
-            runFileServerCommand.OnExecute(() =>
+            // Determine file store
+            IFileStore fileStore;
+            if (store == null)
             {
-                // Validate store option - should be present at most once
-                if (storeOption.Values.Count > 1)
-                {
-                    Console.WriteLine("Error: --store option can only be specified once.");
-                    return 1;
-                }
+                Console.WriteLine("Warning: No --store option specified. Using in-memory store.");
+                fileStore = new FileStoreFromConcurrentDictionary();
+            }
+            else
+            {
+                var absoluteDirectoryPath = Path.GetFullPath(store);
 
-                // Determine file store
-                IFileStore fileStore;
-                if (storeOption.Values.Count is 0)
-                {
-                    Console.WriteLine("Warning: No --store option specified. Using in-memory store.");
-                    fileStore = new FileStoreFromConcurrentDictionary();
-                }
-                else
-                {
-                    var storeDirectoryPath = storeOption.Values[0];
-                    var absoluteDirectoryPath = Path.GetFullPath(storeDirectoryPath);
+                Console.WriteLine($"Using store directory: {store}");
+                Console.WriteLine($"Absolute directory path: {absoluteDirectoryPath}");
 
-                    Console.WriteLine($"Using store directory: {storeDirectoryPath}");
-                    Console.WriteLine($"Absolute directory path: {absoluteDirectoryPath}");
+                // Create directory if it doesn't exist
+                Directory.CreateDirectory(absoluteDirectoryPath);
 
-                    // Create directory if it doesn't exist
-                    Directory.CreateDirectory(absoluteDirectoryPath);
+                // Use common retry options for file operations
+                var retryOptions = new FileStoreFromSystemIOFile.FileStoreRetryOptions(
+                    MaxRetryAttempts: 3,
+                    InitialRetryDelay: TimeSpan.FromMilliseconds(100),
+                    MaxRetryDelay: TimeSpan.FromSeconds(1));
 
-                    // Use common retry options for file operations
-                    var retryOptions = new FileStoreFromSystemIOFile.FileStoreRetryOptions(
-                        MaxRetryAttempts: 3,
-                        InitialRetryDelay: TimeSpan.FromMilliseconds(100),
-                        MaxRetryDelay: TimeSpan.FromSeconds(1));
+                fileStore = new FileStoreFromSystemIOFile(absoluteDirectoryPath, retryOptions);
+            }
 
-                    fileStore = new FileStoreFromSystemIOFile(absoluteDirectoryPath, retryOptions);
-                }
+            // Determine port
+            var actualPort = port ?? 8080;
 
-                // Determine port
-                var port = 8080; // Default port
-                if (portOption.Value() is { } portString)
-                {
-                    if (!int.TryParse(portString, out port) || port < 1 || port > 65535)
-                    {
-                        Console.WriteLine("Error: Invalid port number. Port must be between 1 and 65535.");
-                        return 1;
-                    }
-                }
+            Console.WriteLine($"Starting FileStore HTTP server on port {actualPort}...");
+            if (authPassword != null)
+            {
+                Console.WriteLine("Basic authentication is enabled.");
+            }
 
-                // Determine authentication
-                var authPassword = authPasswordOption.Value();
-
-                Console.WriteLine($"Starting FileStore HTTP server on port {port}...");
-                if (authPassword != null)
-                {
-                    Console.WriteLine("Basic authentication is enabled.");
-                }
-
-                try
-                {
-                    return RunFileStoreHttpServer(fileStore, port, authPassword);
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Failed to start server: {ex.Message}");
-                    return 1;
-                }
-            });
+            try
+            {
+                return RunFileStoreHttpServer(fileStore, actualPort, authPassword);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to start server: {ex.Message}");
+                return 1;
+            }
         });
+
+        return command;
+    }
 
     private static int RunFileStoreHttpServer(IFileStore fileStore, int port, string? authPassword)
     {
@@ -2785,25 +2472,31 @@ public class Program
         return 0;
     }
 
-    private static Func<string?, string?> SitePasswordFromSiteFromOptionOnCommandOrFromSettings(
-        CommandLineApplication cmd, string? siteName = null)
+    private static (Argument<string> siteArgument, Option<string?> passwordOption, Func<ParseResult, string?, string?> getPassword)
+        ProcessSiteArgumentAndPasswordOption(Command cmd, string? siteName = null)
     {
         siteName ??= "site";
 
-        var sitePasswordOption = cmd.Option("--" + siteName + "-password", "Password to access the " + siteName + ".", CommandOptionType.SingleValue);
+        var siteArgument = new Argument<string>("process-site");
 
-        return site => site == null ? null : sitePasswordOption.Value() ?? UserSecrets.LoadPasswordForSite(site);
+        var sitePasswordOption = new Option<string?>(
+            name: "--" + siteName + "-password")
+        {
+            Description = "Password for " + siteName + "."
+        };
+
+        cmd.Add(siteArgument);
+        cmd.Add(sitePasswordOption);
+
+        Func<ParseResult, string?, string?> getPassword = (parseResult, site) =>
+            site == null ? null : (parseResult.GetValue(sitePasswordOption) ?? UserSecrets.LoadPasswordForSite(site));
+
+        return (siteArgument, sitePasswordOption, getPassword);
     }
 
-    private static CommandArgument ProcessSiteArgumentOnCommand(CommandLineApplication cmd) =>
-        cmd
-        .Argument("process-site", "Path to the admin interface of the server running the process.")
-        .IsRequired(allowEmptyStrings: false);
-
-    private static (CommandOption elmEngineOption, Func<ElmEngineType> parseElmEngineTypeFromOption)
-        AddElmEngineOptionOnCommand(
+    private static (Option<string?> elmEngineOption, Func<ElmEngineType> parseElmEngineTypeFromOption)
+        CreateElmEngineOption(
         DynamicPGOShare? dynamicPGOShare,
-        CommandLineApplication cmd,
         string? defaultFromEnvironmentVariablePrefix,
         Func<ElmEngineTypeCLI?, ElmEngineTypeCLI> defaultEngineConsideringEnvironmentVariable)
     {
@@ -2816,17 +2509,479 @@ public class Program
 
         var defaultEngine = defaultEngineConsideringEnvironmentVariable(defaultEngineFromEnvironmentVariable);
 
-        var elmEngineOption =
-            cmd.Option(
-                template: "--elm-engine",
-                description: "Select the engine for running Elm programs (" + string.Join(", ", Enum.GetNames<ElmEngineTypeCLI>()) + "). Defaults to " + defaultEngine,
-                optionType: CommandOptionType.SingleValue,
-                inherited: true);
+        var elmEngineOption = new Option<string?>(
+            name: "--elm-engine" + string.Join(", ", Enum.GetNames<ElmEngineTypeCLI>()) + "). Defaults to " + defaultEngine);
 
         ElmEngineType parseElmEngineTypeFromOption()
         {
             var cliName =
-                elmEngineOption?.Value() switch
+                defaultEngine;  // Simplified for now - would need to get actual option value
+
+            return
+                ParseElmEngineType(
+                    dynamicPGOShare,
+                    cliName);
+        }
+
+        return (elmEngineOption, parseElmEngineTypeFromOption);
+    }
+
+    private static (Option<string?> elmCompilerOption, Func<Pine.IConsole, FileTree> loadElmCompilerFromOption)
+        CreateElmCompilerOption()
+    {
+        var defaultCompiler = ElmCompiler.CompilerSourceFilesDefault.Value;
+
+        var elmCompilerOption = new Option<string?>("--elm-compiler");
+
+        FileTree parseElmCompilerFromOption(Pine.IConsole console)
+        {
+            // Simplified - would need to handle option value
+            return defaultCompiler;
+        }
+
+        return (elmCompilerOption, parseElmCompilerFromOption);
+    }
+
+    private static Command CreateInteractiveCommand(DynamicPGOShare? dynamicPGOShare)
+    {
+        var command = new Command("interactive", "Enter environment for interactive exploration and composition of Elm programs.")
+        {
+            Aliases = { "repl" }
+        };
+
+        // Options
+        var contextAppOption = new Option<string[]>("--context-app")
+        {
+            Description = "Path to an app to use as context. The Elm modules from this app will be available in the interactive environment.",
+            AllowMultipleArgumentsPerToken = true,
+            Arity = ArgumentArity.ZeroOrMore
+        };
+
+        var contextAppModuleNameFilterOption = new Option<string?>("--context-app-module-name-filter")
+        {
+            Description = "Filter on module names to apply on modules loaded via the '--context-app' option."
+        };
+
+        var initStepsOption = new Option<string?>("--init-steps")
+        {
+            Description = "Path to a list of submissions to start the session with."
+        };
+
+        var enableInspectionOption = new Option<bool>("--enable-inspection")
+        {
+            Description = "Display additional information to inspect the implementation."
+        };
+
+        var submitOption = new Option<string[]>("--submit")
+        {
+            Description = "Option to submit a string as if entered during the interactive session.",
+            AllowMultipleArgumentsPerToken = true,
+            Arity = ArgumentArity.ZeroOrMore
+        };
+
+        var saveToFileOption = new Option<string?>("--save-to-file")
+        {
+            Description = "Path to a file to save the session state to, after compiling context app and initial submissions."
+        };
+
+        var (elmCompilerOption, loadElmCompilerFromOption) = CreateElmCompilerOption(command);
+        var (elmEngineOption, parseElmEngineTypeFromOption) = CreateElmEngineOption(
+            dynamicPGOShare: null,
+            command,
+            defaultFromEnvironmentVariablePrefix: "interactive",
+            defaultEngineConsideringEnvironmentVariable: fromEnv => fromEnv ?? IInteractiveSession.DefaultImplementation);
+
+        command.Add(contextAppOption);
+        command.Add(contextAppModuleNameFilterOption);
+        command.Add(initStepsOption);
+        command.Add(enableInspectionOption);
+        command.Add(submitOption);
+        command.Add(saveToFileOption);
+        command.Add(elmCompilerOption);
+        command.Add(elmEngineOption);
+
+        // Test subcommand
+        var testCommand = new Command("test", "Test the interactive automatically with given scenarios and reports timings.");
+
+        var scenarioOption = new Option<string[]>("--scenario")
+        {
+            Description = "Test an interactive scenario from the given path. The scenario specifies the submissions and can also specify expectations.",
+            AllowMultipleArgumentsPerToken = true,
+            Arity = ArgumentArity.ZeroOrMore
+        };
+
+        var scenariosOption = new Option<string[]>("--scenarios")
+        {
+            Description = "Test a list of interactive scenarios from the given directory. Each scenario specifies the submissions and can also specify expectations.",
+            AllowMultipleArgumentsPerToken = true,
+            Arity = ArgumentArity.ZeroOrMore
+        };
+
+        testCommand.Add(scenarioOption);
+        testCommand.Add(scenariosOption);
+
+        testCommand.SetAction((parseResult) =>
+        {
+            var scenarioSources = parseResult.GetValue(scenarioOption) ?? [];
+            var scenariosSources = parseResult.GetValue(scenariosOption) ?? [];
+
+            var console = (Pine.IConsole)StaticConsole.Instance;
+
+            console.WriteLine("Got " + scenarioSources.Length + " source(s) for an individual scenario to load...");
+            console.WriteLine("Got " + scenariosSources.Length + " source(s) for a directory of scenarios to load...");
+
+            var scenarioLoadResults =
+                scenarioSources
+                .ToImmutableDictionary(
+                    scenarioSource => scenarioSource!,
+                    scenarioSource => LoadComposition.LoadFromPathResolvingNetworkDependencies(scenarioSource!).LogToList());
+
+            var scenariosLoadResults =
+                scenariosSources
+                .ToImmutableDictionary(
+                    scenariosSource => scenariosSource!,
+                    scenariosSource => LoadComposition.LoadFromPathResolvingNetworkDependencies(scenariosSource!).LogToList());
+
+            var failedLoads =
+                scenarioLoadResults.Concat(scenariosLoadResults)
+                .Where(r => !r.Value.result.IsOk())
+                .ToImmutableList();
+
+            if (!failedLoads.IsEmpty)
+            {
+                var failedLoad = failedLoads.First();
+
+                console.WriteLine(
+                    string.Join(
+                        "\n",
+                            "Failed to load from " + failedLoad.Key + ":",
+                            string.Join("\n", failedLoad.Value.log),
+                            failedLoad.Value.result.Unpack(fromErr: error => error, fromOk: _ => throw new NotImplementedException())),
+                    color: Pine.IConsole.TextColor.Red);
+
+                return 1;
+            }
+
+            var namedDistinctScenarios =
+                scenarioLoadResults
+                .Select(scenarioLoadResult =>
+                (name: scenarioLoadResult.Key.Split('/', '\\').Last(),
+                component: scenarioLoadResult.Value.result.Extract(error => throw new Exception(error)).tree))
+                .Concat(scenariosLoadResults.SelectMany(scenariosComposition =>
+                {
+                    var asTree =
+                    scenariosComposition.Value.result.Extract(error => throw new Exception(error)).tree switch
+                    {
+                        FileTree.DirectoryNode tree => tree,
+                        _ => null
+                    };
+
+                    if (asTree is null)
+                        return ImmutableList<(string, FileTree)>.Empty;
+
+                    return
+                    asTree.Items
+                    .Where(entry => entry.component is FileTree.DirectoryNode scenarioTree);
+                }))
+                .Select(loadedScenario =>
+                {
+                    var asComposition = FileTreeEncoding.Encode(loadedScenario.component);
+
+                    var hashBase16 = Convert.ToHexStringLower(PineValueHashTree.ComputeHash(asComposition).Span);
+
+                    return new
+                    {
+                        loadedScenario,
+                        asComposition,
+                        hashBase16
+                    };
+                })
+                .DistinctBy(loadedScenario => loadedScenario.hashBase16)
+                .ToImmutableDictionary(
+                    keySelector: scenario => scenario.loadedScenario.name + "-" + scenario.hashBase16[..10],
+                    elementSelector: scenario => scenario);
+
+            var compileElmProgramCodeFiles = loadElmCompilerFromOption(parseResult, console);
+            var elmEngineType = parseElmEngineTypeFromOption(parseResult);
+
+            var aggregateCompositionTree =
+                FileTree.SortedDirectory(
+                    [.. namedDistinctScenarios.Select(scenario => (scenario.Key, scenario.Value.loadedScenario.component))]);
+
+            var parsedScenarios =
+            TestElmInteractive.ParseElmInteractiveScenarios(
+                aggregateCompositionTree,
+                console);
+
+            IInteractiveSession newInteractiveSessionFromAppCode(FileTree? appCodeTree)
+            {
+                return IInteractiveSession.Create(
+                    compilerSourceFiles: compileElmProgramCodeFiles,
+                    appCodeTree: appCodeTree,
+                    elmEngineType);
+            }
+
+            var interactiveConfig = new InteractiveSessionConfig(
+                CompilerId:
+                Convert.ToHexStringLower(PineValueHashTree.ComputeHashSorted(compileElmProgramCodeFiles).Span)[..8],
+                newInteractiveSessionFromAppCode);
+
+            {
+                var warmupStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+                using var session = interactiveConfig.SessionFromAppCode(null);
+
+                session.Submit("1 + 3");
+
+                console.WriteLine(
+                    "Warmup completed in " +
+                    warmupStopwatch.Elapsed.TotalSeconds.ToString("0.##") + " seconds.");
+            }
+
+            var scenariosResults =
+            TestElmInteractive.TestElmInteractiveScenarios(
+                parsedScenarios,
+                interactiveConfig,
+                console: console,
+                asyncLogDelegate: null);
+
+            return 0;
+        });
+
+        command.Add(testCommand);
+
+        // Main interactive command handler
+        command.SetAction((parseResult) =>
+        {
+            var contextAppPaths = parseResult.GetValue(contextAppOption) ?? [];
+            var contextAppModuleNameFilterPattern = parseResult.GetValue(contextAppModuleNameFilterOption);
+            var initStepsPath = parseResult.GetValue(initStepsOption);
+            var enableInspection = parseResult.GetValue(enableInspectionOption);
+            var submitsFromOption = parseResult.GetValue(submitOption) ?? [];
+            var saveToFile = parseResult.GetValue(saveToFileOption);
+
+            var console = (Pine.IConsole)StaticConsole.Instance;
+
+            var compileElmProgramCodeFiles = loadElmCompilerFromOption(parseResult, console);
+            var elmEngineType = parseElmEngineTypeFromOption(parseResult);
+
+            console.WriteLine(
+                "---- Elm Interactive v" + AppVersionId + " ----");
+
+            FileTree loadContextAppCodeTreeFromPath(string contextAppPath)
+            {
+                return
+                LoadComposition.LoadFromPathResolvingNetworkDependencies(contextAppPath)
+                .LogToActions(console.WriteLine)
+                .Map(loaded => loaded.tree)
+                .Unpack(
+                    fromErr: error => throw new Exception("Failed to load from path '" + contextAppPath + "': " + error),
+                    fromOk: tree =>
+                    {
+                        if (!tree.EnumerateFilesTransitive().Take(1).Any())
+                            throw new Exception("Found no files under context app path '" + contextAppPath + "'.");
+
+                        return tree;
+                    });
+            }
+
+            var contextAppCodeTreeBeforeFilter =
+            contextAppPaths.Length == 0
+            ?
+            null
+            :
+            FileTreeExtensions.Union(contextAppPaths.Select(loadContextAppCodeTreeFromPath!));
+
+            var contextAppModuleNameFilterIncluded =
+                contextAppModuleNameFilterPattern is null
+                ?
+                []
+                :
+                contextAppModuleNameFilterPattern
+                .Split(',')
+                .Select(moduleName => moduleName.ToLowerInvariant())
+                .ToImmutableHashSet();
+
+            bool contextAppModuleNameFilter(IReadOnlyList<string> moduleName)
+            {
+                if (contextAppModuleNameFilterPattern is null)
+                    return true;
+
+                var flatModuleName = string.Join('.', moduleName).ToLowerInvariant();
+
+                return contextAppModuleNameFilterIncluded.Contains(flatModuleName);
+            }
+
+            var contextAppCodeTree =
+            contextAppCodeTreeBeforeFilter is null
+            ?
+            null
+            :
+            ElmModule.FilterAppCodeTreeForRootModulesAndDependencies(
+                contextAppCodeTreeBeforeFilter,
+                moduleNameIsRootModule: contextAppModuleNameFilter);
+
+            var initStepsSubmission =
+            initStepsPath switch
+            {
+                null =>
+                [],
+
+                not null =>
+                LoadComposition.LoadFromPathResolvingNetworkDependencies(initStepsPath)
+                .LogToActions(console.WriteLine)
+                .Map(loaded => loaded.tree)
+                .Unpack(
+                    fromErr: error => throw new Exception("Failed to load from path '" + initStepsPath + "': " + error),
+                    fromOk: treeNode =>
+                    {
+                        if (!treeNode.EnumerateFilesTransitive().Take(1).Any())
+                            throw new Exception("Found no files under context app path '" + initStepsPath + "'.");
+
+                        return
+                        treeNode
+                        .Map(
+                            fromFile: _ => throw new Exception("Unexpected blob"),
+                            fromDirectory: tree =>
+                            tree.Select(stepDirectory =>
+                            TestElmInteractive.ParseScenarioStep(stepDirectory.itemValue)
+                            .Extract(fromErr: error => throw new Exception(error)).Submission))
+                            .ToImmutableList();
+                    })
+            };
+
+            using var interactiveSession = IInteractiveSession.Create(
+                compilerSourceFiles: compileElmProgramCodeFiles,
+                appCodeTree: contextAppCodeTree,
+                engineType: elmEngineType);
+
+            string? processSubmission(string submission)
+            {
+                if (!(0 < submission?.Trim()?.Length))
+                    return null;
+
+                var evalStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+                var evalResult = interactiveSession.Submit(submission);
+
+                evalStopwatch.Stop();
+
+                return
+                evalResult
+                .Unpack(
+                    fromErr: error =>
+                    {
+                        console.WriteLine("Failed to evaluate: " + error);
+                        return submission;
+                    },
+                    fromOk: evalOk =>
+                    {
+                        if (enableInspection)
+                        {
+                            console.WriteLine(
+                                "Processing this submission took " +
+                                CommandLineInterface.FormatIntegerForDisplay(evalStopwatch.ElapsedMilliseconds) + " ms.");
+
+                            console.WriteLine(
+                                "Inspection log has " + (evalOk.InspectionLog?.Count ?? 0) + " entries:\n" +
+                                string.Join("\n", evalOk.InspectionLog.EmptyIfNull()));
+                        }
+
+                        console.WriteLine(evalOk.InteractiveResponse.DisplayText);
+
+                        return submission;
+                    });
+            }
+
+            var promptPrefix = "> ";
+
+            var allSubmissionsFromArguments =
+            initStepsSubmission
+            .Concat(submitsFromOption.EmptyIfNull()).WhereNotNull()
+            .ToImmutableList();
+
+            if (0 < allSubmissionsFromArguments.Count)
+            {
+                console.WriteLine(allSubmissionsFromArguments.Count + " initial submission(s) from arguments in total...");
+            }
+
+            foreach (var submission in allSubmissionsFromArguments)
+            {
+                console.WriteLine(promptPrefix + submission);
+
+                processSubmission(submission);
+            }
+
+            if (saveToFile is not null)
+            {
+                console.WriteLine("Got option to save session state to " + saveToFile + "...");
+
+                if (interactiveSession is not InteractiveSessionPine pineSession)
+                {
+                    console.WriteLine("Cannot save session state for this engine type: " + interactiveSession.GetType().Name);
+                }
+                else
+                {
+                    var sessionState = pineSession.CurrentEnvironmentValue();
+
+                    var (environmentJson, _) =
+                    ElmInteractive.ElmInteractive.FromPineValueBuildingDictionary(
+                        sessionState,
+                        ElmInteractive.ElmInteractive.CompilationCache.Empty);
+
+                    var environmentJsonString =
+                        System.Text.Json.JsonSerializer.Serialize(environmentJson.json,
+                            options: ElmInteractive.ElmInteractive.compilerInterfaceJsonSerializerOptions);
+
+                    File.WriteAllText(saveToFile, environmentJsonString);
+
+                    console.WriteLine(
+                        "Saved session state to " + saveToFile + ", as JSON with total length of " +
+                        environmentJsonString.Length);
+                }
+
+                return 0;
+            }
+
+            ReadLine.HistoryEnabled = true;
+
+            while (true)
+            {
+                var submission = ReadLine.Read(promptPrefix);
+
+                processSubmission(submission);
+            }
+        });
+
+        return command;
+    }
+
+    private static (Option<string?> elmEngineOption, Func<ParseResult, ElmEngineType> parseElmEngineTypeFromOption)
+        CreateElmEngineOption(
+        DynamicPGOShare? dynamicPGOShare,
+        Command cmd,
+        string? defaultFromEnvironmentVariablePrefix,
+        Func<ElmEngineTypeCLI?, ElmEngineTypeCLI> defaultEngineConsideringEnvironmentVariable)
+    {
+        var defaultEngineFromEnvironmentVariable =
+            defaultFromEnvironmentVariablePrefix switch
+            {
+                { } variablePrefix => ElmEngineFromEnvironmentVariableWithPrefix(variablePrefix),
+                null => null
+            };
+
+        var defaultEngine = defaultEngineConsideringEnvironmentVariable(defaultEngineFromEnvironmentVariable);
+
+        var elmEngineOption = new Option<string?>("--elm-engine")
+        {
+            Description = "Select the engine for running Elm programs (" + string.Join(", ", Enum.GetNames<ElmEngineTypeCLI>()) + "). Defaults to " + defaultEngine,
+            Arity = ArgumentArity.ZeroOrOne
+        };
+
+        ElmEngineType parseElmEngineTypeFromOption(ParseResult parseResult)
+        {
+            var cliName =
+                parseResult.GetValue(elmEngineOption) switch
                 {
                     { } asString => Enum.Parse<ElmEngineTypeCLI>(asString, ignoreCase: true),
                     null => defaultEngine,
@@ -2841,21 +2996,20 @@ public class Program
         return (elmEngineOption, parseElmEngineTypeFromOption);
     }
 
-    private static (CommandOption elmCompilerOption, Func<Pine.IConsole, FileTree> loadElmCompilerFromOption)
-        AddElmCompilerOptionOnCommand(CommandLineApplication cmd)
+    private static (Option<string?> elmCompilerOption, Func<ParseResult, Pine.IConsole, FileTree> loadElmCompilerFromOption)
+        CreateElmCompilerOption(Command cmd)
     {
         var defaultCompiler = ElmCompiler.CompilerSourceFilesDefault.Value;
 
-        var elmCompilerOption =
-            cmd.Option(
-                template: "--elm-compiler",
-                description: "Select a program for compiling Elm programs. Defaults to the version integrated with Pine.",
-                optionType: CommandOptionType.SingleValue,
-                inherited: true);
-
-        FileTree parseElmCompilerFromOption(Pine.IConsole console)
+        var elmCompilerOption = new Option<string?>("--elm-compiler")
         {
-            if (elmCompilerOption?.Value() is { } compilerAsString)
+            Description = "Select a program for compiling Elm programs. Defaults to the version integrated with Pine.",
+            Arity = ArgumentArity.ZeroOrOne
+        };
+
+        FileTree parseElmCompilerFromOption(ParseResult parseResult, Pine.IConsole console)
+        {
+            if (parseResult.GetValue(elmCompilerOption) is { } compilerAsString)
             {
                 console.WriteLine("Loading Elm compiler from " + compilerAsString);
 
