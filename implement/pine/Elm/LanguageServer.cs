@@ -430,6 +430,12 @@ public class LanguageServer(
             "Workspace_didChangeWatchedFiles: " + changes.Count + " changes: " +
             string.Join(", ", changes.Select(change => change.Uri)));
 
+        // Process file changes asynchronously to avoid blocking the RPC thread
+        System.Threading.Tasks.Task.Run(() => ProcessFileChangesAsync(changes));
+    }
+
+    private void ProcessFileChangesAsync(IReadOnlyList<FileEvent> changes)
+    {
         if (_languageServiceStateTask is not { } languageServiceStateTask)
         {
             Log("Error processing file changes: language service state not initialized");
