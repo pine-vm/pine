@@ -136,6 +136,40 @@ public class FormatCompleteTests
     }
 
     [Fact]
+    public void Linebreak_between_case_of_branch()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl a b c =
+                case a of
+                    Just x ->
+                        b + x            
+                    Nothing ->
+                        c
+            """";
+
+        var formatted = FormatString(input);
+
+        formatted.Trim().Should().Be(
+            """"
+            module Test exposing (..)
+
+
+            decl a b c =
+                case a of
+                    Just x ->
+                        b + x
+
+                    Nothing ->
+                        c
+            """"
+            .Trim());
+    }
+
+    [Fact]
     public void Stable_configurations()
     {
         /*
