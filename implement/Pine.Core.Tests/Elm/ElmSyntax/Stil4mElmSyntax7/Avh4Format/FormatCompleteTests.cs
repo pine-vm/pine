@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Pine.Core.Elm.ElmSyntax;
 using Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 using System;
+using System.Collections.Generic;
 using Xunit;
 
 namespace Pine.Core.Tests.Elm.ElmSyntax.Stil4mElmSyntax7.Avh4Format;
@@ -50,5 +51,89 @@ public class FormatCompleteTests
             module Test exposing (..)
             """"
             .Trim());
+    }
+
+    [Fact]
+    public void Simple_declaration()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl = 42
+            """";
+
+        var formatted = FormatString(input);
+
+        formatted.Trim().Should().Be(
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                42
+            """"
+            .Trim());
+    }
+
+    [Fact]
+    public void Stable_configurations()
+    {
+        /*
+         * Set of module texts that are already formatted according to Avh4 style.
+         * Therefore, formatting them again should yield the same text.
+         * */
+
+        IReadOnlyList<string> testCases =
+            [
+            """"
+            module Test exposing (..)
+
+
+            decl a b c =
+                a b c
+
+            """",
+
+            """"
+            module Test exposing (..)
+
+
+            decl a b c =
+                a
+                    b
+                    c
+            """",
+
+            """"
+            module Test exposing (..)
+
+
+            decl a b c =
+                [ a, b, c ]
+
+            """",
+
+            """"
+            module Test exposing (..)
+
+
+            decl a b c =
+                [ a
+                , b
+                , c
+                ]
+            """",
+            ];
+
+        for (var i = 0; i < testCases.Count; i++)
+        {
+            var input = testCases[i];
+
+            var formatted = FormatString(input);
+
+            formatted.Trim().Should().Be(input.Trim(), $"Test case index: {i}");
+        }
     }
 }
