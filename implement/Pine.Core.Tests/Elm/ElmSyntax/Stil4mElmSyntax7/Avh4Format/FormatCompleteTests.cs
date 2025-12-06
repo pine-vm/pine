@@ -125,6 +125,29 @@ public class FormatCompleteTests
                 , c
                 ]
             """",
+
+            """"
+            module Test exposing (..)
+
+
+            decl : Int -> Int -> Int -> List Int
+            decl a b c =
+                []
+
+            """",
+
+            """"
+            module Test exposing (..)
+
+
+            decl :
+                Int
+                -> Int
+                -> Int
+                -> List Int
+            decl a b c =
+                []
+            """",
             ];
 
         for (var i = 0; i < testCases.Count; i++)
