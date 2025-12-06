@@ -78,6 +78,32 @@ public class FormatCompleteTests
     }
 
     [Fact]
+    public void Trim_whitespace_in_empty_list()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                [
+                ]
+            """";
+
+        var formatted = FormatString(input);
+
+        formatted.Trim().Should().Be(
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                []
+            """"
+            .Trim());
+    }
+
+    [Fact]
     public void Stable_configurations()
     {
         /*
