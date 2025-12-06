@@ -3,18 +3,13 @@ using System.Linq;
 
 namespace Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 
+/// <summary>
+/// Format Elm syntax trees following the style of https://github.com/avh4/elm-format
+/// </summary>
 public class Avh4Format
 {
-    /// <summary>
-    /// Format an Elm file to canonical format by stripping location information.
-    /// When rendered with location-preserving renderer, this will produce canonical spacing.
-    /// </summary>
     public static File Format(File file)
     {
-        // Strip all location information from the AST so that the location-preserving
-        // renderer will use canonical spacing (1 space for untracked elements, etc.)
-        // instead of preserving the original source locations with extra whitespace.
-
         var defaultRange = new Range(
             Start: new Location(Row: 1, Column: 1),
             End: new Location(Row: 1, Column: 1));
