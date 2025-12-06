@@ -104,6 +104,38 @@ public class FormatCompleteTests
     }
 
     [Fact]
+    public void Linebreak_between_then_and_else()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl a b c =
+                if a < b then
+                    c + 1            
+                else
+                    c - 1
+            """";
+
+        var formatted = FormatString(input);
+
+        formatted.Trim().Should().Be(
+            """"
+            module Test exposing (..)
+
+
+            decl a b c =
+                if a < b then
+                    c + 1
+
+                else
+                    c - 1
+            """"
+            .Trim());
+    }
+
+    [Fact]
     public void Stable_configurations()
     {
         /*
