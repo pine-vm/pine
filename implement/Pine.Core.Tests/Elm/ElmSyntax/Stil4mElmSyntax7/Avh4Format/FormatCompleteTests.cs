@@ -204,6 +204,33 @@ public class FormatCompleteTests
     }
 
     [Fact]
+    public void Spaces_between_infix_operators()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl a b c =
+                a+b*c
+
+            """";
+
+        var formatted = FormatString(input);
+
+        formatted.Trim().Should().Be(
+            """"
+            module Test exposing (..)
+
+
+            decl a b c =
+                a + b * c
+
+            """"
+            .Trim());
+    }
+
+    [Fact]
     public void Stable_configurations()
     {
         /*
