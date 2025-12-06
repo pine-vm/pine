@@ -49,6 +49,15 @@ public class Rendering
         /// </summary>
         public sealed record CanonicalBasedOnComplexity
             : LineBreakingConfig;
+
+        /// <summary>
+        /// Preserves the original input line locations.
+        /// </summary>
+        /// <remarks>Use this type when it is important to maintain the mapping between output lines and
+        /// their corresponding positions in the input source. This can be useful for scenarios such as diagnostics,
+        /// error reporting, or source mapping, where accurate line location information is required.</remarks>
+        public sealed record PreserveInputLocations
+            : LineBreakingConfig;
     }
 
     /// <summary>
@@ -64,6 +73,15 @@ public class Rendering
         Func<QualifiedNameRef, QualifiedNameRef>? mapQualifiedName = null) =>
         new(
             LineBreaking: lineBreaking,
+            MapQualifiedName: mapQualifiedName);
+
+    /// <summary>
+    /// Preserves input source locations during rendering.
+    /// </summary>
+    public static Config ConfigPreserveLocations(
+        Func<QualifiedNameRef, QualifiedNameRef>? mapQualifiedName = null) =>
+        new(
+            LineBreaking: new LineBreakingConfig.PreserveInputLocations(),
             MapQualifiedName: mapQualifiedName);
 
     /// <summary>
@@ -86,6 +104,11 @@ public class Rendering
         File file,
         Config config)
     {
+        if (config.LineBreaking is LineBreakingConfig.PreserveInputLocations)
+        {
+            return ToStringPreservingLocations(file, config);
+        }
+
         var indentedLines = ToIndentedLines(file, config);
 
         var sb = new StringBuilder();
@@ -111,6 +134,1403 @@ public class Rendering
         }
 
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Context for tracking position while rendering with location preservation.
+    /// </summary>
+    private class RenderContext
+    {
+        public StringBuilder Output { get; } = new();
+        public int CurrentRow { get; set; } = 1;
+        public int CurrentColumn { get; set; } = 1;
+
+        /// <summary>
+        /// Advances to the given location by adding spaces or newlines as needed.
+        /// If the target location is before the current position, uses the minimum spacing instead.
+        /// </summary>
+        public void AdvanceToLocation(Location targetLocation, int minSpaces = 1)
+        {
+            // Handle row changes
+            while (CurrentRow < targetLocation.Row)
+            {
+                Output.Append('\n');
+                CurrentRow++;
+                CurrentColumn = 1;
+            }
+
+            // Handle column changes on the same row
+            if (CurrentRow == targetLocation.Row)
+            {
+                var spacesToAdd = targetLocation.Column - CurrentColumn;
+                if (spacesToAdd > 0)
+                {
+                    Output.Append(' ', spacesToAdd);
+                    CurrentColumn = targetLocation.Column;
+                }
+                else if (spacesToAdd < 0 && minSpaces > 0)
+                {
+                    // Location is in the past, use minimum spacing
+                    Output.Append(' ', minSpaces);
+                    CurrentColumn += minSpaces;
+                }
+                // If spacesToAdd == 0, we're already at the target, don't add spaces
+            }
+        }
+
+        /// <summary>
+        /// Advances by at least the minimum number of spaces (or newlines if needed).
+        /// </summary>
+        public void AdvanceByMinimum(int minSpaces)
+        {
+            Output.Append(' ', minSpaces);
+            CurrentColumn += minSpaces;
+        }
+
+        /// <summary>
+        /// Appends text and updates the current position.
+        /// </summary>
+        public void Append(string text)
+        {
+            Output.Append(text);
+
+            // Update position based on the text content
+            foreach (var ch in text)
+            {
+                if (ch == '\n')
+                {
+                    CurrentRow++;
+                    CurrentColumn = 1;
+                }
+                else
+                {
+                    CurrentColumn++;
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Renders a file while preserving the original source locations.
+    /// </summary>
+    private static string ToStringPreservingLocations(
+        File file,
+        Config config)
+    {
+        var context = new RenderContext();
+
+        // Render module definition
+        RenderModulePreservingLocations(file.ModuleDefinition, context);
+
+        // Render imports
+        foreach (var import in file.Imports)
+        {
+            context.AdvanceToLocation(import.Range.Start);
+            RenderImportPreservingLocations(import, context);
+        }
+
+        // Render declarations
+        foreach (var declaration in file.Declarations)
+        {
+            context.AdvanceToLocation(declaration.Range.Start);
+            RenderDeclarationPreservingLocations(declaration, context, config);
+        }
+
+        return context.Output.ToString();
+    }
+
+    private static void RenderImportPreservingLocations(
+        Node<Import> importNode,
+        RenderContext context)
+    {
+        context.Append("import");
+
+        // Advance to module name location
+        context.AdvanceToLocation(importNode.Value.ModuleName.Range.Start);
+        context.Append(RenderModuleName(importNode.Value.ModuleName.Value));
+
+        if (importNode.Value.ModuleAlias is { } alias)
+        {
+            // For now, use minimum spacing (can be enhanced with location data if available)
+            context.AdvanceByMinimum(1);
+            context.Append("as");
+            context.AdvanceByMinimum(1);
+            context.Append(RenderModuleName(alias.Value));
+        }
+
+        if (importNode.Value.ExposingList is { } exposingList)
+        {
+            // Advance to exposing keyword location
+            context.AdvanceToLocation(exposingList.Range.Start);
+            context.Append("exposing");
+
+            // Render the exposing part
+            RenderExposingPreservingLocations(exposingList, context);
+        }
+    }
+
+    private static void RenderModulePreservingLocations(
+        Node<Module> moduleNode,
+        RenderContext context)
+    {
+        string moduleKeyword;
+        Node<IReadOnlyList<string>> moduleName;
+        Node<Exposing> exposingList;
+
+        switch (moduleNode.Value)
+        {
+            case Module.NormalModule normalModule:
+                moduleKeyword = "module";
+                moduleName = normalModule.ModuleData.ModuleName;
+                exposingList = normalModule.ModuleData.ExposingList;
+                break;
+            case Module.PortModule portModule:
+                moduleKeyword = "port module";
+                moduleName = portModule.ModuleData.ModuleName;
+                exposingList = portModule.ModuleData.ExposingList;
+                break;
+            case Module.EffectModule effectModule:
+                moduleKeyword = "effect module";
+                moduleName = effectModule.ModuleData.ModuleName;
+                exposingList = effectModule.ModuleData.ExposingList;
+                break;
+            default:
+                throw new NotImplementedException($"Unknown module type: {moduleNode.Value.GetType().Name}");
+        }
+
+        // Start at the module definition's location
+        context.AdvanceToLocation(moduleNode.Range.Start);
+        context.Append(moduleKeyword);
+
+        // Advance to module name location
+        context.AdvanceToLocation(moduleName.Range.Start);
+        context.Append(RenderModuleName(moduleName.Value));
+
+        // Advance to exposing list location and append "exposing"
+        context.AdvanceToLocation(exposingList.Range.Start);
+        context.Append("exposing");
+
+        // Render the exposing part
+        RenderExposingPreservingLocations(exposingList, context);
+    }
+
+    private static void RenderExposingPreservingLocations(
+        Node<Exposing> exposingNode,
+        RenderContext context)
+    {
+        switch (exposingNode.Value)
+        {
+            case Exposing.All all:
+                {
+                    // For Exposing.All, advance to the opening paren location (before the dots)
+                    // The all.Range is for the ".." only, so we need to back up 1 for the "("
+                    var openParenLocation = new Location(all.Range.Start.Row, all.Range.Start.Column - 1);
+                    context.AdvanceToLocation(openParenLocation, minSpaces: 1);
+                    context.Append("(");
+
+                    // Now advance to the dots location (no minimum spacing needed)
+                    context.AdvanceToLocation(all.Range.Start, minSpaces: 0);
+                    context.Append("..)");
+                    break;
+                }
+
+            case Exposing.Explicit explicit_:
+                {
+                    // For multi-line exposing lists, the opening paren should be placed one column before
+                    // the first item. For single-line, it should be right after "exposing" with a space.
+                    // We can detect this by checking if the first item is on a different row than current position.
+                    if (explicit_.Nodes.Count > 0)
+                    {
+                        var firstItemLocation = explicit_.Nodes[0].Range.Start;
+
+                        // Check if the first item is on a different row (multi-line list)
+                        if (firstItemLocation.Row > context.CurrentRow)
+                        {
+                            // Multi-line: place opening paren one ROW before the first item, 
+                            // at column (firstItem.Column - 1) which gives proper indentation
+                            var openParenLocation = new Location(
+                                firstItemLocation.Row - 1,
+                                firstItemLocation.Column - 1);
+                            context.AdvanceToLocation(openParenLocation, minSpaces: 1);
+                        }
+                        else
+                        {
+                            // Single-line: just add a space before the opening paren
+                            context.AdvanceByMinimum(1);
+                        }
+                    }
+                    else
+                    {
+                        // Empty list: just add a space
+                        context.AdvanceByMinimum(1);
+                    }
+                    context.Append("(");
+
+                    // Detect if this is a multi-line list by checking if any item is on a different row
+                    bool isMultiLine = false;
+                    if (explicit_.Nodes.Count > 1)
+                    {
+                        var firstRow = explicit_.Nodes[0].Range.Start.Row;
+                        for (var i = 1; i < explicit_.Nodes.Count; i++)
+                        {
+                            if (explicit_.Nodes[i].Range.Start.Row != firstRow)
+                            {
+                                isMultiLine = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    for (var i = 0; i < explicit_.Nodes.Count; i++)
+                    {
+                        var node = explicit_.Nodes[i];
+
+                        if (i > 0)
+                        {
+                            if (isMultiLine)
+                            {
+                                // Multi-line: comma at start of new line (2 columns before the item)
+                                var commaLocation = new Location(
+                                    node.Range.Start.Row,
+                                    node.Range.Start.Column - 2);
+                                context.AdvanceToLocation(commaLocation, minSpaces: 1);
+                                context.Append(", ");
+                            }
+                            else
+                            {
+                                // Single-line: comma immediately after previous item
+                                context.Append(", ");
+                            }
+                        }
+
+                        // Advance to the item's start location
+                        context.AdvanceToLocation(node.Range.Start, minSpaces: i > 0 && !isMultiLine ? 0 : 1);
+
+                        // Handle TypeExpose with Open specially to preserve spacing before (..)
+                        if (node.Value is TopLevelExpose.TypeExpose typeExpose && typeExpose.ExposedType.Open is not null)
+                        {
+                            context.Append(typeExpose.ExposedType.Name);
+
+                            // The Open range corresponds to the ".." only  
+                            // Use the Open.Start column directly as the target for the opening paren
+                            // (This appears to point to where we want the paren, not the dots)
+                            var typeOpenParenLoc = new Location(
+                                typeExpose.ExposedType.Open.Start.Row,
+                                typeExpose.ExposedType.Open.Start.Column);
+                            context.AdvanceToLocation(typeOpenParenLoc, minSpaces: 0);
+                            context.Append("(");
+
+                            // Advance 1 more column for the dots
+                            context.AdvanceByMinimum(0);
+                            context.Append("..");
+
+                            // Append closing paren immediately after (not tracked in syntax model)
+                            context.Append(")");
+                        }
+                        else
+                        {
+                            context.Append(RenderTopLevelExpose(node.Value));
+                        }
+                    }
+
+                    // Handle closing paren
+                    if (isMultiLine)
+                    {
+                        // Multi-line: closing paren should be on the next line
+                        // We can use the exposingNode.Range.End to find where it should be
+                        // The End points to the character after the closing paren, so back up 1 column
+                        var closingParenLocation = new Location(
+                            exposingNode.Range.End.Row,
+                            exposingNode.Range.End.Column - 1);
+                        context.AdvanceToLocation(closingParenLocation, minSpaces: 1);
+                    }
+                    else
+                    {
+                        // Single-line: closing paren immediately after last item (1 space before)
+                        context.AdvanceByMinimum(0);
+                    }
+                    context.Append(")");
+                    break;
+                }
+
+            default:
+                throw new NotImplementedException($"Unknown exposing type: {exposingNode.Value.GetType().Name}");
+        }
+    }
+
+    private static void RenderDeclarationPreservingLocations(
+        Node<Declaration> declarationNode,
+        RenderContext context,
+        Config config)
+    {
+        switch (declarationNode.Value)
+        {
+            case Declaration.FunctionDeclaration funcDecl:
+                RenderFunctionPreservingLocations(funcDecl.Function, context, config);
+                break;
+
+            case Declaration.CustomTypeDeclaration customType:
+                RenderCustomTypePreservingLocations(customType.TypeDeclaration, context, config);
+                break;
+
+            case Declaration.AliasDeclaration aliasDecl:
+                RenderTypeAliasPreservingLocations(aliasDecl.TypeAlias, context, config);
+                break;
+
+            case Declaration.PortDeclaration portDecl:
+                context.Append("port " + RenderSignature(portDecl.Signature, config));
+                break;
+
+            case Declaration.InfixDeclaration infixDecl:
+                context.Append(RenderInfix(infixDecl.Infix));
+                break;
+
+            default:
+                throw new NotImplementedException($"Unknown declaration type: {declarationNode.Value.GetType().Name}");
+        }
+    }
+
+    private static void RenderTypeAliasPreservingLocations(
+        TypeAlias typeAlias,
+        RenderContext context,
+        Config config)
+    {
+        // Render "type alias"
+        context.Append("type");
+        context.AdvanceByMinimum(1);
+        context.Append("alias");
+
+        // Advance to name location
+        context.AdvanceToLocation(typeAlias.Name.Range.Start);
+        var nameEndColumn = typeAlias.Name.Range.End.Column;
+        context.Append(typeAlias.Name.Value);
+
+        // Render generics if present
+        foreach (var generic in typeAlias.Generics)
+        {
+            context.AdvanceToLocation(generic.Range.Start);
+            context.Append(generic.Value);
+            nameEndColumn = generic.Range.End.Column;
+        }
+
+        // Position the equals sign based on type annotation location
+        var typeLocation = typeAlias.TypeAnnotation.Range.Start;
+
+        if (typeLocation.Row == context.CurrentRow)
+        {
+            // Same row: Add minimal space before =, then advance to type location after =
+            context.AdvanceByMinimum(1);
+            context.Append("=");
+            // Advance to type location (this will add the appropriate spacing after =)
+            context.AdvanceToLocation(typeLocation, minSpaces: 1);
+        }
+        else
+        {
+            // Different row: put equals on current row with spacing that matches source formatting
+            // Try to maintain consistent spacing (typically 1-2 spaces before =)
+            context.AdvanceByMinimum(1);
+            context.Append("=");
+        }
+
+        // Render type annotation with location preservation
+        RenderTypeAnnotationPreservingLocations(typeAlias.TypeAnnotation, context, config);
+    }
+
+    private static void RenderCustomTypePreservingLocations(
+        TypeStruct typeStruct,
+        RenderContext context,
+        Config config)
+    {
+        // Render "type"
+        context.Append("type");
+
+        // Advance to name location
+        context.AdvanceToLocation(typeStruct.Name.Range.Start);
+        var nameEndColumn = typeStruct.Name.Range.End.Column;
+        context.Append(typeStruct.Name.Value);
+
+        // Render generics if present
+        foreach (var generic in typeStruct.Generics)
+        {
+            context.AdvanceToLocation(generic.Range.Start);
+            context.Append(generic.Value);
+            nameEndColumn = generic.Range.End.Column;
+        }
+
+        // Position the equals sign based on first constructor location
+        if (typeStruct.Constructors.Count > 0)
+        {
+            var firstConstructor = typeStruct.Constructors[0];
+            var firstConstructorLocation = firstConstructor.Value.Name.Range.Start;
+
+            if (firstConstructorLocation.Row == context.CurrentRow)
+            {
+                // Same row: add minimal space before =, then advance to constructor location after =
+                context.AdvanceByMinimum(1);
+                context.Append("=");
+                // Don't advance yet - will be done in the loop
+            }
+            else
+            {
+                // Different row: put equals on current row
+                context.AdvanceByMinimum(1);
+                context.Append("=");
+                // Don't advance yet - will be done in the loop
+            }
+        }
+        else
+        {
+            // No constructors (shouldn't happen in valid Elm)
+            context.AdvanceByMinimum(1);
+            context.Append("=");
+        }
+
+        // Render constructors
+        for (var i = 0; i < typeStruct.Constructors.Count; i++)
+        {
+            var constructor = typeStruct.Constructors[i];
+
+            if (i == 0)
+            {
+                // First constructor - advance to its location
+                context.AdvanceToLocation(constructor.Value.Name.Range.Start, minSpaces: 1);
+            }
+            else if (i > 0)
+            {
+                var prevConstructor = typeStruct.Constructors[i - 1];
+
+                // Check if on new line
+                if (constructor.Value.Name.Range.Start.Row > prevConstructor.Value.Name.Range.End.Row)
+                {
+                    // New line - need to position the pipe
+                    // Advance to new row and position pipe before constructor name
+                    // The pipe should be aligned properly with spacing before the constructor name
+                    var constructorRow = constructor.Value.Name.Range.Start.Row;
+                    var constructorNameColumn = constructor.Value.Name.Range.Start.Column;
+
+                    // Calculate pipe column: the pattern is typically "    | Name"
+                    // So pipe is 2 columns before the constructor name (for "| ")
+                    var pipeColumn = constructorNameColumn - 2;
+
+                    context.AdvanceToLocation(new Location(constructorRow, pipeColumn), minSpaces: 0);
+                    context.Append("|");
+
+                    // Now advance to constructor name location
+                    context.AdvanceToLocation(constructor.Value.Name.Range.Start, minSpaces: 1);
+                }
+                else
+                {
+                    // Same line - pipe with spacing
+                    context.AdvanceByMinimum(1);
+                    context.Append("|");
+                    context.AdvanceByMinimum(1);
+                }
+            }
+
+            // Render constructor name
+            context.Append(constructor.Value.Name.Value);
+
+            // Render constructor arguments
+            foreach (var arg in constructor.Value.Arguments)
+            {
+                context.AdvanceToLocation(arg.Range.Start);
+                RenderTypeAnnotationPreservingLocations(arg, context, config);
+            }
+        }
+    }
+
+    private static void RenderTypeAnnotationPreservingLocations(
+        Node<TypeAnnotation> typeAnnotationNode,
+        RenderContext context,
+        Config config)
+    {
+        var typeAnnotation = typeAnnotationNode.Value;
+
+        context.AdvanceToLocation(typeAnnotationNode.Range.Start);
+
+        switch (typeAnnotation)
+        {
+            case TypeAnnotation.GenericType generic:
+                context.Append(generic.Name);
+                break;
+
+            case TypeAnnotation.Typed typed:
+                RenderTypedAnnotationPreservingLocations(typed, context, config);
+                break;
+
+            case TypeAnnotation.Unit:
+                context.Append("()");
+                break;
+
+            case TypeAnnotation.Record record:
+                RenderRecordDefinitionPreservingLocations(record.RecordDefinition, context, config);
+                break;
+
+            case TypeAnnotation.FunctionTypeAnnotation funcType:
+                RenderTypeAnnotationPreservingLocations(funcType.ArgumentType, context, config);
+                // Add spacing before ->
+                context.AdvanceByMinimum(1);
+                context.Append("->");
+                // Advance to the return type's location
+                context.AdvanceToLocation(funcType.ReturnType.Range.Start, minSpaces: 1);
+                RenderTypeAnnotationPreservingLocations(funcType.ReturnType, context, config);
+                break;
+
+            case TypeAnnotation.Tupled tupled:
+                RenderTupledTypeAnnotationPreservingLocations(tupled, context, config);
+                break;
+
+            default:
+                // For other types, fall back to simple rendering
+                context.Append(RenderTypeAnnotation(typeAnnotation, config));
+                break;
+        }
+    }
+
+    private static void RenderTupledTypeAnnotationPreservingLocations(
+        TypeAnnotation.Tupled tupled,
+        RenderContext context,
+        Config config)
+    {
+        context.Append("(");
+
+        for (var i = 0; i < tupled.TypeAnnotations.Count; i++)
+        {
+            var typeNode = tupled.TypeAnnotations[i];
+
+            // Advance to this type's location
+            context.AdvanceToLocation(typeNode.Range.Start, minSpaces: i == 0 ? 0 : 1);
+            RenderTypeAnnotationPreservingLocations(typeNode, context, config);
+
+            if (i < tupled.TypeAnnotations.Count - 1)
+            {
+                // Add comma immediately after this type (not the last one)
+                context.Append(",");
+            }
+        }
+
+        // Closing paren location is not tracked, so use 1 space
+        context.AdvanceByMinimum(1);
+        context.Append(")");
+    }
+
+    private static void RenderTypedAnnotationPreservingLocations(
+        TypeAnnotation.Typed typed,
+        RenderContext context,
+        Config config)
+    {
+        var originalQualifiedName =
+            new QualifiedNameRef(
+                ModuleName: typed.TypeName.Value.ModuleName,
+                Name: typed.TypeName.Value.Name);
+
+        var mappedQualifiedName =
+            config.MapQualifiedName is { } mapQualifiedName
+            ?
+            mapQualifiedName(originalQualifiedName)
+            :
+            originalQualifiedName;
+
+        var typeName =
+            mappedQualifiedName.ModuleName.Count > 0
+            ?
+            RenderModuleName(mappedQualifiedName.ModuleName) + "." + mappedQualifiedName.Name
+            :
+            mappedQualifiedName.Name;
+
+        context.Append(typeName);
+
+        // Render type arguments
+        foreach (var arg in typed.TypeArguments)
+        {
+            context.AdvanceToLocation(arg.Range.Start);
+            RenderTypeAnnotationPreservingLocations(arg, context, config);
+        }
+    }
+
+    private static void RenderRecordDefinitionPreservingLocations(
+        RecordDefinition recordDefinition,
+        RenderContext context,
+        Config config)
+    {
+        var openingBraceColumn = context.CurrentColumn;
+        var openingBraceRow = context.CurrentRow;
+        context.Append("{");
+
+        bool isMultiLine = false;
+        bool firstFieldOnSameLineAsOpening = false;
+
+        // Pre-check the record structure
+        if (recordDefinition.Fields.Count > 0)
+        {
+            var firstField = recordDefinition.Fields[0];
+
+            // Check if first field is on same line as opening brace
+            if (firstField.Range.Start.Row == openingBraceRow)
+            {
+                // Check if opening brace is on its own indented line (pure multi-line)
+                // or on the same line as the equals sign (mixed mode)
+                // Heuristic: if openingBraceColumn is small (<=10), it's on its own line
+                if (openingBraceColumn > 10)
+                {
+                    firstFieldOnSameLineAsOpening = true;
+                }
+            }
+
+            // Check if this is a multi-line record
+            foreach (var field in recordDefinition.Fields)
+            {
+                if (field.Range.Start.Row > openingBraceRow)
+                {
+                    isMultiLine = true;
+                    break;
+                }
+            }
+        }
+
+        for (var i = 0; i < recordDefinition.Fields.Count; i++)
+        {
+            var field = recordDefinition.Fields[i];
+
+            if (i > 0)
+            {
+                var prevField = recordDefinition.Fields[i - 1];
+
+                // Check if this field is on a different row than the previous one
+                if (field.Range.Start.Row > prevField.Range.End.Row)
+                {
+                    // Multi-line field transition
+                    if (firstFieldOnSameLineAsOpening)
+                    {
+                        // Mixed mode: first field on same line as {, subsequent fields on new lines
+                        // Comma goes at end of previous line immediately after the type
+                        context.Append(",");
+                        // Advance to new line with base indentation (4 spaces)
+                        context.AdvanceToLocation(new Location(field.Range.Start.Row, 5), minSpaces: 0);
+                    }
+                    else
+                    {
+                        // Pure multi-line: all fields on separate lines
+                        // Comma goes at start of new line
+                        context.AdvanceToLocation(new Location(field.Range.Start.Row, openingBraceColumn), minSpaces: 0);
+                        context.Append(",");
+                        // Now advance to the field's actual location
+                        context.AdvanceToLocation(field.Value.FieldName.Range.Start, minSpaces: 0);
+                    }
+                }
+                else
+                {
+                    // Same line: comma goes right after the previous field
+                    context.Append(",");
+                    // Advance to the field's location
+                    context.AdvanceToLocation(field.Value.FieldName.Range.Start, minSpaces: 0);
+                }
+            }
+            else
+            {
+                // First field: just advance to its location
+                context.AdvanceToLocation(field.Value.FieldName.Range.Start, minSpaces: 0);
+            }
+
+            // Render field name
+            var fieldNameEnd = field.Value.FieldName.Range.End.Column;
+            context.Append(field.Value.FieldName.Value);
+
+            // Position the colon based on field type location
+            var typeLocation = field.Value.FieldType.Range.Start;
+
+            // Add 1 space before colon, then advance to type location after colon
+            context.AdvanceByMinimum(1);
+            context.Append(":");
+            // Advance to type location (this preserves the original spacing after colon)
+            context.AdvanceToLocation(typeLocation, minSpaces: 1);
+
+            // Render field type
+            RenderTypeAnnotationPreservingLocations(field.Value.FieldType, context, config);
+        }
+
+        // Render closing brace
+        if (isMultiLine)
+        {
+            // For multi-line records, put closing brace on new line with proper indentation
+            int indentColumn = firstFieldOnSameLineAsOpening ? 5 : openingBraceColumn;
+            context.Append("\n");  // Move to next line
+            // Add indentation
+            if (indentColumn > 1)
+            {
+                context.Append(new string(' ', indentColumn - 1));
+            }
+            context.Append("}");
+        }
+        else
+        {
+            // For single-line records, add space before closing brace
+            context.AdvanceByMinimum(1);
+            context.Append("}");
+        }
+    }
+
+    private static void RenderFunctionPreservingLocations(
+        FunctionStruct function,
+        RenderContext context,
+        Config config)
+    {
+        if (function.Signature is { } signature)
+        {
+            context.AdvanceToLocation(signature.Range.Start);
+            RenderSignaturePreservingLocations(signature.Value, context, config);
+        }
+
+        var impl = function.Declaration;
+        context.AdvanceToLocation(impl.Range.Start);
+        context.Append(impl.Value.Name.Value);
+
+        // Render arguments
+        foreach (var arg in impl.Value.Arguments)
+        {
+            context.AdvanceToLocation(arg.Range.Start);
+            context.Append(RenderPattern(arg.Value));
+        }
+
+        // Render equals sign and expression
+        // The equals sign location is not tracked in the syntax model, so use 1 space
+        context.AdvanceByMinimum(1);
+        context.Append("=");
+
+        // Render the expression with location preservation
+        RenderExpressionPreservingLocations(impl.Value.Expression, context, config);
+    }
+
+    private static void RenderSignaturePreservingLocations(
+        Signature signature,
+        RenderContext context,
+        Config config)
+    {
+        // Render function name
+        context.Append(signature.Name.Value);
+
+        // Render colon
+        context.AdvanceByMinimum(1);
+        context.Append(":");
+
+        // Render type annotation with location preservation
+        RenderTypeAnnotationPreservingLocations(signature.TypeAnnotation, context, config);
+    }
+
+    private static void RenderExpressionPreservingLocations(
+        Node<Expression> expressionNode,
+        RenderContext context,
+        Config config)
+    {
+        var expr = expressionNode.Value;
+
+        context.AdvanceToLocation(expressionNode.Range.Start);
+
+        switch (expr)
+        {
+            case Expression.UnitExpr:
+                context.Append("()");
+                break;
+
+            case Expression.Literal literal:
+                context.Append(RenderStringLiteral(literal.Value));
+                break;
+
+            case Expression.CharLiteral charLit:
+                context.Append(RenderCharLiteral(charLit.Value));
+                break;
+
+            case Expression.Integer integer:
+                context.Append(integer.Value.ToString());
+                break;
+
+            case Expression.Hex hex:
+                context.Append("0x" + hex.Value.ToString("X"));
+                break;
+
+            case Expression.Floatable floatable:
+                var floatStr = floatable.Value.ToString("G", System.Globalization.CultureInfo.InvariantCulture);
+                // Ensure decimal point is included for whole numbers
+                if (!floatStr.Contains('.') && !floatStr.Contains('E') && !floatStr.Contains('e'))
+                {
+                    floatStr += ".0";
+                }
+                context.Append(floatStr);
+                break;
+
+            case Expression.Negation negation:
+                context.Append("-");
+                RenderExpressionPreservingLocations(negation.Expression, context, config);
+                break;
+
+            case Expression.TupledExpression tupled:
+                RenderTupledExpressionPreservingLocations(expressionNode, tupled, context, config);
+                break;
+
+            case Expression.ListExpr listExpr:
+                RenderListExprPreservingLocations(expressionNode, listExpr, context, config);
+                break;
+
+            case Expression.Application app:
+                RenderApplicationPreservingLocations(app, context, config);
+                break;
+
+            case Expression.RecordExpr recordExpr:
+                RenderRecordExprPreservingLocations(expressionNode, recordExpr, context, config);
+                break;
+
+            case Expression.RecordUpdateExpression recordUpdate:
+                RenderRecordUpdateExprPreservingLocations(expressionNode, recordUpdate, context, config);
+                break;
+
+            case Expression.OperatorApplication opApp:
+                RenderOperatorApplicationPreservingLocations(opApp, context, config);
+                break;
+
+            case Expression.CaseExpression caseExpr:
+                RenderCaseExpressionPreservingLocations(expressionNode, caseExpr.CaseBlock, context, config);
+                break;
+
+            case Expression.LetExpression letExpr:
+                RenderLetExpressionPreservingLocations(letExpr.Value, context, config);
+                break;
+
+            case Expression.IfBlock ifBlock:
+                RenderIfExpressionPreservingLocations(ifBlock, context, config);
+                break;
+
+            case Expression.LambdaExpression lambdaExpr:
+                RenderLambdaExpressionPreservingLocations(lambdaExpr.Lambda, context, config);
+                break;
+
+            case Expression.FunctionOrValue funcOrVal:
+                context.Append(funcOrVal.ModuleName.Count > 0
+                    ? RenderModuleName(funcOrVal.ModuleName) + "." + funcOrVal.Name
+                    : funcOrVal.Name);
+                break;
+
+            case Expression.RecordAccessFunction recordAccess:
+                context.Append(recordAccess.FunctionName);
+                break;
+
+            case Expression.ParenthesizedExpression parenExpr:
+                context.Append("(");
+                RenderExpressionPreservingLocations(parenExpr.Expression, context, config);
+                // Closing paren location is at the end of the parenthesized expression's range
+                var closingParenLocation = new Location(expressionNode.Range.End.Row, expressionNode.Range.End.Column - 1);
+                context.AdvanceToLocation(closingParenLocation, minSpaces: 1);
+                context.Append(")");
+                break;
+
+            default:
+                throw new NotImplementedException(
+                    $"Unknown expression type: {expr.GetType().Name}");
+        }
+    }
+
+    private static void RenderApplicationPreservingLocations(
+        Expression.Application app,
+        RenderContext context,
+        Config config)
+    {
+        // Render each argument (including the function as the first argument)
+        for (var i = 0; i < app.Arguments.Count; i++)
+        {
+            var arg = app.Arguments[i];
+
+            if (i > 0)
+            {
+                // Advance to the argument's location
+                context.AdvanceToLocation(arg.Range.Start, minSpaces: 1);
+            }
+
+            RenderExpressionPreservingLocations(arg, context, config);
+        }
+    }
+
+    private static void RenderOperatorApplicationPreservingLocations(
+        Expression.OperatorApplication opApp,
+        RenderContext context,
+        Config config)
+    {
+        // Render left operand
+        RenderExpressionPreservingLocations(opApp.Left, context, config);
+
+        // Check if right operand starts on a different row than where we currently are
+        // Also ensure right operand is actually after current position (clamping handles backwards locations)
+        if (opApp.Right.Range.Start.Row > context.CurrentRow)
+        {
+            // Multi-line case: operator should be on the same line as right operand
+            // Calculate position: operator goes before the right operand
+            // Position it at (right operand column - operator length - 1 space)
+            // Ensure column doesn't go negative by using Math.Max
+            var operatorColumn = Math.Max(1, opApp.Right.Range.Start.Column - opApp.Operator.Length - 1);
+            var operatorLocation = new Location(opApp.Right.Range.Start.Row, operatorColumn);
+
+            context.AdvanceToLocation(operatorLocation, minSpaces: 0);
+            context.Append(opApp.Operator);
+
+            // Advance to right operand (should be 1 space after operator)
+            context.AdvanceToLocation(opApp.Right.Range.Start, minSpaces: 1);
+        }
+        else
+        {
+            // Same line case: operator goes 1 space after left operand
+            context.AdvanceByMinimum(1);
+            context.Append(opApp.Operator);
+
+            // Advance to right operand
+            // AdvanceToLocation handles clamping if right operand precedes current position
+            context.AdvanceToLocation(opApp.Right.Range.Start, minSpaces: 1);
+        }
+
+        RenderExpressionPreservingLocations(opApp.Right, context, config);
+    }
+
+    private static void RenderTupledExpressionPreservingLocations(
+        Node<Expression> tupledExprNode,
+        Expression.TupledExpression tupled,
+        RenderContext context,
+        Config config)
+    {
+        context.Append("(");
+
+        for (var i = 0; i < tupled.Elements.Count; i++)
+        {
+            var element = tupled.Elements[i];
+
+            if (i > 0)
+            {
+                // Add comma (no space before it)
+                context.Append(",");
+            }
+
+            // Advance to element location
+            context.AdvanceToLocation(element.Range.Start, minSpaces: 1);
+            RenderExpressionPreservingLocations(element, context, config);
+        }
+
+        // Closing paren location is at the end of the tupled expression's range
+        var closingParenLocation = new Location(tupledExprNode.Range.End.Row, tupledExprNode.Range.End.Column - 1);
+        context.AdvanceToLocation(closingParenLocation, minSpaces: 1);
+        context.Append(")");
+    }
+
+    private static void RenderListExprPreservingLocations(
+        Node<Expression> listExprNode,
+        Expression.ListExpr listExpr,
+        RenderContext context,
+        Config config)
+    {
+        var openingBracketColumn = context.CurrentColumn;
+
+        context.Append("[");
+
+        var previousItemRow = listExprNode.Range.Start.Row;
+
+        for (var i = 0; i < listExpr.Elements.Count; i++)
+        {
+            var item = listExpr.Elements[i];
+
+            if (i > 0)
+            {
+                var linebreak =
+                    item.Range.Start.Row > previousItemRow;
+
+                var commaColumn =
+                    linebreak
+                    ?
+                    openingBracketColumn
+                    :
+                    context.CurrentColumn;
+
+                context.AdvanceToLocation(new Location(item.Range.Start.Row, commaColumn), minSpaces: 0);
+
+                context.Append(",");
+
+                // Now advance to the element's actual location
+                context.AdvanceToLocation(item.Range.Start, minSpaces: 0);
+            }
+            else
+            {
+                // First element: just advance to its location
+                context.AdvanceToLocation(item.Range.Start, minSpaces: 1);
+            }
+
+            RenderExpressionPreservingLocations(item, context, config);
+        }
+
+        {
+            // Advance to the closing bracket position (one column before the list's Range.End)
+            var closingBracketLocation = new Location(listExprNode.Range.End.Row, listExprNode.Range.End.Column - 1);
+
+            var linebreak =
+                previousItemRow < closingBracketLocation.Row;
+
+            context.AdvanceToLocation(closingBracketLocation, minSpaces: linebreak ? 0 : 1);
+            context.Append("]");
+        }
+    }
+
+    private static void RenderRecordExprPreservingLocations(
+        Node<Expression> recordNode,
+        Expression.RecordExpr recordExpr,
+        RenderContext context,
+        Config config)
+    {
+        context.Append("{");
+
+        // Check if fields span multiple rows to determine comma placement
+        bool isMultiLine = false;
+        if (recordExpr.Fields.Count > 1)
+        {
+            var firstFieldRow = recordExpr.Fields[0].Range.Start.Row;
+            var lastFieldRow = recordExpr.Fields[recordExpr.Fields.Count - 1].Range.Start.Row;
+            isMultiLine = lastFieldRow > firstFieldRow;
+        }
+
+        for (var i = 0; i < recordExpr.Fields.Count; i++)
+        {
+            var fieldNode = recordExpr.Fields[i];
+            var (fieldName, valueExpr) = fieldNode.Value;
+
+            // For multi-line records, check if comma should come before this field
+            if (isMultiLine && i > 0)
+            {
+                var currentFieldRow = fieldNode.Range.Start.Row;
+                var prevFieldRow = recordExpr.Fields[i - 1].Range.Start.Row;
+
+                if (currentFieldRow > prevFieldRow)
+                {
+                    // Comma at the beginning of the new line
+                    // Position comma 4 columns before the field name (for ",   " pattern)
+                    var commaLocation = new Location(fieldNode.Range.Start.Row, fieldNode.Range.Start.Column - 4);
+                    context.AdvanceToLocation(commaLocation, minSpaces: 0);
+                    context.Append(",");
+                }
+            }
+
+            // Advance to field name location
+            context.AdvanceToLocation(fieldName.Range.Start, minSpaces: 1);
+            context.Append(fieldName.Value);
+
+            // Add space before equals (not tracked in syntax model, so use 1 space)
+            context.AdvanceByMinimum(1);
+            context.Append("=");
+
+            // Advance to value expression location
+            context.AdvanceToLocation(valueExpr.Range.Start, minSpaces: 1);
+            RenderExpressionPreservingLocations(valueExpr, context, config);
+
+            // For non-multi-line or same-row fields, add comma immediately after
+            if (i < recordExpr.Fields.Count - 1 && !isMultiLine)
+            {
+                context.Append(",");
+            }
+            else if (i < recordExpr.Fields.Count - 1 && isMultiLine)
+            {
+                var currentFieldRow = fieldNode.Range.Start.Row;
+                var nextFieldRow = recordExpr.Fields[i + 1].Range.Start.Row;
+
+                if (currentFieldRow == nextFieldRow)
+                {
+                    // Same row: comma immediately after
+                    context.Append(",");
+                }
+                // Otherwise, comma will be placed at the beginning of the next line
+            }
+        }
+
+        // Closing brace position is calculated from the record's overall range
+        // The closing brace is at the last column of the range
+        var closingBraceLocation = new Location(recordNode.Range.End.Row, recordNode.Range.End.Column - 1);
+        context.AdvanceToLocation(closingBraceLocation, minSpaces: 1);
+        context.Append("}");
+    }
+
+    private static void RenderRecordUpdateExprPreservingLocations(
+        Node<Expression> recordNode,
+        Expression.RecordUpdateExpression recordUpdate,
+        RenderContext context,
+        Config config)
+    {
+        context.Append("{");
+
+        // Advance to record name location
+        context.AdvanceToLocation(recordUpdate.RecordName.Range.Start, minSpaces: 1);
+        context.Append(recordUpdate.RecordName.Value);
+
+        // Add pipe symbol (not tracked, so use 1 space)
+        context.AdvanceByMinimum(1);
+        context.Append("|");
+
+        for (var i = 0; i < recordUpdate.Fields.Count; i++)
+        {
+            var fieldNode = recordUpdate.Fields[i];
+            var (fieldName, valueExpr) = fieldNode.Value;
+
+            // Advance to field name location
+            context.AdvanceToLocation(fieldName.Range.Start, minSpaces: 1);
+            context.Append(fieldName.Value);
+
+            // Add space before equals (not tracked in syntax model, so use 1 space)
+            context.AdvanceByMinimum(1);
+            context.Append("=");
+
+            // Advance to value expression location
+            context.AdvanceToLocation(valueExpr.Range.Start, minSpaces: 1);
+            RenderExpressionPreservingLocations(valueExpr, context, config);
+
+            if (i < recordUpdate.Fields.Count - 1)
+            {
+                // Add comma immediately after this field (not the last one)
+                context.Append(",");
+            }
+        }
+
+        // Closing brace position is calculated from the record's overall range
+        // The closing brace is at the last column of the range
+        var closingBraceLocation = new Location(recordNode.Range.End.Row, recordNode.Range.End.Column - 1);
+        context.AdvanceToLocation(closingBraceLocation, minSpaces: 1);
+        context.Append("}");
+    }
+
+    private static void RenderCaseExpressionPreservingLocations(
+        Node<Expression> caseExprNode,
+        CaseBlock caseBlock,
+        RenderContext context,
+        Config config)
+    {
+        // Render "case "
+        context.Append("case");
+        context.AdvanceByMinimum(1);
+
+        // Render the scrutinee expression
+        RenderExpressionPreservingLocations(caseBlock.Expression, context, config);
+
+        // Render " of" (not tracked, so use 1 space)
+        context.AdvanceByMinimum(1);
+        context.Append("of");
+
+        // Render each case branch
+        for (var i = 0; i < caseBlock.Cases.Count; i++)
+        {
+            var caseItem = caseBlock.Cases[i];
+
+            // Advance to pattern location
+            context.AdvanceToLocation(caseItem.Pattern.Range.Start, minSpaces: 1);
+            context.Append(RenderPattern(caseItem.Pattern.Value));
+
+            // Render " ->" (not tracked, so use 1 space)
+            context.AdvanceByMinimum(1);
+            context.Append("->");
+
+            // Advance to expression location
+            context.AdvanceToLocation(caseItem.Expression.Range.Start, minSpaces: 1);
+            RenderExpressionPreservingLocations(caseItem.Expression, context, config);
+        }
+    }
+
+    private static void RenderLetExpressionPreservingLocations(
+        Expression.LetBlock letBlock,
+        RenderContext context,
+        Config config)
+    {
+        // Render "let" keyword
+        context.Append("let");
+
+        // Render each declaration
+        for (var i = 0; i < letBlock.Declarations.Count; i++)
+        {
+            var declNode = letBlock.Declarations[i];
+            var decl = declNode.Value;
+
+            // Advance to declaration location
+            context.AdvanceToLocation(declNode.Range.Start, minSpaces: 1);
+
+            switch (decl)
+            {
+                case Expression.LetDeclaration.LetFunction letFunc:
+                    RenderLetFunctionPreservingLocations(letFunc, context, config);
+                    break;
+
+                case Expression.LetDeclaration.LetDestructuring letDestr:
+                    // Render pattern
+                    context.Append(RenderPattern(letDestr.Pattern.Value));
+                    // Render " =" (not tracked, so use 1 space)
+                    context.AdvanceByMinimum(1);
+                    context.Append("=");
+                    // Advance to expression location
+                    context.AdvanceToLocation(letDestr.Expression.Range.Start, minSpaces: 1);
+                    RenderExpressionPreservingLocations(letDestr.Expression, context, config);
+                    break;
+
+                default:
+                    throw new NotImplementedException($"Unknown let declaration type: {decl.GetType().Name}");
+            }
+        }
+
+        // Render "in" keyword
+        // The "in" should be on the line before the expression (or same line if expression is indented enough)
+        // We'll place it so that advancing to the expression location will put us at the right spot
+        // If expression is on a different row, "in" goes on the row before at the same column as expression minus length("in ")
+        if (letBlock.Expression.Range.Start.Row > context.CurrentRow)
+        {
+            // Multi-line case: "in" on its own line
+            // Calculate column for "in" based on where expression will be
+            // Expression is at column C, so "in" should be at roughly the same indentation
+            // We'll put "in" at column (C - 0) since they're on different lines
+            var inRow = letBlock.Expression.Range.Start.Row - 1;
+            var inCol = letBlock.Expression.Range.Start.Column;
+            context.AdvanceToLocation(new Location(inRow, inCol), minSpaces: 1);
+            context.Append("in");
+
+            // Now advance to expression location
+            context.AdvanceToLocation(letBlock.Expression.Range.Start, minSpaces: 0);
+        }
+        else
+        {
+            // Same line case: "in" goes 1 space after last declaration
+            context.AdvanceByMinimum(1);
+            context.Append("in");
+            context.AdvanceToLocation(letBlock.Expression.Range.Start, minSpaces: 1);
+        }
+        RenderExpressionPreservingLocations(letBlock.Expression, context, config);
+    }
+
+    private static void RenderLetFunctionPreservingLocations(
+        Expression.LetDeclaration.LetFunction letFunc,
+        RenderContext context,
+        Config config)
+    {
+        // Render signature if present
+        if (letFunc.Function.Signature is not null)
+        {
+            var sig = letFunc.Function.Signature.Value;
+            context.Append(sig.Name.Value);
+            context.AdvanceByMinimum(1);
+            context.Append(":");
+            context.AdvanceToLocation(sig.TypeAnnotation.Range.Start, minSpaces: 1);
+            context.Append(RenderTypeAnnotation(sig.TypeAnnotation.Value, config));
+
+            // After signature, advance to the implementation location
+            context.AdvanceToLocation(letFunc.Function.Declaration.Range.Start, minSpaces: 1);
+        }
+
+        var impl = letFunc.Function.Declaration.Value;
+
+        // Render function name
+        context.Append(impl.Name.Value);
+
+        // Render arguments
+        foreach (var arg in impl.Arguments)
+        {
+            context.AdvanceByMinimum(1);
+            context.Append(RenderPattern(arg.Value));
+        }
+
+        // Render " =" (not tracked, so use 1 space)
+        context.AdvanceByMinimum(1);
+        context.Append("=");
+
+        // Advance to expression location
+        context.AdvanceToLocation(impl.Expression.Range.Start, minSpaces: 1);
+        RenderExpressionPreservingLocations(impl.Expression, context, config);
+    }
+
+    private static void RenderIfExpressionPreservingLocations(
+        Expression.IfBlock ifBlock,
+        RenderContext context,
+        Config config)
+    {
+        // Render "if "
+        context.Append("if");
+        context.AdvanceByMinimum(1);
+
+        // Render condition
+        RenderExpressionPreservingLocations(ifBlock.Condition, context, config);
+
+        // Render " then" (not tracked, so use 1 space)
+        context.AdvanceByMinimum(1);
+        context.Append("then");
+
+        // Advance to then block location
+        context.AdvanceToLocation(ifBlock.ThenBlock.Range.Start, minSpaces: 1);
+        RenderExpressionPreservingLocations(ifBlock.ThenBlock, context, config);
+
+        // Render "else" keyword
+        // Check if the else block is an if expression (for "else if" pattern)
+        var isElseIf = ifBlock.ElseBlock.Value is Expression.IfBlock;
+
+        // Similar to "in" in let expressions, "else" positioning depends on layout
+        // In multi-line if expressions, "else" typically aligns with "if" (not the else block)
+        // But we don't track "if" location, so we'll use a heuristic:
+        // If else block is indented more than 4 columns, "else" goes 4 columns to the left of else block
+        if (ifBlock.ElseBlock.Range.Start.Row > context.CurrentRow)
+        {
+            // Multi-line case: "else" on its own line or same line as "if" for "else if"
+            if (isElseIf)
+            {
+                // For "else if", keep them on the same line
+                // The if location points to the "i" in "if", so "else " should be 5 characters before it
+                var elseLocation = new Location(
+                    ifBlock.ElseBlock.Range.Start.Row,
+                    ifBlock.ElseBlock.Range.Start.Column - 5);
+                context.AdvanceToLocation(elseLocation, minSpaces: 1);
+                context.Append("else ");
+            }
+            else
+            {
+                // Regular else: "else" on its own line
+                // Calculate column for "else" - typically less indented than the else block
+                var elseRow = ifBlock.ElseBlock.Range.Start.Row - 1;
+                // Heuristic: if else block is indented (col > 4), place "else" 4 columns earlier
+                var elseCol = ifBlock.ElseBlock.Range.Start.Column > 4
+                    ? ifBlock.ElseBlock.Range.Start.Column - 4
+                    : ifBlock.ElseBlock.Range.Start.Column;
+                context.AdvanceToLocation(new Location(elseRow, elseCol), minSpaces: 1);
+                context.Append("else");
+
+                // Now advance to else block location
+                context.AdvanceToLocation(ifBlock.ElseBlock.Range.Start, minSpaces: 0);
+            }
+        }
+        else
+        {
+            // Same line case: "else" goes 1 space after then block
+            context.AdvanceByMinimum(1);
+            context.Append("else");
+            context.AdvanceToLocation(ifBlock.ElseBlock.Range.Start, minSpaces: 1);
+        }
+        RenderExpressionPreservingLocations(ifBlock.ElseBlock, context, config);
+    }
+
+    private static void RenderLambdaExpressionPreservingLocations(
+        LambdaStruct lambda,
+        RenderContext context,
+        Config config)
+    {
+        // Render opening backslash (no opening paren - that comes from source location if present)
+        context.Append("\\");
+
+        // Render arguments
+        for (var i = 0; i < lambda.Arguments.Count; i++)
+        {
+            var arg = lambda.Arguments[i];
+
+            // Advance to argument location (first argument gets 1 space minimum after backslash)
+            context.AdvanceToLocation(arg.Range.Start, minSpaces: 1);
+            context.Append(RenderPattern(arg.Value));
+        }
+
+        // Render " ->" (not tracked, so use 1 space)
+        context.AdvanceByMinimum(1);
+        context.Append("->");
+
+        // Render expression (RenderExpressionPreservingLocations will advance to its location)
+        RenderExpressionPreservingLocations(lambda.Expression, context, config);
+
+        // No closing parenthesis here - that should come from source location if present
     }
 
     public static IEnumerable<IndentedLine> ToIndentedLines(

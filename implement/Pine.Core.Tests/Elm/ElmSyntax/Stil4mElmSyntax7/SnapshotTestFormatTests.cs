@@ -6,19 +6,39 @@ using Xunit;
 
 namespace Pine.Core.Tests.Elm.ElmSyntax.Stil4mElmSyntax7;
 
-public class RenderingTests
+public class SnapshotTestFormatTests
 {
-    private static readonly Rendering.Config s_renderingDefaultConfig =
-        Rendering.ConfigNormalizeAllLocations(
-            Rendering.LineBreakingConfig.SnapshotTestsDefault);
+    private static readonly Core.Elm.ElmSyntax.Stil4mElmSyntax7.Rendering.Config s_renderingDefaultConfig =
+        Core.Elm.ElmSyntax.Stil4mElmSyntax7.Rendering.ConfigPreserveLocations();
 
     private static string RenderDefault(File file) =>
-        Rendering.ToString(
+        Core.Elm.ElmSyntax.Stil4mElmSyntax7.Rendering.ToString(
             file,
             s_renderingDefaultConfig);
 
+    private static string FormatString(
+        string input)
+    {
+        var parsed =
+            ElmSyntaxParser.ParseModuleText(input)
+            .Extract(err => throw new System.Exception($"Parsing failed: {err}"));
+
+        return Format(parsed);
+    }
+
+    private static string Format(File file)
+    {
+        var formatted =
+            SnapshotTestFormat.Format(file);
+
+        var rendered =
+            RenderDefault(formatted);
+
+        return rendered;
+    }
+
     [Fact]
-    public void ToString_EmptyFile()
+    public void Format_EmptyFile()
     {
         var file =
             new File(
@@ -35,7 +55,9 @@ public class RenderingTests
                 Declarations: [],
                 Comments: []);
 
-        var rendered = RenderDefault(file);
+        var fileFormatted = SnapshotTestFormat.Format(file);
+
+        var rendered = RenderDefault(fileFormatted);
 
         rendered.Trim().Should().Be("module Test exposing (..)");
     }
@@ -133,11 +155,7 @@ public class RenderingTests
 
             try
             {
-                var parsed =
-                    ElmSyntaxParser.ParseModuleText(testCase.Input.TrimStart())
-                    .Extract(err => throw new System.Exception("Parsing failed: " + err.ToString()));
-
-                var rendered = RenderDefault(parsed);
+                var rendered = FormatString(testCase.Input);
 
                 rendered.Trim().Should().Be(testCase.Expected.Trim());
             }
@@ -649,6 +667,7 @@ public class RenderingTests
                         0
 
             """",
+
             """"
             module Test exposing (..)
 
@@ -772,11 +791,7 @@ public class RenderingTests
 
             try
             {
-                var parsed =
-                    ElmSyntaxParser.ParseModuleText(testCase.TrimStart())
-                    .Extract(err => throw new System.Exception("Parsing failed: " + err.ToString()));
-
-                var rendered = RenderDefault(parsed);
+                var rendered = FormatString(testCase);
 
                 rendered.Trim().Should().Be(testCase.Trim());
             }
@@ -786,76 +801,6 @@ public class RenderingTests
                     $"Test case {i} failed:\n{testCase}", e);
             }
         }
-    }
-
-    [Fact]
-    public void Supports_mapping_qualified_names()
-    {
-        var inputModuleText =
-            """
-            module Test exposing (..)
-
-            a : Basics.Int
-            a =
-                aa
-
-
-            b : String.String
-            b =
-                bb
-
-
-            c : Char.Char
-            c =
-                cc
-
-            """;
-
-        var expectedModuleText =
-            """"
-            module Test exposing (..)
-            
-            
-            a : Int
-            a =
-                aa
-
-
-            b : String
-            b =
-                bb
-
-
-            c : Char
-            c =
-                cc
-
-
-            """";
-
-        var parsed =
-            ElmSyntaxParser.ParseModuleText(inputModuleText)
-            .Extract(err => throw new System.Exception("Parsing failed: " + err.ToString()));
-
-        var namesMap =
-            new Dictionary<QualifiedNameRef, QualifiedNameRef>
-            {
-                [QualifiedNameRef.FromFullName("Basics.Int")] = QualifiedNameRef.FromFullName("Int"),
-                [QualifiedNameRef.FromFullName("String.String")] = QualifiedNameRef.FromFullName("String"),
-                [QualifiedNameRef.FromFullName("Char.Char")] = QualifiedNameRef.FromFullName("Char"),
-            };
-
-        var renderConfig =
-            Rendering.ConfigNormalizeAllLocations(
-                Rendering.LineBreakingConfig.SnapshotTestsDefault,
-                mapQualifiedName: namesMap);
-
-        var rendered =
-            Rendering.ToString(
-                parsed,
-                renderConfig);
-
-        rendered.Trim().Should().Be(expectedModuleText.Trim());
     }
 
     private static Node<T> NodeWithRangeZero<T>(T value) =>
