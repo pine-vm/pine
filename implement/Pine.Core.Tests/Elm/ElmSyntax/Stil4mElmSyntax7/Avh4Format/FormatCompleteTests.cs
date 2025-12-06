@@ -170,6 +170,40 @@ public class FormatCompleteTests
     }
 
     [Fact]
+    public void Linebreak_between_top_level_declarations()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            alfa =
+                31
+
+            beta =
+                37
+
+            """";
+
+        var formatted = FormatString(input);
+
+        formatted.Trim().Should().Be(
+            """"
+            module Test exposing (..)
+
+
+            alfa =
+                31
+
+
+            beta =
+                37
+
+            """"
+            .Trim());
+    }
+
+    [Fact]
     public void Stable_configurations()
     {
         /*
