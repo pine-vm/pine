@@ -1870,7 +1870,7 @@ public class ElmSyntaxParser
 
                 while (
                     NextTokenMatches(peek =>
-                    lessApplication.Range.Start.Column <= peek.Start.Column &&
+                    lessApplication.Range.Start.Column < peek.Start.Column &&
                     indentMin <= peek.Start.Column &&
                     CanStartTypeAnnotation(peek)))
                 {

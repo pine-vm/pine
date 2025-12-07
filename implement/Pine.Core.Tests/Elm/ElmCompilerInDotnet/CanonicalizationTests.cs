@@ -50,8 +50,10 @@ public class CanonicalizationTests
         var canonicalizeResult =
             Canonicalization.Canonicalize(parsedModules);
 
-        return
+        var beforeFormat =
             GetCanonicalizedModule(canonicalizeResult, [.. moduleName]);
+
+        return Avh4Format.Format(beforeFormat);
     }
 
     [Fact]
@@ -1109,9 +1111,7 @@ public class CanonicalizationTests
 
             decl : Node.Node Basics.Int
             decl =
-                Node.Node
-                    {}
-                    5
+                Node.Node {} 5
 
             """";
 
@@ -1124,7 +1124,7 @@ public class CanonicalizationTests
         var renderedAppModule =
             Rendering.ToString(
                 appModuleCanonicalized,
-                Rendering.ConfigNormalizeAllLocations(lineBreaking: Rendering.LineBreakingConfig.SnapshotTestsDefault));
+                Rendering.ConfigPreserveLocations());
 
         renderedAppModule.Trim().Should().Be(
             expectedAppModuleText.Trim());
@@ -1164,9 +1164,7 @@ public class CanonicalizationTests
 
             decl : Node.Node Basics.Int
             decl =
-                Node.Node
-                    {}
-                    5
+                Node.Node {} 5
 
             """";
 
@@ -1179,7 +1177,7 @@ public class CanonicalizationTests
         var renderedAppModule =
             Rendering.ToString(
                 appModuleCanonicalized,
-                Rendering.ConfigNormalizeAllLocations(lineBreaking: Rendering.LineBreakingConfig.SnapshotTestsDefault));
+                Rendering.ConfigPreserveLocations());
 
         renderedAppModule.Trim().Should().Be(
             expectedAppModuleText.Trim());
@@ -1233,9 +1231,7 @@ public class CanonicalizationTests
 
             decl : Beta.Node Basics.Int
             decl =
-                Alfa.Node
-                    {}
-                    5
+                Alfa.Node {} 5
 
             """";
 
@@ -1248,7 +1244,7 @@ public class CanonicalizationTests
         var renderedAppModule =
             Rendering.ToString(
                 appModuleCanonicalized,
-                Rendering.ConfigNormalizeAllLocations(lineBreaking: Rendering.LineBreakingConfig.SnapshotTestsDefault));
+                Rendering.ConfigPreserveLocations());
 
         renderedAppModule.Trim().Should().Be(
             expectedAppModuleText.Trim());

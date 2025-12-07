@@ -116,7 +116,6 @@ public class InliningCrossModuleTests
                         Pine_kernel.take [ 4, Pine_kernel.skip [ offset, srcBytes ] ]
                 in
                 if Pine_kernel.equal [ Pine_kernel.length nextChar, 0 ] then
-                    -- end of source
                     PState srcBytes offset indent row col
 
                 else if isGood nextChar then
@@ -129,7 +128,6 @@ public class InliningCrossModuleTests
                         indent
 
                 else
-                    -- no match
                     PState srcBytes offset indent row col
 
             """";
@@ -162,14 +160,13 @@ public class InliningCrossModuleTests
 
             isAlphaNumOrUnderscore : Char -> Bool
             isAlphaNumOrUnderscore char =
-                if Char.isAlphaNum char then
+                if Char.isAlphaNum
+                    char then
                     Basics.True
 
                 else
                     Pine_kernel.equal
-                        [ char
-                        , 0x5F
-                        ]
+                        [ char, 0x5F ]
 
 
             typeName : ParserFast.Parser String
@@ -185,21 +182,17 @@ public class InliningCrossModuleTests
                             nextCharBytes =
                                 Pine_kernel.take
                                     [ 4
-                                    , Pine_kernel.skip
-                                        [ sOffset, sSrcBytes ]
+                                    , Pine_kernel.skip [ sOffset, sSrcBytes ]
                                     ]
                         in
-                        if Char.isUpper nextCharBytes then
+                        if Char.isUpper
+                            nextCharBytes then
                             let
                                 s1 : ParserFast.State
                                 s1 =
                                     ParserFast.skipWhileWithoutLinebreakHelp
                                         Elm.Parser.Tokens.isAlphaNumOrUnderscore
-                                        (Pine_kernel.int_add
-                                            [ sOffset
-                                            , 4
-                                            ]
-                                        )
+                                        (Pine_kernel.int_add [ sOffset, 4 ])
                                         sRow
                                         (sColInt + 1)
                                         sSrcBytes
@@ -212,16 +205,14 @@ public class InliningCrossModuleTests
                                 nameSliceBytesLength =
                                     Pine_kernel.int_add
                                         [ s1Offset
-                                        , Pine_kernel.int_mul
-                                            [ -1, sOffset ]
+                                        , Pine_kernel.int_mul [ -1, sOffset ]
                                         ]
 
                                 nameSliceBytes : Int
                                 nameSliceBytes =
                                     Pine_kernel.take
                                         [ nameSliceBytesLength
-                                        , Pine_kernel.skip
-                                            [ sOffset, sSrcBytes ]
+                                        , Pine_kernel.skip [ sOffset, sSrcBytes ]
                                         ]
                             in
                             ParserFast.Good
@@ -348,8 +339,6 @@ public class InliningCrossModuleTests
                             sColInt : Int
                             sColInt =
                                 sCol
-
-                            -- each char is 4 bytes in UTF-32
                         in
                         if
                             Pine_kernel.equal
@@ -594,8 +583,6 @@ public class InliningCrossModuleTests
                             sColInt : Int
                             sColInt =
                                 sCol
-
-                            -- each char is 4 bytes in UTF-32
                         in
                         if
                             Pine_kernel.equal

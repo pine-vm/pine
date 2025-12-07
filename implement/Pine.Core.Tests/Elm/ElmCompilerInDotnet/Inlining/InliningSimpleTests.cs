@@ -21,8 +21,11 @@ public class InliningSimpleTests
                 moduleName,
                 config);
 
+        var formatted =
+            Core.Elm.ElmSyntax.Stil4mElmSyntax7.SnapshotTestFormat.Format(appModule);
+
         var rendered =
-            InliningTestHelper.RenderModuleForSnapshotTests(appModule);
+            InliningTestHelper.RenderModuleForSnapshotTests(formatted);
 
         return rendered;
     }
@@ -167,7 +170,14 @@ public class InliningSimpleTests
                         , 1
                         ]
                 )
-                    ((\b -> Pine_kernel.int_multiply [ b, 2 ]) 3)
+                    ((\b ->
+                        Pine_kernel.int_multiply
+                            [ b
+                            , 2
+                            ]
+                     )
+                        3
+                    )
             """";
 
         var rendered =

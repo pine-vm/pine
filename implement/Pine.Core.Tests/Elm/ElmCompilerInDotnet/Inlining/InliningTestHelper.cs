@@ -19,16 +19,17 @@ public class InliningTestHelper
         .SetItem(QualifiedNameRef.FromFullName("Char.Char"), QualifiedNameRef.FromFullName("Char"));
 
     private static readonly Rendering.Config s_renderingConfigSnapshotTestsDefault =
-        Rendering.ConfigNormalizeAllLocations(
-            Rendering.LineBreakingConfig.SnapshotTestsDefault,
+        Rendering.ConfigPreserveLocations(
             mapQualifiedName: s_renderingNameMap);
 
     public static string RenderModuleForSnapshotTests(
         File module)
     {
+        var moduleFormatted = SnapshotTestFormat.Format(module);
+
         return
             Rendering.ToString(
-                module,
+                moduleFormatted,
                 s_renderingConfigSnapshotTestsDefault);
     }
 
@@ -64,6 +65,9 @@ public class InliningTestHelper
                 config)
             .Extract(err => throw new System.Exception("Failed inlining: " + err));
 
-        return allInlinedModules[moduleName];
+        var moduleBeforeFormat =
+            allInlinedModules[moduleName];
+
+        return SnapshotTestFormat.Format(moduleBeforeFormat);
     }
 }

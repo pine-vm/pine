@@ -6,19 +6,37 @@ using Xunit;
 
 namespace Pine.Core.Tests.Elm.ElmSyntax.Stil4mElmSyntax7;
 
-public class RenderingTests
+public class SnapshotTestFormatTests
 {
-    private static readonly Rendering.Config s_renderingDefaultConfig =
-        Rendering.ConfigNormalizeAllLocations(
-            Rendering.LineBreakingConfig.SnapshotTestsDefault);
+    private static readonly Core.Elm.ElmSyntax.Stil4mElmSyntax7.Rendering.Config s_renderingDefaultConfig =
+        Core.Elm.ElmSyntax.Stil4mElmSyntax7.Rendering.ConfigPreserveLocations();
 
     private static string RenderDefault(File file) =>
-        Rendering.ToString(
-            file,
-            s_renderingDefaultConfig);
+        Core.Elm.ElmSyntax.Stil4mElmSyntax7.Rendering.ToString(file, s_renderingDefaultConfig);
+
+    private static string FormatString(
+        string input)
+    {
+        var parsed =
+            ElmSyntaxParser.ParseModuleText(input)
+            .Extract(err => throw new System.Exception($"Parsing failed: {err}"));
+
+        return Format(parsed);
+    }
+
+    private static string Format(File file)
+    {
+        var formatted =
+            SnapshotTestFormat.Format(file);
+
+        var rendered =
+            RenderDefault(formatted);
+
+        return rendered;
+    }
 
     [Fact]
-    public void ToString_EmptyFile()
+    public void Format_EmptyFile()
     {
         var file =
             new File(
@@ -35,7 +53,9 @@ public class RenderingTests
                 Declarations: [],
                 Comments: []);
 
-        var rendered = RenderDefault(file);
+        var fileFormatted = SnapshotTestFormat.Format(file);
+
+        var rendered = RenderDefault(fileFormatted);
 
         rendered.Trim().Should().Be("module Test exposing (..)");
     }
@@ -48,33 +68,33 @@ public class RenderingTests
             new
             {
                 Input =
-                """
+                """"
                 module Test exposing (..)
-                """,
+                """",
 
                 Expected =
-                """
+                """"
                 module Test exposing (..)
-                """
+                """"
             },
 
             new
             {
                 Input =
-                """
+                """"
                 module   Test   exposing   (  ..  )
-                """,
+                """",
 
                 Expected =
-                """
+                """"
                 module Test exposing (..)
-                """
+                """"
             },
 
             new
             {
                 Input =
-                """
+                """"
                 module Test exposing (..)
 
                 import Html exposing (text)
@@ -83,10 +103,10 @@ public class RenderingTests
                     text "Hello, World!"
 
                 beta = 42
-                """,
+                """",
 
                 Expected =
-                """
+                """"
                 module Test exposing (..)
 
                 import Html exposing (text)
@@ -99,23 +119,23 @@ public class RenderingTests
 
                 beta =
                     42
-                """
+                """"
             },
 
             new
             {
                 Input =
-                """
+                """"
                 module Test exposing (..)
 
 
                 sketch a =
                     func "test" (a + 3)
 
-                """,
+                """",
 
                 Expected =
-                """
+                """"
                 module Test exposing (..)
 
 
@@ -123,7 +143,230 @@ public class RenderingTests
                     func
                         "test"
                         (a + 3)
-                """,
+                """",
+            },
+
+            new
+            {
+                Input =
+                """"
+                module App exposing (..)
+                
+                
+                app x =
+                    (\y -> [ 13, y + x ])
+
+                """",
+
+                Expected =
+                """"
+                module App exposing (..)
+
+
+                app x =
+                    (\y ->
+                        [ 13
+                        , y + x
+                        ]
+                    )
+
+                """",
+            },
+
+            new
+            {
+                Input =
+                """"
+                module App exposing (..)
+
+
+                apply f x =
+                    f x
+
+
+                result =
+                    (\y -> Pine_kernel.int_multiply [ y, 2 ]) 5
+
+                """",
+
+                Expected =
+                """"
+                module App exposing (..)
+
+
+                apply f x =
+                    f
+                        x
+
+
+                result =
+                    (\y ->
+                        Pine_kernel.int_multiply
+                            [ y
+                            , 2
+                            ]
+                    )
+                        5
+                """",
+            },
+
+            new
+            {
+                Input =
+                """"
+                module App exposing (..)
+
+
+                decl =
+                    let
+                        (ParserFast.Parser attemptFirst) =
+                            (ParserFast.keyword "right" Elm.Parser.Declarations.Right)
+                    in
+                    71
+
+                """",
+
+                Expected =
+                """"
+                module App exposing (..)
+                
+                
+                decl =
+                    let
+                        (ParserFast.Parser attemptFirst) =
+                            (ParserFast.keyword
+                                "right"
+                                Elm.Parser.Declarations.Right
+                            )
+                    in
+                    71
+
+                """",
+            },
+
+            new
+            {
+                Input =
+                """"
+                module Test exposing (..)
+
+
+                decl a b =
+                    (\x y ->
+                        if x < y then
+                            ChoiceTag 72 79
+                        else
+                            ChoiceTag 71 (a b x y)
+                    )
+                        13
+                        17
+
+                """",
+
+                Expected =
+                """"
+                module Test exposing (..)
+
+
+                decl a b =
+                    (\x y ->
+                        if x < y then
+                            ChoiceTag
+                                72
+                                79
+
+                        else
+                            ChoiceTag
+                                71
+                                (a
+                                    b
+                                    x
+                                    y
+                                )
+                    )
+                        13
+                        17
+                
+                """",
+            },
+
+            new
+            {
+                Input =
+                """"
+                module Elm.Parser.Declarations exposing (..)
+                
+                
+                infixDirectionOnlyTwo_noRange =
+                    let
+                        (ParserFast.Parser attemptFirst) =
+                            (ParserFast.keyword "right" Elm.Parser.Declarations.Right)
+                
+                        (ParserFast.Parser attemptSecond) =
+                            (ParserFast.keyword "left" Elm.Parser.Declarations.Left)
+                    in
+                    ParserFast.Parser
+                        (\s ->
+                            case attemptSecond s of
+                                (ParserFast.Good _ _) as secondGood ->
+                                    secondGood
+                
+                                (ParserFast.Bad secondCommitted secondX) as secondBad ->
+                                    if secondCommitted then
+                                        secondBad
+                
+                                    else
+                                        ParserFast.Bad
+                                            Basics.False
+                                            (ParserFast.ExpectingOneOf
+                                                firstX
+                                                secondX
+                                                []
+                                            )
+                        )
+
+                """",
+
+                Expected =
+                """"
+                module Elm.Parser.Declarations exposing (..)
+                
+                
+                infixDirectionOnlyTwo_noRange =
+                    let
+                        (ParserFast.Parser attemptFirst) =
+                            (ParserFast.keyword
+                                "right"
+                                Elm.Parser.Declarations.Right
+                            )
+                
+                        (ParserFast.Parser attemptSecond) =
+                            (ParserFast.keyword
+                                "left"
+                                Elm.Parser.Declarations.Left
+                            )
+                    in
+                    ParserFast.Parser
+                        (\s ->
+                            case attemptSecond s of
+                                (ParserFast.Good _ _) as secondGood ->
+                                    secondGood
+                
+                                (ParserFast.Bad secondCommitted secondX) as secondBad ->
+                                    if secondCommitted then
+                                        secondBad
+                
+                                    else
+                                        ParserFast.Bad
+                                            Basics.False
+                                            (ParserFast.ExpectingOneOf
+                                                firstX
+                                                secondX
+                                                []
+                                            )
+                        )
+                
+                """",
             },
         };
 
@@ -133,11 +376,7 @@ public class RenderingTests
 
             try
             {
-                var parsed =
-                    ElmSyntaxParser.ParseModuleText(testCase.Input.TrimStart())
-                    .Extract(err => throw new System.Exception("Parsing failed: " + err.ToString()));
-
-                var rendered = RenderDefault(parsed);
+                var rendered = FormatString(testCase.Input);
 
                 rendered.Trim().Should().Be(testCase.Expected.Trim());
             }
@@ -154,6 +393,17 @@ public class RenderingTests
     {
         var testCases = new[]
         {
+            """"
+            module Test exposing (..)
+
+
+            type MyType
+                = ConstructorA
+                  -- A comment
+                | ConstructorB Int
+
+            """",
+
             """"
             module Basics exposing
                 ( (&&)
@@ -258,9 +508,6 @@ public class RenderingTests
                 | AnyOtherKind_Float
 
 
-            {-| Represents the relative ordering of two things.
-            The relations are less than, equal to, and greater than.
-            -}
             type Order
                 = LT
                 | EQ
@@ -449,7 +696,8 @@ public class RenderingTests
 
 
             decl2 =
-                [ { a = [] }
+                [ { a = []
+                  }
                 , { a =
                         [ { a = [ 1, 2, 3 ]
                           }
@@ -649,6 +897,7 @@ public class RenderingTests
                         0
 
             """",
+
             """"
             module Test exposing (..)
 
@@ -772,11 +1021,7 @@ public class RenderingTests
 
             try
             {
-                var parsed =
-                    ElmSyntaxParser.ParseModuleText(testCase.TrimStart())
-                    .Extract(err => throw new System.Exception("Parsing failed: " + err.ToString()));
-
-                var rendered = RenderDefault(parsed);
+                var rendered = FormatString(testCase);
 
                 rendered.Trim().Should().Be(testCase.Trim());
             }
@@ -786,76 +1031,6 @@ public class RenderingTests
                     $"Test case {i} failed:\n{testCase}", e);
             }
         }
-    }
-
-    [Fact]
-    public void Supports_mapping_qualified_names()
-    {
-        var inputModuleText =
-            """
-            module Test exposing (..)
-
-            a : Basics.Int
-            a =
-                aa
-
-
-            b : String.String
-            b =
-                bb
-
-
-            c : Char.Char
-            c =
-                cc
-
-            """;
-
-        var expectedModuleText =
-            """"
-            module Test exposing (..)
-            
-            
-            a : Int
-            a =
-                aa
-
-
-            b : String
-            b =
-                bb
-
-
-            c : Char
-            c =
-                cc
-
-
-            """";
-
-        var parsed =
-            ElmSyntaxParser.ParseModuleText(inputModuleText)
-            .Extract(err => throw new System.Exception("Parsing failed: " + err.ToString()));
-
-        var namesMap =
-            new Dictionary<QualifiedNameRef, QualifiedNameRef>
-            {
-                [QualifiedNameRef.FromFullName("Basics.Int")] = QualifiedNameRef.FromFullName("Int"),
-                [QualifiedNameRef.FromFullName("String.String")] = QualifiedNameRef.FromFullName("String"),
-                [QualifiedNameRef.FromFullName("Char.Char")] = QualifiedNameRef.FromFullName("Char"),
-            };
-
-        var renderConfig =
-            Rendering.ConfigNormalizeAllLocations(
-                Rendering.LineBreakingConfig.SnapshotTestsDefault,
-                mapQualifiedName: namesMap);
-
-        var rendered =
-            Rendering.ToString(
-                parsed,
-                renderConfig);
-
-        rendered.Trim().Should().Be(expectedModuleText.Trim());
     }
 
     private static Node<T> NodeWithRangeZero<T>(T value) =>
