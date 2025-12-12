@@ -457,7 +457,8 @@ public class Rendering
                 break;
 
             case Declaration.PortDeclaration portDecl:
-                context.Append("port " + RenderSignature(portDecl.Signature));
+                context.Append("port ");
+                RenderSignature(portDecl.Signature, context);
                 break;
 
             case Declaration.InfixDeclaration infixDecl:
@@ -699,10 +700,13 @@ public class Rendering
                 RenderTupledTypeAnnotation(tupled, context);
                 break;
 
-            default:
-                // For other types, fall back to simple rendering
-                context.Append(RenderTypeAnnotation(typeAnnotation));
+            case TypeAnnotation.GenericRecord genericRecord:
+                RenderGenericRecordTypeAnnotation(genericRecord, context);
                 break;
+
+            default:
+                throw new NotImplementedException(
+                    $"Unknown type annotation: {typeAnnotation.GetType().Name}");
         }
     }
 
@@ -740,6 +744,50 @@ public class Rendering
         // Closing paren location is not tracked, so use 1 space
         context.AdvanceByMinimum(1);
         context.Append(")");
+    }
+
+    private static void RenderGenericRecordTypeAnnotation(
+        TypeAnnotation.GenericRecord genericRecord,
+        RenderContext context)
+    {
+        // Format: { genericName | field1 : type1, field2 : type2 }
+        context.Append("{");
+
+        // Advance to generic name location
+        context.AdvanceToLocation(genericRecord.GenericName.Range.Start, minSpaces: 1);
+        context.Append(genericRecord.GenericName.Value);
+
+        // " | "
+        context.AdvanceByMinimum(1);
+        context.Append("|");
+
+        // Render fields
+        var fields = genericRecord.RecordDefinition.Value.Fields;
+        for (var i = 0; i < fields.Count; i++)
+        {
+            var field = fields[i];
+
+            if (i > 0)
+            {
+                // Add comma between fields
+                context.Append(",");
+            }
+
+            // Advance to field name location
+            context.AdvanceToLocation(field.Value.FieldName.Range.Start, minSpaces: 1);
+            context.Append(field.Value.FieldName.Value);
+
+            // " : "
+            context.AdvanceByMinimum(1);
+            context.Append(":");
+
+            // Render field type
+            RenderTypeAnnotation(field.Value.FieldType, context);
+        }
+
+        // Closing brace
+        context.AdvanceByMinimum(1);
+        context.Append("}");
     }
 
     private static void RenderTypedAnnotation(
@@ -1526,7 +1574,7 @@ public class Rendering
             context.AdvanceByMinimum(1);
             context.Append(":");
             context.AdvanceToLocation(sig.TypeAnnotation.Range.Start, minSpaces: 1);
-            context.Append(RenderTypeAnnotation(sig.TypeAnnotation.Value));
+            RenderTypeAnnotation(sig.TypeAnnotation, context);
 
             // After signature, advance to the implementation location
             context.AdvanceToLocation(letFunc.Function.Declaration.Range.Start, minSpaces: 1);
@@ -1776,158 +1824,31 @@ public class Rendering
     private static string RenderModuleName(IReadOnlyList<string> moduleName) =>
         string.Join(".", moduleName);
 
-    private static string RenderExposing(Exposing exposing)
-    {
-        return exposing switch
-        {
-            Exposing.All => "(..)",
-
-            Exposing.Explicit explicit_ =>
-                "(" + string.Join(", ", explicit_.Nodes.Select(n => RenderTopLevelExpose(n.Value))) + ")",
-
-            _ =>
-            throw new NotImplementedException(
-                $"Unknown exposing type: {exposing.GetType().Name}")
-        };
-    }
-
     private static string RenderTopLevelExpose(TopLevelExpose expose)
     {
         return expose switch
         {
-            TopLevelExpose.InfixExpose infix => $"({infix.Name})",
-            TopLevelExpose.FunctionExpose func => func.Name,
-            TopLevelExpose.TypeOrAliasExpose typeOrAlias => typeOrAlias.Name,
+            TopLevelExpose.InfixExpose infix =>
+            $"({infix.Name})",
+
+            TopLevelExpose.FunctionExpose func =>
+            func.Name,
+
+            TopLevelExpose.TypeOrAliasExpose typeOrAlias =>
+            typeOrAlias.Name,
+
             TopLevelExpose.TypeExpose typeExpose =>
-                typeExpose.ExposedType.Open is not null
-                    ? $"{typeExpose.ExposedType.Name}(..)"
-                    : typeExpose.ExposedType.Name,
-            _ => throw new NotImplementedException($"Unknown expose type: {expose.GetType().Name}")
-        };
-    }
-
-    private static string RenderImport(Import import)
-    {
-        var sb = new StringBuilder();
-        sb.Append("import ");
-        sb.Append(RenderModuleName(import.ModuleName.Value));
-
-        if (import.ModuleAlias is not null)
-        {
-            sb.Append(" as ");
-            sb.Append(RenderModuleName(import.ModuleAlias.Value));
-        }
-
-        if (import.ExposingList is not null)
-        {
-            sb.Append(" exposing ");
-            sb.Append(RenderExposing(import.ExposingList.Value));
-        }
-
-        return sb.ToString();
-    }
-
-    private static string RenderSignature(Signature signature) =>
-        $"{signature.Name.Value} : {RenderTypeAnnotation(signature.TypeAnnotation.Value)}";
-
-    private static string RenderTypeAnnotation(TypeAnnotation typeAnnotation)
-    {
-        return typeAnnotation switch
-        {
-            TypeAnnotation.GenericType generic => generic.Name,
-
-            TypeAnnotation.Typed typed =>
-            RenderTypedAnnotation(typed),
-
-            TypeAnnotation.Unit => "()",
-
-            TypeAnnotation.Tupled tupled when tupled.TypeAnnotations.Count is 1 =>
-            // Single-element tuple is just parentheses
-            "(" + RenderTypeAnnotation(tupled.TypeAnnotations[0].Value) + ")",
-
-            TypeAnnotation.Tupled tupled =>
-            "( " + string.Join(", ", tupled.TypeAnnotations.Select(t => RenderTypeAnnotation(t.Value))) + " )",
-
-            TypeAnnotation.Record record =>
-            RenderRecordDefinition(record.RecordDefinition),
-
-            TypeAnnotation.GenericRecord genericRecord =>
-            "{ " + genericRecord.GenericName.Value +
-            " | " +
-            RenderRecordFields(genericRecord.RecordDefinition.Value) + " }",
-
-            TypeAnnotation.FunctionTypeAnnotation funcType =>
-            RenderFunctionTypeAnnotation(funcType),
+            typeExpose.ExposedType.Open is not null
+            ?
+            $"{typeExpose.ExposedType.Name}(..)"
+            :
+            typeExpose.ExposedType.Name,
 
             _ =>
             throw new NotImplementedException(
-                $"Unknown type annotation: {typeAnnotation.GetType().Name}")
+                $"Unknown expose type: {expose.GetType().Name}")
         };
     }
-
-    private static string RenderTypedAnnotation(TypeAnnotation.Typed typed)
-    {
-        var typeName =
-            typed.TypeName.Value.ModuleName.Count > 0
-            ?
-            RenderModuleName(typed.TypeName.Value.ModuleName) + "." + typed.TypeName.Value.Name
-            :
-            typed.TypeName.Value.Name;
-
-        if (typed.TypeArguments.Count is 0)
-            return typeName;
-
-        return
-            typeName +
-            " " +
-            string.Join(" ", typed.TypeArguments.Select(a => RenderTypeAnnotationParenthesized(a.Value)));
-    }
-
-    private static string RenderTypeAnnotationParenthesized(TypeAnnotation typeAnnotation)
-    {
-        // Wrap complex types in parentheses
-        return typeAnnotation switch
-        {
-            TypeAnnotation.FunctionTypeAnnotation =>
-            "(" + RenderTypeAnnotation(typeAnnotation) + ")",
-
-            TypeAnnotation.Typed typed when typed.TypeArguments.Count > 0 =>
-            "(" + RenderTypeAnnotation(typeAnnotation) + ")",
-
-            _ =>
-            RenderTypeAnnotation(typeAnnotation)
-        };
-    }
-
-    private static string RenderFunctionTypeAnnotation(TypeAnnotation.FunctionTypeAnnotation funcType)
-    {
-        // Argument needs parens only if it's a function type (for precedence)
-        // Typed with args (like Array a) doesn't need parens - type application binds tighter than ->
-        var argStr = funcType.ArgumentType.Value switch
-        {
-            TypeAnnotation.FunctionTypeAnnotation =>
-                "(" + RenderTypeAnnotation(funcType.ArgumentType.Value) + ")",
-            _ =>
-                RenderTypeAnnotation(funcType.ArgumentType.Value)
-        };
-
-        // Return type rendering
-        var retStr = RenderTypeAnnotation(funcType.ReturnType.Value);
-
-        return argStr + " -> " + retStr;
-    }
-
-    private static string RenderRecordDefinition(RecordDefinition recordDefinition)
-    {
-        if (recordDefinition.Fields.Count is 0)
-            return "{}";
-
-        return "{ " + RenderRecordFields(recordDefinition) + " }";
-    }
-
-    private static string RenderRecordFields(RecordDefinition recordDefinition) =>
-        string.Join(", ", recordDefinition.Fields.Select(f =>
-            f.Value.FieldName.Value + " : " + RenderTypeAnnotation(f.Value.FieldType.Value)));
 
     private static string RenderInfix(Infix infix)
     {
@@ -1948,121 +1869,6 @@ public class Rendering
         };
 
         return $"infix {direction} {infix.Precedence.Value} ({infix.Operator.Value}) = {infix.FunctionName.Value}";
-    }
-
-    private static string RenderExpression(Expression expression)
-    {
-        return expression switch
-        {
-            Expression.UnitExpr => "()",
-
-            Expression.Literal literal =>
-            RenderStringLiteral(literal.Value),
-
-            Expression.CharLiteral charLiteral =>
-            RenderCharLiteral(charLiteral.Value),
-
-            Expression.Integer integer =>
-            integer.Value.ToString(),
-
-            Expression.Hex hex =>
-            RenderHexPattern(hex.Value),
-
-            Expression.Floatable floatable =>
-            FormatFloatForElm(floatable.Value),
-
-            Expression.Negation negation =>
-            "-" + RenderExpressionParenthesizedIfNeeded(negation.Expression.Value),
-
-            Expression.ListExpr listExpr =>
-            listExpr.Elements.Count is 0
-            ?
-            "[]"
-            :
-            "[ " + string.Join(", ", listExpr.Elements.Select(e => RenderExpression(e.Value))) + " ]",
-
-            Expression.FunctionOrValue funcOrVal =>
-            funcOrVal.ModuleName.Count > 0
-            ?
-            RenderModuleName(funcOrVal.ModuleName) + "." + funcOrVal.Name
-            :
-            funcOrVal.Name,
-
-            Expression.IfBlock ifBlock =>
-            "if " + RenderExpression(ifBlock.Condition.Value) +
-            " then " + RenderExpression(ifBlock.ThenBlock.Value) +
-            " else " + RenderExpression(ifBlock.ElseBlock.Value),
-
-            Expression.PrefixOperator prefixOp => "(" + prefixOp.Operator + ")",
-
-            Expression.ParenthesizedExpression paren =>
-                "(" + RenderExpression(paren.Expression.Value) + ")",
-
-            Expression.Application app =>
-                string.Join(" ", app.Arguments.Select(a => RenderExpressionParenthesizedIfNeeded(a.Value))),
-
-            Expression.OperatorApplication opApp =>
-                RenderExpression(opApp.Left.Value) + " " + opApp.Operator + " " + RenderExpression(opApp.Right.Value),
-
-            Expression.TupledExpression tupled =>
-                "( " + string.Join(", ", tupled.Elements.Select(e => RenderExpression(e.Value))) + " )",
-
-            Expression.LambdaExpression lambda =>
-                "\\" + string.Join(" ", lambda.Lambda.Arguments.Select(a => RenderPattern(a.Value))) +
-                " -> " + RenderExpression(lambda.Lambda.Expression.Value),
-
-            Expression.CaseExpression caseExpr =>
-                RenderCaseExpression(caseExpr.CaseBlock),
-
-            Expression.LetExpression letExpr =>
-                RenderLetExpression(letExpr.Value),
-
-            Expression.RecordExpr recordExpr =>
-                RenderRecordExpr(recordExpr),
-
-            Expression.RecordAccess recordAccess =>
-                RenderExpressionParenthesizedIfNeeded(recordAccess.Record.Value) + "." + recordAccess.FieldName.Value,
-
-            Expression.RecordAccessFunction accessFunc => accessFunc.FunctionName,
-
-            Expression.RecordUpdateExpression recordUpdate =>
-                "{ " + recordUpdate.RecordName.Value + " | " +
-                string.Join(", ", recordUpdate.Fields.Select(f =>
-                    f.Value.fieldName.Value + " = " + RenderExpression(f.Value.valueExpr.Value))) + " }",
-
-            _ =>
-            throw new NotImplementedException(
-                $"Unknown expression type: {expression.GetType().Name}")
-        };
-    }
-
-    private static string RenderExpressionParenthesizedIfNeeded(Expression expression)
-    {
-        // Wrap complex expressions in parentheses when they appear as arguments
-        return expression switch
-        {
-            Expression.Application =>
-            "(" + RenderExpression(expression) + ")",
-
-            Expression.OperatorApplication =>
-            "(" + RenderExpression(expression) + ")",
-
-            Expression.IfBlock =>
-            "(" + RenderExpression(expression) + ")",
-
-            Expression.CaseExpression =>
-            "(" + RenderExpression(expression) + ")",
-
-            Expression.LetExpression =>
-            "(" + RenderExpression(expression) + ")",
-
-            Expression.LambdaExpression =>
-            "(" + RenderExpression(expression) + ")",
-            Expression.Negation => "(" + RenderExpression(expression) + ")",
-
-            _ =>
-            RenderExpression(expression)
-        };
     }
 
     private static string RenderStringLiteral(string value)
@@ -2164,80 +1970,6 @@ public class Rendering
         return str;
     }
 
-    private static string RenderCaseExpression(CaseBlock caseBlock)
-    {
-        var sb = new StringBuilder();
-        sb.Append("case ");
-        sb.Append(RenderExpression(caseBlock.Expression.Value));
-        sb.Append(" of ");
-
-        for (var i = 0; i < caseBlock.Cases.Count; i++)
-        {
-            var case_ = caseBlock.Cases[i];
-            sb.Append(RenderPattern(case_.Pattern.Value));
-            sb.Append(" -> ");
-            sb.Append(RenderExpression(case_.Expression.Value));
-
-            if (i < caseBlock.Cases.Count - 1)
-            {
-                sb.Append(' ');
-            }
-        }
-
-        return sb.ToString();
-    }
-
-    private static string RenderLetExpression(Expression.LetBlock letBlock)
-    {
-        var sb = new StringBuilder();
-        sb.Append("let ");
-
-        foreach (var decl in letBlock.Declarations)
-        {
-            sb.Append(RenderLetDeclaration(decl.Value));
-            sb.Append(' ');
-        }
-
-        sb.Append("in ");
-        sb.Append(RenderExpression(letBlock.Expression.Value));
-
-        return sb.ToString();
-    }
-
-    private static string RenderLetDeclaration(Expression.LetDeclaration letDecl)
-    {
-        return letDecl switch
-        {
-            Expression.LetDeclaration.LetFunction letFunc =>
-                RenderLetFunction(letFunc),
-
-            Expression.LetDeclaration.LetDestructuring letDestr =>
-                RenderPattern(letDestr.Pattern.Value) + " = " + RenderExpression(letDestr.Expression.Value),
-
-            _ => throw new NotImplementedException($"Unknown let declaration type: {letDecl.GetType().Name}")
-        };
-    }
-
-    private static string RenderLetFunction(Expression.LetDeclaration.LetFunction letFunc)
-    {
-        var impl = letFunc.Function.Declaration.Value;
-        var header = impl.Name.Value;
-        if (impl.Arguments.Count > 0)
-        {
-            header += " " + string.Join(" ", impl.Arguments.Select(a => RenderPattern(a.Value)));
-        }
-        return header + " = " + RenderExpression(impl.Expression.Value);
-    }
-
-    private static string RenderRecordExpr(Expression.RecordExpr recordExpr)
-    {
-        if (recordExpr.Fields.Count is 0)
-            return "{}";
-
-        return "{ " + string.Join(", ", recordExpr.Fields.Select(f =>
-            f.Value.fieldName.Value + " = " + RenderExpression(f.Value.valueExpr.Value))) + " }";
-    }
-
     private static string RenderPattern(Pattern pattern)
     {
         return pattern switch
@@ -2299,9 +2031,12 @@ public class Rendering
 
     private static string RenderNamedPattern(Pattern.NamedPattern namedPat)
     {
-        var name = namedPat.Name.ModuleName.Count > 0
-            ? RenderModuleName(namedPat.Name.ModuleName) + "." + namedPat.Name.Name
-            : namedPat.Name.Name;
+        var name =
+            namedPat.Name.ModuleName.Count > 0
+            ?
+            RenderModuleName(namedPat.Name.ModuleName) + "." + namedPat.Name.Name
+            :
+            namedPat.Name.Name;
 
         if (namedPat.Arguments.Count is 0)
             return name;
