@@ -158,7 +158,7 @@ public class InliningCrossModuleTests
             module Elm.Parser.Tokens exposing (..)
 
 
-            isAlphaNumOrUnderscore : Char ->      Bool
+            isAlphaNumOrUnderscore : Char -> Bool
             isAlphaNumOrUnderscore char =
                 if
                     Char.isAlphaNum

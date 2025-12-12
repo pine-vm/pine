@@ -67,16 +67,13 @@ public class RenderingConfigTests
                 [QualifiedNameRef.FromFullName("Char.Char")] = QualifiedNameRef.FromFullName("Char"),
             };
 
-        var renderConfig =
-            Rendering.ConfigPreserveLocations(mapQualifiedName: namesMap);
+        var mapped =
+            NameMapper.MapNames(parsed, namesMap);
 
         var formatted =
-            Core.Elm.ElmSyntax.Stil4mElmSyntax7.Avh4Format.Format(parsed);
+            Core.Elm.ElmSyntax.Stil4mElmSyntax7.Avh4Format.Format(mapped);
 
-        var rendered =
-            Rendering.ToString(
-                formatted,
-                renderConfig);
+        var rendered = Rendering.ToString(formatted);
 
         rendered.Trim().Should().Be(expectedModuleText.Trim());
     }

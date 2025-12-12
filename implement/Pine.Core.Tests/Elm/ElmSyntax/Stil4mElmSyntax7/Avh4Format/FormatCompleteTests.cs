@@ -12,13 +12,8 @@ using Avh4Format = Core.Elm.ElmSyntax.Stil4mElmSyntax7.Avh4Format;
 
 public class FormatCompleteTests
 {
-    private static readonly Rendering.Config s_renderingDefaultConfig =
-        Rendering.ConfigPreserveLocations();
-
     private static string RenderDefault(File file) =>
-        Rendering.ToString(
-            file,
-            s_renderingDefaultConfig);
+        Rendering.ToString(file);
 
     private static string FormatString(
         string input)

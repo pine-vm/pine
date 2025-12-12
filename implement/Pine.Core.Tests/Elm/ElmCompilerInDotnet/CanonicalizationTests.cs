@@ -1080,9 +1080,7 @@ public class CanonicalizationTests
                 moduleName: ["App"]);
 
         var renderedAppModule =
-            Rendering.ToString(
-                appModuleCanonicalized,
-                Rendering.ConfigPreserveLocations());
+            Rendering.ToString(appModuleCanonicalized);
 
         renderedAppModule.Trim().Should().Be(
             expectedAppModuleText.Trim());
@@ -1133,9 +1131,7 @@ public class CanonicalizationTests
                 moduleName: ["App"]);
 
         var renderedAppModule =
-            Rendering.ToString(
-                appModuleCanonicalized,
-                Rendering.ConfigPreserveLocations());
+            Rendering.ToString(appModuleCanonicalized);
 
         renderedAppModule.Trim().Should().Be(
             expectedAppModuleText.Trim());
@@ -1200,9 +1196,7 @@ public class CanonicalizationTests
                 moduleName: ["App"]);
 
         var renderedAppModule =
-            Rendering.ToString(
-                appModuleCanonicalized,
-                Rendering.ConfigPreserveLocations());
+            Rendering.ToString(appModuleCanonicalized);
 
         renderedAppModule.Trim().Should().Be(
             expectedAppModuleText.Trim());

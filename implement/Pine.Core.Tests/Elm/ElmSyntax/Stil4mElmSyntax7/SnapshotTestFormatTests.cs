@@ -8,11 +8,8 @@ namespace Pine.Core.Tests.Elm.ElmSyntax.Stil4mElmSyntax7;
 
 public class SnapshotTestFormatTests
 {
-    private static readonly Core.Elm.ElmSyntax.Stil4mElmSyntax7.Rendering.Config s_renderingDefaultConfig =
-        Core.Elm.ElmSyntax.Stil4mElmSyntax7.Rendering.ConfigPreserveLocations();
-
     private static string RenderDefault(File file) =>
-        Core.Elm.ElmSyntax.Stil4mElmSyntax7.Rendering.ToString(file, s_renderingDefaultConfig);
+        Core.Elm.ElmSyntax.Stil4mElmSyntax7.Rendering.ToString(file);
 
     private static string FormatString(
         string input)

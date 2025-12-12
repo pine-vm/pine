@@ -18,19 +18,14 @@ public class InliningTestHelper
         .SetItem(QualifiedNameRef.FromFullName("String.String"), QualifiedNameRef.FromFullName("String"))
         .SetItem(QualifiedNameRef.FromFullName("Char.Char"), QualifiedNameRef.FromFullName("Char"));
 
-    private static readonly Rendering.Config s_renderingConfigSnapshotTestsDefault =
-        Rendering.ConfigPreserveLocations(
-            mapQualifiedName: s_renderingNameMap);
-
-    public static string RenderModuleForSnapshotTests(
-        File module)
+    public static string RenderModuleForSnapshotTests(File module)
     {
-        var moduleFormatted = SnapshotTestFormat.Format(module);
+        var moduleMapped =
+            NameMapper.MapNames(module, s_renderingNameMap);
 
-        return
-            Rendering.ToString(
-                moduleFormatted,
-                s_renderingConfigSnapshotTestsDefault);
+        var moduleFormatted = SnapshotTestFormat.Format(moduleMapped);
+
+        return Rendering.ToString(moduleFormatted);
     }
 
     public static File CanonicalizeAndInlineAndGetSingleModule(

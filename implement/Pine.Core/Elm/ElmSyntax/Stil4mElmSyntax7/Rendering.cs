@@ -17,36 +17,6 @@ namespace Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 public class Rendering
 {
     /// <summary>
-    /// Represents configuration options for mapping qualified names using a custom function.
-    /// </summary>
-    /// <remarks>Use this record to supply a custom mapping strategy for qualified names when processing or
-    /// transforming them. If no mapping function is provided, qualified names remain unchanged.</remarks>
-    /// <param name="MapQualifiedName">A delegate that defines how to transform a <see cref="QualifiedNameRef"/> instance.
-    /// If <see langword="null"/>, no mapping is applied.
-    /// </param>
-    public record Config(
-        Func<QualifiedNameRef, QualifiedNameRef>? MapQualifiedName);
-
-    /// <summary>
-    /// Preserves input source locations during rendering.
-    /// </summary>
-    public static Config ConfigPreserveLocations(
-        Func<QualifiedNameRef, QualifiedNameRef>? mapQualifiedName = null) =>
-        new(
-            MapQualifiedName: mapQualifiedName);
-
-    /// <summary>
-    /// Preserves input source locations during rendering.
-    /// </summary>
-    public static Config ConfigPreserveLocations(
-        IReadOnlyDictionary<QualifiedNameRef, QualifiedNameRef> mapQualifiedName) =>
-        new(
-            MapQualifiedName: originalQualifiedName =>
-                mapQualifiedName.TryGetValue(originalQualifiedName, out var mappedQualifiedName)
-                ? mappedQualifiedName
-                : originalQualifiedName);
-
-    /// <summary>
     /// Context for tracking position while rendering with location preservation.
     /// </summary>
     private class RenderContext
@@ -214,9 +184,7 @@ public class Rendering
     /// <summary>
     /// Renders a file while preserving the original source locations.
     /// </summary>
-    public static string ToString(
-        File file,
-        Config config)
+    public static string ToString(File file)
     {
         var context = new RenderContext
         {
@@ -237,7 +205,7 @@ public class Rendering
         foreach (var declaration in file.Declarations)
         {
             context.AdvanceToLocation(declaration.Range.Start);
-            RenderDeclaration(declaration, context, config);
+            RenderDeclaration(declaration, context);
         }
 
         // Ensure file ends with a trailing newline (AVH4 elm-format style)
@@ -472,25 +440,24 @@ public class Rendering
 
     private static void RenderDeclaration(
         Node<Declaration> declarationNode,
-        RenderContext context,
-        Config config)
+        RenderContext context)
     {
         switch (declarationNode.Value)
         {
             case Declaration.FunctionDeclaration funcDecl:
-                RenderFunction(funcDecl.Function, context, config);
+                RenderFunction(funcDecl.Function, context);
                 break;
 
             case Declaration.CustomTypeDeclaration customType:
-                RenderCustomType(customType.TypeDeclaration, context, config);
+                RenderCustomType(customType.TypeDeclaration, context);
                 break;
 
             case Declaration.AliasDeclaration aliasDecl:
-                RenderTypeAlias(aliasDecl.TypeAlias, context, config);
+                RenderTypeAlias(aliasDecl.TypeAlias, context);
                 break;
 
             case Declaration.PortDeclaration portDecl:
-                context.Append("port " + RenderSignature(portDecl.Signature, config));
+                context.Append("port " + RenderSignature(portDecl.Signature));
                 break;
 
             case Declaration.InfixDeclaration infixDecl:
@@ -505,8 +472,7 @@ public class Rendering
 
     private static void RenderTypeAlias(
         TypeAlias typeAlias,
-        RenderContext context,
-        Config config)
+        RenderContext context)
     {
         // Render "type alias"
         context.Append("type");
@@ -546,13 +512,12 @@ public class Rendering
         }
 
         // Render type annotation with location preservation
-        RenderTypeAnnotation(typeAlias.TypeAnnotation, context, config);
+        RenderTypeAnnotation(typeAlias.TypeAnnotation, context);
     }
 
     private static void RenderCustomType(
         TypeStruct typeStruct,
-        RenderContext context,
-        Config config)
+        RenderContext context)
     {
         // Render documentation comment if present
         if (typeStruct.Documentation is { } docComment)
@@ -659,7 +624,7 @@ public class Rendering
             foreach (var arg in constructor.Value.Arguments)
             {
                 // RenderTypeAnnotation will handle advancing to arg.Range.Start
-                RenderTypeAnnotation(arg, context, config);
+                RenderTypeAnnotation(arg, context);
             }
         }
     }
@@ -667,7 +632,6 @@ public class Rendering
     private static void RenderTypeAnnotation(
         Node<TypeAnnotation> typeAnnotationNode,
         RenderContext context,
-        Config config,
         bool skipAdvanceIfDifferentRow = false)
     {
         var typeAnnotation = typeAnnotationNode.Value;
@@ -689,7 +653,7 @@ public class Rendering
                 break;
 
             case TypeAnnotation.Typed typed:
-                RenderTypedAnnotation(typed, context, config);
+                RenderTypedAnnotation(typed, context);
                 break;
 
             case TypeAnnotation.Unit:
@@ -697,12 +661,12 @@ public class Rendering
                 break;
 
             case TypeAnnotation.Record record:
-                RenderRecordDefinition(record.RecordDefinition, context, config);
+                RenderRecordDefinition(record.RecordDefinition, context);
                 break;
 
             case TypeAnnotation.FunctionTypeAnnotation funcType:
                 // Render the argument type (parens are handled via single-element Tupled in AST)
-                RenderTypeAnnotation(funcType.ArgumentType, context, config);
+                RenderTypeAnnotation(funcType.ArgumentType, context);
 
                 // Check if return type is on a new line
                 var returnTypeOnNewLine = funcType.ReturnType.Range.Start.Row > context.CurrentRow;
@@ -728,30 +692,29 @@ public class Rendering
                 }
 
                 // Render the return type (parens are handled via single-element Tupled in AST)
-                RenderTypeAnnotation(funcType.ReturnType, context, config);
+                RenderTypeAnnotation(funcType.ReturnType, context);
                 break;
 
             case TypeAnnotation.Tupled tupled:
-                RenderTupledTypeAnnotation(tupled, context, config);
+                RenderTupledTypeAnnotation(tupled, context);
                 break;
 
             default:
                 // For other types, fall back to simple rendering
-                context.Append(RenderTypeAnnotation(typeAnnotation, config));
+                context.Append(RenderTypeAnnotation(typeAnnotation));
                 break;
         }
     }
 
     private static void RenderTupledTypeAnnotation(
         TypeAnnotation.Tupled tupled,
-        RenderContext context,
-        Config config)
+        RenderContext context)
     {
         // Single-element tuple is just parentheses (no spaces)
         if (tupled.TypeAnnotations.Count is 1)
         {
             context.Append("(");
-            RenderTypeAnnotation(tupled.TypeAnnotations[0], context, config);
+            RenderTypeAnnotation(tupled.TypeAnnotations[0], context);
             context.Append(")");
             return;
         }
@@ -765,7 +728,7 @@ public class Rendering
 
             // Advance to this type's location
             context.AdvanceToLocation(typeNode.Range.Start, minSpaces: i is 0 ? 0 : 1);
-            RenderTypeAnnotation(typeNode, context, config);
+            RenderTypeAnnotation(typeNode, context);
 
             if (i < tupled.TypeAnnotations.Count - 1)
             {
@@ -781,27 +744,14 @@ public class Rendering
 
     private static void RenderTypedAnnotation(
         TypeAnnotation.Typed typed,
-        RenderContext context,
-        Config config)
+        RenderContext context)
     {
-        var originalQualifiedName =
-            new QualifiedNameRef(
-                ModuleName: typed.TypeName.Value.ModuleName,
-                Name: typed.TypeName.Value.Name);
-
-        var mappedQualifiedName =
-            config.MapQualifiedName is { } mapQualifiedName
-            ?
-            mapQualifiedName(originalQualifiedName)
-            :
-            originalQualifiedName;
-
         var typeName =
-            mappedQualifiedName.ModuleName.Count > 0
+            typed.TypeName.Value.ModuleName.Count > 0
             ?
-            RenderModuleName(mappedQualifiedName.ModuleName) + "." + mappedQualifiedName.Name
+            RenderModuleName(typed.TypeName.Value.ModuleName) + "." + typed.TypeName.Value.Name
             :
-            mappedQualifiedName.Name;
+            typed.TypeName.Value.Name;
 
         context.Append(typeName);
 
@@ -825,14 +775,13 @@ public class Rendering
                 context.AdvanceByMinimum(1);
             }
             // Pass skipAdvanceIfDifferentRow=true for type arguments to handle nested stale ranges
-            RenderTypeAnnotation(arg, context, config, skipAdvanceIfDifferentRow: true);
+            RenderTypeAnnotation(arg, context, skipAdvanceIfDifferentRow: true);
         }
     }
 
     private static void RenderRecordDefinition(
         RecordDefinition recordDefinition,
-        RenderContext context,
-        Config config)
+        RenderContext context)
     {
         var openingBraceColumn = context.CurrentColumn;
         var openingBraceRow = context.CurrentRow;
@@ -927,7 +876,7 @@ public class Rendering
             context.AdvanceToLocation(typeLocation, minSpaces: 1);
 
             // Render field type
-            RenderTypeAnnotation(field.Value.FieldType, context, config);
+            RenderTypeAnnotation(field.Value.FieldType, context);
         }
 
         // Render closing brace
@@ -953,13 +902,12 @@ public class Rendering
 
     private static void RenderFunction(
         FunctionStruct function,
-        RenderContext context,
-        Config config)
+        RenderContext context)
     {
         if (function.Signature is { } signature)
         {
             context.AdvanceToLocation(signature.Range.Start);
-            RenderSignature(signature.Value, context, config);
+            RenderSignature(signature.Value, context);
         }
 
         var impl = function.Declaration;
@@ -994,13 +942,12 @@ public class Rendering
         context.Append("=");
 
         // Render the expression with location preservation
-        RenderExpression(impl.Value.Expression, context, config);
+        RenderExpression(impl.Value.Expression, context);
     }
 
     private static void RenderSignature(
         Signature signature,
-        RenderContext context,
-        Config config)
+        RenderContext context)
     {
         // Render function name
         context.Append(signature.Name.Value);
@@ -1010,13 +957,12 @@ public class Rendering
         context.Append(":");
 
         // Render type annotation with location preservation
-        RenderTypeAnnotation(signature.TypeAnnotation, context, config);
+        RenderTypeAnnotation(signature.TypeAnnotation, context);
     }
 
     private static void RenderExpression(
         Node<Expression> expressionNode,
-        RenderContext context,
-        Config config)
+        RenderContext context)
     {
         var expr = expressionNode.Value;
 
@@ -1050,47 +996,47 @@ public class Rendering
 
             case Expression.Negation negation:
                 context.Append("-");
-                RenderExpression(negation.Expression, context, config);
+                RenderExpression(negation.Expression, context);
                 break;
 
             case Expression.TupledExpression tupled:
-                RenderTupledExpression(expressionNode, tupled, context, config);
+                RenderTupledExpression(expressionNode, tupled, context);
                 break;
 
             case Expression.ListExpr listExpr:
-                RenderListExpr(expressionNode, listExpr, context, config);
+                RenderListExpr(expressionNode, listExpr, context);
                 break;
 
             case Expression.Application app:
-                RenderApplication(app, context, config);
+                RenderApplication(app, context);
                 break;
 
             case Expression.RecordExpr recordExpr:
-                RenderRecordExpr(expressionNode, recordExpr, context, config);
+                RenderRecordExpr(expressionNode, recordExpr, context);
                 break;
 
             case Expression.RecordUpdateExpression recordUpdate:
-                RenderRecordUpdateExpr(expressionNode, recordUpdate, context, config);
+                RenderRecordUpdateExpr(expressionNode, recordUpdate, context);
                 break;
 
             case Expression.OperatorApplication opApp:
-                RenderOperatorApplication(opApp, context, config);
+                RenderOperatorApplication(opApp, context);
                 break;
 
             case Expression.CaseExpression caseExpr:
-                RenderCaseExpression(expressionNode, caseExpr.CaseBlock, context, config);
+                RenderCaseExpression(expressionNode, caseExpr.CaseBlock, context);
                 break;
 
             case Expression.LetExpression letExpr:
-                RenderLetExpression(letExpr.Value, context, config);
+                RenderLetExpression(letExpr.Value, context);
                 break;
 
             case Expression.IfBlock ifBlock:
-                RenderIfExpression(ifBlock, context, config);
+                RenderIfExpression(ifBlock, context);
                 break;
 
             case Expression.LambdaExpression lambdaExpr:
-                RenderLambdaExpression(lambdaExpr.Lambda, context, config);
+                RenderLambdaExpression(lambdaExpr.Lambda, context);
                 break;
 
             case Expression.FunctionOrValue funcOrVal:
@@ -1105,7 +1051,7 @@ public class Rendering
 
             case Expression.ParenthesizedExpression parenExpr:
                 context.Append("(");
-                RenderExpression(parenExpr.Expression, context, config);
+                RenderExpression(parenExpr.Expression, context);
                 // Closing paren location is at the end of the parenthesized expression's range
                 var closingParenLocation = new Location(expressionNode.Range.End.Row, expressionNode.Range.End.Column - 1);
                 context.AdvanceToLocation(closingParenLocation, minSpaces: 1);
@@ -1119,7 +1065,7 @@ public class Rendering
                 break;
 
             case Expression.RecordAccess recordAccess:
-                RenderExpression(recordAccess.Record, context, config);
+                RenderExpression(recordAccess.Record, context);
                 context.Append(".");
                 context.Append(recordAccess.FieldName.Value);
                 break;
@@ -1132,8 +1078,7 @@ public class Rendering
 
     private static void RenderApplication(
         Expression.Application app,
-        RenderContext context,
-        Config config)
+        RenderContext context)
     {
         // Render each argument (including the function as the first argument)
         for (var i = 0; i < app.Arguments.Count; i++)
@@ -1146,17 +1091,16 @@ public class Rendering
                 context.AdvanceToLocation(arg.Range.Start, minSpaces: 1);
             }
 
-            RenderExpression(arg, context, config);
+            RenderExpression(arg, context);
         }
     }
 
     private static void RenderOperatorApplication(
         Expression.OperatorApplication opApp,
-        RenderContext context,
-        Config config)
+        RenderContext context)
     {
         // Render left operand
-        RenderExpression(opApp.Left, context, config);
+        RenderExpression(opApp.Left, context);
 
         // Check if right operand starts on a different row than where we currently are
         // Also ensure right operand is actually after current position (clamping handles backwards locations)
@@ -1186,14 +1130,13 @@ public class Rendering
             context.AdvanceToLocation(opApp.Right.Range.Start, minSpaces: 1);
         }
 
-        RenderExpression(opApp.Right, context, config);
+        RenderExpression(opApp.Right, context);
     }
 
     private static void RenderTupledExpression(
         Node<Expression> tupledExprNode,
         Expression.TupledExpression tupled,
-        RenderContext context,
-        Config config)
+        RenderContext context)
     {
         var openingParenColumn = context.CurrentColumn;
 
@@ -1230,7 +1173,7 @@ public class Rendering
                 context.AdvanceToLocation(element.Range.Start, minSpaces: 1);
             }
 
-            RenderExpression(element, context, config);
+            RenderExpression(element, context);
 
             // Update previousItemRow to track the last rendered item's ending row
             previousItemRow = element.Range.End.Row;
@@ -1251,8 +1194,7 @@ public class Rendering
     private static void RenderListExpr(
         Node<Expression> listExprNode,
         Expression.ListExpr listExpr,
-        RenderContext context,
-        Config config)
+        RenderContext context)
     {
         var openingBracketColumn = context.CurrentColumn;
 
@@ -1289,7 +1231,7 @@ public class Rendering
                 context.AdvanceToLocation(item.Range.Start, minSpaces: 1);
             }
 
-            RenderExpression(item, context, config);
+            RenderExpression(item, context);
 
             // Update previousItemRow to track the last rendered item's ending row
             previousItemRow = item.Range.End.Row;
@@ -1310,8 +1252,7 @@ public class Rendering
     private static void RenderRecordExpr(
         Node<Expression> recordNode,
         Expression.RecordExpr recordExpr,
-        RenderContext context,
-        Config config)
+        RenderContext context)
     {
         context.Append("{");
 
@@ -1369,7 +1310,7 @@ public class Rendering
 
             // Advance to value expression location
             context.AdvanceToLocation(valueExpr.Range.Start, minSpaces: 1);
-            RenderExpression(valueExpr, context, config);
+            RenderExpression(valueExpr, context);
 
             // For non-multi-line or same-row fields, add comma immediately after
             if (i < recordExpr.Fields.Count - 1 && !isMultiLine)
@@ -1400,8 +1341,7 @@ public class Rendering
     private static void RenderRecordUpdateExpr(
         Node<Expression> recordNode,
         Expression.RecordUpdateExpression recordUpdate,
-        RenderContext context,
-        Config config)
+        RenderContext context)
     {
         context.Append("{");
 
@@ -1457,7 +1397,7 @@ public class Rendering
 
             // Advance to value expression location
             context.AdvanceToLocation(valueExpr.Range.Start, minSpaces: 1);
-            RenderExpression(valueExpr, context, config);
+            RenderExpression(valueExpr, context);
 
             if (!isMultiLine && i < recordUpdate.Fields.Count - 1)
             {
@@ -1476,15 +1416,14 @@ public class Rendering
     private static void RenderCaseExpression(
         Node<Expression> caseExprNode,
         CaseBlock caseBlock,
-        RenderContext context,
-        Config config)
+        RenderContext context)
     {
         // Render "case "
         context.Append("case");
         context.AdvanceByMinimum(1);
 
         // Render the scrutinee expression
-        RenderExpression(caseBlock.Expression, context, config);
+        RenderExpression(caseBlock.Expression, context);
 
         // Render " of" (not tracked, so use 1 space)
         context.AdvanceByMinimum(1);
@@ -1505,14 +1444,13 @@ public class Rendering
 
             // Advance to expression location
             context.AdvanceToLocation(caseItem.Expression.Range.Start, minSpaces: 1);
-            RenderExpression(caseItem.Expression, context, config);
+            RenderExpression(caseItem.Expression, context);
         }
     }
 
     private static void RenderLetExpression(
         Expression.LetBlock letBlock,
-        RenderContext context,
-        Config config)
+        RenderContext context)
     {
         // Render "let" keyword
         context.Append("let");
@@ -1529,7 +1467,7 @@ public class Rendering
             switch (decl)
             {
                 case Expression.LetDeclaration.LetFunction letFunc:
-                    RenderLetFunction(letFunc, context, config);
+                    RenderLetFunction(letFunc, context);
                     break;
 
                 case Expression.LetDeclaration.LetDestructuring letDestr:
@@ -1540,7 +1478,7 @@ public class Rendering
                     context.Append("=");
                     // Advance to expression location
                     context.AdvanceToLocation(letDestr.Expression.Range.Start, minSpaces: 1);
-                    RenderExpression(letDestr.Expression, context, config);
+                    RenderExpression(letDestr.Expression, context);
                     break;
 
                 default:
@@ -1573,13 +1511,12 @@ public class Rendering
             context.Append("in");
             context.AdvanceToLocation(letBlock.Expression.Range.Start, minSpaces: 1);
         }
-        RenderExpression(letBlock.Expression, context, config);
+        RenderExpression(letBlock.Expression, context);
     }
 
     private static void RenderLetFunction(
         Expression.LetDeclaration.LetFunction letFunc,
-        RenderContext context,
-        Config config)
+        RenderContext context)
     {
         // Render signature if present
         if (letFunc.Function.Signature is not null)
@@ -1589,7 +1526,7 @@ public class Rendering
             context.AdvanceByMinimum(1);
             context.Append(":");
             context.AdvanceToLocation(sig.TypeAnnotation.Range.Start, minSpaces: 1);
-            context.Append(RenderTypeAnnotation(sig.TypeAnnotation.Value, config));
+            context.Append(RenderTypeAnnotation(sig.TypeAnnotation.Value));
 
             // After signature, advance to the implementation location
             context.AdvanceToLocation(letFunc.Function.Declaration.Range.Start, minSpaces: 1);
@@ -1613,13 +1550,12 @@ public class Rendering
 
         // Advance to expression location
         context.AdvanceToLocation(impl.Expression.Range.Start, minSpaces: 1);
-        RenderExpression(impl.Expression, context, config);
+        RenderExpression(impl.Expression, context);
     }
 
     private static void RenderIfExpression(
         Expression.IfBlock ifBlock,
-        RenderContext context,
-        Config config)
+        RenderContext context)
     {
         // Render "if" first
         context.Append("if");
@@ -1644,7 +1580,7 @@ public class Rendering
             // Single-line condition: just add a space
             context.AdvanceByMinimum(1);
         }
-        RenderExpression(ifBlock.Condition, context, config);
+        RenderExpression(ifBlock.Condition, context);
 
         // Render "then"
         if (isConditionMultiLine)
@@ -1711,7 +1647,7 @@ public class Rendering
 
         // Advance to then block location
         context.AdvanceToLocation(ifBlock.ThenBlock.Range.Start, minSpaces: 1);
-        RenderExpression(ifBlock.ThenBlock, context, config);
+        RenderExpression(ifBlock.ThenBlock, context);
 
         // Render "else" keyword
         // Check if the else block is an if expression (for "else if" pattern)
@@ -1807,13 +1743,12 @@ public class Rendering
             context.Append("else");
             context.AdvanceToLocation(ifBlock.ElseBlock.Range.Start, minSpaces: 1);
         }
-        RenderExpression(ifBlock.ElseBlock, context, config);
+        RenderExpression(ifBlock.ElseBlock, context);
     }
 
     private static void RenderLambdaExpression(
         LambdaStruct lambda,
-        RenderContext context,
-        Config config)
+        RenderContext context)
     {
         // Render opening backslash (no opening paren - that comes from source location if present)
         context.Append("\\");
@@ -1833,7 +1768,7 @@ public class Rendering
         context.Append("->");
 
         // Render expression (RenderExpression will advance to its location)
-        RenderExpression(lambda.Expression, context, config);
+        RenderExpression(lambda.Expression, context);
 
         // No closing parenthesis here - that should come from source location if present
     }
@@ -1892,41 +1827,37 @@ public class Rendering
         return sb.ToString();
     }
 
-    private static string RenderSignature(
-        Signature signature,
-        Config config) =>
-        $"{signature.Name.Value} : {RenderTypeAnnotation(signature.TypeAnnotation.Value, config)}";
+    private static string RenderSignature(Signature signature) =>
+        $"{signature.Name.Value} : {RenderTypeAnnotation(signature.TypeAnnotation.Value)}";
 
-    private static string RenderTypeAnnotation(
-        TypeAnnotation typeAnnotation,
-        Config config)
+    private static string RenderTypeAnnotation(TypeAnnotation typeAnnotation)
     {
         return typeAnnotation switch
         {
             TypeAnnotation.GenericType generic => generic.Name,
 
             TypeAnnotation.Typed typed =>
-            RenderTypedAnnotation(typed, config),
+            RenderTypedAnnotation(typed),
 
             TypeAnnotation.Unit => "()",
 
             TypeAnnotation.Tupled tupled when tupled.TypeAnnotations.Count is 1 =>
             // Single-element tuple is just parentheses
-            "(" + RenderTypeAnnotation(tupled.TypeAnnotations[0].Value, config) + ")",
+            "(" + RenderTypeAnnotation(tupled.TypeAnnotations[0].Value) + ")",
 
             TypeAnnotation.Tupled tupled =>
-            "( " + string.Join(", ", tupled.TypeAnnotations.Select(t => RenderTypeAnnotation(t.Value, config))) + " )",
+            "( " + string.Join(", ", tupled.TypeAnnotations.Select(t => RenderTypeAnnotation(t.Value))) + " )",
 
             TypeAnnotation.Record record =>
-            RenderRecordDefinition(record.RecordDefinition, config),
+            RenderRecordDefinition(record.RecordDefinition),
 
             TypeAnnotation.GenericRecord genericRecord =>
             "{ " + genericRecord.GenericName.Value +
             " | " +
-            RenderRecordFields(genericRecord.RecordDefinition.Value, config) + " }",
+            RenderRecordFields(genericRecord.RecordDefinition.Value) + " }",
 
             TypeAnnotation.FunctionTypeAnnotation funcType =>
-            RenderFunctionTypeAnnotation(funcType, config),
+            RenderFunctionTypeAnnotation(funcType),
 
             _ =>
             throw new NotImplementedException(
@@ -1934,28 +1865,14 @@ public class Rendering
         };
     }
 
-    private static string RenderTypedAnnotation(
-        TypeAnnotation.Typed typed,
-        Config config)
+    private static string RenderTypedAnnotation(TypeAnnotation.Typed typed)
     {
-        var originalQualifiedName =
-            new QualifiedNameRef(
-                ModuleName: typed.TypeName.Value.ModuleName,
-                Name: typed.TypeName.Value.Name);
-
-        var mappedQualifiedName =
-            config.MapQualifiedName is { } mapQualifiedName
-            ?
-            mapQualifiedName(originalQualifiedName)
-            :
-            originalQualifiedName;
-
         var typeName =
-            mappedQualifiedName.ModuleName.Count > 0
+            typed.TypeName.Value.ModuleName.Count > 0
             ?
-            RenderModuleName(mappedQualifiedName.ModuleName) + "." + mappedQualifiedName.Name
+            RenderModuleName(typed.TypeName.Value.ModuleName) + "." + typed.TypeName.Value.Name
             :
-            mappedQualifiedName.Name;
+            typed.TypeName.Value.Name;
 
         if (typed.TypeArguments.Count is 0)
             return typeName;
@@ -1963,62 +1880,54 @@ public class Rendering
         return
             typeName +
             " " +
-            string.Join(" ", typed.TypeArguments.Select(a => RenderTypeAnnotationParenthesized(a.Value, config)));
+            string.Join(" ", typed.TypeArguments.Select(a => RenderTypeAnnotationParenthesized(a.Value)));
     }
 
-    private static string RenderTypeAnnotationParenthesized(
-        TypeAnnotation typeAnnotation,
-        Config config)
+    private static string RenderTypeAnnotationParenthesized(TypeAnnotation typeAnnotation)
     {
         // Wrap complex types in parentheses
         return typeAnnotation switch
         {
             TypeAnnotation.FunctionTypeAnnotation =>
-            "(" + RenderTypeAnnotation(typeAnnotation, config) + ")",
+            "(" + RenderTypeAnnotation(typeAnnotation) + ")",
 
             TypeAnnotation.Typed typed when typed.TypeArguments.Count > 0 =>
-            "(" + RenderTypeAnnotation(typeAnnotation, config) + ")",
+            "(" + RenderTypeAnnotation(typeAnnotation) + ")",
 
             _ =>
-            RenderTypeAnnotation(typeAnnotation, config)
+            RenderTypeAnnotation(typeAnnotation)
         };
     }
 
-    private static string RenderFunctionTypeAnnotation(
-        TypeAnnotation.FunctionTypeAnnotation funcType,
-        Config config)
+    private static string RenderFunctionTypeAnnotation(TypeAnnotation.FunctionTypeAnnotation funcType)
     {
         // Argument needs parens only if it's a function type (for precedence)
         // Typed with args (like Array a) doesn't need parens - type application binds tighter than ->
         var argStr = funcType.ArgumentType.Value switch
         {
             TypeAnnotation.FunctionTypeAnnotation =>
-                "(" + RenderTypeAnnotation(funcType.ArgumentType.Value, config) + ")",
+                "(" + RenderTypeAnnotation(funcType.ArgumentType.Value) + ")",
             _ =>
-                RenderTypeAnnotation(funcType.ArgumentType.Value, config)
+                RenderTypeAnnotation(funcType.ArgumentType.Value)
         };
 
         // Return type rendering
-        var retStr = RenderTypeAnnotation(funcType.ReturnType.Value, config);
+        var retStr = RenderTypeAnnotation(funcType.ReturnType.Value);
 
         return argStr + " -> " + retStr;
     }
 
-    private static string RenderRecordDefinition(
-        RecordDefinition recordDefinition,
-        Config config)
+    private static string RenderRecordDefinition(RecordDefinition recordDefinition)
     {
         if (recordDefinition.Fields.Count is 0)
             return "{}";
 
-        return "{ " + RenderRecordFields(recordDefinition, config) + " }";
+        return "{ " + RenderRecordFields(recordDefinition) + " }";
     }
 
-    private static string RenderRecordFields(
-        RecordDefinition recordDefinition,
-        Config config) =>
+    private static string RenderRecordFields(RecordDefinition recordDefinition) =>
         string.Join(", ", recordDefinition.Fields.Select(f =>
-            f.Value.FieldName.Value + " : " + RenderTypeAnnotation(f.Value.FieldType.Value, config)));
+            f.Value.FieldName.Value + " : " + RenderTypeAnnotation(f.Value.FieldType.Value)));
 
     private static string RenderInfix(Infix infix)
     {

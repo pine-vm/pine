@@ -10,13 +10,8 @@ using Rendering = Core.Elm.ElmSyntax.Stil4mElmSyntax7.Rendering;
 
 public class RenderingCompleteTests
 {
-    private static readonly Rendering.Config s_renderingDefaultConfig =
-        Rendering.ConfigPreserveLocations();
-
     private static string RenderDefault(File file) =>
-        Rendering.ToString(
-            file,
-            s_renderingDefaultConfig);
+        Rendering.ToString(file);
 
     private static Range RangeFromStartAndLength(Location start, int length) =>
         new(
