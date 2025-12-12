@@ -547,6 +547,17 @@ public class Rendering
         RenderContext context,
         Config config)
     {
+        // Render documentation comment if present
+        if (typeStruct.Documentation is { } docComment)
+        {
+            // Append doc comment (this updates position automatically)
+            context.Append(docComment.Value);
+            // Move to next line after doc comment
+            context.Output.Append('\n');
+            context.CurrentRow++;
+            context.CurrentColumn = 1;
+        }
+
         // Render "type"
         context.Append("type");
 
