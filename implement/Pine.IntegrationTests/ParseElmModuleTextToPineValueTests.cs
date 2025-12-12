@@ -928,6 +928,16 @@ public class ParseElmModuleTextToPineValueTests
                 """",
 
                 """"
+                module Test exposing (..)
+
+
+                decl : Int -> (a -> String) -> Int
+                decl a b =
+                    17
+
+                """",
+
+                """"
                 module Basics exposing (..)
 
 

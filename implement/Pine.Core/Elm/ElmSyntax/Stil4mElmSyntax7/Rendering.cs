@@ -683,6 +683,7 @@ public class Rendering
                 break;
 
             case TypeAnnotation.FunctionTypeAnnotation funcType:
+                // Render the argument type (parens are handled via single-element Tupled in AST)
                 RenderTypeAnnotation(funcType.ArgumentType, context, config);
 
                 // Check if return type is on a new line
@@ -708,6 +709,7 @@ public class Rendering
                     context.AdvanceToLocation(funcType.ReturnType.Range.Start, minSpaces: 1);
                 }
 
+                // Render the return type (parens are handled via single-element Tupled in AST)
                 RenderTypeAnnotation(funcType.ReturnType, context, config);
                 break;
 
@@ -727,6 +729,16 @@ public class Rendering
         RenderContext context,
         Config config)
     {
+        // Single-element tuple is just parentheses (no spaces)
+        if (tupled.TypeAnnotations.Count == 1)
+        {
+            context.Append("(");
+            RenderTypeAnnotation(tupled.TypeAnnotations[0], context, config);
+            context.Append(")");
+            return;
+        }
+
+        // Multi-element tuple: ( element1, element2, ... )
         context.Append("(");
 
         for (var i = 0; i < tupled.TypeAnnotations.Count; i++)
@@ -1723,6 +1735,10 @@ public class Rendering
 
             TypeAnnotation.Unit => "()",
 
+            TypeAnnotation.Tupled tupled when tupled.TypeAnnotations.Count == 1 =>
+            // Single-element tuple is just parentheses
+            "(" + RenderTypeAnnotation(tupled.TypeAnnotations[0].Value, config) + ")",
+
             TypeAnnotation.Tupled tupled =>
             "( " + string.Join(", ", tupled.TypeAnnotations.Select(t => RenderTypeAnnotation(t.Value, config))) + " )",
 
@@ -1735,9 +1751,7 @@ public class Rendering
             RenderRecordFields(genericRecord.RecordDefinition.Value, config) + " }",
 
             TypeAnnotation.FunctionTypeAnnotation funcType =>
-            RenderTypeAnnotationParenthesizedForFunction(funcType.ArgumentType.Value, config) +
-            " -> " +
-            RenderTypeAnnotation(funcType.ReturnType.Value, config),
+            RenderFunctionTypeAnnotation(funcType, config),
 
             _ =>
             throw new NotImplementedException(
@@ -1795,19 +1809,24 @@ public class Rendering
         };
     }
 
-    private static string RenderTypeAnnotationParenthesizedForFunction(
-        TypeAnnotation typeAnnotation,
+    private static string RenderFunctionTypeAnnotation(
+        TypeAnnotation.FunctionTypeAnnotation funcType,
         Config config)
     {
-        // Only wrap function types in parentheses when they appear as arguments to a function type
-        return typeAnnotation switch
+        // Argument needs parens only if it's a function type (for precedence)
+        // Typed with args (like Array a) doesn't need parens - type application binds tighter than ->
+        var argStr = funcType.ArgumentType.Value switch
         {
             TypeAnnotation.FunctionTypeAnnotation =>
-            "(" + RenderTypeAnnotation(typeAnnotation, config) + ")",
-
+                "(" + RenderTypeAnnotation(funcType.ArgumentType.Value, config) + ")",
             _ =>
-            RenderTypeAnnotation(typeAnnotation, config)
+                RenderTypeAnnotation(funcType.ArgumentType.Value, config)
         };
+
+        // Return type rendering
+        var retStr = RenderTypeAnnotation(funcType.ReturnType.Value, config);
+
+        return argStr + " -> " + retStr;
     }
 
     private static string RenderRecordDefinition(
