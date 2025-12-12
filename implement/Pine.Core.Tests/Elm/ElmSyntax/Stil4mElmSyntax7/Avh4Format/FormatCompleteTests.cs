@@ -1072,7 +1072,7 @@ public class FormatCompleteTests
     }
 
     [Fact]
-    public void Stable_configurations()
+    public void Stable_configurations_units()
     {
         /*
          * Set of module texts that are already formatted according to Avh4 style.
@@ -1724,6 +1724,30 @@ public class FormatCompleteTests
             module Test exposing (..)
 
 
+            decl =
+                []
+                    |> identity
+
+            """",
+
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                [ ( 13
+                  , []
+                        |> identity
+                  , 17
+                  )
+                ]
+
+            """",
+
+            """"
+            module Test exposing (..)
+
+
             decl a =
                 (*) a 0x17
 
@@ -1976,6 +2000,50 @@ public class FormatCompleteTests
                 = LT
                 | EQ
                 | GT
+
+            """",
+
+            """"
+            module Bitwise exposing
+                ( and
+                , complement
+                )
+
+            {-
+               Functions in the 'Bitwise' module emulate limits of JavaScript bitwise operations for backwards-compatibility.
+
+               To provide an Elm core library that is backward-compatible with libraries and apps implemented for
+               legacy platforms, simulate mapping from integer to two's complement and wrapping to 32-bit.
+            -}
+
+
+            decl =
+                42
+
+            """",
+
+            """"
+            module FNV1a exposing (hash, hashWithSeed, initialSeed)
+
+            {-|
+
+            @docs hash, hashWithSeed, initialSeed
+
+            -}
+
+            import Bitwise
+
+
+            hash =
+                Bitwise.and
+
+
+            hashWithSeed =
+                Bitwise.and
+
+
+            initialSeed =
+                0
 
             """",
 

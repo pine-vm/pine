@@ -196,31 +196,67 @@ public class Avh4Format
             var (formattedModule, contextAfterModule, mapperAfterModule, commentsAfterModule) =
                 FormatModuleDefinition(file.ModuleDefinition, context, locationMapper, formattedComments);
 
+            // Check for comments between module definition and imports (module-level doc comments)
+            // Only relevant when there are imports
+            var moduleRow = file.ModuleDefinition.Range.End.Row;
+            var hasImports = file.Imports.Any();
+
+            var commentsAfterModuleBeforeImports = hasImports
+                ? originalComments
+                    .Where(c => c.Range.Start.Row > moduleRow && c.Range.Start.Row < file.Imports.First().Range.Start.Row)
+                    .OrderBy(c => c.Range.Start.Row)
+                    .ToList()
+                : [];
+
+            FormattingContext contextBeforeImports;
+            ImmutableList<Node<string>> currentComments = commentsAfterModule;
+
+            if (commentsAfterModuleBeforeImports.Count != 0)
+            {
+                // Format module-level doc comments (between module and imports)
+                contextBeforeImports = contextAfterModule.NextRow().NextRow();
+
+                foreach (var comment in commentsAfterModuleBeforeImports)
+                {
+                    var commentLocation = contextBeforeImports.ToLocation();
+                    var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value);
+                    var formattedComment = new Node<string>(
+                        new Range(commentLocation, commentEnd),
+                        comment.Value);
+
+                    currentComments = currentComments.Add(formattedComment);
+
+                    // Move to next row after comment
+                    contextBeforeImports = CreateContextAfterComment(contextBeforeImports, commentEnd);
+                }
+
+                // Add blank line before imports
+                contextBeforeImports = contextBeforeImports.NextRow();
+            }
+            else
+            {
+                // No comments between module and imports - just add blank line
+                contextBeforeImports = contextAfterModule.NextRow().NextRow();
+            }
+
             // Format imports
             FormattingContext contextAfterImports;
             IReadOnlyList<Node<Import>> formattedImports;
             ImmutableDictionary<Location, Location> mapperAfterImports;
             ImmutableList<Node<string>> commentsAfterImports;
 
-            if (file.Imports.Any())
+            if (hasImports)
             {
-                // Add 1 blank line after module (2 newlines total)
-                var contextBeforeImports = contextAfterModule.NextRow().NextRow();
                 (formattedImports, contextAfterImports, mapperAfterImports, commentsAfterImports) =
-                    FormatImports(file.Imports, contextBeforeImports, mapperAfterModule, commentsAfterModule);
+                    FormatImports(file.Imports, contextBeforeImports, mapperAfterModule, currentComments);
             }
             else
             {
                 formattedImports = [];
                 contextAfterImports = contextAfterModule;
                 mapperAfterImports = mapperAfterModule;
-                commentsAfterImports = commentsAfterModule;
+                commentsAfterImports = currentComments;
             }
-
-            // Add blank lines before declarations
-            var contextBeforeDecls = formattedImports.Any()
-                ? contextAfterImports.NextRow().NextRow()  // 1 more blank line after imports (already have 1 from last import)
-                : contextAfterModule.NextRow().NextRow().NextRow();   // 2 blank lines after module if no imports
 
             // Check for comments before first declaration (after imports/module)
             ImmutableList<Node<string>> commentsBeforeDecls = commentsAfterImports;
@@ -228,41 +264,54 @@ public class Avh4Format
                 ? formattedImports.Last().Range.End.Row
                 : formattedModule.Range.End.Row;
 
-            if (file.Declarations.Any())
-            {
-                var firstDecl = file.Declarations.First();
-                var commentsBefore = originalComments
-                    .Where(c => c.Range.Start.Row > lastRowBeforeDecls && c.Range.End.Row < firstDecl.Range.Start.Row)
+            // Determine if there are comments before the first declaration
+            var commentsBefore = file.Declarations.Any()
+                ? originalComments
+                    .Where(c => c.Range.Start.Row > lastRowBeforeDecls && c.Range.End.Row < file.Declarations.First().Range.Start.Row)
                     .OrderBy(c => c.Range.Start.Row)
-                    .ToList();
+                    .ToList()
+                : [];
 
-                if (commentsBefore.Count != 0)
+            FormattingContext contextBeforeDecls;
+
+            if (commentsBefore.Count != 0)
+            {
+                // When there are comments before the first declaration:
+                // - With imports: 2 blank lines after last import before the comment (same as before declaration)
+                // - Without imports: 1 blank line after module before the comment
+                // - 2 blank lines after non-doc comments before the declaration
+                contextBeforeDecls = formattedImports.Any()
+                    ? contextAfterImports.NextRow().NextRow().NextRow()  // 2 blank lines after imports
+                    : contextAfterModule.NextRow().NextRow();   // 1 blank line after module if no imports
+
+                foreach (var comment in commentsBefore)
                 {
-                    // Add one more blank line before comments (module-level comments get 2 blank lines)
-                    contextBeforeDecls = contextBeforeDecls.NextRow();
+                    // Format the comment at current position
+                    var commentLocation = contextBeforeDecls.ToLocation();
+                    var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value);
+                    var formattedComment = new Node<string>(
+                        new Range(commentLocation, commentEnd),
+                        comment.Value);
 
-                    foreach (var comment in commentsBefore)
+                    commentsBeforeDecls = commentsBeforeDecls.Add(formattedComment);
+
+                    // Move to next row after comment
+                    contextBeforeDecls = CreateContextAfterComment(contextBeforeDecls, commentEnd);
+
+                    // If this is a doc comment, connect directly to first declaration (no blank lines)
+                    // Otherwise, add 2 blank lines
+                    if (!IsDocComment(comment.Value))
                     {
-                        // Format the comment at current position
-                        var commentLocation = contextBeforeDecls.ToLocation();
-                        var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value);
-                        var formattedComment = new Node<string>(
-                            new Range(commentLocation, commentEnd),
-                            comment.Value);
-
-                        commentsBeforeDecls = commentsBeforeDecls.Add(formattedComment);
-
-                        // Move to next row after comment
-                        contextBeforeDecls = CreateContextAfterComment(contextBeforeDecls, commentEnd);
-
-                        // If this is a doc comment, connect directly to first declaration (no blank lines)
-                        // Otherwise, add 2 blank lines
-                        if (!IsDocComment(comment.Value))
-                        {
-                            contextBeforeDecls = contextBeforeDecls.NextRow().NextRow();
-                        }
+                        contextBeforeDecls = contextBeforeDecls.NextRow().NextRow();
                     }
                 }
+            }
+            else
+            {
+                // No comments: standard 2 blank lines before declarations
+                contextBeforeDecls = formattedImports.Any()
+                    ? contextAfterImports.NextRow().NextRow()  // 1 more blank line after imports (already have 1 from last import)
+                    : contextAfterModule.NextRow().NextRow().NextRow();   // 2 blank lines after module if no imports
             }
 
             // Format declarations
@@ -1746,14 +1795,12 @@ public class Avh4Format
                 // Multiline: left on one line, operator and right on next line
                 var (leftFormatted, afterLeft) = VisitExpressionNodeLessMapping(expr.Left, context);
 
-                // Move to next line for operator
-                var opLineContext = afterLeft.NextRow().Indent().SetIndentColumn();
+                // Move to next line for operator, indented 4 spaces from where the left operand started
+                var opLineContext = afterLeft.NextRow().SetColumn(context.CurrentColumn + 4);
                 var afterOp = opLineContext.Advance(expr.Operator.Length);
                 var afterOpSpace = afterOp.Advance(1); // space after operator
 
                 var (rightFormatted, afterRight) = VisitExpressionNodeLessMapping(expr.Right, afterOpSpace);
-
-                var finalContext = afterRight.Dedent();
 
                 var formattedExpr = new Expression.OperatorApplication(
                     Operator: expr.Operator,
@@ -1762,8 +1809,8 @@ public class Avh4Format
                     Right: rightFormatted
                 );
 
-                var range = new Range(context.ToLocation(), finalContext.ToLocation());
-                return (new Node<Expression>(range, formattedExpr), finalContext);
+                var range = new Range(context.ToLocation(), afterRight.ToLocation());
+                return (new Node<Expression>(range, formattedExpr), afterRight);
             }
             else
             {
