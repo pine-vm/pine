@@ -1681,7 +1681,13 @@ public class FormatCompleteTests
 
                     0x00012345 ->
                         73
-            
+
+                    0x7FFFFFFF ->
+                        79
+
+                    0x0000000100000000 ->
+                        83
+
                     _ ->
                         42
 

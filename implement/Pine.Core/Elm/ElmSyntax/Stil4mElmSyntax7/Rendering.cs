@@ -987,7 +987,7 @@ public class Rendering
                 break;
 
             case Expression.Hex hex:
-                context.Append("0x" + hex.Value.ToString("X"));
+                context.Append(RenderHexPattern(hex.Value));
                 break;
 
             case Expression.Floatable floatable:
@@ -1966,7 +1966,7 @@ public class Rendering
             integer.Value.ToString(),
 
             Expression.Hex hex =>
-            "0x" + hex.Value.ToString("X"),
+            RenderHexPattern(hex.Value),
 
             Expression.Floatable floatable =>
             FormatFloatForElm(floatable.Value),
@@ -2106,21 +2106,29 @@ public class Rendering
         return "'" + c + "'";
     }
 
+    /// <summary>
+    /// Formats a hexadecimal pattern with padding to match elm-format behavior.
+    /// Pads to lengths of 2, 4, 8, or multiples of 8 (e.g., 8, 16, 32...).
+    /// </summary>
     internal static string RenderHexPattern(long value)
     {
         // Convert to hex string (uppercase)
         var hex = value.ToString("X");
 
-        // Determine target length: 2, 4, 8, 12, 16, etc.
+        // Determine target length: 2, 4, 8, 16, 32, etc.
         // Matches elm-format padding behavior
+
         int targetLength;
+
         if (hex.Length <= 2)
             targetLength = 2;
         else if (hex.Length <= 4)
             targetLength = 4;
+        else if (hex.Length <= 8)
+            targetLength = 8;
         else
-            // Round up to next multiple of 4
-            targetLength = ((hex.Length + 3) / 4) * 4;
+            // Round up to next multiple of 8
+            targetLength = (hex.Length + 7) / 8 * 8;
 
         // Pad with leading zeros
         var paddedHex = hex.PadLeft(targetLength, '0');

@@ -1529,7 +1529,7 @@ public class Avh4Format
                 intPattern.Value.ToString(),
 
                 Pattern.HexPattern hexPattern =>
-                FormatHexPattern(hexPattern.Value),
+                Rendering.RenderHexPattern(hexPattern.Value),
 
                 Pattern.FloatPattern floatPattern =>
                 floatPattern.Value.ToString(),
@@ -1625,31 +1625,6 @@ public class Avh4Format
         {
             var pattern = FormatPatternText(asPattern.Pattern.Value);
             return $"{pattern} as {asPattern.Name.Value}";
-        }
-
-        /// <summary>
-        /// Formats a hexadecimal pattern with padding to match elm-format behavior.
-        /// Pads to lengths of 2, 4, or multiples of 4 (e.g., 8, 12, 16...).
-        /// </summary>
-        private static string FormatHexPattern(long value)
-        {
-            // Convert to hex string (uppercase)
-            var hex = value.ToString("X");
-
-            // Determine target length: 2, 4, 8, 12, 16, etc.
-            int targetLength;
-            if (hex.Length <= 2)
-                targetLength = 2;
-            else if (hex.Length <= 4)
-                targetLength = 4;
-            else
-                // Round up to next multiple of 4
-                targetLength = ((hex.Length + 3) / 4) * 4;
-
-            // Pad with leading zeros
-            var paddedHex = hex.PadLeft(targetLength, '0');
-
-            return $"0x{paddedHex}";
         }
 
         // Expression visitor methods
