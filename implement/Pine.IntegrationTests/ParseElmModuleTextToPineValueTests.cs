@@ -938,6 +938,26 @@ public class ParseElmModuleTextToPineValueTests
                 """",
 
                 """"
+                module Test exposing (..)
+
+
+                type Choice
+                    = TagName (List Char.Char)
+                    | AnotherTag Int String
+
+                """",
+
+                """"
+                module Test exposing (..)
+
+
+                decl : Maybe (List Int)
+                decl =
+                    Nothing
+
+                """",
+
+                """"
                 module Basics exposing (..)
 
 

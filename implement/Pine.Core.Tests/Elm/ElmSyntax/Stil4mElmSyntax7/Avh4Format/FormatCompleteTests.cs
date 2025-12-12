@@ -24,7 +24,7 @@ public class FormatCompleteTests
         string input)
     {
         var parsed =
-            ElmSyntaxParser.ParseModuleText(input)
+            ElmSyntaxParser.ParseModuleText(input, enableMaxPreservation: true)
             .Extract(err => throw new Exception($"Parsing failed: {err}"));
 
         var formatted =

@@ -43,16 +43,25 @@ public class ElmSyntaxParser
     /// <summary>
     /// Parses Elm module text into the classic syntax tree representation.
     /// </summary>
-    /// <param name="elmModuleText">Source code of the Elm module to parse.</param>
-    /// <returns>Result containing either the parsed file structure or an error description.</returns>
+    /// <param name="elmModuleText">
+    /// Source code of the Elm module to parse.
+    /// </param>
+    /// <param name="enableMaxPreservation">
+    /// Enable maximum source preservation, to support applications like code formatters.
+    /// Enabling this will retain more parenthesis than the original parser in the stil4m/elm-syntax project.
+    /// </param>
+    /// <returns>
+    /// Result containing either the parsed file structure or an error description.
+    /// </returns>
     public static Result<string, File> ParseModuleText(
-        string elmModuleText)
+        string elmModuleText,
+        bool enableMaxPreservation = false)
     {
         var tokenizer = new Tokenizer(elmModuleText);
 
         var tokens = tokenizer.Tokenize().ToArray();
 
-        var parser = new Parser(tokens);
+        var parser = new Parser(tokens, enableMaxPreservation: enableMaxPreservation);
 
         return parser.ParseFile();
     }
@@ -819,7 +828,9 @@ public class ElmSyntaxParser
         }
     }
 
-    private class Parser(ReadOnlyMemory<Token> tokens)
+    private class Parser(
+        ReadOnlyMemory<Token> tokens,
+        bool enableMaxPreservation)
     {
         private int _current = 0;
 
@@ -1651,8 +1662,29 @@ public class ElmSyntaxParser
                         CanStartTypeAnnotation(peek)))
                     {
                         var argumentAnnotation =
-                            ParseTypeAnnotationLessApplication(
-                                indentMin: constructorNameToken.Start.Column);
+                            ParseTypeAnnotationTypedArg(indentMin: constructorNameToken.Start.Column);
+
+                        if (!enableMaxPreservation)
+                        {
+                            /*
+                               * For type arguments,
+                               * https://github.com/stil4m/elm-syntax/tree/58671250026416cdae72100bb0c67da17dec92ee/src does not
+                               * emit a 'parenthesized' node for type arguments.
+                               * 
+                               * See https://github.com/stil4m/elm-syntax/issues/211 for how this might change in future versions.
+                               * */
+
+                            if (argumentAnnotation.Value is TypeAnnotation.Tupled typeArgTupled &&
+                                typeArgTupled.TypeAnnotations.Count is 1)
+                            {
+                                argumentAnnotation =
+                                    typeArgTupled.TypeAnnotations[0]
+                                    with
+                                    {
+                                        Range = argumentAnnotation.Range
+                                    };
+                            }
+                        }
 
                         constructorArguments.Add(argumentAnnotation);
 
@@ -1737,7 +1769,8 @@ public class ElmSyntaxParser
                 ConsumeAllTrivia();
 
                 var signatureTypeAnnotation =
-                    ParseTypeAnnotation(indentMin: functionFirstNameToken.Start.Column);
+                    ParseTypeAnnotation(
+                        indentMin: functionFirstNameToken.Start.Column);
 
                 signature =
                     new Node<Signature>(
@@ -1824,12 +1857,27 @@ public class ElmSyntaxParser
                 declaration);
         }
 
-        private Node<TypeAnnotation> ParseTypeAnnotation(int indentMin, bool isDelimited = false)
+        private Node<TypeAnnotation> ParseTypeAnnotation(
+            int indentMin)
         {
-            var lessFunction =
-                ParseTypeAnnotationLessFunction(indentMin: indentMin, isDelimited: isDelimited);
+            var paramType =
+                ParseTypeAnnotationFunctionParam(indentMin: indentMin);
 
             ConsumeAllTrivia();
+
+            if (!enableMaxPreservation)
+            {
+                if (paramType.Value is TypeAnnotation.Tupled paramTupled &&
+                    paramTupled.TypeAnnotations.Count is 1)
+                {
+                    paramType =
+                        paramTupled.TypeAnnotations[0]
+                        with
+                        {
+                            Range = paramType.Range
+                        };
+                }
+            }
 
             if (NextTokenMatches(peek => peek.Type is TokenType.Arrow))
             {
@@ -1838,27 +1886,28 @@ public class ElmSyntaxParser
                 ConsumeAllTrivia();
 
                 var returnType =
-                    ParseTypeAnnotation(lessFunction.Range.Start.Column, isDelimited: false);
+                    ParseTypeAnnotation(
+                        paramType.Range.Start.Column);
 
                 var range =
                     new SyntaxTypes.Range(
-                        lessFunction.Range.Start,
+                        paramType.Range.Start,
                         returnType.Range.End);
 
                 return
                     new Node<TypeAnnotation>(
                         range,
                         new TypeAnnotation.FunctionTypeAnnotation(
-                            lessFunction,
-                            returnType));
+                            ArgumentType: paramType,
+                            ReturnType: returnType));
             }
 
-            return lessFunction;
+            return paramType;
         }
 
-        private Node<TypeAnnotation> ParseTypeAnnotationLessFunction(int indentMin, bool isDelimited = false)
+        private Node<TypeAnnotation> ParseTypeAnnotationFunctionParam(int indentMin)
         {
-            var lessApplication = ParseTypeAnnotationLessApplication(indentMin, isDelimited: isDelimited);
+            var lessApplication = ParseTypeAnnotationTypedArg(indentMin);
 
             if (lessApplication.Value is TypeAnnotation.Typed typedLessApp &&
                 typedLessApp.TypeArguments.Count is 0)
@@ -1874,9 +1923,30 @@ public class ElmSyntaxParser
                     indentMin <= peek.Start.Column &&
                     CanStartTypeAnnotation(peek)))
                 {
-                    // Type arguments are delimited by position (whitespace separation)
                     var typeArgument =
-                        ParseTypeAnnotationLessApplication(indentMin: indentMin, isDelimited: false);
+                        ParseTypeAnnotationTypedArg(indentMin: indentMin);
+
+                    if (!enableMaxPreservation)
+                    {
+                        /*
+                         * For type arguments,
+                         * https://github.com/stil4m/elm-syntax/tree/58671250026416cdae72100bb0c67da17dec92ee/src does not
+                         * emit a 'parenthesized' node for type arguments.
+                         * 
+                         * See https://github.com/stil4m/elm-syntax/issues/211 for how this might change in future versions.
+                         * */
+
+                        if (typeArgument.Value is TypeAnnotation.Tupled typeArgTupled &&
+                            typeArgTupled.TypeAnnotations.Count is 1)
+                        {
+                            typeArgument =
+                                typeArgTupled.TypeAnnotations[0]
+                                with
+                                {
+                                    Range = typeArgument.Range
+                                };
+                        }
+                    }
 
                     typeArguments.Add(typeArgument);
 
@@ -1907,7 +1977,7 @@ public class ElmSyntaxParser
             return lessApplication;
         }
 
-        private Node<TypeAnnotation> ParseTypeAnnotationLessApplication(int indentMin, bool isDelimited = false)
+        private Node<TypeAnnotation> ParseTypeAnnotationTypedArg(int indentMin)
         {
             var start = Peek;
 
@@ -1930,7 +2000,7 @@ public class ElmSyntaxParser
                 }
 
                 var firstTypeAnnotation =
-                    ParseTypeAnnotation(indentMin: indentMin, isDelimited: true);
+                    ParseTypeAnnotation(indentMin: indentMin);
 
                 ConsumeAllTrivia();
 
@@ -1950,7 +2020,7 @@ public class ElmSyntaxParser
                     while (true)
                     {
                         var typeAnnotation =
-                            ParseTypeAnnotation(indentMin: indentMin, isDelimited: true);
+                            ParseTypeAnnotation(indentMin: indentMin);
 
                         tupleItems.Add(typeAnnotation);
 
@@ -1979,37 +2049,14 @@ public class ElmSyntaxParser
                 }
 
                 {
-                    // Single-element parenthesized type annotation.
-                    // If the parent context already provides delimitation (isDelimited=true),
-                    // then these parens are redundant and should be preserved via single-item Tupled.
-                    // If the parent context does NOT provide delimitation (isDelimited=false),
-                    // then these parens are structural (necessary for grouping) and we return the inner type.
                     var closingToken = Consume(TokenType.CloseParen);
 
                     var range = new SyntaxTypes.Range(openToken.Start, closingToken.End);
 
-                    /*
-                     * See https://github.com/stil4m/elm-syntax/issues/211 for how this might change in future versions.
-                     * */
-
-                    if (isDelimited)
-                    {
-                        // Parent already provides delimitation - parens are redundant
-                        // Emit as single-item Tupled to preserve them for roundtripping
-                        return
-                            new Node<TypeAnnotation>(
-                                range,
-                                new TypeAnnotation.Tupled([firstTypeAnnotation]));
-                    }
-                    else
-                    {
-                        // Parent does NOT provide delimitation - parens are structural
-                        // Return inner type with updated range (parens are necessary for grouping)
-                        return
-                            new Node<TypeAnnotation>(
-                                range,
-                                firstTypeAnnotation.Value);
-                    }
+                    return
+                        new Node<TypeAnnotation>(
+                            range,
+                            new TypeAnnotation.Tupled([firstTypeAnnotation]));
                 }
             }
 
@@ -2048,7 +2095,8 @@ public class ElmSyntaxParser
                     ConsumeAllTrivia();
 
                     var fieldTypeAnnotation =
-                        ParseTypeAnnotation(indentMin: fieldNameToken.Start.Column, isDelimited: true);
+                        ParseTypeAnnotation(
+                            indentMin: fieldNameToken.Start.Column);
 
                     ConsumeAllTrivia();
 
