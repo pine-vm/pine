@@ -78,6 +78,7 @@ public class Program
         rootCommand.Add(CreateCompileCommand());
         rootCommand.Add(CreateElmTestRsCommand());
         rootCommand.Add(CreateMakeCommand());
+        rootCommand.Add(ElmFormatCommand.CreateElmFormatCommand());
         rootCommand.Add(CreateDescribeCommand());
         rootCommand.Add(CreateRunCacheServerCommand());
         rootCommand.Add(CreateRunFileServerCommand());
@@ -199,6 +200,7 @@ public class Program
             ["compile"] = "Compile app source code.",
             ["elm-test-rs"] = "Compile and run tests.",
             ["make"] = "Compile Elm code.",
+            ["elm-format"] = "Format Elm module files.",
             ["describe"] = "Describe a composition.",
             ["run"] = null,
             ["run-server"] = "Run a server with a web-based admin interface.",
@@ -236,6 +238,7 @@ public class Program
             "compile",
             "elm-test-rs",
             "make",
+            "elm-format",
             "describe",
         };
 
@@ -256,7 +259,7 @@ public class Program
         Console.WriteLine($"\nUsage: {elmFsCommandName} [command] [options]");
         Console.WriteLine("\nThese are common pine commands used in various situations:");
 
-        if (setupGroupCommandNames.Any())
+        if (setupGroupCommandNames.Count is not 0)
         {
             Console.WriteLine("\nSet up your development environment:");
             foreach (var name in setupGroupCommandNames)
