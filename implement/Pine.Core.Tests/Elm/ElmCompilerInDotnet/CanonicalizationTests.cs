@@ -43,7 +43,7 @@ public class CanonicalizationTests
         var parsedModules =
             elmModulesTexts
             .Select(text =>
-                ElmSyntaxParser.ParseModuleText(text)
+                ElmSyntaxParser.ParseModuleText(text, enableMaxPreservation: true)
                 .Extract(err => throw new System.Exception("Failed parsing: " + err)))
             .ToList();
 
@@ -54,6 +54,13 @@ public class CanonicalizationTests
             GetCanonicalizedModule(canonicalizeResult, [.. moduleName]);
 
         return Avh4Format.Format(beforeFormat);
+    }
+
+    private static File ParseModuleText(string moduleTex)
+    {
+        return
+            ElmSyntaxParser.ParseModuleText(moduleTex, enableMaxPreservation: false)
+            .Extract(err => throw new System.Exception("Failed parsing: " + err));
     }
 
     [Fact]
@@ -74,8 +81,7 @@ public class CanonicalizationTests
             """";
 
         var parsedModule =
-            ElmSyntaxParser.ParseModuleText(elmModuleText)
-            .Extract(err => throw new System.Exception("Failed parsing: " + err));
+            ParseModuleText(elmModuleText);
 
         var canonicalizeResult =
             Canonicalization.Canonicalize([parsedModule]);
@@ -114,13 +120,9 @@ public class CanonicalizationTests
                 otherFunc x
             """";
 
-        var parsedModule1 =
-            ElmSyntaxParser.ParseModuleText(module1Text)
-            .Extract(err => throw new System.Exception("Failed parsing module 1: " + err));
+        var parsedModule1 = ParseModuleText(module1Text);
 
-        var parsedModule2 =
-            ElmSyntaxParser.ParseModuleText(module2Text)
-            .Extract(err => throw new System.Exception("Failed parsing module 2: " + err));
+        var parsedModule2 = ParseModuleText(module2Text);
 
         var canonicalizeResult =
             Canonicalization.Canonicalize([parsedModule1, parsedModule2]);
@@ -174,8 +176,7 @@ public class CanonicalizationTests
             """";
 
         var parsedModule =
-            ElmSyntaxParser.ParseModuleText(elmModuleText)
-            .Extract(err => throw new System.Exception("Failed parsing: " + err));
+            ParseModuleText(elmModuleText);
 
         var canonicalizeResult =
             Canonicalization.Canonicalize([parsedModule]);
@@ -225,9 +226,7 @@ public class CanonicalizationTests
                 person.name
             """";
 
-        var parsedModule =
-            ElmSyntaxParser.ParseModuleText(elmModuleText)
-            .Extract(err => throw new System.Exception("Failed parsing: " + err));
+        var parsedModule = ParseModuleText(elmModuleText);
 
         var canonicalizeResult =
             Canonicalization.Canonicalize([parsedModule]);
@@ -288,13 +287,9 @@ public class CanonicalizationTests
                         False
             """";
 
-        var parsedModule1 =
-            ElmSyntaxParser.ParseModuleText(module1Text)
-            .Extract(err => throw new System.Exception("Failed parsing module 1: " + err));
+        var parsedModule1 = ParseModuleText(module1Text);
 
-        var parsedModule2 =
-            ElmSyntaxParser.ParseModuleText(module2Text)
-            .Extract(err => throw new System.Exception("Failed parsing module 2: " + err));
+        var parsedModule2 = ParseModuleText(module2Text);
 
         var canonicalizeResult =
             Canonicalization.Canonicalize([parsedModule1, parsedModule2]);
@@ -355,13 +350,9 @@ public class CanonicalizationTests
                 user.name
             """";
 
-        var parsedModule1 =
-            ElmSyntaxParser.ParseModuleText(module1Text)
-            .Extract(err => throw new System.Exception("Failed parsing module 1: " + err));
+        var parsedModule1 = ParseModuleText(module1Text);
 
-        var parsedModule2 =
-            ElmSyntaxParser.ParseModuleText(module2Text)
-            .Extract(err => throw new System.Exception("Failed parsing module 2: " + err));
+        var parsedModule2 = ParseModuleText(module2Text);
 
         var canonicalizeResult =
             Canonicalization.Canonicalize([parsedModule1, parsedModule2]);
@@ -418,13 +409,9 @@ public class CanonicalizationTests
                 helper 5
             """";
 
-        var parsedModule1 =
-            ElmSyntaxParser.ParseModuleText(module1Text)
-            .Extract(err => throw new System.Exception("Failed parsing module 1: " + err));
+        var parsedModule1 = ParseModuleText(module1Text);
 
-        var parsedModule2 =
-            ElmSyntaxParser.ParseModuleText(module2Text)
-            .Extract(err => throw new System.Exception("Failed parsing module 2: " + err));
+        var parsedModule2 = ParseModuleText(module2Text);
 
         var canonicalizeResult =
             Canonicalization.Canonicalize([parsedModule1, parsedModule2]);
@@ -480,17 +467,11 @@ public class CanonicalizationTests
                 helper 5
             """";
 
-        var parsedModule1 =
-            ElmSyntaxParser.ParseModuleText(module1Text)
-            .Extract(err => throw new System.Exception("Failed parsing module 1: " + err));
+        var parsedModule1 = ParseModuleText(module1Text);
 
-        var parsedModule2 =
-            ElmSyntaxParser.ParseModuleText(module2Text)
-            .Extract(err => throw new System.Exception("Failed parsing module 2: " + err));
+        var parsedModule2 = ParseModuleText(module2Text);
 
-        var parsedModule3 =
-            ElmSyntaxParser.ParseModuleText(module3Text)
-            .Extract(err => throw new System.Exception("Failed parsing module 3: " + err));
+        var parsedModule3 = ParseModuleText(module3Text);
 
         var canonicalizeResult =
             Canonicalization.Canonicalize([parsedModule1, parsedModule2, parsedModule3]);
@@ -542,13 +523,9 @@ public class CanonicalizationTests
                 Decode.int
             """";
 
-        var parsedModule1 =
-            ElmSyntaxParser.ParseModuleText(module1Text)
-            .Extract(err => throw new System.Exception("Failed parsing module 1: " + err));
+        var parsedModule1 = ParseModuleText(module1Text);
 
-        var parsedModule2 =
-            ElmSyntaxParser.ParseModuleText(module2Text)
-            .Extract(err => throw new System.Exception("Failed parsing module 2: " + err));
+        var parsedModule2 = ParseModuleText(module2Text);
 
         var canonicalizeResult =
             Canonicalization.Canonicalize([parsedModule1, parsedModule2]);
@@ -599,13 +576,9 @@ public class CanonicalizationTests
                 double x + triple x
             """";
 
-        var parsedModule1 =
-            ElmSyntaxParser.ParseModuleText(module1Text)
-            .Extract(err => throw new System.Exception("Failed parsing module 1: " + err));
+        var parsedModule1 = ParseModuleText(module1Text);
 
-        var parsedModule2 =
-            ElmSyntaxParser.ParseModuleText(module2Text)
-            .Extract(err => throw new System.Exception("Failed parsing module 2: " + err));
+        var parsedModule2 = ParseModuleText(module2Text);
 
         var canonicalizeResult =
             Canonicalization.Canonicalize([parsedModule1, parsedModule2]);
@@ -664,9 +637,7 @@ public class CanonicalizationTests
                         0
             """";
 
-        var parsedModule =
-            ElmSyntaxParser.ParseModuleText(elmModuleText)
-            .Extract(err => throw new System.Exception("Failed parsing: " + err));
+        var parsedModule = ParseModuleText(elmModuleText);
 
         var canonicalizeResult =
             Canonicalization.Canonicalize([parsedModule]);
@@ -727,9 +698,7 @@ public class CanonicalizationTests
                 0
             """";
 
-        var parsedModule =
-            ElmSyntaxParser.ParseModuleText(elmModuleText)
-            .Extract(err => throw new System.Exception("Failed parsing: " + err));
+        var parsedModule = ParseModuleText(elmModuleText);
 
         var canonicalizeResult =
             Canonicalization.Canonicalize([parsedModule]);
@@ -747,6 +716,9 @@ public class CanonicalizationTests
         signature.Should().NotBeNull();
 
         var funcType = (TypeAnnotation.FunctionTypeAnnotation)signature.Value.TypeAnnotation.Value;
+
+        // The argument type is wrapped in a single-element Tupled (parentheses)
+        // containing Typed with a single-element Tupled argument
         var argType = (TypeAnnotation.Typed)funcType.ArgumentType.Value;
 
         // Should be Optional (not Maybe)
@@ -782,9 +754,7 @@ public class CanonicalizationTests
                 helper MyValue
             """";
 
-        var parsedModule =
-            ElmSyntaxParser.ParseModuleText(elmModuleText)
-            .Extract(err => throw new System.Exception("Failed parsing: " + err));
+        var parsedModule = ParseModuleText(elmModuleText);
 
         var canonicalizeResult =
             Canonicalization.Canonicalize([parsedModule]);
@@ -852,9 +822,7 @@ public class CanonicalizationTests
                 "hello"
             """";
 
-        var parsedModule =
-            ElmSyntaxParser.ParseModuleText(elmModuleText)
-            .Extract(err => throw new System.Exception("Failed parsing: " + err));
+        var parsedModule = ParseModuleText(elmModuleText);
 
         var canonicalizeResult =
             Canonicalization.Canonicalize([parsedModule]);
@@ -965,13 +933,9 @@ public class CanonicalizationTests
                 MyOk
             """";
 
-        var parsedModuleTypes =
-            ElmSyntaxParser.ParseModuleText(moduleTypesText)
-            .Extract(err => throw new System.Exception("Failed parsing module 1: " + err));
+        var parsedModuleTypes = ParseModuleText(moduleTypesText);
 
-        var parsedModuleMain =
-            ElmSyntaxParser.ParseModuleText(moduleMainText)
-            .Extract(err => throw new System.Exception("Failed parsing module 2: " + err));
+        var parsedModuleMain = ParseModuleText(moduleMainText);
 
         var canonicalizeResult =
             Canonicalization.Canonicalize([parsedModuleTypes, parsedModuleMain]);
@@ -1039,17 +1003,11 @@ public class CanonicalizationTests
                 helper 5
             """";
 
-        var parsedModule1 =
-            ElmSyntaxParser.ParseModuleText(module1Text)
-            .Extract(err => throw new System.Exception("Failed parsing module 1: " + err));
+        var parsedModule1 = ParseModuleText(module1Text);
 
-        var parsedModule2 =
-            ElmSyntaxParser.ParseModuleText(module2Text)
-            .Extract(err => throw new System.Exception("Failed parsing module 2: " + err));
+        var parsedModule2 = ParseModuleText(module2Text);
 
-        var parsedModule3 =
-            ElmSyntaxParser.ParseModuleText(module3Text)
-            .Extract(err => throw new System.Exception("Failed parsing module 3: " + err));
+        var parsedModule3 = ParseModuleText(module3Text);
 
         var canonicalizeResult =
             Canonicalization.Canonicalize([parsedModule1, parsedModule2, parsedModule3]);

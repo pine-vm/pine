@@ -18,7 +18,7 @@ public class SnapshotTestFormatTests
         string input)
     {
         var parsed =
-            ElmSyntaxParser.ParseModuleText(input)
+            ElmSyntaxParser.ParseModuleText(input, enableMaxPreservation: true)
             .Extract(err => throw new System.Exception($"Parsing failed: {err}"));
 
         return Format(parsed);
@@ -498,13 +498,13 @@ public class SnapshotTestFormatTests
 
             type String
                 = String Int
-                    -- We need another tag to prevent the compiler from assuming that the condition for tag 'String' is always true.
+                  -- We need another tag to prevent the compiler from assuming that the condition for tag 'String' is always true.
                 | AnyOtherKind_String
 
 
             type Elm_Float
                 = Elm_Float Int Int
-                    -- We need another tag to prevent the compiler from assuming that the condition for tag 'String' is always true.
+                  -- We need another tag to prevent the compiler from assuming that the condition for tag 'String' is always true.
                 | AnyOtherKind_Float
 
 

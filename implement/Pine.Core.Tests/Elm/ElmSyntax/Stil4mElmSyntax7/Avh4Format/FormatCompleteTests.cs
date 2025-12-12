@@ -798,6 +798,285 @@ public class FormatCompleteTests
     }
 
     [Fact]
+    public void Preserves_comment_despite_shifting_declarations()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl_alfa =
+                a
+                b c d e f g h
+
+            decl_beta =
+                -- Simple comment
+                71
+            
+            """";
+
+        var formatted = FormatString(input);
+
+        formatted.Trim().Should().Be(
+            """"
+            module Test exposing (..)
+
+
+            decl_alfa =
+                a
+                    b
+                    c
+                    d
+                    e
+                    f
+                    g
+                    h
+
+
+            decl_beta =
+                -- Simple comment
+                71
+                        
+            """"
+            .Trim());
+    }
+
+    [Fact]
+    public void Preserves_comment_despite_shifting_list_items()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                [ a + 13, b + 17, a + 19 , b + 21
+                -- Simple comment
+                , a + 23, b + 29, a + 31, b + 37, a + 41
+                ]
+            
+            """";
+
+        var formatted = FormatString(input);
+
+        formatted.Trim().Should().Be(
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                [ a + 13
+                , b + 17
+                , a + 19
+                , b + 21
+
+                -- Simple comment
+                , a + 23
+                , b + 29
+                , a + 31
+                , b + 37
+                , a + 41
+                ]
+                        
+            """"
+            .Trim());
+    }
+
+    [Fact]
+    public void Preserves_comment_despite_shifting_nested_list_items()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                [ [ 13, 17, 19, 21 ]
+                , [ a + 13 , b + 17, a + 19, b + 21
+            -- Simple comment
+                  , a + 23, b + 29, a + 31
+                  , b + 37, a + 41
+                  ]
+                , [ 43, 47, 53, 59 ]
+                ]
+            
+            """";
+
+        var formatted = FormatString(input);
+
+        formatted.Trim().Should().Be(
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                [ [ 13, 17, 19, 21 ]
+                , [ a + 13
+                  , b + 17
+                  , a + 19
+                  , b + 21
+
+                  -- Simple comment
+                  , a + 23
+                  , b + 29
+                  , a + 31
+                  , b + 37
+                  , a + 41
+                  ]
+                , [ 43, 47, 53, 59 ]
+                ]
+                        
+            """"
+            .Trim());
+    }
+
+    [Fact]
+    public void Connects_doc_comment_to_declaration()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+            import Dict
+
+
+
+            {- One multiline comment
+
+               Another line
+            -}
+            alfa =
+                41
+
+
+            {-| A doc comment
+            -}
+
+
+            beta =
+                39
+            
+            """";
+
+        var formatted = FormatString(input);
+
+        formatted.Trim().Should().Be(
+            """"
+            module Test exposing (..)
+
+            import Dict
+
+
+
+            {- One multiline comment
+
+               Another line
+            -}
+
+
+            alfa =
+                41
+
+
+            {-| A doc comment
+            -}
+            beta =
+                39
+                        
+            """"
+            .Trim());
+    }
+
+    [Fact]
+    public void Indents_single_line_comment_between_choice_type_tags()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            type String
+                = String Int
+            -- another tag
+                | AnyOtherKind_String
+
+            """";
+
+        var formatted = FormatString(input);
+
+        formatted.Trim().Should().Be(
+            """"
+            module Test exposing (..)
+
+
+            type String
+                = String Int
+                  -- another tag
+                | AnyOtherKind_String
+
+            """"
+            .Trim());
+    }
+
+    [Fact]
+    public void Aligns_record_type_annotation_multiline()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl :
+                { beta :   Char
+                  ,        alfa :    List Int
+                , gamma     : Dict.Dict  Int     Char
+                }
+            decl =
+                other
+
+            """";
+
+        var formatted = FormatString(input);
+
+        formatted.Trim().Should().Be(
+            """"
+            module Test exposing (..)
+
+
+            decl :
+                { beta : Char
+                , alfa : List Int
+                , gamma : Dict.Dict Int Char
+                }
+            decl =
+                other
+
+            """"
+            .Trim());
+    }
+
+    [Fact]
+    public void File_ends_with_trailing_newline()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                42
+            """";
+
+        var formatted = FormatString(input);
+
+        // Verify the formatted output ends with exactly one newline
+        formatted.Should().EndWith("\n");
+
+        // Verify it doesn't end with multiple newlines (just one)
+        formatted.TrimEnd('\n').Should().NotEndWith("\n");
+    }
+
+    [Fact]
     public void Stable_configurations()
     {
         /*
@@ -1005,6 +1284,28 @@ public class FormatCompleteTests
             module Test exposing (..)
 
 
+            alfa =
+                ( 13, 17 )
+
+
+            beta =
+                ( 19
+                , 23
+                )
+
+
+            gamma =
+                ( 29
+                , ( 31, 37 )
+                , 41
+                )
+
+            """",
+
+            """"
+            module Test exposing (..)
+
+
             decl1 =
                 { a = []
                 , b =
@@ -1046,6 +1347,78 @@ public class FormatCompleteTests
                 -> List Int
             decl a b c =
                 []
+            """",
+
+            """"
+            module Test exposing (..)
+
+
+            foldl : (a -> b -> b) -> b -> Array a -> b
+            foldl foldItem seed array =
+                []
+
+            """",
+
+            """"
+            module Test exposing (..)
+
+
+            composeL : (b -> c) -> (a -> b) -> (a -> c)
+            composeL g f x =
+                g (f x)
+
+            """",
+
+            """"
+            module Test exposing (..)
+
+
+            alfa : (b -> c) -> ((a -> b) -> (a -> c))
+            alfa =
+                other
+
+
+            beta : ((b -> c) -> (a -> b)) -> (a -> c)
+            beta =
+                other
+
+            """",
+
+            """"
+            module Test exposing (..)
+
+
+            decl : { beta : Char, alfa : List Int, gamme : Dict.Dict Int Char }
+            decl =
+                other
+
+            """",
+
+            """"
+            module Test exposing (..)
+
+
+            decl :
+                { beta : Char
+                , alfa : List Int
+                }
+            decl =
+                other
+
+            """",
+
+            """"
+            module Test exposing (..)
+
+
+            decl :
+                { beta : Char
+                , alfa : { f71 : Char, f79 : Int, f83 : Char }
+                , gamma : Dict.Dict Int Char
+                }
+            decl =
+                other
+
             """",
 
             """"
@@ -1142,6 +1515,22 @@ public class FormatCompleteTests
 
                 else
                     b
+
+            """",
+
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                if
+                    func
+                        []
+                then
+                    []
+
+                else
+                    []
 
             """",
 
@@ -1413,7 +1802,181 @@ public class FormatCompleteTests
                                     )
                 )
 
+            """",
+
             """"
+            module Test exposing (..)
+
+
+            decl =
+                -- Simple comment
+                71
+                        
+            """",
+
+            """"
+            module Test exposing (..)
+
+
+            decl a b =
+                if
+                    -- A simple comment
+                    a < b
+                then
+                    -- Another simple comment
+                    [ 13 ]
+
+                else
+                    -- Yet another simple comment
+                    [ 17 ]
+                        
+            """",
+
+            """"
+            module Test exposing (..)
+
+
+            decl a b =
+                if a < b then
+                    [ 13 ]
+
+                else if
+                    -- A simple comment
+                    a > b
+                then
+                    -- Another simple comment
+                    [ 17 ]
+
+                else
+                    -- Yet another simple comment
+                    [ 21 ]
+                        
+            """",
+
+            """"
+            module Test exposing (..)
+
+
+            decl a b =
+                let
+                    alfa =
+                        42
+                in
+                if a == 71 then
+                    [ 13 ]
+
+                else if
+                    -- A comment before condition
+                    (a == 73)
+                        || (a == 77)
+                    -- Comment between conditions
+                then
+                    [ 17 ]
+
+                else if
+                    -- Another simple comment
+                    a == 79
+                then
+                    -- And another simple comment
+                    [ 21 ]
+
+                else
+                    -- Yet another simple comment
+                    [ 23 ]
+                        
+            """",
+
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                [ 13
+                , 17
+
+                -- Fra
+                -- i
+                -- pesci
+                , 23
+
+                -- cartilaginei
+                , 19
+                ]
+                        
+            """",
+
+            """"
+            module Test exposing (..)
+
+
+            type String
+                = String Int
+                  -- another tag
+                | AnyOtherKind_String
+                        
+            """",
+
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                {- Multi-line comment
+                   Test
+                -}
+                71
+                        
+            """",
+
+            """"
+            module Test exposing (..)
+
+            import Dict
+
+
+
+            {- One multiline comment
+
+               Another line
+            -}
+
+
+            decl =
+                []
+
+            """",
+
+            """"
+            module Test exposing (..)
+
+            import Dict
+
+
+            {-| One multiline comment
+
+            Another line
+
+            -}
+            decl =
+                []
+
+            """",
+
+            """"
+            module Test exposing (..)
+
+            import Char
+
+
+            {-| Represents the relative ordering of two things.
+            The relations are less than, equal to, and greater than.
+            -}
+            type Order
+                = LT
+                | EQ
+                | GT
+
+            """",
 
             ];
 

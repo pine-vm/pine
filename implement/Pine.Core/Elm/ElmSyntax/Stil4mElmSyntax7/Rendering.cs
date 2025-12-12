@@ -94,7 +94,7 @@ public class Rendering
                     Output.Append(' ', minSpaces);
                     CurrentColumn += minSpaces;
                 }
-                // If spacesToAdd == 0, we're already at the target, don't add spaces
+                // If spacesToAdd is 0, we're already at the target, don't add spaces
             }
         }
 
@@ -240,7 +240,14 @@ public class Rendering
             RenderDeclaration(declaration, context, config);
         }
 
-        return context.Output.ToString();
+        // Ensure file ends with a trailing newline (AVH4 elm-format style)
+        var result = context.Output.ToString();
+        if (!result.EndsWith("\n"))
+        {
+            result += "\n";
+        }
+
+        return result;
     }
 
     private static void RenderImport(
@@ -741,7 +748,7 @@ public class Rendering
         Config config)
     {
         // Single-element tuple is just parentheses (no spaces)
-        if (tupled.TypeAnnotations.Count == 1)
+        if (tupled.TypeAnnotations.Count is 1)
         {
             context.Append("(");
             RenderTypeAnnotation(tupled.TypeAnnotations[0], context, config);
@@ -1188,7 +1195,11 @@ public class Rendering
         RenderContext context,
         Config config)
     {
+        var openingParenColumn = context.CurrentColumn;
+
         context.Append("(");
+
+        var previousItemRow = tupledExprNode.Range.Start.Row;
 
         for (var i = 0; i < tupled.Elements.Count; i++)
         {
@@ -1196,19 +1207,45 @@ public class Rendering
 
             if (i > 0)
             {
-                // Add comma (no space before it)
+                var linebreak =
+                    element.Range.Start.Row > previousItemRow;
+
+                var commaColumn =
+                    linebreak
+                    ?
+                    openingParenColumn
+                    :
+                    context.CurrentColumn;
+
+                context.AdvanceToLocation(new Location(element.Range.Start.Row, commaColumn), minSpaces: 0);
+
                 context.Append(",");
+
+                // Now advance to the element's actual location
+                context.AdvanceToLocation(element.Range.Start, minSpaces: 1);
+            }
+            else
+            {
+                // First element: just advance to its location
+                context.AdvanceToLocation(element.Range.Start, minSpaces: 1);
             }
 
-            // Advance to element location
-            context.AdvanceToLocation(element.Range.Start, minSpaces: 1);
             RenderExpression(element, context, config);
+
+            // Update previousItemRow to track the last rendered item's ending row
+            previousItemRow = element.Range.End.Row;
         }
 
-        // Closing paren location is at the end of the tupled expression's range
-        var closingParenLocation = new Location(tupledExprNode.Range.End.Row, tupledExprNode.Range.End.Column - 1);
-        context.AdvanceToLocation(closingParenLocation, minSpaces: 1);
-        context.Append(")");
+        {
+            // Advance to the closing paren position (one column before the tuple's Range.End)
+            var closingParenLocation = new Location(tupledExprNode.Range.End.Row, tupledExprNode.Range.End.Column - 1);
+
+            var linebreak =
+                previousItemRow < closingParenLocation.Row;
+
+            context.AdvanceToLocation(closingParenLocation, minSpaces: linebreak ? 0 : 1);
+            context.Append(")");
+        }
     }
 
     private static void RenderListExpr(
@@ -1584,16 +1621,93 @@ public class Rendering
         RenderContext context,
         Config config)
     {
-        // Render "if "
+        // Render "if" first
         context.Append("if");
-        context.AdvanceByMinimum(1);
+        var ifRow = context.CurrentRow;
+
+        // Check if this is multiline format by seeing if condition starts on a different row than "if"
+        // This handles cases where:
+        // 1. The condition expression itself spans multiple lines
+        // 2. There's a comment before the condition, pushing it to a new line
+        var isConditionMultiLine = ifBlock.Condition.Range.Start.Row != ifRow ||
+                                   ifBlock.Condition.Range.Start.Row != ifBlock.Condition.Range.End.Row;
 
         // Render condition
+        if (isConditionMultiLine)
+        {
+            // For multiline conditions, advance to the condition's start location
+            // This will add the necessary newline and indentation
+            context.AdvanceToLocation(ifBlock.Condition.Range.Start, minSpaces: 1);
+        }
+        else
+        {
+            // Single-line condition: just add a space
+            context.AdvanceByMinimum(1);
+        }
         RenderExpression(ifBlock.Condition, context, config);
 
-        // Render " then" (not tracked, so use 1 space)
-        context.AdvanceByMinimum(1);
-        context.Append("then");
+        // Render "then"
+        if (isConditionMultiLine)
+        {
+            // For multiline conditions, "then" should be on its own line aligned with "if"
+            // "then" column should be 4 less than condition column (dedented to same level as "if")
+            var thenCol = ifBlock.Condition.Range.Start.Column > 4
+                ? ifBlock.Condition.Range.Start.Column - 4
+                : 1;
+
+            // Smart positioning of "then" keyword based on context:
+            // We need to determine where "then" goes by examining comments in the gap
+            // between condition.End and thenBlock.Start
+            //
+            // The formatter positions comments differently based on whether they're
+            // "before then" or "after then":
+            // - "Before then" comments: at row Condition.End.Row + 1 (immediate next row)
+            // - "After then" comments: at row >= Condition.End.Row + 2 (leaving room for "then")
+            //
+            // Strategy:
+            // 1. Comments at row Condition.End.Row + 1 are "before then" → then goes AFTER
+            // 2. Comments at row > Condition.End.Row + 1 are "after then" → then goes BEFORE
+            //
+            // We scan comments in row order. While we see comments at consecutive rows
+            // starting from Condition.End.Row + 1, they're "before then". As soon as we
+            // see a gap (or run out of comments), that's where "then" goes.
+
+            var thenRow = ifBlock.Condition.Range.End.Row + 1;
+
+            // Collect comments in the gap between condition and then-block
+            var commentsInGap = context.Comments
+                .Where(c => c.Range.Start.Row > ifBlock.Condition.Range.End.Row &&
+                           c.Range.Start.Row < ifBlock.ThenBlock.Range.Start.Row)
+                .OrderBy(c => c.Range.Start.Row)
+                .ToList();
+
+            // Advance thenRow past any "before then" comments
+            // These are comments that form a consecutive block starting at thenRow
+            foreach (var comment in commentsInGap)
+            {
+                if (comment.Range.Start.Row == thenRow)
+                {
+                    // This comment is right where we'd put "then" - it's a "before then" comment
+                    // Advance thenRow past this comment
+                    thenRow = comment.Range.End.Row + 1;
+                }
+                else
+                {
+                    // There's a gap - this comment is "after then"
+                    // Stop, don't advance thenRow further
+                    break;
+                }
+            }
+
+            context.AdvanceToLocation(new Location(thenRow, thenCol), minSpaces: 1);
+            context.Append("then");
+        }
+        else
+        {
+            // Single-line condition: "then" follows with a space
+            context.AdvanceByMinimum(1);
+            context.Append("then");
+        }
 
         // Advance to then block location
         context.AdvanceToLocation(ifBlock.ThenBlock.Range.Start, minSpaces: 1);
@@ -1603,16 +1717,48 @@ public class Rendering
         // Check if the else block is an if expression (for "else if" pattern)
         var isElseIf = ifBlock.ElseBlock.Value is Expression.IfBlock;
 
-        // Similar to "in" in let expressions, "else" positioning depends on layout
-        // In multi-line if expressions, "else" typically aligns with "if" (not the else block)
-        // But we don't track "if" location, so we'll use a heuristic:
-        // If else block is indented more than 4 columns, "else" goes 4 columns to the left of else block
+        // Strategy for positioning keywords without location info:
+        // Find the gap left by the formatter in the collection of comments.
+        // The formatter positions comments around keywords, leaving gaps where keywords should go.
+
         if (ifBlock.ElseBlock.Range.Start.Row > context.CurrentRow)
         {
-            // Multi-line case: "else" on its own line or same line as "if" for "else if"
-            if (isElseIf)
+            // Multi-line case
+            // Calculate else column: same as "if" (dedented from else block content)
+            var elseCol = ifBlock.ElseBlock.Range.Start.Column > 4
+                ? ifBlock.ElseBlock.Range.Start.Column - 4
+                : ifBlock.ElseBlock.Range.Start.Column;
+
+            // Find "else" position by looking for the gap in comments
+            // "else" goes on the first row after then-block that doesn't have a comment
+            // (the formatter leaves a blank line, then puts "else")
+            var elseRow = ifBlock.ThenBlock.Range.End.Row + 2; // Default: blank line + else
+
+            // Collect comments in the gap between then-block and else-block
+            var commentsInGap = context.Comments
+                .Where(c => c.Range.Start.Row > ifBlock.ThenBlock.Range.End.Row &&
+                           c.Range.Start.Row < ifBlock.ElseBlock.Range.Start.Row)
+                .OrderBy(c => c.Range.Start.Row)
+                .ToList();
+
+            if (isElseIf && commentsInGap.Count is not 0)
             {
-                // For "else if", keep them on the same line
+                // For "else if" with comments between else and if:
+                // Both "else" and "if" are at the same column level
+                // The formatter positions "if" at the dedented level (same as "else")
+                // So elseCol = ElseBlock.Range.Start.Column (not dedented further)
+                var elseColForCommentCase = ifBlock.ElseBlock.Range.Start.Column;
+
+                context.AdvanceToLocation(new Location(elseRow, elseColForCommentCase), minSpaces: 1);
+                context.Append("else");
+
+                // Now advance to else block location (the nested if)
+                // The renderer will output comments as it advances
+                context.AdvanceToLocation(ifBlock.ElseBlock.Range.Start, minSpaces: 0);
+            }
+            else if (isElseIf)
+            {
+                // No comments - keep "else if" on the same line
                 // The if location points to the "i" in "if", so "else " should be 5 characters before it
                 var elseLocation = new Location(
                     ifBlock.ElseBlock.Range.Start.Row,
@@ -1622,13 +1768,31 @@ public class Rendering
             }
             else
             {
-                // Regular else: "else" on its own line
-                // Calculate column for "else" - typically less indented than the else block
-                var elseRow = ifBlock.ElseBlock.Range.Start.Row - 1;
-                // Heuristic: if else block is indented (col > 4), place "else" 4 columns earlier
-                var elseCol = ifBlock.ElseBlock.Range.Start.Column > 4
-                    ? ifBlock.ElseBlock.Range.Start.Column - 4
-                    : ifBlock.ElseBlock.Range.Start.Column;
+                // Regular else: place "else" on the row before the first element after else
+                // 
+                // The formatter positions content in this sequence:
+                // 1. Then block content (e.g., `[ 13 ]`)
+                // 2. Blank line (optional)
+                // 3. "else" keyword
+                // 4. Comments (optional) - these appear between "else" and the else expression
+                // 5. Else block content (e.g., `[ 17 ]`)
+                //
+                // The commentsInGap collection contains comments between then-block and else-block.
+                // If there are comments, they appear AFTER "else" but BEFORE the else expression.
+                // So we place "else" on the row before the first comment (or the else expression if no comments).
+
+                if (commentsInGap.Count is not 0)
+                {
+                    // There are comments between then and else blocks
+                    // "else" goes on the row before the first comment
+                    elseRow = commentsInGap[0].Range.Start.Row - 1;
+                }
+                else
+                {
+                    // No comments - "else" goes on the row before else block
+                    elseRow = ifBlock.ElseBlock.Range.Start.Row - 1;
+                }
+
                 context.AdvanceToLocation(new Location(elseRow, elseCol), minSpaces: 1);
                 context.Append("else");
 
@@ -1746,7 +1910,7 @@ public class Rendering
 
             TypeAnnotation.Unit => "()",
 
-            TypeAnnotation.Tupled tupled when tupled.TypeAnnotations.Count == 1 =>
+            TypeAnnotation.Tupled tupled when tupled.TypeAnnotations.Count is 1 =>
             // Single-element tuple is just parentheses
             "(" + RenderTypeAnnotation(tupled.TypeAnnotations[0].Value, config) + ")",
 

@@ -56,7 +56,7 @@ public class RenderingConfigTests
             """";
 
         var parsed =
-            ElmSyntaxParser.ParseModuleText(inputModuleText)
+            ElmSyntaxParser.ParseModuleText(inputModuleText, enableMaxPreservation: true)
             .Extract(err => throw new System.Exception("Parsing failed: " + err.ToString()));
 
         var namesMap =

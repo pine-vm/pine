@@ -158,10 +158,12 @@ public class InliningCrossModuleTests
             module Elm.Parser.Tokens exposing (..)
 
 
-            isAlphaNumOrUnderscore : Char -> Bool
+            isAlphaNumOrUnderscore : Char ->      Bool
             isAlphaNumOrUnderscore char =
-                if Char.isAlphaNum
-                    char then
+                if
+                    Char.isAlphaNum
+                        char
+                then
                     Basics.True
 
                 else
@@ -185,8 +187,10 @@ public class InliningCrossModuleTests
                                     , Pine_kernel.skip [ sOffset, sSrcBytes ]
                                     ]
                         in
-                        if Char.isUpper
-                            nextCharBytes then
+                        if
+                            Char.isUpper
+                                nextCharBytes
+                        then
                             let
                                 s1 : ParserFast.State
                                 s1 =

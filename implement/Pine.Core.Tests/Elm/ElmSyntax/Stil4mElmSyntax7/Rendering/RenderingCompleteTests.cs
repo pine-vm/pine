@@ -694,7 +694,7 @@ public class RenderingCompleteTests
             try
             {
                 var parsed =
-                    ElmSyntaxParser.ParseModuleText(testCase.TrimStart())
+                    ElmSyntaxParser.ParseModuleText(testCase.TrimStart(), enableMaxPreservation: true)
                     .Extract(err => throw new System.Exception("Parsing failed: " + err.ToString()));
 
                 var rendered = RenderDefault(parsed);

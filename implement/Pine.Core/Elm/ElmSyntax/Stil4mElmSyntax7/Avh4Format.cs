@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 
 namespace Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
@@ -11,10 +12,103 @@ public class Avh4Format
 {
     public static File Format(File file)
     {
-        var visitor = new Avh4FormatVisitor();
+        var visitor = new Avh4FormatVisitor(file.Comments);
         var context = new FormattingContext(CurrentRow: 1, CurrentColumn: 1, IndentLevel: 0);
+        var locationMapping = ImmutableDictionary<Location, Location>.Empty;
 
-        return visitor.FormatFile(file, context);
+        var (formatted, updatedLocationMapping, formattedComments) = visitor.FormatFile(file, context, locationMapping);
+
+        return formatted with { Comments = formattedComments };
+    }
+
+    /// <summary>
+    /// Records that an original range maps to a new formatted range.
+    /// Creates mappings for all locations within the range.
+    /// Returns an updated location mapping.
+    /// </summary>
+    private static ImmutableDictionary<Location, Location> RecordMapping(
+        Range originalRange,
+        Range formattedRange,
+        ImmutableDictionary<Location, Location> locationMapping)
+    {
+        var newMapping = locationMapping;
+
+        // Always map the start location
+        if (!newMapping.ContainsKey(originalRange.Start))
+        {
+            newMapping = newMapping.Add(originalRange.Start, formattedRange.Start);
+        }
+
+        // Map the end location if different
+        if (originalRange.End != originalRange.Start && !newMapping.ContainsKey(originalRange.End))
+        {
+            newMapping = newMapping.Add(originalRange.End, formattedRange.End);
+        }
+
+        return newMapping;
+    }
+
+    /// <summary>
+    /// Calculate the end location of a comment given its start location and value.
+    /// Handles both single-line and multi-line comments.
+    /// </summary>
+    private static Location CalculateCommentEndLocation(Location startLocation, string commentValue)
+    {
+        var lines = commentValue.Split('\n');
+
+        if (lines.Length is 1)
+        {
+            // Single-line comment: end is on the same row
+            return new Location(startLocation.Row, startLocation.Column + commentValue.Length);
+        }
+        else
+        {
+            // Multi-line comment: end is on a different row
+            var endRow = startLocation.Row + lines.Length - 1;
+            var lastLineLength = lines[lines.Length - 1].Length;
+            return new Location(endRow, lastLineLength + 1);
+        }
+    }
+
+    /// <summary>
+    /// Creates a new FormattingContext positioned after a comment ends.
+    /// Handles both single-line and multi-line comments by advancing to the next row.
+    /// </summary>
+    private static FormattingContext CreateContextAfterComment(
+        FormattingContext currentContext,
+        Location commentEnd)
+    {
+        return new FormattingContext(
+            commentEnd.Row + 1,
+            1,
+            currentContext.IndentLevel,
+            currentContext.AddHalfIndent).SetIndentColumn();
+    }
+
+    /// <summary>
+    /// Creates a context after a comment where the next element stays at the same indent level
+    /// (doesn't add extra row advance for blank lines).
+    /// Stays at the comment end position (same row).
+    /// </summary>
+    private static FormattingContext CreateContextAfterCommentSameIndent(
+        FormattingContext currentContext,
+        Location commentEnd)
+    {
+        // Stay at the comment end position
+        return new FormattingContext(
+            commentEnd.Row,
+            commentEnd.Column,
+            currentContext.IndentLevel,
+            currentContext.AddHalfIndent);
+    }
+
+    /// <summary>
+    /// Check if a comment is a doc comment (starts with {-|).
+    /// Doc comments are connected directly to the declaration they document with no blank lines.
+    /// </summary>
+    private static bool IsDocComment(string commentValue)
+    {
+        return commentValue.TrimStart().StartsWith("{-|");
     }
 
     /// <summary>
@@ -78,32 +172,49 @@ public class Avh4Format
     /// <summary>
     /// Visitor implementation for AVH4 formatting.
     /// </summary>
-    private class Avh4FormatVisitor : ExpressionVisitorBase<FormattingContext, (Node<Expression>, FormattingContext)>
+    private class Avh4FormatVisitor(IReadOnlyList<Node<string>> originalComments) : ExpressionVisitorBase<FormattingContext, (Node<Expression>, FormattingContext)>
     {
-        private IReadOnlyList<Node<string>> _comments = [];
 
-        public File FormatFile(File file, FormattingContext context)
+        /// <summary>
+        /// Accumulates formatted comments during expression visiting.
+        /// This allows comments to be collected even through code paths that don't thread
+        /// comments through return values (like VisitExpressionNodeLessMapping).
+        /// </summary>
+        private readonly List<Node<string>> _accumulatedComments = [];
+
+        public (File, ImmutableDictionary<Location, Location>, IReadOnlyList<Node<string>>) FormatFile(
+            File file,
+            FormattingContext context,
+            ImmutableDictionary<Location, Location> locationMapper)
         {
-            // Store comments for use during formatting
-            _comments = file.Comments;
+            // Clear accumulated comments from any previous formatting
+            _accumulatedComments.Clear();
+
+            var formattedComments = ImmutableList<Node<string>>.Empty;
 
             // Format module definition
-            var (formattedModule, contextAfterModule) = FormatModuleDefinition(file.ModuleDefinition, context);
+            var (formattedModule, contextAfterModule, mapperAfterModule, commentsAfterModule) =
+                FormatModuleDefinition(file.ModuleDefinition, context, locationMapper, formattedComments);
 
             // Format imports
             FormattingContext contextAfterImports;
             IReadOnlyList<Node<Import>> formattedImports;
+            ImmutableDictionary<Location, Location> mapperAfterImports;
+            ImmutableList<Node<string>> commentsAfterImports;
 
             if (file.Imports.Any())
             {
                 // Add 1 blank line after module (2 newlines total)
                 var contextBeforeImports = contextAfterModule.NextRow().NextRow();
-                (formattedImports, contextAfterImports) = FormatImports(file.Imports, contextBeforeImports);
+                (formattedImports, contextAfterImports, mapperAfterImports, commentsAfterImports) =
+                    FormatImports(file.Imports, contextBeforeImports, mapperAfterModule, commentsAfterModule);
             }
             else
             {
                 formattedImports = [];
                 contextAfterImports = contextAfterModule;
+                mapperAfterImports = mapperAfterModule;
+                commentsAfterImports = commentsAfterModule;
             }
 
             // Add blank lines before declarations
@@ -111,21 +222,72 @@ public class Avh4Format
                 ? contextAfterImports.NextRow().NextRow()  // 1 more blank line after imports (already have 1 from last import)
                 : contextAfterModule.NextRow().NextRow().NextRow();   // 2 blank lines after module if no imports
 
-            // Format declarations
-            var (formattedDeclarations, _) = FormatDeclarations(file.Declarations, contextBeforeDecls);
+            // Check for comments before first declaration (after imports/module)
+            ImmutableList<Node<string>> commentsBeforeDecls = commentsAfterImports;
+            var lastRowBeforeDecls = formattedImports.Any()
+                ? formattedImports.Last().Range.End.Row
+                : formattedModule.Range.End.Row;
 
-            return new File(
+            if (file.Declarations.Any())
+            {
+                var firstDecl = file.Declarations.First();
+                var commentsBefore = originalComments
+                    .Where(c => c.Range.Start.Row > lastRowBeforeDecls && c.Range.End.Row < firstDecl.Range.Start.Row)
+                    .OrderBy(c => c.Range.Start.Row)
+                    .ToList();
+
+                if (commentsBefore.Count != 0)
+                {
+                    // Add one more blank line before comments (module-level comments get 2 blank lines)
+                    contextBeforeDecls = contextBeforeDecls.NextRow();
+
+                    foreach (var comment in commentsBefore)
+                    {
+                        // Format the comment at current position
+                        var commentLocation = contextBeforeDecls.ToLocation();
+                        var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value);
+                        var formattedComment = new Node<string>(
+                            new Range(commentLocation, commentEnd),
+                            comment.Value);
+
+                        commentsBeforeDecls = commentsBeforeDecls.Add(formattedComment);
+
+                        // Move to next row after comment
+                        contextBeforeDecls = CreateContextAfterComment(contextBeforeDecls, commentEnd);
+
+                        // If this is a doc comment, connect directly to first declaration (no blank lines)
+                        // Otherwise, add 2 blank lines
+                        if (!IsDocComment(comment.Value))
+                        {
+                            contextBeforeDecls = contextBeforeDecls.NextRow().NextRow();
+                        }
+                    }
+                }
+            }
+
+            // Format declarations
+            var (formattedDeclarations, _, mapperAfterDecls, commentsAfterDecls) =
+                FormatDeclarations(file.Declarations, contextBeforeDecls, mapperAfterImports, commentsBeforeDecls);
+
+            // Merge comments threaded through return values with accumulated comments from expression visiting
+            var allFormattedComments = commentsAfterDecls.AddRange(_accumulatedComments);
+
+            var formattedFile = new File(
                 ModuleDefinition: formattedModule,
                 Imports: formattedImports,
                 Declarations: formattedDeclarations,
-                Comments: file.Comments);
+                Comments: []); // Comments will be set by Format method
+
+            return (formattedFile, mapperAfterDecls, allFormattedComments);
         }
 
-        private static (Node<Module>, FormattingContext) FormatModuleDefinition(
+        private static (Node<Module>, FormattingContext, ImmutableDictionary<Location, Location>, ImmutableList<Node<string>>) FormatModuleDefinition(
             Node<Module> module,
-            FormattingContext context)
+            FormattingContext context,
+            ImmutableDictionary<Location, Location> locationMapper,
+            ImmutableList<Node<string>> formattedComments)
         {
-            return module.Value switch
+            var result = module.Value switch
             {
                 Module.NormalModule nm =>
                 FormatNormalModule(nm, context),
@@ -140,6 +302,10 @@ public class Avh4Format
                 throw new System.NotImplementedException(
                     $"Formatting for module type '{module.Value.GetType().Name}' is not implemented.")
             };
+
+            // Record the mapping from original module range to formatted range
+            var updatedMapper = RecordMapping(module.Range, result.Item1.Range, locationMapper);
+            return (result.Item1, result.Item2, updatedMapper, formattedComments);
         }
 
         private static (Node<Module>, FormattingContext) FormatNormalModule(
@@ -367,12 +533,14 @@ public class Avh4Format
             return (new Node<TopLevelExpose>(range, node.Value), afterExpose);
         }
 
-        private static (IReadOnlyList<Node<Import>>, FormattingContext) FormatImports(
+        private static (IReadOnlyList<Node<Import>>, FormattingContext, ImmutableDictionary<Location, Location>, ImmutableList<Node<string>>) FormatImports(
             IReadOnlyList<Node<Import>> imports,
-            FormattingContext context)
+            FormattingContext context,
+            ImmutableDictionary<Location, Location> locationMapper,
+            ImmutableList<Node<string>> formattedComments)
         {
             if (!imports.Any())
-                return ([], context);
+                return ([], context, locationMapper, formattedComments);
 
             // Sort imports by module name in ascending order (alphabetical)
             var sortedImports =
@@ -382,11 +550,15 @@ public class Avh4Format
 
             var formattedImports = new List<Node<Import>>();
             var currentContext = context;
+            var currentMapper = locationMapper;
 
             foreach (var import in sortedImports)
             {
                 var (formattedImport, nextContext) =
                     FormatImport(import, currentContext);
+
+                // Record the mapping
+                currentMapper = RecordMapping(import.Range, formattedImport.Range, currentMapper);
 
                 formattedImports.Add(formattedImport);
 
@@ -394,7 +566,7 @@ public class Avh4Format
                 currentContext = nextContext.NextRow();
             }
 
-            return (formattedImports, currentContext);
+            return (formattedImports, currentContext, currentMapper, formattedComments);
         }
 
         private static (Node<Import>, FormattingContext) FormatImport(Node<Import> import, FormattingContext context)
@@ -442,15 +614,19 @@ public class Avh4Format
             return (new Node<Import>(range, formattedImport), currentContext);
         }
 
-        private (IReadOnlyList<Node<Declaration>>, FormattingContext) FormatDeclarations(
+        private (IReadOnlyList<Node<Declaration>>, FormattingContext, ImmutableDictionary<Location, Location>, ImmutableList<Node<string>>) FormatDeclarations(
             IReadOnlyList<Node<Declaration>> declarations,
-            FormattingContext context)
+            FormattingContext context,
+            ImmutableDictionary<Location, Location> locationMapper,
+            ImmutableList<Node<string>> formattedComments)
         {
             if (!declarations.Any())
-                return ([], context);
+                return ([], context, locationMapper, formattedComments);
 
             var formattedDeclarations = new List<Node<Declaration>>();
             var currentContext = context;
+            var currentMapper = locationMapper;
+            var currentComments = formattedComments;
 
             for (var i = 0; i < declarations.Count; i++)
             {
@@ -458,18 +634,63 @@ public class Avh4Format
 
                 // Ensure we start each declaration at indent level 0
                 var declContext = currentContext with { IndentLevel = 0 };
-                var (formattedDecl, nextContext) = FormatDeclaration(decl, declContext);
+                var (formattedDecl, nextContext, updatedMapper, updatedComments) =
+                    FormatDeclaration(decl, declContext, currentMapper, currentComments);
+
+                // Record the mapping
+                currentMapper = RecordMapping(decl.Range, formattedDecl.Range, updatedMapper);
+                currentComments = updatedComments;
+
                 formattedDeclarations.Add(formattedDecl);
 
                 // Spacing after declaration (except for the last one):
                 // - Consecutive infix declarations: 1 newline (no blank lines)
+                // - Comments before next declaration: handle with appropriate spacing
+                //   - Regular comments: 2 blank lines after current decl, comment, 2 blank lines before next decl
+                //   - Doc comments: 2 blank lines after current decl, doc comment connects directly to next decl
                 // - All other cases: 3 newlines (2 blank lines)
                 if (i < declarations.Count - 1)
                 {
                     var nextDecl = declarations[i + 1];
+
+                    // Check if there are any comments between this declaration and the next
+                    // For doc comments, they may be within the next declaration's range but still need to be formatted
+                    var commentsBetween = originalComments
+                        .Where(c => c.Range.Start.Row > decl.Range.End.Row && c.Range.Start.Row <= nextDecl.Range.Start.Row)
+                        .OrderBy(c => c.Range.Start.Row)
+                        .ToList();
+
                     if (formattedDecl.Value is Declaration.InfixDeclaration && nextDecl.Value is Declaration.InfixDeclaration)
                     {
                         currentContext = nextContext.NextRow();
+                    }
+                    else if (commentsBetween.Count != 0)
+                    {
+                        // Add 2 blank lines before first comment
+                        currentContext = nextContext.NextRow().NextRow().NextRow();
+
+                        // Format each comment
+                        foreach (var comment in commentsBetween)
+                        {
+                            // Format the comment at current position
+                            var commentLocation = currentContext.ToLocation();
+                            var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value);
+                            var formattedComment = new Node<string>(
+                                new Range(commentLocation, commentEnd),
+                                comment.Value);
+
+                            currentComments = currentComments.Add(formattedComment);
+
+                            // Move to next row after comment
+                            currentContext = CreateContextAfterComment(currentContext, commentEnd);
+
+                            // If this is a doc comment, connect directly to next declaration (no blank lines)
+                            // Otherwise, add 2 blank lines
+                            if (!IsDocComment(comment.Value))
+                            {
+                                currentContext = currentContext.NextRow().NextRow();
+                            }
+                        }
                     }
                     else
                     {
@@ -482,24 +703,31 @@ public class Avh4Format
                 }
             }
 
-            return (formattedDeclarations, currentContext);
+            return (formattedDeclarations, currentContext, currentMapper, currentComments);
         }
 
-        private (Node<Declaration>, FormattingContext) FormatDeclaration(Node<Declaration> decl, FormattingContext context)
+        private (Node<Declaration>, FormattingContext, ImmutableDictionary<Location, Location>, ImmutableList<Node<string>>) FormatDeclaration(
+            Node<Declaration> decl,
+            FormattingContext context,
+            ImmutableDictionary<Location, Location> locationMapper,
+            ImmutableList<Node<string>> formattedComments)
         {
             return decl.Value switch
             {
                 Declaration.FunctionDeclaration funcDecl =>
-                    FormatFunctionDeclaration(funcDecl, context),
+                    FormatFunctionDeclaration(funcDecl, decl.Range, context, locationMapper, formattedComments),
 
                 Declaration.AliasDeclaration aliasDecl =>
-                    FormatAliasDeclaration(aliasDecl, context),
+                    FormatAliasDeclaration(aliasDecl, context, locationMapper, formattedComments),
 
                 Declaration.CustomTypeDeclaration customTypeDecl =>
-                    FormatCustomTypeDeclaration(customTypeDecl, context),
+                    FormatCustomTypeDeclaration(customTypeDecl, context, locationMapper, formattedComments),
 
                 Declaration.InfixDeclaration infixDecl =>
-                    FormatInfixDeclaration(infixDecl, decl.Range, context),
+                    (FormatInfixDeclaration(infixDecl, decl.Range, context).Item1,
+                     FormatInfixDeclaration(infixDecl, decl.Range, context).Item2,
+                     locationMapper,
+                     formattedComments),
 
                 _ =>
                 throw new System.NotImplementedException(
@@ -507,11 +735,31 @@ public class Avh4Format
             };
         }
 
-        private (Node<Declaration>, FormattingContext) FormatFunctionDeclaration(
+        private (Node<Declaration>, FormattingContext, ImmutableDictionary<Location, Location>, ImmutableList<Node<string>>) FormatFunctionDeclaration(
             Declaration.FunctionDeclaration funcDecl,
-            FormattingContext context)
+            Range originalDeclRange,
+            FormattingContext context,
+            ImmutableDictionary<Location, Location> locationMapper,
+            ImmutableList<Node<string>> formattedComments)
         {
             var currentContext = context;
+            var currentComments = formattedComments;
+
+            // Format documentation comment if present
+            if (funcDecl.Function.Documentation is { } docComment)
+            {
+                // Format the doc comment at current position
+                var docCommentLocation = currentContext.ToLocation();
+                var docCommentEnd = CalculateCommentEndLocation(docCommentLocation, docComment.Value);
+                var formattedDocComment = new Node<string>(
+                    new Range(docCommentLocation, docCommentEnd),
+                    docComment.Value);
+
+                currentComments = currentComments.Add(formattedDocComment);
+
+                // Move to next row after doc comment (connects directly to declaration)
+                currentContext = CreateContextAfterComment(currentContext, docCommentEnd);
+            }
 
             // Format signature if present
             Node<Signature>? formattedSignature = null;
@@ -522,14 +770,27 @@ public class Avh4Format
 
                 if (isMultiLine)
                 {
-                    // For multi-line signatures, preserve the input format
-                    // Just create a new node with updated range
-                    var sigStartRow = currentContext.CurrentRow;
-                    var sigEndRow = signature.Range.End.Row - signature.Range.Start.Row + sigStartRow;
-                    var sigEnd = new Location(sigEndRow, signature.Range.End.Column);
-                    var sigRange = new Range(currentContext.ToLocation(), sigEnd);
-                    formattedSignature = new Node<Signature>(sigRange, signature.Value);
-                    currentContext = currentContext with { CurrentRow = sigEndRow + 1, CurrentColumn = 1 };
+                    // Multi-line signature: format the type annotation properly
+                    var sigName = signature.Value.Name.Value;
+                    var afterSigName = currentContext.Advance(sigName.Length);
+                    // " :"
+                    var afterColon = afterSigName.Advance(2);
+                    // Move to next line and indent for the type annotation
+                    var typeContext = afterColon.NextRow().Indent().SetIndentColumn();
+
+                    // Format the type annotation using FormatTypeAnnotation
+                    var (formattedTypeAnnotation, afterType) = FormatTypeAnnotation(signature.Value.TypeAnnotation, typeContext);
+
+                    // Create new Signature with formatted TypeAnnotation
+                    var formattedSig = new Signature(
+                        Name: signature.Value.Name,
+                        TypeAnnotation: formattedTypeAnnotation);
+
+                    var sigRange = new Range(currentContext.ToLocation(), afterType.ToLocation());
+                    formattedSignature = new Node<Signature>(sigRange, formattedSig);
+
+                    // Move to next line for the implementation
+                    currentContext = afterType.Dedent().NextRow();
                 }
                 else
                 {
@@ -539,14 +800,7 @@ public class Avh4Format
                     // " : "
                     var afterColon = afterSigName.Advance(3);
 
-                    var typeText = FormatTypeAnnotationText(signature.Value.TypeAnnotation.Value);
-                    var afterType = afterColon.Advance(typeText.Length);
-
-                    // Create new TypeAnnotation node with updated range
-                    var typeRange = new Range(afterColon.ToLocation(), afterType.ToLocation());
-                    var formattedTypeAnnotation = new Node<TypeAnnotation>(
-                        typeRange,
-                        signature.Value.TypeAnnotation.Value);
+                    var (formattedTypeAnnotation, afterType) = FormatTypeAnnotation(signature.Value.TypeAnnotation, afterColon);
 
                     // Create new Signature with updated TypeAnnotation range
                     var formattedSig = new Signature(
@@ -576,11 +830,39 @@ public class Avh4Format
             // " ="
             var afterEquals = afterArgs.Advance(2);
 
+            // Pull in comments that appear within this function implementation
+            // (between the function name and the end of the expression)
+            var commentsInImpl = originalComments
+                .Where(c => c.Range.Start.Row >= funcDecl.Function.Declaration.Range.Start.Row &&
+                           c.Range.End.Row <= funcDecl.Function.Declaration.Range.End.Row)
+                .ToList();
+
             // Move to next line and indent for the expression
             var exprContext = afterEquals.NextRow().Indent().SetIndentColumn();
+            var updatedComments = currentComments;
 
-            // Format the expression
-            var (formattedExpr, contextAfterExpr) = VisitExpressionNode(impl.Expression, exprContext);
+            // Add comments that appear before the expression
+            foreach (var comment in commentsInImpl)
+            {
+                // Only add comments that are before the expression
+                if (comment.Range.Start.Row < impl.Expression.Range.Start.Row)
+                {
+                    // Create formatted comment at current position
+                    var commentLocation = exprContext.ToLocation();
+                    var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value);
+                    var formattedComment = new Node<string>(
+                        new Range(commentLocation, commentEnd),
+                        comment.Value);
+
+                    updatedComments = updatedComments.Add(formattedComment);
+
+                    // Advance to next line after the comment ends (handles multi-line comments)
+                    exprContext = CreateContextAfterComment(exprContext, commentEnd);
+                }
+            }
+
+            // Format the expression and record mapping
+            var (formattedExpr, contextAfterExpr, updatedMapper, finalComments) = VisitExpressionNode(impl.Expression, exprContext, locationMapper, updatedComments);
 
             // Build formatted implementation
             var formattedImpl = new FunctionImplementation(
@@ -598,15 +880,36 @@ public class Avh4Format
             );
 
             var range = new Range(context.ToLocation(), contextAfterExpr.ToLocation());
-            return (new Node<Declaration>(range, new Declaration.FunctionDeclaration(formattedFunc)), contextAfterExpr);
+            return (new Node<Declaration>(range, new Declaration.FunctionDeclaration(formattedFunc)), contextAfterExpr, updatedMapper, finalComments);
         }
 
-        private (Node<Declaration>, FormattingContext) FormatAliasDeclaration(
+        private (Node<Declaration>, FormattingContext, ImmutableDictionary<Location, Location>, ImmutableList<Node<string>>) FormatAliasDeclaration(
             Declaration.AliasDeclaration aliasDecl,
-            FormattingContext context)
+            FormattingContext context,
+            ImmutableDictionary<Location, Location> locationMapper,
+            ImmutableList<Node<string>> formattedComments)
         {
+            var currentComments = formattedComments;
+            var startContext = context;
+
+            // Format documentation comment if present
+            if (aliasDecl.TypeAlias.Documentation is { } docComment)
+            {
+                // Format the doc comment at current position
+                var docCommentLocation = startContext.ToLocation();
+                var docCommentEnd = CalculateCommentEndLocation(docCommentLocation, docComment.Value);
+                var formattedDocComment = new Node<string>(
+                    new Range(docCommentLocation, docCommentEnd),
+                    docComment.Value);
+
+                currentComments = currentComments.Add(formattedDocComment);
+
+                // Move to next row after doc comment (connects directly to declaration)
+                startContext = CreateContextAfterComment(startContext, docCommentEnd);
+            }
+
             // "type alias "
-            var afterTypeAlias = context.Advance(11);
+            var afterTypeAlias = startContext.Advance(11);
 
             // Name
             var aliasName = aliasDecl.TypeAlias.Name.Value;
@@ -637,21 +940,261 @@ public class Avh4Format
             );
 
             var finalContext = afterType.Dedent();
-            var range = new Range(context.ToLocation(), finalContext.ToLocation());
-            return (new Node<Declaration>(range, new Declaration.AliasDeclaration(formattedTypeAlias)), finalContext);
+            var range = new Range(startContext.ToLocation(), finalContext.ToLocation());
+            return (new Node<Declaration>(range, new Declaration.AliasDeclaration(formattedTypeAlias)), finalContext, locationMapper, currentComments);
         }
 
         private (Node<TypeAnnotation>, FormattingContext) FormatTypeAnnotation(Node<TypeAnnotation> typeAnnot, FormattingContext context)
         {
             return typeAnnot.Value switch
             {
+                TypeAnnotation.GenericType generic =>
+                    FormatGenericTypeAnnotation(generic, context),
+
+                TypeAnnotation.Unit =>
+                    FormatUnitTypeAnnotation(context),
+
+                TypeAnnotation.Typed typed =>
+                    FormatTypedAnnotation(typed, context),
+
+                TypeAnnotation.FunctionTypeAnnotation funcType =>
+                    FormatFunctionTypeAnnotation(funcType, context),
+
+                TypeAnnotation.Tupled tupled =>
+                    FormatTupledTypeAnnotation(tupled, context),
+
+                TypeAnnotation.GenericRecord genericRecord =>
+                    FormatGenericRecordTypeAnnotation(genericRecord, context),
+
                 TypeAnnotation.Record recordDef =>
-                FormatRecordTypeAnnotation(recordDef, typeAnnot.Range, context),
+                    FormatRecordTypeAnnotation(recordDef, typeAnnot.Range, context),
 
                 _ =>
                 throw new System.NotImplementedException(
                     $"Formatting for type annotation '{typeAnnot.Value.GetType().Name}' is not implemented.")
             };
+        }
+
+        private (Node<TypeAnnotation>, FormattingContext) FormatGenericTypeAnnotation(TypeAnnotation.GenericType generic, FormattingContext context)
+        {
+            var afterName = context.Advance(generic.Name.Length);
+            var range = new Range(context.ToLocation(), afterName.ToLocation());
+            return (new Node<TypeAnnotation>(range, generic), afterName);
+        }
+
+        private (Node<TypeAnnotation>, FormattingContext) FormatUnitTypeAnnotation(FormattingContext context)
+        {
+            var afterUnit = context.Advance(2); // "()"
+            var range = new Range(context.ToLocation(), afterUnit.ToLocation());
+            return (new Node<TypeAnnotation>(range, new TypeAnnotation.Unit()), afterUnit);
+        }
+
+        private (Node<TypeAnnotation>, FormattingContext) FormatTypedAnnotation(TypeAnnotation.Typed typed, FormattingContext context)
+        {
+            var moduleName = typed.TypeName.Value.ModuleName.Count > 0
+                ? string.Join(".", typed.TypeName.Value.ModuleName) + "."
+                : "";
+            var typeName = moduleName + typed.TypeName.Value.Name;
+
+            var currentContext = context.Advance(typeName.Length);
+            var formattedArgs = new List<Node<TypeAnnotation>>();
+
+            foreach (var arg in typed.TypeArguments)
+            {
+                currentContext = currentContext.Advance(1); // space before argument
+
+                // Parenthesize complex type arguments
+                var needsParens = arg.Value is TypeAnnotation.FunctionTypeAnnotation ||
+                                  (arg.Value is TypeAnnotation.Typed t && t.TypeArguments.Count > 0);
+
+                if (needsParens)
+                {
+                    currentContext = currentContext.Advance(1); // "("
+                }
+
+                var argNode = new Node<TypeAnnotation>(arg.Range, arg.Value);
+                var (formattedArg, afterArg) = FormatTypeAnnotation(argNode, currentContext);
+                formattedArgs.Add(formattedArg);
+                currentContext = afterArg;
+
+                if (needsParens)
+                {
+                    currentContext = currentContext.Advance(1); // ")"
+                }
+            }
+
+            var formattedTyped = new TypeAnnotation.Typed(
+                TypeName: typed.TypeName,
+                TypeArguments: formattedArgs);
+
+            var range = new Range(context.ToLocation(), currentContext.ToLocation());
+            return (new Node<TypeAnnotation>(range, formattedTyped), currentContext);
+        }
+
+        private (Node<TypeAnnotation>, FormattingContext) FormatFunctionTypeAnnotation(TypeAnnotation.FunctionTypeAnnotation funcType, FormattingContext context)
+        {
+            // Check if the function type annotation was originally multiline (arrow on new line)
+            var isMultiLine = funcType.ArgumentType.Range.End.Row < funcType.ReturnType.Range.Start.Row;
+
+            var currentContext = context;
+
+            // Check if argument needs parentheses
+            // Only function type arguments need parens (for precedence with ->)
+            // Typed with args (like Array a) does NOT need parens because type application binds tighter than ->
+            var argNeedsParens = funcType.ArgumentType.Value is TypeAnnotation.FunctionTypeAnnotation;
+
+            Node<TypeAnnotation> formattedArg;
+            if (argNeedsParens)
+            {
+                // Start paren
+                currentContext = currentContext.Advance(1); // "("
+
+                // Format the inner argument type
+                var (innerArg, afterInner) = FormatTypeAnnotation(funcType.ArgumentType, currentContext);
+                currentContext = afterInner;
+
+                // End paren
+                currentContext = currentContext.Advance(1); // ")"
+
+                // Wrap in single-element Tupled to tell renderer to output parens
+                var parenRange = new Range(context.ToLocation(), currentContext.ToLocation());
+                formattedArg = new Node<TypeAnnotation>(parenRange, new TypeAnnotation.Tupled([innerArg]));
+            }
+            else
+            {
+                // Format the argument type directly
+                var (arg, afterArg) = FormatTypeAnnotation(funcType.ArgumentType, currentContext);
+                formattedArg = arg;
+                currentContext = afterArg;
+            }
+
+            if (isMultiLine)
+            {
+                // Multiline function type: arrow on new line
+                // Move to next line, set indent column, then "-> "
+                currentContext = currentContext.NextRow().SetIndentColumn();
+                currentContext = currentContext.Advance(3); // "-> "
+            }
+            else
+            {
+                // Single-line function type: " -> "
+                currentContext = currentContext.Advance(4);
+            }
+
+            // Format the return type
+            var (formattedReturn, afterReturn) = FormatTypeAnnotation(funcType.ReturnType, currentContext);
+            currentContext = afterReturn;
+
+            var formattedFunc = new TypeAnnotation.FunctionTypeAnnotation(
+                ArgumentType: formattedArg,
+                ReturnType: formattedReturn);
+
+            var range = new Range(context.ToLocation(), currentContext.ToLocation());
+            return (new Node<TypeAnnotation>(range, formattedFunc), currentContext);
+        }
+
+        private (Node<TypeAnnotation>, FormattingContext) FormatTupledTypeAnnotation(TypeAnnotation.Tupled tupled, FormattingContext context)
+        {
+            // Single-element tuple is just parentheses around a type (no spaces)
+            if (tupled.TypeAnnotations.Count is 1)
+            {
+                // "("
+                var currentContext = context.Advance(1);
+
+                var (formattedType, afterType) = FormatTypeAnnotation(tupled.TypeAnnotations[0], currentContext);
+
+                // ")"
+                currentContext = afterType.Advance(1);
+
+                var formattedTupled = new TypeAnnotation.Tupled([formattedType]);
+                var range = new Range(context.ToLocation(), currentContext.ToLocation());
+                return (new Node<TypeAnnotation>(range, formattedTupled), currentContext);
+            }
+
+            // Multi-element tuple: "( element1, element2, ... )"
+            // "( "
+            var multiContext = context.Advance(2);
+            var formattedTypes = new List<Node<TypeAnnotation>>();
+
+            for (var i = 0; i < tupled.TypeAnnotations.Count; i++)
+            {
+                if (i > 0)
+                {
+                    // ", "
+                    multiContext = multiContext.Advance(2);
+                }
+
+                var (formattedType, afterType) = FormatTypeAnnotation(tupled.TypeAnnotations[i], multiContext);
+                formattedTypes.Add(formattedType);
+                multiContext = afterType;
+            }
+
+            // " )"
+            multiContext = multiContext.Advance(2);
+
+            var formattedMultiTupled = new TypeAnnotation.Tupled(formattedTypes);
+            var multiRange = new Range(context.ToLocation(), multiContext.ToLocation());
+            return (new Node<TypeAnnotation>(multiRange, formattedMultiTupled), multiContext);
+        }
+
+        private (Node<TypeAnnotation>, FormattingContext) FormatGenericRecordTypeAnnotation(TypeAnnotation.GenericRecord genericRecord, FormattingContext context)
+        {
+            // "{ "
+            var currentContext = context.Advance(2);
+
+            // Generic name
+            var genericName = genericRecord.GenericName.Value;
+            var afterGenericName = currentContext.Advance(genericName.Length);
+            var genericNameRange = new Range(currentContext.ToLocation(), afterGenericName.ToLocation());
+            currentContext = afterGenericName;
+
+            // " | "
+            currentContext = currentContext.Advance(3);
+
+            // Format fields
+            var formattedFields = new List<Node<RecordField>>();
+            for (var i = 0; i < genericRecord.RecordDefinition.Value.Fields.Count; i++)
+            {
+                if (i > 0)
+                {
+                    // ", "
+                    currentContext = currentContext.Advance(2);
+                }
+
+                var field = genericRecord.RecordDefinition.Value.Fields[i];
+                var fieldStartContext = currentContext;
+
+                // field name
+                var fieldName = field.Value.FieldName.Value;
+                currentContext = currentContext.Advance(fieldName.Length);
+                var fieldNameRange = new Range(fieldStartContext.ToLocation(), currentContext.ToLocation());
+
+                // " : "
+                currentContext = currentContext.Advance(3);
+
+                // field type
+                var (formattedFieldType, afterFieldType) = FormatTypeAnnotation(field.Value.FieldType, currentContext);
+                currentContext = afterFieldType;
+
+                var newField = new RecordField(
+                    FieldName: new Node<string>(fieldNameRange, fieldName),
+                    FieldType: formattedFieldType);
+                var fieldRange = new Range(fieldStartContext.ToLocation(), currentContext.ToLocation());
+                formattedFields.Add(new Node<RecordField>(fieldRange, newField));
+            }
+
+            // " }"
+            currentContext = currentContext.Advance(2);
+
+            var formattedRecordDef = new RecordDefinition(formattedFields);
+            var formattedGenericRecord = new TypeAnnotation.GenericRecord(
+                GenericName: new Node<string>(genericNameRange, genericName),
+                RecordDefinition: new Node<RecordDefinition>(
+                    new Range(context.Advance(2).ToLocation(), currentContext.Advance(-2).ToLocation()),
+                    formattedRecordDef));
+
+            var range = new Range(context.ToLocation(), currentContext.ToLocation());
+            return (new Node<TypeAnnotation>(range, formattedGenericRecord), currentContext);
         }
 
         private (Node<TypeAnnotation>, FormattingContext) FormatRecordTypeAnnotation(TypeAnnotation.Record recordType, Range originalRange, FormattingContext context)
@@ -689,18 +1232,16 @@ public class Avh4Format
                 // " : "
                 currentContext = currentContext.Advance(3);
 
-                // field type - create a new node with normalized text
-                var fieldTypeText = FormatTypeAnnotationText(field.Value.FieldType.Value);
-                var fieldTypeContext = currentContext;
-                currentContext = currentContext.Advance(fieldTypeText.Length);
+                // Format the field type using FormatTypeAnnotation
+                var (formattedFieldType, afterFieldType) = FormatTypeAnnotation(field.Value.FieldType, currentContext);
+                currentContext = afterFieldType;
 
                 // Create new field node with proper range
                 var fieldNameRange = new Range(fieldStartContext.ToLocation(), fieldStartContext.Advance(fieldName.Length).ToLocation());
-                var fieldTypeRange = new Range(fieldTypeContext.ToLocation(), currentContext.ToLocation());
 
                 var newField = new RecordField(
                     FieldName: new Node<string>(fieldNameRange, fieldName),
-                    FieldType: new Node<TypeAnnotation>(fieldTypeRange, field.Value.FieldType.Value)
+                    FieldType: formattedFieldType
                 );
 
                 var fieldRange = new Range(fieldStartContext.ToLocation(), currentContext.ToLocation());
@@ -733,14 +1274,14 @@ public class Avh4Format
             var fieldName0 = field0.Value.FieldName.Value;
             var afterName0 = afterOpenBrace.Advance(fieldName0.Length);
             var afterColon0 = afterName0.Advance(3); // " : "
-            var fieldTypeText0 = FormatTypeAnnotationText(field0.Value.FieldType.Value);
-            var afterType0 = afterColon0.Advance(fieldTypeText0.Length);
+
+            // Format the field type using FormatTypeAnnotation
+            var (formattedFieldType0, afterType0) = FormatTypeAnnotation(field0.Value.FieldType, afterColon0);
 
             var field0NameRange = new Range(afterOpenBrace.ToLocation(), afterName0.ToLocation());
-            var field0TypeRange = new Range(afterColon0.ToLocation(), afterType0.ToLocation());
             var newField0 = new RecordField(
                 FieldName: new Node<string>(field0NameRange, fieldName0),
-                FieldType: new Node<TypeAnnotation>(field0TypeRange, field0.Value.FieldType.Value)
+                FieldType: formattedFieldType0
             );
             var field0Range = new Range(afterOpenBrace.ToLocation(), afterType0.ToLocation());
             formattedFields.Add(new Node<RecordField>(field0Range, newField0));
@@ -762,16 +1303,14 @@ public class Avh4Format
                 // " : "
                 var afterColon = afterName.Advance(3);
 
-                // field type
-                var fieldTypeText = FormatTypeAnnotationText(field.Value.FieldType.Value);
-                var afterType = afterColon.Advance(fieldTypeText.Length);
+                // Format the field type using FormatTypeAnnotation
+                var (formattedFieldType, afterType) = FormatTypeAnnotation(field.Value.FieldType, afterColon);
 
                 // Create new field node
                 var fieldNameRange = new Range(afterComma.ToLocation(), afterName.ToLocation());
-                var fieldTypeRange = new Range(afterColon.ToLocation(), afterType.ToLocation());
                 var newField = new RecordField(
                     FieldName: new Node<string>(fieldNameRange, fieldName),
-                    FieldType: new Node<TypeAnnotation>(fieldTypeRange, field.Value.FieldType.Value)
+                    FieldType: formattedFieldType
                 );
                 var fieldRange = new Range(fieldContext.ToLocation(), afterType.ToLocation());
                 formattedFields.Add(new Node<RecordField>(fieldRange, newField));
@@ -788,18 +1327,35 @@ public class Avh4Format
             return (new Node<TypeAnnotation>(range, new TypeAnnotation.Record(formattedRecordDef)), afterCloseBrace);
         }
 
-        private (Node<Declaration>, FormattingContext) FormatCustomTypeDeclaration(
+        private (Node<Declaration>, FormattingContext, ImmutableDictionary<Location, Location>, ImmutableList<Node<string>>) FormatCustomTypeDeclaration(
             Declaration.CustomTypeDeclaration customTypeDecl,
-            FormattingContext context)
+            FormattingContext context,
+            ImmutableDictionary<Location, Location> locationMapper,
+            ImmutableList<Node<string>> formattedComments)
         {
             var typeDecl = customTypeDecl.TypeDeclaration;
             var currentContext = context;
+            var updatedComments = formattedComments;
+
+            // If there's a documentation comment, advance context past it
+            // (the doc comment will be rendered directly by Rendering.RenderCustomType)
+            if (typeDecl.Documentation is { } docComment)
+            {
+                var docCommentLocation = currentContext.ToLocation();
+                var docCommentEnd = CalculateCommentEndLocation(docCommentLocation, docComment.Value);
+                // Move to next row after doc comment (connects directly to declaration)
+                currentContext = CreateContextAfterComment(currentContext, docCommentEnd);
+            }
+
+            // Save context position before "type" keyword
+            var typeKeywordContext = currentContext;
 
             // "type "
             currentContext = currentContext.Advance(5);
 
             // type name
             var typeName = typeDecl.Name.Value;
+            var typeNameStartContext = currentContext;
             currentContext = currentContext.Advance(typeName.Length);
 
             // generics
@@ -823,29 +1379,45 @@ public class Avh4Format
 
                 if (i > 0)
                 {
-                    var prevConstructor = typeDecl.Constructors[i - 1];
-
                     // Check for comments between previous and current constructor
-                    var commentsBetween =
-                        _comments
-                        .Where(c =>
-                        c.Range.Start.Row > prevConstructor.Range.End.Row &&
-                        c.Range.Start.Row < constructor.Range.Start.Row)
+                    var prevConstructor = typeDecl.Constructors[i - 1];
+                    var commentsBetween = originalComments
+                        .Where(c => c.Range.Start.Row > prevConstructor.Range.End.Row &&
+                                   c.Range.Start.Row < constructor.Range.Start.Row)
+                        .OrderBy(c => c.Range.Start.Row)
                         .ToList();
+
+                    if (commentsBetween.Count != 0)
+                    {
+                        foreach (var comment in commentsBetween)
+                        {
+                            // Move to new line for comment
+                            currentContext = currentContext.NextRow().SetIndentColumn();
+
+                            // Comments between choice type tags are indented 2 spaces after the indent column
+                            // This aligns them 2 spaces to the right of the "|" character
+                            var commentContext = currentContext.Advance(2);
+
+                            // Create formatted comment at current position
+                            var commentLocation = commentContext.ToLocation();
+                            var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value);
+                            var formattedComment = new Node<string>(
+                                new Range(commentLocation, commentEnd),
+                                comment.Value);
+
+                            updatedComments = updatedComments.Add(formattedComment);
+
+                            // Update context to after the comment (handles multi-line comments)
+                            currentContext = new FormattingContext(
+                                commentEnd.Row,
+                                commentEnd.Column,
+                                currentContext.IndentLevel,
+                                currentContext.AddHalfIndent);
+                        }
+                    }
 
                     // Move to new line and add "| " prefix for subsequent constructors
                     currentContext = currentContext.NextRow();
-
-                    // Account for comments between constructors
-                    foreach (var comment in commentsBetween)
-                    {
-                        // Count newlines in the comment to determine how many rows it occupies
-                        var commentRowCount = comment.Value.Count(ch => ch is '\n') + 1;
-                        for (var j = 0; j < commentRowCount; j++)
-                        {
-                            currentContext = currentContext.NextRow();
-                        }
-                    }
 
                     currentContext = currentContext.SetIndentColumn();
                     currentContext = currentContext.Advance(2);
@@ -862,11 +1434,13 @@ public class Avh4Format
                 foreach (var arg in constructor.Value.Arguments)
                 {
                     currentContext = currentContext.Advance(1); // space before argument
-                    var argStart = currentContext;
-                    var argText = FormatTypeAnnotationText(arg.Value);
-                    currentContext = currentContext.Advance(argText.Length);
-                    var argRange = new Range(argStart.ToLocation(), currentContext.ToLocation());
-                    formattedArgs.Add(new Node<TypeAnnotation>(argRange, arg.Value));
+
+                    var (formattedArg, contextAfterArg) =
+                        FormatTypeAnnotation(arg, currentContext);
+
+                    formattedArgs.Add(formattedArg);
+
+                    currentContext = contextAfterArg;
                 }
 
                 // Create formatted constructor
@@ -880,7 +1454,7 @@ public class Avh4Format
             }
 
             // Create formatted type declaration
-            var typeNameRange = new Range(context.Advance(5).ToLocation(), context.Advance(5 + typeName.Length).ToLocation());
+            var typeNameRange = new Range(typeNameStartContext.ToLocation(), typeNameStartContext.Advance(typeName.Length).ToLocation());
             var formattedTypeDecl = new TypeStruct(
                 Documentation: typeDecl.Documentation,
                 Name: new Node<string>(typeNameRange, typeName),
@@ -890,7 +1464,7 @@ public class Avh4Format
 
             var declRange = new Range(context.ToLocation(), currentContext.ToLocation());
             var formattedDecl = new Declaration.CustomTypeDeclaration(formattedTypeDecl);
-            return (new Node<Declaration>(declRange, formattedDecl), currentContext);
+            return (new Node<Declaration>(declRange, formattedDecl), currentContext, locationMapper, updatedComments);
         }
 
         private (Node<Declaration>, FormattingContext) FormatInfixDeclaration(
@@ -930,73 +1504,6 @@ public class Avh4Format
         private static bool IsSignatureMultiLine(Signature signature)
         {
             return signature.TypeAnnotation.Range.Start.Row != signature.TypeAnnotation.Range.End.Row;
-        }
-
-        private string FormatTypeAnnotationText(TypeAnnotation typeAnnotation)
-        {
-            // Simplified type annotation rendering for spacing calculation
-            return typeAnnotation switch
-            {
-                TypeAnnotation.GenericType generic =>
-                generic.Name,
-
-                TypeAnnotation.Unit => "()",
-
-                TypeAnnotation.Typed typed =>
-                    FormatTypedAnnotationText(typed),
-
-                TypeAnnotation.FunctionTypeAnnotation funcType =>
-                    FormatTypeAnnotationText(funcType.ArgumentType.Value) + " -> " +
-                    FormatTypeAnnotationText(funcType.ReturnType.Value),
-
-                TypeAnnotation.Tupled tupled =>
-                    "( " + string.Join(", ", tupled.TypeAnnotations.Select(t => FormatTypeAnnotationText(t.Value))) + " )",
-
-                TypeAnnotation.GenericRecord genericRecord =>
-                    FormatGenericRecordTypeAnnotationText(genericRecord),
-
-                TypeAnnotation.Record record =>
-                    FormatRecordTypeAnnotationFieldsText(record.RecordDefinition),
-
-                _ =>
-                throw new System.NotImplementedException(
-                    $"Formatting for type annotation '{typeAnnotation.GetType().Name}' is not implemented.")
-            };
-        }
-
-        private string FormatGenericRecordTypeAnnotationText(TypeAnnotation.GenericRecord genericRecord)
-        {
-            var fields = string.Join(", ", genericRecord.RecordDefinition.Value.Fields.Select(f =>
-                f.Value.FieldName.Value + " : " + FormatTypeAnnotationText(f.Value.FieldType.Value)));
-            return "{ " + genericRecord.GenericName.Value + " | " + fields + " }";
-        }
-
-        private string FormatRecordTypeAnnotationFieldsText(RecordDefinition recordDef)
-        {
-            var fields = string.Join(", ", recordDef.Fields.Select(f =>
-                f.Value.FieldName.Value + " : " + FormatTypeAnnotationText(f.Value.FieldType.Value)));
-            return "{ " + fields + " }";
-        }
-
-        private string FormatTypedAnnotationText(TypeAnnotation.Typed typed)
-        {
-            var moduleName = typed.TypeName.Value.ModuleName.Count > 0
-                ? string.Join(".", typed.TypeName.Value.ModuleName) + "."
-                : "";
-            var typeName = moduleName + typed.TypeName.Value.Name;
-
-            if (typed.TypeArguments.Count is 0)
-                return typeName;
-
-            return typeName + " " + string.Join(" ", typed.TypeArguments.Select(a =>
-            {
-                // Parenthesize complex type arguments
-                var argText = FormatTypeAnnotationText(a.Value);
-                return a.Value is TypeAnnotation.FunctionTypeAnnotation ||
-                       (a.Value is TypeAnnotation.Typed t && t.TypeArguments.Count > 0)
-                    ? "(" + argText + ")"
-                    : argText;
-            }));
         }
 
         private static string FormatPatternText(Pattern pattern)
@@ -1262,14 +1769,14 @@ public class Avh4Format
             if (isMultiline)
             {
                 // Multiline: left on one line, operator and right on next line
-                var (leftFormatted, afterLeft) = VisitExpressionNode(expr.Left, context);
+                var (leftFormatted, afterLeft) = VisitExpressionNodeLessMapping(expr.Left, context);
 
                 // Move to next line for operator
                 var opLineContext = afterLeft.NextRow().Indent().SetIndentColumn();
                 var afterOp = opLineContext.Advance(expr.Operator.Length);
                 var afterOpSpace = afterOp.Advance(1); // space after operator
 
-                var (rightFormatted, afterRight) = VisitExpressionNode(expr.Right, afterOpSpace);
+                var (rightFormatted, afterRight) = VisitExpressionNodeLessMapping(expr.Right, afterOpSpace);
 
                 var finalContext = afterRight.Dedent();
 
@@ -1286,11 +1793,11 @@ public class Avh4Format
             else
             {
                 // Single-line: left op right with spaces
-                var (leftFormatted, afterLeft) = VisitExpressionNode(expr.Left, context);
+                var (leftFormatted, afterLeft) = VisitExpressionNodeLessMapping(expr.Left, context);
                 var afterLeftSpace = afterLeft.Advance(1); // space before operator
                 var afterOp = afterLeftSpace.Advance(expr.Operator.Length);
                 var afterOpSpace = afterOp.Advance(1); // space after operator
-                var (rightFormatted, afterRight) = VisitExpressionNode(expr.Right, afterOpSpace);
+                var (rightFormatted, afterRight) = VisitExpressionNodeLessMapping(expr.Right, afterOpSpace);
 
                 var formattedExpr = new Expression.OperatorApplication(
                     Operator: expr.Operator,
@@ -1309,7 +1816,48 @@ public class Avh4Format
         /// This is crucial for detecting multiline status at each nesting level independently,
         /// particularly for single-element lists where the closing bracket may be on a new line.
         /// </summary>
-        private (Node<Expression>, FormattingContext) VisitExpressionNode(
+        /// <summary>
+        /// Visit an expression node and record location mappings.
+        /// </summary>
+        private (Node<Expression>, FormattingContext, ImmutableDictionary<Location, Location>, ImmutableList<Node<string>>) VisitExpressionNode(
+            Node<Expression> node,
+            FormattingContext context,
+            ImmutableDictionary<Location, Location> locationMapper,
+            ImmutableList<Node<string>> formattedComments)
+        {
+            // Special handling for list expressions to support comments between list items
+            if (node.Value is Expression.ListExpr listExpr && listExpr.Elements.Count > 0)
+            {
+                var (formattedNode, newContext, updatedComments) = VisitListExprWithComments(
+                    listExpr, node.Range, context, formattedComments);
+
+                // Record the mapping from original to formatted range
+                var updatedMapper = RecordMapping(node.Range, formattedNode.Range, locationMapper);
+
+                return (formattedNode, newContext, updatedMapper, updatedComments);
+            }
+
+            // Special handling for if-blocks to support comments before the condition
+            if (node.Value is Expression.IfBlock ifBlock)
+            {
+                var (formattedNode, newContext, updatedComments) = VisitIfBlockWithComments(
+                    ifBlock, node.Range, context, formattedComments);
+
+                // Record the mapping from original to formatted range
+                var updatedMapper = RecordMapping(node.Range, formattedNode.Range, locationMapper);
+
+                return (formattedNode, newContext, updatedMapper, updatedComments);
+            }
+
+            var (formattedNodeRegular, newContextRegular) = VisitExpressionNodeLessMapping(node, context);
+
+            // Record the mapping from original to formatted range
+            var updatedMapperRegular = RecordMapping(node.Range, formattedNodeRegular.Range, locationMapper);
+
+            return (formattedNodeRegular, newContextRegular, updatedMapperRegular, formattedComments);
+        }
+
+        private (Node<Expression>, FormattingContext) VisitExpressionNodeLessMapping(
             Node<Expression> node,
             FormattingContext context)
         {
@@ -1323,6 +1871,12 @@ public class Avh4Format
             if (node.Value is Expression.RecordExpr recordExpr)
             {
                 return VisitRecordExprWithRange(recordExpr, node.Range, context);
+            }
+
+            // For TupledExpression, use the Node's Range to detect multiline at this level
+            if (node.Value is Expression.TupledExpression tupledExpr)
+            {
+                return VisitTupledExpressionWithRange(tupledExpr, node.Range, context);
             }
 
             // For other expressions, use the regular Visit
@@ -1374,6 +1928,38 @@ public class Avh4Format
             return FormatList(expr, context, isMultiLine);
         }
 
+        private (Node<Expression>, FormattingContext, ImmutableList<Node<string>>) VisitListExprWithComments(
+            Expression.ListExpr expr,
+            Range originalRange,
+            FormattingContext context,
+            ImmutableList<Node<string>> formattedComments)
+        {
+            if (expr.Elements.Count is 0)
+            {
+                // Empty list: "[]"
+                var afterList = context.Advance(2);
+                var emptyListRange = new Range(context.ToLocation(), afterList.ToLocation());
+                return (new Node<Expression>(emptyListRange, expr), afterList, formattedComments);
+            }
+
+            // Detect if this specific list is multiline
+            bool isMultiLine;
+            if (expr.Elements.Count >= 2)
+            {
+                isMultiLine = NodesSpanMultipleRows(expr.Elements);
+            }
+            else
+            {
+                var element = expr.Elements[0];
+                var elementEndRow = element.Range.End.Row;
+                var elementStartRow = element.Range.Start.Row;
+                var listEndRow = originalRange.End.Row;
+                isMultiLine = listEndRow > elementEndRow || elementEndRow > elementStartRow;
+            }
+
+            return FormatListWithComments(expr, context, isMultiLine, formattedComments);
+        }
+
         public override (Node<Expression>, FormattingContext) VisitListExpr(Expression.ListExpr expr, FormattingContext context)
         {
             // This method is called by the base visitor pattern when we don't have direct access
@@ -1411,7 +1997,7 @@ public class Avh4Format
 
                 for (var i = 0; i < expr.Elements.Count; i++)
                 {
-                    var (formattedElem, nextContext) = VisitExpressionNode(expr.Elements[i], currentContext);
+                    var (formattedElem, nextContext) = VisitExpressionNodeLessMapping(expr.Elements[i], currentContext);
                     formattedElements.Add(formattedElem);
                     currentContext = i < expr.Elements.Count - 1
                         ? nextContext.Advance(2) // ", "
@@ -1429,7 +2015,7 @@ public class Avh4Format
                 var formattedElements = new List<Node<Expression>>();
 
                 // First element on same line as "["
-                var (firstElem, afterFirst) = VisitExpressionNode(expr.Elements[0], afterOpen);
+                var (firstElem, afterFirst) = VisitExpressionNodeLessMapping(expr.Elements[0], afterOpen);
                 formattedElements.Add(firstElem);
 
                 // Subsequent elements on new lines with ", " prefix
@@ -1451,7 +2037,7 @@ public class Avh4Format
                     // Add half indent for subsequent list elements to support nested multiline expressions
                     var elemContext = afterComma.WithHalfIndent(true);
 
-                    var (formattedElem, nextContext) = VisitExpressionNode(expr.Elements[i], elemContext);
+                    var (formattedElem, nextContext) = VisitExpressionNodeLessMapping(expr.Elements[i], elemContext);
                     formattedElements.Add(formattedElem);
 
                     // Move to next line
@@ -1470,21 +2056,284 @@ public class Avh4Format
             }
         }
 
+        private (Node<Expression>, FormattingContext, ImmutableList<Node<string>>) FormatListWithComments(
+            Expression.ListExpr expr,
+            FormattingContext context,
+            bool isMultiLine,
+            ImmutableList<Node<string>> formattedComments)
+        {
+            if (!isMultiLine)
+            {
+                // Single-line lists don't have comments between items
+                var (formatted, newContext) = FormatList(expr, context, false);
+                return (formatted, newContext, formattedComments);
+            }
+            else
+            {
+                // Multi-line: first element on same line as "[", rest on new lines with commas
+                var openingBracketColumn = context.CurrentColumn;
+                var afterOpen = context.Advance(2); // "[ "
+                var formattedElements = new List<Node<Expression>>();
+                var updatedComments = formattedComments;
+
+                // First element on same line as "["
+                // Check if first element is a list that might contain comments
+                Node<Expression> firstElem;
+                FormattingContext afterFirst;
+                if (expr.Elements[0].Value is Expression.ListExpr firstListExpr && firstListExpr.Elements.Count > 0)
+                {
+                    ImmutableList<Node<string>> firstComments;
+                    (firstElem, afterFirst, firstComments) = VisitListExprWithComments(
+                        firstListExpr, expr.Elements[0].Range, afterOpen, updatedComments);
+                    updatedComments = firstComments;
+                }
+                else
+                {
+                    (firstElem, afterFirst) = VisitExpressionNodeLessMapping(expr.Elements[0], afterOpen);
+                }
+                formattedElements.Add(firstElem);
+
+                // Subsequent elements on new lines with ", " prefix
+                var nextRow = afterFirst.CurrentRow + 1;
+
+                for (var i = 1; i < expr.Elements.Count; i++)
+                {
+                    var prevElement = expr.Elements[i - 1];
+                    var currentElement = expr.Elements[i];
+
+                    // Check for comments between previous and current element
+                    var commentsBetween = originalComments
+                        .Where(c => c.Range.Start.Row > prevElement.Range.End.Row &&
+                                   c.Range.Start.Row < currentElement.Range.Start.Row)
+                        .OrderBy(c => c.Range.Start.Row)
+                        .ToList();
+
+                    // Add blank line and comments if any exist
+                    if (commentsBetween.Count != 0)
+                    {
+                        // Add blank line before comment
+                        nextRow++;
+
+                        foreach (var comment in commentsBetween)
+                        {
+                            // Create context at opening bracket column for comment
+                            var baseIndentLevel = context.IndentLevel + (context.AddHalfIndent ? 1 : 0);
+                            var commentContext = new FormattingContext(
+                                nextRow,
+                                openingBracketColumn,
+                                baseIndentLevel);
+
+                            // Create formatted comment at current position
+                            var commentLocation = commentContext.ToLocation();
+                            var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value);
+                            var formattedComment = new Node<string>(
+                                new Range(commentLocation, commentEnd),
+                                comment.Value);
+
+                            updatedComments = updatedComments.Add(formattedComment);
+
+                            // Move to next line after the comment (handles multi-line comments)
+                            nextRow = commentEnd.Row + 1;
+                        }
+                    }
+
+                    // Create context at opening bracket column for comma
+                    var baseIndentLevelForComma = context.IndentLevel + (context.AddHalfIndent ? 1 : 0);
+                    var commaContext = new FormattingContext(
+                        nextRow,
+                        openingBracketColumn,
+                        baseIndentLevelForComma);
+
+                    // ", " at the start of the line (at opening bracket column)
+                    var afterComma = commaContext.Advance(2);
+
+                    // Add half indent for subsequent list elements to support nested multiline expressions
+                    var elemContext = afterComma.WithHalfIndent(true);
+
+                    // Check if element is a list expression that might contain comments
+                    Node<Expression> formattedElem;
+                    FormattingContext nextContext;
+                    if (currentElement.Value is Expression.ListExpr nestedListExpr && nestedListExpr.Elements.Count > 0)
+                    {
+                        // Format nested list with comment support
+                        ImmutableList<Node<string>> nestedComments;
+                        (formattedElem, nextContext, nestedComments) = VisitListExprWithComments(
+                            nestedListExpr, currentElement.Range, elemContext, updatedComments);
+                        updatedComments = nestedComments;
+                    }
+                    else
+                    {
+                        (formattedElem, nextContext) = VisitExpressionNodeLessMapping(currentElement, elemContext);
+                    }
+
+                    formattedElements.Add(formattedElem);
+
+                    // Move to next line
+                    nextRow = nextContext.CurrentRow + 1;
+                }
+
+                // Closing bracket "]" should be at opening bracket column
+                var closingBracketContext = new FormattingContext(
+                    nextRow,
+                    openingBracketColumn,
+                    context.IndentLevel);
+                var afterClose = closingBracketContext.Advance(1);
+
+                var listRange = new Range(context.ToLocation(), afterClose.ToLocation());
+                return (new Node<Expression>(listRange, new Expression.ListExpr(formattedElements)), afterClose, updatedComments);
+            }
+        }
+
         public override (Node<Expression>, FormattingContext) VisitIfBlock(Expression.IfBlock expr, FormattingContext context)
         {
-            // "if"
-            var afterIf = context.Advance(2);
-            // " " after if
-            afterIf = afterIf.Advance(1);
-            var (condFormatted, afterCond) = Visit(expr.Condition.Value, afterIf);
+            // Check if the condition expression spans multiple lines in the original source
+            // Also check for comments between the if keyword and condition
+            var isConditionMultiLine = expr.Condition.Range.Start.Row != expr.Condition.Range.End.Row;
 
-            // " then"
-            var afterThen = afterCond.Advance(5);
+            // Track which comments have already been formatted to avoid duplicates
+            var alreadyFormattedCommentTexts = new HashSet<string>(
+                _accumulatedComments.Select(c => c.Value));
+
+            // Find comments that appear before the condition expression (within the if block)
+            var commentsBeforeCondition = originalComments
+                .Where(c => c.Range.End.Row < expr.Condition.Range.Start.Row &&
+                           c.Range.Start.Row >= expr.Condition.Range.Start.Row - 5 &&
+                           !alreadyFormattedCommentTexts.Contains(c.Value))
+                .OrderBy(c => c.Range.Start.Row)
+                .ToList();
+
+            // Find comments between condition and then keyword
+            var commentsBetweenConditionAndThen = originalComments
+                .Where(c => c.Range.Start.Row > expr.Condition.Range.End.Row &&
+                           c.Range.Start.Row <= expr.Condition.Range.End.Row + 1 &&
+                           c.Range.End.Row < expr.ThenBlock.Range.Start.Row &&
+                           !alreadyFormattedCommentTexts.Contains(c.Value))
+                .OrderBy(c => c.Range.Start.Row)
+                .ToList();
+
+            // If there are comments before the condition that would push condition to a new line, treat as multiline
+            isConditionMultiLine = isConditionMultiLine || commentsBeforeCondition.Count != 0 || commentsBetweenConditionAndThen.Count != 0;
+
+            Node<Expression> condFormatted;
+            FormattingContext afterCond;
+            FormattingContext afterThen;
+
+            if (isConditionMultiLine)
+            {
+                // Multi-line condition format:
+                // if
+                //     -- comment
+                //     condition
+                // then
+                //     ...
+
+                // "if"
+                var afterIf = context.Advance(2);
+
+                // Move to next line and indent for condition (or comment before condition)
+                var condContext = afterIf.NextRow().Indent().SetIndentColumn();
+
+                // Format any comments that appear before the condition
+                foreach (var comment in commentsBeforeCondition)
+                {
+                    // Create formatted comment at current position
+                    var commentLocation = condContext.ToLocation();
+                    var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value);
+                    var formattedComment = new Node<string>(
+                        new Range(commentLocation, commentEnd),
+                        comment.Value);
+
+                    _accumulatedComments.Add(formattedComment);
+
+                    // Advance to next line after the comment ends
+                    condContext = CreateContextAfterComment(condContext, commentEnd);
+                }
+
+                (condFormatted, afterCond) = VisitExpressionNodeLessMapping(expr.Condition, condContext);
+
+                // Format any comments between condition and then
+                foreach (var comment in commentsBetweenConditionAndThen)
+                {
+                    // Move to next line at same indent level as condition
+                    afterCond = afterCond.NextRow().SetIndentColumn();
+
+                    var commentLocation = afterCond.ToLocation();
+                    var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value);
+                    var formattedComment = new Node<string>(
+                        new Range(commentLocation, commentEnd),
+                        comment.Value);
+
+                    _accumulatedComments.Add(formattedComment);
+                    afterCond = CreateContextAfterCommentSameIndent(afterCond, commentEnd);
+                }
+
+                // "then" on a new line at the same indentation as "if"
+                var thenLineContext = afterCond.Dedent().NextRow().SetIndentColumn();
+                afterThen = thenLineContext.Advance(4); // "then"
+            }
+            else
+            {
+                // Single-line condition format:
+                // if condition then
+                //     ...
+
+                // "if " (2 chars for "if" + 1 space)
+                var afterIf = context.Advance(3);
+                (condFormatted, afterCond) = Visit(expr.Condition.Value, afterIf);
+
+                // " then" (1 space + 4 chars for "then")
+                afterThen = afterCond.Advance(5);
+            }
+
+            // Find and format comments that appear after 'then' keyword but before the then-block expression
+            var thenKeywordRow = expr.Condition.Range.End.Row + 1 + commentsBetweenConditionAndThen.Count;
+            var commentsAfterThenKeyword = originalComments
+                .Where(c => c.Range.Start.Row > thenKeywordRow &&
+                           c.Range.End.Row < expr.ThenBlock.Range.Start.Row &&
+                           !alreadyFormattedCommentTexts.Contains(c.Value))
+                .OrderBy(c => c.Range.Start.Row)
+                .ToList();
+
             var thenContext = afterThen.NextRow().Indent().SetIndentColumn();
+
+            // Format any comments that appear after 'then' keyword but before the then expression
+            foreach (var comment in commentsAfterThenKeyword)
+            {
+                var commentLocation = thenContext.ToLocation();
+                var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value);
+                var formattedComment = new Node<string>(
+                    new Range(commentLocation, commentEnd),
+                    comment.Value);
+
+                _accumulatedComments.Add(formattedComment);
+                thenContext = CreateContextAfterComment(thenContext, commentEnd);
+            }
+
             var (thenFormatted, afterThenExpr) = Visit(expr.ThenBlock.Value, thenContext);
 
             // Check if else block is an if-expression (for "else if" formatting)
             var isElseIf = expr.ElseBlock.Value is Expression.IfBlock;
+
+            // For else-if chains, check if there are comments or multiline conditions in nested if
+            var hasCommentsBetweenElseAndIf = false;
+            var nestedIfHasMultilineCondition = false;
+            if (isElseIf)
+            {
+                hasCommentsBetweenElseAndIf = originalComments
+                    .Any(c => c.Range.Start.Row > expr.ThenBlock.Range.End.Row &&
+                             c.Range.End.Row < expr.ElseBlock.Range.Start.Row &&
+                             !alreadyFormattedCommentTexts.Contains(c.Value));
+
+                // Check if the nested if has a multiline condition or comments before its condition
+                var nestedIfBlock = (Expression.IfBlock)expr.ElseBlock.Value;
+                var nestedConditionIsMultiLine = nestedIfBlock.Condition.Range.Start.Row != nestedIfBlock.Condition.Range.End.Row;
+                var nestedHasCommentsBeforeCondition = originalComments
+                    .Any(c => c.Range.End.Row < nestedIfBlock.Condition.Range.Start.Row &&
+                             c.Range.Start.Row >= nestedIfBlock.Condition.Range.Start.Row - 5 &&
+                             c.Range.Start.Row > expr.ThenBlock.Range.End.Row &&
+                             !alreadyFormattedCommentTexts.Contains(c.Value));
+                nestedIfHasMultilineCondition = nestedConditionIsMultiLine || nestedHasCommentsBeforeCondition;
+            }
 
             // Blank line before else
             var elseLineContext = afterThenExpr.Dedent().NextRow().NextRow().SetIndentColumn();
@@ -1493,15 +2342,76 @@ public class Avh4Format
             var afterElseKeyword = elseLineContext.Advance(4);
 
             FormattingContext elseContext;
-            if (isElseIf)
+            if (isElseIf && !hasCommentsBetweenElseAndIf && !nestedIfHasMultilineCondition)
             {
                 // "else if" - keep on same line with space
+                elseContext = afterElseKeyword.Advance(1);
+            }
+            else if (isElseIf && hasCommentsBetweenElseAndIf)
+            {
+                // else-if with comments between else and if
+                elseContext = afterElseKeyword.NextRow().SetIndentColumn();
+
+                // Format comments at the else/if level
+                var commentsBeforeNestedIf = originalComments
+                    .Where(c => c.Range.Start.Row > expr.ThenBlock.Range.End.Row &&
+                               c.Range.End.Row < expr.ElseBlock.Range.Start.Row &&
+                               !alreadyFormattedCommentTexts.Contains(c.Value))
+                    .OrderBy(c => c.Range.Start.Row)
+                    .ToList();
+
+                foreach (var comment in commentsBeforeNestedIf)
+                {
+                    var commentLocation = elseContext.ToLocation();
+                    var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value);
+                    var formattedComment = new Node<string>(
+                        new Range(commentLocation, commentEnd),
+                        comment.Value);
+
+                    _accumulatedComments.Add(formattedComment);
+                    elseContext = CreateContextAfterCommentSameIndent(elseContext, commentEnd);
+                }
+
+                // Move to next row for the nested "if"
+                if (commentsBeforeNestedIf.Count != 0)
+                {
+                    elseContext = elseContext.NextRow().SetIndentColumn();
+                }
+            }
+            else if (isElseIf && nestedIfHasMultilineCondition)
+            {
+                // else-if where the nested if has multiline condition (comments before condition)
+                elseContext = afterElseKeyword.Advance(1);
+            }
+            else if (isElseIf)
+            {
+                // else-if without any special cases - format on same line
                 elseContext = afterElseKeyword.Advance(1);
             }
             else
             {
                 // Regular else - move to next line and indent
                 elseContext = afterElseKeyword.NextRow().Indent().SetIndentColumn();
+
+                // Find and format comments before the else expression (for non-else-if cases)
+                var commentsBeforeElse = originalComments
+                    .Where(c => c.Range.Start.Row > expr.ThenBlock.Range.End.Row &&
+                               c.Range.End.Row < expr.ElseBlock.Range.Start.Row &&
+                               !alreadyFormattedCommentTexts.Contains(c.Value))
+                    .OrderBy(c => c.Range.Start.Row)
+                    .ToList();
+
+                foreach (var comment in commentsBeforeElse)
+                {
+                    var commentLocation = elseContext.ToLocation();
+                    var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value);
+                    var formattedComment = new Node<string>(
+                        new Range(commentLocation, commentEnd),
+                        comment.Value);
+
+                    _accumulatedComments.Add(formattedComment);
+                    elseContext = CreateContextAfterComment(elseContext, commentEnd);
+                }
             }
 
             var (elseFormatted, afterElseExpr) = Visit(expr.ElseBlock.Value, elseContext);
@@ -1515,6 +2425,281 @@ public class Avh4Format
             var finalContext = isElseIf ? afterElseExpr : afterElseExpr.Dedent();
             var range = new Range(context.ToLocation(), finalContext.ToLocation());
             return (new Node<Expression>(range, formattedIf), finalContext);
+        }
+
+        private (Node<Expression>, FormattingContext, ImmutableList<Node<string>>) VisitIfBlockWithComments(
+            Expression.IfBlock expr,
+            Range originalRange,
+            FormattingContext context,
+            ImmutableList<Node<string>> formattedComments)
+        {
+            var updatedComments = formattedComments;
+
+            // Check if the condition expression spans multiple lines in the original source
+            // Also check for comments between the if keyword and condition
+            var isConditionMultiLine = expr.Condition.Range.Start.Row != expr.Condition.Range.End.Row;
+
+            // Track which original comments have already been formatted (by their text content)
+            // This prevents double-formatting when parent and nested calls both try to handle the same comment
+            var alreadyFormattedCommentTexts = new HashSet<string>(
+                formattedComments.Select(c => c.Value));
+
+            // Find comments that appear before the condition expression (within the if block)
+            // Exclude comments that have already been formatted by the parent
+            var commentsBeforeCondition = originalComments
+                .Where(c => c.Range.End.Row < expr.Condition.Range.Start.Row &&
+                           c.Range.Start.Row >= expr.Condition.Range.Start.Row - 5 &&
+                           !alreadyFormattedCommentTexts.Contains(c.Value))
+                .OrderBy(c => c.Range.Start.Row)
+                .ToList();
+
+            // Find comments between condition and then keyword (NOT after then keyword)
+            // In multiline format, 'then' appears on the row after condition ends
+            // So comments on rows between condition.End.Row and condition.End.Row + 1 (inclusive)
+            // would be between condition and 'then'
+            var commentsBetweenConditionAndThen = originalComments
+                .Where(c => c.Range.Start.Row > expr.Condition.Range.End.Row &&
+                           c.Range.Start.Row <= expr.Condition.Range.End.Row + 1 &&
+                           c.Range.End.Row < expr.ThenBlock.Range.Start.Row)
+                .OrderBy(c => c.Range.Start.Row)
+                .ToList();
+
+            // If there are comments before condition or between condition and then, treat as multiline
+            isConditionMultiLine = isConditionMultiLine || commentsBeforeCondition.Count != 0 || commentsBetweenConditionAndThen.Count != 0;
+
+            Node<Expression> condFormatted;
+            FormattingContext afterCond;
+            FormattingContext afterThen;
+
+            if (isConditionMultiLine)
+            {
+                // Multi-line condition format:
+                // if
+                //     -- comment
+                //     condition
+                // then
+                //     ...
+
+                // "if"
+                var afterIf = context.Advance(2);
+
+                // Move to next line and indent for condition (or comment before condition)
+                var condContext = afterIf.NextRow().Indent().SetIndentColumn();
+
+                // Format any comments that appear before the condition
+                foreach (var comment in commentsBeforeCondition)
+                {
+                    // Create formatted comment at current position
+                    var commentLocation = condContext.ToLocation();
+                    var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value);
+                    var formattedComment = new Node<string>(
+                        new Range(commentLocation, commentEnd),
+                        comment.Value);
+
+                    updatedComments = updatedComments.Add(formattedComment);
+
+                    // Advance to next line after the comment ends
+                    condContext = CreateContextAfterComment(condContext, commentEnd);
+                }
+
+                (condFormatted, afterCond) = VisitExpressionNodeLessMapping(expr.Condition, condContext);
+
+                // Format any comments that appear between condition and then (at same indent as condition)
+                foreach (var comment in commentsBetweenConditionAndThen)
+                {
+                    // Move to next line at same indent level as condition
+                    afterCond = afterCond.NextRow().SetIndentColumn();
+
+                    var commentLocation = afterCond.ToLocation();
+                    var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value);
+                    var formattedComment = new Node<string>(
+                        new Range(commentLocation, commentEnd),
+                        comment.Value);
+
+                    updatedComments = updatedComments.Add(formattedComment);
+                    afterCond = CreateContextAfterCommentSameIndent(afterCond, commentEnd);
+                }
+
+                // "then" on a new line at the same indentation as "if"
+                var thenLineContext = afterCond.Dedent().NextRow().SetIndentColumn();
+                afterThen = thenLineContext.Advance(4); // "then"
+            }
+            else
+            {
+                // Single-line condition format:
+                // if condition then
+                //     ...
+
+                // "if " (2 chars for "if" + 1 space)
+                var afterIf = context.Advance(3);
+                (condFormatted, afterCond) = Visit(expr.Condition.Value, afterIf);
+
+                // " then" (1 space + 4 chars for "then")
+                afterThen = afterCond.Advance(5);
+            }
+
+            // Find and format comments that appear after 'then' keyword but before the then-block expression
+            // We need to format these so they get proper positions in the formatted output
+            var thenKeywordRow = expr.Condition.Range.End.Row + 1 + commentsBetweenConditionAndThen.Count;
+            var commentsAfterThenKeyword = originalComments
+                .Where(c => c.Range.Start.Row > thenKeywordRow &&
+                           c.Range.End.Row < expr.ThenBlock.Range.Start.Row)
+                .OrderBy(c => c.Range.Start.Row)
+                .ToList();
+
+            var thenContext = afterThen.NextRow().Indent().SetIndentColumn();
+
+            // Format any comments that appear after 'then' keyword but before the then expression
+            foreach (var comment in commentsAfterThenKeyword)
+            {
+                var commentLocation = thenContext.ToLocation();
+                var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value);
+                var formattedComment = new Node<string>(
+                    new Range(commentLocation, commentEnd),
+                    comment.Value);
+
+                updatedComments = updatedComments.Add(formattedComment);
+                thenContext = CreateContextAfterComment(thenContext, commentEnd);
+            }
+
+            var (thenFormatted, afterThenExpr) = Visit(expr.ThenBlock.Value, thenContext);
+
+            // Check if else block is an if-expression (for "else if" formatting)
+            var isElseIf = expr.ElseBlock.Value is Expression.IfBlock;
+
+            // Blank line before else
+            var elseLineContext = afterThenExpr.Dedent().NextRow().NextRow().SetIndentColumn();
+
+            // "else"
+            var afterElseKeyword = elseLineContext.Advance(4);
+
+            // For else-if chains, check if there are comments between "else" and the nested "if"
+            // (not between "if" and its condition - those are handled by the nested VisitIfBlockWithComments)
+            // Comments between "else" and "if" have row < nestedIfBlock's range start row
+            var hasCommentsBetweenElseAndIf = false;
+            var nestedIfHasMultilineCondition = false;
+            if (isElseIf)
+            {
+                hasCommentsBetweenElseAndIf = originalComments
+                    .Any(c => c.Range.Start.Row > expr.ThenBlock.Range.End.Row &&
+                             c.Range.End.Row < expr.ElseBlock.Range.Start.Row);
+
+                // Check if the nested if has a multiline condition or comments before its condition
+                var nestedIfBlock = (Expression.IfBlock)expr.ElseBlock.Value;
+                var nestedConditionIsMultiLine = nestedIfBlock.Condition.Range.Start.Row != nestedIfBlock.Condition.Range.End.Row;
+                var nestedHasCommentsBeforeCondition = originalComments
+                    .Any(c => c.Range.End.Row < nestedIfBlock.Condition.Range.Start.Row &&
+                             c.Range.Start.Row >= nestedIfBlock.Condition.Range.Start.Row - 5 &&
+                             c.Range.Start.Row > expr.ThenBlock.Range.End.Row);
+                nestedIfHasMultilineCondition = nestedConditionIsMultiLine || nestedHasCommentsBeforeCondition;
+            }
+
+            FormattingContext elseContext;
+            if (isElseIf && !hasCommentsBetweenElseAndIf && !nestedIfHasMultilineCondition)
+            {
+                // "else if" - keep on same line with space
+                elseContext = afterElseKeyword.Advance(1);
+            }
+            else if (isElseIf && hasCommentsBetweenElseAndIf)
+            {
+                // else-if with comments between else and if
+                // Format: else\n-- comment\nif\n    condition
+                // Position comments and if at else's indent level
+                elseContext = afterElseKeyword.NextRow().SetIndentColumn();
+
+                // Format comments at the else/if level
+                var commentsBeforeNestedIf = originalComments
+                    .Where(c => c.Range.Start.Row > expr.ThenBlock.Range.End.Row &&
+                               c.Range.End.Row < expr.ElseBlock.Range.Start.Row)
+                    .OrderBy(c => c.Range.Start.Row)
+                    .ToList();
+
+                foreach (var comment in commentsBeforeNestedIf)
+                {
+                    var commentLocation = elseContext.ToLocation();
+                    var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value);
+                    var formattedComment = new Node<string>(
+                        new Range(commentLocation, commentEnd),
+                        comment.Value);
+
+                    updatedComments = updatedComments.Add(formattedComment);
+                    elseContext = CreateContextAfterCommentSameIndent(elseContext, commentEnd);
+                }
+
+                // Move to next row for the nested "if"
+                if (commentsBeforeNestedIf.Count != 0)
+                {
+                    elseContext = elseContext.NextRow().SetIndentColumn();
+                }
+            }
+            else if (isElseIf && nestedIfHasMultilineCondition)
+            {
+                // else-if where the nested if has multiline condition (comments before condition)
+                // Format as: else if\n    -- comment\n    condition
+                // Position context after "else " so nested call outputs "if" there
+                elseContext = afterElseKeyword.Advance(1);
+            }
+            else if (isElseIf)
+            {
+                // else-if without any special cases - format on same line
+                // This shouldn't happen given the conditions above, but as a fallback
+                elseContext = afterElseKeyword.Advance(1);
+            }
+            else
+            {
+                // Regular else - move to next line and indent
+                elseContext = afterElseKeyword.NextRow().Indent().SetIndentColumn();
+            }
+
+            // Find comments that appear before the else-block expression (for non-else-if cases)
+            if (!isElseIf)
+            {
+                var commentsBeforeElse = originalComments
+                    .Where(c => c.Range.Start.Row > expr.ThenBlock.Range.End.Row &&
+                               c.Range.End.Row < expr.ElseBlock.Range.Start.Row)
+                    .OrderBy(c => c.Range.Start.Row)
+                    .ToList();
+
+                // Format any comments that appear before the else expression
+                foreach (var comment in commentsBeforeElse)
+                {
+                    var commentLocation = elseContext.ToLocation();
+                    var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value);
+                    var formattedComment = new Node<string>(
+                        new Range(commentLocation, commentEnd),
+                        comment.Value);
+
+                    updatedComments = updatedComments.Add(formattedComment);
+                    elseContext = CreateContextAfterComment(elseContext, commentEnd);
+                }
+            }
+
+            Node<Expression> elseFormatted;
+            FormattingContext afterElseExpr;
+
+            // For else-if chains, recursively handle the nested if-block with comments
+            if (isElseIf)
+            {
+                var (nestedIfFormatted, nestedAfterElse, nestedComments) = VisitIfBlockWithComments(
+                    (Expression.IfBlock)expr.ElseBlock.Value, expr.ElseBlock.Range, elseContext, updatedComments);
+                elseFormatted = nestedIfFormatted;
+                afterElseExpr = nestedAfterElse;
+                updatedComments = nestedComments;
+            }
+            else
+            {
+                (elseFormatted, afterElseExpr) = Visit(expr.ElseBlock.Value, elseContext);
+            }
+
+            var formattedIf = new Expression.IfBlock(
+                Condition: condFormatted,
+                ThenBlock: thenFormatted,
+                ElseBlock: elseFormatted
+            );
+
+            var finalContext = isElseIf ? afterElseExpr : afterElseExpr.Dedent();
+            var range = new Range(context.ToLocation(), finalContext.ToLocation());
+            return (new Node<Expression>(range, formattedIf), finalContext, updatedComments);
         }
 
         public override (Node<Expression>, FormattingContext) VisitCaseExpression(Expression.CaseExpression expr, FormattingContext context)
@@ -1770,7 +2955,7 @@ public class Avh4Format
 
             // Format the expression after "in"
             var exprContext = afterInNewline.SetIndentColumn();
-            var (formattedExpr, afterExpr) = VisitExpressionNode(expr.Value.Expression, exprContext);
+            var (formattedExpr, afterExpr) = VisitExpressionNodeLessMapping(expr.Value.Expression, exprContext);
 
             // Create the formatted let block
             var formattedLetBlock = new Expression.LetBlock(formattedDeclarations, formattedExpr);
@@ -1795,7 +2980,9 @@ public class Avh4Format
             };
         }
 
-        private (Expression.LetDeclaration, FormattingContext) FormatLetFunction(Expression.LetDeclaration.LetFunction letFunc, FormattingContext context)
+        private (Expression.LetDeclaration, FormattingContext) FormatLetFunction(
+            Expression.LetDeclaration.LetFunction letFunc,
+            FormattingContext context)
         {
             // Format like a regular function declaration but without the full signature handling
             var func = letFunc.Function;
@@ -1813,26 +3000,19 @@ public class Avh4Format
                 // " : "
                 var afterColon = afterSigName.Advance(3);
 
-                // Type annotation (always single-line in formatted output)
-                var typeText = FormatTypeAnnotationText(signature.Value.TypeAnnotation.Value);
-                var afterType = afterColon.Advance(typeText.Length);
-
-                // Create new TypeAnnotation node with updated range
-                var typeRange = new Range(afterColon.ToLocation(), afterType.ToLocation());
-                var formattedTypeAnnotation = new Node<TypeAnnotation>(
-                    typeRange,
-                    signature.Value.TypeAnnotation.Value);
+                var (formattedTypeAnnotation, contextAfterTypeAnnotation) =
+                    FormatTypeAnnotation(signature.Value.TypeAnnotation, afterColon);
 
                 // Create new Signature with updated TypeAnnotation range
                 var formattedSig = new Signature(
                     Name: signature.Value.Name,
                     TypeAnnotation: formattedTypeAnnotation);
 
-                var sigRange = new Range(context.ToLocation(), afterType.ToLocation());
+                var sigRange = new Range(context.ToLocation(), contextAfterTypeAnnotation.ToLocation());
                 formattedSignature = new Node<Signature>(sigRange, formattedSig);
 
                 // Move to next line for the function declaration
-                currentContext = afterType.NextRow().SetIndentColumn();
+                currentContext = contextAfterTypeAnnotation.NextRow().SetIndentColumn();
             }
 
             // Remember where the declaration starts (for the Range)
@@ -1859,7 +3039,7 @@ public class Avh4Format
 
             // Format the expression (indented)
             var exprContext = afterEqualsNewline.Indent().SetIndentColumn();
-            var (formattedExpr, afterExpr) = VisitExpressionNode(func.Declaration.Value.Expression, exprContext);
+            var (formattedExpr, afterExpr) = VisitExpressionNodeLessMapping(func.Declaration.Value.Expression, exprContext);
 
             // Create formatted implementation
             var formattedImpl = new FunctionImplementation(
@@ -1895,7 +3075,7 @@ public class Avh4Format
 
             // Format the expression (indented)
             var exprContext = afterEqualsNewline.Indent().SetIndentColumn();
-            var (formattedExpr, afterExpr) = VisitExpressionNode(letDestr.Expression, exprContext);
+            var (formattedExpr, afterExpr) = VisitExpressionNodeLessMapping(letDestr.Expression, exprContext);
 
             var finalContext = afterExpr.Dedent();
 
@@ -1970,27 +3150,130 @@ public class Avh4Format
             Expression.TupledExpression expr,
             FormattingContext context)
         {
-            // Tupled expressions like ( 1, 2, 3 )
-            var startLocation = context.ToLocation();
-
-            // "( "
-            var afterOpen = context.Advance(2);
-
-            var formattedElements = new List<Node<Expression>>();
-            var currentContext = afterOpen;
-
-            for (var i = 0; i < expr.Elements.Count; i++)
+            // When called without a Range, synthesize one based on element positions
+            if (expr.Elements.Count is 0)
             {
-                var (formattedElem, afterElem) = VisitExpressionNode(expr.Elements[i], currentContext);
-                formattedElements.Add(formattedElem);
-
-                currentContext = i < expr.Elements.Count - 1
-                    ? afterElem.Advance(2) // ", "
-                    : afterElem.Advance(2); // " )"
+                // Empty tuple (shouldn't happen in practice)
+                var emptyRange = new Range(new Location(1, 1), new Location(1, 3));
+                return VisitTupledExpressionWithRange(expr, emptyRange, context);
             }
 
-            var exprRange = new Range(startLocation, currentContext.ToLocation());
-            return (new Node<Expression>(exprRange, new Expression.TupledExpression(formattedElements)), currentContext);
+            // Synthesize a Range that encompasses all elements
+            var startLoc = expr.Elements[0].Range.Start;
+            var endLoc = expr.Elements[expr.Elements.Count - 1].Range.End;
+            var synthesizedRange = new Range(startLoc, endLoc);
+
+            return VisitTupledExpressionWithRange(expr, synthesizedRange, context);
+        }
+
+        /// <summary>
+        /// Format a tuple expression with access to its original Range for accurate multiline detection.
+        /// </summary>
+        private (Node<Expression>, FormattingContext) VisitTupledExpressionWithRange(
+            Expression.TupledExpression expr,
+            Range originalRange,
+            FormattingContext context)
+        {
+            if (expr.Elements.Count is 0)
+            {
+                // Empty tuple: "()"
+                var afterTuple = context.Advance(2);
+                var emptyTupleRange = new Range(context.ToLocation(), afterTuple.ToLocation());
+                return (new Node<Expression>(emptyTupleRange, expr), afterTuple);
+            }
+
+            // Detect if tuple is multiline by checking if elements span different rows
+            // or if the closing paren is on a different row
+            bool isMultiLine;
+            if (expr.Elements.Count >= 2)
+            {
+                isMultiLine = NodesSpanMultipleRows(expr.Elements);
+            }
+            else
+            {
+                // Single element: check if parent tuple Range spans multiple rows
+                var element = expr.Elements[0];
+                var elementEndRow = element.Range.End.Row;
+                var elementStartRow = element.Range.Start.Row;
+                var tupleEndRow = originalRange.End.Row;
+                isMultiLine = tupleEndRow > elementEndRow || elementEndRow > elementStartRow;
+            }
+
+            return FormatTuple(expr, context, isMultiLine);
+        }
+
+        private (Node<Expression>, FormattingContext) FormatTuple(
+            Expression.TupledExpression expr,
+            FormattingContext context,
+            bool isMultiLine)
+        {
+            var startLocation = context.ToLocation();
+            var openingParenColumn = context.CurrentColumn;
+
+            // "("
+            var afterOpen = context.Advance(1);
+
+            var formattedElements = new List<Node<Expression>>();
+
+            if (!isMultiLine)
+            {
+                // Single-line tuple: ( elem1, elem2, elem3 )
+                var currentContext = afterOpen.Advance(1); // space after "("
+
+                for (var i = 0; i < expr.Elements.Count; i++)
+                {
+                    var (formattedElem, afterElem) = VisitExpressionNodeLessMapping(expr.Elements[i], currentContext);
+                    formattedElements.Add(formattedElem);
+
+                    if (i < expr.Elements.Count - 1)
+                    {
+                        currentContext = afterElem.Advance(2); // ", "
+                    }
+                    else
+                    {
+                        currentContext = afterElem.Advance(2); // " )"
+                    }
+                }
+
+                var exprRange = new Range(startLocation, currentContext.ToLocation());
+                return (new Node<Expression>(exprRange, new Expression.TupledExpression(formattedElements)), currentContext);
+            }
+            else
+            {
+                // Multi-line tuple:
+                // ( elem1
+                // , elem2
+                // , elem3
+                // )
+                var currentContext = afterOpen.Advance(1); // space after "("
+
+                // First element on same line as opening paren
+                var (firstElem, afterFirst) = VisitExpressionNodeLessMapping(expr.Elements[0], currentContext);
+                formattedElements.Add(firstElem);
+
+                // Subsequent elements on new lines with ", " prefix at opening paren column
+                var elemContext = afterFirst;
+
+                for (var i = 1; i < expr.Elements.Count; i++)
+                {
+                    // Move to new line, position comma at opening paren column
+                    elemContext = elemContext.NextRow();
+                    elemContext = elemContext with { CurrentColumn = openingParenColumn };
+                    elemContext = elemContext.Advance(2); // ", "
+
+                    var (formattedElem, afterElem) = VisitExpressionNodeLessMapping(expr.Elements[i], elemContext);
+                    formattedElements.Add(formattedElem);
+                    elemContext = afterElem;
+                }
+
+                // Closing paren on new line at opening paren column
+                var closingContext = elemContext.NextRow();
+                closingContext = closingContext with { CurrentColumn = openingParenColumn };
+                closingContext = closingContext.Advance(1); // ")"
+
+                var exprRange = new Range(startLocation, closingContext.ToLocation());
+                return (new Node<Expression>(exprRange, new Expression.TupledExpression(formattedElements)), closingContext);
+            }
         }
 
         /// <summary>
@@ -2089,7 +3372,7 @@ public class Avh4Format
                     var afterEquals = afterFieldName.Advance(3);
 
                     // value
-                    var (formattedValue, afterValue) = VisitExpressionNode(field.valueExpr, afterEquals);
+                    var (formattedValue, afterValue) = VisitExpressionNodeLessMapping(field.valueExpr, afterEquals);
 
                     var fieldRange = new Range(currentContext.ToLocation(), afterValue.ToLocation());
                     var formattedField = new Node<(Node<string> fieldName, Node<Expression> valueExpr)>(
@@ -2140,7 +3423,7 @@ public class Avh4Format
                     firstValueContext = afterEquals;
                 }
 
-                var (formattedValue, afterFirstValue) = VisitExpressionNode(firstField.valueExpr, firstValueContext);
+                var (formattedValue, afterFirstValue) = VisitExpressionNodeLessMapping(firstField.valueExpr, firstValueContext);
 
                 // Dedent if we indented for multiline value
                 if (isFirstValueMultiline)
@@ -2200,7 +3483,7 @@ public class Avh4Format
                     }
 
                     // value
-                    var (formattedFieldValue, afterValue) = VisitExpressionNode(field.valueExpr, valueContext);
+                    var (formattedFieldValue, afterValue) = VisitExpressionNodeLessMapping(field.valueExpr, valueContext);
 
                     // Dedent if we indented for multiline value
                     if (isValueMultiline)
@@ -2238,7 +3521,7 @@ public class Avh4Format
             var startLocation = context.ToLocation();
 
             // Format the record expression
-            var (formattedRecord, afterRecord) = VisitExpressionNode(expr.Record, context);
+            var (formattedRecord, afterRecord) = VisitExpressionNodeLessMapping(expr.Record, context);
 
             // "."
             var afterDot = afterRecord.Advance(1);
@@ -2320,7 +3603,7 @@ public class Avh4Format
             }
 
             // Expression
-            var (formattedExpr, afterExpr) = VisitExpressionNode(expr.Lambda.Expression, exprStartContext);
+            var (formattedExpr, afterExpr) = VisitExpressionNodeLessMapping(expr.Lambda.Expression, exprStartContext);
 
             // If we indented for multiline, we need to dedent after
             if (isMultiLine)
@@ -2359,7 +3642,7 @@ public class Avh4Format
             var afterMinus = context.Advance(1);
 
             // Format the inner expression
-            var (formattedInner, afterInner) = VisitExpressionNode(expr.Expression, afterMinus);
+            var (formattedInner, afterInner) = VisitExpressionNodeLessMapping(expr.Expression, afterMinus);
 
             // Create a new Negation with the formatted inner expression
             var formattedExpr = new Expression.Negation(formattedInner);
@@ -2392,7 +3675,7 @@ public class Avh4Format
                 var afterOpenParen = context.Advance(1);
 
                 // Format inner expression on same line as opening paren
-                var (formattedInner, afterInner) = VisitExpressionNode(expr.Expression, afterOpenParen);
+                var (formattedInner, afterInner) = VisitExpressionNodeLessMapping(expr.Expression, afterOpenParen);
 
                 // Closing paren needs to be on a new line, at the same indentation as the opening paren
                 var closingParenContext = afterInner.NextRow().SetColumn(context.CurrentColumn);
@@ -2414,7 +3697,7 @@ public class Avh4Format
                 var innerContext = context.Advance(1);
 
                 // Format the inner expression
-                var (formattedInner, afterInner) = VisitExpressionNode(expr.Expression, innerContext);
+                var (formattedInner, afterInner) = VisitExpressionNodeLessMapping(expr.Expression, innerContext);
 
                 // The closing paren is one column after the inner expression
                 var endContext = afterInner.Advance(1);
