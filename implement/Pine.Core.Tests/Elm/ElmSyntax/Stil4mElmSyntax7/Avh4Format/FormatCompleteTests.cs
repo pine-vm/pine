@@ -2051,18 +2051,42 @@ public class FormatCompleteTests
 
         for (var i = 0; i < testCases.Count; i++)
         {
-            var input = testCases[i];
+            var testCase = testCases[i];
 
             try
             {
-                var formatted = FormatString(input);
+                AssertSyntaxNodesValueEqualityForModuleText(testCase);
 
-                formatted.Trim().Should().Be(input.Trim());
+                var formatted = FormatString(testCase);
+
+                formatted.Trim().Should().Be(testCase.Trim());
             }
             catch (Exception ex)
             {
                 throw new Exception($"Failed in test case index: {i}", ex);
             }
         }
+    }
+
+    private static void AssertSyntaxNodesValueEqualityForModuleText(
+        string elmModuleText)
+    {
+        /*
+         * Verify the C# type declarations implement value-based equality and
+         * hash code generation correctly, by parsing the same module text twice
+         * and comparing the resulting syntax nodes.
+         * */
+
+        var parsed_0 =
+            ElmSyntaxParser.ParseModuleText(elmModuleText, enableMaxPreservation: true)
+            .Extract(err => throw new Exception("Parsing failed: " + err.ToString()));
+
+        var parsed_1 =
+            ElmSyntaxParser.ParseModuleText(elmModuleText, enableMaxPreservation: true)
+            .Extract(err => throw new Exception("Reparsing failed: " + err.ToString()));
+
+        parsed_0.Should().Be(parsed_1);
+
+        parsed_0.GetHashCode().Should().Be(parsed_1.GetHashCode());
     }
 }

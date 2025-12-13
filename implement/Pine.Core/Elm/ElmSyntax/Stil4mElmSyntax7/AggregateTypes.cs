@@ -41,6 +41,14 @@ public record Node<T>(
             return System.Linq.Enumerable.SequenceEqual(list, otherList);
         }
 
+        // Handle tuples containing ModuleName (e.g., (ModuleName ModuleName, string Name))
+        if (Value is System.ValueTuple<ModuleName, string> tuple &&
+            other.Value is System.ValueTuple<ModuleName, string> otherTuple)
+        {
+            return System.Linq.Enumerable.SequenceEqual(tuple.Item1, otherTuple.Item1) &&
+                   tuple.Item2 == otherTuple.Item2;
+        }
+
         return EqualityComparer<T>.Default.Equals(Value, other.Value);
     }
 
@@ -57,6 +65,14 @@ public record Node<T>(
             {
                 hashCode.Add(item);
             }
+        }
+        else if (Value is System.ValueTuple<ModuleName, string> tuple)
+        {
+            foreach (var item in tuple.Item1)
+            {
+                hashCode.Add(item);
+            }
+            hashCode.Add(tuple.Item2);
         }
         else
         {
