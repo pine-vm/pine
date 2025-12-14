@@ -1095,6 +1095,80 @@ public class FormatCompleteTests
             """",
 
             """"
+            module Test exposing (..)
+
+
+            decl a =
+                case a of
+                    -- dando luogo
+                    0 ->
+                        -- a evidenti
+                        13
+
+                    1 ->
+                        17
+
+            """",
+
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                [ 17
+                , -- A comment
+                  19
+                , 23
+                ]
+
+            """",
+
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                """
+
+            testing 
+
+            escape \t sequences \u{000D} in \\\\ strings " '
+
+
+            """
+
+            """",
+
+            """"
+            module Test exposing (..)
+
+
+            type alias RecordType =
+                { fieldA : Int
+                , fieldB :
+                    List
+                        ( String
+                        , List Int
+                        )
+                }
+
+            """",
+
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                [ ( "a string constant"
+                  , Tag
+                        { files = []
+                        }
+                  )
+                ]
+
+            """",
+
+            """"
             module Test exposing (alfa, beta, gamma)
             
             
@@ -2134,6 +2208,80 @@ public class FormatCompleteTests
                   -- another tag
                 | AnyOtherKind_String
                         
+            """",
+
+            """"
+            module Test exposing (..)
+
+
+            decl a =
+                case a of
+                    -- dando luogo
+                    0 ->
+                        -- a evidenti
+                        13
+
+                    1 ->
+                        17
+
+            """",
+
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                [ 17
+                , -- A comment
+                  19
+                , 23
+                ]
+
+            """",
+
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                """
+
+            testing 
+
+            escape \t sequences \u{000D} in \\\\ strings " '
+
+
+            """
+
+            """",
+
+            """"
+            module Test exposing (..)
+
+
+            type alias RecordType =
+                { fieldA : Int
+                , fieldB :
+                    List
+                        ( String
+                        , List Int
+                        )
+                }
+
+            """",
+
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                [ ( "a string constant"
+                  , Tag
+                        { files = []
+                        }
+                  )
+                ]
+
             """",
 
             """"

@@ -731,27 +731,72 @@ public class Rendering
             return;
         }
 
-        // Multi-element tuple: ( element1, element2, ... )
+        // Check if this is a multiline tuple (elements on different rows)
+        var isMultiLine = tupled.TypeAnnotations.Count >= 2 &&
+            tupled.TypeAnnotations.Skip(1).Any(t => t.Range.Start.Row != tupled.TypeAnnotations[0].Range.Start.Row);
+
+        // Multi-element tuple
         context.Append("(");
 
-        for (var i = 0; i < tupled.TypeAnnotations.Count; i++)
+        var openingParenColumn = context.CurrentColumn - 1; // We already appended "("
+
+        if (!isMultiLine)
         {
-            var typeNode = tupled.TypeAnnotations[i];
-
-            // Advance to this type's location
-            context.AdvanceToLocation(typeNode.Range.Start, minSpaces: i is 0 ? 0 : 1);
-            RenderTypeAnnotation(typeNode, context);
-
-            if (i < tupled.TypeAnnotations.Count - 1)
+            // Single-line: ( element1, element2, ... )
+            for (var i = 0; i < tupled.TypeAnnotations.Count; i++)
             {
-                // Add comma immediately after this type (not the last one)
-                context.Append(",");
-            }
-        }
+                var typeNode = tupled.TypeAnnotations[i];
 
-        // Closing paren location is not tracked, so use 1 space
-        context.AdvanceByMinimum(1);
-        context.Append(")");
+                // Advance to this type's location
+                context.AdvanceToLocation(typeNode.Range.Start, minSpaces: i is 0 ? 0 : 1);
+                RenderTypeAnnotation(typeNode, context);
+
+                if (i < tupled.TypeAnnotations.Count - 1)
+                {
+                    // Add comma immediately after this type (not the last one)
+                    context.Append(",");
+                }
+            }
+
+            // Closing paren
+            context.AdvanceByMinimum(1);
+            context.Append(")");
+        }
+        else
+        {
+            // Multi-line tuple:
+            // ( element1
+            // , element2
+            // , element3
+            // )
+
+            // First element on same line as "("
+            var firstTypeNode = tupled.TypeAnnotations[0];
+            context.AdvanceToLocation(firstTypeNode.Range.Start, minSpaces: 1);
+            RenderTypeAnnotation(firstTypeNode, context);
+
+            // Subsequent elements on new lines with ", " prefix at opening paren column
+            for (var i = 1; i < tupled.TypeAnnotations.Count; i++)
+            {
+                var typeNode = tupled.TypeAnnotations[i];
+
+                // Advance to the comma position (opening paren column on element's row)
+                var commaLocation = new Location(typeNode.Range.Start.Row, openingParenColumn);
+                context.AdvanceToLocation(commaLocation, minSpaces: 0);
+                context.Append(",");
+
+                // Advance to the type's location
+                context.AdvanceToLocation(typeNode.Range.Start, minSpaces: 1);
+                RenderTypeAnnotation(typeNode, context);
+            }
+
+            // Closing paren on new line at opening paren column
+            // Calculate the closing paren row as one row after the last element
+            var lastElementRow = tupled.TypeAnnotations[tupled.TypeAnnotations.Count - 1].Range.End.Row;
+            var closingParenLocation = new Location(lastElementRow + 1, openingParenColumn);
+            context.AdvanceToLocation(closingParenLocation, minSpaces: 0);
+            context.Append(")");
+        }
     }
 
     private static void RenderGenericRecordTypeAnnotation(
@@ -814,22 +859,11 @@ public class Rendering
         // Render type arguments
         foreach (var arg in typed.TypeArguments)
         {
-            // Check if we should advance to the argument's range location.
-            // If the argument is on a different row than current (likely due to Avh4Format
-            // reformatting without updating nested ranges), just add minimum spacing.
-            var isSameRow = arg.Range.Start.Row == context.CurrentRow;
-            var isAheadOnSameRow = isSameRow && arg.Range.Start.Column > context.CurrentColumn;
+            // Advance to the argument's range location.
+            // For multiline type arguments, this will move to the next row.
+            // For same-row arguments, this will add the appropriate spacing.
+            context.AdvanceToLocation(arg.Range.Start, minSpaces: 1);
 
-            if (isAheadOnSameRow)
-            {
-                // Argument is ahead on the same row - advance to it
-                context.AdvanceToLocation(arg.Range.Start);
-            }
-            else
-            {
-                // Argument is on a different row or at/behind current position - just add space
-                context.AdvanceByMinimum(1);
-            }
             // Pass skipAdvanceIfDifferentRow=true for type arguments to handle nested stale ranges
             RenderTypeAnnotation(arg, context, skipAdvanceIfDifferentRow: true);
         }
@@ -1278,7 +1312,31 @@ public class Rendering
                     :
                     context.CurrentColumn;
 
-                context.AdvanceToLocation(new Location(item.Range.Start.Row, commaColumn), minSpaces: 0);
+                // For multiline lists with inline comments after comma,
+                // place the comma on the row of the comment (if any),
+                // so the format is: ", -- comment\n  element"
+                // But only if the comment is at an element column (after ", "),
+                // not at the bracket column (which is a standalone comment)
+                var commaRow = item.Range.Start.Row;
+                if (linebreak)
+                {
+                    // Check if there's an inline comment between previous item and this item
+                    // An inline comment is one that's at a column > bracket column (i.e., after ", ")
+                    var inlineCommentBetween = context.Comments
+                        .Where(c => c.Range.Start.Row > previousItemRow &&
+                                   c.Range.Start.Row < item.Range.Start.Row &&
+                                   c.Range.Start.Column > openingBracketColumn)
+                        .OrderBy(c => c.Range.Start.Row)
+                        .FirstOrDefault();
+
+                    if (inlineCommentBetween is not null)
+                    {
+                        // Place comma on the inline comment's row
+                        commaRow = inlineCommentBetween.Range.Start.Row;
+                    }
+                }
+
+                context.AdvanceToLocation(new Location(commaRow, commaColumn), minSpaces: 0);
 
                 context.Append(",");
 
@@ -1932,18 +1990,53 @@ public class Rendering
         // Use triple quotes only if explicitly requested (based on original source formatting)
         if (isTripleQuoted)
         {
-            return "\"\"\"" + value + "\"\"\"";
+            // For triple-quoted strings, escape special characters but keep newlines as-is
+            // (since they're literal in triple-quoted strings)
+            var escaped = EscapeStringForTripleQuoted(value);
+            return "\"\"\"" + escaped + "\"\"\"";
         }
 
-        // Escape special characters
-        var escaped = value
+        // Escape special characters for regular strings
+        var escapedRegular = value
             .Replace("\\", "\\\\")
             .Replace("\"", "\\\"")
             .Replace("\n", "\\n")
             .Replace("\r", "\\r")
             .Replace("\t", "\\t");
 
-        return "\"" + escaped + "\"";
+        return "\"" + escapedRegular + "\"";
+    }
+
+    /// <summary>
+    /// Escapes special characters in a triple-quoted string.
+    /// Newlines are kept as-is, but other special characters are escaped.
+    /// </summary>
+    private static string EscapeStringForTripleQuoted(string value)
+    {
+        var sb = new StringBuilder();
+        foreach (var c in value)
+        {
+            switch (c)
+            {
+                case '\\':
+                    sb.Append("\\\\");
+                    break;
+                case '\t':
+                    sb.Append("\\t");
+                    break;
+                case '\r':
+                    sb.Append("\\u{000D}");
+                    break;
+                // Newlines are kept as-is in triple-quoted strings
+                case '\n':
+                    sb.Append(c);
+                    break;
+                default:
+                    sb.Append(c);
+                    break;
+            }
+        }
+        return sb.ToString();
     }
 
     internal static string RenderCharLiteral(int value)
