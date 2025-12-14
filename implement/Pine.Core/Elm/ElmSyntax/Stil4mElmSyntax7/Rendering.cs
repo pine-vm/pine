@@ -32,6 +32,12 @@ public class Rendering
         private int _nextCommentIndex = 0;
 
         /// <summary>
+        /// Column offset to apply when advancing to locations.
+        /// Used to correct for misaligned ranges in nested else-if chains.
+        /// </summary>
+        public int ColumnOffset { get; set; } = 0;
+
+        /// <summary>
         /// Advances to the given location by adding spaces or newlines as needed.
         /// If the target location is before the current position, uses the minimum spacing instead.
         /// Renders any comments that fall between the current position and the target position.
@@ -52,11 +58,13 @@ public class Rendering
             // Handle column changes on the same row
             if (CurrentRow == targetLocation.Row)
             {
-                var spacesToAdd = targetLocation.Column - CurrentColumn;
+                // Apply column offset for misaligned ranges (e.g., nested else-if chains)
+                var adjustedTargetColumn = targetLocation.Column - ColumnOffset;
+                var spacesToAdd = adjustedTargetColumn - CurrentColumn;
                 if (spacesToAdd > 0)
                 {
                     Output.Append(' ', spacesToAdd);
-                    CurrentColumn = targetLocation.Column;
+                    CurrentColumn = adjustedTargetColumn;
                 }
                 else if (spacesToAdd < 0 && minSpaces > 0)
                 {
@@ -1010,11 +1018,15 @@ public class Rendering
 
     private static void RenderExpression(
         Node<Expression> expressionNode,
-        RenderContext context)
+        RenderContext context,
+        bool skipAdvanceToRange = false)
     {
         var expr = expressionNode.Value;
 
-        context.AdvanceToLocation(expressionNode.Range.Start);
+        if (!skipAdvanceToRange)
+        {
+            context.AdvanceToLocation(expressionNode.Range.Start);
+        }
 
         switch (expr)
         {
@@ -1023,7 +1035,7 @@ public class Rendering
                 break;
 
             case Expression.Literal literal:
-                context.Append(RenderStringLiteral(literal.Value));
+                context.Append(RenderStringLiteral(literal.Value, literal.IsTripleQuoted));
                 break;
 
             case Expression.CharLiteral charLit:
@@ -1080,7 +1092,7 @@ public class Rendering
                 break;
 
             case Expression.IfBlock ifBlock:
-                RenderIfExpression(ifBlock, context);
+                RenderIfExpression(expressionNode, ifBlock, context);
                 break;
 
             case Expression.LambdaExpression lambdaExpr:
@@ -1602,9 +1614,18 @@ public class Rendering
     }
 
     private static void RenderIfExpression(
+        Node<Expression> ifBlockNode,
         Expression.IfBlock ifBlock,
-        RenderContext context)
+        RenderContext context,
+        int? outerIfColumn = null)
     {
+        // The if keyword column: use outer if column for else-if chains, otherwise use node's range
+        var ifKeywordColumn = outerIfColumn ?? ifBlockNode.Range.Start.Column;
+
+        // When outerIfColumn is set, we're rendering a nested if as part of an else-if chain
+        // In this case, the condition range may have incorrect column positions due to formatter context
+        var isNestedElseIf = outerIfColumn.HasValue;
+
         // Render "if" first
         context.Append("if");
         var ifRow = context.CurrentRow;
@@ -1622,13 +1643,32 @@ public class Rendering
             // For multiline conditions, advance to the condition's start location
             // This will add the necessary newline and indentation
             context.AdvanceToLocation(ifBlock.Condition.Range.Start, minSpaces: 1);
+            RenderExpression(ifBlock.Condition, context);
         }
         else
         {
             // Single-line condition: just add a space
             context.AdvanceByMinimum(1);
+
+            // For nested else-if, calculate and apply column offset to correct misaligned ranges
+            // The condition's range start column is relative to the formatter's context, 
+            // which differs from where we're actually rendering
+            var savedOffset = context.ColumnOffset;
+            if (isNestedElseIf)
+            {
+                // Expected condition start: CurrentColumn (where we are now after "if ")
+                // Actual condition start in range: ifBlock.Condition.Range.Start.Column
+                // Offset needed: actual - expected
+                var expectedConditionColumn = context.CurrentColumn;
+                var actualConditionColumn = ifBlock.Condition.Range.Start.Column;
+                context.ColumnOffset = actualConditionColumn - expectedConditionColumn;
+            }
+
+            RenderExpression(ifBlock.Condition, context);
+
+            // Restore the offset
+            context.ColumnOffset = savedOffset;
         }
-        RenderExpression(ifBlock.Condition, context);
 
         // Render "then"
         if (isConditionMultiLine)
@@ -1708,10 +1748,8 @@ public class Rendering
         if (ifBlock.ElseBlock.Range.Start.Row > context.CurrentRow)
         {
             // Multi-line case
-            // Calculate else column: same as "if" (dedented from else block content)
-            var elseCol = ifBlock.ElseBlock.Range.Start.Column > 4
-                ? ifBlock.ElseBlock.Range.Start.Column - 4
-                : ifBlock.ElseBlock.Range.Start.Column;
+            // Use the if keyword column for else positioning (else aligns with if)
+            var elseCol = ifKeywordColumn;
 
             // Find "else" position by looking for the gap in comments
             // "else" goes on the first row after then-block that doesn't have a comment
@@ -1728,12 +1766,8 @@ public class Rendering
             if (isElseIf && commentsInGap.Count is not 0)
             {
                 // For "else if" with comments between else and if:
-                // Both "else" and "if" are at the same column level
-                // The formatter positions "if" at the dedented level (same as "else")
-                // So elseCol = ElseBlock.Range.Start.Column (not dedented further)
-                var elseColForCommentCase = ifBlock.ElseBlock.Range.Start.Column;
-
-                context.AdvanceToLocation(new Location(elseRow, elseColForCommentCase), minSpaces: 1);
+                // Use the outer if column to ensure alignment
+                context.AdvanceToLocation(new Location(elseRow, ifKeywordColumn), minSpaces: 1);
                 context.Append("else");
 
                 // Now advance to else block location (the nested if)
@@ -1743,10 +1777,10 @@ public class Rendering
             else if (isElseIf)
             {
                 // No comments - keep "else if" on the same line
-                // The if location points to the "i" in "if", so "else " should be 5 characters before it
+                // Use the outer if column for the "else" part
                 var elseLocation = new Location(
                     ifBlock.ElseBlock.Range.Start.Row,
-                    ifBlock.ElseBlock.Range.Start.Column - 5);
+                    ifKeywordColumn);
                 context.AdvanceToLocation(elseLocation, minSpaces: 1);
                 context.Append("else ");
             }
@@ -1791,7 +1825,21 @@ public class Rendering
             context.Append("else");
             context.AdvanceToLocation(ifBlock.ElseBlock.Range.Start, minSpaces: 1);
         }
-        RenderExpression(ifBlock.ElseBlock, context);
+
+        // Render the else block
+        // For else-if chains, pass the outer if column to maintain alignment
+        if (isElseIf)
+        {
+            RenderIfExpression(
+                ifBlock.ElseBlock,
+                (Expression.IfBlock)ifBlock.ElseBlock.Value,
+                context,
+                outerIfColumn: ifKeywordColumn);
+        }
+        else
+        {
+            RenderExpression(ifBlock.ElseBlock, context);
+        }
     }
 
     private static void RenderLambdaExpression(
@@ -1852,29 +1900,37 @@ public class Rendering
 
     private static string RenderInfix(Infix infix)
     {
-        var direction = infix.Direction.Value switch
-        {
-            InfixDirection.Left =>
-            "left ",  // Pad with space to align with "right"
+        var direction =
+            infix.Direction.Value switch
+            {
+                InfixDirection.Left =>
+                "left ",  // Pad with space to align with "right"
 
-            InfixDirection.Right =>
-            "right",
+                InfixDirection.Right =>
+                "right",
 
-            InfixDirection.Non =>
-            "non  ",   // Pad with spaces to align with "right"
+                InfixDirection.Non =>
+                "non  ",   // Pad with spaces to align with "right"
 
-            _ =>
-            throw new NotImplementedException(
-                $"Unknown infix direction: {infix.Direction.Value}")
-        };
+                _ =>
+                throw new NotImplementedException(
+                    $"Unknown infix direction: {infix.Direction.Value}")
+            };
 
         return $"infix {direction} {infix.Precedence.Value} ({infix.Operator.Value}) = {infix.FunctionName.Value}";
     }
 
-    private static string RenderStringLiteral(string value)
+    /// <summary>
+    /// Converts the specified string to a source code string literal, using either standard or triple-quoted syntax as
+    /// appropriate.
+    /// </summary>
+    /// <remarks>If triple-quoted syntax is used, the value is included without escaping special characters.
+    /// Otherwise, special characters such as backslashes, quotes, and control characters are escaped to produce a valid
+    /// string literal.</remarks>
+    public static string RenderStringLiteral(string value, bool isTripleQuoted)
     {
-        // Check if multi-line string
-        if (value.Contains('\n'))
+        // Use triple quotes only if explicitly requested (based on original source formatting)
+        if (isTripleQuoted)
         {
             return "\"\"\"" + value + "\"\"\"";
         }
@@ -1908,6 +1964,15 @@ public class Rendering
 
         if (c is "\t")
             return "'\\t'";
+
+        // Handle control characters and other non-printable characters with Unicode escapes
+        // This includes null (0), backspace (8), form feed (12), and other control characters
+        if (value < 32 || (value >= 127 && value < 160))
+        {
+            // Use Unicode escape sequence for control characters
+            // Format with uppercase hex, padded to 4 digits minimum
+            return $"'\\u{{{value:X4}}}'";
+        }
 
         return "'" + c + "'";
     }
@@ -1987,7 +2052,7 @@ public class Rendering
             RenderCharLiteral(charPat.Value),
 
             Pattern.StringPattern stringPat =>
-            RenderStringLiteral(stringPat.Value),
+            RenderStringLiteral(stringPat.Value, isTripleQuoted: false),
 
             Pattern.IntPattern intPat =>
             intPat.Value.ToString(),

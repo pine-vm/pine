@@ -168,6 +168,7 @@ public class ElmSyntaxParser
 
         Identifier,
         StringLiteral,
+        TripleQuotedStringLiteral,
         CharLiteral,
         NumberLiteral,
         OpenParen,
@@ -403,7 +404,7 @@ public class ElmSyntaxParser
                     {
                         Location end = new(_line, _column);
 
-                        return new Token(TokenType.StringLiteral, literal, start, end);
+                        return new Token(TokenType.TripleQuotedStringLiteral, literal, start, end);
                     }
                 }
                 else
@@ -2360,6 +2361,7 @@ public class ElmSyntaxParser
             return token.Type switch
             {
                 TokenType.StringLiteral or
+                TokenType.TripleQuotedStringLiteral or
                 TokenType.NumberLiteral or
                 TokenType.CharLiteral or
                 TokenType.Identifier or
@@ -2428,7 +2430,17 @@ public class ElmSyntaxParser
                 var stringLiteral =
                     Consume(TokenType.StringLiteral);
 
-                var literalExpr = new SyntaxTypes.Expression.Literal(stringLiteral.Lexeme);
+                var literalExpr = new SyntaxTypes.Expression.Literal(stringLiteral.Lexeme, IsTripleQuoted: false);
+
+                return new Node<SyntaxTypes.Expression>(stringLiteral.Range, literalExpr);
+            }
+
+            if (start.Type is TokenType.TripleQuotedStringLiteral)
+            {
+                var stringLiteral =
+                    Consume(TokenType.TripleQuotedStringLiteral);
+
+                var literalExpr = new SyntaxTypes.Expression.Literal(stringLiteral.Lexeme, IsTripleQuoted: true);
 
                 return new Node<SyntaxTypes.Expression>(stringLiteral.Range, literalExpr);
             }
@@ -3255,11 +3267,11 @@ public class ElmSyntaxParser
                 }
             }
 
-            if (start.Type is TokenType.StringLiteral)
+            if (start.Type is TokenType.StringLiteral or TokenType.TripleQuotedStringLiteral)
             {
                 // | StringPattern String
 
-                var literalToken = Consume(TokenType.StringLiteral);
+                var literalToken = Consume(start.Type);
 
                 var stringPattern =
                     new Pattern.StringPattern(literalToken.Lexeme);
@@ -3415,7 +3427,7 @@ public class ElmSyntaxParser
         private static bool CanStartArgumentPattern(Token token)
         {
             if (token.Type is
-                TokenType.StringLiteral or TokenType.NumberLiteral or TokenType.CharLiteral)
+                TokenType.StringLiteral or TokenType.TripleQuotedStringLiteral or TokenType.NumberLiteral or TokenType.CharLiteral)
             {
                 return false;
             }
@@ -3431,6 +3443,7 @@ public class ElmSyntaxParser
             return token.Type switch
             {
                 TokenType.StringLiteral or
+                TokenType.TripleQuotedStringLiteral or
                 TokenType.CharLiteral or
                 TokenType.NumberLiteral or
                 TokenType.Identifier or

@@ -24,6 +24,18 @@ public record Node<T>(
         return new Node<TOther>(Range, (TOther)(object)Value);
     }
 
+    /// <summary>
+    /// Creates a new node with the specified start and end locations, updating the range accordingly.
+    /// </summary>
+    public Node<T> WithRange(
+        Location newStart,
+        Location newEnd) =>
+        this
+        with
+        {
+            Range = new Range(newStart, newEnd)
+        };
+
     /// <inheritdoc/>
     public virtual bool Equals(Node<T>? other)
     {
@@ -882,7 +894,13 @@ public abstract record Expression
 
     /// <summary>String literal expression.</summary>
     public sealed record Literal(
-        string Value)
+        string Value,
+        /*
+         * Note: Property 'IsTripleQuoted' does not exist in V7 of upstream, planned to be added in V8:
+         * https://github.com/stil4m/elm-syntax/issues/57
+         * https://github.com/stil4m/elm-syntax/commit/25403ee0b4e2f78265f37fd27b0682fe6f89ea71
+         * */
+        bool IsTripleQuoted = false)
         : Expression;
 
     /// <summary>Character literal expression.</summary>

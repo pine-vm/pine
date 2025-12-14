@@ -1518,6 +1518,31 @@ public class FormatCompleteTests
 
 
             decl =
+                let
+                    ( a, b ) =
+                        c
+                            41
+                            13
+                in
+                if a < b then
+                    a
+
+                else if a > b then
+                    b
+
+                else if a > c then
+                    c
+
+                else
+                    0
+
+            """",
+
+            """"
+            module Test exposing (..)
+
+
+            decl =
                 if
                     func
                         []
@@ -1546,6 +1571,87 @@ public class FormatCompleteTests
 
                     Nothing ->
                         0
+
+            """",
+
+            """"
+            module Test exposing (..)
+            
+
+            decl =
+                func
+                    (if a b then
+                        c
+
+                     else
+                        d
+                    )
+
+            """",
+
+            """"
+            module Test exposing (..)
+            
+            
+            decl =
+                [ ( "other"
+                  , { field_a =
+                        ( 13
+                        , 17
+                        )
+                    }
+                  )
+                ]
+
+            """",
+
+            """"
+            module Test exposing (..)
+            
+            
+            decl =
+                [ 13
+                , func a b
+                    |> modBy c
+                ]
+
+            """",
+
+            """"
+            module Test exposing (..)
+            
+            
+            decl =
+                """
+            A line
+            B line
+            """
+
+            """",
+
+            """"
+            module Test exposing (..)
+            
+            
+            decl =
+                """ single line """
+
+            """",
+
+            """"
+            module Test exposing (..)
+            
+            
+            decl =
+                [ """
+
+            a
+            """
+                , """
+            b
+
+            """
+                ]
 
             """",
 
@@ -1612,8 +1718,26 @@ public class FormatCompleteTests
                     '"' ->
                         79
 
+                    '\u{0000}' ->
+                        83
+
+                    '\u{0008}' ->
+                        85
+
+                    '\u{000C}' ->
+                        87
+
                     _ ->
                         0
+
+            """",
+
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                "\n"
 
             """",
 
@@ -1833,9 +1957,80 @@ public class FormatCompleteTests
             module Test exposing (..)
 
 
+            type alias EmitStack =
+                { fa : List String
+                , fb : Int
+
+                -- La loro conformazione
+                , fc : List String
+
+                -- è profondamente modificata
+                , fd : Bool
+                , fe : Int
+                }
+
+            """",
+
+            """"
+            module Test exposing (..)
+
+
+            type Expression
+                = LiteralExpression Value
+                | ListExpression (List Expression)
+                | ParseAndEvalExpression
+                    -- Encoded
+                    Expression
+                    -- Environment
+                    Expression
+                | KernelApplicationExpression String Expression
+                | ConditionalExpression
+                    -- Condition
+                    Expression
+                    -- False Branch
+                    Expression
+                    -- True Branch
+                    Expression
+                | EnvironmentExpression
+
+            """",
+
+            """"
+            module Test exposing (..)
+
+
             decl =
                 -- Simple comment
                 71
+                        
+            """",
+
+            """"
+            module Test exposing (..)
+
+
+            toCode : Char -> Int
+            toCode char =
+                Pine_kernel.int_add
+                    [ -- Add the sign prefix byte
+                      Pine_kernel.concat [ Pine_kernel.take [ 1, 0 ], char ]
+
+                    -- Use kernel function 'add' to ensure canonical form
+                    , 0
+                    ]
+                        
+            """",
+
+            """"
+            module Test exposing (..)
+
+
+            charCode =
+                Pine_kernel.int_add
+                    [ Pine_kernel.int_mul [ firstFourBits, 4096 ] -- Multiply by 2^12
+                    , Pine_kernel.int_mul [ secondSixBits, 64 ] -- Multiply by 2^6
+                    , thirdSixBits
+                    ]
                         
             """",
 
