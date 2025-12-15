@@ -50,5 +50,43 @@ decl a b =
         [ 17 ]
 ```
 
+To work around the problem of figuring out placement between these location-less tokens on one side and comments on the other, we used an approach that places the tokens where the gaps between comments are.
+
+The following is an example from our test suite that we succesfully round-trip using the original stil4m/elm-syntax version 7 model:
+
+```Elm
+module Test exposing (..)
+
+
+decl a b =
+    let
+        alfa =
+            42
+    in
+    if a == 71 then
+        [ 13 ]
+
+    else if
+        -- A comment before condition
+        (a == 73)
+            || (a == 77)
+        -- Comment between conditions
+    then
+        [ 17 ]
+
+    else if
+        a == 79
+        -- Another simple comment
+    then
+        -- And another simple comment
+        [ 21 ]
+
+    else
+        -- Yet another simple comment
+        [ 23 ]
+```
+
+While this might be sufficient to achieve proper round-tripping aligned with avh4/elm-format, the implementation is somewhat hacky here: Since our architecture has a formatter separate from the renderer, the renderer has duplicate implementations of this placement logic.
+
 
 tags:elm,parsing,formatting
