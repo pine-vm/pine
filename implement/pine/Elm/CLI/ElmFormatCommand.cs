@@ -5,7 +5,7 @@ using System.Collections.Generic;
 using System.CommandLine;
 using System.IO;
 
-namespace Pine.Elm;
+namespace Pine.Elm.CLI;
 
 public class ElmFormatCommand
 {

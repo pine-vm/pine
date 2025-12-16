@@ -16,6 +16,7 @@ using Pine.Core.Http;
 using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Core.IO;
 using Pine.Elm;
+using Pine.Elm.CLI;
 using Pine.Elm.CommonBinaries;
 using Pine.Elm.Platform;
 using Pine.IntermediateVM;
