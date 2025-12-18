@@ -70,9 +70,11 @@ public static class Testing
                         [
                             "Failed in chunk " + chunkIndex + " of " + expectedChunks.Count,
                                 "Chunks differ at char index " + firstDifferentCharIndex + ":",
-                                expectedSlice,
-                                "<vs>",
+                                "↓ (actual)",
                                 responseSlice,
+                                "<vs>",
+                                expectedSlice,
+                                "↑ (expected)",
                                 "Text following previous checked chunk is:",
                                 remainingText,
                         ]);
