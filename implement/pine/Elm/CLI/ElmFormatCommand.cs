@@ -135,21 +135,20 @@ public class ElmFormatCommand
                     continue;
                 }
 
-                // Format the parsed module
                 var formatted =
-                    Core.Elm.ElmSyntax.Stil4mElmSyntax7.Avh4Format.Format(parsed);
+                    Core.Elm.ElmSyntax.Stil4mConcretized.Avh4Format.Format(parsed);
 
-                var formattedContent =
-                    Core.Elm.ElmSyntax.Stil4mElmSyntax7.Rendering.ToString(formatted);
+                var rendered =
+                    Core.Elm.ElmSyntax.Stil4mConcretized.Rendering.ToString(formatted);
 
                 // Check if content changed
-                if (originalContent == formattedContent)
+                if (originalContent == rendered)
                 {
                     alreadyFormatted.Add(filePath);
                 }
                 else
                 {
-                    needsFormatting.Add((filePath, formattedContent));
+                    needsFormatting.Add((filePath, rendered));
                 }
             }
             catch (Exception ex)

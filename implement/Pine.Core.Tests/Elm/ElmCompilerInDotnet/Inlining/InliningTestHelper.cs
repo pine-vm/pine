@@ -1,6 +1,6 @@
 using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.ElmSyntax;
-using Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using Pine.Core.Elm.ElmSyntax.Stil4mConcretized;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -8,6 +8,7 @@ using System.Linq;
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.Inlining;
 
 using Inlining = Core.Elm.ElmCompilerInDotnet.Inlining;
+using SyntaxV7 = Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 
 public class InliningTestHelper
 {
@@ -18,17 +19,21 @@ public class InliningTestHelper
         .SetItem(QualifiedNameRef.FromFullName("String.String"), QualifiedNameRef.FromFullName("String"))
         .SetItem(QualifiedNameRef.FromFullName("Char.Char"), QualifiedNameRef.FromFullName("Char"));
 
-    public static string RenderModuleForSnapshotTests(File module)
+    public static string RenderModuleForSnapshotTests(SyntaxV7.File module)
     {
-        var moduleMapped =
-            NameMapper.MapNames(module, s_renderingNameMap);
+        var mapped =
+            NameMapper.MapNames(SyntaxV7.ToStil4mConcretized.ToConcretized(module), s_renderingNameMap);
 
-        var moduleFormatted = SnapshotTestFormat.Format(moduleMapped);
+        var formatted =
+            SnapshotTestFormat.Format(mapped);
 
-        return Rendering.ToString(moduleFormatted);
+        var rendered =
+            Rendering.ToString(formatted);
+
+        return rendered;
     }
 
-    public static File CanonicalizeAndInlineAndGetSingleModule(
+    public static SyntaxV7.File CanonicalizeAndInlineAndGetSingleModule(
         IReadOnlyList<string> elmModulesTexts,
         IReadOnlyList<string> moduleName,
         Inlining.Config config)
@@ -38,6 +43,7 @@ public class InliningTestHelper
             .Select(text =>
                 ElmSyntaxParser.ParseModuleText(text, enableMaxPreservation: true)
                 .Extract(err => throw new System.Exception("Failed parsing: " + err)))
+            .Select(SyntaxV7.FromStil4mConcretized.fromStil4mConcretized)
             .ToList();
 
         var canonicalizeResult =
@@ -60,9 +66,6 @@ public class InliningTestHelper
                 config)
             .Extract(err => throw new System.Exception("Failed inlining: " + err));
 
-        var moduleBeforeFormat =
-            allInlinedModules[moduleName];
-
-        return SnapshotTestFormat.Format(moduleBeforeFormat);
+        return allInlinedModules[moduleName];
     }
 }

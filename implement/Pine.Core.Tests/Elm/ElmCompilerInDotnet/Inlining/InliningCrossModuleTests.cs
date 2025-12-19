@@ -184,7 +184,8 @@ public class InliningCrossModuleTests
                             nextCharBytes =
                                 Pine_kernel.take
                                     [ 4
-                                    , Pine_kernel.skip [ sOffset, sSrcBytes ]
+                                    , Pine_kernel.skip
+                                        [ sOffset, sSrcBytes ]
                                     ]
                         in
                         if
@@ -196,7 +197,9 @@ public class InliningCrossModuleTests
                                 s1 =
                                     ParserFast.skipWhileWithoutLinebreakHelp
                                         Elm.Parser.Tokens.isAlphaNumOrUnderscore
-                                        (Pine_kernel.int_add [ sOffset, 4 ])
+                                        (Pine_kernel.int_add
+                                            [ sOffset, 4 ]
+                                        )
                                         sRow
                                         (sColInt + 1)
                                         sSrcBytes
@@ -209,14 +212,16 @@ public class InliningCrossModuleTests
                                 nameSliceBytesLength =
                                     Pine_kernel.int_add
                                         [ s1Offset
-                                        , Pine_kernel.int_mul [ -1, sOffset ]
+                                        , Pine_kernel.int_mul
+                                            [ -1, sOffset ]
                                         ]
 
                                 nameSliceBytes : Int
                                 nameSliceBytes =
                                     Pine_kernel.take
                                         [ nameSliceBytesLength
-                                        , Pine_kernel.skip [ sOffset, sSrcBytes ]
+                                        , Pine_kernel.skip
+                                            [ sOffset, sSrcBytes ]
                                         ]
                             in
                             ParserFast.Good

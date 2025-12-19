@@ -1,7 +1,10 @@
 using System.Collections.Generic;
 using System.Linq;
 
-namespace Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using Location = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7.Location;
+using Range = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7.Range;
+
+namespace Pine.Core.Elm.ElmSyntax.Stil4mConcretized;
 
 /// <summary>
 /// Format for Elm syntax for use in snapshot tests.
@@ -12,12 +15,14 @@ namespace Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 /// </summary>
 public class SnapshotTestFormat
 {
+    /// <summary>
+    /// Format a concretized File for snapshot testing.
+    /// </summary>
     public static File Format(File file)
     {
         var formatedLessAVH4 = FormatLessAVH4(file);
 
         // Avh4Format covers proper indentation and spacing
-
         var formatted = Avh4Format.Format(formatedLessAVH4);
 
         return formatted;
@@ -37,7 +42,7 @@ public class SnapshotTestFormat
         );
     }
 
-    private static Node<Declaration> FormatDeclaration(Node<Declaration> node)
+    private static Stil4mElmSyntax7.Node<Declaration> FormatDeclaration(Stil4mElmSyntax7.Node<Declaration> node)
     {
         return node with
         {
@@ -71,7 +76,8 @@ public class SnapshotTestFormat
         };
     }
 
-    private static Node<FunctionImplementation> FormatFunctionImplementation(Node<FunctionImplementation> implNode)
+    private static Stil4mElmSyntax7.Node<FunctionImplementation> FormatFunctionImplementation(
+        Stil4mElmSyntax7.Node<FunctionImplementation> implNode)
     {
         return implNode with
         {
@@ -82,7 +88,7 @@ public class SnapshotTestFormat
         };
     }
 
-    private static Node<Expression> FormatExpression(Node<Expression> node)
+    private static Stil4mElmSyntax7.Node<Expression> FormatExpression(Stil4mElmSyntax7.Node<Expression> node)
     {
         var formattedValue = node.Value switch
         {
@@ -102,15 +108,19 @@ public class SnapshotTestFormat
                 FormatListExpr(node.Range, listExpr),
 
             Expression.ListExpr listExpr => new Expression.ListExpr(
-                Elements: [.. listExpr.Elements.Select(FormatExpression)]
+                Elements: MapSeparatedList(listExpr.Elements, FormatExpression)
             ),
 
             Expression.TupledExpression tuple => new Expression.TupledExpression(
-                Elements: [.. tuple.Elements.Select(FormatExpression)]
+                OpenParenLocation: tuple.OpenParenLocation,
+                Elements: MapSeparatedList(tuple.Elements, FormatExpression),
+                CloseParenLocation: tuple.CloseParenLocation
             ),
 
             Expression.ParenthesizedExpression paren => new Expression.ParenthesizedExpression(
-                Expression: FormatExpression(paren.Expression)
+                OpenParenLocation: paren.OpenParenLocation,
+                Expression: FormatExpression(paren.Expression),
+                CloseParenLocation: paren.CloseParenLocation
             ),
 
             Expression.LambdaExpression lambda =>
@@ -122,23 +132,36 @@ public class SnapshotTestFormat
             Expression.RecordUpdateExpression recUpdate =>
             new Expression.RecordUpdateExpression(
                 RecordName: recUpdate.RecordName,
-                Fields: [.. recUpdate.Fields.Select(f => f with
-                {
-                    Value = (f.Value.fieldName, FormatExpression(f.Value.valueExpr))
-                })]
+                PipeLocation: recUpdate.PipeLocation,
+                Fields: MapSeparatedList(recUpdate.Fields, f =>
+                    new RecordExprField(f.FieldName, f.EqualsLocation, FormatExpression(f.ValueExpr)))
             ),
 
             Expression.LetExpression letExpr => new Expression.LetExpression(
                 Value: new Expression.LetBlock(
+                    LetTokenLocation: letExpr.Value.LetTokenLocation,
                     Declarations: [.. letExpr.Value.Declarations.Select(decl => decl with
                     {
                         Value = decl.Value switch
                         {
-                            Expression.LetDeclaration.LetFunction letFunc => letFunc,
+                            Expression.LetDeclaration.LetFunction letFunc =>
+                            new Expression.LetDeclaration.LetFunction(
+                                Function: letFunc.Function with
+                                {
+                                    Declaration = letFunc.Function.Declaration with
+                                    {
+                                        Value = letFunc.Function.Declaration.Value with
+                                        {
+                                            Expression = FormatExpression(letFunc.Function.Declaration.Value.Expression)
+                                        }
+                                    }
+                                }
+                            ),
 
                             Expression.LetDeclaration.LetDestructuring letDestr =>
                             new Expression.LetDeclaration.LetDestructuring(
                                 Pattern: letDestr.Pattern,
+                                EqualsTokenLocation: letDestr.EqualsTokenLocation,
                                 Expression: FormatExpression(letDestr.Expression)
                             ),
 
@@ -147,21 +170,27 @@ public class SnapshotTestFormat
                                 $"Formatting not implemented for let declaration type: {decl.Value.GetType().Name}")
                         }
                     })],
+                    InTokenLocation: letExpr.Value.InTokenLocation,
                     Expression: FormatExpression(letExpr.Value.Expression)
                 )
             ),
 
             Expression.IfBlock ifBlock =>
             new Expression.IfBlock(
+                IfTokenLocation: ifBlock.IfTokenLocation,
                 Condition: FormatExpression(ifBlock.Condition),
+                ThenTokenLocation: ifBlock.ThenTokenLocation,
                 ThenBlock: FormatExpression(ifBlock.ThenBlock),
+                ElseTokenLocation: ifBlock.ElseTokenLocation,
                 ElseBlock: FormatExpression(ifBlock.ElseBlock)
             ),
 
             Expression.CaseExpression caseExpr =>
             new Expression.CaseExpression(
                 new CaseBlock(
+                    CaseTokenLocation: caseExpr.CaseBlock.CaseTokenLocation,
                     Expression: caseExpr.CaseBlock.Expression,
+                    OfTokenLocation: caseExpr.CaseBlock.OfTokenLocation,
                     Cases: [.. caseExpr.CaseBlock.Cases.Select(c => c with
                     {
                         Expression = FormatExpression(c.Expression)
@@ -194,6 +223,12 @@ public class SnapshotTestFormat
             Expression.Floatable floatable =>
             floatable,
 
+            Expression.Negation negation =>
+            new Expression.Negation(FormatExpression(negation.Expression)),
+
+            Expression.PrefixOperator prefixOp =>
+            prefixOp,
+
             _ =>
             throw new System.NotImplementedException(
                 $"Formatting not implemented for expression type: {node.Value.GetType().Name}")
@@ -207,7 +242,6 @@ public class SnapshotTestFormat
             if (formattedList.Elements.Count > 0)
             {
                 var firstElem = formattedList.Elements[0];
-
                 var lastElem = formattedList.Elements[formattedList.Elements.Count - 1];
 
                 var newRange = new Range(
@@ -215,7 +249,7 @@ public class SnapshotTestFormat
                     End: new Location(Row: lastElem.Range.End.Row, Column: 15)
                 );
 
-                return new Node<Expression>(newRange, formattedValue);
+                return new Stil4mElmSyntax7.Node<Expression>(newRange, formattedValue);
             }
         }
 
@@ -228,7 +262,7 @@ public class SnapshotTestFormat
                 Start: node.Range.Start,
                 End: bodyRange.End
             );
-            return new Node<Expression>(multilineRange, formattedValue);
+            return new Stil4mElmSyntax7.Node<Expression>(multilineRange, formattedValue);
         }
 
         // For applications, create a new node with a multiline range
@@ -242,7 +276,7 @@ public class SnapshotTestFormat
                 End: lastArg.Range.End
             );
 
-            return new Node<Expression>(multilineRange, formattedValue);
+            return new Stil4mElmSyntax7.Node<Expression>(multilineRange, formattedValue);
         }
 
         // For parenthesized expressions containing multiline content, update the range
@@ -266,8 +300,29 @@ public class SnapshotTestFormat
                     End: new Location(Row: endRow, Column: innerRange.End.Column)
                 );
 
-                return new Node<Expression>(multilineRange, formattedValue);
+                return new Stil4mElmSyntax7.Node<Expression>(multilineRange, formattedValue);
             }
+        }
+
+        // For record expressions with fields, create a multiline range to signal that the record 
+        // should be formatted with closing brace on a new line. This is needed since we removed
+        // the CloseBraceLocation property and now rely on the containing node's range.
+        // NOTE: The fields' value expressions already have their own ranges set in FormatRecordExpr,
+        // so this only affects the detection of whether the RECORD itself is multiline.
+        if (formattedValue is Expression.RecordExpr recordExpr && recordExpr.Fields.Count > 0)
+        {
+            var fields = Stil4mElmSyntax7.FromStil4mConcretized.ToList(recordExpr.Fields);
+            var lastField = fields[^1];
+            // Use the last field's row + 1 for closing brace on next line
+            var lastFieldRow = lastField.FieldName.Range.Start.Row;
+            var endRow = lastFieldRow + 1;
+
+            var multilineRange = new Range(
+                Start: node.Range.Start,
+                End: new Location(Row: endRow, Column: 5)
+            );
+
+            return new Stil4mElmSyntax7.Node<Expression>(multilineRange, formattedValue);
         }
 
         return node with { Value = formattedValue };
@@ -278,10 +333,12 @@ public class SnapshotTestFormat
         if (list.Elements.Count is 0)
             return false;
 
-        // Make list multiline if it contains records, nested multiline lists, or operator applications
-        return list.Elements.Any(elem =>
+        // Make list multiline if it contains records, nested multiline lists, operator applications,
+        // or any applications (to make function calls readable in snapshots)
+        return list.Elements.Nodes.Any(elem =>
             elem.Value is Expression.RecordExpr ||
             elem.Value is Expression.OperatorApplication ||
+            elem.Value is Expression.Application ||
             elem.Value is Expression.ListExpr innerList && ShouldFormatListAsMultiline(innerList)
         );
     }
@@ -293,10 +350,20 @@ public class SnapshotTestFormat
             || opApp.Left.Value is Expression.RecordExpr;
     }
 
+    private static bool ShouldFormatApplicationAsMultiline(Expression.Application app)
+    {
+        // Application should be multiline if any argument is a complex (multiline) list or record
+        // or if any argument is itself an application that should be multiline
+        return app.Arguments.Skip(1).Any(arg =>
+            arg.Value is Expression.RecordExpr ||
+            arg.Value is Expression.ListExpr listExpr && ShouldFormatListAsMultiline(listExpr) ||
+            arg.Value is Expression.Application innerApp && ShouldFormatApplicationAsMultiline(innerApp)
+        );
+    }
+
     private static Expression FormatOperatorApplication(Range originalRange, Expression.OperatorApplication opApp)
     {
         // Transform operator application to multiline by marking operands with separate row locations
-        // This way Avh4Format will recognize it needs special handling
 
         var formattedLeft = FormatExpression(opApp.Left);
         var formattedRight = FormatExpression(opApp.Right);
@@ -337,7 +404,7 @@ public class SnapshotTestFormat
         if (list.Elements.Count is 0)
             return list;
 
-        var formattedElements = list.Elements.Select(FormatExpression).ToList();
+        var formattedElements = list.Elements.Nodes.Select(FormatExpression).ToList();
 
         // Check if any element is multiline
         var hasMultilineElement = formattedElements.Any(elem =>
@@ -350,7 +417,7 @@ public class SnapshotTestFormat
         if (hasMultilineElement)
         {
             // Multiline: put each element on a different row
-            var elementsWithLocation = new List<Node<Expression>>();
+            var elementsWithLocation = new List<Stil4mElmSyntax7.Node<Expression>>();
             for (var i = 0; i < formattedElements.Count; i++)
             {
                 var elem = formattedElements[i];
@@ -365,40 +432,30 @@ public class SnapshotTestFormat
                 });
             }
 
-            return new Expression.ListExpr(Elements: elementsWithLocation);
+            return new Expression.ListExpr(
+                Elements: ToSeparatedList(elementsWithLocation, list.Elements)
+            );
         }
 
-        return new Expression.ListExpr(Elements: formattedElements);
+        return new Expression.ListExpr(
+            Elements: ToSeparatedList(formattedElements, list.Elements)
+        );
     }
 
     private static Expression FormatRecordExpr(Range originalRange, Expression.RecordExpr record)
     {
         // Transform record to multiline by marking fields with separate row locations
-        // This way Avh4Format will format it as multiline
 
         if (record.Fields.Count is 0)
             return record;
 
-        var formattedFields = record.Fields.Select(f => f with
-        {
-            Value = (f.Value.fieldName, FormatExpression(f.Value.valueExpr))
-        }).ToList();
-
-        // Always format records as multiline by placing fields on different rows
-        // Avh4Format will decide the actual formatting based on complexity
-        var shouldBeMultiline = true;
-
-        if (!shouldBeMultiline && record.Fields.Count is 1)
-        {
-            // Check if the single field's value expression is multiline
-            var fieldValueExpr = formattedFields[0].Value.valueExpr;
-            shouldBeMultiline = IsExpressionMultiline(fieldValueExpr);
-        }
+        var formattedFields = record.Fields.Nodes.Select(f =>
+            (fieldName: f.FieldName, valueExpr: FormatExpression(f.ValueExpr), equalsLocation: f.EqualsLocation)).ToList();
 
         // Use original row as base to maintain relative positioning
         var fakeRow = originalRange.Start.Row;
 
-        var fieldsWithLocation = new List<Node<(Node<string> fieldName, Node<Expression> valueExpr)>>();
+        var fieldsWithLocation = new List<RecordExprField>();
 
         // Multiline: put each field on a different row
         for (var i = 0; i < formattedFields.Count; i++)
@@ -413,24 +470,55 @@ public class SnapshotTestFormat
                 fieldEndRow = fieldRow + 1;
             }
 
-            fieldsWithLocation.Add(field with
+            // Update the field name location to reflect the new row
+            var updatedFieldName = field.fieldName with
             {
                 Range = new Range(
                     Start: new Location(Row: fieldRow, Column: 5),
-                    End: new Location(Row: fieldEndRow, Column: 15)
+                    End: new Location(Row: fieldRow, Column: 5 + field.fieldName.Value.Length)
                 )
-            });
+            };
+
+            // Check if value is a complex expression that should be on a new line
+            // (nested records, multiline lists, applications)
+            var valueIsComplex = field.valueExpr.Value is Expression.RecordExpr nestedRecord && nestedRecord.Fields.Count > 0
+                || field.valueExpr.Value is Expression.ListExpr nestedList && ShouldFormatListAsMultiline(nestedList)
+                || field.valueExpr.Value is Expression.Application;
+
+            // Update the value expression location
+            // If value is complex, put it on a new row to signal multiline formatting
+            // If the formatted value already has a multiline range (e.g., nested records get
+            // multiline ranges in FormatExpression), preserve that multiline indication
+            var valueStartRow = valueIsComplex ? fieldRow + 1 : fieldRow;
+
+            // Check if the formatted value already has a multiline range
+            var formattedValueIsMultiline = field.valueExpr.Range.End.Row > field.valueExpr.Range.Start.Row;
+
+            // For values that are already multiline (e.g., nested records), preserve the row span
+            // For non-multiline values, end row equals start row
+            var valueEndRow = formattedValueIsMultiline
+                ? valueStartRow + (field.valueExpr.Range.End.Row - field.valueExpr.Range.Start.Row)
+                : valueStartRow;
+
+            var updatedValueExpr = field.valueExpr with
+            {
+                Range = new Range(
+                    Start: new Location(Row: valueStartRow, Column: field.valueExpr.Range.Start.Column),
+                    End: new Location(Row: valueEndRow, Column: 15)
+                )
+            };
+
+            fieldsWithLocation.Add(new RecordExprField(updatedFieldName, field.equalsLocation, updatedValueExpr));
         }
 
         return new Expression.RecordExpr(
-            Fields: fieldsWithLocation
+            Fields: ToSeparatedListFromRecordExprFields(fieldsWithLocation, record.Fields)
         );
     }
 
     private static Expression FormatLambdaExpression(Range originalRange, Expression.LambdaExpression lambda)
     {
         // Always format lambda expressions as multiline by placing the body on a new row
-        // This ensures there's always a line break between the arguments and body
 
         var bodyExpression = lambda.Lambda.Expression.Value;
         Expression formattedBodyValue;
@@ -444,7 +532,6 @@ public class SnapshotTestFormat
         else if (bodyExpression is Expression.Application app && app.Arguments.Count > 0)
         {
             // Always format applications inside lambda bodies as multiline (forced)
-            // And ensure any list arguments are also multiline
             formattedBodyValue = FormatApplicationForLambdaBody(lambda.Lambda.Expression.Range, app);
         }
         else
@@ -452,23 +539,24 @@ public class SnapshotTestFormat
             formattedBodyValue = FormatExpression(lambda.Lambda.Expression).Value;
         }
 
-        // Use original row as base - ensure the body starts on a different row than the lambda
-        // to trigger multiline detection in Avh4Format
-        var fakeRow = originalRange.Start.Row;
+        // Use a very large row number to ensure the body is always treated as being on a new line
+        // during formatting. The Avh4Format checks if body row > current row to decide multiline.
+        // Using 10000 ensures this is always true regardless of actual file position.
+        var futureRow = 10000;
 
         // Place the body on a row significantly later to signal multiline formatting
-        // The body should start at row+10 to be clearly detected as multiline by Avh4Format
-        // (Avh4Format checks if originalExprStartRow > currentContext.CurrentRow at line 2290)
-        var bodyWithLocation = new Node<Expression>(
+        var bodyWithLocation = new Stil4mElmSyntax7.Node<Expression>(
             Range: new Range(
-                Start: new Location(Row: fakeRow + 10, Column: 1),
-                End: new Location(Row: fakeRow + 20, Column: 1)
+                Start: new Location(Row: futureRow, Column: 1),
+                End: new Location(Row: futureRow + 10, Column: 1)
             ),
             Value: formattedBodyValue
         );
 
         var formattedLambda = new LambdaStruct(
+            BackslashLocation: lambda.Lambda.BackslashLocation,
             Arguments: lambda.Lambda.Arguments,
+            ArrowLocation: lambda.Lambda.ArrowLocation,
             Expression: bodyWithLocation
         );
 
@@ -488,8 +576,17 @@ public class SnapshotTestFormat
             if (arg.Value is Expression.ListExpr listExpr && listExpr.Elements.Count > 0)
             {
                 // Force list to be multiline
-                var formattedList = FormatListExprAsMultiline(arg.Range, listExpr);
-                return arg with { Value = formattedList };
+                var formattedList = (Expression.ListExpr)FormatListExprAsMultiline(arg.Range, listExpr);
+
+                // Create a multiline range based on the formatted elements
+                var firstElem = formattedList.Elements[0];
+                var lastElem = formattedList.Elements[formattedList.Elements.Count - 1];
+                var multilineRange = new Range(
+                    Start: new Location(Row: firstElem.Range.Start.Row, Column: 1),
+                    End: new Location(Row: lastElem.Range.End.Row, Column: 15)
+                );
+
+                return new Stil4mElmSyntax7.Node<Expression>(multilineRange, formattedList);
             }
             else
             {
@@ -503,11 +600,17 @@ public class SnapshotTestFormat
         var argsWithLocation = formattedArgs.Select((arg, i) =>
         {
             var argRow = fakeRow + i;
+
+            // Preserve multiline ranges for arguments that are already multiline
+            var argEndRow = arg.Range.End.Row > arg.Range.Start.Row
+                ? argRow + (arg.Range.End.Row - arg.Range.Start.Row)
+                : argRow;
+
             return arg with
             {
                 Range = new Range(
                     Start: new Location(Row: argRow, Column: i is 0 ? 1 : 5),
-                    End: new Location(Row: argRow, Column: 15)
+                    End: new Location(Row: argEndRow, Column: 15)
                 )
             };
         }).ToList();
@@ -524,13 +627,13 @@ public class SnapshotTestFormat
         if (list.Elements.Count is 0)
             return list;
 
-        var formattedElements = list.Elements.Select(FormatExpression).ToList();
+        var formattedElements = list.Elements.Nodes.Select(FormatExpression).ToList();
 
         // Use original row as base
         var fakeRow = originalRange.Start.Row;
 
         // Always multiline: put each element on a different row
-        var elementsWithLocation = new List<Node<Expression>>();
+        var elementsWithLocation = new List<Stil4mElmSyntax7.Node<Expression>>();
         for (var i = 0; i < formattedElements.Count; i++)
         {
             var elem = formattedElements[i];
@@ -545,10 +648,12 @@ public class SnapshotTestFormat
             });
         }
 
-        return new Expression.ListExpr(Elements: elementsWithLocation);
+        return new Expression.ListExpr(
+            Elements: ToSeparatedList(elementsWithLocation, list.Elements)
+        );
     }
 
-    private static bool IsExpressionMultiline(Node<Expression> exprNode)
+    private static bool IsExpressionMultiline(Stil4mElmSyntax7.Node<Expression> exprNode)
     {
         // Check if expression spans multiple rows or contains multiline structures
         if (exprNode.Range.End.Row > exprNode.Range.Start.Row)
@@ -571,7 +676,6 @@ public class SnapshotTestFormat
     private static Expression FormatApplication(Range originalRange, Expression.Application app)
     {
         // Transform application to multiline by marking it with separate row locations
-        // This way Avh4Format will format it as multiline
 
         if (app.Arguments.Count is 0)
             return app;
@@ -580,19 +684,23 @@ public class SnapshotTestFormat
         var formattedArgs = app.Arguments.Select(FormatExpression).ToList();
 
         // Mark as multiline by giving different rows to each argument
-        // Use original row as base to maintain relative positioning
         var fakeRow = originalRange.Start.Row;
 
         var argsWithLocation = formattedArgs.Select((arg, i) =>
         {
             var argRow = fakeRow + (i * 10); // Use larger spacing to ensure distinct rows
-            // Set columns to create proper indentation signal for Avh4Format
-            // First arg at a base position, subsequent args indented
+
+            // Preserve multiline ranges for arguments that are already multiline
+            // (e.g., lists that should be formatted as multiline)
+            var argEndRow = arg.Range.End.Row > arg.Range.Start.Row
+                ? argRow + (arg.Range.End.Row - arg.Range.Start.Row)
+                : argRow;
+
             return arg with
             {
                 Range = new Range(
                     Start: new Location(Row: argRow, Column: i is 0 ? 1 : 5),
-                    End: new Location(Row: argRow, Column: 15)
+                    End: new Location(Row: argEndRow, Column: 15)
                 )
             };
         }).ToList();
@@ -600,5 +708,92 @@ public class SnapshotTestFormat
         return new Expression.Application(
             Arguments: argsWithLocation
         );
+    }
+
+    /// <summary>
+    /// Helper to map over a SeparatedSyntaxList.
+    /// </summary>
+    private static SeparatedSyntaxList<TNode> MapSeparatedList<TNode>(
+        SeparatedSyntaxList<TNode> list,
+        System.Func<TNode, TNode> mapper)
+    {
+        return list switch
+        {
+            SeparatedSyntaxList<TNode>.Empty =>
+                list,
+
+            SeparatedSyntaxList<TNode>.NonEmpty nonEmpty =>
+                new SeparatedSyntaxList<TNode>.NonEmpty(
+                    First: mapper(nonEmpty.First),
+                    Rest: [.. nonEmpty.Rest.Select(r => (r.SeparatorLocation, mapper(r.Node)))]),
+
+            _ =>
+                throw new System.NotImplementedException(
+                    $"Unexpected SeparatedSyntaxList type: {list.GetType().Name}")
+        };
+    }
+
+    /// <summary>
+    /// Convert a list back to SeparatedSyntaxList, preserving separator locations from the original.
+    /// </summary>
+    private static SeparatedSyntaxList<TNode> ToSeparatedList<TNode>(
+        IReadOnlyList<TNode> items,
+        SeparatedSyntaxList<TNode> original)
+    {
+        if (items.Count == 0)
+            return new SeparatedSyntaxList<TNode>.Empty();
+
+        if (original is SeparatedSyntaxList<TNode>.NonEmpty originalNonEmpty)
+        {
+            var rest = new List<(Location SeparatorLocation, TNode Node)>();
+            for (var i = 1; i < items.Count; i++)
+            {
+                var separatorLoc = i - 1 < originalNonEmpty.Rest.Count
+                    ? originalNonEmpty.Rest[i - 1].SeparatorLocation
+                    : new Location(1, 1);
+                rest.Add((separatorLoc, items[i]));
+            }
+            return new SeparatedSyntaxList<TNode>.NonEmpty(items[0], rest);
+        }
+
+        // Fallback - create with default separator locations
+        var restDefault = new List<(Location SeparatorLocation, TNode Node)>();
+        for (var i = 1; i < items.Count; i++)
+        {
+            restDefault.Add((new Location(1, 1), items[i]));
+        }
+        return new SeparatedSyntaxList<TNode>.NonEmpty(items[0], restDefault);
+    }
+
+    /// <summary>
+    /// Convert a list of tuples back to SeparatedSyntaxList, preserving separator locations from the original.
+    /// </summary>
+    private static SeparatedSyntaxList<RecordExprField> ToSeparatedListFromRecordExprFields(
+        IReadOnlyList<RecordExprField> items,
+        SeparatedSyntaxList<RecordExprField> original)
+    {
+        if (items.Count == 0)
+            return new SeparatedSyntaxList<RecordExprField>.Empty();
+
+        if (original is SeparatedSyntaxList<RecordExprField>.NonEmpty originalNonEmpty)
+        {
+            var rest = new List<(Location SeparatorLocation, RecordExprField Node)>();
+            for (var i = 1; i < items.Count; i++)
+            {
+                var separatorLoc = i - 1 < originalNonEmpty.Rest.Count
+                    ? originalNonEmpty.Rest[i - 1].SeparatorLocation
+                    : new Location(1, 1);
+                rest.Add((separatorLoc, items[i]));
+            }
+            return new SeparatedSyntaxList<RecordExprField>.NonEmpty(items[0], rest);
+        }
+
+        // Fallback - create with default separator locations
+        var restDefault = new List<(Location SeparatorLocation, RecordExprField Node)>();
+        for (var i = 1; i < items.Count; i++)
+        {
+            restDefault.Add((new Location(1, 1), items[i]));
+        }
+        return new SeparatedSyntaxList<RecordExprField>.NonEmpty(items[0], restDefault);
     }
 }

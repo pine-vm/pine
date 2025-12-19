@@ -1,12 +1,12 @@
 using AwesomeAssertions;
 using Pine.Core.Elm.ElmSyntax;
-using Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using Pine.Core.Elm.ElmSyntax.Stil4mConcretized;
 using System.Collections.Generic;
 using Xunit;
 
-namespace Pine.Core.Tests.Elm.ElmSyntax.Stil4mElmSyntax7.Rendering;
+namespace Pine.Core.Tests.Elm.ElmSyntax.Stil4mConcretized;
 
-using Rendering = Core.Elm.ElmSyntax.Stil4mElmSyntax7.Rendering;
+using ConcretizedAvh4Format = Core.Elm.ElmSyntax.Stil4mConcretized.Avh4Format;
 
 public class RenderingConfigTests
 {
@@ -71,9 +71,10 @@ public class RenderingConfigTests
             NameMapper.MapNames(parsed, namesMap);
 
         var formatted =
-            Core.Elm.ElmSyntax.Stil4mElmSyntax7.Avh4Format.Format(mapped);
+            ConcretizedAvh4Format.Format(mapped);
 
-        var rendered = Rendering.ToString(formatted);
+        var rendered =
+            Rendering.ToString(formatted);
 
         rendered.Trim().Should().Be(expectedModuleText.Trim());
     }

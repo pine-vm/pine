@@ -45,6 +45,7 @@ public class CanonicalizationTests
             .Select(text =>
                 ElmSyntaxParser.ParseModuleText(text, enableMaxPreservation: true)
                 .Extract(err => throw new System.Exception("Failed parsing: " + err)))
+            .Select(FromStil4mConcretized.fromStil4mConcretized)
             .ToList();
 
         var canonicalizeResult =
@@ -53,14 +54,20 @@ public class CanonicalizationTests
         var beforeFormat =
             GetCanonicalizedModule(canonicalizeResult, [.. moduleName]);
 
-        return Avh4Format.Format(beforeFormat);
+        var formatted =
+            Core.Elm.ElmSyntax.Stil4mConcretized.Avh4Format.Format(
+                ToStil4mConcretized.ToConcretized(beforeFormat));
+
+        return FromStil4mConcretized.fromStil4mConcretized(formatted);
     }
 
     private static File ParseModuleText(string moduleTex)
     {
-        return
+        var concreteSyntax =
             ElmSyntaxParser.ParseModuleText(moduleTex, enableMaxPreservation: false)
             .Extract(err => throw new System.Exception("Failed parsing: " + err));
+
+        return FromStil4mConcretized.fromStil4mConcretized(concreteSyntax);
     }
 
     [Fact]
@@ -1080,7 +1087,8 @@ public class CanonicalizationTests
                 moduleName: ["App"]);
 
         var renderedAppModule =
-            Rendering.ToString(appModuleCanonicalized);
+            Core.Elm.ElmSyntax.Stil4mConcretized.Avh4Format.FormatToString(
+                ToStil4mConcretized.ToConcretized(appModuleCanonicalized));
 
         renderedAppModule.Trim().Should().Be(
             expectedAppModuleText.Trim());
@@ -1131,7 +1139,8 @@ public class CanonicalizationTests
                 moduleName: ["App"]);
 
         var renderedAppModule =
-            Rendering.ToString(appModuleCanonicalized);
+            Core.Elm.ElmSyntax.Stil4mConcretized.Avh4Format.FormatToString(
+                ToStil4mConcretized.ToConcretized(appModuleCanonicalized));
 
         renderedAppModule.Trim().Should().Be(
             expectedAppModuleText.Trim());
@@ -1196,7 +1205,8 @@ public class CanonicalizationTests
                 moduleName: ["App"]);
 
         var renderedAppModule =
-            Rendering.ToString(appModuleCanonicalized);
+            Core.Elm.ElmSyntax.Stil4mConcretized.Avh4Format.FormatToString(
+                ToStil4mConcretized.ToConcretized(appModuleCanonicalized));
 
         renderedAppModule.Trim().Should().Be(
             expectedAppModuleText.Trim());

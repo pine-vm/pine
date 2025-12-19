@@ -1,20 +1,15 @@
 using AwesomeAssertions;
 using Pine.Core.Elm.ElmSyntax;
-using Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 using System;
 using System.Collections.Generic;
 using Xunit;
 
-namespace Pine.Core.Tests.Elm.ElmSyntax.Stil4mElmSyntax7.Avh4Format;
+namespace Pine.Core.Tests.Elm.ElmSyntax.Stil4mConcretized.Avh4Format;
 
-using Rendering = Core.Elm.ElmSyntax.Stil4mElmSyntax7.Rendering;
-using Avh4Format = Core.Elm.ElmSyntax.Stil4mElmSyntax7.Avh4Format;
+using Avh4Format = Core.Elm.ElmSyntax.Stil4mConcretized.Avh4Format;
 
 public class FormatCompleteTests
 {
-    private static string RenderDefault(File file) =>
-        Rendering.ToString(file);
-
     private static string FormatString(
         string input)
     {
@@ -22,13 +17,7 @@ public class FormatCompleteTests
             ElmSyntaxParser.ParseModuleText(input, enableMaxPreservation: true)
             .Extract(err => throw new Exception($"Parsing failed: {err}"));
 
-        var formatted =
-            Avh4Format.Format(parsed);
-
-        var rendered =
-            RenderDefault(formatted);
-
-        return rendered;
+        return Avh4Format.FormatToString(parsed);
     }
 
     [Fact]
@@ -1128,6 +1117,32 @@ public class FormatCompleteTests
 
 
             decl =
+                [ 17
+
+                -- A comment
+                , 19
+                , 23
+                ]
+
+            """",
+
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                [ 17
+                , 19 -- A comment
+                , 23
+                ]
+
+            """",
+
+            """"
+            module Test exposing (..)
+
+
+            decl =
                 """
 
             testing 
@@ -2168,8 +2183,8 @@ public class FormatCompleteTests
                     [ 17 ]
 
                 else if
-                    -- Another simple comment
                     a == 79
+                    -- Another simple comment
                 then
                     -- And another simple comment
                     [ 21 ]
@@ -2388,6 +2403,59 @@ public class FormatCompleteTests
             initialSeed =
                 0
 
+            """",
+
+            """"
+            module Records exposing (..)
+
+
+            updateRecord_0 record =
+                { record
+                    | field1 = 13
+                }
+
+
+            updateRecord_1 record =
+                { record
+                    | field1 = 17
+                    , field2 = 21
+                }
+            """",
+
+            """"
+            module Elm.Parser.Declarations exposing (..)
+
+
+            infixDirectionOnlyTwo_noRange : ParserFast.Parser Elm.Parser.Declarations.InfixDirection
+            infixDirectionOnlyTwo_noRange =
+                ParserFast.Parser
+                    (\s ->
+                        case attemptFirst s of
+                            (ParserFast.Good _ _) as firstGood ->
+                                firstGood
+
+                            (ParserFast.Bad firstCommitted firstX) as firstBad ->
+                                if firstCommitted then
+                                    firstBad
+
+                                else
+                                    case attemptSecond s of
+                                        (ParserFast.Good _ _) as secondGood ->
+                                            secondGood
+
+                                        (ParserFast.Bad secondCommitted secondX) as secondBad ->
+                                            if secondCommitted then
+                                                secondBad
+
+                                            else
+                                                ParserFast.Bad
+                                                    Basics.False
+                                                    (ParserFast.ExpectingOneOf
+                                                        firstX
+                                                        secondX
+                                                        []
+                                                    )
+                    )
             """",
 
             ];

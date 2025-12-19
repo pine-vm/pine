@@ -2,17 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+namespace Pine.Core.Elm.ElmSyntax.Stil4mConcretized;
 
 /// <summary>
-/// Maps qualified names in an Elm syntax tree.
+/// Maps qualified names in an Elm module file.
 /// This class processes a file and transforms <see cref="QualifiedNameRef"/> instances
 /// according to a provided mapping function or dictionary.
 /// </summary>
-/// <remarks>
-/// Similar to <see cref="Avh4Format"/>, this class operates on the file level,
-/// transforming the syntax tree before rendering.
-/// </remarks>
 public class NameMapper
 {
     /// <summary>
@@ -54,8 +50,8 @@ public class NameMapper
             : originalName);
     }
 
-    private static Node<Declaration> MapDeclaration(
-        Node<Declaration> declNode,
+    private static Stil4mElmSyntax7.Node<Declaration> MapDeclaration(
+        Stil4mElmSyntax7.Node<Declaration> declNode,
         Func<QualifiedNameRef, QualifiedNameRef> mapQualifiedName)
     {
         var mappedDecl = declNode.Value switch
@@ -70,7 +66,9 @@ public class NameMapper
                 new Declaration.CustomTypeDeclaration(MapTypeStruct(customTypeDecl.TypeDeclaration, mapQualifiedName)),
 
             Declaration.PortDeclaration portDecl =>
-                new Declaration.PortDeclaration(MapSignature(portDecl.Signature, mapQualifiedName)),
+                new Declaration.PortDeclaration(
+                    portDecl.PortTokenLocation,
+                    MapSignature(portDecl.Signature, mapQualifiedName)),
 
             Declaration.InfixDeclaration =>
                 declNode.Value,
@@ -80,7 +78,7 @@ public class NameMapper
                     $"Mapping for declaration type '{declNode.Value.GetType().Name}' is not implemented.")
         };
 
-        return new Node<Declaration>(declNode.Range, mappedDecl);
+        return new Stil4mElmSyntax7.Node<Declaration>(declNode.Range, mappedDecl);
     }
 
     private static FunctionStruct MapFunction(
@@ -93,14 +91,15 @@ public class NameMapper
         var mappedImpl = new FunctionImplementation(
             Name: impl.Name,
             Arguments: impl.Arguments,
+            EqualsTokenLocation: impl.EqualsTokenLocation,
             Expression: mappedExpression);
 
         return new FunctionStruct(
             Documentation: func.Documentation,
             Signature: func.Signature is { } sig
-                ? new Node<Signature>(sig.Range, MapSignature(sig.Value, mapQualifiedName))
+                ? new Stil4mElmSyntax7.Node<Signature>(sig.Range, MapSignature(sig.Value, mapQualifiedName))
                 : null,
-            Declaration: new Node<FunctionImplementation>(func.Declaration.Range, mappedImpl));
+            Declaration: new Stil4mElmSyntax7.Node<FunctionImplementation>(func.Declaration.Range, mappedImpl));
     }
 
     private static Signature MapSignature(
@@ -109,6 +108,7 @@ public class NameMapper
     {
         return new Signature(
             Name: sig.Name,
+            ColonLocation: sig.ColonLocation,
             TypeAnnotation: MapTypeAnnotation(sig.TypeAnnotation, mapQualifiedName));
     }
 
@@ -118,8 +118,11 @@ public class NameMapper
     {
         return new TypeAlias(
             Documentation: alias.Documentation,
+            TypeTokenLocation: alias.TypeTokenLocation,
+            AliasTokenLocation: alias.AliasTokenLocation,
             Name: alias.Name,
             Generics: alias.Generics,
+            EqualsTokenLocation: alias.EqualsTokenLocation,
             TypeAnnotation: MapTypeAnnotation(alias.TypeAnnotation, mapQualifiedName));
     }
 
@@ -129,25 +132,29 @@ public class NameMapper
     {
         return new TypeStruct(
             Documentation: typeStruct.Documentation,
+            TypeTokenLocation: typeStruct.TypeTokenLocation,
             Name: typeStruct.Name,
             Generics: typeStruct.Generics,
+            EqualsTokenLocation: typeStruct.EqualsTokenLocation,
             Constructors: [.. typeStruct.Constructors.Select(c => MapValueConstructor(c, mapQualifiedName))]);
     }
 
-    private static Node<ValueConstructor> MapValueConstructor(
-        Node<ValueConstructor> constructorNode,
+    private static (Stil4mElmSyntax7.Location? PipeTokenLocation, Stil4mElmSyntax7.Node<ValueConstructor> Constructor) MapValueConstructor(
+        (Stil4mElmSyntax7.Location? PipeTokenLocation, Stil4mElmSyntax7.Node<ValueConstructor> Constructor) constructorItem,
         Func<QualifiedNameRef, QualifiedNameRef> mapQualifiedName)
     {
-        var constructor = constructorNode.Value;
-        return new Node<ValueConstructor>(
-            constructorNode.Range,
-            new ValueConstructor(
-                Name: constructor.Name,
-                Arguments: [.. constructor.Arguments.Select(a => MapTypeAnnotation(a, mapQualifiedName))]));
+        var constructor = constructorItem.Constructor.Value;
+        return (
+            constructorItem.PipeTokenLocation,
+            new Stil4mElmSyntax7.Node<ValueConstructor>(
+                constructorItem.Constructor.Range,
+                new ValueConstructor(
+                    Name: constructor.Name,
+                    Arguments: [.. constructor.Arguments.Select(a => MapTypeAnnotation(a, mapQualifiedName))])));
     }
 
-    private static Node<TypeAnnotation> MapTypeAnnotation(
-        Node<TypeAnnotation> typeAnnotNode,
+    private static Stil4mElmSyntax7.Node<TypeAnnotation> MapTypeAnnotation(
+        Stil4mElmSyntax7.Node<TypeAnnotation> typeAnnotNode,
         Func<QualifiedNameRef, QualifiedNameRef> mapQualifiedName)
     {
         var mapped = typeAnnotNode.Value switch
@@ -158,21 +165,30 @@ public class NameMapper
             TypeAnnotation.FunctionTypeAnnotation funcType =>
                 new TypeAnnotation.FunctionTypeAnnotation(
                     ArgumentType: MapTypeAnnotation(funcType.ArgumentType, mapQualifiedName),
+                    ArrowLocation: funcType.ArrowLocation,
                     ReturnType: MapTypeAnnotation(funcType.ReturnType, mapQualifiedName)),
 
             TypeAnnotation.Tupled tupled =>
                 new TypeAnnotation.Tupled(
-                    [.. tupled.TypeAnnotations.Select(t => MapTypeAnnotation(t, mapQualifiedName))]),
+                    OpenParenLocation: tupled.OpenParenLocation,
+                    TypeAnnotations: MapSeparatedList(tupled.TypeAnnotations, t => MapTypeAnnotation(t, mapQualifiedName)),
+                    CloseParenLocation: tupled.CloseParenLocation),
 
             TypeAnnotation.Record record =>
-                new TypeAnnotation.Record(MapRecordDefinition(record.RecordDefinition, mapQualifiedName)),
+                new TypeAnnotation.Record(
+                    OpenBraceLocation: record.OpenBraceLocation,
+                    RecordDefinition: MapRecordDefinition(record.RecordDefinition, mapQualifiedName),
+                    CloseBraceLocation: record.CloseBraceLocation),
 
             TypeAnnotation.GenericRecord genericRecord =>
                 new TypeAnnotation.GenericRecord(
+                    OpenBraceLocation: genericRecord.OpenBraceLocation,
                     GenericName: genericRecord.GenericName,
-                    RecordDefinition: new Node<RecordDefinition>(
+                    PipeLocation: genericRecord.PipeLocation,
+                    RecordDefinition: new Stil4mElmSyntax7.Node<RecordDefinition>(
                         genericRecord.RecordDefinition.Range,
-                        MapRecordDefinition(genericRecord.RecordDefinition.Value, mapQualifiedName))),
+                        MapRecordDefinition(genericRecord.RecordDefinition.Value, mapQualifiedName)),
+                    CloseBraceLocation: genericRecord.CloseBraceLocation),
 
             // These don't contain type names to map
             TypeAnnotation.GenericType or TypeAnnotation.Unit =>
@@ -183,7 +199,7 @@ public class NameMapper
                     $"Mapping for type annotation '{typeAnnotNode.Value.GetType().Name}' is not implemented.")
         };
 
-        return new Node<TypeAnnotation>(typeAnnotNode.Range, mapped);
+        return new Stil4mElmSyntax7.Node<TypeAnnotation>(typeAnnotNode.Range, mapped);
     }
 
     private static TypeAnnotation.Typed MapTypedAnnotation(
@@ -196,7 +212,7 @@ public class NameMapper
 
         var mappedQualifiedName = mapQualifiedName(originalQualifiedName);
 
-        var newTypeName = new Node<(IReadOnlyList<string> ModuleName, string Name)>(
+        var newTypeName = new Stil4mElmSyntax7.Node<(IReadOnlyList<string> ModuleName, string Name)>(
             typed.TypeName.Range,
             (mappedQualifiedName.ModuleName, mappedQualifiedName.Name));
 
@@ -210,25 +226,26 @@ public class NameMapper
         Func<QualifiedNameRef, QualifiedNameRef> mapQualifiedName)
     {
         return new RecordDefinition(
-            [.. recordDef.Fields.Select(f => MapRecordField(f, mapQualifiedName))]);
+            MapSeparatedList(recordDef.Fields, f => MapRecordField(f, mapQualifiedName)));
     }
 
-    private static Node<RecordField> MapRecordField(
-        Node<RecordField> fieldNode,
+    private static Stil4mElmSyntax7.Node<RecordField> MapRecordField(
+        Stil4mElmSyntax7.Node<RecordField> fieldNode,
         Func<QualifiedNameRef, QualifiedNameRef> mapQualifiedName)
     {
         var field = fieldNode.Value;
-        return new Node<RecordField>(
+        return new Stil4mElmSyntax7.Node<RecordField>(
             fieldNode.Range,
             new RecordField(
                 FieldName: field.FieldName,
+                ColonLocation: field.ColonLocation,
                 FieldType: MapTypeAnnotation(field.FieldType, mapQualifiedName)));
     }
 
     // Expression mapping methods
 
-    private static Node<Expression> MapExpression(
-        Node<Expression> exprNode,
+    private static Stil4mElmSyntax7.Node<Expression> MapExpression(
+        Stil4mElmSyntax7.Node<Expression> exprNode,
         Func<QualifiedNameRef, QualifiedNameRef> mapQualifiedName)
     {
         var mappedExpr = exprNode.Value switch
@@ -244,8 +261,11 @@ public class NameMapper
 
             Expression.IfBlock ifBlock =>
                 new Expression.IfBlock(
+                    IfTokenLocation: ifBlock.IfTokenLocation,
                     Condition: MapExpression(ifBlock.Condition, mapQualifiedName),
+                    ThenTokenLocation: ifBlock.ThenTokenLocation,
                     ThenBlock: MapExpression(ifBlock.ThenBlock, mapQualifiedName),
+                    ElseTokenLocation: ifBlock.ElseTokenLocation,
                     ElseBlock: MapExpression(ifBlock.ElseBlock, mapQualifiedName)),
 
             Expression.Application app =>
@@ -254,20 +274,23 @@ public class NameMapper
 
             Expression.ListExpr listExpr =>
                 new Expression.ListExpr(
-                    [.. listExpr.Elements.Select(e => MapExpression(e, mapQualifiedName))]),
+                    Elements: MapSeparatedList(listExpr.Elements, e => MapExpression(e, mapQualifiedName))),
 
             Expression.TupledExpression tupled =>
                 new Expression.TupledExpression(
-                    [.. tupled.Elements.Select(e => MapExpression(e, mapQualifiedName))]),
+                    OpenParenLocation: tupled.OpenParenLocation,
+                    Elements: MapSeparatedList(tupled.Elements, e => MapExpression(e, mapQualifiedName)),
+                    CloseParenLocation: tupled.CloseParenLocation),
 
             Expression.RecordExpr recordExpr =>
                 new Expression.RecordExpr(
-                    [.. recordExpr.Fields.Select(f => MapRecordExprField(f, mapQualifiedName))]),
+                    Fields: MapSeparatedList(recordExpr.Fields, f => MapRecordExprField(f, mapQualifiedName))),
 
             Expression.RecordUpdateExpression recordUpdate =>
                 new Expression.RecordUpdateExpression(
                     RecordName: recordUpdate.RecordName,
-                    Fields: [.. recordUpdate.Fields.Select(f => MapRecordExprField(f, mapQualifiedName))]),
+                    PipeLocation: recordUpdate.PipeLocation,
+                    Fields: MapSeparatedList(recordUpdate.Fields, f => MapRecordExprField(f, mapQualifiedName))),
 
             Expression.OperatorApplication opApp =>
                 new Expression.OperatorApplication(
@@ -280,7 +303,10 @@ public class NameMapper
                 new Expression.Negation(MapExpression(negation.Expression, mapQualifiedName)),
 
             Expression.ParenthesizedExpression parenExpr =>
-                new Expression.ParenthesizedExpression(MapExpression(parenExpr.Expression, mapQualifiedName)),
+                new Expression.ParenthesizedExpression(
+                    OpenParenLocation: parenExpr.OpenParenLocation,
+                    Expression: MapExpression(parenExpr.Expression, mapQualifiedName),
+                    CloseParenLocation: parenExpr.CloseParenLocation),
 
             Expression.RecordAccess recordAccess =>
                 new Expression.RecordAccess(
@@ -298,7 +324,7 @@ public class NameMapper
                 exprNode.Value // Return unchanged for unhandled expression types
         };
 
-        return new Node<Expression>(exprNode.Range, mappedExpr);
+        return new Stil4mElmSyntax7.Node<Expression>(exprNode.Range, mappedExpr);
     }
 
     private static Expression.LetBlock MapLetBlock(
@@ -306,12 +332,14 @@ public class NameMapper
         Func<QualifiedNameRef, QualifiedNameRef> mapQualifiedName)
     {
         return new Expression.LetBlock(
+            LetTokenLocation: letBlock.LetTokenLocation,
             Declarations: [.. letBlock.Declarations.Select(d => MapLetDeclaration(d, mapQualifiedName))],
+            InTokenLocation: letBlock.InTokenLocation,
             Expression: MapExpression(letBlock.Expression, mapQualifiedName));
     }
 
-    private static Node<Expression.LetDeclaration> MapLetDeclaration(
-        Node<Expression.LetDeclaration> declNode,
+    private static Stil4mElmSyntax7.Node<Expression.LetDeclaration> MapLetDeclaration(
+        Stil4mElmSyntax7.Node<Expression.LetDeclaration> declNode,
         Func<QualifiedNameRef, QualifiedNameRef> mapQualifiedName)
     {
         Expression.LetDeclaration mappedDecl = declNode.Value switch
@@ -322,6 +350,7 @@ public class NameMapper
             Expression.LetDeclaration.LetDestructuring letDestr =>
                 new Expression.LetDeclaration.LetDestructuring(
                     Pattern: letDestr.Pattern,
+                    EqualsTokenLocation: letDestr.EqualsTokenLocation,
                     Expression: MapExpression(letDestr.Expression, mapQualifiedName)),
 
             _ =>
@@ -329,7 +358,7 @@ public class NameMapper
                     $"Mapping for let declaration type '{declNode.Value.GetType().Name}' is not implemented.")
         };
 
-        return new Node<Expression.LetDeclaration>(declNode.Range, mappedDecl);
+        return new Stil4mElmSyntax7.Node<Expression.LetDeclaration>(declNode.Range, mappedDecl);
     }
 
     private static LambdaStruct MapLambda(
@@ -337,7 +366,9 @@ public class NameMapper
         Func<QualifiedNameRef, QualifiedNameRef> mapQualifiedName)
     {
         return new LambdaStruct(
+            BackslashLocation: lambda.BackslashLocation,
             Arguments: lambda.Arguments,
+            ArrowLocation: lambda.ArrowLocation,
             Expression: MapExpression(lambda.Expression, mapQualifiedName));
     }
 
@@ -346,7 +377,9 @@ public class NameMapper
         Func<QualifiedNameRef, QualifiedNameRef> mapQualifiedName)
     {
         return new CaseBlock(
+            CaseTokenLocation: caseBlock.CaseTokenLocation,
             Expression: MapExpression(caseBlock.Expression, mapQualifiedName),
+            OfTokenLocation: caseBlock.OfTokenLocation,
             Cases: [.. caseBlock.Cases.Select(c => MapCase(c, mapQualifiedName))]);
     }
 
@@ -356,16 +389,37 @@ public class NameMapper
     {
         return new Case(
             Pattern: caseItem.Pattern,
+            ArrowLocation: caseItem.ArrowLocation,
             Expression: MapExpression(caseItem.Expression, mapQualifiedName));
     }
 
-    private static Node<(Node<string> fieldName, Node<Expression> valueExpr)> MapRecordExprField(
-        Node<(Node<string> fieldName, Node<Expression> valueExpr)> fieldNode,
+    private static RecordExprField MapRecordExprField(
+        RecordExprField field,
         Func<QualifiedNameRef, QualifiedNameRef> mapQualifiedName)
     {
-        var field = fieldNode.Value;
-        return new Node<(Node<string> fieldName, Node<Expression> valueExpr)>(
-            fieldNode.Range,
-            (field.fieldName, MapExpression(field.valueExpr, mapQualifiedName)));
+        return new RecordExprField(field.FieldName, field.EqualsLocation, MapExpression(field.ValueExpr, mapQualifiedName));
+    }
+
+    /// <summary>
+    /// Helper to map over a SeparatedSyntaxList.
+    /// </summary>
+    private static SeparatedSyntaxList<TNode> MapSeparatedList<TNode>(
+        SeparatedSyntaxList<TNode> list,
+        Func<TNode, TNode> mapper)
+    {
+        return list switch
+        {
+            SeparatedSyntaxList<TNode>.Empty =>
+                list,
+
+            SeparatedSyntaxList<TNode>.NonEmpty nonEmpty =>
+                new SeparatedSyntaxList<TNode>.NonEmpty(
+                    First: mapper(nonEmpty.First),
+                    Rest: [.. nonEmpty.Rest.Select(r => (r.SeparatorLocation, mapper(r.Node)))]),
+
+            _ =>
+                throw new NotImplementedException(
+                    $"Unexpected SeparatedSyntaxList type: {list.GetType().Name}")
+        };
     }
 }

@@ -1,0 +1,1195 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+
+using Location = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7.Location;
+
+namespace Pine.Core.Elm.ElmSyntax.Stil4mConcretized;
+
+/// <summary>
+/// Functionality for rendering Elm source files from the concretized syntax model.
+/// This model preserves token locations, enabling more precise rendering.
+/// </summary>
+public class Rendering
+{
+    /// <summary>
+    /// Context for tracking position while rendering with location preservation.
+    /// </summary>
+    private class RenderContext
+    {
+        public StringBuilder Output { get; } = new();
+
+        public int CurrentRow { get; set; } = 1;
+
+        public int CurrentColumn { get; set; } = 1;
+
+        public IReadOnlyList<Stil4mElmSyntax7.Node<string>> Comments { get; set; } = [];
+
+        private int _nextCommentIndex = 0;
+
+        /// <summary>
+        /// Advances to the given location by adding spaces or newlines as needed.
+        /// Renders any comments that fall between the current position and the target position.
+        /// </summary>
+        public void AdvanceToLocation(Location targetLocation, int minSpaces = 1)
+        {
+            // Render any comments that should appear before reaching the target location
+            RenderCommentsUpTo(targetLocation);
+
+            // Handle row changes
+            while (CurrentRow < targetLocation.Row)
+            {
+                Output.Append('\n');
+                CurrentRow++;
+                CurrentColumn = 1;
+            }
+
+            // Handle column changes on the same row
+            if (CurrentRow == targetLocation.Row)
+            {
+                var spacesToAdd = targetLocation.Column - CurrentColumn;
+                if (spacesToAdd > 0)
+                {
+                    Output.Append(' ', spacesToAdd);
+                    CurrentColumn = targetLocation.Column;
+                }
+                else if (spacesToAdd < 0 && minSpaces > 0)
+                {
+                    Output.Append(' ', minSpaces);
+                    CurrentColumn += minSpaces;
+                }
+            }
+        }
+
+        private void RenderCommentsUpTo(Location targetLocation)
+        {
+            while (_nextCommentIndex < Comments.Count)
+            {
+                var comment = Comments[_nextCommentIndex];
+
+                var commentIsAfterCurrent = comment.Range.Start.Row > CurrentRow ||
+                    (comment.Range.Start.Row == CurrentRow && comment.Range.Start.Column >= CurrentColumn);
+
+                var commentIsBeforeTarget = comment.Range.Start.Row < targetLocation.Row ||
+                    (comment.Range.Start.Row == targetLocation.Row && comment.Range.Start.Column < targetLocation.Column);
+
+                if (commentIsAfterCurrent && commentIsBeforeTarget)
+                {
+                    AdvanceToLocationSimple(comment.Range.Start);
+                    Output.Append(comment.Value);
+
+                    foreach (var ch in comment.Value)
+                    {
+                        if (ch is '\n')
+                        {
+                            CurrentRow++;
+                            CurrentColumn = 1;
+                        }
+                        else
+                        {
+                            CurrentColumn++;
+                        }
+                    }
+
+                    _nextCommentIndex++;
+                }
+                else if (commentIsBeforeTarget)
+                {
+                    _nextCommentIndex++;
+                }
+                else
+                {
+                    break;
+                }
+            }
+        }
+
+        private void AdvanceToLocationSimple(Location targetLocation)
+        {
+            while (CurrentRow < targetLocation.Row)
+            {
+                Output.Append('\n');
+                CurrentRow++;
+                CurrentColumn = 1;
+            }
+
+            if (CurrentRow == targetLocation.Row)
+            {
+                var spacesToAdd = targetLocation.Column - CurrentColumn;
+                if (spacesToAdd > 0)
+                {
+                    Output.Append(' ', spacesToAdd);
+                    CurrentColumn = targetLocation.Column;
+                }
+            }
+        }
+
+        public void AdvanceByMinimum(int minSpaces)
+        {
+            Output.Append(' ', minSpaces);
+            CurrentColumn += minSpaces;
+        }
+
+        public void Append(string text)
+        {
+            Output.Append(text);
+
+            foreach (var ch in text)
+            {
+                if (ch is '\n')
+                {
+                    CurrentRow++;
+                    CurrentColumn = 1;
+                }
+                else
+                {
+                    CurrentColumn++;
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Renders a file to a string while preserving the original source locations.
+    /// Note: If the file has not been formatted (e.g., from ToStil4mConcretized with default locations),
+    /// consider using Avh4Format.FormatToString instead which formats before rendering.
+    /// </summary>
+    public static string ToString(File file)
+    {
+        return ToStringWithoutFormatting(file);
+    }
+
+    /// <summary>
+    /// Renders a file to a string without applying formatting.
+    /// The file should already have proper token locations.
+    /// </summary>
+    internal static string ToStringWithoutFormatting(File file)
+    {
+        var context = new RenderContext
+        {
+            Comments = [.. file.Comments.OrderBy(c => c.Range.Start.Row).ThenBy(c => c.Range.Start.Column)]
+        };
+
+        // Render module definition
+        RenderModule(file.ModuleDefinition, context);
+
+        // Render imports
+        foreach (var import in file.Imports)
+        {
+            context.AdvanceToLocation(import.Range.Start);
+            RenderImport(import, context);
+        }
+
+        // Render declarations
+        foreach (var declaration in file.Declarations)
+        {
+            context.AdvanceToLocation(declaration.Range.Start);
+            RenderDeclaration(declaration, context);
+        }
+
+        // Ensure file ends with a trailing newline (AVH4 elm-format style)
+        var result = context.Output.ToString();
+        if (!result.EndsWith('\n'))
+        {
+            result += "\n";
+        }
+
+        return result;
+    }
+
+    private static void RenderModule(
+        Stil4mElmSyntax7.Node<Module> moduleNode,
+        RenderContext context)
+    {
+        context.AdvanceToLocation(moduleNode.Range.Start);
+
+        switch (moduleNode.Value)
+        {
+            case Module.NormalModule normalModule:
+                context.Append("module");
+                context.AdvanceToLocation(normalModule.ModuleData.ModuleName.Range.Start);
+                context.Append(RenderModuleName(normalModule.ModuleData.ModuleName.Value));
+                context.AdvanceToLocation(normalModule.ModuleData.ExposingTokenLocation);
+                context.Append("exposing");
+                RenderExposing(normalModule.ModuleData.ExposingList, context);
+                break;
+
+            case Module.PortModule portModule:
+                context.Append("port");
+                context.AdvanceToLocation(portModule.ModuleTokenLocation);
+                context.Append("module");
+                context.AdvanceToLocation(portModule.ModuleData.ModuleName.Range.Start);
+                context.Append(RenderModuleName(portModule.ModuleData.ModuleName.Value));
+                context.AdvanceToLocation(portModule.ModuleData.ExposingTokenLocation);
+                context.Append("exposing");
+                RenderExposing(portModule.ModuleData.ExposingList, context);
+                break;
+
+            case Module.EffectModule effectModule:
+                context.Append("effect");
+                context.AdvanceToLocation(effectModule.ModuleTokenLocation);
+                context.Append("module");
+                context.AdvanceToLocation(effectModule.ModuleData.ModuleName.Range.Start);
+                context.Append(RenderModuleName(effectModule.ModuleData.ModuleName.Value));
+                context.AdvanceToLocation(effectModule.ModuleData.ExposingTokenLocation);
+                context.Append("exposing");
+                RenderExposing(effectModule.ModuleData.ExposingList, context);
+                break;
+
+            default:
+                throw new NotImplementedException($"Module type '{moduleNode.Value.GetType().Name}' not supported");
+        }
+    }
+
+    private static void RenderExposing(
+        Stil4mElmSyntax7.Node<Exposing> exposingNode,
+        RenderContext context)
+    {
+        // Note: We don't advance to exposingNode.Range.Start because "exposing" keyword
+        // has already been rendered by the caller. The exposing node range includes that keyword
+        // in its start position, so advancing there would cause issues.
+
+        switch (exposingNode.Value)
+        {
+            case Exposing.All:
+                context.AdvanceByMinimum(1);
+                context.Append("(..)");
+                break;
+
+            case Exposing.Explicit explicitExposing:
+                // Check if multiline by looking at whether nodes span multiple rows
+                var isMultiline = explicitExposing.Nodes.Count >= 2 &&
+                    explicitExposing.Nodes.Any(n => n.Range.Start.Row != explicitExposing.Nodes[0].Range.Start.Row);
+
+                if (isMultiline)
+                {
+                    // Multiline format: 
+                    // exposing
+                    //     ( first
+                    //     , second
+                    //     , third
+                    //     )
+                    var firstNode = explicitExposing.Nodes[0];
+
+                    // Go to the line where ( and first element should be
+                    // The ( should be 2 columns before the first element
+                    context.AdvanceToLocation(new Location(firstNode.Range.Start.Row, firstNode.Range.Start.Column - 2), minSpaces: 0);
+                    context.Append("(");
+                    context.AdvanceByMinimum(1);
+                    RenderTopLevelExpose(firstNode, context);
+
+                    for (var i = 1; i < explicitExposing.Nodes.Count; i++)
+                    {
+                        var expose = explicitExposing.Nodes[i];
+                        // Comma comes at start of line, 2 columns before the element
+                        context.AdvanceToLocation(new Location(expose.Range.Start.Row, expose.Range.Start.Column - 2), minSpaces: 0);
+                        context.Append(",");
+                        context.AdvanceByMinimum(1);
+                        RenderTopLevelExpose(expose, context);
+                    }
+
+                    // Closing paren on its own line at same column as opening paren
+                    var lastNode = explicitExposing.Nodes[explicitExposing.Nodes.Count - 1];
+                    context.AdvanceToLocation(new Location(lastNode.Range.End.Row + 1, firstNode.Range.Start.Column - 2), minSpaces: 0);
+                    context.Append(")");
+                }
+                else
+                {
+                    // Single line format: exposing (a, b, c)
+                    context.AdvanceByMinimum(1);
+                    context.Append("(");
+                    for (var i = 0; i < explicitExposing.Nodes.Count; i++)
+                    {
+                        var expose = explicitExposing.Nodes[i];
+                        if (i > 0)
+                        {
+                            context.Append(",");
+                            context.AdvanceToLocation(expose.Range.Start);
+                        }
+                        else
+                        {
+                            context.AdvanceToLocation(expose.Range.Start);
+                        }
+                        RenderTopLevelExpose(expose, context);
+                    }
+                    context.Append(")");
+                }
+                break;
+
+            default:
+                throw new NotImplementedException($"Exposing type '{exposingNode.Value.GetType().Name}' not supported");
+        }
+    }
+
+    private static void RenderTopLevelExpose(
+        Stil4mElmSyntax7.Node<TopLevelExpose> exposeNode,
+        RenderContext context)
+    {
+        switch (exposeNode.Value)
+        {
+            case TopLevelExpose.InfixExpose infix:
+                context.Append($"({infix.Name})");
+                break;
+
+            case TopLevelExpose.FunctionExpose func:
+                context.Append(func.Name);
+                break;
+
+            case TopLevelExpose.TypeOrAliasExpose type:
+                context.Append(type.Name);
+                break;
+
+            case TopLevelExpose.TypeExpose typeExpose:
+                context.Append(typeExpose.ExposedType.Name);
+                if (typeExpose.ExposedType.Open is not null)
+                {
+                    context.Append("(..)");
+                }
+                break;
+
+            default:
+                throw new NotImplementedException($"TopLevelExpose type '{exposeNode.Value.GetType().Name}' not supported");
+        }
+    }
+
+    private static void RenderImport(
+        Stil4mElmSyntax7.Node<Import> importNode,
+        RenderContext context)
+    {
+        context.AdvanceToLocation(importNode.Value.ImportTokenLocation);
+        context.Append("import");
+
+        context.AdvanceToLocation(importNode.Value.ModuleName.Range.Start);
+        context.Append(RenderModuleName(importNode.Value.ModuleName.Value));
+
+        if (importNode.Value.ModuleAlias is { } alias)
+        {
+            context.AdvanceToLocation(alias.AsTokenLocation);
+            context.Append("as");
+            context.AdvanceToLocation(alias.Alias.Range.Start);
+            context.Append(RenderModuleName(alias.Alias.Value));
+        }
+
+        if (importNode.Value.ExposingList is { } exposingList)
+        {
+            context.AdvanceToLocation(exposingList.ExposingTokenLocation);
+            context.Append("exposing");
+            RenderExposing(exposingList.ExposingList, context);
+        }
+    }
+
+    private static void RenderDeclaration(
+        Stil4mElmSyntax7.Node<Declaration> declarationNode,
+        RenderContext context)
+    {
+        switch (declarationNode.Value)
+        {
+            case Declaration.FunctionDeclaration funcDecl:
+                RenderFunctionDeclaration(funcDecl, context);
+                break;
+
+            case Declaration.AliasDeclaration aliasDecl:
+                RenderAliasDeclaration(aliasDecl, context);
+                break;
+
+            case Declaration.CustomTypeDeclaration customTypeDecl:
+                RenderCustomTypeDeclaration(customTypeDecl, context);
+                break;
+
+            case Declaration.InfixDeclaration infixDecl:
+                RenderInfixDeclaration(infixDecl, context);
+                break;
+
+            case Declaration.PortDeclaration portDecl:
+                RenderPortDeclaration(portDecl, context);
+                break;
+
+            default:
+                throw new NotImplementedException($"Declaration type '{declarationNode.Value.GetType().Name}' not supported");
+        }
+    }
+
+    private static void RenderFunctionDeclaration(
+        Declaration.FunctionDeclaration funcDecl,
+        RenderContext context)
+    {
+        // Render signature if present
+        if (funcDecl.Function.Signature is { } signature)
+        {
+            context.AdvanceToLocation(signature.Range.Start);
+            context.Append(signature.Value.Name.Value);
+            context.AdvanceToLocation(signature.Value.ColonLocation);
+            context.Append(":");
+            RenderTypeAnnotation(signature.Value.TypeAnnotation, context);
+        }
+
+        // Render implementation
+        var impl = funcDecl.Function.Declaration;
+        context.AdvanceToLocation(impl.Range.Start);
+        context.Append(impl.Value.Name.Value);
+
+        foreach (var arg in impl.Value.Arguments)
+        {
+            context.AdvanceToLocation(arg.Range.Start);
+            RenderPattern(arg, context);
+        }
+
+        context.AdvanceToLocation(impl.Value.EqualsTokenLocation);
+        context.Append("=");
+
+        RenderExpression(impl.Value.Expression, context);
+    }
+
+    private static void RenderAliasDeclaration(
+        Declaration.AliasDeclaration aliasDecl,
+        RenderContext context)
+    {
+        context.AdvanceToLocation(aliasDecl.TypeAlias.TypeTokenLocation);
+        context.Append("type");
+        context.AdvanceToLocation(aliasDecl.TypeAlias.AliasTokenLocation);
+        context.Append("alias");
+        context.AdvanceToLocation(aliasDecl.TypeAlias.Name.Range.Start);
+        context.Append(aliasDecl.TypeAlias.Name.Value);
+
+        foreach (var generic in aliasDecl.TypeAlias.Generics)
+        {
+            context.AdvanceToLocation(generic.Range.Start);
+            context.Append(generic.Value);
+        }
+
+        context.AdvanceToLocation(aliasDecl.TypeAlias.EqualsTokenLocation);
+        context.Append("=");
+
+        RenderTypeAnnotation(aliasDecl.TypeAlias.TypeAnnotation, context);
+    }
+
+    private static void RenderCustomTypeDeclaration(
+        Declaration.CustomTypeDeclaration customTypeDecl,
+        RenderContext context)
+    {
+        context.AdvanceToLocation(customTypeDecl.TypeDeclaration.TypeTokenLocation);
+        context.Append("type");
+        context.AdvanceToLocation(customTypeDecl.TypeDeclaration.Name.Range.Start);
+        context.Append(customTypeDecl.TypeDeclaration.Name.Value);
+
+        foreach (var generic in customTypeDecl.TypeDeclaration.Generics)
+        {
+            context.AdvanceToLocation(generic.Range.Start);
+            context.Append(generic.Value);
+        }
+
+        context.AdvanceToLocation(customTypeDecl.TypeDeclaration.EqualsTokenLocation);
+        context.Append("=");
+
+        for (var i = 0; i < customTypeDecl.TypeDeclaration.Constructors.Count; i++)
+        {
+            var (pipeLocation, constructor) = customTypeDecl.TypeDeclaration.Constructors[i];
+            if (pipeLocation is { } pipe)
+            {
+                context.AdvanceToLocation(pipe);
+                context.Append("|");
+            }
+
+            context.AdvanceToLocation(constructor.Range.Start);
+            RenderValueConstructor(constructor, context);
+        }
+    }
+
+    private static void RenderValueConstructor(
+        Stil4mElmSyntax7.Node<ValueConstructor> constructor,
+        RenderContext context)
+    {
+        context.Append(constructor.Value.Name.Value);
+
+        foreach (var arg in constructor.Value.Arguments)
+        {
+            context.AdvanceToLocation(arg.Range.Start);
+            RenderTypeAnnotation(arg, context);
+        }
+    }
+
+    private static void RenderInfixDeclaration(
+        Declaration.InfixDeclaration infixDecl,
+        RenderContext context)
+    {
+        context.AdvanceToLocation(infixDecl.Infix.InfixTokenLocation);
+        context.Append("infix");
+        context.AdvanceToLocation(infixDecl.Infix.Direction.Range.Start);
+
+        context.Append(infixDecl.Infix.Direction.Value switch
+        {
+            Stil4mElmSyntax7.InfixDirection.Left => "left",
+            Stil4mElmSyntax7.InfixDirection.Right => "right",
+            Stil4mElmSyntax7.InfixDirection.Non => "non",
+
+            _ =>
+            throw new NotImplementedException(
+                $"InfixDirection '{infixDecl.Infix.Direction.Value}' not supported")
+        });
+
+        context.AdvanceToLocation(infixDecl.Infix.Precedence.Range.Start);
+        context.Append(infixDecl.Infix.Precedence.Value.ToString());
+        context.AdvanceToLocation(infixDecl.Infix.Operator.Range.Start);
+        context.Append($"({infixDecl.Infix.Operator.Value})");
+        context.AdvanceToLocation(infixDecl.Infix.EqualsTokenLocation);
+        context.Append("=");
+        context.AdvanceToLocation(infixDecl.Infix.FunctionName.Range.Start);
+        context.Append(infixDecl.Infix.FunctionName.Value);
+    }
+
+    private static void RenderPortDeclaration(
+        Declaration.PortDeclaration portDecl,
+        RenderContext context)
+    {
+        context.AdvanceToLocation(portDecl.PortTokenLocation);
+        context.Append("port");
+        context.AdvanceToLocation(portDecl.Signature.Name.Range.Start);
+        context.Append(portDecl.Signature.Name.Value);
+        context.AdvanceToLocation(portDecl.Signature.ColonLocation);
+        context.Append(":");
+        RenderTypeAnnotation(portDecl.Signature.TypeAnnotation, context);
+    }
+
+    private static void RenderTypeAnnotation(
+        Stil4mElmSyntax7.Node<TypeAnnotation> typeAnnotationNode,
+        RenderContext context)
+    {
+        context.AdvanceToLocation(typeAnnotationNode.Range.Start);
+
+        switch (typeAnnotationNode.Value)
+        {
+            case TypeAnnotation.GenericType genericType:
+                context.Append(genericType.Name);
+                break;
+
+            case TypeAnnotation.Typed typed:
+                var typeName = typed.TypeName.Value;
+                if (typeName.ModuleName.Count > 0)
+                {
+                    context.Append(string.Join(".", typeName.ModuleName) + "." + typeName.Name);
+                }
+                else
+                {
+                    context.Append(typeName.Name);
+                }
+
+                foreach (var arg in typed.TypeArguments)
+                {
+                    context.AdvanceToLocation(arg.Range.Start);
+                    RenderTypeAnnotation(arg, context);
+                }
+                break;
+
+            case TypeAnnotation.Unit:
+                context.Append("()");
+                break;
+
+            case TypeAnnotation.Tupled tupled:
+                context.AdvanceToLocation(tupled.OpenParenLocation);
+                context.Append("(");
+                RenderSeparatedList(tupled.TypeAnnotations, RenderTypeAnnotation, context);
+                context.AdvanceToLocation(tupled.CloseParenLocation);
+                context.Append(")");
+                break;
+
+            case TypeAnnotation.Record record:
+                context.AdvanceToLocation(record.OpenBraceLocation);
+                context.Append("{");
+                RenderRecordDefinition(record.RecordDefinition, context);
+                context.AdvanceToLocation(record.CloseBraceLocation);
+                context.Append("}");
+                break;
+
+            case TypeAnnotation.GenericRecord genericRecord:
+                context.AdvanceToLocation(genericRecord.OpenBraceLocation);
+                context.Append("{");
+                context.AdvanceToLocation(genericRecord.GenericName.Range.Start);
+                context.Append(genericRecord.GenericName.Value);
+                context.AdvanceToLocation(genericRecord.PipeLocation);
+                context.Append("|");
+                RenderRecordDefinition(genericRecord.RecordDefinition.Value, context);
+                context.AdvanceToLocation(genericRecord.CloseBraceLocation);
+                context.Append("}");
+                break;
+
+            case TypeAnnotation.FunctionTypeAnnotation funcType:
+                RenderTypeAnnotation(funcType.ArgumentType, context);
+                context.AdvanceToLocation(funcType.ArrowLocation);
+                context.Append("->");
+                RenderTypeAnnotation(funcType.ReturnType, context);
+                break;
+
+            default:
+                throw new NotImplementedException($"TypeAnnotation type '{typeAnnotationNode.Value.GetType().Name}' not supported");
+        }
+    }
+
+    private static void RenderRecordDefinition(
+        RecordDefinition recordDef,
+        RenderContext context)
+    {
+        RenderSeparatedList(recordDef.Fields, RenderRecordField, context);
+    }
+
+    /// <summary>
+    /// Renders a separated syntax list using the separator locations from the concretized model.
+    /// </summary>
+    private static void RenderSeparatedList<TNode>(
+        SeparatedSyntaxList<TNode> list,
+        Action<TNode, RenderContext> renderItem,
+        RenderContext context)
+    {
+        switch (list)
+        {
+            case SeparatedSyntaxList<TNode>.Empty:
+                break;
+
+            case SeparatedSyntaxList<TNode>.NonEmpty nonEmpty:
+                renderItem(nonEmpty.First, context);
+                foreach (var (separatorLocation, node) in nonEmpty.Rest)
+                {
+                    context.AdvanceToLocation(separatorLocation);
+                    context.Append(",");
+                    renderItem(node, context);
+                }
+                break;
+        }
+    }
+
+    private static void RenderRecordField(
+        Stil4mElmSyntax7.Node<RecordField> fieldNode,
+        RenderContext context)
+    {
+        context.AdvanceToLocation(fieldNode.Range.Start);
+        context.Append(fieldNode.Value.FieldName.Value);
+        context.AdvanceToLocation(fieldNode.Value.ColonLocation);
+        context.Append(":");
+        RenderTypeAnnotation(fieldNode.Value.FieldType, context);
+    }
+
+    private static void RenderRecordExprField(
+        RecordExprField field,
+        RenderContext context)
+    {
+        context.AdvanceToLocation(field.FieldName.Range.Start);
+        context.Append(field.FieldName.Value);
+
+        // Check if value is on a different row - if so, don't add trailing space after =
+        var valueOnDifferentRow = field.ValueExpr.Range.Start.Row > field.FieldName.Range.Start.Row;
+        if (valueOnDifferentRow)
+        {
+            context.Append(" =");
+        }
+        else
+        {
+            // Use the stored equals sign location to preserve original whitespace
+            context.AdvanceToLocation(field.EqualsLocation, minSpaces: 1);
+            context.Append("=");
+        }
+        RenderExpression(field.ValueExpr, context);
+    }
+
+    private static void RenderExpression(
+        Stil4mElmSyntax7.Node<Expression> expressionNode,
+        RenderContext context)
+    {
+        context.AdvanceToLocation(expressionNode.Range.Start);
+
+        switch (expressionNode.Value)
+        {
+            case Expression.UnitExpr:
+                context.Append("()");
+                break;
+
+            case Expression.Literal literal:
+                context.Append($"{RenderStringLiteral(literal.Value, isTripleQuoted: literal.IsTripleQuoted)}");
+                break;
+
+            case Expression.CharLiteral charLiteral:
+                context.Append($"{RenderCharLiteral((char)charLiteral.Value)}");
+                break;
+
+            case Expression.Integer integer:
+                context.Append(integer.Value.ToString());
+                break;
+
+            case Expression.Hex hex:
+                context.Append(RenderHexPattern(hex.Value));
+                break;
+
+            case Expression.Floatable floatable:
+                context.Append(FormatFloatForElm(floatable.Value));
+                break;
+
+            case Expression.Negation negation:
+                context.Append("-");
+                RenderExpression(negation.Expression, context);
+                break;
+
+            case Expression.ListExpr listExpr:
+                // The opening bracket is at the expression's start location (already advanced to)
+                context.Append("[");
+                RenderSeparatedList(listExpr.Elements, RenderExpression, context);
+                // The closing bracket is at the end of the expression range (column - 1 since Range.End is after the bracket)
+                context.AdvanceToLocation(expressionNode.Range.End with { Column = expressionNode.Range.End.Column - 1 });
+                context.Append("]");
+                break;
+
+            case Expression.FunctionOrValue funcOrValue:
+                if (funcOrValue.ModuleName.Count > 0)
+                {
+                    context.Append(string.Join(".", funcOrValue.ModuleName) + "." + funcOrValue.Name);
+                }
+                else
+                {
+                    context.Append(funcOrValue.Name);
+                }
+                break;
+
+            case Expression.IfBlock ifBlock:
+                context.AdvanceToLocation(ifBlock.IfTokenLocation);
+                context.Append("if");
+                RenderExpression(ifBlock.Condition, context);
+                context.AdvanceToLocation(ifBlock.ThenTokenLocation);
+                context.Append("then");
+                RenderExpression(ifBlock.ThenBlock, context);
+                context.AdvanceToLocation(ifBlock.ElseTokenLocation);
+                context.Append("else");
+                RenderExpression(ifBlock.ElseBlock, context);
+                break;
+
+            case Expression.PrefixOperator prefixOp:
+                context.Append($"({prefixOp.Operator})");
+                break;
+
+            case Expression.ParenthesizedExpression parenExpr:
+                context.AdvanceToLocation(parenExpr.OpenParenLocation);
+                context.Append("(");
+                RenderExpression(parenExpr.Expression, context);
+                context.AdvanceToLocation(parenExpr.CloseParenLocation);
+                context.Append(")");
+                break;
+
+            case Expression.Application application:
+                for (var i = 0; i < application.Arguments.Count; i++)
+                {
+                    RenderExpression(application.Arguments[i], context);
+                }
+                break;
+
+            case Expression.OperatorApplication opApp:
+                RenderExpression(opApp.Left, context);
+                // Check if right operand is on a different row - if so, put operator on new line
+                if (opApp.Right.Range.Start.Row > opApp.Left.Range.End.Row)
+                {
+                    context.AdvanceToLocation(opApp.Right.Range.Start with { Column = opApp.Right.Range.Start.Column - opApp.Operator.Length - 1 });
+                }
+                else
+                {
+                    context.AdvanceByMinimum(1);
+                }
+                context.Append(opApp.Operator);
+                RenderExpression(opApp.Right, context);
+                break;
+
+            case Expression.TupledExpression tupledExpr:
+                context.AdvanceToLocation(tupledExpr.OpenParenLocation);
+                context.Append("(");
+                RenderSeparatedList(tupledExpr.Elements, RenderExpression, context);
+                context.AdvanceToLocation(tupledExpr.CloseParenLocation);
+                context.Append(")");
+                break;
+
+            case Expression.LambdaExpression lambdaExpr:
+                context.AdvanceToLocation(lambdaExpr.Lambda.BackslashLocation);
+                context.Append("\\");
+                foreach (var arg in lambdaExpr.Lambda.Arguments)
+                {
+                    RenderPattern(arg, context);
+                }
+                context.AdvanceToLocation(lambdaExpr.Lambda.ArrowLocation);
+                context.Append("->");
+                RenderExpression(lambdaExpr.Lambda.Expression, context);
+                break;
+
+            case Expression.CaseExpression caseExpr:
+                context.AdvanceToLocation(caseExpr.CaseBlock.CaseTokenLocation);
+                context.Append("case");
+                RenderExpression(caseExpr.CaseBlock.Expression, context);
+                context.AdvanceToLocation(caseExpr.CaseBlock.OfTokenLocation);
+                context.Append("of");
+
+                foreach (var caseItem in caseExpr.CaseBlock.Cases)
+                {
+                    RenderPattern(caseItem.Pattern, context);
+                    context.AdvanceToLocation(caseItem.ArrowLocation);
+                    context.Append("->");
+                    RenderExpression(caseItem.Expression, context);
+                }
+                break;
+
+            case Expression.LetExpression letExpr:
+                context.AdvanceToLocation(letExpr.Value.LetTokenLocation);
+                context.Append("let");
+
+                foreach (var decl in letExpr.Value.Declarations)
+                {
+                    RenderLetDeclaration(decl, context);
+                }
+
+                context.AdvanceToLocation(letExpr.Value.InTokenLocation);
+                context.Append("in");
+                RenderExpression(letExpr.Value.Expression, context);
+                break;
+
+            case Expression.RecordExpr recordExpr:
+                // The opening brace is at the expression's start location (already advanced to)
+                context.Append("{");
+                RenderSeparatedList(recordExpr.Fields, RenderRecordExprField, context);
+                // The closing brace is at the end of the expression range (column - 1 since Range.End is after the brace)
+                context.AdvanceToLocation(expressionNode.Range.End with { Column = expressionNode.Range.End.Column - 1 });
+                context.Append("}");
+                break;
+
+            case Expression.RecordAccess recordAccess:
+                RenderExpression(recordAccess.Record, context);
+                context.Append(".");
+                context.Append(recordAccess.FieldName.Value);
+                break;
+
+            case Expression.RecordAccessFunction accessFunc:
+                context.Append(accessFunc.FunctionName);
+                break;
+
+            case Expression.RecordUpdateExpression recordUpdate:
+                // The opening brace is at the expression's start location (already advanced to)
+                context.Append("{");
+                context.AdvanceToLocation(recordUpdate.RecordName.Range.Start);
+                context.Append(recordUpdate.RecordName.Value);
+                context.AdvanceToLocation(recordUpdate.PipeLocation);
+                context.Append("|");
+                RenderSeparatedList(recordUpdate.Fields, RenderRecordExprField, context);
+                // The closing brace is at the end of the expression range (column - 1 since Range.End is after the brace)
+                context.AdvanceToLocation(expressionNode.Range.End with { Column = expressionNode.Range.End.Column - 1 });
+                context.Append("}");
+                break;
+
+            default:
+                throw new NotImplementedException($"Expression type '{expressionNode.Value.GetType().Name}' not supported");
+        }
+    }
+
+    private static void RenderLetDeclaration(
+        Stil4mElmSyntax7.Node<Expression.LetDeclaration> letDeclNode,
+        RenderContext context)
+    {
+        context.AdvanceToLocation(letDeclNode.Range.Start);
+
+        switch (letDeclNode.Value)
+        {
+            case Expression.LetDeclaration.LetFunction letFunc:
+                if (letFunc.Function.Signature is { } signature)
+                {
+                    context.AdvanceToLocation(signature.Range.Start);
+                    context.Append(signature.Value.Name.Value);
+                    context.AdvanceToLocation(signature.Value.ColonLocation);
+                    context.Append(":");
+                    RenderTypeAnnotation(signature.Value.TypeAnnotation, context);
+                }
+
+                var impl = letFunc.Function.Declaration;
+                context.AdvanceToLocation(impl.Range.Start);
+                context.Append(impl.Value.Name.Value);
+
+                foreach (var arg in impl.Value.Arguments)
+                {
+                    RenderPattern(arg, context);
+                }
+
+                context.AdvanceToLocation(impl.Value.EqualsTokenLocation);
+                context.Append("=");
+                RenderExpression(impl.Value.Expression, context);
+                break;
+
+            case Expression.LetDeclaration.LetDestructuring letDestructuring:
+                RenderPattern(letDestructuring.Pattern, context);
+                context.AdvanceToLocation(letDestructuring.EqualsTokenLocation);
+                context.Append("=");
+                RenderExpression(letDestructuring.Expression, context);
+                break;
+
+            default:
+                throw new NotImplementedException($"LetDeclaration type '{letDeclNode.Value.GetType().Name}' not supported");
+        }
+    }
+
+    private static void RenderPattern(
+        Stil4mElmSyntax7.Node<Pattern> patternNode,
+        RenderContext context)
+    {
+        context.AdvanceToLocation(patternNode.Range.Start);
+
+        switch (patternNode.Value)
+        {
+            case Pattern.AllPattern:
+                context.Append("_");
+                break;
+
+            case Pattern.VarPattern varPattern:
+                context.Append(varPattern.Name);
+                break;
+
+            case Pattern.UnitPattern:
+                context.Append("()");
+                break;
+
+            case Pattern.CharPattern charPattern:
+                context.Append($"{RenderCharLiteral((char)charPattern.Value)}");
+                break;
+
+            case Pattern.StringPattern stringPattern:
+                context.Append($"{RenderStringLiteral(stringPattern.Value, isTripleQuoted: false)}");
+                break;
+
+            case Pattern.IntPattern intPattern:
+                context.Append(intPattern.Value.ToString());
+                break;
+
+            case Pattern.HexPattern hexPattern:
+                context.Append(RenderHexPattern(hexPattern.Value));
+                break;
+
+            case Pattern.FloatPattern floatPattern:
+                context.Append(FormatFloatForElm(floatPattern.Value));
+                break;
+
+            case Pattern.TuplePattern tuplePattern:
+                context.AdvanceToLocation(tuplePattern.OpenParenLocation);
+                context.Append("(");
+                for (var i = 0; i < tuplePattern.Elements.Count; i++)
+                {
+                    if (i > 0) context.Append(",");
+                    RenderPattern(tuplePattern.Elements[i], context);
+                }
+                context.AdvanceToLocation(tuplePattern.CloseParenLocation);
+                context.Append(")");
+                break;
+
+            case Pattern.RecordPattern recordPattern:
+                context.AdvanceToLocation(recordPattern.OpenBraceLocation);
+                context.Append("{");
+                for (var i = 0; i < recordPattern.Fields.Count; i++)
+                {
+                    if (i > 0) context.Append(",");
+                    context.AdvanceToLocation(recordPattern.Fields[i].Range.Start);
+                    context.Append(recordPattern.Fields[i].Value);
+                }
+                context.AdvanceToLocation(recordPattern.CloseBraceLocation);
+                context.Append("}");
+                break;
+
+            case Pattern.UnConsPattern unConsPattern:
+                RenderPattern(unConsPattern.Head, context);
+                context.AdvanceToLocation(unConsPattern.ConsOperatorLocation);
+                context.Append("::");
+                RenderPattern(unConsPattern.Tail, context);
+                break;
+
+            case Pattern.ListPattern listPattern:
+                context.AdvanceToLocation(listPattern.OpenBracketLocation);
+                context.Append("[");
+                for (var i = 0; i < listPattern.Elements.Count; i++)
+                {
+                    if (i > 0) context.Append(",");
+                    RenderPattern(listPattern.Elements[i], context);
+                }
+                context.AdvanceToLocation(listPattern.CloseBracketLocation);
+                context.Append("]");
+                break;
+
+            case Pattern.NamedPattern namedPattern:
+                if (namedPattern.Name.ModuleName.Count > 0)
+                {
+                    context.Append(string.Join(".", namedPattern.Name.ModuleName) + "." + namedPattern.Name.Name);
+                }
+                else
+                {
+                    context.Append(namedPattern.Name.Name);
+                }
+
+                foreach (var arg in namedPattern.Arguments)
+                {
+                    context.AdvanceByMinimum(1); // space before each argument
+                    RenderPattern(arg, context);
+                }
+                break;
+
+            case Pattern.AsPattern asPattern:
+                RenderPattern(asPattern.Pattern, context);
+                context.AdvanceByMinimum(1); // space before "as"
+                context.Append("as");
+                context.AdvanceByMinimum(1); // space after "as"
+                context.Append(asPattern.Name.Value);
+                break;
+
+            case Pattern.ParenthesizedPattern parenPattern:
+                context.AdvanceToLocation(parenPattern.OpenParenLocation);
+                context.Append("(");
+                RenderPattern(parenPattern.Pattern, context);
+                context.AdvanceToLocation(parenPattern.CloseParenLocation);
+                context.Append(")");
+                break;
+
+            default:
+                throw new NotImplementedException($"Pattern type '{patternNode.Value.GetType().Name}' not supported");
+        }
+    }
+
+    private static string RenderModuleName(IReadOnlyList<string> moduleName) =>
+        string.Join(".", moduleName);
+
+    /// <summary>
+    /// Converts the specified string to a source code string literal, using either standard or triple-quoted syntax as
+    /// appropriate.
+    /// </summary>
+    /// <remarks>If triple-quoted syntax is used, the value is included without escaping special characters.
+    /// Otherwise, special characters such as backslashes, quotes, and control characters are escaped to produce a valid
+    /// string literal.</remarks>
+    public static string RenderStringLiteral(string value, bool isTripleQuoted)
+    {
+        // Use triple quotes only if explicitly requested (based on original source formatting)
+        if (isTripleQuoted)
+        {
+            // For triple-quoted strings, escape special characters but keep newlines as-is
+            // (since they're literal in triple-quoted strings)
+            var escaped = EscapeTripleQuotedString(value);
+            return "\"\"\"" + escaped + "\"\"\"";
+        }
+
+        // Escape special characters for regular strings
+        var escapedRegular = value
+            .Replace("\\", "\\\\")
+            .Replace("\"", "\\\"")
+            .Replace("\n", "\\n")
+            .Replace("\r", "\\r")
+            .Replace("\t", "\\t");
+
+        return "\"" + escapedRegular + "\"";
+    }
+
+    /// <summary>
+    /// Escapes a string for use in a triple-quoted string literal.
+    /// In Elm triple-quoted strings, newlines and tabs are literal, but backslashes
+    /// and certain control characters need escaping.
+    /// </summary>
+    private static string EscapeTripleQuotedString(string value)
+    {
+        var sb = new StringBuilder();
+        foreach (var ch in value)
+        {
+            sb.Append(EscapeCharForTripleQuoted(ch));
+        }
+        return sb.ToString();
+    }
+
+    private static string EscapeCharForTripleQuoted(char ch) =>
+        ch switch
+        {
+            '\n' => "\n",  // Literal newlines are preserved
+            '\t' => "\\t", // Tabs are escaped
+            '\r' => "\\u{000D}", // Carriage return uses Unicode escape
+            '\\' => "\\\\", // Backslashes are escaped
+            _ when ch < 32 => $"\\u{{{(int)ch:X4}}}", // Other control chars use Unicode escape
+            _ => ch.ToString()
+        };
+
+    internal static string RenderCharLiteral(int value)
+    {
+        var c = char.ConvertFromUtf32(value);
+
+        if (c is "'")
+            return "'\\''";
+
+        if (c is "\\")
+            return "'\\\\'";
+
+        if (c is "\n")
+            return "'\\n'";
+
+        if (c is "\r")
+            return "'\\u{000D}'";  // elm-format uses Unicode escape for carriage return
+
+        if (c is "\t")
+            return "'\\t'";
+
+        // Handle control characters and other non-printable characters with Unicode escapes
+        // This includes null (0), backspace (8), form feed (12), and other control characters
+        if (value < 32 || (value >= 127 && value < 160))
+        {
+            // Use Unicode escape sequence for control characters
+            // Format with uppercase hex, padded to 4 digits minimum
+            return $"'\\u{{{value:X4}}}'";
+        }
+
+        return "'" + c + "'";
+    }
+
+    /// <summary>
+    /// Formats a hexadecimal pattern with padding to match elm-format behavior.
+    /// Pads to lengths of 2, 4, 8, or multiples of 8 (e.g., 8, 16, 32...).
+    /// </summary>
+    internal static string RenderHexPattern(long value)
+    {
+        // Convert to hex string (uppercase)
+        var hex = value.ToString("X");
+
+        // Determine target length: 2, 4, 8, 16, 32, etc.
+        // Matches elm-format padding behavior
+
+        int targetLength;
+
+        if (hex.Length <= 2)
+            targetLength = 2;
+        else if (hex.Length <= 4)
+            targetLength = 4;
+        else if (hex.Length <= 8)
+            targetLength = 8;
+        else
+            // Round up to next multiple of 8
+            targetLength = (hex.Length + 7) / 8 * 8;
+
+        // Pad with leading zeros
+        var paddedHex = hex.PadLeft(targetLength, '0');
+
+        return "0x" + paddedHex;
+    }
+
+    internal static string FormatFloatForElm(double value)
+    {
+        // Use "R" (round-trip) format which produces the shortest representation
+        // that parses back to the same value
+        var str = value.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
+
+        if (str.Contains('E') || str.Contains('e'))
+        {
+            // Convert scientific notation to fixed-point decimal
+            // The format "F17" uses fixed-point with up to 17 digits
+            str = value.ToString("F17", System.Globalization.CultureInfo.InvariantCulture).TrimEnd('0');
+
+            // Make sure we don't end with just a decimal point
+            if (str.EndsWith('.'))
+            {
+                str += "0";
+            }
+        }
+
+        // Elm requires at least one digit after the decimal point
+        if (!str.Contains('.'))
+        {
+            str += ".0";
+        }
+
+        return str;
+    }
+}

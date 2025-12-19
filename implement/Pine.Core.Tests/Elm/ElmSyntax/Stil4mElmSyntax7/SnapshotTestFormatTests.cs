@@ -4,13 +4,17 @@ using Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 using System.Collections.Generic;
 using Xunit;
 
+using ConcretizedFile = Pine.Core.Elm.ElmSyntax.Stil4mConcretized.File;
+using ConcretizedModule = Pine.Core.Elm.ElmSyntax.Stil4mConcretized.Module;
+using ConcretizedDefaultModuleData = Pine.Core.Elm.ElmSyntax.Stil4mConcretized.DefaultModuleData;
+using ConcretizedExposing = Pine.Core.Elm.ElmSyntax.Stil4mConcretized.Exposing;
+using ConcretizedSnapshotTestFormat = Pine.Core.Elm.ElmSyntax.Stil4mConcretized.SnapshotTestFormat;
+using ConcretizedRendering = Pine.Core.Elm.ElmSyntax.Stil4mConcretized.Rendering;
+
 namespace Pine.Core.Tests.Elm.ElmSyntax.Stil4mElmSyntax7;
 
 public class SnapshotTestFormatTests
 {
-    private static string RenderDefault(File file) =>
-        Core.Elm.ElmSyntax.Stil4mElmSyntax7.Rendering.ToString(file);
-
     private static string FormatString(
         string input)
     {
@@ -18,16 +22,16 @@ public class SnapshotTestFormatTests
             ElmSyntaxParser.ParseModuleText(input, enableMaxPreservation: true)
             .Extract(err => throw new System.Exception($"Parsing failed: {err}"));
 
-        return Format(parsed);
+        return FormatConcretized(parsed);
     }
 
-    private static string Format(File file)
+    private static string FormatConcretized(ConcretizedFile file)
     {
         var formatted =
-            SnapshotTestFormat.Format(file);
+            ConcretizedSnapshotTestFormat.Format(file);
 
         var rendered =
-            RenderDefault(formatted);
+            ConcretizedRendering.ToString(formatted);
 
         return rendered;
     }
@@ -36,23 +40,23 @@ public class SnapshotTestFormatTests
     public void Format_EmptyFile()
     {
         var file =
-            new File(
+            new ConcretizedFile(
                 ModuleDefinition:
-                NodeWithRangeZero<Module>(
-                    new Module.NormalModule(
-                        ModuleData: new DefaultModuleData(
+                NodeWithRangeZero<ConcretizedModule>(
+                    new ConcretizedModule.NormalModule(
+                        ModuleTokenLocation: s_fakeLocationZero,
+                        ModuleData: new ConcretizedDefaultModuleData(
                             ModuleName: NodeWithRangeZero((IReadOnlyList<string>)["Test"]),
-                            ExposingList: NodeWithRangeZero<Exposing>(
-                                new Exposing.All(s_fakeRangeZero))
+                            ExposingTokenLocation: s_fakeLocationZero,
+                            ExposingList: NodeWithRangeZero<ConcretizedExposing>(
+                                new ConcretizedExposing.All(s_fakeRangeZero))
                     )
                 )),
                 Imports: [],
                 Declarations: [],
                 Comments: []);
 
-        var fileFormatted = SnapshotTestFormat.Format(file);
-
-        var rendered = RenderDefault(fileFormatted);
+        var rendered = FormatConcretized(file);
 
         rendered.Trim().Should().Be("module Test exposing (..)");
     }

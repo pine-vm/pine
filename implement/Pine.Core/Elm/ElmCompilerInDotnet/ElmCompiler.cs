@@ -70,12 +70,15 @@ public class ElmCompiler
             }
 
             var moduleName =
-                SyntaxTypes.Module.GetModuleName(parseModuleOk.ModuleDefinition.Value).Value;
+                ElmSyntax.Stil4mConcretized.Module.GetModuleName(parseModuleOk.ModuleDefinition.Value).Value;
 
             var moduleNameFlattened =
                 string.Join(".", moduleName);
 
-            parsedModulesBeforeCanonicalize.Add(parseModuleOk);
+            var parseModuleAst =
+                ElmSyntax.Stil4mElmSyntax7.FromStil4mConcretized.fromStil4mConcretized(parseModuleOk);
+
+            parsedModulesBeforeCanonicalize.Add(parseModuleAst);
         }
 
         var canonicalizationResult =
@@ -148,7 +151,7 @@ public class ElmCompiler
         var compilationContext =
             new ModuleCompilationContext(
                 allFunctions,
-                CompiledFunctionsCache: System.Collections.Immutable.ImmutableDictionary<string, PineValue>.Empty,
+                CompiledFunctionsCache: [],
                 PineKernelModuleNames: s_pineKernelModuleNamesDefault);
 
         // Second pass: Compile each module with access to all functions

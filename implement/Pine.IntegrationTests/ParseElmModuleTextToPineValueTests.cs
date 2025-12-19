@@ -1133,6 +1133,18 @@ public class ParseElmModuleTextToPineValueTests
             """",
 
             """"
+            module Records exposing (..)
+
+
+            repress =
+                { beta = 41
+                , alfa = "test"
+                , gamma = []
+                }
+                
+            """",
+
+            """"
             module Frontend.ContainerHtml exposing (..)
                 
 
