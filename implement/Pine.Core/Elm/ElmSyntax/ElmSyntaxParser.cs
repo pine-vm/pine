@@ -944,7 +944,7 @@ public class ElmSyntaxParser
                             "Unexpected declaration type: " + decl.GetType().Name),
                     })];
 
-                bool commentEmittedInGlobalList(Token commentToken)
+                bool CommentEmittedInGlobalList(Token commentToken)
                 {
                     if (commentsOnDeclarations.Any(onDecl => onDecl.Range == commentToken.Range))
                     {
@@ -956,7 +956,7 @@ public class ElmSyntaxParser
 
                 IReadOnlyList<Node<string>> commentsGlobalList =
                     [.. allComments
-                    .Where(commentEmittedInGlobalList)
+                    .Where(CommentEmittedInGlobalList)
                     .Select(token => new Node<string>(token.Range,token.Lexeme))
                     ];
 
@@ -2965,7 +2965,7 @@ public class ElmSyntaxParser
                 return
                     new Node<SyntaxTypes.Expression>(
                         start.Range,
-                        ParseNumberAsConcretized(start.Lexeme));
+                        ParseNumber(start.Lexeme));
             }
 
             if (start.Type is TokenType.Negation)
@@ -3129,7 +3129,7 @@ public class ElmSyntaxParser
             }
         }
 
-        private static SyntaxTypes.Expression ParseNumberAsConcretized(string expression)
+        private static SyntaxTypes.Expression ParseNumber(string expression)
         {
             if (expression.StartsWith("-0x"))
             {

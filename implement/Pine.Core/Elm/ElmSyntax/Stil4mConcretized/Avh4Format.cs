@@ -61,11 +61,16 @@ public class Avh4Format
         public const string Module = "module ";
         public const string PortModule = "port module ";
         public const string EffectModule = "effect module ";
+        public const string Port = "port ";
+        public const string Effect = "effect ";
+        public const string Alias = "alias ";
         public const string ExposingAll = "exposing (..)";
         public const string Exposing = "exposing";
         public const string ExposingOpen = "exposing (";
+        public const string SpaceExposingSpace = " exposing ";
         public const string Import = "import ";
         public const string As = " as ";
+        public const string AsSpace = "as ";
         public const string Case = "case ";
         public const string Of = " of";
         public const string Let = "let";
@@ -90,10 +95,16 @@ public class Avh4Format
         public const string Comma = ", ";
         public const string Colon = ": ";
         public const string ColonSpace = " : ";
+        public const string SpaceColon = " :";
         public new const string Equals = " = ";
+        public const string EqualsSign = "=";
+        public const string SpaceEquals = " =";
         public const string Arrow = "-> ";
         public const string Minus = "-";
         public const string Pipe = " | ";
+        public const string PipeSpace = "| ";
+        public const string EqualsSpace = "= ";
+        public const string Space = " ";
     }
 
     #endregion
@@ -106,8 +117,7 @@ public class Avh4Format
     private record FormattingContext(
         int CurrentRow,
         int CurrentColumn,
-        int IndentSpaces,
-        bool InElementContext = false)
+        int IndentSpaces)
     {
         public Location CurrentLocation() =>
             new(CurrentRow, CurrentColumn);
@@ -118,6 +128,20 @@ public class Avh4Format
                 CurrentRow = CurrentRow + 1,
                 CurrentColumn = 1
             };
+
+        /// <summary>
+        /// Advances to the next row and stays at the current indent column.
+        /// Equivalent to NextRow().SetIndentColumn().
+        /// </summary>
+        public FormattingContext NextRowSameIndent() =>
+            NextRow().SetIndentColumn();
+
+        /// <summary>
+        /// Adds a blank line by advancing two rows.
+        /// Equivalent to NextRow().NextRow().
+        /// </summary>
+        public FormattingContext WithBlankLine() =>
+            NextRow().NextRow();
 
         public FormattingContext SetColumn(int column) =>
             this with
@@ -134,8 +158,7 @@ public class Avh4Format
         public FormattingContext Indent() =>
             this with
             {
-                IndentSpaces = IndentSpaces + Indentation.Full,
-                InElementContext = false
+                IndentSpaces = IndentSpaces + Indentation.Full
             };
 
         public FormattingContext IndentHalf() =>
@@ -147,20 +170,13 @@ public class Avh4Format
         public FormattingContext ReturnToIndent(FormattingContext prevContext) =>
             this with
             {
-                IndentSpaces = prevContext.IndentSpaces,
-                InElementContext = prevContext.InElementContext,
+                IndentSpaces = prevContext.IndentSpaces
             };
 
         public FormattingContext SetIndentColumn() =>
             this with
             {
                 CurrentColumn = 1 + IndentSpaces
-            };
-
-        public FormattingContext WithInElementContext() =>
-            this with
-            {
-                InElementContext = true
             };
 
         public int GetNextMultipleOfFourColumn()
@@ -173,46 +189,24 @@ public class Avh4Format
 
     /// <summary>
     /// Result of a formatting operation containing the formatted node, updated context,
-    /// location mappings from original to formatted positions, and accumulated comments.
+    /// and accumulated comments.
     /// This type is intended to replace tuple returns in formatting methods to eliminate mutation.
     /// </summary>
     private record FormattingResult<T>(
         T FormattedNode,
         FormattingContext Context,
-        ImmutableDictionary<Location, Location> LocationMapping,
         ImmutableList<Stil4mElmSyntax7.Node<string>> Comments)
     {
         public static FormattingResult<T> Create(
             T formattedNode,
             FormattingContext context,
             ImmutableList<Stil4mElmSyntax7.Node<string>> comments) =>
-            new(formattedNode, context, [], comments);
+            new(formattedNode, context, comments);
 
         public static FormattingResult<T> Create(
             T formattedNode,
             FormattingContext context) =>
-            new(formattedNode, context, [],
-                []);
-
-        public FormattingResult<T> WithComment(Stil4mElmSyntax7.Node<string> comment) =>
-            this with { Comments = Comments.Add(comment) };
-
-        public FormattingResult<T> WithComments(IEnumerable<Stil4mElmSyntax7.Node<string>> newComments) =>
-            this with { Comments = Comments.AddRange(newComments) };
-
-        public FormattingResult<T> WithLocationMapping(Location original, Location formatted) =>
-            this with { LocationMapping = LocationMapping.Add(original, formatted) };
-
-        public FormattingResult<TNew> Map<TNew>(System.Func<T, TNew> mapper) =>
-            new(mapper(FormattedNode), Context, LocationMapping, Comments);
-
-        public FormattingResult<T> MergeFrom<TOther>(FormattingResult<TOther> other) =>
-            this with
-            {
-                Context = other.Context,
-                LocationMapping = LocationMapping.AddRange(other.LocationMapping),
-                Comments = Comments.AddRange(other.Comments)
-            };
+            new(formattedNode, context, []);
     }
 
     #endregion
@@ -249,6 +243,23 @@ public class Avh4Format
             commentEnd.Row + 1,
             1,
             currentContext.IndentSpaces).SetIndentColumn();
+    }
+
+    /// <summary>
+    /// Formats a comment and adds it to the comments list, returning the updated context and comments.
+    /// This encapsulates the common pattern of: get location, calculate end, create formatted comment, add to list, update context.
+    /// </summary>
+    private static (FormattingContext Context, ImmutableList<Stil4mElmSyntax7.Node<string>> Comments) FormatAndAddComment(
+        Stil4mElmSyntax7.Node<string> comment,
+        FormattingContext context,
+        ImmutableList<Stil4mElmSyntax7.Node<string>> comments)
+    {
+        var commentLocation = context.CurrentLocation();
+        var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value);
+        var formattedComment = comment.WithRange(commentLocation, commentEnd);
+        var updatedComments = comments.Add(formattedComment);
+        var updatedContext = CreateContextAfterComment(context, commentEnd);
+        return (updatedContext, updatedComments);
     }
 
     /// <summary>
@@ -318,14 +329,14 @@ public class Avh4Format
 
             if (commentsAfterModuleBeforeImports.Count is not 0)
             {
-                var startContext = contextAfterModule.NextRow().NextRow();
+                var startContext = contextAfterModule.WithBlankLine();
                 (currentComments, contextBeforeImports) = FormatCommentsAtContext(
                     commentsAfterModuleBeforeImports, startContext, commentsAfterModule);
                 contextBeforeImports = contextBeforeImports.NextRow();
             }
             else
             {
-                contextBeforeImports = contextAfterModule.NextRow().NextRow();
+                contextBeforeImports = contextAfterModule.WithBlankLine();
                 currentComments = commentsAfterModule;
             }
 
@@ -366,8 +377,8 @@ public class Avh4Format
             if (commentsBefore.Count is not 0)
             {
                 var startContext = formattedImports.Any()
-                    ? contextAfterImports.NextRow().NextRow().NextRow()
-                    : contextAfterModule.NextRow().NextRow();
+                    ? contextAfterImports.WithBlankLine().NextRow()
+                    : contextAfterModule.WithBlankLine();
 
                 (commentsBeforeDecls, contextBeforeDecls) = FormatCommentsAtContext(
                     commentsBefore, startContext, commentsAfterImports, addBlankLinesAfterNonDocComments: true);
@@ -375,8 +386,8 @@ public class Avh4Format
             else
             {
                 contextBeforeDecls = formattedImports.Any()
-                    ? contextAfterImports.NextRow().NextRow()
-                    : contextAfterModule.NextRow().NextRow().NextRow();
+                    ? contextAfterImports.WithBlankLine()
+                    : contextAfterModule.WithBlankLine().NextRow();
             }
 
             // Format declarations
@@ -403,31 +414,46 @@ public class Avh4Format
 
             foreach (var comment in comments)
             {
-                var commentLocation = currentContext.CurrentLocation();
-                var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value);
-                var formattedComment = comment.WithRange(commentLocation, commentEnd);
-                currentComments = currentComments.Add(formattedComment);
-                currentContext = CreateContextAfterComment(currentContext, commentEnd);
+                (currentContext, currentComments) = FormatAndAddComment(comment, currentContext, currentComments);
 
                 if (addBlankLinesAfterNonDocComments && !IsDocComment(comment.Value))
                 {
-                    currentContext = currentContext.NextRow().NextRow();
+                    currentContext = currentContext.WithBlankLine();
                 }
             }
 
             return (currentComments, currentContext);
         }
 
+        /// <summary>
+        /// Get comments between two row numbers (exclusive on both ends).
+        /// </summary>
         private IReadOnlyList<Stil4mElmSyntax7.Node<string>> GetCommentsBetweenRows(int afterRow, int beforeRow) =>
             [.. originalComments
                 .Where(c => c.Range.Start.Row > afterRow && c.Range.End.Row < beforeRow)
                 .OrderBy(c => c.Range.Start.Row)];
 
+        /// <summary>
+        /// Get comments that start after the end of one range and before the start of another range.
+        /// </summary>
+        private IReadOnlyList<Stil4mElmSyntax7.Node<string>> GetCommentsBetweenRanges(Range after, Range before) =>
+            [.. originalComments
+                .Where(c => c.Range.Start.Row > after.End.Row && c.Range.Start.Row < before.Start.Row)
+                .OrderBy(c => c.Range.Start.Row)];
+
+        /// <summary>
+        /// Get a trailing comment on the same row as the element, after the element ends.
+        /// </summary>
+        private Stil4mElmSyntax7.Node<string>? GetTrailingComment(Range elementRange) =>
+            originalComments
+                .FirstOrDefault(c => c.Range.Start.Row == elementRange.Start.Row &&
+                                     c.Range.Start.Column > elementRange.End.Column);
+
         #endregion
 
         #region Module Formatting
 
-        private (Stil4mElmSyntax7.Node<Module>, FormattingContext, ImmutableList<Stil4mElmSyntax7.Node<string>>) FormatModuleDefinition(
+        private static (Stil4mElmSyntax7.Node<Module>, FormattingContext, ImmutableList<Stil4mElmSyntax7.Node<string>>) FormatModuleDefinition(
             Stil4mElmSyntax7.Node<Module> module,
             FormattingContext context,
             ImmutableList<Stil4mElmSyntax7.Node<string>> formattedComments)
@@ -451,7 +477,7 @@ public class Avh4Format
             return (result.Item1, result.Item2, formattedComments);
         }
 
-        private (Stil4mElmSyntax7.Node<Module>, FormattingContext) FormatNormalModule(
+        private static (Stil4mElmSyntax7.Node<Module>, FormattingContext) FormatNormalModule(
             Module.NormalModule module,
             FormattingContext context)
         {
@@ -460,7 +486,7 @@ public class Avh4Format
             var afterModuleKeyword = context.Advance(Keywords.Module.Length);
 
             var moduleName = string.Join(".", module.ModuleData.ModuleName.Value);
-            var afterModuleName = afterModuleKeyword.Advance(moduleName.Length + 1);
+            var afterModuleName = afterModuleKeyword.Advance(moduleName.Length + Keywords.Space.Length);
 
             var exposingTokenLoc = afterModuleName.CurrentLocation();
             var (formattedExposing, contextAfterExposing) = FormatExposing(module.ModuleData.ExposingList, afterModuleName);
@@ -477,17 +503,17 @@ public class Avh4Format
             return (new Stil4mElmSyntax7.Node<Module>(range, new Module.NormalModule(moduleTokenLoc, formattedModuleData)), contextAfterExposing);
         }
 
-        private (Stil4mElmSyntax7.Node<Module>, FormattingContext) FormatPortModule(
+        private static (Stil4mElmSyntax7.Node<Module>, FormattingContext) FormatPortModule(
             Module.PortModule module,
             FormattingContext context)
         {
             var portTokenLoc = context.CurrentLocation();
-            var afterPort = context.Advance(5); // "port "
+            var afterPort = context.Advance(Keywords.Port.Length);
             var moduleTokenLoc = afterPort.CurrentLocation();
-            var afterModuleKeyword = afterPort.Advance(7); // "module "
+            var afterModuleKeyword = afterPort.Advance(Keywords.Module.Length);
 
             var moduleName = string.Join(".", module.ModuleData.ModuleName.Value);
-            var afterModuleName = afterModuleKeyword.Advance(moduleName.Length + 1);
+            var afterModuleName = afterModuleKeyword.Advance(moduleName.Length + Keywords.Space.Length);
 
             var exposingTokenLoc = afterModuleName.CurrentLocation();
             var (formattedExposing, contextAfterExposing) =
@@ -505,17 +531,17 @@ public class Avh4Format
             return (new Stil4mElmSyntax7.Node<Module>(range, new Module.PortModule(portTokenLoc, moduleTokenLoc, formattedModuleData)), contextAfterExposing);
         }
 
-        private (Stil4mElmSyntax7.Node<Module>, FormattingContext) FormatEffectModule(
+        private static (Stil4mElmSyntax7.Node<Module>, FormattingContext) FormatEffectModule(
             Module.EffectModule module,
             FormattingContext context)
         {
             var effectTokenLoc = context.CurrentLocation();
-            var afterEffect = context.Advance(7); // "effect "
+            var afterEffect = context.Advance(Keywords.Effect.Length);
             var moduleTokenLoc = afterEffect.CurrentLocation();
-            var afterModuleKeyword = afterEffect.Advance(7); // "module "
+            var afterModuleKeyword = afterEffect.Advance(Keywords.Module.Length);
 
             var moduleName = string.Join(".", module.ModuleData.ModuleName.Value);
-            var afterModuleName = afterModuleKeyword.Advance(moduleName.Length + 1);
+            var afterModuleName = afterModuleKeyword.Advance(moduleName.Length + Keywords.Space.Length);
 
             var exposingTokenLoc = afterModuleName.CurrentLocation();
             var (formattedExposing, contextAfterExposing) =
@@ -535,7 +561,7 @@ public class Avh4Format
             return (new Stil4mElmSyntax7.Node<Module>(range, new Module.EffectModule(effectTokenLoc, moduleTokenLoc, formattedModuleData)), contextAfterExposing);
         }
 
-        private (Stil4mElmSyntax7.Node<Exposing>, FormattingContext) FormatExposing(
+        private static (Stil4mElmSyntax7.Node<Exposing>, FormattingContext) FormatExposing(
             Stil4mElmSyntax7.Node<Exposing> exposing,
             FormattingContext context)
         {
@@ -601,13 +627,13 @@ public class Avh4Format
 
                 for (var i = 1; i < explicitList.Nodes.Count; i++)
                 {
-                    var afterComma = itemContext.Advance(2);
+                    var afterComma = itemContext.Advance(Keywords.Comma.Length);
                     var (formattedNode, nextContext) = FormatTopLevelExpose(explicitList.Nodes[i], afterComma);
                     formattedNodes.Add(formattedNode);
                     itemContext = nextContext.NextRow().SetIndentColumn();
                 }
 
-                var afterCloseParen = itemContext.Advance(1);
+                var afterCloseParen = itemContext.Advance(Keywords.CloseParen.Length);
                 var finalContext = afterCloseParen.ReturnToIndent(parentContext);
                 var range = MakeRange(context.CurrentLocation(), finalContext.CurrentLocation());
                 return (new Stil4mElmSyntax7.Node<Exposing>(range, new Exposing.Explicit(formattedNodes)), finalContext);
@@ -649,16 +675,15 @@ public class Avh4Format
         {
             var exposeName = GetTopLevelExposeName(node.Value);
             var afterExpose = context.Advance(exposeName.Length);
-            var range = MakeRange(context.CurrentLocation(), afterExpose.CurrentLocation());
 
-            return (new Stil4mElmSyntax7.Node<TopLevelExpose>(range, node.Value), afterExpose);
+            return (MakeNodeWithRange(context.CurrentLocation(), afterExpose.CurrentLocation(), node.Value), afterExpose);
         }
 
         #endregion
 
         #region Import Formatting
 
-        private (IReadOnlyList<Stil4mElmSyntax7.Node<Import>>, FormattingContext, ImmutableList<Stil4mElmSyntax7.Node<string>>) FormatImports(
+        private static (IReadOnlyList<Stil4mElmSyntax7.Node<Import>>, FormattingContext, ImmutableList<Stil4mElmSyntax7.Node<string>>) FormatImports(
             IReadOnlyList<Stil4mElmSyntax7.Node<Import>> imports,
             FormattingContext context,
             ImmutableList<Stil4mElmSyntax7.Node<string>> formattedComments)
@@ -699,22 +724,22 @@ public class Avh4Format
             (Location AsTokenLocation, Stil4mElmSyntax7.Node<IReadOnlyList<string>> Alias)? moduleAlias = null;
             if (import.Value.ModuleAlias is { } alias)
             {
-                // Advance 1 for space before "as"
-                var afterSpace = currentContext.Advance(1);
+                // Advance for space before "as"
+                var afterSpace = currentContext.Advance(Keywords.Space.Length);
                 var asTokenLoc = afterSpace.CurrentLocation();
                 // Advance past "as " (3 chars: "as" + space after)
-                currentContext = afterSpace.Advance(3);
+                currentContext = afterSpace.Advance(Keywords.AsSpace.Length);
                 var aliasName = string.Join(".", alias.Alias.Value);
-                var aliasRange = MakeRange(currentContext.CurrentLocation(), currentContext.Advance(aliasName.Length).CurrentLocation());
+                var aliasStartLoc = currentContext.CurrentLocation();
                 currentContext = currentContext.Advance(aliasName.Length);
-                moduleAlias = (asTokenLoc, new Stil4mElmSyntax7.Node<IReadOnlyList<string>>(aliasRange, alias.Alias.Value));
+                moduleAlias = (asTokenLoc, MakeNodeWithRange(aliasStartLoc, currentContext.CurrentLocation(), alias.Alias.Value));
             }
 
             (Location ExposingTokenLocation, Stil4mElmSyntax7.Node<Exposing> ExposingList)? exposingList = null;
             if (import.Value.ExposingList is { } exposing)
             {
-                var exposingTokenLoc = currentContext.Advance(1).CurrentLocation(); // space before exposing
-                currentContext = currentContext.Advance(10); // " exposing "
+                var exposingTokenLoc = currentContext.Advance(Keywords.Space.Length).CurrentLocation(); // space before exposing
+                currentContext = currentContext.Advance(Keywords.SpaceExposingSpace.Length);
                 var exposingTextLength = exposing.ExposingList.Range.End.Column - exposing.ExposingList.Range.Start.Column;
                 currentContext = currentContext.Advance(exposingTextLength);
                 exposingList = (exposingTokenLoc, exposing.ExposingList);
@@ -774,23 +799,19 @@ public class Avh4Format
                     }
                     else if (commentsBetween.Count is not 0)
                     {
-                        currentContext = nextContext.NextRow().NextRow().NextRow();
+                        currentContext = nextContext.WithBlankLine().NextRow();
                         foreach (var comment in commentsBetween)
                         {
-                            var commentLocation = currentContext.CurrentLocation();
-                            var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value);
-                            var formattedComment = comment.WithRange(commentLocation, commentEnd);
-                            currentComments = currentComments.Add(formattedComment);
-                            currentContext = CreateContextAfterComment(currentContext, commentEnd);
+                            (currentContext, currentComments) = FormatAndAddComment(comment, currentContext, currentComments);
                             if (!IsDocComment(comment.Value))
                             {
-                                currentContext = currentContext.NextRow().NextRow();
+                                currentContext = currentContext.WithBlankLine();
                             }
                         }
                     }
                     else
                     {
-                        currentContext = nextContext.NextRow().NextRow().NextRow();
+                        currentContext = nextContext.WithBlankLine().NextRow();
                     }
                 }
                 else
@@ -826,7 +847,8 @@ public class Avh4Format
 
                 _ =>
                 throw new System.NotImplementedException(
-                    $"Formatting for declaration type '{decl.Value.GetType().Name}' is not implemented.")
+                    $"Formatting for declaration type '{decl.Value.GetType().Name}' is not implemented " +
+                    $"at row {decl.Range.Start.Row}, column {decl.Range.Start.Column}.")
             };
         }
 
@@ -842,11 +864,7 @@ public class Avh4Format
             // Format documentation comment if present
             if (funcDecl.Function.Documentation is { } docComment)
             {
-                var docCommentLocation = currentContext.CurrentLocation();
-                var docCommentEnd = CalculateCommentEndLocation(docCommentLocation, docComment.Value);
-                var formattedDocComment = docComment.WithRange(docCommentLocation, docCommentEnd);
-                currentComments = currentComments.Add(formattedDocComment);
-                currentContext = CreateContextAfterComment(currentContext, docCommentEnd);
+                (currentContext, currentComments) = FormatAndAddComment(docComment, currentContext, currentComments);
             }
 
             // Format signature if present
@@ -974,17 +992,13 @@ public class Avh4Format
 
             if (aliasDecl.TypeAlias.Documentation is { } docComment)
             {
-                var docCommentLocation = startContext.CurrentLocation();
-                var docCommentEnd = CalculateCommentEndLocation(docCommentLocation, docComment.Value);
-                var formattedDocComment = docComment.WithRange(docCommentLocation, docCommentEnd);
-                currentComments = currentComments.Add(formattedDocComment);
-                startContext = CreateContextAfterComment(startContext, docCommentEnd);
+                (startContext, currentComments) = FormatAndAddComment(docComment, startContext, currentComments);
             }
 
             var typeTokenLoc = startContext.CurrentLocation();
-            var afterType = startContext.Advance(5); // "type "
+            var afterType = startContext.Advance(Keywords.Type.Length);
             var aliasTokenLoc = afterType.CurrentLocation();
-            var afterTypeAlias = afterType.Advance(6); // "alias "
+            var afterTypeAlias = afterType.Advance(Keywords.Alias.Length);
 
             var aliasName = aliasDecl.TypeAlias.Name.Value;
             var afterName = afterTypeAlias.Advance(aliasName.Length);
@@ -992,20 +1006,21 @@ public class Avh4Format
             var currentContext = afterName;
             foreach (var generic in aliasDecl.TypeAlias.Generics)
             {
-                currentContext = currentContext.Advance(1);
+                currentContext = currentContext.Advance(Keywords.Space.Length);
                 currentContext = currentContext.Advance(generic.Value.Length);
             }
 
             // " =" space before equals
-            var afterNameSpace = currentContext.Advance(1);
+            var afterNameSpace = currentContext.Advance(Keywords.Space.Length);
             var equalsLoc = afterNameSpace.CurrentLocation();
-            var afterEquals = afterNameSpace.Advance(1); // just "="
+            var afterEquals = afterNameSpace.Advance(Keywords.EqualsSign.Length); // just "="
 
             var parentContext = afterEquals.NextRow();
             var typeContext = parentContext.Indent().SetIndentColumn();
 
             // Format the type annotation with proper locations
-            var (formattedTypeAnnotation, afterTypeAnnot, typeAnnotComments) = FormatTypeAnnotation(aliasDecl.TypeAlias.TypeAnnotation, typeContext);
+            var (formattedTypeAnnotation, afterTypeAnnot, typeAnnotComments) =
+                FormatTypeAnnotation(aliasDecl.TypeAlias.TypeAnnotation, typeContext);
 
             // Add any comments collected during type annotation formatting
             currentComments = currentComments.AddRange(typeAnnotComments);
@@ -1038,15 +1053,11 @@ public class Avh4Format
 
             if (customTypeDecl.TypeDeclaration.Documentation is { } docComment)
             {
-                var docCommentLocation = startContext.CurrentLocation();
-                var docCommentEnd = CalculateCommentEndLocation(docCommentLocation, docComment.Value);
-                var formattedDocComment = docComment.WithRange(docCommentLocation, docCommentEnd);
-                currentComments = currentComments.Add(formattedDocComment);
-                startContext = CreateContextAfterComment(startContext, docCommentEnd);
+                (startContext, currentComments) = FormatAndAddComment(docComment, startContext, currentComments);
             }
 
             var typeTokenLoc = startContext.CurrentLocation();
-            var afterType = startContext.Advance(5); // "type "
+            var afterType = startContext.Advance(Keywords.Type.Length);
 
             var typeName = customTypeDecl.TypeDeclaration.Name.Value;
             var afterName = afterType.Advance(typeName.Length);
@@ -1055,7 +1066,7 @@ public class Avh4Format
             var formattedGenerics = new List<Stil4mElmSyntax7.Node<string>>();
             foreach (var generic in customTypeDecl.TypeDeclaration.Generics)
             {
-                currentContext = currentContext.Advance(1); // space
+                currentContext = currentContext.Advance(Keywords.Space.Length);
                 var genericLoc = currentContext.CurrentLocation();
                 currentContext = currentContext.Advance(generic.Value.Length);
                 formattedGenerics.Add(MakeNodeWithRange(genericLoc, currentContext.CurrentLocation(), generic.Value));
@@ -1065,7 +1076,7 @@ public class Avh4Format
             var constructorIndentContext = currentContext.NextRow().Indent().SetIndentColumn();
 
             var equalsLoc = constructorIndentContext.CurrentLocation();
-            var afterEquals = constructorIndentContext.Advance(2); // "= "
+            var afterEquals = constructorIndentContext.Advance(Keywords.EqualsSpace.Length);
 
             // Format constructors
             var formattedConstructors = new List<(Location? PipeLocation, Stil4mElmSyntax7.Node<ValueConstructor> Constructor)>();
@@ -1080,11 +1091,7 @@ public class Avh4Format
                 {
                     // Check for comments between this and previous constructor
                     var prevConstructor = customTypeDecl.TypeDeclaration.Constructors[i - 1].Constructor;
-                    var commentsBetweenConstructors = originalComments
-                        .Where(c => c.Range.Start.Row > prevConstructor.Range.End.Row &&
-                                    c.Range.Start.Row < constructor.Range.Start.Row)
-                        .OrderBy(c => c.Range.Start.Row)
-                        .ToList();
+                    var commentsBetweenConstructors = GetCommentsBetweenRanges(prevConstructor.Range, constructor.Range).ToList();
 
                     if (commentsBetweenConstructors.Count is not 0)
                     {
@@ -1298,8 +1305,7 @@ public class Avh4Format
         {
             var startLoc = context.CurrentLocation();
             var (formattedValue, afterType, comments) = FormatTypeAnnotationValue(typeAnnot.Value, context, arrowBaseColumn);
-            var range = MakeRange(startLoc, afterType.CurrentLocation());
-            return (new Stil4mElmSyntax7.Node<TypeAnnotation>(range, formattedValue), afterType, comments);
+            return (MakeNodeWithRange(startLoc, afterType.CurrentLocation(), formattedValue), afterType, comments);
         }
 
         private (TypeAnnotation, FormattingContext, ImmutableList<Stil4mElmSyntax7.Node<string>>) FormatTypeAnnotationValue(
@@ -1374,19 +1380,8 @@ public class Avh4Format
                         var openParenLoc = context.CurrentLocation();
                         var collectedComments = emptyComments;
 
-                        // Detect if tuple should be multiline based on original layout
-                        var isMultilineTuple = false;
-                        if (tupledElements.Count >= 2)
-                        {
-                            var firstRow = tupledElements[0].Range.Start.Row;
-                            isMultilineTuple = tupledElements.Any(e => e.Range.Start.Row != firstRow);
-                        }
-
-                        // Also check if closing paren is on a different row
-                        if (!isMultilineTuple && tupledElements.Count > 0)
-                        {
-                            isMultilineTuple = tupled.CloseParenLocation.Row > tupledElements[0].Range.Start.Row;
-                        }
+                        // Detect if tuple should be multiline based on the containing node's start and end locations
+                        var isMultilineTuple = tupled.CloseParenLocation.Row > tupled.OpenParenLocation.Row;
 
                         if (isMultilineTuple)
                         {
@@ -1473,7 +1468,10 @@ public class Avh4Format
                                 {
                                     tupledCtx = tupledCtx.Advance(2); // ", "
                                 }
-                                var (formattedElem, afterElem, elemComments) = FormatTypeAnnotation(tupledElements[i], tupledCtx);
+
+                                var (formattedElem, afterElem, elemComments) =
+                                    FormatTypeAnnotation(tupledElements[i], tupledCtx);
+
                                 formattedTupled.Add(formattedElem);
                                 tupledCtx = afterElem;
                                 collectedComments = collectedComments.AddRange(elemComments);
@@ -1548,19 +1546,8 @@ public class Avh4Format
                         var recordFields = Stil4mElmSyntax7.FromStil4mConcretized.ToList(record.RecordDefinition.Fields);
                         var collectedComments = emptyComments;
 
-                        // Detect if record should be multiline based on original layout
-                        var isMultilineRecord = false;
-                        if (recordFields.Count >= 2)
-                        {
-                            var firstRow = recordFields[0].Range.Start.Row;
-                            isMultilineRecord = recordFields.Any(f => f.Range.Start.Row != firstRow);
-                        }
-
-                        // Also check if closing brace is on a different row (indicates multiline)
-                        if (!isMultilineRecord && recordFields.Count > 0)
-                        {
-                            isMultilineRecord = record.CloseBraceLocation.Row > recordFields[0].Range.Start.Row;
-                        }
+                        // Detect if record should be multiline based on the containing node's start and end locations
+                        var isMultilineRecord = record.CloseBraceLocation.Row > record.OpenBraceLocation.Row;
 
                         var recordOpenBraceLoc = context.CurrentLocation();
 
@@ -1809,11 +1796,9 @@ public class Avh4Format
         {
             var startLoc = context.CurrentLocation();
             var result = FormatExpressionValue(expr.Value, expr.Range, context, comments);
-            var range = MakeRange(startLoc, result.Context.CurrentLocation());
             return new FormattingResult<Stil4mElmSyntax7.Node<Expression>>(
-                new Stil4mElmSyntax7.Node<Expression>(range, result.FormattedNode),
+                MakeNodeWithRange(startLoc, result.Context.CurrentLocation(), result.FormattedNode),
                 result.Context,
-                result.LocationMapping,
                 result.Comments);
         }
 
@@ -1882,17 +1867,13 @@ public class Avh4Format
                         return new FormattingResult<Expression>(
                             new Expression.Negation(negResult.FormattedNode),
                             negResult.Context,
-                            negResult.LocationMapping,
                             negResult.Comments);
                     }
 
                 case Expression.Application app:
                     {
-                        // Check if application spans multiple lines in original
-                        // This includes: multiple arguments on different rows, OR any single argument spanning multiple rows
-                        var isMultiline = app.Arguments.Count >= 1 && (
-                            (app.Arguments.Count >= 2 && app.Arguments.Any(arg => arg.Range.Start.Row != app.Arguments[0].Range.Start.Row)) ||
-                            app.Arguments.Any(arg => arg.Range.End.Row > arg.Range.Start.Row));
+                        // Check if application spans multiple lines based on the containing node's range only
+                        var isMultiline = SpansMultipleRows(originalRange);
 
                         var formattedArgs = new List<Stil4mElmSyntax7.Node<Expression>>();
                         var appCtx = context;
@@ -1950,10 +1931,8 @@ public class Avh4Format
                                 afterOpenBrace.Advance(1), comments); // "}"
                         }
 
-                        // Check if record should be multiline based on field row positions OR original range spanning multiple rows
-                        var isMultilineRecord =
-                            (recordFields.Count >= 2 && recordFields.Any(f => f.FieldName.Range.Start.Row != recordFields[0].FieldName.Range.Start.Row)) ||
-                            originalRange.End.Row > originalRange.Start.Row;
+                        // Check if record should be multiline based on the containing node's range only
+                        var isMultilineRecord = SpansMultipleRows(originalRange);
 
                         if (isMultilineRecord)
                         {
@@ -2110,7 +2089,7 @@ public class Avh4Format
                         // Check if list should be multiline based on the container range only.
                         // The AVH4 formatter should preserve the multiline structure if:
                         // - The container range spans multiple rows (start row != end row)
-                        var isMultilineList = originalRange.End.Row > originalRange.Start.Row;
+                        var isMultilineList = SpansMultipleRows(originalRange);
 
                         if (isMultilineList)
                         {
@@ -2157,9 +2136,7 @@ public class Avh4Format
                             var elemCtx = firstElemResult.Context;
 
                             // Check for trailing comment on the same row as the first element
-                            var firstElemTrailingComment = originalComments
-                                .FirstOrDefault(c => c.Range.Start.Row == elements[0].Range.Start.Row &&
-                                                     c.Range.Start.Column > elements[0].Range.End.Column);
+                            var firstElemTrailingComment = GetTrailingComment(elements[0].Range);
 
                             if (firstElemTrailingComment is not null)
                             {
@@ -2187,11 +2164,7 @@ public class Avh4Format
                                 // Check for comments between this and previous element
                                 var prevElem = elements[i - 1];
                                 var currElem = elements[i];
-                                var commentsBetween = originalComments
-                                    .Where(c => c.Range.Start.Row > prevElem.Range.End.Row &&
-                                                c.Range.Start.Row < currElem.Range.Start.Row)
-                                    .OrderBy(c => c.Range.Start.Row)
-                                    .ToList();
+                                var commentsBetween = GetCommentsBetweenRanges(prevElem.Range, currElem.Range).ToList();
 
                                 if (commentsBetween.Count is not 0)
                                 {
@@ -2267,9 +2240,7 @@ public class Avh4Format
                                     elemCtx = elemResult.Context;
 
                                     // Check for trailing comment on the same row as the element
-                                    var trailingComment = originalComments
-                                        .FirstOrDefault(c => c.Range.Start.Row == currElem.Range.Start.Row &&
-                                                             c.Range.Start.Column > currElem.Range.End.Column);
+                                    var trailingComment = GetTrailingComment(currElem.Range);
 
                                     if (trailingComment is not null)
                                     {
@@ -2353,7 +2324,7 @@ public class Avh4Format
 
                         return new FormattingResult<Expression>(
                             new Expression.ParenthesizedExpression(openParenLoc, innerResult.FormattedNode, closeParenLoc),
-                            afterCloseParen, [], innerResult.Comments);
+                            afterCloseParen, innerResult.Comments);
                     }
 
                 case Expression.OperatorApplication opApp:
@@ -2438,7 +2409,8 @@ public class Avh4Format
 
                 default:
                     throw new System.NotImplementedException(
-                        $"Expression formatting not implemented for: {expr.GetType().Name}");
+                        $"Expression formatting not implemented for: {expr.GetType().Name} " +
+                        $"at row {originalRange.Start.Row}, column {originalRange.Start.Column}");
             }
         }
 
@@ -2453,7 +2425,7 @@ public class Avh4Format
             var currentComments = comments;
 
             // Check if condition is multiline based on original layout
-            var conditionIsMultiline = ifBlock.Condition.Range.End.Row > ifBlock.Condition.Range.Start.Row ||
+            var conditionIsMultiline = SpansMultipleRows(ifBlock.Condition.Range) ||
                                        ifBlock.ThenTokenLocation.Row > ifBlock.Condition.Range.Start.Row;
 
             // "if" or "if "
@@ -2584,7 +2556,7 @@ public class Avh4Format
 
             // Empty line before else - align with the base column
             // Reset IndentSpaces to the original context value for the else continuation
-            var elseContext = thenResult.Context.NextRow().NextRow().SetColumn(effectiveBaseColumn)
+            var elseContext = thenResult.Context.WithBlankLine().SetColumn(effectiveBaseColumn)
                 with
             { IndentSpaces = context.IndentSpaces };
 
@@ -2601,7 +2573,7 @@ public class Avh4Format
                 var innerIfTokenLoc = afterElse.CurrentLocation();
 
                 // Check if inner condition is multiline
-                var innerConditionIsMultiline = innerIfBlock.Condition.Range.End.Row > innerIfBlock.Condition.Range.Start.Row ||
+                var innerConditionIsMultiline = SpansMultipleRows(innerIfBlock.Condition.Range) ||
                                                 innerIfBlock.ThenTokenLocation.Row > innerIfBlock.Condition.Range.Start.Row;
 
                 FormattingResult<Stil4mElmSyntax7.Node<Expression>> innerConditionResult;
@@ -2719,7 +2691,7 @@ public class Avh4Format
 
                 // Inner else - recurse for the rest of the chain - align with base column
                 // Reset IndentSpaces to the original context value for the else/chain continuation
-                var innerElseContext = innerThenResult.Context.NextRow().NextRow().SetColumn(effectiveBaseColumn)
+                var innerElseContext = innerThenResult.Context.WithBlankLine().SetColumn(effectiveBaseColumn)
                     with
                 { IndentSpaces = context.IndentSpaces };
                 var innerElseTokenLoc = innerElseContext.CurrentLocation();
@@ -2921,11 +2893,7 @@ public class Avh4Format
                 var caseExprContext = afterArrow.NextRow().Indent().SetIndentColumn();
 
                 // Check for comments before the case expression
-                var commentsBeforeExpr = originalComments
-                    .Where(c => c.Range.Start.Row > caseItem.Pattern.Range.End.Row &&
-                                c.Range.Start.Row < caseItem.Expression.Range.Start.Row)
-                    .OrderBy(c => c.Range.Start.Row)
-                    .ToList();
+                var commentsBeforeExpr = GetCommentsBetweenRanges(caseItem.Pattern.Range, caseItem.Expression.Range).ToList();
 
                 foreach (var comment in commentsBeforeExpr)
                 {
@@ -3140,7 +3108,8 @@ public class Avh4Format
 
                 default:
                     throw new System.NotImplementedException(
-                        $"LetDeclaration formatting not implemented for: {letDecl.Value.GetType().Name}");
+                        $"LetDeclaration formatting not implemented for: {letDecl.Value.GetType().Name} " +
+                        $"at row {letDecl.Range.Start.Row}, column {letDecl.Range.Start.Column}");
             }
         }
 
@@ -3217,9 +3186,8 @@ public class Avh4Format
             var elements = Stil4mElmSyntax7.FromStil4mConcretized.ToList(tupledExpr.Elements);
             var currentComments = comments;
 
-            // Check if tuple should be multiline based on element row positions
-            var isMultiline = elements.Count >= 2 &&
-                elements.Any(elem => elem.Range.Start.Row != elements[0].Range.Start.Row);
+            // Check if tuple should be multiline based on the containing node's start and end locations
+            var isMultiline = tupledExpr.CloseParenLocation.Row > tupledExpr.OpenParenLocation.Row;
 
             var openParenLoc = context.CurrentLocation();
 
@@ -3305,16 +3273,8 @@ public class Avh4Format
             var fields = Stil4mElmSyntax7.FromStil4mConcretized.ToList(recordUpdate.Fields);
             var currentComments = comments;
 
-            // Detect if record update should be multiline based on original layout
-            var isMultiline = fields.Count >= 1 &&
-                (recordUpdate.PipeLocation.Row > recordUpdate.RecordName.Range.Start.Row ||
-                 fields.Any(f => f.FieldName.Range.Start.Row != fields[0].FieldName.Range.Start.Row));
-
-            // Also check if closing brace is on a different row (use originalRange.End for closing brace position)
-            if (!isMultiline && fields.Count > 0)
-            {
-                isMultiline = originalRange.End.Row > fields[0].FieldName.Range.Start.Row;
-            }
+            // Detect if record update should be multiline based on the containing node's range only
+            var isMultiline = SpansMultipleRows(originalRange);
 
             // "{ "
             var afterOpenBrace = context.Advance(2);
