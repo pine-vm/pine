@@ -1063,6 +1063,196 @@ public class FormatCompleteTests
     }
 
     [Fact]
+    public void Roundtrip_nested_infix_operators_multiline()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl a b c =
+                a
+                    + b
+                    * c
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
+    public void Roundtrip_function_application_with_first_arg_on_first_line()
+    {
+        /*
+         * Rule of avh4/elm-format:
+         * Even if the overall application expression is multi-line,
+         * the first argument is allowed to stay on the same line as the function name.
+         * */
+
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl a b c d =
+                a b
+                    c
+                    d
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
+    public void Roundtrip_type_annotation_arrow_on_own_line()
+    {
+        /*
+         * Rule of avh4/elm-format:
+         * When the -> operator is on its own line in a function type annotation,
+         * the result type should also go on a new line with additional indentation.
+         * */
+
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            func :
+                ArgType
+                ->
+                    Result
+                        ErrorType
+                        OkType
+            func =
+                Debug.todo ""
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
+    public void Roundtrip_import_ordering_case_sensitive()
+    {
+        /*
+         * Rule of avh4/elm-format:
+         * Imports are sorted using case-sensitive (ordinal) string comparison.
+         * FNV should come before File because 'N' (ASCII 78) < 'i' (ASCII 105).
+         * */
+
+        var input =
+            """"
+            module Test exposing (..)
+
+            import FNVModule
+            import FileModule
+
+
+            decl =
+                0
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
+    public void Roundtrip_application_argument_with_hex_in_parens()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                modBy 0x0100 (charCode // 0x0100)
+
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
+    public void Roundtrip_joining_strings_containing_escaped_chars_on_single_line()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                "\n" ++ string
+
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
+    public void Roundtrip_lambda_with_comment_multi_line_at_root()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                \c ->
+                    {- some comment
+                    -}
+                    [ c ]
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
+    public void Roundtrip_module_doc_comment()
+    {
+        /*
+         * Rule of avh4/elm-format:
+         * A doc comment following the module declaration should stay attached to the module,
+         * instead of attaching to the following declaration.
+         * */
+
+        var input =
+            """"
+            module Frontend.MonacoEditor exposing (..)
+
+            {-| Types for exchanging messages with the JavaScript wrapping the Monaco Editor.
+            -}
+
+
+            type MessageToEditor
+                = OpenDocumentEvent OpenDocumentEventStruct
+
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
+    public void Roundtrip_multiline_record_type_annotation_on_let_declaration()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                let
+                    innerDecl :
+                        { a : String
+                        , b : Int
+                        }
+                    innerDecl =
+                        other
+                in
+                71
+
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
     public void Stable_configurations_units()
     {
         /*
@@ -2544,6 +2734,14 @@ public class FormatCompleteTests
                     "Failed for test case source: " + sourceDirectory, e);
             }
         }
+    }
+
+    private static void AssertModuleTextFormatsToItself(
+        string elmModuleText)
+    {
+        var formatted = FormatString(elmModuleText);
+
+        formatted.Trim().Should().Be(elmModuleText.Trim());
     }
 
     private static void AssertSyntaxNodesValueEqualityForModuleText(
