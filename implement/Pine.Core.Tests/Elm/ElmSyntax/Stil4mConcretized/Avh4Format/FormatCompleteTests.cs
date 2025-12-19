@@ -2,6 +2,8 @@ using AwesomeAssertions;
 using Pine.Core.Elm.ElmSyntax;
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
+using System.Linq;
 using Xunit;
 
 namespace Pine.Core.Tests.Elm.ElmSyntax.Stil4mConcretized.Avh4Format;
@@ -2475,6 +2477,71 @@ public class FormatCompleteTests
             catch (Exception ex)
             {
                 throw new Exception($"Failed in test case index: {i}", ex);
+            }
+        }
+    }
+
+    [Fact(Skip = "Fix formatter egde cases before enabling regression tests")]
+    public async System.Threading.Tasks.Task Stable_configurations_from_remote_repositories()
+    {
+        IReadOnlyList<string> testCasesSourceDirectories =
+            [
+            "https://github.com/pine-vm/pine/tree/64f5258d6f110737df6f3c5aea83f118552803cb/implement/pine/Elm/elm-compiler/src",
+            // "https://github.com/pine-vm/pine/tree/64f5258d6f110737df6f3c5aea83f118552803cb/implement/example-apps",
+            "https://github.com/guida-lang/compiler/tree/8af68e3c4124f52a60ceb4b66193cc5b46962562/src",
+            "https://github.com/Viir/bots/tree/977a1a6c63add836f979aa993ca7b6d844e3f969/implement",
+            ];
+
+        static bool AssumeIsElmModuleFile(
+            IReadOnlyList<string> filePath)
+        {
+            var lastSegment = filePath[filePath.Count - 1];
+
+            return lastSegment.EndsWith(".elm", StringComparison.OrdinalIgnoreCase);
+        }
+
+        foreach (var sourceDirectory in testCasesSourceDirectories)
+        {
+            try
+            {
+                var sourceFiles =
+                    await GitCore.LoadFromUrl.LoadTreeContentsFromUrlAsync(sourceDirectory);
+
+                var elmModuleFiles =
+                    sourceFiles
+                    .Where(filePathAndContent => AssumeIsElmModuleFile(filePathAndContent.Key))
+                    .ToImmutableArray();
+
+                Console.WriteLine(
+                    "Found Elm module files from source directory: " +
+                    sourceDirectory +
+                    " (" +
+                    elmModuleFiles.Length +
+                    " .elm files)");
+
+                foreach (var elmModuleFile in elmModuleFiles)
+                {
+                    try
+                    {
+                        var elmModuleText =
+                            System.Text.Encoding.UTF8.GetString(elmModuleFile.Value.Span);
+
+                        var formatted = FormatString(elmModuleText);
+
+                        formatted.Trim().Should().Be(elmModuleText.Trim());
+                    }
+                    catch (Exception exFile)
+                    {
+                        throw new Exception(
+                            "Failed in test case file: " + string.Join("/", elmModuleFile.Key) +
+                            " from source directory: " + sourceDirectory, exFile);
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                throw new Exception(
+                    "Failed for test case source: " + sourceDirectory, e);
             }
         }
     }
