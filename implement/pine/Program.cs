@@ -780,7 +780,7 @@ public class Program
                 fromErr:
                 err =>
                 {
-                    console.WriteLine("Failed to list functions at " + site + ": " + err, Pine.IConsole.TextColor.Red);
+                    console.WriteLine("Failed to list functions at " + site + ": " + err, IConsole.TextColor.Red);
 
                     return 2;
                 },
@@ -2661,7 +2661,7 @@ public class Program
                             "Failed to load from " + failedLoad.Key + ":",
                             string.Join("\n", failedLoad.Value.log),
                             failedLoad.Value.result.Unpack(fromErr: error => error, fromOk: _ => throw new NotImplementedException())),
-                    color: Pine.IConsole.TextColor.Red);
+                    color: IConsole.TextColor.Red);
 
                 return 1;
             }
@@ -3092,7 +3092,7 @@ public class Program
         return (compositionId, summary: new SourceSummaryStructure
         (
             numberOfFiles: allBlobs.Count,
-            totalSizeOfFilesContents: allBlobs.Select(blob => blob.fileContent.Length).Sum()
+            totalSizeOfFilesContents: allBlobs.Sum(blob => blob.fileContent.Length)
         ));
     }
 

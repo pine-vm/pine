@@ -178,8 +178,7 @@ public record CompiledExpression(
         {
             var matchingBinding =
                 availableBindings
-                .Where(binding => binding.Value.DeclarationName == identiferName.Identifier.ValueText)
-                .FirstOrDefault();
+                .FirstOrDefault(binding => binding.Value.DeclarationName == identiferName.Identifier.ValueText);
 
             if (matchingBinding.Key is null)
                 continue;

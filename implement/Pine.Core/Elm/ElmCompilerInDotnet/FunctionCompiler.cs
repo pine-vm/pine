@@ -273,6 +273,6 @@ public class FunctionCompiler
             new FunctionRecord(
                 InnerFunction: Expression.LiteralInstance(value),
                 ParameterCount: 0,
-                EnvFunctions: System.ReadOnlyMemory<PineValue>.Empty,
-                ArgumentsAlreadyCollected: System.ReadOnlyMemory<PineValue>.Empty));
+                EnvFunctions: ReadOnlyMemory<PineValue>.Empty,
+                ArgumentsAlreadyCollected: ReadOnlyMemory<PineValue>.Empty));
 }

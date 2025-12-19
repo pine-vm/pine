@@ -136,8 +136,7 @@ public record StaticProgramCSharpClass(
         var hasTailRecursiveCalls =
             functionBody
             .EnumerateTailCalls()
-            .Where(funcApp => funcApp.FunctionName == selfFunctionName)
-            .Any();
+            .Any(funcApp => funcApp.FunctionName == selfFunctionName);
 
         // Build initial blocked names (parameters)
         var initialBlocked =
