@@ -1253,6 +1253,80 @@ public class FormatCompleteTests
     }
 
     [Fact]
+    public void Restores_let_declaration_from_type_annotation_broken_colon_on_new_line()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+            
+            
+            decl =
+                let
+                    inner
+            : Int
+                    inner =
+                        71
+                in
+                inner
+
+            """";
+
+        var expected =
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                let
+                    inner : Int
+                    inner =
+                        71
+                in
+                inner
+
+            """";
+
+        AssertModuleTextFormatsToExpected(input, expected);
+    }
+
+    [Fact]
+    public void Restores_let_declaration_from_type_annotation_broken_type_on_new_line()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+            
+            
+            decl =
+                let
+                    inner :
+            Int
+                    inner =
+                        71
+                in
+                inner
+
+            """";
+
+        var expected =
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                let
+                    inner : Int
+                    inner =
+                        71
+                in
+                inner
+
+            """";
+
+        AssertModuleTextFormatsToExpected(input, expected);
+    }
+
+    [Fact]
     public void Stable_configurations_units()
     {
         /*
@@ -2742,6 +2816,15 @@ public class FormatCompleteTests
         var formatted = FormatString(elmModuleText);
 
         formatted.Trim().Should().Be(elmModuleText.Trim());
+    }
+
+    private static void AssertModuleTextFormatsToExpected(
+        string elmModuleText,
+        string expectedFormattedElmModuleText)
+    {
+        var formatted = FormatString(elmModuleText);
+
+        formatted.Trim().Should().Be(expectedFormattedElmModuleText.Trim());
     }
 
     private static void AssertSyntaxNodesValueEqualityForModuleText(
