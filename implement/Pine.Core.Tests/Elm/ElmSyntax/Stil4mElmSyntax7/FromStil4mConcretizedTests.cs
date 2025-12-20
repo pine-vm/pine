@@ -48,7 +48,7 @@ public class FromStil4mConcretizedTests
             )
         );
 
-        var result = FromStil4mConcretized.fromStil4mConcretized(concretizedModule);
+        var result = FromStil4mConcretized.Convert(concretizedModule);
 
         result.Should().BeOfType<Module.NormalModule>();
         var normalModule = (Module.NormalModule)result;
@@ -74,7 +74,7 @@ public class FromStil4mConcretizedTests
             )
         );
 
-        var result = FromStil4mConcretized.fromStil4mConcretized(concretizedModule);
+        var result = FromStil4mConcretized.Convert(concretizedModule);
 
         result.Should().BeOfType<Module.PortModule>();
     }
@@ -93,7 +93,7 @@ public class FromStil4mConcretizedTests
             null
         );
 
-        var result = FromStil4mConcretized.fromStil4mConcretized(concretizedImport);
+        var result = FromStil4mConcretized.Convert(concretizedImport);
 
         result.ModuleName.Value.Should().BeEquivalentTo(moduleName);
         result.ModuleAlias.Should().BeNull();
@@ -116,7 +116,7 @@ public class FromStil4mConcretizedTests
             null
         );
 
-        var result = FromStil4mConcretized.fromStil4mConcretized(concretizedImport);
+        var result = FromStil4mConcretized.Convert(concretizedImport);
 
         result.ModuleName.Value.Should().BeEquivalentTo(moduleName);
         result.ModuleAlias.Should().NotBeNull();
@@ -130,7 +130,7 @@ public class FromStil4mConcretizedTests
 
         var concretizedExposing = new ConcretizedTypes.Exposing.All(range);
 
-        var result = FromStil4mConcretized.fromStil4mConcretized(concretizedExposing);
+        var result = FromStil4mConcretized.Convert(concretizedExposing);
 
         result.Should().BeOfType<Exposing.All>();
         ((Exposing.All)result).Range.Should().Be(range);
@@ -145,7 +145,7 @@ public class FromStil4mConcretizedTests
             [new Node<ConcretizedTypes.TopLevelExpose>(range, new ConcretizedTypes.TopLevelExpose.FunctionExpose("test"))]
         );
 
-        var result = FromStil4mConcretized.fromStil4mConcretized(concretizedExposing);
+        var result = FromStil4mConcretized.Convert(concretizedExposing);
 
         result.Should().BeOfType<Exposing.Explicit>();
         var @explicit = (Exposing.Explicit)result;
@@ -156,15 +156,15 @@ public class FromStil4mConcretizedTests
     public void TopLevelExpose_variants_convert_correctly()
     {
         var infix = new ConcretizedTypes.TopLevelExpose.InfixExpose("+");
-        var infixResult = FromStil4mConcretized.fromStil4mConcretized(infix);
+        var infixResult = FromStil4mConcretized.Convert(infix);
         infixResult.Should().BeOfType<TopLevelExpose.InfixExpose>();
 
         var function = new ConcretizedTypes.TopLevelExpose.FunctionExpose("myFunc");
-        var functionResult = FromStil4mConcretized.fromStil4mConcretized(function);
+        var functionResult = FromStil4mConcretized.Convert(function);
         functionResult.Should().BeOfType<TopLevelExpose.FunctionExpose>();
 
         var typeOrAlias = new ConcretizedTypes.TopLevelExpose.TypeOrAliasExpose("MyType");
-        var typeOrAliasResult = FromStil4mConcretized.fromStil4mConcretized(typeOrAlias);
+        var typeOrAliasResult = FromStil4mConcretized.Convert(typeOrAlias);
         typeOrAliasResult.Should().BeOfType<TopLevelExpose.TypeOrAliasExpose>();
     }
 
@@ -173,7 +173,7 @@ public class FromStil4mConcretizedTests
     {
         var concretizedExpr = new ConcretizedTypes.Expression.Integer(42);
 
-        var result = FromStil4mConcretized.fromStil4mConcretized(concretizedExpr);
+        var result = FromStil4mConcretized.Convert(concretizedExpr);
 
         result.Should().BeOfType<SyntaxV7.Expression.Integer>();
 
@@ -185,7 +185,7 @@ public class FromStil4mConcretizedTests
     {
         var concretizedExpr = new ConcretizedTypes.Expression.Literal("hello", false);
 
-        var result = FromStil4mConcretized.fromStil4mConcretized(concretizedExpr);
+        var result = FromStil4mConcretized.Convert(concretizedExpr);
 
         result.Should().BeOfType<SyntaxV7.Expression.Literal>();
         var literal = (SyntaxV7.Expression.Literal)result;
@@ -210,7 +210,7 @@ public class FromStil4mConcretizedTests
             new Node<ConcretizedTypes.Expression>(range, new ConcretizedTypes.Expression.Integer(3))
         );
 
-        var result = FromStil4mConcretized.fromStil4mConcretized(concretizedExpr);
+        var result = FromStil4mConcretized.Convert(concretizedExpr);
 
         result.Should().BeOfType<SyntaxV7.Expression.IfBlock>();
         var ifBlock = (SyntaxV7.Expression.IfBlock)result;
@@ -231,7 +231,7 @@ public class FromStil4mConcretizedTests
             )
         );
 
-        var result = FromStil4mConcretized.fromStil4mConcretized(concretizedExpr);
+        var result = FromStil4mConcretized.Convert(concretizedExpr);
 
         result.Should().BeOfType<SyntaxV7.Expression.ListExpr>();
         var listExpr = (SyntaxV7.Expression.ListExpr)result;
@@ -244,7 +244,7 @@ public class FromStil4mConcretizedTests
         ModuleName moduleName = ["List"];
         var concretizedExpr = new ConcretizedTypes.Expression.FunctionOrValue(moduleName, "map");
 
-        var result = FromStil4mConcretized.fromStil4mConcretized(concretizedExpr);
+        var result = FromStil4mConcretized.Convert(concretizedExpr);
 
         result.Should().BeOfType<SyntaxV7.Expression.FunctionOrValue>();
         var functionOrValue = (SyntaxV7.Expression.FunctionOrValue)result;
@@ -257,7 +257,7 @@ public class FromStil4mConcretizedTests
     {
         var concretizedPattern = new ConcretizedTypes.Pattern.VarPattern("x");
 
-        var result = FromStil4mConcretized.fromStil4mConcretized(concretizedPattern);
+        var result = FromStil4mConcretized.Convert(concretizedPattern);
 
         result.Should().BeOfType<Pattern.VarPattern>();
         ((Pattern.VarPattern)result).Name.Should().Be("x");
@@ -279,7 +279,7 @@ public class FromStil4mConcretizedTests
             closeLoc
         );
 
-        var result = FromStil4mConcretized.fromStil4mConcretized(concretizedPattern);
+        var result = FromStil4mConcretized.Convert(concretizedPattern);
 
         result.Should().BeOfType<Pattern.TuplePattern>();
         ((Pattern.TuplePattern)result).Elements.Should().HaveCount(2);
@@ -290,7 +290,7 @@ public class FromStil4mConcretizedTests
     {
         var concretizedType = new ConcretizedTypes.TypeAnnotation.GenericType("a");
 
-        var result = FromStil4mConcretized.fromStil4mConcretized(concretizedType);
+        var result = FromStil4mConcretized.Convert(concretizedType);
 
         result.Should().BeOfType<TypeAnnotation.GenericType>();
         ((TypeAnnotation.GenericType)result).Name.Should().Be("a");
@@ -312,7 +312,7 @@ public class FromStil4mConcretizedTests
             closeLoc
         );
 
-        var result = FromStil4mConcretized.fromStil4mConcretized(concretizedType);
+        var result = FromStil4mConcretized.Convert(concretizedType);
 
         result.Should().BeOfType<TypeAnnotation.Tupled>();
         ((TypeAnnotation.Tupled)result).TypeAnnotations.Should().HaveCount(2);
@@ -332,7 +332,7 @@ public class FromStil4mConcretizedTests
             new Node<ConcretizedTypes.Expression>(range, new ConcretizedTypes.Expression.Integer(42))
         );
 
-        var result = FromStil4mConcretized.fromStil4mConcretized(concretizedLambda);
+        var result = FromStil4mConcretized.Convert(concretizedLambda);
 
         result.Arguments.Should().HaveCount(1);
         result.Expression.Value.Should().BeOfType<SyntaxV7.Expression.Integer>();
@@ -359,7 +359,7 @@ public class FromStil4mConcretizedTests
             ]
         );
 
-        var result = FromStil4mConcretized.fromStil4mConcretized(concretizedCaseBlock);
+        var result = FromStil4mConcretized.Convert(concretizedCaseBlock);
 
         result.Cases.Should().HaveCount(1);
         result.Expression.Value.Should().BeOfType<SyntaxV7.Expression.Integer>();
@@ -387,7 +387,7 @@ public class FromStil4mConcretizedTests
             )
         );
 
-        var result = FromStil4mConcretized.fromStil4mConcretized(concretizedDeclaration);
+        var result = FromStil4mConcretized.Convert(concretizedDeclaration);
 
         result.Should().BeOfType<Declaration.FunctionDeclaration>();
         var functionDecl = (Declaration.FunctionDeclaration)result;
@@ -400,7 +400,7 @@ public class FromStil4mConcretizedTests
         ModuleName moduleName = ["Maybe"];
         var concretizedRef = new ConcretizedTypes.QualifiedNameRef(moduleName, "Just");
 
-        var result = FromStil4mConcretized.fromStil4mConcretized(concretizedRef);
+        var result = FromStil4mConcretized.Convert(concretizedRef);
 
         result.ModuleName.Should().BeEquivalentTo(moduleName);
         result.Name.Should().Be("Just");

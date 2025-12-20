@@ -76,7 +76,7 @@ public class ElmCompiler
                 string.Join(".", moduleName);
 
             var parseModuleAst =
-                SyntaxTypes.FromStil4mConcretized.fromStil4mConcretized(parseModuleOk);
+                SyntaxTypes.FromStil4mConcretized.Convert(parseModuleOk);
 
             parsedModulesBeforeCanonicalize.Add(parseModuleAst);
         }

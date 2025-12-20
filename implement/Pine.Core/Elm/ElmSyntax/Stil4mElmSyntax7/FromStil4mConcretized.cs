@@ -14,35 +14,35 @@ public static class FromStil4mConcretized
     /// <summary>
     /// Converts a Stil4mConcretized.File to a Stil4mElmSyntax7.File.
     /// </summary>
-    public static File fromStil4mConcretized(
+    public static File Convert(
         ConcretizedTypes.File file)
     {
         return
             new File(
-                ModuleDefinition: ConvertNode(file.ModuleDefinition, fromStil4mConcretized),
-                Imports: ConvertNodes(file.Imports, fromStil4mConcretized),
-                Declarations: ConvertNodes(file.Declarations, fromStil4mConcretized),
+                ModuleDefinition: ConvertNode(file.ModuleDefinition, Convert),
+                Imports: ConvertNodes(file.Imports, Convert),
+                Declarations: ConvertNodes(file.Declarations, Convert),
                 Comments: file.Comments);
     }
 
     /// <summary>
     /// Converts a Stil4mConcretized.Module to a Stil4mElmSyntax7.Module.
     /// </summary>
-    public static Module fromStil4mConcretized(
+    public static Module Convert(
         ConcretizedTypes.Module module) =>
         module switch
         {
             ConcretizedTypes.Module.NormalModule normalModule =>
                 new Module.NormalModule(
-                    fromStil4mConcretized(normalModule.ModuleData)),
+                    Convert(normalModule.ModuleData)),
 
             ConcretizedTypes.Module.PortModule portModule =>
                 new Module.PortModule(
-                    fromStil4mConcretized(portModule.ModuleData)),
+                    Convert(portModule.ModuleData)),
 
             ConcretizedTypes.Module.EffectModule effectModule =>
                 new Module.EffectModule(
-                    fromStil4mConcretized(effectModule.ModuleData)),
+                    Convert(effectModule.ModuleData)),
 
             _ =>
                 throw new System.NotImplementedException(
@@ -52,27 +52,27 @@ public static class FromStil4mConcretized
     /// <summary>
     /// Converts a Stil4mConcretized.DefaultModuleData to a Stil4mElmSyntax7.DefaultModuleData.
     /// </summary>
-    public static DefaultModuleData fromStil4mConcretized(
+    public static DefaultModuleData Convert(
         ConcretizedTypes.DefaultModuleData moduleData) =>
         new(
             ModuleName: moduleData.ModuleName,
-            ExposingList: ConvertNode(moduleData.ExposingList, fromStil4mConcretized));
+            ExposingList: ConvertNode(moduleData.ExposingList, Convert));
 
     /// <summary>
     /// Converts a Stil4mConcretized.EffectModuleData to a Stil4mElmSyntax7.EffectModuleData.
     /// </summary>
-    public static EffectModuleData fromStil4mConcretized(
+    public static EffectModuleData Convert(
         ConcretizedTypes.EffectModuleData moduleData) =>
         new(
             ModuleName: moduleData.ModuleName,
-            ExposingList: ConvertNode(moduleData.ExposingList, fromStil4mConcretized),
+            ExposingList: ConvertNode(moduleData.ExposingList, Convert),
             Command: moduleData.Command,
             Subscription: moduleData.Subscription);
 
     /// <summary>
     /// Converts a Stil4mConcretized.Exposing to a Stil4mElmSyntax7.Exposing.
     /// </summary>
-    public static Exposing fromStil4mConcretized(
+    public static Exposing Convert(
         ConcretizedTypes.Exposing exposing) =>
         exposing switch
         {
@@ -81,7 +81,7 @@ public static class FromStil4mConcretized
 
             ConcretizedTypes.Exposing.Explicit @explicit =>
                 new Exposing.Explicit(
-                    ConvertNodes(@explicit.Nodes, fromStil4mConcretized)),
+                    ConvertNodes(@explicit.Nodes, Convert)),
 
             _ =>
                 throw new System.NotImplementedException(
@@ -91,7 +91,7 @@ public static class FromStil4mConcretized
     /// <summary>
     /// Converts a Stil4mConcretized.TopLevelExpose to a Stil4mElmSyntax7.TopLevelExpose.
     /// </summary>
-    public static TopLevelExpose fromStil4mConcretized(
+    public static TopLevelExpose Convert(
         ConcretizedTypes.TopLevelExpose expose) =>
         expose switch
         {
@@ -106,7 +106,7 @@ public static class FromStil4mConcretized
 
             ConcretizedTypes.TopLevelExpose.TypeExpose typeExpose =>
                 new TopLevelExpose.TypeExpose(
-                    fromStil4mConcretized(typeExpose.ExposedType)),
+                    Convert(typeExpose.ExposedType)),
 
             _ =>
                 throw new System.NotImplementedException(
@@ -116,7 +116,7 @@ public static class FromStil4mConcretized
     /// <summary>
     /// Converts a Stil4mConcretized.ExposedType to a Stil4mElmSyntax7.ExposedType.
     /// </summary>
-    public static ExposedType fromStil4mConcretized(
+    public static ExposedType Convert(
         ConcretizedTypes.ExposedType exposedType) =>
         new(
             Name: exposedType.Name,
@@ -125,41 +125,41 @@ public static class FromStil4mConcretized
     /// <summary>
     /// Converts a Stil4mConcretized.Import to a Stil4mElmSyntax7.Import.
     /// </summary>
-    public static Import fromStil4mConcretized(
+    public static Import Convert(
         ConcretizedTypes.Import import) =>
         new(
             ModuleName: import.ModuleName,
             ModuleAlias: import.ModuleAlias?.Alias,
             ExposingList: import.ExposingList is { } exposingList
-                ? ConvertNode(exposingList.ExposingList, fromStil4mConcretized)
+                ? ConvertNode(exposingList.ExposingList, Convert)
                 : null);
 
     /// <summary>
     /// Converts a Stil4mConcretized.Declaration to a Stil4mElmSyntax7.Declaration.
     /// </summary>
-    public static Declaration fromStil4mConcretized(
+    public static Declaration Convert(
         ConcretizedTypes.Declaration declaration) =>
         declaration switch
         {
             ConcretizedTypes.Declaration.FunctionDeclaration functionDeclaration =>
                 new Declaration.FunctionDeclaration(
-                    fromStil4mConcretized(functionDeclaration.Function)),
+                    Convert(functionDeclaration.Function)),
 
             ConcretizedTypes.Declaration.CustomTypeDeclaration customTypeDeclaration =>
                 new Declaration.CustomTypeDeclaration(
-                    fromStil4mConcretized(customTypeDeclaration.TypeDeclaration)),
+                    Convert(customTypeDeclaration.TypeDeclaration)),
 
             ConcretizedTypes.Declaration.AliasDeclaration aliasDeclaration =>
                 new Declaration.AliasDeclaration(
-                    fromStil4mConcretized(aliasDeclaration.TypeAlias)),
+                    Convert(aliasDeclaration.TypeAlias)),
 
             ConcretizedTypes.Declaration.PortDeclaration portDeclaration =>
                 new Declaration.PortDeclaration(
-                    fromStil4mConcretized(portDeclaration.Signature)),
+                    Convert(portDeclaration.Signature)),
 
             ConcretizedTypes.Declaration.InfixDeclaration infixDeclaration =>
                 new Declaration.InfixDeclaration(
-                    fromStil4mConcretized(infixDeclaration.Infix)),
+                    Convert(infixDeclaration.Infix)),
 
             _ =>
                 throw new System.NotImplementedException(
@@ -169,7 +169,7 @@ public static class FromStil4mConcretized
     /// <summary>
     /// Converts a Stil4mConcretized.Infix to a Stil4mElmSyntax7.Infix.
     /// </summary>
-    public static Infix fromStil4mConcretized(
+    public static Infix Convert(
         ConcretizedTypes.Infix infix) =>
         new(
             Direction: infix.Direction,
@@ -180,38 +180,38 @@ public static class FromStil4mConcretized
     /// <summary>
     /// Converts a Stil4mConcretized.TypeAlias to a Stil4mElmSyntax7.TypeAlias.
     /// </summary>
-    public static TypeAlias fromStil4mConcretized(
+    public static TypeAlias Convert(
         ConcretizedTypes.TypeAlias typeAlias) =>
         new(
             Documentation: typeAlias.Documentation,
             Name: typeAlias.Name,
             Generics: typeAlias.Generics,
-            TypeAnnotation: ConvertNode(typeAlias.TypeAnnotation, fromStil4mConcretized));
+            TypeAnnotation: ConvertNode(typeAlias.TypeAnnotation, Convert));
 
     /// <summary>
     /// Converts a Stil4mConcretized.TypeStruct to a Stil4mElmSyntax7.TypeStruct.
     /// </summary>
-    public static TypeStruct fromStil4mConcretized(
+    public static TypeStruct Convert(
         ConcretizedTypes.TypeStruct typeStruct) =>
         new(
             Documentation: typeStruct.Documentation,
             Name: typeStruct.Name,
             Generics: typeStruct.Generics,
-            Constructors: [.. typeStruct.Constructors.Select(c => ConvertNode(c.Constructor, fromStil4mConcretized))]);
+            Constructors: [.. typeStruct.Constructors.Select(c => ConvertNode(c.Constructor, Convert))]);
 
     /// <summary>
     /// Converts a Stil4mConcretized.ValueConstructor to a Stil4mElmSyntax7.ValueConstructor.
     /// </summary>
-    public static ValueConstructor fromStil4mConcretized(
+    public static ValueConstructor Convert(
         ConcretizedTypes.ValueConstructor constructor) =>
         new(
             Name: constructor.Name,
-            Arguments: ConvertNodes(constructor.Arguments, fromStil4mConcretized));
+            Arguments: ConvertNodes(constructor.Arguments, Convert));
 
     /// <summary>
     /// Converts a Stil4mConcretized.TypeAnnotation to a Stil4mElmSyntax7.TypeAnnotation.
     /// </summary>
-    public static TypeAnnotation fromStil4mConcretized(
+    public static TypeAnnotation Convert(
         ConcretizedTypes.TypeAnnotation typeAnnotation) =>
         typeAnnotation switch
         {
@@ -221,28 +221,28 @@ public static class FromStil4mConcretized
             ConcretizedTypes.TypeAnnotation.Typed typed =>
                 new TypeAnnotation.Typed(
                     typed.TypeName,
-                    ConvertNodes(typed.TypeArguments, fromStil4mConcretized)),
+                    ConvertNodes(typed.TypeArguments, Convert)),
 
             ConcretizedTypes.TypeAnnotation.Unit =>
                 new TypeAnnotation.Unit(),
 
             ConcretizedTypes.TypeAnnotation.Tupled tupled =>
                 new TypeAnnotation.Tupled(
-                    ConvertSeparatedNodes(tupled.TypeAnnotations, fromStil4mConcretized)),
+                    ConvertSeparatedNodes(tupled.TypeAnnotations, Convert)),
 
             ConcretizedTypes.TypeAnnotation.Record record =>
                 new TypeAnnotation.Record(
-                    fromStil4mConcretized(record.RecordDefinition)),
+                    Convert(record.RecordDefinition)),
 
             ConcretizedTypes.TypeAnnotation.GenericRecord genericRecord =>
                 new TypeAnnotation.GenericRecord(
                     genericRecord.GenericName,
-                    ConvertNode(genericRecord.RecordDefinition, fromStil4mConcretized)),
+                    ConvertNode(genericRecord.RecordDefinition, Convert)),
 
             ConcretizedTypes.TypeAnnotation.FunctionTypeAnnotation functionType =>
                 new TypeAnnotation.FunctionTypeAnnotation(
-                    ConvertNode(functionType.ArgumentType, fromStil4mConcretized),
-                    ConvertNode(functionType.ReturnType, fromStil4mConcretized)),
+                    ConvertNode(functionType.ArgumentType, Convert),
+                    ConvertNode(functionType.ReturnType, Convert)),
 
             _ =>
                 throw new System.NotImplementedException(
@@ -252,55 +252,55 @@ public static class FromStil4mConcretized
     /// <summary>
     /// Converts a Stil4mConcretized.RecordDefinition to a Stil4mElmSyntax7.RecordDefinition.
     /// </summary>
-    public static RecordDefinition fromStil4mConcretized(
+    public static RecordDefinition Convert(
         ConcretizedTypes.RecordDefinition recordDefinition) =>
         new(
-            Fields: ConvertSeparatedNodes(recordDefinition.Fields, fromStil4mConcretized));
+            Fields: ConvertSeparatedNodes(recordDefinition.Fields, Convert));
 
     /// <summary>
     /// Converts a Stil4mConcretized.RecordField to a Stil4mElmSyntax7.RecordField.
     /// </summary>
-    public static RecordField fromStil4mConcretized(
+    public static RecordField Convert(
         ConcretizedTypes.RecordField recordField) =>
         new(
             FieldName: recordField.FieldName,
-            FieldType: ConvertNode(recordField.FieldType, fromStil4mConcretized));
+            FieldType: ConvertNode(recordField.FieldType, Convert));
 
     /// <summary>
     /// Converts a Stil4mConcretized.FunctionStruct to a Stil4mElmSyntax7.FunctionStruct.
     /// </summary>
-    public static FunctionStruct fromStil4mConcretized(
+    public static FunctionStruct Convert(
         ConcretizedTypes.FunctionStruct functionStruct) =>
         new(
             Documentation: functionStruct.Documentation,
             Signature: functionStruct.Signature is { } sig
-                ? ConvertNode(sig, fromStil4mConcretized)
+                ? ConvertNode(sig, Convert)
                 : null,
-            Declaration: ConvertNode(functionStruct.Declaration, fromStil4mConcretized));
+            Declaration: ConvertNode(functionStruct.Declaration, Convert));
 
     /// <summary>
     /// Converts a Stil4mConcretized.FunctionImplementation to a Stil4mElmSyntax7.FunctionImplementation.
     /// </summary>
-    public static FunctionImplementation fromStil4mConcretized(
+    public static FunctionImplementation Convert(
         ConcretizedTypes.FunctionImplementation functionImplementation) =>
         new(
             Name: functionImplementation.Name,
-            Arguments: ConvertNodes(functionImplementation.Arguments, fromStil4mConcretized),
+            Arguments: ConvertNodes(functionImplementation.Arguments, Convert),
             Expression: ConvertExpressionNode(functionImplementation.Expression));
 
     /// <summary>
     /// Converts a Stil4mConcretized.Signature to a Stil4mElmSyntax7.Signature.
     /// </summary>
-    public static Signature fromStil4mConcretized(
+    public static Signature Convert(
         ConcretizedTypes.Signature signature) =>
         new(
             Name: signature.Name,
-            TypeAnnotation: ConvertNode(signature.TypeAnnotation, fromStil4mConcretized));
+            TypeAnnotation: ConvertNode(signature.TypeAnnotation, Convert));
 
     /// <summary>
     /// Converts a Stil4mConcretized.Pattern to a Stil4mElmSyntax7.Pattern.
     /// </summary>
-    public static Pattern fromStil4mConcretized(
+    public static Pattern Convert(
         ConcretizedTypes.Pattern pattern) =>
         pattern switch
         {
@@ -330,33 +330,33 @@ public static class FromStil4mConcretized
 
             ConcretizedTypes.Pattern.TuplePattern tuplePattern =>
                 new Pattern.TuplePattern(
-                    ConvertNodes(tuplePattern.Elements, fromStil4mConcretized)),
+                    ConvertNodes(tuplePattern.Elements, Convert)),
 
             ConcretizedTypes.Pattern.RecordPattern recordPattern =>
                 new Pattern.RecordPattern(recordPattern.Fields),
 
             ConcretizedTypes.Pattern.UnConsPattern unConsPattern =>
                 new Pattern.UnConsPattern(
-                    ConvertNode(unConsPattern.Head, fromStil4mConcretized),
-                    ConvertNode(unConsPattern.Tail, fromStil4mConcretized)),
+                    ConvertNode(unConsPattern.Head, Convert),
+                    ConvertNode(unConsPattern.Tail, Convert)),
 
             ConcretizedTypes.Pattern.ListPattern listPattern =>
                 new Pattern.ListPattern(
-                    ConvertNodes(listPattern.Elements, fromStil4mConcretized)),
+                    ConvertNodes(listPattern.Elements, Convert)),
 
             ConcretizedTypes.Pattern.NamedPattern namedPattern =>
                 new Pattern.NamedPattern(
-                    fromStil4mConcretized(namedPattern.Name),
-                    ConvertNodes(namedPattern.Arguments, fromStil4mConcretized)),
+                    Convert(namedPattern.Name),
+                    ConvertNodes(namedPattern.Arguments, Convert)),
 
             ConcretizedTypes.Pattern.AsPattern asPattern =>
                 new Pattern.AsPattern(
-                    ConvertNode(asPattern.Pattern, fromStil4mConcretized),
+                    ConvertNode(asPattern.Pattern, Convert),
                     asPattern.Name),
 
             ConcretizedTypes.Pattern.ParenthesizedPattern parenthesizedPattern =>
                 new Pattern.ParenthesizedPattern(
-                    ConvertNode(parenthesizedPattern.Pattern, fromStil4mConcretized)),
+                    ConvertNode(parenthesizedPattern.Pattern, Convert)),
 
             _ =>
                 throw new System.NotImplementedException(
@@ -366,7 +366,7 @@ public static class FromStil4mConcretized
     /// <summary>
     /// Converts a Stil4mConcretized.QualifiedNameRef to a Stil4mElmSyntax7.QualifiedNameRef.
     /// </summary>
-    public static QualifiedNameRef fromStil4mConcretized(
+    public static QualifiedNameRef Convert(
         ConcretizedTypes.QualifiedNameRef qualifiedNameRef) =>
         new(
             ModuleName: qualifiedNameRef.ModuleName,
@@ -377,7 +377,7 @@ public static class FromStil4mConcretized
     /// Note: For RecordExpr and RecordUpdateExpression, use ConvertExpressionNode instead
     /// as they need the containing node's range to compute the closing brace location.
     /// </summary>
-    public static Expression fromStil4mConcretized(
+    public static Expression Convert(
         ConcretizedTypes.Expression expression) =>
         expression switch
         {
@@ -442,15 +442,15 @@ public static class FromStil4mConcretized
 
             ConcretizedTypes.Expression.LambdaExpression lambdaExpression =>
                 new Expression.LambdaExpression(
-                    fromStil4mConcretized(lambdaExpression.Lambda)),
+                    Convert(lambdaExpression.Lambda)),
 
             ConcretizedTypes.Expression.CaseExpression caseExpression =>
                 new Expression.CaseExpression(
-                    fromStil4mConcretized(caseExpression.CaseBlock)),
+                    Convert(caseExpression.CaseBlock)),
 
             ConcretizedTypes.Expression.LetExpression letExpression =>
                 new Expression.LetExpression(
-                    fromStil4mConcretized(letExpression.Value)),
+                    Convert(letExpression.Value)),
 
             // RecordExpr and RecordUpdateExpression need the containing node's range,
             // so they should be converted via ConvertExpressionNode
@@ -499,7 +499,7 @@ public static class FromStil4mConcretized
                     ConvertRecordFields(recordUpdateExpression.Fields, closeBraceLocation, isRecordUpdateExpression: true)),
 
             // For all other expression types, use the standard conversion
-            var expr => fromStil4mConcretized(expr)
+            var expr => Convert(expr)
         };
 
         return new Node<Expression>(node.Range, convertedValue);
@@ -522,53 +522,53 @@ public static class FromStil4mConcretized
     /// <summary>
     /// Converts a Stil4mConcretized.LambdaStruct to a Stil4mElmSyntax7.LambdaStruct.
     /// </summary>
-    public static LambdaStruct fromStil4mConcretized(
+    public static LambdaStruct Convert(
         ConcretizedTypes.LambdaStruct lambdaStruct) =>
         new(
-            Arguments: ConvertNodes(lambdaStruct.Arguments, fromStil4mConcretized),
+            Arguments: ConvertNodes(lambdaStruct.Arguments, Convert),
             Expression: ConvertExpressionNode(lambdaStruct.Expression));
 
     /// <summary>
     /// Converts a Stil4mConcretized.CaseBlock to a Stil4mElmSyntax7.CaseBlock.
     /// </summary>
-    public static CaseBlock fromStil4mConcretized(
+    public static CaseBlock Convert(
         ConcretizedTypes.CaseBlock caseBlock) =>
         new(
             Expression: ConvertExpressionNode(caseBlock.Expression),
-            Cases: [.. caseBlock.Cases.Select(fromStil4mConcretized)]);
+            Cases: [.. caseBlock.Cases.Select(Convert)]);
 
     /// <summary>
     /// Converts a Stil4mConcretized.Case to a Stil4mElmSyntax7.Case.
     /// </summary>
-    public static Case fromStil4mConcretized(
+    public static Case Convert(
         ConcretizedTypes.Case @case) =>
         new(
-            Pattern: ConvertNode(@case.Pattern, fromStil4mConcretized),
+            Pattern: ConvertNode(@case.Pattern, Convert),
             Expression: ConvertExpressionNode(@case.Expression));
 
     /// <summary>
     /// Converts a Stil4mConcretized.Expression.LetBlock to a Stil4mElmSyntax7.Expression.LetBlock.
     /// </summary>
-    public static Expression.LetBlock fromStil4mConcretized(
+    public static Expression.LetBlock Convert(
         ConcretizedTypes.Expression.LetBlock letBlock) =>
         new(
-            Declarations: ConvertNodes(letBlock.Declarations, fromStil4mConcretized),
+            Declarations: ConvertNodes(letBlock.Declarations, Convert),
             Expression: ConvertExpressionNode(letBlock.Expression));
 
     /// <summary>
     /// Converts a Stil4mConcretized.Expression.LetDeclaration to a Stil4mElmSyntax7.Expression.LetDeclaration.
     /// </summary>
-    public static Expression.LetDeclaration fromStil4mConcretized(
+    public static Expression.LetDeclaration Convert(
         ConcretizedTypes.Expression.LetDeclaration letDeclaration) =>
         letDeclaration switch
         {
             ConcretizedTypes.Expression.LetDeclaration.LetFunction letFunction =>
                 new Expression.LetDeclaration.LetFunction(
-                    fromStil4mConcretized(letFunction.Function)),
+                    Convert(letFunction.Function)),
 
             ConcretizedTypes.Expression.LetDeclaration.LetDestructuring letDestructuring =>
                 new Expression.LetDeclaration.LetDestructuring(
-                    ConvertNode(letDestructuring.Pattern, fromStil4mConcretized),
+                    ConvertNode(letDestructuring.Pattern, Convert),
                     ConvertExpressionNode(letDestructuring.Expression)),
 
             _ =>
@@ -623,11 +623,11 @@ public static class FromStil4mConcretized
 
         var result = new List<Node<(Node<string> fieldName, Node<Expression> valueExpr)>>();
 
-        bool isSingleField = nonEmpty.Rest.Count == 0;
+        var isSingleField = nonEmpty.Rest.Count is 0;
 
         // Elm parser quirk: The behavior differs between single-line and multi-line records.
         // Detect multi-line by comparing the first field's row with the closing brace row.
-        bool isMultiLine = closeBraceLocation.Row > nonEmpty.First.FieldName.Range.Start.Row;
+        var isMultiLine = closeBraceLocation.Row > nonEmpty.First.FieldName.Range.Start.Row;
 
         // Process first field
         {
@@ -671,12 +671,12 @@ public static class FromStil4mConcretized
         }
 
         // Process remaining fields
-        for (int i = 0; i < nonEmpty.Rest.Count; i++)
+        for (var i = 0; i < nonEmpty.Rest.Count; i++)
         {
             var (_, field) = nonEmpty.Rest[i];
             var convertedValueExpr = ConvertExpressionNode(field.ValueExpr);
 
-            bool isLastField = i == nonEmpty.Rest.Count - 1;
+            var isLastField = i == nonEmpty.Rest.Count - 1;
             Location fieldRangeEnd;
             if (isLastField)
             {

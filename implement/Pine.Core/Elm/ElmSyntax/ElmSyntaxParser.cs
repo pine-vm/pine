@@ -41,7 +41,7 @@ public class ElmSyntaxParser
                 "Unexpected parse result type: " + parseResult.GetType().Name);
         }
 
-        var asAst = FromStil4mConcretized.fromStil4mConcretized(parseOk);
+        var asAst = FromStil4mConcretized.Convert(parseOk);
 
         return EncodeAsElmValue.EncodeFile(asAst);
     }

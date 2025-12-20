@@ -43,7 +43,7 @@ public class InliningTestHelper
             .Select(text =>
                 ElmSyntaxParser.ParseModuleText(text, enableMaxPreservation: true)
                 .Extract(err => throw new System.Exception("Failed parsing: " + err)))
-            .Select(SyntaxV7.FromStil4mConcretized.fromStil4mConcretized)
+            .Select(SyntaxV7.FromStil4mConcretized.Convert)
             .ToList();
 
         var canonicalizeResult =

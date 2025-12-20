@@ -45,7 +45,7 @@ public class CanonicalizationTests
             .Select(text =>
                 ElmSyntaxParser.ParseModuleText(text, enableMaxPreservation: true)
                 .Extract(err => throw new System.Exception("Failed parsing: " + err)))
-            .Select(FromStil4mConcretized.fromStil4mConcretized)
+            .Select(FromStil4mConcretized.Convert)
             .ToList();
 
         var canonicalizeResult =
@@ -58,7 +58,7 @@ public class CanonicalizationTests
             Core.Elm.ElmSyntax.Stil4mConcretized.Avh4Format.Format(
                 ToStil4mConcretized.ToConcretized(beforeFormat));
 
-        return FromStil4mConcretized.fromStil4mConcretized(formatted);
+        return FromStil4mConcretized.Convert(formatted);
     }
 
     private static File ParseModuleText(string moduleTex)
@@ -67,7 +67,7 @@ public class CanonicalizationTests
             ElmSyntaxParser.ParseModuleText(moduleTex, enableMaxPreservation: false)
             .Extract(err => throw new System.Exception("Failed parsing: " + err));
 
-        return FromStil4mConcretized.fromStil4mConcretized(concreteSyntax);
+        return FromStil4mConcretized.Convert(concreteSyntax);
     }
 
     [Fact]
