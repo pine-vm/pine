@@ -67,7 +67,10 @@ public class ElmSyntaxParser
 
         var tokens = tokenizer.Tokenize().ToArray();
 
-        var parser = new Parser(tokens, enableMaxPreservation: enableMaxPreservation);
+        var parser =
+            new Parser(
+                tokens,
+                enableMaxPreservation: enableMaxPreservation);
 
         return parser.ParseFile();
     }
@@ -213,6 +216,163 @@ public class ElmSyntaxParser
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Checks if a token is a keyword that can start a top-level declaration.
+    /// </summary>
+    private static bool IsDeclarationStartKeyword(Token token)
+    {
+        if (token.Type is TokenType.Identifier)
+        {
+            return token.Lexeme switch
+            {
+                "type" or "port" or "infix" =>
+                true,
+
+                _ => false,
+            };
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Checks if a token marks the start of a new declaration at the module level.
+    /// A declaration boundary is a token at column 1 that can start a declaration.
+    /// </summary>
+    private static bool IsDeclarationBoundary(Token token)
+    {
+        // Must be at column 1 to start a new declaration
+        if (token.Start.Column is not 1)
+        {
+            return false;
+        }
+
+        // Comments and declaration keywords at column 1 indicate a new declaration
+        if (token.Type is TokenType.Comment)
+        {
+            return true;
+        }
+
+        // Declaration keywords (type, port, infix) at column 1 start declarations
+        if (IsDeclarationStartKeyword(token))
+        {
+            return true;
+        }
+
+        // Non-keyword identifiers at column 1 start function declarations
+        if (token.Type is TokenType.Identifier && !IsKeyword(token))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Reconstructs readable text from a list of tokens, inserting appropriate whitespace.
+    /// </summary>
+    private static string ReconstructTextFromTokens(IReadOnlyList<Token> tokens)
+    {
+        if (tokens.Count is 0)
+        {
+            return string.Empty;
+        }
+
+        var sb = new System.Text.StringBuilder();
+        Token? previousToken = null;
+
+        foreach (var token in tokens)
+        {
+            if (previousToken is not null)
+            {
+                // Add newlines if tokens are on different rows
+                var rowDiff = token.Start.Row - previousToken.End.Row;
+                if (rowDiff > 0)
+                {
+                    for (var i = 0; i < rowDiff; i++)
+                    {
+                        sb.Append('\n');
+                    }
+                    // Add indentation for the new line
+                    for (var i = 1; i < token.Start.Column; i++)
+                    {
+                        sb.Append(' ');
+                    }
+                }
+                else
+                {
+                    // Same row - add spaces between tokens
+                    var columnDiff = token.Start.Column - previousToken.End.Column;
+                    for (var i = 0; i < columnDiff; i++)
+                    {
+                        sb.Append(' ');
+                    }
+                }
+            }
+
+            sb.Append(token.Lexeme);
+            previousToken = token;
+        }
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Trims trailing empty lines from a string, keeping content up to and including the last non-empty line.
+    /// </summary>
+    private static string TrimTrailingEmptyLines(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return text;
+        }
+
+        var lines = text.Split('\n');
+        var lastNonEmptyIndex = -1;
+
+        for (var i = lines.Length - 1; i >= 0; i--)
+        {
+            if (!string.IsNullOrWhiteSpace(lines[i]))
+            {
+                lastNonEmptyIndex = i;
+                break;
+            }
+        }
+
+        if (lastNonEmptyIndex < 0)
+        {
+            // All lines are empty
+            return string.Empty;
+        }
+
+        // Return lines up to and including the last non-empty line
+        return string.Join("\n", lines.Take(lastNonEmptyIndex + 1));
+    }
+
+    /// <summary>
+    /// Calculates the end location given a start location and text content.
+    /// </summary>
+    private static Location CalculateEndLocation(Location start, string text)
+    {
+        var row = start.Row;
+        var column = start.Column;
+
+        foreach (var ch in text)
+        {
+            if (ch is '\n')
+            {
+                row++;
+                column = 1;
+            }
+            else
+            {
+                column++;
+            }
+        }
+
+        return new Location(row, column);
     }
 
     private static bool CharCanAppearInOperator(char Char) =>
@@ -873,6 +1033,7 @@ public class ElmSyntaxParser
                 }
 
                 var declarations = new List<Node<SyntaxTypes.Declaration>>();
+                var incompleteDeclarations = new List<Node<SyntaxTypes.IncompleteDeclaration>>();
 
                 ConsumeAllTrivia();
 
@@ -886,7 +1047,7 @@ public class ElmSyntaxParser
                             declarations.Count + " declarations");
                     }
 
-                    bool canAttachComment(Token commentToken)
+                    bool CanAttachComment(Token commentToken)
                     {
                         if (declarations.Count is 0)
                         {
@@ -913,9 +1074,86 @@ public class ElmSyntaxParser
 
                     var docComment =
                         docComments
-                        .LastOrDefault(canAttachComment);
+                        .LastOrDefault(CanAttachComment);
 
-                    declarations.Add(ParseDeclaration(docComment));
+                    // Save position before attempting to parse
+                    var declStartPosition = _current;
+                    var declStartToken = Peek;
+
+                    try
+                    {
+                        declarations.Add(ParseDeclaration(docComment));
+                    }
+                    catch (Exception ex)
+                    {
+                        // Declaration parsing failed - capture as incomplete declaration.
+                        // We catch Exception (not just ParserException) because parsing failures
+                        // can manifest as various exception types including InvalidOperationException
+                        // from LINQ operations when tokens are exhausted.
+                        // Skip to the next declaration boundary (column 1 token that can start a declaration)
+                        var incompleteTokens = new List<Token>();
+
+                        // Reset to start of failed declaration
+                        _current = declStartPosition;
+
+                        // Capture error information
+                        Location errorLocation;
+                        string errorMessage;
+
+                        if (ex is ParserException parserEx && parserEx.LineNumber.HasValue && parserEx.ColumnNumber.HasValue)
+                        {
+                            // Use the location from the parser exception
+                            errorLocation = new Location(parserEx.LineNumber.Value, parserEx.ColumnNumber.Value);
+                            errorMessage = ex.Message;
+                        }
+                        else
+                        {
+                            // Use the current token location as the error location
+                            var currentToken = IsAtEnd() ? tokens.Span[tokens.Length - 1] : Peek;
+                            errorLocation = currentToken.Start;
+                            errorMessage = ex.Message;
+                        }
+
+                        // Collect tokens until we find the next declaration boundary or end of file
+                        while (!IsAtEnd())
+                        {
+                            var currentToken = Peek;
+
+                            // Check if this token starts a new declaration
+                            if (incompleteTokens.Count > 0 &&
+                                IsDeclarationBoundary(currentToken))
+                            {
+                                break;
+                            }
+
+                            incompleteTokens.Add(Advance());
+                        }
+
+                        // Store incomplete declaration with trimmed trailing empty lines
+                        if (incompleteTokens.Count > 0)
+                        {
+                            var firstToken = incompleteTokens[0];
+                            var lastToken = incompleteTokens[^1];
+
+                            // Reconstruct the text from tokens, preserving structure
+                            var incompleteText = ReconstructTextFromTokens(incompleteTokens);
+
+                            // Trim trailing empty lines
+                            incompleteText = TrimTrailingEmptyLines(incompleteText);
+
+                            // Calculate end location based on trimmed text
+                            var endLocation = CalculateEndLocation(firstToken.Start, incompleteText);
+                            var range = new Range(firstToken.Start, endLocation);
+
+                            // Add as Node<IncompleteDeclaration> with proper range and error info
+                            incompleteDeclarations.Add(new Node<SyntaxTypes.IncompleteDeclaration>(
+                                range,
+                                new SyntaxTypes.IncompleteDeclaration(
+                                    incompleteText,
+                                    errorLocation,
+                                    errorMessage)));
+                        }
+                    }
 
                     ConsumeAllTrivia();
                 }
@@ -957,14 +1195,15 @@ public class ElmSyntaxParser
                 IReadOnlyList<Node<string>> commentsGlobalList =
                     [.. allComments
                     .Where(CommentEmittedInGlobalList)
-                    .Select(token => new Node<string>(token.Range,token.Lexeme))
+                    .Select(token => new Node<string>(token.Range, token.Lexeme))
                     ];
 
                 return new SyntaxTypes.File(
                     moduleDefinition,
                     imports,
                     declarations,
-                    Comments: commentsGlobalList);
+                    Comments: commentsGlobalList,
+                    IncompleteDeclarations: incompleteDeclarations);
             }
             catch (Exception ex)
             {

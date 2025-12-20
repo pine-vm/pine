@@ -54,7 +54,8 @@ public class SnapshotTestFormatTests
                 )),
                 Imports: [],
                 Declarations: [],
-                Comments: []);
+                Comments: [],
+                IncompleteDeclarations: []);
 
         var rendered = FormatConcretized(file);
 

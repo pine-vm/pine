@@ -17,6 +17,18 @@ public static class FromStil4mConcretized
     public static File Convert(
         ConcretizedTypes.File file)
     {
+        if (file.IncompleteDeclarations.FirstOrDefault()?.Value is { } incompleteDeclaration)
+        {
+            /*
+             * If the file should be converted despite syntax errors,
+             * set the 'IncompleteDeclarations' to empty before invoking this conversion.
+             * */
+            throw new ParserException(
+                incompleteDeclaration.ErrorMessage,
+                lineNumber: incompleteDeclaration.ErrorLocation.Row,
+                columnNumber: incompleteDeclaration.ErrorLocation.Column);
+        }
+
         return
             new File(
                 ModuleDefinition: ConvertNode(file.ModuleDefinition, Convert),
@@ -627,7 +639,8 @@ public static class FromStil4mConcretized
 
         // Elm parser quirk: The behavior differs between single-line and multi-line records.
         // Detect multi-line by comparing the first field's row with the closing brace row.
-        var isMultiLine = closeBraceLocation.Row > nonEmpty.First.FieldName.Range.Start.Row;
+        var isMultiLine =
+            closeBraceLocation.Row > nonEmpty.First.FieldName.Range.Start.Row;
 
         // Process first field
         {

@@ -109,13 +109,27 @@ public abstract record SeparatedSyntaxList<TNode>
 }
 
 /// <summary>
+/// Represents an incomplete declaration that could not be fully parsed.
+/// Contains the original text of the declaration for preservation during roundtrip,
+/// along with error information to help diagnose the parsing failure.
+/// </summary>
+/// <param name="OriginalText">The original text of the incomplete declaration.</param>
+/// <param name="ErrorLocation">The location where the parsing error occurred.</param>
+/// <param name="ErrorMessage">The error message describing why parsing failed.</param>
+public record IncompleteDeclaration(
+    string OriginalText,
+    Location ErrorLocation,
+    string ErrorMessage);
+
+/// <summary>
 /// Root of an Elm source file: module definition, imports, top declarations and comments.
 /// </summary>
 public record File(
     Node<Module> ModuleDefinition,
     IReadOnlyList<Node<Import>> Imports,
     IReadOnlyList<Node<Declaration>> Declarations,
-    IReadOnlyList<Node<string>> Comments)
+    IReadOnlyList<Node<string>> Comments,
+    IReadOnlyList<Node<IncompleteDeclaration>> IncompleteDeclarations)
 {
     /// <inheritdoc/>
     public virtual bool Equals(File? other)
@@ -130,7 +144,8 @@ public record File(
             ModuleDefinition.Equals(other.ModuleDefinition) &&
             Enumerable.SequenceEqual(Imports, other.Imports) &&
             Enumerable.SequenceEqual(Declarations, other.Declarations) &&
-            Enumerable.SequenceEqual(Comments, other.Comments);
+            Enumerable.SequenceEqual(Comments, other.Comments) &&
+            Enumerable.SequenceEqual(IncompleteDeclarations, other.IncompleteDeclarations);
     }
 
     /// <inheritdoc/>
@@ -147,6 +162,9 @@ public record File(
             hashCode.Add(item);
 
         foreach (var item in Comments)
+            hashCode.Add(item);
+
+        foreach (var item in IncompleteDeclarations)
             hashCode.Add(item);
 
         return hashCode.ToHashCode();

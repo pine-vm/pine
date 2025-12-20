@@ -39,7 +39,8 @@ public static class ToStil4mConcretized
                 ModuleDefinition: ConvertNode(file.ModuleDefinition, ToConcretized),
                 Imports: ConvertNodes(file.Imports, ToConcretized),
                 Declarations: ConvertNodes(file.Declarations, ToConcretized),
-                Comments: ConvertComments(file.Comments));
+                Comments: ConvertComments(file.Comments),
+                IncompleteDeclarations: []);
     }
 
     /// <summary>

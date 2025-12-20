@@ -28,7 +28,8 @@ public class NameMapper
             ModuleDefinition: file.ModuleDefinition,
             Imports: file.Imports,
             Declarations: [.. file.Declarations.Select(d => MapDeclaration(d, mapQualifiedName))],
-            Comments: file.Comments);
+            Comments: file.Comments,
+            IncompleteDeclarations: file.IncompleteDeclarations);
     }
 
     /// <summary>

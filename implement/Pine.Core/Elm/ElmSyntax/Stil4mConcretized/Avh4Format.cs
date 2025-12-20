@@ -31,12 +31,12 @@ public class Avh4Format
     /// <returns>A formatted File with updated token locations.</returns>
     public static File Format(File file)
     {
-        var visitor = new Avh4FormatVisitor(file.Comments);
+        var visitor = new Avh4FormatVisitor(file.Comments, file.IncompleteDeclarations);
         var context = new FormattingContext(CurrentRow: 1, CurrentColumn: 1, IndentSpaces: 0);
 
-        var (formatted, formattedComments) = visitor.FormatFile(file, context);
+        var (formatted, formattedComments, formattedIncompleteDeclarations) = visitor.FormatFile(file, context);
 
-        return formatted with { Comments = formattedComments };
+        return formatted with { Comments = formattedComments, IncompleteDeclarations = formattedIncompleteDeclarations };
     }
 
     #region Constants and Keywords
@@ -215,34 +215,56 @@ public class Avh4Format
 
     /// <summary>
     /// Calculate the end location of a comment given its start location and value.
+    /// Also returns whether the comment ends with a newline.
     /// </summary>
-    private static Location CalculateCommentEndLocation(Location startLocation, string commentValue)
+    private static (Location EndLocation, bool EndsWithNewline) CalculateCommentEndLocationEx(Location startLocation, string commentValue)
     {
         var lines = commentValue.Split('\n');
+        var endsWithNewline = commentValue.EndsWith('\n');
 
         if (lines.Length is 1)
         {
-            return new Location(startLocation.Row, startLocation.Column + commentValue.Length);
+            return (new Location(startLocation.Row, startLocation.Column + commentValue.Length), endsWithNewline);
         }
         else
         {
             var endRow = startLocation.Row + lines.Length - 1;
             var lastLineLength = lines[lines.Length - 1].Length;
-            return new Location(endRow, lastLineLength + 1);
+            return (new Location(endRow, lastLineLength + 1), endsWithNewline);
         }
     }
 
     /// <summary>
+    /// Calculate the end location of a comment given its start location and value.
+    /// </summary>
+    private static Location CalculateCommentEndLocation(Location startLocation, string commentValue) =>
+        CalculateCommentEndLocationEx(startLocation, commentValue).EndLocation;
+
+    /// <summary>
     /// Creates a new FormattingContext positioned after a comment ends.
+    /// If the comment ends with a newline, we're already at the start of a new line.
     /// </summary>
     private static FormattingContext CreateContextAfterComment(
         FormattingContext currentContext,
-        Location commentEnd)
+        Location commentEnd,
+        bool commentEndsWithNewline)
     {
-        return new FormattingContext(
-            commentEnd.Row + 1,
-            1,
-            currentContext.IndentSpaces).SetIndentColumn();
+        if (commentEndsWithNewline)
+        {
+            // Comment ends with newline - we're already at the start of a new line (commentEnd.Row)
+            return new FormattingContext(
+                commentEnd.Row,
+                1,
+                currentContext.IndentSpaces).SetIndentColumn();
+        }
+        else
+        {
+            // Comment doesn't end with newline - move to the next row
+            return new FormattingContext(
+                commentEnd.Row + 1,
+                1,
+                currentContext.IndentSpaces).SetIndentColumn();
+        }
     }
 
     /// <summary>
@@ -255,10 +277,10 @@ public class Avh4Format
         ImmutableList<Stil4mElmSyntax7.Node<string>> comments)
     {
         var commentLocation = context.CurrentLocation();
-        var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value);
+        var (commentEnd, endsWithNewline) = CalculateCommentEndLocationEx(commentLocation, comment.Value);
         var formattedComment = comment.WithRange(commentLocation, commentEnd);
         var updatedComments = comments.Add(formattedComment);
-        var updatedContext = CreateContextAfterComment(context, commentEnd);
+        var updatedContext = CreateContextAfterComment(context, commentEnd, endsWithNewline);
         return (updatedContext, updatedComments);
     }
 
@@ -301,11 +323,13 @@ public class Avh4Format
     /// <summary>
     /// Visitor implementation for AVH4 formatting on concretized syntax model.
     /// </summary>
-    private class Avh4FormatVisitor(IReadOnlyList<Stil4mElmSyntax7.Node<string>> originalComments)
+    private class Avh4FormatVisitor(
+        IReadOnlyList<Stil4mElmSyntax7.Node<string>> originalComments,
+        IReadOnlyList<Stil4mElmSyntax7.Node<IncompleteDeclaration>> originalIncompleteDeclarations)
     {
         #region File Formatting
 
-        public (File, IReadOnlyList<Stil4mElmSyntax7.Node<string>>) FormatFile(
+        public (File, IReadOnlyList<Stil4mElmSyntax7.Node<string>>, IReadOnlyList<Stil4mElmSyntax7.Node<IncompleteDeclaration>>) FormatFile(
             File file,
             FormattingContext context)
         {
@@ -360,25 +384,30 @@ public class Avh4Format
             // Check for comments before first declaration
             var commentsBeforeDecls = commentsAfterImports;
 
-            var lastRowBeforeDecls =
-                formattedImports.Any()
-                ? formattedImports.Last().Range.End.Row
-                : formattedModule.Range.End.Row;
+            // Use ORIGINAL file positions when searching for comments (originalComments has original positions)
+            var lastOriginalRowBeforeDecls =
+                file.Imports.Any()
+                ? file.Imports.Last().Range.End.Row
+                : file.ModuleDefinition.Range.End.Row;
 
             var firstDeclaration = file.Declarations.FirstOrDefault();
 
             var commentsBefore =
                 firstDeclaration is not null
-                ? GetCommentsBetweenRows(lastRowBeforeDecls, firstDeclaration.Range.Start.Row)
+                ? GetCommentsBetweenRows(lastOriginalRowBeforeDecls, firstDeclaration.Range.Start.Row)
                 : [];
 
             FormattingContext contextBeforeDecls;
 
             if (commentsBefore.Count is not 0)
             {
+                var firstComment = commentsBefore[0];
+
                 var startContext = formattedImports.Any()
-                    ? contextAfterImports.WithBlankLine().NextRow()
-                    : contextAfterModule.WithBlankLine();
+                    ?
+                    contextAfterImports.WithBlankLine().NextRow()
+                    :
+                    contextAfterModule.WithBlankLine();
 
                 (commentsBeforeDecls, contextBeforeDecls) = FormatCommentsAtContext(
                     commentsBefore, startContext, commentsAfterImports, addBlankLinesAfterNonDocComments: true);
@@ -399,17 +428,69 @@ public class Avh4Format
                     : contextAfterModule.WithBlankLine().NextRow();
             }
 
-            // Format declarations
-            var (formattedDeclarations, _, commentsAfterDecls) =
-                FormatDeclarations(file.Declarations, contextBeforeDecls, commentsBeforeDecls);
+            // Format declarations along with incomplete declarations interleaved by position
+            var (formattedDeclarations, contextAfterDeclarations, commentsAfterDecls, formattedIncompleteDeclarations) =
+                FormatDeclarationsWithIncompletes(file.Declarations, contextBeforeDecls, commentsBeforeDecls);
+
+            // Get trailing comments that appear after all declarations
+            var lastDeclRow = file.Declarations.Any()
+                ? file.Declarations.Max(d => d.Range.End.Row)
+                : (file.Imports.Any()
+                    ? file.Imports.Last().Range.End.Row
+                    : file.ModuleDefinition.Range.End.Row);
+
+            var trailingComments = GetCommentsAfterRow(lastDeclRow);
+
+            // Format trailing comments
+            var finalComments = commentsAfterDecls;
+            FormattingContext contextAfterTrailingComments = contextAfterDeclarations;
+            if (trailingComments.Count > 0)
+            {
+                FormattingContext trailingContext;
+                if (file.Declarations.Any() || formattedIncompleteDeclarations.Any())
+                {
+                    trailingContext = contextAfterDeclarations.WithBlankLine().NextRow();
+                }
+                else
+                {
+                    trailingContext = contextBeforeDecls;
+                }
+                (finalComments, contextAfterTrailingComments) = FormatCommentsAtContext(
+                    trailingComments, trailingContext, commentsAfterDecls);
+            }
 
             var formattedFile = new File(
                 ModuleDefinition: formattedModule,
                 Imports: formattedImports,
                 Declarations: formattedDeclarations,
-                Comments: []);
+                Comments: [],
+                IncompleteDeclarations: []);
 
-            return (formattedFile, commentsAfterDecls);
+            return (formattedFile, finalComments, formattedIncompleteDeclarations);
+        }
+
+        /// <summary>
+        /// Calculates the end location given a start location and text content.
+        /// </summary>
+        private static Stil4mElmSyntax7.Location CalculateEndLocation(Stil4mElmSyntax7.Location start, string text)
+        {
+            var row = start.Row;
+            var column = start.Column;
+
+            foreach (var ch in text)
+            {
+                if (ch == '\n')
+                {
+                    row++;
+                    column = 1;
+                }
+                else
+                {
+                    column++;
+                }
+            }
+
+            return new Stil4mElmSyntax7.Location(row, column);
         }
 
         private static (ImmutableList<Stil4mElmSyntax7.Node<string>> FormattedComments, FormattingContext NextContext) FormatCommentsAtContext(
@@ -425,6 +506,8 @@ public class Avh4Format
             {
                 (currentContext, currentComments) = FormatAndAddComment(comment, currentContext, currentComments);
 
+                // Only add blank lines after real comments (not incomplete declarations stored as comments)
+                // Incomplete declarations already contain their original whitespace
                 if (addBlankLinesAfterNonDocComments && !IsDocComment(comment.Value))
                 {
                     currentContext = currentContext.WithBlankLine();
@@ -435,11 +518,22 @@ public class Avh4Format
         }
 
         /// <summary>
-        /// Get comments between two row numbers (exclusive on both ends).
+        /// Get comments between two row numbers.
+        /// Start is exclusive (comments must start after afterRow).
+        /// End is inclusive (comments may end at or before beforeRow) to handle incomplete declarations
+        /// that span up to the start of the next element.
         /// </summary>
         private IReadOnlyList<Stil4mElmSyntax7.Node<string>> GetCommentsBetweenRows(int afterRow, int beforeRow) =>
             [.. originalComments
-                .Where(c => c.Range.Start.Row > afterRow && c.Range.End.Row < beforeRow)
+                .Where(c => c.Range.Start.Row > afterRow && c.Range.Start.Row < beforeRow)
+                .OrderBy(c => c.Range.Start.Row)];
+
+        /// <summary>
+        /// Get comments (including incomplete declarations) that appear after a given row.
+        /// </summary>
+        private IReadOnlyList<Stil4mElmSyntax7.Node<string>> GetCommentsAfterRow(int afterRow) =>
+            [.. originalComments
+                .Where(c => c.Range.Start.Row > afterRow)
                 .OrderBy(c => c.Range.Start.Row)];
 
         /// <summary>
@@ -936,6 +1030,150 @@ public class Avh4Format
             return (formattedDeclarations, currentContext, currentComments);
         }
 
+        /// <summary>
+        /// Formats both complete and incomplete declarations, interleaving them by their original positions.
+        /// </summary>
+        private (IReadOnlyList<Stil4mElmSyntax7.Node<Declaration>>, FormattingContext, ImmutableList<Stil4mElmSyntax7.Node<string>>, IReadOnlyList<Stil4mElmSyntax7.Node<IncompleteDeclaration>>) FormatDeclarationsWithIncompletes(
+            IReadOnlyList<Stil4mElmSyntax7.Node<Declaration>> declarations,
+            FormattingContext context,
+            ImmutableList<Stil4mElmSyntax7.Node<string>> formattedComments)
+        {
+            // Create a union of complete and incomplete declarations sorted by position
+            // We use a discriminated union approach with an interface
+            var allItems = new List<(int row, bool isComplete, int originalIndex)>();
+
+            for (var i = 0; i < declarations.Count; i++)
+            {
+                allItems.Add((declarations[i].Range.Start.Row, isComplete: true, originalIndex: i));
+            }
+
+            for (var i = 0; i < originalIncompleteDeclarations.Count; i++)
+            {
+                allItems.Add((originalIncompleteDeclarations[i].Range.Start.Row, isComplete: false, originalIndex: i));
+            }
+
+            // Sort by row to interleave correctly
+            allItems.Sort((a, b) => a.row.CompareTo(b.row));
+
+            if (allItems.Count == 0)
+                return ([], context, formattedComments, []);
+
+            var formattedDeclarations = new List<Stil4mElmSyntax7.Node<Declaration>>();
+            var formattedIncompletes = new List<Stil4mElmSyntax7.Node<IncompleteDeclaration>>();
+            var currentContext = context;
+            var currentComments = formattedComments;
+
+            for (var i = 0; i < allItems.Count; i++)
+            {
+                var (row, isComplete, originalIndex) = allItems[i];
+
+                if (isComplete)
+                {
+                    var decl = declarations[originalIndex];
+                    var declContext = currentContext with { IndentSpaces = 0 };
+
+                    var (formattedDecl, nextContext, updatedComments) =
+                        FormatDeclaration(decl, declContext, currentComments);
+
+                    currentComments = updatedComments;
+                    formattedDeclarations.Add(formattedDecl);
+
+                    // Update context for next item
+                    if (i < allItems.Count - 1)
+                    {
+                        var nextItem = allItems[i + 1];
+
+                        if (nextItem.isComplete)
+                        {
+                            var nextDecl = declarations[nextItem.originalIndex];
+                            var commentsBetween = originalComments
+                                .Where(c => c.Range.Start.Row > decl.Range.End.Row && c.Range.Start.Row <= nextDecl.Range.Start.Row)
+                                .OrderBy(c => c.Range.Start.Row)
+                                .ToList();
+
+                            if (formattedDecl.Value is Declaration.InfixDeclaration && nextDecl.Value is Declaration.InfixDeclaration)
+                            {
+                                currentContext = nextContext.NextRow();
+                            }
+                            else if (commentsBetween.Count is not 0)
+                            {
+                                var firstComment = commentsBetween[0];
+                                var isFirstCommentDoc = IsDocComment(firstComment.Value);
+
+                                if (isFirstCommentDoc)
+                                {
+                                    currentContext = nextContext.WithBlankLine().NextRow();
+                                }
+                                else
+                                {
+                                    currentContext = nextContext.WithBlankLine().WithBlankLine();
+                                }
+
+                                foreach (var comment in commentsBetween)
+                                {
+                                    (currentContext, currentComments) = FormatAndAddComment(comment, currentContext, currentComments);
+                                    if (!IsDocComment(comment.Value))
+                                    {
+                                        currentContext = currentContext.WithBlankLine();
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                currentContext = nextContext.WithBlankLine().NextRow();
+                            }
+                        }
+                        else
+                        {
+                            // Next item is incomplete - just add blank lines
+                            currentContext = nextContext.WithBlankLine().NextRow();
+                        }
+                    }
+                    else
+                    {
+                        currentContext = nextContext;
+                    }
+                }
+                else
+                {
+                    // Handle incomplete declaration
+                    var incompleteDecl = originalIncompleteDeclarations[originalIndex];
+                    var originalText = incompleteDecl.Value.OriginalText;
+                    var startLoc = currentContext.CurrentLocation();
+                    var endLoc = CalculateEndLocation(startLoc, originalText);
+
+                    // Preserve the original error location and message
+                    formattedIncompletes.Add(new Stil4mElmSyntax7.Node<IncompleteDeclaration>(
+                        new Stil4mElmSyntax7.Range(startLoc, endLoc),
+                        new IncompleteDeclaration(
+                            originalText,
+                            incompleteDecl.Value.ErrorLocation,
+                            incompleteDecl.Value.ErrorMessage)));
+
+                    // Advance context past this incomplete declaration
+                    foreach (var ch in originalText)
+                    {
+                        if (ch == '\n')
+                        {
+                            currentContext = currentContext.NextRow();
+                        }
+                        else
+                        {
+                            currentContext = currentContext.Advance(1);
+                        }
+                    }
+
+                    // Add blank lines before the next item
+                    if (i < allItems.Count - 1)
+                    {
+                        currentContext = currentContext.WithBlankLine().NextRow();
+                    }
+                }
+            }
+
+            return (formattedDeclarations, currentContext, currentComments, formattedIncompletes);
+        }
+
         private (Stil4mElmSyntax7.Node<Declaration>, FormattingContext, ImmutableList<Stil4mElmSyntax7.Node<string>>) FormatDeclaration(
             Stil4mElmSyntax7.Node<Declaration> decl,
             FormattingContext context,
@@ -1060,10 +1298,10 @@ public class Avh4Format
             foreach (var comment in commentsBeforeExpr)
             {
                 var commentLocation = exprContext.CurrentLocation();
-                var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value);
+                var (commentEnd, endsWithNewline) = CalculateCommentEndLocationEx(commentLocation, comment.Value);
                 var formattedComment = comment.WithRange(commentLocation, commentEnd);
                 currentComments = currentComments.Add(formattedComment);
-                exprContext = CreateContextAfterComment(exprContext, commentEnd);
+                exprContext = CreateContextAfterComment(exprContext, commentEnd, endsWithNewline);
                 // Maintain the same indent level after the comment (column is 1-based)
                 exprContext = exprContext with { CurrentColumn = exprContext.IndentSpaces + 1 };
             }
@@ -3495,10 +3733,10 @@ public class Avh4Format
                 foreach (var comment in commentsBeforeExpr)
                 {
                     var commentLocation = bodyContext.CurrentLocation();
-                    var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value);
+                    var (commentEnd, endsWithNewline) = CalculateCommentEndLocationEx(commentLocation, comment.Value);
                     var formattedComment = comment.WithRange(commentLocation, commentEnd);
                     currentComments = currentComments.Add(formattedComment);
-                    bodyContext = CreateContextAfterComment(bodyContext, commentEnd);
+                    bodyContext = CreateContextAfterComment(bodyContext, commentEnd, endsWithNewline);
                     // Maintain the same indent level after the comment (column is 1-based)
                     bodyContext = bodyContext with { CurrentColumn = bodyContext.IndentSpaces + 1 };
                 }

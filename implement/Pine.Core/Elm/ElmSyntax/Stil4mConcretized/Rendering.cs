@@ -14,6 +14,20 @@ namespace Pine.Core.Elm.ElmSyntax.Stil4mConcretized;
 public class Rendering
 {
     /// <summary>
+    /// Represents an item that can be inserted during rendering (comment or incomplete declaration).
+    /// </summary>
+    private readonly record struct InsertableItem(
+        Location StartLocation,
+        string Text)
+    {
+        public static InsertableItem FromComment(Stil4mElmSyntax7.Node<string> node) =>
+            new(node.Range.Start, node.Value);
+
+        public static InsertableItem FromIncompleteDeclaration(Stil4mElmSyntax7.Node<IncompleteDeclaration> node) =>
+            new(node.Range.Start, node.Value.OriginalText);
+    }
+
+    /// <summary>
     /// Context for tracking position while rendering with location preservation.
     /// </summary>
     private class RenderContext
@@ -24,18 +38,22 @@ public class Rendering
 
         public int CurrentColumn { get; set; } = 1;
 
-        public IReadOnlyList<Stil4mElmSyntax7.Node<string>> Comments { get; set; } = [];
+        /// <summary>
+        /// Combined list of comments and incomplete declarations, sorted by position.
+        /// </summary>
+        public IReadOnlyList<InsertableItem> Insertables { get; set; } = [];
 
-        private int _nextCommentIndex = 0;
+        private int _nextInsertableIndex = 0;
 
         /// <summary>
         /// Advances to the given location by adding spaces or newlines as needed.
-        /// Renders any comments that fall between the current position and the target position.
+        /// Renders any insertables (comments or incomplete declarations) that fall between 
+        /// the current position and the target position.
         /// </summary>
         public void AdvanceToLocation(Location targetLocation, int minSpaces = 1)
         {
-            // Render any comments that should appear before reaching the target location
-            RenderCommentsUpTo(targetLocation);
+            // Render any insertables that should appear before reaching the target location
+            RenderInsertablesUpTo(targetLocation);
 
             // Handle row changes
             while (CurrentRow < targetLocation.Row)
@@ -62,45 +80,49 @@ public class Rendering
             }
         }
 
-        private void RenderCommentsUpTo(Location targetLocation)
+        private void RenderInsertablesUpTo(Location targetLocation)
         {
-            while (_nextCommentIndex < Comments.Count)
+            while (_nextInsertableIndex < Insertables.Count)
             {
-                var comment = Comments[_nextCommentIndex];
+                var item = Insertables[_nextInsertableIndex];
 
-                var commentIsAfterCurrent = comment.Range.Start.Row > CurrentRow ||
-                    (comment.Range.Start.Row == CurrentRow && comment.Range.Start.Column >= CurrentColumn);
+                var itemIsAfterCurrent = item.StartLocation.Row > CurrentRow ||
+                    (item.StartLocation.Row == CurrentRow && item.StartLocation.Column >= CurrentColumn);
 
-                var commentIsBeforeTarget = comment.Range.Start.Row < targetLocation.Row ||
-                    (comment.Range.Start.Row == targetLocation.Row && comment.Range.Start.Column < targetLocation.Column);
+                var itemIsBeforeTarget = item.StartLocation.Row < targetLocation.Row ||
+                    (item.StartLocation.Row == targetLocation.Row && item.StartLocation.Column < targetLocation.Column);
 
-                if (commentIsAfterCurrent && commentIsBeforeTarget)
+                if (itemIsAfterCurrent && itemIsBeforeTarget)
                 {
-                    AdvanceToLocationSimple(comment.Range.Start);
-                    Output.Append(comment.Value);
-
-                    foreach (var ch in comment.Value)
-                    {
-                        if (ch is '\n')
-                        {
-                            CurrentRow++;
-                            CurrentColumn = 1;
-                        }
-                        else
-                        {
-                            CurrentColumn++;
-                        }
-                    }
-
-                    _nextCommentIndex++;
+                    RenderInsertableItem(item);
+                    _nextInsertableIndex++;
                 }
-                else if (commentIsBeforeTarget)
+                else if (itemIsBeforeTarget)
                 {
-                    _nextCommentIndex++;
+                    _nextInsertableIndex++;
                 }
                 else
                 {
                     break;
+                }
+            }
+        }
+
+        private void RenderInsertableItem(InsertableItem item)
+        {
+            AdvanceToLocationSimple(item.StartLocation);
+            Output.Append(item.Text);
+
+            foreach (var ch in item.Text)
+            {
+                if (ch is '\n')
+                {
+                    CurrentRow++;
+                    CurrentColumn = 1;
+                }
+                else
+                {
+                    CurrentColumn++;
                 }
             }
         }
@@ -122,6 +144,28 @@ public class Rendering
                     Output.Append(' ', spacesToAdd);
                     CurrentColumn = targetLocation.Column;
                 }
+            }
+        }
+
+        /// <summary>
+        /// Renders all remaining insertables (comments and incomplete declarations) that haven't been rendered yet.
+        /// Called at the end of rendering to output any trailing items.
+        /// </summary>
+        public void RenderRemainingInsertables()
+        {
+            while (_nextInsertableIndex < Insertables.Count)
+            {
+                var item = Insertables[_nextInsertableIndex];
+
+                var itemIsAfterCurrent = item.StartLocation.Row > CurrentRow ||
+                    (item.StartLocation.Row == CurrentRow && item.StartLocation.Column >= CurrentColumn);
+
+                if (itemIsAfterCurrent)
+                {
+                    RenderInsertableItem(item);
+                }
+
+                _nextInsertableIndex++;
             }
         }
 
@@ -166,9 +210,29 @@ public class Rendering
     /// </summary>
     internal static string ToStringWithoutFormatting(File file)
     {
+        // Combine comments and incomplete declarations into a unified list of insertables
+        var insertables = new List<InsertableItem>();
+
+        foreach (var comment in file.Comments)
+        {
+            insertables.Add(InsertableItem.FromComment(comment));
+        }
+
+        foreach (var incompleteDecl in file.IncompleteDeclarations)
+        {
+            insertables.Add(InsertableItem.FromIncompleteDeclaration(incompleteDecl));
+        }
+
+        // Sort by position (row, then column)
+        insertables.Sort((a, b) =>
+        {
+            var rowCompare = a.StartLocation.Row.CompareTo(b.StartLocation.Row);
+            return rowCompare != 0 ? rowCompare : a.StartLocation.Column.CompareTo(b.StartLocation.Column);
+        });
+
         var context = new RenderContext
         {
-            Comments = [.. file.Comments.OrderBy(c => c.Range.Start.Row).ThenBy(c => c.Range.Start.Column)]
+            Insertables = insertables
         };
 
         // Render module definition
@@ -181,12 +245,16 @@ public class Rendering
             RenderImport(import, context);
         }
 
-        // Render declarations
+        // Render declarations - insertables (comments and incomplete declarations) are rendered
+        // automatically by AdvanceToLocation when they fall between positions
         foreach (var declaration in file.Declarations)
         {
             context.AdvanceToLocation(declaration.Range.Start);
             RenderDeclaration(declaration, context);
         }
+
+        // Render any remaining insertables (trailing comments and incomplete declarations)
+        context.RenderRemainingInsertables();
 
         // Ensure file ends with a trailing newline (AVH4 elm-format style)
         var result = context.Output.ToString();

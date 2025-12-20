@@ -38,7 +38,8 @@ public class SnapshotTestFormat
             ModuleDefinition: file.ModuleDefinition,
             Imports: file.Imports,
             Declarations: [.. file.Declarations.Select(FormatDeclaration)],
-            Comments: file.Comments
+            Comments: file.Comments,
+            IncompleteDeclarations: file.IncompleteDeclarations
         );
     }
 
