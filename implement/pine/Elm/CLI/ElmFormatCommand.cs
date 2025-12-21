@@ -1,9 +1,13 @@
 using Pine.Core;
 using Pine.Core.Elm.ElmSyntax;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.CommandLine;
 using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace Pine.Elm.CLI;
 
@@ -107,12 +111,14 @@ public class ElmFormatCommand
         // Sort paths alphabetically
         elmFiles.Sort(StringComparer.Ordinal);
 
-        // Parse, format, and check each file
-        var alreadyFormatted = new List<string>();
-        var needsFormatting = new List<(string path, string formattedContent)>();
-        var parseErrors = new List<(string path, string error)>();
+        // Parse, format, and check each file in parallel.
+        // Parallel.ForEach automatically adapts max concurrency based on the available
+        // processors, using the default ThreadPool scheduler.
+        var alreadyFormatted = new ConcurrentBag<string>();
+        var needsFormatting = new ConcurrentBag<(string path, string formattedContent)>();
+        var parseErrors = new ConcurrentBag<(string path, string error)>();
 
-        foreach (var filePath in elmFiles)
+        Parallel.ForEach(elmFiles, (filePath) =>
         {
             try
             {
@@ -126,13 +132,13 @@ public class ElmFormatCommand
                 if (parseResult.IsErrOrNull() is { } parseErr)
                 {
                     parseErrors.Add((filePath, parseErr));
-                    continue;
+                    return;
                 }
 
                 if (parseResult.IsOkOrNull() is not { } parsed)
                 {
                     parseErrors.Add((filePath, "Unexpected parse result type"));
-                    continue;
+                    return;
                 }
 
                 var formatted =
@@ -155,25 +161,41 @@ public class ElmFormatCommand
             {
                 parseErrors.Add((filePath, ex.Message));
             }
-        }
+        });
 
-        // Output already formatted files
-        if (alreadyFormatted.Count is not 0)
+        // Output already formatted files (sorted for consistent output)
+        var sortedAlreadyFormatted =
+            alreadyFormatted
+            .OrderBy(p => p, StringComparer.Ordinal)
+            .ToImmutableList();
+
+        if (sortedAlreadyFormatted.Count is not 0)
         {
-            foreach (var path in alreadyFormatted)
+            foreach (var path in sortedAlreadyFormatted)
             {
                 Console.WriteLine(path);
             }
         }
 
+        // Sort collections for consistent output
+        var sortedParseErrors =
+            parseErrors
+            .OrderBy(e => e.path, StringComparer.Ordinal)
+            .ToImmutableList();
+
+        var sortedNeedsFormatting =
+            needsFormatting
+            .OrderBy(f => f.path, StringComparer.Ordinal)
+            .ToImmutableList();
+
         // Handle verify-no-changes mode
         if (verifyNoChanges)
         {
-            if (parseErrors.Count is not 0)
+            if (sortedParseErrors.Count is not 0)
             {
                 Console.WriteLine("\nFiles with syntax errors:");
 
-                foreach (var (path, error) in parseErrors)
+                foreach (var (path, error) in sortedParseErrors)
                 {
                     Console.WriteLine($"{path}: {error}");
                 }
@@ -181,11 +203,11 @@ public class ElmFormatCommand
                 return 200;
             }
 
-            if (needsFormatting.Count is not 0)
+            if (sortedNeedsFormatting.Count is not 0)
             {
                 Console.WriteLine("\nFiles not formatted:");
 
-                foreach (var (path, _) in needsFormatting)
+                foreach (var (path, _) in sortedNeedsFormatting)
                 {
                     Console.WriteLine(path);
                 }
@@ -197,11 +219,11 @@ public class ElmFormatCommand
         }
 
         // Report parse errors
-        if (parseErrors.Count is not 0)
+        if (sortedParseErrors.Count is not 0)
         {
             Console.WriteLine("\nFiles with syntax errors:");
 
-            foreach (var (path, error) in parseErrors)
+            foreach (var (path, error) in sortedParseErrors)
             {
                 Console.WriteLine($"{path}: {error}");
             }
@@ -210,7 +232,7 @@ public class ElmFormatCommand
         }
 
         // Report files that need formatting
-        if (needsFormatting.Count is 0)
+        if (sortedNeedsFormatting.Count is 0)
         {
             // All files already formatted
             if (shouldShowCount)
@@ -229,16 +251,16 @@ public class ElmFormatCommand
 
             return 0;
         }
-        else if (needsFormatting.Count is not 0)
+        else if (sortedNeedsFormatting.Count is not 0)
         {
             // Report count if processing multiple files or a directory
             if (shouldShowCount)
             {
-                Console.WriteLine($"\n{needsFormatting.Count} file(s) need formatting");
+                Console.WriteLine($"\n{sortedNeedsFormatting.Count} file(s) need formatting");
             }
 
             // List files to be formatted
-            foreach (var (path, _) in needsFormatting)
+            foreach (var (path, _) in sortedNeedsFormatting)
             {
                 Console.WriteLine(path);
             }
@@ -261,12 +283,12 @@ public class ElmFormatCommand
             }
 
             // Write formatted content to files
-            foreach (var (path, formattedContent) in needsFormatting)
+            foreach (var (path, formattedContent) in sortedNeedsFormatting)
             {
                 File.WriteAllText(path, formattedContent);
             }
 
-            Console.WriteLine($"\nFormatted {needsFormatting.Count} file(s).");
+            Console.WriteLine($"\nFormatted {sortedNeedsFormatting.Count} file(s).");
         }
         else
         {
