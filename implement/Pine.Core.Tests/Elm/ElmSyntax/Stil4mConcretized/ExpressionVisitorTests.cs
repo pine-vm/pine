@@ -151,8 +151,9 @@ public class ExpressionVisitorTests
     public void Visit_OperatorApplication_dispatches_correctly()
     {
         var range = new Range(new Location(1, 1), new Location(1, 10));
+        var opRange = new Range(new Location(1, 3), new Location(1, 4));
         var expr = new SyntaxTypes.Expression.OperatorApplication(
-            "+",
+            new Node<string>(opRange, "+"),
             InfixDirection.Left,
             new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer(1)),
             new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer(2)));
@@ -259,15 +260,11 @@ public class ExpressionVisitorTests
     public void Visit_TupledExpression_dispatches_correctly()
     {
         var range = new Range(new Location(1, 1), new Location(1, 10));
-        var openLoc = new Location(1, 1);
-        var closeLoc = new Location(1, 10);
         var commaLoc = new Location(1, 5);
         var expr = new SyntaxTypes.Expression.TupledExpression(
-            openLoc,
             new SyntaxTypes.SeparatedSyntaxList<Node<SyntaxTypes.Expression>>.NonEmpty(
                 new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer(1)),
-                [(commaLoc, new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer(2)))]),
-            closeLoc);
+                [(commaLoc, new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer(2)))]));
 
         var result = _visitor.Visit(expr, null);
 

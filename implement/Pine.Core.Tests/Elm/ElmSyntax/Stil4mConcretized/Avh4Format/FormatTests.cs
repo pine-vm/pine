@@ -1,30 +1,17 @@
 using AwesomeAssertions;
-using Pine.Core.Elm.ElmSyntax;
 using System;
 using System.Collections.Generic;
 using Xunit;
 
 namespace Pine.Core.Tests.Elm.ElmSyntax.Stil4mConcretized.Avh4Format;
 
-using Avh4Format = Core.Elm.ElmSyntax.Stil4mConcretized.Avh4Format;
+using static FormatTestHelper;
 
 /// <summary>
 /// Tests for the Avh4Format functionality used in the `elm-format` command.
 /// </summary>
 public class FormatTests
 {
-    private static Core.Elm.ElmSyntax.Stil4mConcretized.File ParseModule(string input)
-    {
-        return ElmSyntaxParser.ParseModuleText(input, enableMaxPreservation: true)
-            .Extract(err => throw new Exception($"Parsing failed: {err}"));
-    }
-
-    private static string FormatString(string input)
-    {
-        var parsed = ParseModule(input);
-        return Avh4Format.FormatToString(parsed);
-    }
-
     [Fact]
     public void FormatToString_simple_module()
     {

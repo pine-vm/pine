@@ -279,9 +279,7 @@ public class NameMapper
 
             Expression.TupledExpression tupled =>
                 new Expression.TupledExpression(
-                    OpenParenLocation: tupled.OpenParenLocation,
-                    Elements: MapSeparatedList(tupled.Elements, e => MapExpression(e, mapQualifiedName)),
-                    CloseParenLocation: tupled.CloseParenLocation),
+                    Elements: MapSeparatedList(tupled.Elements, e => MapExpression(e, mapQualifiedName))),
 
             Expression.RecordExpr recordExpr =>
                 new Expression.RecordExpr(

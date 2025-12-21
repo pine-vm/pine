@@ -1,40 +1,17 @@
 using AwesomeAssertions;
-using Pine.Core.Elm.ElmSyntax;
-using Pine.Core.Elm.ElmSyntax.Stil4mConcretized;
-using System;
 using Xunit;
 
 using Location = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7.Location;
 
 namespace Pine.Core.Tests.Elm.ElmSyntax.Stil4mConcretized.Avh4Format;
 
-using Avh4Format = Core.Elm.ElmSyntax.Stil4mConcretized.Avh4Format;
+using static FormatTestHelper;
 
 public class FormatIncompleteTests
 {
     /*
      * Scenarios to test formatting of Elm modules containing some incomplete declarations.
      * */
-
-    private static string FormatString(
-        string input)
-    {
-        var parsed =
-            ElmSyntaxParser.ParseModuleText(
-                input,
-                enableMaxPreservation: true)
-            .Extract(err => throw new Exception($"Parsing failed: {err}"));
-
-        return Avh4Format.FormatToString(parsed);
-    }
-
-    private static File ParseFile(string input)
-    {
-        return ElmSyntaxParser.ParseModuleText(
-            input,
-            enableMaxPreservation: true)
-            .Extract(err => throw new Exception($"Parsing failed: {err}"));
-    }
 
     [Fact]
     public void Simple_module()
@@ -176,44 +153,5 @@ public class FormatIncompleteTests
 
         // The ErrorMessage should describe the issue unexpected open bracket
         incompleteDecl.Value.ErrorMessage.Should().Contain("OpenBracket");
-    }
-
-    private static void AssertModuleTextFormatsToItself(
-        string elmModuleText)
-    {
-        var formatted = FormatString(elmModuleText);
-
-        formatted.Trim().Should().Be(elmModuleText.Trim());
-    }
-
-    private static void AssertModuleTextFormatsToExpected(
-        string elmModuleText,
-        string expectedFormattedElmModuleText)
-    {
-        var formatted = FormatString(elmModuleText);
-
-        formatted.Trim().Should().Be(expectedFormattedElmModuleText.Trim());
-    }
-
-    private static void AssertSyntaxNodesValueEqualityForModuleText(
-        string elmModuleText)
-    {
-        /*
-         * Verify the C# type declarations implement value-based equality and
-         * hash code generation correctly, by parsing the same module text twice
-         * and comparing the resulting syntax nodes.
-         * */
-
-        var parsed_0 =
-            ElmSyntaxParser.ParseModuleText(elmModuleText, enableMaxPreservation: true)
-            .Extract(err => throw new Exception("Parsing failed: " + err.ToString()));
-
-        var parsed_1 =
-            ElmSyntaxParser.ParseModuleText(elmModuleText, enableMaxPreservation: true)
-            .Extract(err => throw new Exception("Reparsing failed: " + err.ToString()));
-
-        parsed_0.Should().Be(parsed_1);
-
-        parsed_0.GetHashCode().Should().Be(parsed_1.GetHashCode());
     }
 }

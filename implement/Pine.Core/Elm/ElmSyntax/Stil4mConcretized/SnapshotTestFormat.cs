@@ -113,9 +113,7 @@ public class SnapshotTestFormat
             ),
 
             Expression.TupledExpression tuple => new Expression.TupledExpression(
-                OpenParenLocation: tuple.OpenParenLocation,
-                Elements: MapSeparatedList(tuple.Elements, FormatExpression),
-                CloseParenLocation: tuple.CloseParenLocation
+                Elements: MapSeparatedList(tuple.Elements, FormatExpression)
             ),
 
             Expression.ParenthesizedExpression paren => new Expression.ParenthesizedExpression(
@@ -381,7 +379,16 @@ public class SnapshotTestFormat
             )
         };
 
-        // Right operand on next row
+        // Operator on the next row (multiline)
+        var operatorWithLocation = opApp.Operator with
+        {
+            Range = new Range(
+                Start: new Location(Row: fakeRow + 2, Column: 1),
+                End: new Location(Row: fakeRow + 2, Column: 1 + opApp.Operator.Value.Length)
+            )
+        };
+
+        // Right operand on next row after operator
         var rightWithLocation = formattedRight with
         {
             Range = new Range(
@@ -391,7 +398,7 @@ public class SnapshotTestFormat
         };
 
         return new Expression.OperatorApplication(
-            Operator: opApp.Operator,
+            Operator: operatorWithLocation,
             Direction: opApp.Direction,
             Left: leftWithLocation,
             Right: rightWithLocation

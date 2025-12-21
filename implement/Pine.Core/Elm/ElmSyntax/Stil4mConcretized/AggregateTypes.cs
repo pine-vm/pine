@@ -1078,7 +1078,7 @@ public abstract record Expression
 
     /// <summary>Operator application with explicit direction.</summary>
     public sealed record OperatorApplication(
-        string Operator,
+        Node<string> Operator,
         InfixDirection Direction,
         Node<Expression> Left,
         Node<Expression> Right)
@@ -1086,9 +1086,7 @@ public abstract record Expression
 
     /// <summary>Tuple literal expression.</summary>
     public sealed record TupledExpression(
-        Location OpenParenLocation,
-        SeparatedSyntaxList<Node<Expression>> Elements,
-        Location CloseParenLocation)
+        SeparatedSyntaxList<Node<Expression>> Elements)
         : Expression;
 
     /// <summary>Lambda expression.</summary>

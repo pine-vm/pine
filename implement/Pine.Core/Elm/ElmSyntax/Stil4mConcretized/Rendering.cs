@@ -848,24 +848,18 @@ public class Rendering
 
             case Expression.OperatorApplication opApp:
                 RenderExpression(opApp.Left, context);
-                // Check if right operand is on a different row - if so, put operator on new line
-                if (opApp.Right.Range.Start.Row > opApp.Left.Range.End.Row)
-                {
-                    context.AdvanceToLocation(opApp.Right.Range.Start with { Column = opApp.Right.Range.Start.Column - opApp.Operator.Length - 1 });
-                }
-                else
-                {
-                    context.AdvanceByMinimum(1);
-                }
-                context.Append(opApp.Operator);
+                context.AdvanceToLocation(opApp.Operator.Range.Start);
+                context.Append(opApp.Operator.Value);
                 RenderExpression(opApp.Right, context);
                 break;
 
             case Expression.TupledExpression tupledExpr:
-                context.AdvanceToLocation(tupledExpr.OpenParenLocation);
+                // Open paren location is derived from containing node's range start (already positioned by RenderExpression)
                 context.Append("(");
                 RenderSeparatedList(tupledExpr.Elements, RenderExpression, context);
-                context.AdvanceToLocation(tupledExpr.CloseParenLocation);
+                // Close paren location is derived from containing node's range end - 1
+                var closeParenLocation = new Location(expressionNode.Range.End.Row, expressionNode.Range.End.Column - 1);
+                context.AdvanceToLocation(closeParenLocation);
                 context.Append(")");
                 break;
 
@@ -1193,7 +1187,8 @@ public class Rendering
 
         // Handle control characters and other non-printable characters with Unicode escapes
         // This includes null (0), backspace (8), form feed (12), and other control characters
-        if (value < 32 || (value >= 127 && value < 160))
+        // Also includes characters in the C1 control block (127-159) and non-breaking space (160)
+        if (value < 32 || (value >= 127 && value <= 160))
         {
             // Use Unicode escape sequence for control characters
             // Format with uppercase hex, padded to 4 digits minimum

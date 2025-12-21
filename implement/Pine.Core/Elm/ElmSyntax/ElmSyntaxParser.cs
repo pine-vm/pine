@@ -2653,6 +2653,11 @@ public class ElmSyntaxParser
 
                 var opInfo = InfixOperatorInfo.GetInfo(opToken.Lexeme);
 
+                // Create a Node for the operator with its source range
+                var operatorNode = new Node<string>(
+                    MakeRange(opToken.Start, opToken.End),
+                    opToken.Lexeme);
+
                 // Determine the next minimum precedence for the right-hand side.
                 // For left-associative operators, use (precedence + 1).
                 var nextMinPrecedence =
@@ -2674,7 +2679,7 @@ public class ElmSyntaxParser
                 left =
                     new Node<SyntaxTypes.Expression>(
                         MakeRange(left.Range.Start, right.Range.End),
-                        new SyntaxTypes.Expression.OperatorApplication(opToken.Lexeme, opInfo.Direction, left, right));
+                        new SyntaxTypes.Expression.OperatorApplication(operatorNode, opInfo.Direction, left, right));
 
                 ConsumeAllTrivia();
             }
@@ -3187,11 +3192,9 @@ public class ElmSyntaxParser
 
                     var tupledExpr =
                         new SyntaxTypes.Expression.TupledExpression(
-                            OpenParenLocation: parenOpenToken.Start,
                             Elements: new SyntaxTypes.SeparatedSyntaxList<Node<SyntaxTypes.Expression>>.NonEmpty(
                                 First: firstItemExpr,
-                                Rest: furtherItems),
-                            CloseParenLocation: parenCloseToken.Start);
+                                Rest: furtherItems));
 
                     return new Node<SyntaxTypes.Expression>(parenRange, tupledExpr);
                 }

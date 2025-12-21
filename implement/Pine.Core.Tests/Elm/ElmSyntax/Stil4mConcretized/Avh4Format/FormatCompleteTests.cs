@@ -1,5 +1,4 @@
 using AwesomeAssertions;
-using Pine.Core.Elm.ElmSyntax;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -8,20 +7,10 @@ using Xunit;
 
 namespace Pine.Core.Tests.Elm.ElmSyntax.Stil4mConcretized.Avh4Format;
 
-using Avh4Format = Core.Elm.ElmSyntax.Stil4mConcretized.Avh4Format;
+using static FormatTestHelper;
 
 public class FormatCompleteTests
 {
-    private static string FormatString(
-        string input)
-    {
-        var parsed =
-            ElmSyntaxParser.ParseModuleText(input, enableMaxPreservation: true)
-            .Extract(err => throw new Exception($"Parsing failed: {err}"));
-
-        return Avh4Format.FormatToString(parsed);
-    }
-
     [Fact]
     public void Simple_module()
     {
@@ -837,7 +826,8 @@ public class FormatCompleteTests
 
             decl =
                 [ a + 13, b + 17, a + 19 , b + 21
-                -- Simple comment
+                  -- Simple comment
+              -- Another line of comment
                 , a + 23, b + 29, a + 31, b + 37, a + 41
                 ]
             
@@ -857,6 +847,7 @@ public class FormatCompleteTests
                 , b + 21
 
                 -- Simple comment
+                -- Another line of comment
                 , a + 23
                 , b + 29
                 , a + 31
@@ -1250,6 +1241,818 @@ public class FormatCompleteTests
             """";
 
         AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
+    public void Roundtrip_list_containing_escaped_char()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                [ '\\', 'n' ]
+
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
+    public void Roundtrip_signature_with_multiline_type_annotation_containing_record()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl :
+                String
+                ->
+                    { arancini : List Int
+                    }
+                -> Int
+            decl =
+                71
+
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
+    public void Roundtrip_application_containing_singleline_comments()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl a b c =
+                -- Alcuni gruppi
+                --
+                b
+                    -- di squali,
+                    --
+                    a
+                    --
+                    -- in particolare
+                    --
+                    c
+
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
+    public void Roundtrip_application_containing_multiline_comments()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl a b c =
+                {- Alcuni gruppi
+
+                -}
+                b
+                    {- di squali,
+
+                    -}
+                    a
+                    {- in particolare
+
+                    -}
+                    c
+
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
+    public void Keep_left_pipe_operator_on_end_of_preceding_line()
+    {
+        /*
+         * https://github.com/avh4/elm-format/blob/e7e5da37716acbfb4954a88128b5cc72b2c911d9/Style%20Guide/Expressions.md#left-pipe-operator
+         * Rule from avh4/elm-format:
+         * Unlike other binary operators, the left pipe <| operator is places at the end of the preceding line,
+         * and the following lines are indented.
+         * */
+
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl b =
+                Ok <|
+                    if b then
+                        "YES"
+
+                    else
+                        "NO"
+
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
+    public void Keep_left_pipe_operator_followed_by_parens()
+    {
+        /*
+         * https://github.com/avh4/elm-format/blob/e7e5da37716acbfb4954a88128b5cc72b2c911d9/Style%20Guide/Expressions.md#left-pipe-operator
+         * Rule from avh4/elm-format:
+         * Parentheses are not used around the second term unless it is a binary operator expression:
+         * */
+
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            declA =
+                Ok <| ([ 1, 2, 3 ] |> List.tail)
+
+
+            declB =
+                Ok <| ("a" ++ "b")
+
+
+            declC =
+                test "should pass" <|
+                    \() ->
+                        Expect.pass
+
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
+    public void Roundtrip_comments_in_record_expression()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                { field_beta =
+                    {-
+                       presentano anch'essi
+                       ampie pinne pettorali
+
+                    -}
+                    -- []
+                    71
+
+                {-
+                   che ricordano
+                   il disco
+                -}
+                , {-
+                     tipico delle razze
+                     ma si distinguono
+                  -}
+                  field_alfa = 73
+                }
+
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
+    public void Roundtrip_singleline_comments_in_type_alias_declaration_record()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            type alias Record =
+                -- Nelle razze,
+                { -- le cinque
+                  a
+                  -- o sei
+                    :
+                    -- paia di branchie
+                    Int
+
+                -- sono situate invece
+                , -- in posizione
+                  b : String
+
+                -- ventrale
+                }
+
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
+    public void Roundtrip_multiline_comments_in_type_alias_declaration_record()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            type alias Record =
+                {- Nelle razze,
+
+                -}
+                { {- le cinque -}
+                  a
+                  {- o sei
+
+                  -}
+                    :
+                    {- paia di branchie -} Int
+
+                {- sono situate invece -}
+                , {- in posizione
+
+                  -}
+                  b : String
+
+                {- ventrale -}
+                }
+
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
+    public void Roundtrip_singleline_comments_in_let_block()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                let
+                    -- In molte specie
+                    -- il capo
+                    a =
+                        -- fa parte
+                        -- del disco
+                        41
+
+                    b =
+                        -- mentre in altre
+                        -- la testa è distinta
+                        71
+
+                    -- e le pinne pettorali
+                    -- vi si raccodano.
+                in
+                []
+
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
+    public void Roundtrip_singleline_comments_between_infix_operators()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl a b c =
+                -- In molte specie
+                -- il capo
+                a
+                    -- fa parte
+                    -- del disco
+                    && -- mentre in altre
+                       b
+                    -- la testa è distinta
+                    && c
+
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
+    public void Roundtrip_singleline_comments_in_tuple()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                ( -- gli occhi
+                  71
+                  -- e gli spiracoli
+                , -- sono solitamente
+                  -- disposti
+                  73
+                  -- sulla sommità
+                  -- del capo.
+                , 79
+                  -- In alcune specie
+                  -- abissali di Torpedinoidei,
+                )
+
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
+    public void Roundtrip_singleline_comment_before_right_pipe_operator()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl a b c =
+                a
+                    -- Nelle razze bentoniche
+                    -- cioè diffuse
+                    |> b
+                        -- sui fondali
+                        c
+
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
+    public void Roundtrip_multiline_string_literals_in_record_expression()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                { a =
+                    [ """
+
+            da esse
+
+            """
+                    , """
+
+            per la presenza
+
+             """
+                    ]
+                , b = """
+            di fessure branchiali
+
+              """ ++ """
+
+            ai lati del capo
+                """
+                }
+
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
+    public void Roundtrip_case_block_in_tuple_in_list()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl a =
+                [ ( "DecodedArguments"
+                  , case
+                        a
+                    of
+                        Err err ->
+                            71
+
+                        Ok evalOk ->
+                            73
+                  )
+                ]
+
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
+    public void Roundtrip_record_expressions_in_pipeline_and_lambda()
+    {
+        /*
+         * Indent caused by pipeline and opening of lambda is > 3,
+         * so inner nodes are moved to the next indent level
+         * */
+
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                a
+                    |> b
+                        { fa = 71
+                        , fb = 79
+                        }
+                    |> (\result ->
+                            { fc = result.encodeFunction.text
+                            , fd = result.decodeFunction.text
+                            }
+                       )
+
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
+    public void Roundtrip_record_update_expression_in_tuple()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                let
+                    state =
+                        ( { stateBefore
+                            | elmPackages =
+                                ( packageVersionIdentifer, parsedModules )
+                                    :: stateBefore.elmPackages
+                          }
+                        , 91
+                        )
+                in
+                []
+
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
+    public void Roundtrip_case_of_expression_in_tuple()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl a =
+                let
+                    state =
+                        ( case a of
+                            71 ->
+                                [ 31 ]
+
+                            79 ->
+                                [ 27 ]
+                        , 91
+                        )
+                in
+                []
+
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
+    public void Roundtrip_record_update_expressions_in_let_block()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                let
+                    state : LanguageServiceState
+                    state =
+                        { stateBefore
+                            | elmPackages =
+                                ( packageVersionIdentifer, parsedModules )
+                                    :: stateBefore.elmPackages
+                        }
+                in
+                []
+
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
+    public void Roundtrip_choice_type_tag_argument_in_parens()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl a =
+                TagName
+                    (let
+                        x =
+                            [ a ]
+                     in
+                     []
+                    )
+
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
+    public void Adding_line_breaks_does_not_interfere_with_following_declarations()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+            
+            declA =
+                [ 31, 37, 41
+                , 43, 47
+                ]
+
+
+            type alias RecordA =
+                { a : Int
+                , b : String
+                , c : List String
+                }
+
+
+            type alias ParsedDeclaration =
+                Declaration ( DeclarationRange, CookedDocumentation )
+
+
+            declB a =
+                case a of
+                    True ->
+                        "YES"
+
+                    False ->
+                        "NO"
+
+
+            declC =
+                \a b c ->
+                    a
+                        b
+                        c
+
+            declD a ( b, c ) =
+               case
+            
+            
+                    a
+                
+                    
+                 of
+                    [] ->
+                        b + c
+            
+                    41 :: _ ->
+                        b * c
+            
+                    43 :: _ ->
+                        let
+                            innerF a1 b1 c1 =
+                                a1 - b1 + c1
+            
+                            ( a2, b2 ) =
+                                delta
+                        in
+                        innerF a b c
+            
+                    fst :: following ->
+                        b - c
+            """";
+
+        var expected =
+            """"
+            module Test exposing (..)
+
+            
+            declA =
+                [ 31
+                , 37
+                , 41
+                , 43
+                , 47
+                ]
+
+
+            type alias RecordA =
+                { a : Int
+                , b : String
+                , c : List String
+                }
+
+
+            type alias ParsedDeclaration =
+                Declaration ( DeclarationRange, CookedDocumentation )
+
+
+            declB a =
+                case a of
+                    True ->
+                        "YES"
+
+                    False ->
+                        "NO"
+
+
+            declC =
+                \a b c ->
+                    a
+                        b
+                        c
+
+
+            declD a ( b, c ) =
+                case
+                    a
+                of
+                    [] ->
+                        b + c
+            
+                    41 :: _ ->
+                        b * c
+            
+                    43 :: _ ->
+                        let
+                            innerF a1 b1 c1 =
+                                a1 - b1 + c1
+            
+                            ( a2, b2 ) =
+                                delta
+                        in
+                        innerF a b c
+            
+                    fst :: following ->
+                        b - c
+
+            """";
+
+        AssertModuleTextFormatsToExpected(input, expected);
+    }
+
+    [Fact]
+    public void Trimming_line_breaks_does_not_interfere_with_following_declarations()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+            
+            declA =
+                [
+
+
+                ]
+
+
+            type alias RecordA =
+                { a : Int
+                , b : String
+                , c : List String
+                }
+
+
+            type alias ParsedDeclaration =
+                Declaration ( DeclarationRange, CookedDocumentation )
+
+
+            declB a =
+                case a of
+                    True ->
+                        "YES"
+
+                    False ->
+                        "NO"
+
+
+            declC =
+                \a b c ->
+                    a
+                        b
+                        c
+
+            
+            declD a ( b, c ) =
+               case
+
+
+                    a
+                
+                    
+                 of
+                    [] ->
+                        b + c
+            
+                    41 :: _ ->
+                        b * c
+            
+                    43 :: _ ->
+                        let
+                            innerF a1 b1 c1 =
+                                a1 - b1 + c1
+            
+                            ( a2, b2 ) =
+                                delta
+                        in
+                        innerF a b c
+            
+                    fst :: following ->
+                        b - c
+            """";
+
+        var expected =
+            """"
+            module Test exposing (..)
+
+            
+            declA =
+                []
+
+
+            type alias RecordA =
+                { a : Int
+                , b : String
+                , c : List String
+                }
+
+
+            type alias ParsedDeclaration =
+                Declaration ( DeclarationRange, CookedDocumentation )
+
+
+            declB a =
+                case a of
+                    True ->
+                        "YES"
+
+                    False ->
+                        "NO"
+
+
+            declC =
+                \a b c ->
+                    a
+                        b
+                        c
+
+
+            declD a ( b, c ) =
+                case
+                    a
+                of
+                    [] ->
+                        b + c
+
+                    41 :: _ ->
+                        b * c
+
+                    43 :: _ ->
+                        let
+                            innerF a1 b1 c1 =
+                                a1 - b1 + c1
+
+                            ( a2, b2 ) =
+                                delta
+                        in
+                        innerF a b c
+
+                    fst :: following ->
+                        b - c
+            """";
+
+        AssertModuleTextFormatsToExpected(input, expected);
     }
 
     [Fact]
@@ -2082,6 +2885,9 @@ public class FormatCompleteTests
                     '\u{000C}' ->
                         87
 
+                    '\u{00A0}' ->
+                        91
+
                     _ ->
                         0
 
@@ -2317,9 +3123,12 @@ public class FormatCompleteTests
                 , fb : Int
 
                 -- La loro conformazione
+                --
                 , fc : List String
 
+                --
                 -- è profondamente modificata
+                --
                 , fd : Bool
                 , fe : Int
                 }
@@ -2745,6 +3554,46 @@ public class FormatCompleteTests
         }
     }
 
+    [Fact]
+    public void Roundtrip_function_type_annotation_with_nested_generic_records()
+    {
+        // Regression test: Function type annotation with nested generic records
+        // was adding an extra space after closing braces
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            mapErrorStringForFunctionDeclaration : Elm.Syntax.Node.Node { a | declaration : Elm.Syntax.Node.Node { b | name : Elm.Syntax.Node.Node String } } -> String -> String
+            mapErrorStringForFunctionDeclaration node baseErr =
+                baseErr
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
+    public void Roundtrip_commented_out_list_item_before_closing_bracket()
+    {
+        // Regression test: Comment (commented-out list item) before closing bracket being lost
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            mapToValueDict =
+                [ ( [ "base64" ], ( mappingBase64, Nothing ) )
+                , ( [ "bytes" ], mappingBytes )
+                , ( [], mappingBytes )
+                , ( [ "utf8" ], ( mappingUtf8, Nothing ) )
+
+                -- , ( [ "gzip", "base64" ], ( mappingGZipBase64, Nothing ) )
+                ]
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
     [Fact(Skip = "Fix formatter egde cases before enabling regression tests")]
     public async System.Threading.Tasks.Task Stable_configurations_from_remote_repositories()
     {
@@ -2808,44 +3657,5 @@ public class FormatCompleteTests
                     "Failed for test case source: " + sourceDirectory, e);
             }
         }
-    }
-
-    private static void AssertModuleTextFormatsToItself(
-        string elmModuleText)
-    {
-        var formatted = FormatString(elmModuleText);
-
-        formatted.Trim().Should().Be(elmModuleText.Trim());
-    }
-
-    private static void AssertModuleTextFormatsToExpected(
-        string elmModuleText,
-        string expectedFormattedElmModuleText)
-    {
-        var formatted = FormatString(elmModuleText);
-
-        formatted.Trim().Should().Be(expectedFormattedElmModuleText.Trim());
-    }
-
-    private static void AssertSyntaxNodesValueEqualityForModuleText(
-        string elmModuleText)
-    {
-        /*
-         * Verify the C# type declarations implement value-based equality and
-         * hash code generation correctly, by parsing the same module text twice
-         * and comparing the resulting syntax nodes.
-         * */
-
-        var parsed_0 =
-            ElmSyntaxParser.ParseModuleText(elmModuleText, enableMaxPreservation: true)
-            .Extract(err => throw new Exception("Parsing failed: " + err.ToString()));
-
-        var parsed_1 =
-            ElmSyntaxParser.ParseModuleText(elmModuleText, enableMaxPreservation: true)
-            .Extract(err => throw new Exception("Reparsing failed: " + err.ToString()));
-
-        parsed_0.Should().Be(parsed_1);
-
-        parsed_0.GetHashCode().Should().Be(parsed_1.GetHashCode());
     }
 }

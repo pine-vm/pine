@@ -495,16 +495,14 @@ public static class ToStil4mConcretized
 
             Expression.OperatorApplication operatorApplication =>
                 new ConcretizedTypes.Expression.OperatorApplication(
-                    operatorApplication.Operator,
+                    new Node<string>(s_defaultRange, operatorApplication.Operator),
                     operatorApplication.Direction,
                     ConvertNode(operatorApplication.Left, ToConcretized),
                     ConvertNode(operatorApplication.Right, ToConcretized)),
 
             Expression.TupledExpression tupledExpression =>
                 new ConcretizedTypes.Expression.TupledExpression(
-                    OpenParenLocation: s_defaultLocation,
-                    Elements: ToSeparatedList(tupledExpression.Elements, ToConcretized),
-                    CloseParenLocation: s_defaultLocation),
+                    Elements: ToSeparatedList(tupledExpression.Elements, ToConcretized)),
 
             Expression.LambdaExpression lambdaExpression =>
                 new ConcretizedTypes.Expression.LambdaExpression(

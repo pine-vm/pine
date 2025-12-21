@@ -443,7 +443,7 @@ public static class FromStil4mConcretized
 
             ConcretizedTypes.Expression.OperatorApplication operatorApplication =>
                 new Expression.OperatorApplication(
-                    operatorApplication.Operator,
+                    operatorApplication.Operator.Value,
                     operatorApplication.Direction,
                     ConvertExpressionNode(operatorApplication.Left),
                     ConvertExpressionNode(operatorApplication.Right)),

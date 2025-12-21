@@ -255,7 +255,27 @@ public class RenderingCompleteTests
     }
 
     [Fact]
-    public void Roundtrip_record_expression_not_formatter()
+    public void Roundtrip_tuple_expression_not_formatted()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl =
+               (
+                  a
+              , b,
+                   c
+              )
+
+            """";
+
+        AssertRoundtrip(input);
+    }
+
+    [Fact]
+    public void Roundtrip_record_expression_not_formatted()
     {
         var input =
             """"
@@ -271,6 +291,7 @@ public class RenderingCompleteTests
 
         AssertRoundtrip(input);
     }
+
 
     [Fact]
     public void Roundtrip_comments_in_record_type_alias_declaration()
@@ -292,6 +313,28 @@ public class RenderingCompleteTests
                 , fd : Bool
                 , fe : Int   --  dando luogo a
                 }
+
+            """";
+
+        AssertRoundtrip(input);
+    }
+
+    [Fact]
+    public void Roundtrip_left_pipe_operator_not_formatted()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl b =
+                Ok
+                   <|
+                    if b then
+                        "YES"
+
+                    else
+                        "NO"
 
             """";
 

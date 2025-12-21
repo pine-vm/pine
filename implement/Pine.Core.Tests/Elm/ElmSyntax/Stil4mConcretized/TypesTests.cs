@@ -287,27 +287,21 @@ public class TypesTests
     public void Expression_TupledExpression_value_equality()
     {
         var range = new Range(new Location(1, 1), new Location(1, 10));
-        var openLoc = new Location(1, 1);
-        var closeLoc = new Location(1, 10);
         var commaLoc = new Location(1, 5);
 
         var expr1 = new SyntaxTypes.Expression.TupledExpression(
-            openLoc,
             CreateSeparatedList(
                 new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer(1)),
                 commaLoc,
                 new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer(2))
-            ),
-            closeLoc
+            )
         );
         var expr2 = new SyntaxTypes.Expression.TupledExpression(
-            openLoc,
             CreateSeparatedList(
                 new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer(1)),
                 commaLoc,
                 new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer(2))
-            ),
-            closeLoc
+            )
         );
 
         expr1.Should().Be(expr2);
