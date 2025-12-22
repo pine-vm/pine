@@ -42,6 +42,9 @@ public class FormatTestHelper
         var formatted = FormatString(elmModuleText);
 
         formatted.Trim().Should().Be(expectedFormattedElmModuleText.Trim());
+
+        // A single call of the API should always yield a stable result
+        AssertModuleTextFormatsToItself(formatted);
     }
 
     public static void AssertSyntaxNodesValueEqualityForModuleText(

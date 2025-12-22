@@ -19,6 +19,9 @@ public class FormatSectionsTests
             """"
             module Test exposing (..)
 
+            -- Test file for checking comments and spacing
+            -- No detail
+
 
             x =
                 ()

@@ -1574,6 +1574,103 @@ public class FormatCompleteTests
     }
 
     [Fact]
+    public void Roundtrip_singleline_comments_in_if_then_else()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            declD a b =
+                -- gli occhi
+                if
+                    -- e gli spiracoli
+                    -- sono solitamente
+                    a > b
+                    -- disposti
+                then
+                    -- sulla sommità
+                    Just [ a ]
+                    -- del capo.
+
+                else
+                    -- In alcune specie
+                    -- abissali di Torpedinoidei,
+                    Nothing
+
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
+    public void Roundtrip_singleline_comments_in_nested_if_then_else()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl a b =
+                OTag
+                    (\c ->
+                        let
+                            n =
+                                []
+                        in
+                        if a > b then
+                            Just [ a ]
+
+                        else
+                        -- gli occhi
+                        if
+                            -- e gli spiracoli
+                            -- sono solitamente
+                            a == b
+                        then
+                            -- disposti
+                            TagName FA
+                                ()
+                                (c
+                                    d
+                                    e
+                                )
+                            -- sulla sommità
+
+                        else
+                            -- del capo.
+                            Nothing
+                    )
+
+
+            reducedRegression isGood expecting =
+                \s ->
+                    -- not found
+                    if Pine_kernel.equal [ newOffset, -1 ] then
+                        Bad False (fromState s expecting)
+                        -- newline
+
+                    else if Pine_kernel.equal [ newOffset, -2 ] then
+                        Good True
+                            ()
+                            (PState
+                                srcBytes
+                            )
+                        -- found
+
+                    else
+                        Good True
+                            ()
+                            (PState
+                                srcBytes
+                            )
+
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
     public void Roundtrip_singleline_comment_before_right_pipe_operator()
     {
         var input =
@@ -1786,6 +1883,55 @@ public class FormatCompleteTests
     }
 
     [Fact]
+    public void Roundtrip_multiple_multiline_imports()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+            import Alfa
+                exposing
+                    ( a1
+                    , b1
+                    )
+            import Beta
+                exposing
+                    ( a2
+                    , b2
+                    )
+            import Dict
+
+
+            type alias RecordName =
+                {}
+
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
+    public void Roundtrip_multiline_comment_in_nested_list_uncons_pattern()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl a =
+                case a of
+                    LiteralExpression (Pine.ListValue ({- 'String' tag -} _ :: (Pine.ListValue [ literalChars ]) :: _)) ->
+                        71
+
+                    _ ->
+                        73
+
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
     public void Adding_line_breaks_does_not_interfere_with_following_declarations()
     {
         var input =
@@ -1825,7 +1971,13 @@ public class FormatCompleteTests
                         b
                         c
 
+            declD :
+                List Int
+                -> Int
+                -> Int
+                -> Int
             declD a ( b, c ) =
+            
                case
             
             
@@ -1848,7 +2000,26 @@ public class FormatCompleteTests
                                 delta
                         in
                         innerF a b c
-            
+
+                    47 :: _ ->
+                        let
+                            zeta =
+                                delta
+                                    |> List.map
+                                        (\i ->
+                                            case i of
+                                                Nothing ->
+                                                    []
+
+                                                Just fst ->
+                                                    fst
+                                                        |> (\( ia, ib, ic ) ->
+                                                                []
+                                                           )
+                                        )
+                        in
+                        []
+
                     fst :: following ->
                         b - c
             """";
@@ -1894,26 +2065,50 @@ public class FormatCompleteTests
                         c
 
 
+            declD :
+                List Int
+                -> Int
+                -> Int
+                -> Int
             declD a ( b, c ) =
                 case
                     a
                 of
                     [] ->
                         b + c
-            
+
                     41 :: _ ->
                         b * c
-            
+
                     43 :: _ ->
                         let
                             innerF a1 b1 c1 =
                                 a1 - b1 + c1
-            
+
                             ( a2, b2 ) =
                                 delta
                         in
                         innerF a b c
+
+                    47 :: _ ->
+                        let
+                            zeta =
+                                delta
+                                    |> List.map
+                                        (\i ->
+                                            case i of
+                                                Nothing ->
+                                                    []
             
+                                                Just fst ->
+                                                    fst
+                                                        |> (\( ia, ib, ic ) ->
+                                                                []
+                                                           )
+                                        )
+                        in
+                        []
+
                     fst :: following ->
                         b - c
 
