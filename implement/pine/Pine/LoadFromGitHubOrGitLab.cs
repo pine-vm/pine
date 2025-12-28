@@ -264,7 +264,7 @@ public static class LoadFromGitHubOrGitLab
                                 queue.Enqueue(commitSha);
 
                                 (string hash, CommitContent content)? earliestCommit = null;
-                                DateTimeOffset earliestTime = DateTimeOffset.MaxValue;
+                                var earliestTime = DateTimeOffset.MaxValue;
 
                                 while (queue.Count > 0)
                                 {

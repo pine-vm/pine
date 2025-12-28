@@ -166,9 +166,9 @@ public static class CompileTypeSyntax
             return [];
 
         // Check if the current namespace allows shortening the path
-        if (context.CurrentNamespace is not null)
+        if (context.CurrentNamespace is { } currentNamespace)
         {
-            var currentNamespaceSegments = SegmentsFromName(context.CurrentNamespace);
+            var currentNamespaceSegments = SegmentsFromName(currentNamespace);
 
             // If the target namespace exactly matches the current namespace, we can omit it entirely
             if (currentNamespaceSegments.SequenceEqual(namespaceSegments))
@@ -180,7 +180,7 @@ public static class CompileTypeSyntax
             if (namespaceSegments.Count > currentNamespaceSegments.Count &&
                 currentNamespaceSegments.SequenceEqual(namespaceSegments.Take(currentNamespaceSegments.Count)))
             {
-                return namespaceSegments.Skip(currentNamespaceSegments.Count).ToArray();
+                return [.. namespaceSegments.Skip(currentNamespaceSegments.Count)];
             }
         }
 

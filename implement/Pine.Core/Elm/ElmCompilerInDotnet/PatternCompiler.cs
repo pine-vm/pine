@@ -48,11 +48,11 @@ public class PatternCompiler
     {
         /// <summary>Empty analysis with no bindings and always-matching condition.</summary>
         public static PatternAnalysis Empty { get; } =
-            new(ImmutableDictionary<string, Expression>.Empty, new PatternCondition.Always());
+            new([], new PatternCondition.Always());
 
         /// <summary>Creates an analysis with just a condition and no bindings.</summary>
         public static PatternAnalysis WithCondition(PatternCondition condition) =>
-            new(ImmutableDictionary<string, Expression>.Empty, condition);
+            new([], condition);
 
         /// <summary>Creates an analysis with a single binding and always-matching condition.</summary>
         public static PatternAnalysis WithBinding(string name, Expression value) =>

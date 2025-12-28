@@ -2,7 +2,6 @@ using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 
 using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 
@@ -265,7 +264,7 @@ public class FunctionCompiler
 
         AnalyzeExpression(expression);
 
-        return dependencies.ToList();
+        return [.. dependencies];
     }
 
     private static PineValue EmitPlainValueDeclaration(PineValue value) =>
