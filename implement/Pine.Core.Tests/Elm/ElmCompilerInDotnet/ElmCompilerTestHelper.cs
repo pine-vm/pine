@@ -1,7 +1,9 @@
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.ElmCompilerInDotnet;
+using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Core.PineVM;
 using Pine.Core.Tests.Elm.ElmCompilerTests;
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -10,6 +12,35 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
 public class ElmCompilerTestHelper
 {
+    /// <summary>
+    /// Creates a delegate for invoking an Elm function and collecting profiling reports.
+    /// </summary>
+    /// <param name="functionRecord">The parsed function record from the declaration value.</param>
+    /// <returns>
+    /// A delegate that takes a list of arguments and returns a tuple containing:
+    /// - The return value of the invoked function
+    /// - The list of profiling invocation reports collected during execution
+    /// </returns>
+    public static Func<IReadOnlyList<PineValue>, (PineValue returnValue, IReadOnlyList<EvaluationReport> invocationReports)>
+        CreateFunctionInvocationDelegate(FunctionRecord functionRecord)
+    {
+        return arguments =>
+        {
+            var invocationReports = new List<EvaluationReport>();
+
+            var vm = PineVMForProfiling(invocationReports.Add);
+
+            var applyRunResult =
+                ElmInteractiveEnvironment.ApplyFunction(
+                    vm,
+                    functionRecord,
+                    arguments: arguments)
+                .Extract(err => throw new Exception(err));
+
+            return (applyRunResult, invocationReports);
+        };
+    }
+
     public static (ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedEnv, StaticProgram staticProgram)
         StaticProgramFromElmModules(
         IReadOnlyList<string> elmModulesTexts,

@@ -2,9 +2,7 @@ using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
 using Pine.Core.Elm;
-using Pine.Core.Interpreter.IntermediateVM;
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using Xunit;
 
@@ -57,23 +55,11 @@ public class SimpleLetBlockTests
             FunctionRecord.ParseFunctionRecordTagged(declValue.Value, parseCache)
             .Extract(err => throw new Exception("Failed parsing " + nameof(declValue) + ": " + err));
 
-        var invocationReports = new List<EvaluationReport>();
-
-        var vm =
-            ElmCompilerTestHelper.PineVMForProfiling(invocationReports.Add);
+        var invokeFunction = ElmCompilerTestHelper.CreateFunctionInvocationDelegate(declParsed);
 
         PineValue ApplyForArgument(PineValue argument)
         {
-            var applyRunResult =
-                ElmInteractiveEnvironment.ApplyFunction(
-                    vm,
-                    declParsed,
-                    arguments:
-                    [
-                        argument
-                    ])
-                .Extract(err => throw new Exception(err));
-
+            var (applyRunResult, _) = invokeFunction([argument]);
             return applyRunResult;
         }
 
@@ -165,23 +151,11 @@ public class SimpleLetBlockTests
             FunctionRecord.ParseFunctionRecordTagged(declValue.Value, parseCache)
             .Extract(err => throw new Exception("Failed parsing " + nameof(declValue) + ": " + err));
 
-        var invocationReports = new List<EvaluationReport>();
-
-        var vm =
-            ElmCompilerTestHelper.PineVMForProfiling(invocationReports.Add);
+        var invokeFunction = ElmCompilerTestHelper.CreateFunctionInvocationDelegate(declParsed);
 
         PineValue ApplyForArgument(PineValue argument)
         {
-            var applyRunResult =
-                ElmInteractiveEnvironment.ApplyFunction(
-                    vm,
-                    declParsed,
-                    arguments:
-                    [
-                        argument
-                    ])
-                .Extract(err => throw new Exception(err));
-
+            var (applyRunResult, _) = invokeFunction([argument]);
             return applyRunResult;
         }
 
@@ -273,23 +247,11 @@ public class SimpleLetBlockTests
             FunctionRecord.ParseFunctionRecordTagged(declValue.Value, parseCache)
             .Extract(err => throw new Exception("Failed parsing " + nameof(declValue) + ": " + err));
 
-        var invocationReports = new List<EvaluationReport>();
-
-        var vm =
-            ElmCompilerTestHelper.PineVMForProfiling(invocationReports.Add);
+        var invokeFunction = ElmCompilerTestHelper.CreateFunctionInvocationDelegate(declParsed);
 
         PineValue ApplyForArgument(PineValue argument)
         {
-            var applyRunResult =
-                ElmInteractiveEnvironment.ApplyFunction(
-                    vm,
-                    declParsed,
-                    arguments:
-                    [
-                        argument
-                    ])
-                .Extract(err => throw new Exception(err));
-
+            var (applyRunResult, _) = invokeFunction([argument]);
             return applyRunResult;
         }
 
@@ -377,23 +339,11 @@ public class SimpleLetBlockTests
             FunctionRecord.ParseFunctionRecordTagged(declValue.Value, parseCache)
             .Extract(err => throw new Exception("Failed parsing " + nameof(declValue) + ": " + err));
 
-        var invocationReports = new List<EvaluationReport>();
-
-        var vm =
-            ElmCompilerTestHelper.PineVMForProfiling(invocationReports.Add);
+        var invokeFunction = ElmCompilerTestHelper.CreateFunctionInvocationDelegate(declParsed);
 
         PineValue ApplyForArgument(PineValue argument)
         {
-            var applyRunResult =
-                ElmInteractiveEnvironment.ApplyFunction(
-                    vm,
-                    declParsed,
-                    arguments:
-                    [
-                        argument
-                    ])
-                .Extract(err => throw new Exception(err));
-
+            var (applyRunResult, _) = invokeFunction([argument]);
             return applyRunResult;
         }
 

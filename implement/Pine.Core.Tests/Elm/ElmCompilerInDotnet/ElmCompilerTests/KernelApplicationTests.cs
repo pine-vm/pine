@@ -2,9 +2,7 @@ using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
 using Pine.Core.Elm;
-using Pine.Core.Interpreter.IntermediateVM;
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using Xunit;
 
@@ -61,20 +59,10 @@ public class KernelApplicationTests
             FunctionRecord.ParseFunctionRecordTagged(alfaDecl.Value, parseCache)
             .Extract(err => throw new Exception("Failed parsing " + nameof(alfaDecl) + ": " + err));
 
-        var invocationReports = new List<EvaluationReport>();
+        var invokeFunction = ElmCompilerTestHelper.CreateFunctionInvocationDelegate(alfaDeclParsed);
 
-        var vm =
-            ElmCompilerTestHelper.PineVMForProfiling(invocationReports.Add);
-
-        var applyRunResult =
-            ElmInteractiveEnvironment.ApplyFunction(
-                vm,
-                alfaDeclParsed,
-                arguments:
-                [
-                    IntegerEncoding.EncodeSignedInteger(13)
-                ])
-            .Extract(err => throw new Exception(err));
+        var (applyRunResult, invocationReports) =
+            invokeFunction([IntegerEncoding.EncodeSignedInteger(13)]);
 
         var resultAsElmValue =
             ElmValueEncoding.PineValueAsElmValue(applyRunResult, null, null)
