@@ -3643,17 +3643,17 @@ public class ElmSyntaxParser
 
                     ConsumeAllTrivia();
 
-                    var furtherPatterns = new List<Node<SyntaxTypes.Pattern>>();
+                    var furtherPatternsWithCommas = new List<(Location CommaLocation, Node<SyntaxTypes.Pattern> Pattern)>();
 
                     while (Peek.Type is TokenType.Comma)
                     {
-                        Consume(TokenType.Comma);
+                        var commaToken = Consume(TokenType.Comma);
 
                         ConsumeAllTrivia();
 
                         var furtherPattern = ParsePattern(indentMin);
 
-                        furtherPatterns.Add(furtherPattern);
+                        furtherPatternsWithCommas.Add((commaToken.Start, furtherPattern));
 
                         ConsumeAllTrivia();
                     }
@@ -3664,7 +3664,7 @@ public class ElmSyntaxParser
                     var parenRange =
                         MakeRange(parenOpenToken.Start, parenCloseToken.End);
 
-                    if (furtherPatterns.Count is 0)
+                    if (furtherPatternsWithCommas.Count is 0)
                     {
                         return
                             new Node<SyntaxTypes.Pattern>(
@@ -3678,7 +3678,9 @@ public class ElmSyntaxParser
                     var tupledPattern =
                         new SyntaxTypes.Pattern.TuplePattern(
                             OpenParenLocation: parenOpenToken.Start,
-                            Elements: [firstPattern, .. furtherPatterns],
+                            Elements: new SyntaxTypes.SeparatedSyntaxList<Node<SyntaxTypes.Pattern>>.NonEmpty(
+                                firstPattern,
+                                furtherPatternsWithCommas),
                             CloseParenLocation: parenCloseToken.Start);
 
                     return
@@ -3761,25 +3763,27 @@ public class ElmSyntaxParser
 
                 ConsumeAllTrivia();
 
-                var items = new List<Node<SyntaxTypes.Pattern>>();
+                Node<SyntaxTypes.Pattern>? firstItem = null;
+                var restItems = new List<(Location CommaLocation, Node<SyntaxTypes.Pattern> Pattern)>();
 
-                while (NextTokenMatches(peek => peek.Type is not TokenType.CloseBracket))
+                // Parse first item if any
+                if (NextTokenMatches(peek => peek.Type is not TokenType.CloseBracket))
                 {
-                    var itemPattern = ParsePattern(indentMin);
-
-                    items.Add(itemPattern);
-
+                    firstItem = ParsePattern(indentMin);
                     ConsumeAllTrivia();
 
-                    if (Peek.Type is TokenType.Comma)
+                    // Parse remaining items
+                    while (Peek.Type is TokenType.Comma)
                     {
-                        Consume(TokenType.Comma);
-
+                        var commaToken = Consume(TokenType.Comma);
                         ConsumeAllTrivia();
-                    }
-                    else
-                    {
-                        break;
+
+                        if (NextTokenMatches(peek => peek.Type is not TokenType.CloseBracket))
+                        {
+                            var nextPattern = ParsePattern(indentMin);
+                            restItems.Add((commaToken.Start, nextPattern));
+                            ConsumeAllTrivia();
+                        }
                     }
                 }
 
@@ -3789,10 +3793,16 @@ public class ElmSyntaxParser
                 var listRange =
                     MakeRange(listOpenToken.Start, listCloseToken.End);
 
+                SyntaxTypes.SeparatedSyntaxList<Node<SyntaxTypes.Pattern>> elementsList =
+                    firstItem is null
+                        ? new SyntaxTypes.SeparatedSyntaxList<Node<SyntaxTypes.Pattern>>.Empty()
+                        : new SyntaxTypes.SeparatedSyntaxList<Node<SyntaxTypes.Pattern>>.NonEmpty(
+                            firstItem, restItems);
+
                 var listPatternValue =
                     new SyntaxTypes.Pattern.ListPattern(
                         OpenBracketLocation: listOpenToken.Start,
-                        Elements: items,
+                        Elements: elementsList,
                         CloseBracketLocation: listCloseToken.Start);
 
                 return new Node<SyntaxTypes.Pattern>(listRange, listPatternValue);
@@ -3806,27 +3816,29 @@ public class ElmSyntaxParser
 
                 ConsumeAllTrivia();
 
-                var fields = new List<Node<string>>();
+                Node<string>? firstField = null;
+                var restFields = new List<(Location CommaLocation, Node<string> FieldName)>();
 
-                while (Peek.Type is not TokenType.CloseBrace)
+                // Parse first field if any
+                if (Peek.Type is not TokenType.CloseBrace)
                 {
                     var fieldName = ConsumeAnyIdentifier("field name");
-
-                    fields.Add(
-                        new Node<string>(
-                            fieldName.Range,
-                            fieldName.Lexeme));
-
+                    firstField = new Node<string>(fieldName.Range, fieldName.Lexeme);
                     ConsumeAllTrivia();
 
-                    if (Peek.Type is TokenType.Comma)
+                    // Parse remaining fields
+                    while (Peek.Type is TokenType.Comma)
                     {
-                        Consume(TokenType.Comma);
+                        var commaToken = Consume(TokenType.Comma);
                         ConsumeAllTrivia();
-                    }
-                    else
-                    {
-                        break;
+
+                        if (Peek.Type is not TokenType.CloseBrace)
+                        {
+                            var nextFieldName = ConsumeAnyIdentifier("field name");
+                            var nextFieldNode = new Node<string>(nextFieldName.Range, nextFieldName.Lexeme);
+                            restFields.Add((commaToken.Start, nextFieldNode));
+                            ConsumeAllTrivia();
+                        }
                     }
                 }
 
@@ -3835,10 +3847,16 @@ public class ElmSyntaxParser
                 var recordRange =
                     MakeRange(recordOpenToken.Start, recordCloseToken.End);
 
+                SyntaxTypes.SeparatedSyntaxList<Node<string>> fieldsList =
+                    firstField is null
+                        ? new SyntaxTypes.SeparatedSyntaxList<Node<string>>.Empty()
+                        : new SyntaxTypes.SeparatedSyntaxList<Node<string>>.NonEmpty(
+                            firstField, restFields);
+
                 var recordPattern =
                     new SyntaxTypes.Pattern.RecordPattern(
                         OpenBraceLocation: recordOpenToken.Start,
-                        Fields: fields,
+                        Fields: fieldsList,
                         CloseBraceLocation: recordCloseToken.Start);
 
                 return new Node<SyntaxTypes.Pattern>(recordRange, recordPattern);

@@ -270,12 +270,14 @@ public class FromStil4mConcretizedTests
         var openLoc = new Location(1, 1);
         var closeLoc = new Location(1, 10);
 
+        var firstElem = new Node<ConcretizedTypes.Pattern>(range, new ConcretizedTypes.Pattern.VarPattern("x"));
+        var secondElem = new Node<ConcretizedTypes.Pattern>(range, new ConcretizedTypes.Pattern.VarPattern("y"));
+        var elements = new ConcretizedTypes.SeparatedSyntaxList<Node<ConcretizedTypes.Pattern>>.NonEmpty(
+            firstElem, [(new Location(1, 5), secondElem)]);
+
         var concretizedPattern = new ConcretizedTypes.Pattern.TuplePattern(
             openLoc,
-            [
-                new Node<ConcretizedTypes.Pattern>(range, new ConcretizedTypes.Pattern.VarPattern("x")),
-                new Node<ConcretizedTypes.Pattern>(range, new ConcretizedTypes.Pattern.VarPattern("y"))
-            ],
+            elements,
             closeLoc
         );
 

@@ -342,10 +342,10 @@ public static class FromStil4mConcretized
 
             ConcretizedTypes.Pattern.TuplePattern tuplePattern =>
                 new Pattern.TuplePattern(
-                    ConvertNodes(tuplePattern.Elements, Convert)),
+                    ConvertSeparatedNodes(tuplePattern.Elements, Convert)),
 
             ConcretizedTypes.Pattern.RecordPattern recordPattern =>
-                new Pattern.RecordPattern(recordPattern.Fields),
+                new Pattern.RecordPattern(ToList(recordPattern.Fields)),
 
             ConcretizedTypes.Pattern.UnConsPattern unConsPattern =>
                 new Pattern.UnConsPattern(
@@ -354,7 +354,7 @@ public static class FromStil4mConcretized
 
             ConcretizedTypes.Pattern.ListPattern listPattern =>
                 new Pattern.ListPattern(
-                    ConvertNodes(listPattern.Elements, Convert)),
+                    ConvertSeparatedNodes(listPattern.Elements, Convert)),
 
             ConcretizedTypes.Pattern.NamedPattern namedPattern =>
                 new Pattern.NamedPattern(

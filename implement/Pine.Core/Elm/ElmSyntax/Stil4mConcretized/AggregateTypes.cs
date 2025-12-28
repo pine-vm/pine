@@ -693,78 +693,16 @@ public abstract record Pattern
     /// <summary>Pattern matching a tuple.</summary>
     public sealed record TuplePattern(
         Location OpenParenLocation,
-        IReadOnlyList<Node<Pattern>> Elements,
+        SeparatedSyntaxList<Node<Pattern>> Elements,
         Location CloseParenLocation)
-        : Pattern
-    {
-        /// <inheritdoc/>
-        public bool Equals(TuplePattern? other)
-        {
-            if (ReferenceEquals(this, other))
-                return true;
-
-            if (other is null)
-                return false;
-
-            return
-                OpenParenLocation.Equals(other.OpenParenLocation) &&
-                Enumerable.SequenceEqual(Elements, other.Elements) &&
-                CloseParenLocation.Equals(other.CloseParenLocation);
-        }
-
-        /// <inheritdoc/>
-        public override int GetHashCode()
-        {
-            var hashCode = new System.HashCode();
-
-            hashCode.Add(OpenParenLocation);
-
-            foreach (var item in Elements)
-                hashCode.Add(item);
-
-            hashCode.Add(CloseParenLocation);
-
-            return hashCode.ToHashCode();
-        }
-    }
+        : Pattern;
 
     /// <summary>Pattern matching a record with specified fields.</summary>
     public sealed record RecordPattern(
         Location OpenBraceLocation,
-        IReadOnlyList<Node<string>> Fields,
+        SeparatedSyntaxList<Node<string>> Fields,
         Location CloseBraceLocation)
-        : Pattern
-    {
-        /// <inheritdoc/>
-        public bool Equals(RecordPattern? other)
-        {
-            if (ReferenceEquals(this, other))
-                return true;
-
-            if (other is null)
-                return false;
-
-            return
-                OpenBraceLocation.Equals(other.OpenBraceLocation) &&
-                Enumerable.SequenceEqual(Fields, other.Fields) &&
-                CloseBraceLocation.Equals(other.CloseBraceLocation);
-        }
-
-        /// <inheritdoc/>
-        public override int GetHashCode()
-        {
-            var hashCode = new System.HashCode();
-
-            hashCode.Add(OpenBraceLocation);
-
-            foreach (var item in Fields)
-                hashCode.Add(item);
-
-            hashCode.Add(CloseBraceLocation);
-
-            return hashCode.ToHashCode();
-        }
-    }
+        : Pattern;
 
     /// <summary>List cons pattern separating head and tail.</summary>
     public sealed record UnConsPattern(
@@ -776,40 +714,9 @@ public abstract record Pattern
     /// <summary>Pattern matching a list of elements.</summary>
     public sealed record ListPattern(
         Location OpenBracketLocation,
-        IReadOnlyList<Node<Pattern>> Elements,
+        SeparatedSyntaxList<Node<Pattern>> Elements,
         Location CloseBracketLocation)
-        : Pattern
-    {
-        /// <inheritdoc/>
-        public bool Equals(ListPattern? other)
-        {
-            if (other is null)
-                return false;
-
-            if (ReferenceEquals(this, other))
-                return true;
-
-            return
-                OpenBracketLocation.Equals(other.OpenBracketLocation) &&
-                Enumerable.SequenceEqual(Elements, other.Elements) &&
-                CloseBracketLocation.Equals(other.CloseBracketLocation);
-        }
-
-        /// <inheritdoc/>
-        public override int GetHashCode()
-        {
-            var hashCode = new System.HashCode();
-
-            hashCode.Add(OpenBracketLocation);
-
-            foreach (var item in Elements)
-                hashCode.Add(item);
-
-            hashCode.Add(CloseBracketLocation);
-
-            return hashCode.ToHashCode();
-        }
-    }
+        : Pattern;
 
     /// <summary>Pattern matching a named constructor with arguments.</summary>
     public sealed record NamedPattern(

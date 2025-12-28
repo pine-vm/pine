@@ -1671,6 +1671,48 @@ public class FormatCompleteTests
     }
 
     [Fact]
+    public void Roundtrip_block_comments_in_various_patterns()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl arg =
+                case arg of
+                    ({- La loro -} 17 :: b) as c ->
+                        ()
+
+                    (19 {- conformazione -} :: b) as c ->
+                        ()
+
+                    (21 :: {- è profondamente modificata -} b) as c ->
+                        ()
+
+                    (23 :: b {- dando luogo -}) as c ->
+                        ()
+
+                    27 :: ( {- a evidenti forme -} b, c ) :: _ ->
+                        ()
+
+                    29 :: ( b {- di specializzazione -}, c ) :: _ ->
+                        ()
+
+                    31 :: ( b, {- Sono pesci -} c ) :: _ ->
+                        ()
+
+                    37 :: ( b, c {- dal corpo depresso -} ) :: _ ->
+                        ()
+
+                    _ ->
+                        ()
+
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
     public void Roundtrip_singleline_comment_before_right_pipe_operator()
     {
         var input =

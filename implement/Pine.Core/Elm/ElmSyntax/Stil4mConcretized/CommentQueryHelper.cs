@@ -89,17 +89,6 @@ public class CommentQueryHelper
             : null;
 
     /// <summary>
-    /// Get comments that fall within a range (on the same row, within the column range).
-    /// Used to find inline comments within patterns.
-    /// Returns comments ordered by column.
-    /// </summary>
-    public IReadOnlyList<Node<ParsedComment>> GetWithinRange(Range range) =>
-        _byStartRow.TryGetValue(range.Start.Row, out var rowComments)
-            ? [.. rowComments.Where(c => c.Range.Start.Column >= range.Start.Column &&
-                                        c.Range.End.Column <= range.End.Column)]
-            : [];
-
-    /// <summary>
     /// Get comments between two row numbers with inclusive end bound.
     /// Start is exclusive, end is inclusive.
     /// Returns comments ordered by row then column.
@@ -160,4 +149,15 @@ public class CommentQueryHelper
     public bool HasOnRowAfterColumn(int row, int afterColumn) =>
         _byStartRow.TryGetValue(row, out var rowComments) &&
         rowComments.Any(c => c.Range.Start.Column > afterColumn);
+
+    /// <summary>
+    /// Get comments on a specific row that start after one column and end before another column.
+    /// Used for finding inline comments between two column positions.
+    /// Returns comments ordered by column.
+    /// </summary>
+    public IReadOnlyList<Node<ParsedComment>> GetOnRowBetweenColumns(int row, int afterColumn, int beforeColumn) =>
+        _byStartRow.TryGetValue(row, out var rowComments)
+            ? [.. rowComments.Where(c => c.Range.Start.Column > afterColumn &&
+                                         c.Range.End.Column <= beforeColumn)]
+            : [];
 }

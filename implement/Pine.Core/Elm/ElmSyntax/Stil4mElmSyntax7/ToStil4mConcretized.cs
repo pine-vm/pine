@@ -381,13 +381,13 @@ public static class ToStil4mConcretized
             Pattern.TuplePattern tuplePattern =>
                 new ConcretizedTypes.Pattern.TuplePattern(
                     OpenParenLocation: s_defaultLocation,
-                    Elements: ConvertNodes(tuplePattern.Elements, ToConcretized),
+                    Elements: ToSeparatedList(tuplePattern.Elements, ToConcretized),
                     CloseParenLocation: s_defaultLocation),
 
             Pattern.RecordPattern recordPattern =>
                 new ConcretizedTypes.Pattern.RecordPattern(
                     OpenBraceLocation: s_defaultLocation,
-                    Fields: ConvertNodesPreserveValue(recordPattern.Fields),
+                    Fields: ToSeparatedListPreserveValue(recordPattern.Fields),
                     CloseBraceLocation: s_defaultLocation),
 
             Pattern.UnConsPattern unConsPattern =>
@@ -399,7 +399,7 @@ public static class ToStil4mConcretized
             Pattern.ListPattern listPattern =>
                 new ConcretizedTypes.Pattern.ListPattern(
                     OpenBracketLocation: s_defaultLocation,
-                    Elements: ConvertNodes(listPattern.Elements, ToConcretized),
+                    Elements: ToSeparatedList(listPattern.Elements, ToConcretized),
                     CloseBracketLocation: s_defaultLocation),
 
             Pattern.NamedPattern namedPattern =>
@@ -655,6 +655,25 @@ public static class ToStil4mConcretized
             .ToList();
 
         return new ConcretizedTypes.SeparatedSyntaxList<Node<TResult>>.NonEmpty(first, rest);
+    }
+
+    /// <summary>
+    /// Converts an IReadOnlyList of nodes to a SeparatedSyntaxList, preserving values (no conversion).
+    /// </summary>
+    public static ConcretizedTypes.SeparatedSyntaxList<Node<T>> ToSeparatedListPreserveValue<T>(
+        IReadOnlyList<Node<T>> nodes)
+    {
+        if (nodes.Count == 0)
+            return new ConcretizedTypes.SeparatedSyntaxList<Node<T>>.Empty();
+
+        var first = ConvertNodePreserveValue(nodes[0]);
+        var rest = nodes.Skip(1)
+            .Select(node => (
+                SeparatorLocation: s_defaultLocation,
+                Node: ConvertNodePreserveValue(node)))
+            .ToList();
+
+        return new ConcretizedTypes.SeparatedSyntaxList<Node<T>>.NonEmpty(first, rest);
     }
 
     /// <summary>

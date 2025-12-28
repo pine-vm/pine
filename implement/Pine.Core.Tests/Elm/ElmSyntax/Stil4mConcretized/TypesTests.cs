@@ -381,14 +381,17 @@ public class TypesTests
         var openLoc = new Location(1, 1);
         var closeLoc = new Location(1, 10);
 
+        var elemNode = new Node<SyntaxTypes.Pattern>(range, new SyntaxTypes.Pattern.VarPattern("x"));
+        var elements = new SyntaxTypes.SeparatedSyntaxList<Node<SyntaxTypes.Pattern>>.NonEmpty(elemNode, []);
+
         var pattern1 = new SyntaxTypes.Pattern.TuplePattern(
             openLoc,
-            [new Node<SyntaxTypes.Pattern>(range, new SyntaxTypes.Pattern.VarPattern("x"))],
+            elements,
             closeLoc
         );
         var pattern2 = new SyntaxTypes.Pattern.TuplePattern(
             openLoc,
-            [new Node<SyntaxTypes.Pattern>(range, new SyntaxTypes.Pattern.VarPattern("x"))],
+            elements,
             closeLoc
         );
 
@@ -403,14 +406,17 @@ public class TypesTests
         var openLoc = new Location(1, 1);
         var closeLoc = new Location(1, 10);
 
+        var elemNode = new Node<SyntaxTypes.Pattern>(range, new SyntaxTypes.Pattern.VarPattern("x"));
+        var elements = new SyntaxTypes.SeparatedSyntaxList<Node<SyntaxTypes.Pattern>>.NonEmpty(elemNode, []);
+
         var pattern1 = new SyntaxTypes.Pattern.ListPattern(
             openLoc,
-            [new Node<SyntaxTypes.Pattern>(range, new SyntaxTypes.Pattern.VarPattern("x"))],
+            elements,
             closeLoc
         );
         var pattern2 = new SyntaxTypes.Pattern.ListPattern(
             openLoc,
-            [new Node<SyntaxTypes.Pattern>(range, new SyntaxTypes.Pattern.VarPattern("x"))],
+            elements,
             closeLoc
         );
 
@@ -425,14 +431,17 @@ public class TypesTests
         var openLoc = new Location(1, 1);
         var closeLoc = new Location(1, 10);
 
+        var fieldNode = new Node<string>(range, "field1");
+        var fields = new SyntaxTypes.SeparatedSyntaxList<Node<string>>.NonEmpty(fieldNode, []);
+
         var pattern1 = new SyntaxTypes.Pattern.RecordPattern(
             openLoc,
-            [new Node<string>(range, "field1")],
+            fields,
             closeLoc
         );
         var pattern2 = new SyntaxTypes.Pattern.RecordPattern(
             openLoc,
-            [new Node<string>(range, "field1")],
+            fields,
             closeLoc
         );
 

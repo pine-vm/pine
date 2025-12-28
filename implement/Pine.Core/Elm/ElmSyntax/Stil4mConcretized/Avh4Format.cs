@@ -127,38 +127,37 @@ public class Avh4Format
         public int CurrentRow { get; }
         public int CurrentColumn { get; }
         public int IndentSpaces { get; }
+        public ImmutableList<Stil4mElmSyntax7.Node<string>> Comments { get; }
 
-        private FormattingContext(int currentRow, int currentColumn, int indentSpaces)
+        private FormattingContext(
+            int currentRow,
+            int currentColumn,
+            int indentSpaces,
+            ImmutableList<Stil4mElmSyntax7.Node<string>> comments)
         {
             CurrentRow = currentRow;
             CurrentColumn = currentColumn;
             IndentSpaces = indentSpaces;
+            Comments = comments;
         }
 
         /// <summary>
         /// Creates the initial formatting context at row 1, column 1, with no indentation.
         /// </summary>
         public static FormattingContext Initial() =>
-            new(currentRow: 1, currentColumn: 1, indentSpaces: 0);
-
-        /// <summary>
-        /// Creates a formatting context at a specific position, preserving the indent from another context.
-        /// Use this when positioning after multiline content (like comments) while maintaining indent.
-        /// </summary>
-        public static FormattingContext AtPosition(int row, int column, FormattingContext inheritIndentFrom) =>
-            new(row, column, inheritIndentFrom.IndentSpaces);
+            new(currentRow: 1, currentColumn: 1, indentSpaces: 0, comments: []);
 
         public Location CurrentLocation() =>
             new(CurrentRow, CurrentColumn);
 
         private FormattingContext NextRow() =>
-            new(CurrentRow + 1, currentColumn: 1, IndentSpaces);
+            new(CurrentRow + 1, currentColumn: 1, IndentSpaces, Comments);
 
         /// <summary>
         /// Advances to the next row and stays at the current indent column.
         /// </summary>
         public FormattingContext NextRowToIndent() =>
-            new(CurrentRow + 1, 1 + IndentSpaces, IndentSpaces);
+            new(CurrentRow + 1, 1 + IndentSpaces, IndentSpaces, Comments);
 
         /// <summary>
         /// Adds a blank line by advancing two rows.
@@ -168,18 +167,11 @@ public class Avh4Format
             NextRow().NextRow();
 
         /// <summary>
-        /// Sets the column position without changing indent.
-        /// Use this for positioning within a line.
-        /// </summary>
-        private FormattingContext SetColumn(int column) =>
-            new(CurrentRow, column, IndentSpaces);
-
-        /// <summary>
         /// Advances the column by count characters without changing indent.
         /// Use this when advancing past tokens that don't affect nested content alignment.
         /// </summary>
         public FormattingContext Advance(int count) =>
-            new(CurrentRow, CurrentColumn + count, IndentSpaces);
+            new(CurrentRow, CurrentColumn + count, IndentSpaces, Comments);
 
         /// <summary>
         /// Advances to the next column that is greater than current indent and a multiple of 4
@@ -192,7 +184,8 @@ public class Avh4Format
             return new FormattingContext(
                 currentRow: CurrentRow,
                 currentColumn: nextColumn,
-                indentSpaces: IndentSpaces);
+                indentSpaces: IndentSpaces,
+                comments: Comments);
         }
 
         /// <summary>
@@ -203,7 +196,8 @@ public class Avh4Format
             return new FormattingContext(
                 CurrentRow,
                 CurrentColumn,
-                indentSpaces: CurrentColumn - 1);
+                indentSpaces: CurrentColumn - 1,
+                comments: Comments);
         }
 
         /// <summary>
@@ -211,54 +205,182 @@ public class Avh4Format
         /// Use this when exiting a nested block to restore the previous indentation.
         /// </summary>
         public FormattingContext ReturnToIndent(FormattingContext prevContext) =>
-            new(CurrentRow, CurrentColumn, prevContext.IndentSpaces);
+            new(
+                currentRow: CurrentRow,
+                currentColumn: CurrentColumn,
+                indentSpaces: prevContext.IndentSpaces,
+                comments: Comments);
 
         /// <summary>
         /// Resets indent to zero.
         /// Use this for top-level declarations that should start at column 1.
         /// </summary>
         public FormattingContext ResetIndent() =>
-            new(CurrentRow, CurrentColumn, indentSpaces: 0);
+            new(CurrentRow, CurrentColumn, indentSpaces: 0, comments: Comments);
 
         /// <summary>
         /// Sets column to the indent position (1 + IndentSpaces).
         /// Use this when starting a new line that should be at the current indent level.
         /// </summary>
         public FormattingContext SetIndentColumn() =>
-            new(CurrentRow, 1 + IndentSpaces, IndentSpaces);
+            new(CurrentRow, 1 + IndentSpaces, IndentSpaces, Comments);
 
         /// <summary>
         /// Calculates the next column that is greater than current position and a multiple of 4.
         /// Returns columns like 5, 9, 13, ... (since columns are 1-based).
         /// </summary>
-        public int GetNextMultipleOfFourColumn()
+        private int GetNextMultipleOfFourColumn()
         {
             var currentSpaces = CurrentColumn - 1;
             var nextMultipleSpaces = ((currentSpaces / Indentation.Full) + 1) * Indentation.Full;
             return nextMultipleSpaces + 1;
         }
+
+        /// <summary>
+        /// Calculate the end location of a comment given its start location and value.
+        /// Also returns whether the comment ends with a newline.
+        /// </summary>
+        private static (Location EndLocation, bool EndsWithNewline) CalculateCommentEndLocation(
+            Location startLocation,
+            string commentValue)
+        {
+            var lines = commentValue.Split('\n');
+            var endsWithNewline = commentValue.EndsWith('\n');
+
+            if (lines.Length is 1)
+            {
+                return (new Location(startLocation.Row, startLocation.Column + commentValue.Length), endsWithNewline);
+            }
+            else
+            {
+                var endRow = startLocation.Row + lines.Length - 1;
+                var lastLineLength = lines[lines.Length - 1].Length;
+                return (new Location(endRow, lastLineLength + 1), endsWithNewline);
+            }
+        }
+
+        /// <summary>
+        /// Creates a new FormattingContext positioned after a comment ends.
+        /// If the comment ends with a newline, we're already at the start of a new line.
+        /// </summary>
+        private FormattingContext PositionedAfterComment(
+            Location commentEnd,
+            bool commentEndsWithNewline,
+            ImmutableList<Stil4mElmSyntax7.Node<string>> updatedComments)
+        {
+            if (commentEndsWithNewline)
+            {
+                // Comment ends with newline - we're already at the start of a new line (commentEnd.Row)
+                return new FormattingContext(commentEnd.Row, 1, IndentSpaces, updatedComments).SetIndentColumn();
+            }
+            else
+            {
+                // Comment doesn't end with newline - move to the next row
+                return new FormattingContext(commentEnd.Row + 1, 1, IndentSpaces, updatedComments).SetIndentColumn();
+            }
+        }
+
+        /// <summary>
+        /// Formats a parsed comment and adds it to this context, returning an updated context.
+        /// This encapsulates the common pattern of: get location, calculate end, create formatted comment, add to list, update position.
+        /// </summary>
+        public FormattingContext FormatAndAddComment(Stil4mElmSyntax7.Node<ParsedComment> comment)
+        {
+            var commentLocation = CurrentLocation();
+            var (commentEnd, endsWithNewline) = CalculateCommentEndLocation(commentLocation, comment.Value.Text);
+            var formattedComment = comment.ToStringNodeWithRange(commentLocation, commentEnd);
+            var updatedComments = Comments.Add(formattedComment);
+            return PositionedAfterComment(commentEnd, endsWithNewline, updatedComments);
+        }
+
+        /// <summary>
+        /// Formats and adds a Node&lt;string&gt; comment (from AST documentation fields).
+        /// </summary>
+        public FormattingContext FormatAndAddComment(Stil4mElmSyntax7.Node<string> comment)
+        {
+            var commentLocation = CurrentLocation();
+            var (commentEnd, endsWithNewline) = CalculateCommentEndLocation(commentLocation, comment.Value);
+            var formattedComment = comment.WithRange(commentLocation, commentEnd);
+            var updatedComments = Comments.Add(formattedComment);
+            return PositionedAfterComment(commentEnd, endsWithNewline, updatedComments);
+        }
+
+        /// <summary>
+        /// Formats a sequence of comments and adds them to this context, returning an updated context.
+        /// </summary>
+        public FormattingContext FormatAndAddComments(
+            IReadOnlyList<Stil4mElmSyntax7.Node<ParsedComment>> commentsToFormat,
+            bool setIndentAfterEach = false)
+        {
+            var currentContext = this;
+
+            foreach (var comment in commentsToFormat)
+            {
+                currentContext = currentContext.FormatAndAddComment(comment);
+
+                // If requested, set indent column after each comment
+                if (setIndentAfterEach)
+                {
+                    currentContext = currentContext.SetIndentColumn();
+                }
+            }
+
+            return currentContext;
+        }
+
+        /// <summary>
+        /// Adds a pre-formatted comment to the context.
+        /// </summary>
+        public FormattingContext AddFormattedComment(Stil4mElmSyntax7.Node<string> formattedComment) =>
+            new(CurrentRow, CurrentColumn, IndentSpaces, Comments.Add(formattedComment));
+
+        /// <summary>
+        /// Adds multiple pre-formatted comments to the context.
+        /// </summary>
+        public FormattingContext AddFormattedComments(IEnumerable<Stil4mElmSyntax7.Node<string>> formattedComments) =>
+            new(CurrentRow, CurrentColumn, IndentSpaces, Comments.AddRange(formattedComments));
+
+        /// <summary>
+        /// Formats a parsed comment, adds it to the context, and positions at the comment end location (same row).
+        /// Use this when content should continue immediately after the comment on the same line.
+        /// </summary>
+        public FormattingContext FormatAndAddCommentThenPositionAtEnd(
+            Stil4mElmSyntax7.Node<ParsedComment> comment)
+        {
+            var commentLocation = CurrentLocation();
+            var (commentEnd, _) = CalculateCommentEndLocation(commentLocation, comment.Value.Text);
+            var formattedComment = comment.ToStringNodeWithRange(commentLocation, commentEnd);
+            var updatedComments = Comments.Add(formattedComment);
+            return new FormattingContext(commentEnd.Row, commentEnd.Column, IndentSpaces, updatedComments);
+        }
+
+        /// <summary>
+        /// Formats a parsed comment, adds it to the context, and positions at the indent column on the next row.
+        /// Use this when the next content should start at the current indent level on a new line.
+        /// </summary>
+        public FormattingContext FormatAndAddCommentThenNextRowToIndent(
+            Stil4mElmSyntax7.Node<ParsedComment> comment)
+        {
+            var commentLocation = CurrentLocation();
+            var (commentEnd, _) = CalculateCommentEndLocation(commentLocation, comment.Value.Text);
+            var formattedComment = comment.ToStringNodeWithRange(commentLocation, commentEnd);
+            var updatedComments = Comments.Add(formattedComment);
+            return new FormattingContext(commentEnd.Row + 1, 1, IndentSpaces, updatedComments).SetIndentColumn();
+        }
     }
 
     /// <summary>
-    /// Result of a formatting operation containing the formatted node, updated context,
-    /// and accumulated comments.
-    /// This type is intended to replace tuple returns in formatting methods to eliminate mutation.
+    /// Result of a formatting operation containing the formatted node and updated context.
+    /// Comments are tracked in the FormattingContext.
     /// </summary>
     private record FormattingResult<T>(
         T FormattedNode,
-        FormattingContext Context,
-        ImmutableList<Stil4mElmSyntax7.Node<string>> Comments)
+        FormattingContext Context)
     {
         public static FormattingResult<T> Create(
             T formattedNode,
-            FormattingContext context,
-            ImmutableList<Stil4mElmSyntax7.Node<string>> comments) =>
-            new(formattedNode, context, comments);
-
-        public static FormattingResult<T> Create(
-            T formattedNode,
             FormattingContext context) =>
-            new(formattedNode, context, []);
+            new(formattedNode, context);
     }
 
     #endregion
@@ -269,7 +391,9 @@ public class Avh4Format
     /// Calculate the end location of a comment given its start location and value.
     /// Also returns whether the comment ends with a newline.
     /// </summary>
-    private static (Location EndLocation, bool EndsWithNewline) CalculateCommentEndLocationEx(Location startLocation, string commentValue)
+    private static (Location EndLocation, bool EndsWithNewline) CalculateCommentEndLocationEx(
+        Location startLocation,
+        string commentValue)
     {
         var lines = commentValue.Split('\n');
         var endsWithNewline = commentValue.EndsWith('\n');
@@ -293,66 +417,6 @@ public class Avh4Format
         CalculateCommentEndLocationEx(startLocation, commentValue).EndLocation;
 
     /// <summary>
-    /// Creates a new FormattingContext positioned after a comment ends.
-    /// If the comment ends with a newline, we're already at the start of a new line.
-    /// </summary>
-    private static FormattingContext CreateContextAfterComment(
-        FormattingContext currentContext,
-        Location commentEnd,
-        bool commentEndsWithNewline)
-    {
-        if (commentEndsWithNewline)
-        {
-            // Comment ends with newline - we're already at the start of a new line (commentEnd.Row)
-            return FormattingContext.AtPosition(
-                commentEnd.Row,
-                1,
-                currentContext).SetIndentColumn();
-        }
-        else
-        {
-            // Comment doesn't end with newline - move to the next row
-            return FormattingContext.AtPosition(
-                commentEnd.Row + 1,
-                1,
-                currentContext).SetIndentColumn();
-        }
-    }
-
-    /// <summary>
-    /// Formats a comment and adds it to the comments list, returning the updated context and comments.
-    /// This encapsulates the common pattern of: get location, calculate end, create formatted comment, add to list, update context.
-    /// </summary>
-    private static (FormattingContext Context, ImmutableList<Stil4mElmSyntax7.Node<string>> Comments) FormatAndAddComment(
-        Stil4mElmSyntax7.Node<ParsedComment> comment,
-        FormattingContext context,
-        ImmutableList<Stil4mElmSyntax7.Node<string>> comments)
-    {
-        var commentLocation = context.CurrentLocation();
-        var (commentEnd, endsWithNewline) = CalculateCommentEndLocationEx(commentLocation, comment.Value.Text);
-        var formattedComment = comment.ToStringNodeWithRange(commentLocation, commentEnd);
-        var updatedComments = comments.Add(formattedComment);
-        var updatedContext = CreateContextAfterComment(context, commentEnd, endsWithNewline);
-        return (updatedContext, updatedComments);
-    }
-
-    /// <summary>
-    /// Formats and adds a Node&lt;string&gt; comment (from AST documentation fields).
-    /// </summary>
-    private static (FormattingContext Context, ImmutableList<Stil4mElmSyntax7.Node<string>> Comments) FormatAndAddComment(
-        Stil4mElmSyntax7.Node<string> comment,
-        FormattingContext context,
-        ImmutableList<Stil4mElmSyntax7.Node<string>> comments)
-    {
-        var commentLocation = context.CurrentLocation();
-        var (commentEnd, endsWithNewline) = CalculateCommentEndLocationEx(commentLocation, comment.Value);
-        var formattedComment = comment.WithRange(commentLocation, commentEnd);
-        var updatedComments = comments.Add(formattedComment);
-        var updatedContext = CreateContextAfterComment(context, commentEnd, endsWithNewline);
-        return (updatedContext, updatedComments);
-    }
-
-    /// <summary>
     /// Check if a range spans multiple rows.
     /// </summary>
     private static bool SpansMultipleRows(Range range) =>
@@ -372,42 +436,6 @@ public class Avh4Format
 
     #endregion
 
-    #region Comment Formatting Helpers
-
-    /// <summary>
-    /// Formats a sequence of comments and adds them to the comments list.
-    /// Returns the updated context and comments list.
-    /// This reduces repetitive comment handling code by encapsulating the common loop pattern.
-    /// </summary>
-    private static (FormattingContext Context, ImmutableList<Stil4mElmSyntax7.Node<string>> Comments) FormatAndAddComments(
-        IReadOnlyList<Stil4mElmSyntax7.Node<ParsedComment>> commentsToFormat,
-        FormattingContext context,
-        ImmutableList<Stil4mElmSyntax7.Node<string>> comments,
-        bool setIndentAfterEach = false)
-    {
-        var currentContext = context;
-        var currentComments = comments;
-
-        foreach (var comment in commentsToFormat)
-        {
-            var commentLocation = currentContext.CurrentLocation();
-            var (commentEnd, endsWithNewline) = CalculateCommentEndLocationEx(commentLocation, comment.Value.Text);
-            var formattedComment = comment.ToStringNodeWithRange(commentLocation, commentEnd);
-            currentComments = currentComments.Add(formattedComment);
-            currentContext = CreateContextAfterComment(currentContext, commentEnd, endsWithNewline);
-
-            // If requested, set indent column after each comment
-            if (setIndentAfterEach)
-            {
-                currentContext = currentContext.SetIndentColumn();
-            }
-        }
-
-        return (currentContext, currentComments);
-    }
-
-    #endregion
-
     #region Visitor Implementation
 
     /// <summary>
@@ -423,11 +451,9 @@ public class Avh4Format
             File file,
             FormattingContext context)
         {
-            var formattedComments = ImmutableList<Stil4mElmSyntax7.Node<string>>.Empty;
-
             // Format module definition
-            var (formattedModule, contextAfterModule, commentsAfterModule) =
-                FormatModuleDefinition(file.ModuleDefinition, context, formattedComments);
+            var (formattedModule, contextAfterModule) =
+                FormatModuleDefinition(file.ModuleDefinition, context);
 
             // Check for comments associated with first import (leading comments)
             var firstImport = file.Imports.FirstOrDefault();
@@ -438,40 +464,33 @@ public class Avh4Format
                 : [];
 
             FormattingContext contextBeforeImports;
-            ImmutableList<Stil4mElmSyntax7.Node<string>> currentComments;
 
             if (commentsAfterModuleBeforeImports.Count is not 0)
             {
                 var startContext = contextAfterModule.WithBlankLine();
-                (currentComments, contextBeforeImports) = FormatCommentsAtContext(
-                    commentsAfterModuleBeforeImports, startContext, commentsAfterModule);
+                contextBeforeImports = FormatCommentsAtContext(
+                    commentsAfterModuleBeforeImports, startContext);
                 contextBeforeImports = contextBeforeImports.NextRowToIndent();
             }
             else
             {
                 contextBeforeImports = contextAfterModule.WithBlankLine();
-                currentComments = commentsAfterModule;
             }
 
             // Format imports
             FormattingContext contextAfterImports;
             IReadOnlyList<Stil4mElmSyntax7.Node<Import>> formattedImports;
-            ImmutableList<Stil4mElmSyntax7.Node<string>> commentsAfterImports;
 
             if (firstImport is not null)
             {
-                (formattedImports, contextAfterImports, commentsAfterImports) =
-                    FormatImports(file.Imports, contextBeforeImports, currentComments);
+                (formattedImports, contextAfterImports) =
+                    FormatImports(file.Imports, contextBeforeImports);
             }
             else
             {
                 formattedImports = [];
                 contextAfterImports = contextAfterModule;
-                commentsAfterImports = currentComments;
             }
-
-            // Check for comments before first declaration
-            var commentsBeforeDecls = commentsAfterImports;
 
             // Search for comments between imports/module and first declaration using original positions
             var lastOriginalRowBeforeDecls =
@@ -490,16 +509,14 @@ public class Avh4Format
 
             if (commentsBefore.Count is not 0)
             {
-                var firstComment = commentsBefore[0];
-
                 var startContext = formattedImports.Any()
                     ?
                     contextAfterImports.WithBlankLine().NextRowToIndent()
                     :
                     contextAfterModule.WithBlankLine();
 
-                (commentsBeforeDecls, contextBeforeDecls) = FormatCommentsAtContext(
-                    commentsBefore, startContext, commentsAfterImports, addBlankLinesAfterNonDocComments: true);
+                contextBeforeDecls = FormatCommentsAtContext(
+                    commentsBefore, startContext, addBlankLinesAfterNonDocComments: true);
 
                 // For module-level doc comments (between module and first declaration, no imports),
                 // we need to add 2 blank lines after the doc comment
@@ -518,8 +535,8 @@ public class Avh4Format
             }
 
             // Format declarations along with incomplete declarations interleaved by position
-            var (formattedDeclarations, contextAfterDeclarations, commentsAfterDecls, formattedIncompleteDeclarations) =
-                FormatDeclarationsWithIncompletes(file.Declarations, contextBeforeDecls, commentsBeforeDecls);
+            var (formattedDeclarations, contextAfterDeclarations, formattedIncompleteDeclarations) =
+                FormatDeclarationsWithIncompletes(file.Declarations, contextBeforeDecls);
 
             // Get trailing comments that appear after all declarations
             var lastDeclRow = file.Declarations.Any()
@@ -531,7 +548,6 @@ public class Avh4Format
             var trailingComments = commentQueries.GetAfterRow(lastDeclRow);
 
             // Format trailing comments
-            var finalComments = commentsAfterDecls;
             var contextAfterTrailingComments = contextAfterDeclarations;
             if (trailingComments.Count > 0)
             {
@@ -544,8 +560,8 @@ public class Avh4Format
                 {
                     trailingContext = contextBeforeDecls;
                 }
-                (finalComments, contextAfterTrailingComments) = FormatCommentsAtContext(
-                    trailingComments, trailingContext, commentsAfterDecls);
+                contextAfterTrailingComments = FormatCommentsAtContext(
+                    trailingComments, trailingContext);
             }
 
             var formattedFile = new File(
@@ -555,7 +571,7 @@ public class Avh4Format
                 Comments: [],
                 IncompleteDeclarations: []);
 
-            return (formattedFile, finalComments, formattedIncompleteDeclarations);
+            return (formattedFile, contextAfterTrailingComments.Comments, formattedIncompleteDeclarations);
         }
 
         /// <summary>
@@ -582,19 +598,17 @@ public class Avh4Format
             return new Location(row, column);
         }
 
-        private static (ImmutableList<Stil4mElmSyntax7.Node<string>> FormattedComments, FormattingContext NextContext) FormatCommentsAtContext(
+        private static FormattingContext FormatCommentsAtContext(
             IReadOnlyList<Stil4mElmSyntax7.Node<ParsedComment>> comments,
             FormattingContext startContext,
-            ImmutableList<Stil4mElmSyntax7.Node<string>> existingComments,
             bool addBlankLinesAfterNonDocComments = false)
         {
             var currentContext = startContext;
-            var currentComments = existingComments;
 
             for (var i = 0; i < comments.Count; i++)
             {
                 var comment = comments[i];
-                (currentContext, currentComments) = FormatAndAddComment(comment, currentContext, currentComments);
+                currentContext = currentContext.FormatAndAddComment(comment);
 
                 // Only add blank lines after non-doc comments if there's a gap before the next comment
                 // or if this is the last comment. This preserves consecutive comments without blank lines.
@@ -618,19 +632,18 @@ public class Avh4Format
                 }
             }
 
-            return (currentComments, currentContext);
+            return currentContext;
         }
 
         #endregion
 
         #region Module Formatting
 
-        private static (Stil4mElmSyntax7.Node<Module>, FormattingContext, ImmutableList<Stil4mElmSyntax7.Node<string>>) FormatModuleDefinition(
+        private static (Stil4mElmSyntax7.Node<Module>, FormattingContext) FormatModuleDefinition(
             Stil4mElmSyntax7.Node<Module> module,
-            FormattingContext context,
-            ImmutableList<Stil4mElmSyntax7.Node<string>> formattedComments)
+            FormattingContext context)
         {
-            var result = module.Value switch
+            return module.Value switch
             {
                 Module.NormalModule normalModule =>
                 FormatNormalModule(normalModule, context),
@@ -645,8 +658,6 @@ public class Avh4Format
                 throw new System.NotImplementedException(
                     $"Formatting for module type '{module.Value.GetType().Name}' is not implemented.")
             };
-
-            return (result.Item1, result.Item2, formattedComments);
         }
 
         private static (Stil4mElmSyntax7.Node<Module>, FormattingContext) FormatNormalModule(
@@ -927,13 +938,12 @@ public class Avh4Format
 
         #region Import Formatting
 
-        private static (IReadOnlyList<Stil4mElmSyntax7.Node<Import>>, FormattingContext, ImmutableList<Stil4mElmSyntax7.Node<string>>) FormatImports(
+        private static (IReadOnlyList<Stil4mElmSyntax7.Node<Import>>, FormattingContext) FormatImports(
             IReadOnlyList<Stil4mElmSyntax7.Node<Import>> imports,
-            FormattingContext context,
-            ImmutableList<Stil4mElmSyntax7.Node<string>> formattedComments)
+            FormattingContext context)
         {
             if (!imports.Any())
-                return ([], context, formattedComments);
+                return ([], context);
 
             var sortedImports =
                 imports
@@ -951,7 +961,7 @@ public class Avh4Format
                 currentContext = nextContext.ResetIndent().NextRowToIndent();
             }
 
-            return (formattedImports, currentContext, formattedComments);
+            return (formattedImports, currentContext);
         }
 
         private static (Stil4mElmSyntax7.Node<Import>, FormattingContext) FormatImport(
@@ -1030,10 +1040,9 @@ public class Avh4Format
         /// <summary>
         /// Formats both complete and incomplete declarations, interleaving them by their original positions.
         /// </summary>  
-        private (IReadOnlyList<Stil4mElmSyntax7.Node<Declaration>>, FormattingContext, ImmutableList<Stil4mElmSyntax7.Node<string>>, IReadOnlyList<Stil4mElmSyntax7.Node<IncompleteDeclaration>>) FormatDeclarationsWithIncompletes(
+        private (IReadOnlyList<Stil4mElmSyntax7.Node<Declaration>>, FormattingContext, IReadOnlyList<Stil4mElmSyntax7.Node<IncompleteDeclaration>>) FormatDeclarationsWithIncompletes(
             IReadOnlyList<Stil4mElmSyntax7.Node<Declaration>> declarations,
-            FormattingContext context,
-            ImmutableList<Stil4mElmSyntax7.Node<string>> formattedComments)
+            FormattingContext context)
         {
             // Create a union of complete and incomplete declarations sorted by position
             // We use a discriminated union approach with an interface
@@ -1053,12 +1062,11 @@ public class Avh4Format
             allItems.Sort((a, b) => a.row.CompareTo(b.row));
 
             if (allItems.Count is 0)
-                return ([], context, formattedComments, []);
+                return ([], context, []);
 
             var formattedDeclarations = new List<Stil4mElmSyntax7.Node<Declaration>>();
             var formattedIncompletes = new List<Stil4mElmSyntax7.Node<IncompleteDeclaration>>();
             var currentContext = context;
-            var currentComments = formattedComments;
 
             for (var i = 0; i < allItems.Count; i++)
             {
@@ -1070,9 +1078,8 @@ public class Avh4Format
                     var declContext = currentContext.ResetIndent();
 
                     var declResult =
-                        FormatDeclaration(decl, declContext, currentComments);
+                        FormatDeclaration(decl, declContext);
 
-                    currentComments = declResult.Comments;
                     formattedDeclarations.Add(declResult.FormattedNode);
                     var nextContext = declResult.Context;
 
@@ -1110,7 +1117,7 @@ public class Avh4Format
                                     var comment = commentsBetween[ci];
                                     // Ensure we're at column 1 for top-level comments
                                     currentContext = currentContext.ResetIndent().SetIndentColumn();
-                                    (currentContext, currentComments) = FormatAndAddComment(comment, currentContext, currentComments);
+                                    currentContext = currentContext.FormatAndAddComment(comment);
 
                                     // For non-doc section comments:
                                     // - FormatAndAddComment already advances to the next row after the comment
@@ -1182,30 +1189,29 @@ public class Avh4Format
                 }
             }
 
-            return (formattedDeclarations, currentContext, currentComments, formattedIncompletes);
+            return (formattedDeclarations, currentContext, formattedIncompletes);
         }
 
         private FormattingResult<Stil4mElmSyntax7.Node<Declaration>> FormatDeclaration(
             Stil4mElmSyntax7.Node<Declaration> decl,
-            FormattingContext context,
-            ImmutableList<Stil4mElmSyntax7.Node<string>> formattedComments)
+            FormattingContext context)
         {
             return decl.Value switch
             {
                 Declaration.FunctionDeclaration funcDecl =>
-                    FormatFunctionDeclaration(funcDecl, decl.Range, context, formattedComments),
+                    FormatFunctionDeclaration(funcDecl, decl.Range, context),
 
                 Declaration.AliasDeclaration aliasDecl =>
-                    FormatAliasDeclaration(aliasDecl, context, formattedComments),
+                    FormatAliasDeclaration(aliasDecl, context),
 
                 Declaration.CustomTypeDeclaration customTypeDecl =>
-                    FormatCustomTypeDeclaration(customTypeDecl, context, formattedComments),
+                    FormatCustomTypeDeclaration(customTypeDecl, context),
 
                 Declaration.InfixDeclaration infixDecl =>
-                    FormatInfixDeclaration(infixDecl, decl.Range, context, formattedComments),
+                    FormatInfixDeclaration(infixDecl, decl.Range, context),
 
                 Declaration.PortDeclaration portDecl =>
-                    FormatPortDeclaration(portDecl, context, formattedComments),
+                    FormatPortDeclaration(portDecl, context),
 
                 _ =>
                 throw new System.NotImplementedException(
@@ -1217,11 +1223,9 @@ public class Avh4Format
         private FormattingResult<Stil4mElmSyntax7.Node<Declaration>> FormatFunctionDeclaration(
             Declaration.FunctionDeclaration funcDecl,
             Range originalDeclRange,
-            FormattingContext context,
-            ImmutableList<Stil4mElmSyntax7.Node<string>> formattedComments)
+            FormattingContext context)
         {
             var currentContext = context;
-            var currentComments = formattedComments;
 
             // Reference context for indented content (one indent level from base)
             var indentedRef = context.SetIndentColumn().AdvanceToNextIndentLevel().SetIndentToCurrentColumn();
@@ -1229,7 +1233,7 @@ public class Avh4Format
             // Format documentation comment if present
             if (funcDecl.Function.Documentation is { } docComment)
             {
-                (currentContext, currentComments) = FormatAndAddComment(docComment, currentContext, currentComments);
+                currentContext = currentContext.FormatAndAddComment(docComment);
             }
 
             // Format signature if present
@@ -1249,17 +1253,15 @@ public class Avh4Format
                 if (isTypeAnnotOnNewLine)
                 {
                     // Type annotation on new line with indentation - no space after colon
-                    var typeContext = afterColon.ReturnToIndent(indentedRef).NextRowToIndent();
+                    var typeContext = afterColon.ReturnToIndent(indentedRef).NextRowToIndent().AddFormattedComments(currentContext.Comments);
                     typeAnnotResult = FormatTypeAnnotation(signature.Value.TypeAnnotation, typeContext);
                 }
                 else
                 {
                     // Type annotation on same line after " : "
-                    var sameLineContext = afterColon.Advance(1); // space after colon
+                    var sameLineContext = afterColon.Advance(1).AddFormattedComments(currentContext.Comments); // space after colon
                     typeAnnotResult = FormatTypeAnnotation(signature.Value.TypeAnnotation, sameLineContext);
                 }
-
-                currentComments = currentComments.AddRange(typeAnnotResult.Comments);
 
                 var sigRange = MakeRange(currentContext.CurrentLocation(), typeAnnotResult.Context.CurrentLocation());
                 formattedSignature = new Stil4mElmSyntax7.Node<Signature>(sigRange, new Signature(
@@ -1286,13 +1288,9 @@ public class Avh4Format
             foreach (var arg in impl.Arguments)
             {
                 afterArgs = afterArgs.Advance(1); // space before arg
-                var argStartLoc = afterArgs.CurrentLocation();
-                var patternText = FormatPatternText(arg.Value);
-                afterArgs = afterArgs.Advance(patternText.Length);
-                var argEndLoc = afterArgs.CurrentLocation();
-                // Transform the pattern to have updated internal locations for correct rendering
-                var transformedPattern = TransformPatternWithLocation(arg.Value, argStartLoc);
-                formattedArguments.Add(MakeNodeWithRange(argStartLoc, argEndLoc, transformedPattern));
+                var patternResult = FormatPattern(arg, afterArgs);
+                afterArgs = patternResult.Context;
+                formattedArguments.Add(patternResult.FormattedNode);
             }
 
             // " ="
@@ -1308,12 +1306,10 @@ public class Avh4Format
             var commentsBeforeExpr = commentQueries.GetBetweenRows(equalsRow, exprStartRow);
 
             // Format any comments that appear before the expression
-            (exprContext, currentComments) = FormatAndAddComments(
-                commentsBeforeExpr, exprContext, currentComments, setIndentAfterEach: true);
+            exprContext = exprContext.FormatAndAddComments(commentsBeforeExpr, setIndentAfterEach: true);
 
             // Format the expression with updated locations
-            var exprResult = FormatExpression(impl.Expression, exprContext, currentComments);
-            currentComments = exprResult.Comments;
+            var exprResult = FormatExpression(impl.Expression, exprContext);
 
             // Build formatted implementation
             var formattedImpl = new FunctionImplementation(
@@ -1334,16 +1330,13 @@ public class Avh4Format
             var range = MakeRange(context.CurrentLocation(), exprResult.Context.CurrentLocation());
             return FormattingResult<Stil4mElmSyntax7.Node<Declaration>>.Create(
                 new Stil4mElmSyntax7.Node<Declaration>(range, new Declaration.FunctionDeclaration(formattedFunc)),
-                exprResult.Context.ReturnToIndent(context),
-                currentComments);
+                exprResult.Context.ReturnToIndent(context));
         }
 
         private FormattingResult<Stil4mElmSyntax7.Node<Declaration>> FormatAliasDeclaration(
             Declaration.AliasDeclaration aliasDecl,
-            FormattingContext context,
-            ImmutableList<Stil4mElmSyntax7.Node<string>> formattedComments)
+            FormattingContext context)
         {
-            var currentComments = formattedComments;
             var startContext = context;
 
             // Reference context for indented content (one indent level from base)
@@ -1351,7 +1344,7 @@ public class Avh4Format
 
             if (aliasDecl.TypeAlias.Documentation is { } docComment)
             {
-                (startContext, currentComments) = FormatAndAddComment(docComment, startContext, currentComments);
+                startContext = startContext.FormatAndAddComment(docComment);
             }
 
             var typeTokenLoc = startContext.CurrentLocation();
@@ -1381,7 +1374,7 @@ public class Avh4Format
 
             // Save parent context for later indent restoration
             var parentContext = afterEquals;
-            var typeContext = afterEquals.ReturnToIndent(indentedRef).NextRowToIndent();
+            var typeContext = afterEquals.ReturnToIndent(indentedRef).NextRowToIndent().AddFormattedComments(startContext.Comments);
 
             // Check for comments between the equals sign and the type annotation
             var commentsBeforeType = commentQueries.GetBetweenRows(
@@ -1390,20 +1383,11 @@ public class Avh4Format
 
             foreach (var comment in commentsBeforeType)
             {
-                // Position comment at indent column
-                var commentLocation = typeContext.CurrentLocation();
-                var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value.Text);
-                var formattedComment = comment.ToStringNodeWithRange(commentLocation, commentEnd);
-                currentComments = currentComments.Add(formattedComment);
-                typeContext = FormattingContext.AtPosition(commentEnd.Row, commentEnd.Column, typeContext).NextRowToIndent();
+                typeContext = typeContext.FormatAndAddComment(comment);
             }
 
             // Format the type annotation with proper locations
-            var (formattedTypeAnnotation, afterTypeAnnot, typeAnnotComments) =
-                FormatTypeAnnotation(aliasDecl.TypeAlias.TypeAnnotation, typeContext);
-
-            // Add any comments collected during type annotation formatting
-            currentComments = currentComments.AddRange(typeAnnotComments);
+            var typeAnnotResult = FormatTypeAnnotation(aliasDecl.TypeAlias.TypeAnnotation, typeContext);
 
             var formattedTypeAlias = new TypeAlias(
                 Documentation: aliasDecl.TypeAlias.Documentation,
@@ -1412,23 +1396,20 @@ public class Avh4Format
                 Name: formattedName,
                 Generics: formattedGenerics,
                 EqualsTokenLocation: equalsLoc,
-                TypeAnnotation: formattedTypeAnnotation
+                TypeAnnotation: typeAnnotResult.FormattedNode
             );
 
-            var finalContext = afterTypeAnnot.ReturnToIndent(parentContext);
+            var finalContext = typeAnnotResult.Context.ReturnToIndent(parentContext);
             var range = MakeRange(startContext.CurrentLocation(), finalContext.CurrentLocation());
             return FormattingResult<Stil4mElmSyntax7.Node<Declaration>>.Create(
                 new Stil4mElmSyntax7.Node<Declaration>(range, new Declaration.AliasDeclaration(formattedTypeAlias)),
-                finalContext,
-                currentComments);
+                finalContext);
         }
 
         private FormattingResult<Stil4mElmSyntax7.Node<Declaration>> FormatCustomTypeDeclaration(
             Declaration.CustomTypeDeclaration customTypeDecl,
-            FormattingContext context,
-            ImmutableList<Stil4mElmSyntax7.Node<string>> formattedComments)
+            FormattingContext context)
         {
-            var currentComments = formattedComments;
             var startContext = context;
 
             // Reference context for indented content (one indent level from base)
@@ -1436,7 +1417,7 @@ public class Avh4Format
 
             if (customTypeDecl.TypeDeclaration.Documentation is { } docComment)
             {
-                (startContext, currentComments) = FormatAndAddComment(docComment, startContext, currentComments);
+                startContext = startContext.FormatAndAddComment(docComment);
             }
 
             var typeTokenLoc = startContext.CurrentLocation();
@@ -1456,7 +1437,7 @@ public class Avh4Format
             }
 
             // Move to next line for constructors
-            var constructorIndentContext = currentContext.ReturnToIndent(indentedRef).NextRowToIndent();
+            var constructorIndentContext = currentContext.ReturnToIndent(indentedRef).NextRowToIndent().AddFormattedComments(startContext.Comments);
 
             var equalsLoc = constructorIndentContext.CurrentLocation();
             var afterEquals = constructorIndentContext.Advance(Keywords.EqualsSpace.Length);
@@ -1484,17 +1465,18 @@ public class Avh4Format
                         foreach (var comment in commentsBetweenConstructors)
                         {
                             constructorCtx = constructorCtx.ReturnToIndent(commentIndentRef).NextRowToIndent();
-                            var commentLocation = constructorCtx.CurrentLocation();
-                            var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value.Text);
-                            var formattedComment = comment.ToStringNodeWithRange(commentLocation, commentEnd);
-                            currentComments = currentComments.Add(formattedComment);
+                            constructorCtx = constructorCtx.FormatAndAddComment(comment);
                             // Don't add extra blank lines after constructor comment
-                            constructorCtx = FormattingContext.AtPosition(commentEnd.Row, commentEnd.Column, constructorIndentContext);
+                            constructorCtx = constructorCtx.ReturnToIndent(constructorIndentContext);
                         }
+                        // FormatAndAddComment already positioned us on the next row, just set indent
+                        constructorCtx = constructorCtx.SetIndentColumn();
                     }
-
-                    // Move to next line for subsequent constructors
-                    constructorCtx = constructorCtx.NextRowToIndent();
+                    else
+                    {
+                        // Move to next line for subsequent constructors (only when no comments)
+                        constructorCtx = constructorCtx.NextRowToIndent();
+                    }
                     formattedPipeLoc = constructorCtx.CurrentLocation();
                     constructorCtx = constructorCtx.Advance(2); // "| "
                 }
@@ -1508,7 +1490,7 @@ public class Avh4Format
 
                 // Constructor arguments
                 var formattedArgs = new List<Stil4mElmSyntax7.Node<TypeAnnotation>>();
-                var argCtx = afterConstructorName;
+                var argCtx = afterConstructorName.AddFormattedComments(constructorCtx.Comments);
                 for (var argIndex = 0; argIndex < constructor.Value.Arguments.Count; argIndex++)
                 {
                     var arg = constructor.Value.Arguments[argIndex];
@@ -1534,19 +1516,14 @@ public class Avh4Format
                         foreach (var comment in commentsBetween)
                         {
                             argCtx = argCtx.ReturnToIndent(argIndentRef).NextRowToIndent();
-                            var commentLocation = argCtx.CurrentLocation();
-                            var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value.Text);
-                            var formattedComment = comment.ToStringNodeWithRange(commentLocation, commentEnd);
-                            currentComments = currentComments.Add(formattedComment);
-                            argCtx = FormattingContext.AtPosition(commentEnd.Row, commentEnd.Column, argCtx);
+                            argCtx = argCtx.FormatAndAddComment(comment);
                         }
 
-                        // Next argument on new line
-                        argCtx = argCtx.ReturnToIndent(argIndentRef).NextRowToIndent();
-                        var (formattedArg, afterArg, argComments) = FormatTypeAnnotation(arg, argCtx);
-                        formattedArgs.Add(formattedArg);
-                        argCtx = afterArg;
-                        currentComments = currentComments.AddRange(argComments);
+                        // FormatAndAddComment already positioned us on the next row, just set indent
+                        argCtx = argCtx.ReturnToIndent(argIndentRef).SetIndentColumn();
+                        var argResult = FormatTypeAnnotation(arg, argCtx);
+                        formattedArgs.Add(argResult.FormattedNode);
+                        argCtx = argResult.Context;
                         continue;
                     }
 
@@ -1566,10 +1543,9 @@ public class Avh4Format
                         argCtx = argCtx.Advance(1); // space
                     }
 
-                    var (fmtArg, afterFmtArg, fmtArgComments) = FormatTypeAnnotation(arg, argCtx);
-                    formattedArgs.Add(fmtArg);
-                    argCtx = afterFmtArg;
-                    currentComments = currentComments.AddRange(fmtArgComments);
+                    var fmtArgResult = FormatTypeAnnotation(arg, argCtx);
+                    formattedArgs.Add(fmtArgResult.FormattedNode);
+                    argCtx = fmtArgResult.Context;
                 }
 
                 var formattedConstructor = new ValueConstructor(
@@ -1599,15 +1575,13 @@ public class Avh4Format
             var range = MakeRange(startContext.CurrentLocation(), constructorCtx.CurrentLocation());
             return FormattingResult<Stil4mElmSyntax7.Node<Declaration>>.Create(
                 new Stil4mElmSyntax7.Node<Declaration>(range, new Declaration.CustomTypeDeclaration(formattedTypeStruct)),
-                finalContext,
-                currentComments);
+                finalContext);
         }
 
         private static FormattingResult<Stil4mElmSyntax7.Node<Declaration>> FormatInfixDeclaration(
             Declaration.InfixDeclaration infixDecl,
             Range originalRange,
-            FormattingContext context,
-            ImmutableList<Stil4mElmSyntax7.Node<string>> formattedComments)
+            FormattingContext context)
         {
             var infixTokenLoc = context.CurrentLocation();
 
@@ -1627,14 +1601,12 @@ public class Avh4Format
 
             return FormattingResult<Stil4mElmSyntax7.Node<Declaration>>.Create(
                 new Stil4mElmSyntax7.Node<Declaration>(range, new Declaration.InfixDeclaration(formattedInfix)),
-                afterInfix,
-                formattedComments);
+                afterInfix);
         }
 
         private static FormattingResult<Stil4mElmSyntax7.Node<Declaration>> FormatPortDeclaration(
             Declaration.PortDeclaration portDecl,
-            FormattingContext context,
-            ImmutableList<Stil4mElmSyntax7.Node<string>> formattedComments)
+            FormattingContext context)
         {
             var portTokenLoc = context.CurrentLocation();
             var afterPort = context.Advance(5); // "port "
@@ -1665,8 +1637,7 @@ public class Avh4Format
 
             return FormattingResult<Stil4mElmSyntax7.Node<Declaration>>.Create(
                 new Stil4mElmSyntax7.Node<Declaration>(range, new Declaration.PortDeclaration(portTokenLoc, formattedSig)),
-                afterType,
-                formattedComments);
+                afterType);
         }
 
         #endregion
@@ -1682,8 +1653,7 @@ public class Avh4Format
             var typeResult = FormatTypeAnnotationValue(typeAnnot.Value, context, arrowBaseRef);
             return FormattingResult<Stil4mElmSyntax7.Node<TypeAnnotation>>.Create(
                 MakeNodeWithRange(startLoc, typeResult.Context.CurrentLocation(), typeResult.FormattedNode),
-                typeResult.Context,
-                typeResult.Comments);
+                typeResult.Context);
         }
 
         private FormattingResult<TypeAnnotation> FormatTypeAnnotationValue(
@@ -1691,15 +1661,13 @@ public class Avh4Format
             FormattingContext context,
             FormattingContext? arrowBaseRef = null)
         {
-            var emptyComments = ImmutableList<Stil4mElmSyntax7.Node<string>>.Empty;
-
             // Reference context for indented content (one indent level from current position)
             var indentedRef = context.SetIndentColumn().AdvanceToNextIndentLevel().SetIndentToCurrentColumn();
 
             switch (typeAnnot)
             {
                 case TypeAnnotation.GenericType genericType:
-                    return FormattingResult<TypeAnnotation>.Create(genericType, context.Advance(genericType.Name.Length), emptyComments);
+                    return FormattingResult<TypeAnnotation>.Create(genericType, context.Advance(genericType.Name.Length));
 
                 case TypeAnnotation.Typed typed:
                     {
@@ -1711,7 +1679,6 @@ public class Avh4Format
 
                         var formattedArgs = new List<Stil4mElmSyntax7.Node<TypeAnnotation>>();
                         var currentCtx = afterTypeName;
-                        var collectedComments = emptyComments;
 
                         // Track the original row for multiline detection
                         var typeNameOriginalRow = typed.TypeName.Range.Start.Row;
@@ -1730,18 +1697,16 @@ public class Avh4Format
                             {
                                 // Argument on new line with extra indentation
                                 var argContext = currentCtx.ReturnToIndent(indentedRef).NextRowToIndent();
-                                var (formattedArg, afterArg, argComments) = FormatTypeAnnotation(arg, argContext);
-                                formattedArgs.Add(formattedArg);
-                                currentCtx = afterArg.ReturnToIndent(context);
-                                collectedComments = collectedComments.AddRange(argComments);
+                                var argResult = FormatTypeAnnotation(arg, argContext);
+                                formattedArgs.Add(argResult.FormattedNode);
+                                currentCtx = argResult.Context.ReturnToIndent(context);
                             }
                             else
                             {
                                 currentCtx = currentCtx.Advance(1); // space before arg
-                                var (formattedArg, afterArg, argComments) = FormatTypeAnnotation(arg, currentCtx);
-                                formattedArgs.Add(formattedArg);
-                                currentCtx = afterArg;
-                                collectedComments = collectedComments.AddRange(argComments);
+                                var argResult = FormatTypeAnnotation(arg, currentCtx);
+                                formattedArgs.Add(argResult.FormattedNode);
+                                currentCtx = argResult.Context;
                             }
                         }
 
@@ -1749,17 +1714,16 @@ public class Avh4Format
                             typed.TypeName,
                             formattedArgs
                         );
-                        return FormattingResult<TypeAnnotation>.Create(formattedTyped, currentCtx, collectedComments);
+                        return FormattingResult<TypeAnnotation>.Create(formattedTyped, currentCtx);
                     }
 
                 case TypeAnnotation.Unit:
-                    return FormattingResult<TypeAnnotation>.Create(typeAnnot, context.Advance(2), emptyComments); // "()"
+                    return FormattingResult<TypeAnnotation>.Create(typeAnnot, context.Advance(2)); // "()"
 
                 case TypeAnnotation.Tupled tupled:
                     {
                         var tupledElements = Stil4mElmSyntax7.FromStil4mConcretized.ToList(tupled.TypeAnnotations);
                         var openParenLoc = context.CurrentLocation();
-                        var collectedComments = emptyComments;
 
                         // Detect if tuple should be multiline based on the containing node's start and end locations
                         var isMultilineTuple = tupled.CloseParenLocation.Row > tupled.OpenParenLocation.Row;
@@ -1792,19 +1756,18 @@ public class Avh4Format
                                     tupledCtx = tupledCtx.Advance(2); // ", "
                                 }
 
-                                var (formattedElem, afterElem, elemComments) = FormatTypeAnnotation(elem, tupledCtx);
-                                collectedComments = collectedComments.AddRange(elemComments);
+                                var elemResult = FormatTypeAnnotation(elem, tupledCtx);
 
                                 if (i is 0)
                                 {
-                                    firstElem = formattedElem;
+                                    firstElem = elemResult.FormattedNode;
                                 }
                                 else
                                 {
-                                    restElems.Add((separatorLoc!, formattedElem));
+                                    restElems.Add((separatorLoc!, elemResult.FormattedNode));
                                 }
 
-                                tupledCtx = afterElem.ReturnToIndent(context);
+                                tupledCtx = elemResult.Context.ReturnToIndent(context);
                             }
 
                             // Closing paren on new line, aligned with opening paren
@@ -1827,7 +1790,7 @@ public class Avh4Format
                                 separatedElems,
                                 closeParenLoc
                             );
-                            return FormattingResult<TypeAnnotation>.Create(formattedTupledAnnot, afterCloseParen.ReturnToIndent(context), collectedComments);
+                            return FormattingResult<TypeAnnotation>.Create(formattedTupledAnnot, afterCloseParen.ReturnToIndent(context));
                         }
                         else
                         {
@@ -1855,7 +1818,6 @@ public class Avh4Format
 
                                 formattedTupled.Add(elemResult.FormattedNode);
                                 tupledCtx = elemResult.Context;
-                                collectedComments = collectedComments.AddRange(elemResult.Comments);
                             }
 
                             Location closeParenLoc;
@@ -1877,7 +1839,7 @@ public class Avh4Format
                                 ToSeparatedSyntaxList(formattedTupled),
                                 closeParenLoc
                             );
-                            return FormattingResult<TypeAnnotation>.Create(formattedTupledAnnot, afterCloseParen, collectedComments);
+                            return FormattingResult<TypeAnnotation>.Create(formattedTupledAnnot, afterCloseParen);
                         }
                     }
 
@@ -1893,17 +1855,15 @@ public class Avh4Format
                         // Use passed reference or create one at current column if first encounter
                         var effectiveArrowBaseRef = arrowBaseRef ?? context.SetIndentToCurrentColumn();
 
-                        var (formattedArgType, afterArgType, argComments) = FormatTypeAnnotation(funcType.ArgumentType, context, effectiveArrowBaseRef);
+                        var argTypeResult = FormatTypeAnnotation(funcType.ArgumentType, context, effectiveArrowBaseRef);
 
                         Location arrowLocation;
-                        Stil4mElmSyntax7.Node<TypeAnnotation> formattedReturnType;
-                        FormattingContext afterReturnType;
-                        ImmutableList<Stil4mElmSyntax7.Node<string>> returnComments;
+                        FormattingResult<Stil4mElmSyntax7.Node<TypeAnnotation>> returnTypeResult;
 
                         if (returnTypeOnNewLine)
                         {
                             // Multiline: arrow on new line, at the base column
-                            var newLineCtx = afterArgType.ReturnToIndent(effectiveArrowBaseRef).NextRowToIndent();
+                            var newLineCtx = argTypeResult.Context.ReturnToIndent(effectiveArrowBaseRef).NextRowToIndent();
                             arrowLocation = newLineCtx.CurrentLocation();
 
                             if (resultTypeOnOwnLine)
@@ -1914,38 +1874,37 @@ public class Avh4Format
                                 var resultTypeRef = effectiveArrowBaseRef.SetIndentColumn().AdvanceToNextIndentLevel().SetIndentToCurrentColumn();
                                 var resultTypeCtx = afterArrow.ReturnToIndent(resultTypeRef).NextRowToIndent();
                                 // Pass effectiveArrowBaseRef so nested function type arrows align properly
-                                (formattedReturnType, afterReturnType, returnComments) = FormatTypeAnnotation(funcType.ReturnType, resultTypeCtx, effectiveArrowBaseRef);
+                                returnTypeResult = FormatTypeAnnotation(funcType.ReturnType, resultTypeCtx.AddFormattedComments(argTypeResult.Context.Comments), effectiveArrowBaseRef);
                             }
                             else
                             {
                                 // Arrow on new line, but result type on same line as arrow
                                 var arrowCtx = newLineCtx.Advance(3); // "-> "
-                                (formattedReturnType, afterReturnType, returnComments) = FormatTypeAnnotation(funcType.ReturnType, arrowCtx, effectiveArrowBaseRef);
+                                returnTypeResult = FormatTypeAnnotation(funcType.ReturnType, arrowCtx.AddFormattedComments(argTypeResult.Context.Comments), effectiveArrowBaseRef);
                             }
                         }
                         else
                         {
                             // Single line: " -> "
-                            var arrowCtx = afterArgType.Advance(1); // space before arrow
+                            var arrowCtx = argTypeResult.Context.Advance(1); // space before arrow
                             arrowLocation = arrowCtx.CurrentLocation();
                             var afterArrow = arrowCtx.Advance(3); // "-> "
-                            (formattedReturnType, afterReturnType, returnComments) = FormatTypeAnnotation(funcType.ReturnType, afterArrow, effectiveArrowBaseRef);
+                            returnTypeResult = FormatTypeAnnotation(funcType.ReturnType, afterArrow, effectiveArrowBaseRef);
                         }
 
                         var formattedFuncType = new TypeAnnotation.FunctionTypeAnnotation(
-                            formattedArgType,
+                            argTypeResult.FormattedNode,
                             arrowLocation,
-                            formattedReturnType
+                            returnTypeResult.FormattedNode
                         );
                         // Return with IndentSpaces reset to the original context
-                        return FormattingResult<TypeAnnotation>.Create(formattedFuncType, afterReturnType.ReturnToIndent(context), argComments.AddRange(returnComments));
+                        return FormattingResult<TypeAnnotation>.Create(formattedFuncType, returnTypeResult.Context.ReturnToIndent(context));
                     }
 
                 case TypeAnnotation.Record record:
                     {
                         // Format record type annotation
                         var recordFields = Stil4mElmSyntax7.FromStil4mConcretized.ToList(record.RecordDefinition.Fields);
-                        var collectedComments = emptyComments;
 
                         // Detect if record should be multiline based on the containing node's start and end locations
                         var isMultilineRecord = record.CloseBraceLocation.Row > record.OpenBraceLocation.Row;
@@ -1983,25 +1942,15 @@ public class Avh4Format
                                     // If comment is on same row as opening brace, put it right after "{ "
                                     if (comment.Range.Start.Row == record.OpenBraceLocation.Row)
                                     {
-                                        var commentLocation = recordFieldCtx.CurrentLocation();
-                                        var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value.Text);
-                                        var formattedComment = comment.ToStringNodeWithRange(commentLocation, commentEnd);
-                                        collectedComments = collectedComments.Add(formattedComment);
-                                        // Move to next row for the field, indented
-                                        recordFieldCtx = FormattingContext.AtPosition(
-                                            commentEnd.Row + 1,
-                                            fieldIndentRef.CurrentColumn, // indent past brace
-                                            fieldIndentRef);
+                                        // Format the comment, add it to the context, and position at field indent
+                                        recordFieldCtx = recordFieldCtx.ReturnToIndent(fieldIndentRef).FormatAndAddComment(comment);
                                     }
                                     else
                                     {
                                         // Comment on its own line before first field
                                         recordFieldCtx = recordFieldCtx.ReturnToIndent(braceAlignRef).NextRowToIndent();
-                                        var commentLocation = recordFieldCtx.CurrentLocation();
-                                        var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value.Text);
-                                        var formattedComment = comment.ToStringNodeWithRange(commentLocation, commentEnd);
-                                        collectedComments = collectedComments.Add(formattedComment);
-                                        recordFieldCtx = FormattingContext.AtPosition(commentEnd.Row, commentEnd.Column, braceAlignRef);
+                                        // Format the comment, add it to the context, and stay at the comment end position
+                                        recordFieldCtx = recordFieldCtx.FormatAndAddCommentThenPositionAtEnd(comment);
                                     }
                                 }
                             }
@@ -2063,11 +2012,8 @@ public class Avh4Format
                                         foreach (var comment in commentsBeforeSeparator)
                                         {
                                             recordFieldCtx = recordFieldCtx.ReturnToIndent(braceAlignRef).NextRowToIndent();
-                                            var commentLocation = recordFieldCtx.CurrentLocation();
-                                            var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value.Text);
-                                            var formattedComment = comment.ToStringNodeWithRange(commentLocation, commentEnd);
-                                            collectedComments = collectedComments.Add(formattedComment);
-                                            recordFieldCtx = FormattingContext.AtPosition(commentEnd.Row, commentEnd.Column, braceAlignRef);
+                                            // Format the comment, add it to the context, and stay at the comment end position
+                                            recordFieldCtx = recordFieldCtx.FormatAndAddCommentThenPositionAtEnd(comment);
                                         }
                                     }
 
@@ -2077,28 +2023,21 @@ public class Avh4Format
                                     recordFieldCtx = recordFieldCtx.Advance(2); // ", "
 
                                     // Process comments on the same row as comma (after comma)
-                                    foreach (var comment in commentsOnSeparatorRow)
+                                    if (commentsOnSeparatorRow.Count > 0)
                                     {
-                                        var commentLocation = recordFieldCtx.CurrentLocation();
-                                        var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value.Text);
-                                        var formattedComment = comment.ToStringNodeWithRange(commentLocation, commentEnd);
-                                        collectedComments = collectedComments.Add(formattedComment);
-                                        // Move to next row for the field name, indented past comma
-                                        recordFieldCtx = FormattingContext.AtPosition(
-                                            commentEnd.Row + 1,
-                                            fieldIndentRef.CurrentColumn, // indent past comma
-                                            fieldIndentRef);
+                                        foreach (var comment in commentsOnSeparatorRow)
+                                        {
+                                            // Format the comment, add it to the context, and position at field indent
+                                            recordFieldCtx = recordFieldCtx.ReturnToIndent(fieldIndentRef).FormatAndAddComment(comment);
+                                        }
                                     }
 
                                     // Process comments after separator row but before field
                                     foreach (var comment in commentsAfterSeparatorRow)
                                     {
                                         recordFieldCtx = recordFieldCtx.ReturnToIndent(braceAlignRef).NextRowToIndent();
-                                        var commentLocation = recordFieldCtx.CurrentLocation();
-                                        var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value.Text);
-                                        var formattedComment = comment.ToStringNodeWithRange(commentLocation, commentEnd);
-                                        collectedComments = collectedComments.Add(formattedComment);
-                                        recordFieldCtx = FormattingContext.AtPosition(commentEnd.Row, commentEnd.Column, braceAlignRef);
+                                        // Format the comment, add it to the context, and stay at the comment end position
+                                        recordFieldCtx = recordFieldCtx.FormatAndAddCommentThenPositionAtEnd(comment);
                                     }
                                 }
 
@@ -2125,16 +2064,15 @@ public class Avh4Format
                                     foreach (var comment in commentsBeforeColon)
                                     {
                                         ctx = ctx.ReturnToIndent(fieldIndentRef).NextRowToIndent(); // indent after brace
-                                        var commentLocation = ctx.CurrentLocation();
-                                        var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value.Text);
-                                        var formattedComment = comment.ToStringNodeWithRange(commentLocation, commentEnd);
-                                        collectedComments = collectedComments.Add(formattedComment);
-                                        ctx = FormattingContext.AtPosition(commentEnd.Row, commentEnd.Column, fieldIndentRef);
+                                        // Format the comment, add it to the context, and stay at the comment end position
+                                        ctx = ctx.FormatAndAddCommentThenPositionAtEnd(comment);
                                     }
                                     // Colon on new line, indented
                                     colonContext = ctx.ReturnToIndent(fieldTypeIndentRef).NextRowToIndent();
                                     colonLoc = colonContext.CurrentLocation();
                                     afterColon = colonContext.Advance(1); // just ":"
+                                    // Transfer comments from ctx to recordFieldCtx
+                                    recordFieldCtx = recordFieldCtx.AddFormattedComments(ctx.Comments);
                                 }
                                 else
                                 {
@@ -2158,9 +2096,7 @@ public class Avh4Format
                                     field.Value.FieldType.Range.Start.Column,
                                     field.Value.ColonLocation.Row);
 
-                                Stil4mElmSyntax7.Node<TypeAnnotation> formattedFieldType;
-                                FormattingContext afterFieldType;
-                                ImmutableList<Stil4mElmSyntax7.Node<string>> fieldTypeComments;
+                                FormattingResult<Stil4mElmSyntax7.Node<TypeAnnotation>> fieldTypeResult;
 
                                 if (isFieldTypeMultiline || commentsAfterColon.Count > 0)
                                 {
@@ -2168,45 +2104,39 @@ public class Avh4Format
                                     foreach (var comment in commentsAfterColon)
                                     {
                                         ctx = ctx.ReturnToIndent(fieldTypeIndentRef).NextRowToIndent(); // indent for type
-                                        var commentLocation = ctx.CurrentLocation();
-                                        var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value.Text);
-                                        var formattedComment = comment.ToStringNodeWithRange(commentLocation, commentEnd);
-                                        collectedComments = collectedComments.Add(formattedComment);
-                                        ctx = FormattingContext.AtPosition(commentEnd.Row, commentEnd.Column, fieldTypeIndentRef);
+                                        // Format the comment, add it to the context, and stay at the comment end position
+                                        ctx = ctx.FormatAndAddCommentThenPositionAtEnd(comment);
                                     }
+                                    // Transfer comments from ctx to recordFieldCtx
+                                    recordFieldCtx = recordFieldCtx.AddFormattedComments(ctx.Comments);
+
                                     // Field type on new line with extra indentation
                                     var fieldTypeContext = ctx.ReturnToIndent(fieldTypeIndentRef).NextRowToIndent(); // Set proper indent
 
                                     // Handle inline comments that appear on the same line as the type
                                     foreach (var comment in commentsOnSameLineAsType)
                                     {
-                                        var commentLocation = fieldTypeContext.CurrentLocation();
-                                        var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value.Text);
-                                        var formattedComment = comment.ToStringNodeWithRange(commentLocation, commentEnd);
-                                        collectedComments = collectedComments.Add(formattedComment);
-                                        fieldTypeContext = FormattingContext.AtPosition(
-                                            commentEnd.Row,
-                                            commentEnd.Column + 1, // space after comment
-                                            fieldTypeContext);
+                                        // Format the comment, add it to the context, and advance position for space after comment
+                                        fieldTypeContext = fieldTypeContext.FormatAndAddCommentThenPositionAtEnd(comment).Advance(1);
                                     }
 
-                                    (formattedFieldType, afterFieldType, fieldTypeComments) = FormatTypeAnnotation(field.Value.FieldType, fieldTypeContext);
+                                    fieldTypeResult = FormatTypeAnnotation(field.Value.FieldType, fieldTypeContext.AddFormattedComments(recordFieldCtx.Comments));
                                 }
                                 else
                                 {
-                                    (formattedFieldType, afterFieldType, fieldTypeComments) = FormatTypeAnnotation(field.Value.FieldType, afterColon);
+                                    fieldTypeResult = FormatTypeAnnotation(field.Value.FieldType, afterColon.AddFormattedComments(recordFieldCtx.Comments));
                                 }
-                                collectedComments = collectedComments.AddRange(fieldTypeComments);
+                                recordFieldCtx = fieldTypeResult.Context;
 
                                 var formattedFieldNameNode = MakeNodeWithRange(fieldStartLoc, afterFieldName.CurrentLocation(), field.Value.FieldName.Value);
 
                                 var formattedField = new RecordField(
                                     formattedFieldNameNode,
                                     colonLoc,
-                                    formattedFieldType
+                                    fieldTypeResult.FormattedNode
                                 );
 
-                                var formattedFieldNode = MakeNodeWithRange(fieldStartLoc, afterFieldType.CurrentLocation(), formattedField);
+                                var formattedFieldNode = MakeNodeWithRange(fieldStartLoc, fieldTypeResult.Context.CurrentLocation(), formattedField);
 
                                 if (i is 0)
                                 {
@@ -2217,7 +2147,7 @@ public class Avh4Format
                                     restFields.Add((separatorLoc!, formattedFieldNode));
                                 }
 
-                                recordFieldCtx = afterFieldType.ReturnToIndent(context);
+                                recordFieldCtx = fieldTypeResult.Context.ReturnToIndent(context);
                             }
 
                             // Check for comments before the closing brace
@@ -2240,11 +2170,8 @@ public class Avh4Format
                                 foreach (var comment in commentsBeforeCloseBrace)
                                 {
                                     recordFieldCtx = recordFieldCtx.ReturnToIndent(braceAlignRef).NextRowToIndent();
-                                    var commentLocation = recordFieldCtx.CurrentLocation();
-                                    var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value.Text);
-                                    var formattedComment = comment.ToStringNodeWithRange(commentLocation, commentEnd);
-                                    collectedComments = collectedComments.Add(formattedComment);
-                                    recordFieldCtx = FormattingContext.AtPosition(commentEnd.Row, commentEnd.Column, braceAlignRef);
+                                    // Format the comment, add it to the context, and stay at the comment end position
+                                    recordFieldCtx = recordFieldCtx.FormatAndAddCommentThenPositionAtEnd(comment);
                                 }
                             }
 
@@ -2269,7 +2196,7 @@ public class Avh4Format
                                 formattedRecordDef,
                                 recordCloseBraceLoc
                             );
-                            return FormattingResult<TypeAnnotation>.Create(formattedRecord, afterRecordCloseBrace.ReturnToIndent(context), collectedComments);
+                            return FormattingResult<TypeAnnotation>.Create(formattedRecord, afterRecordCloseBrace.ReturnToIndent(context));
                         }
                         else
                         {
@@ -2285,7 +2212,7 @@ public class Avh4Format
                                     emptyRecordDef,
                                     recordCloseBraceLocEmpty
                                 );
-                                return FormattingResult<TypeAnnotation>.Create(emptyRecordResult, afterEmptyRecord, collectedComments);
+                                return FormattingResult<TypeAnnotation>.Create(emptyRecordResult, afterEmptyRecord);
                             }
 
                             // Single line format: { field1 : Type1, field2 : Type2 }
@@ -2306,8 +2233,7 @@ public class Avh4Format
                                 var colonLoc = afterFieldName.Advance(1).CurrentLocation(); // space before colon
                                 var afterColon = afterFieldName.Advance(3); // " : "
 
-                                var fieldTypeResult = FormatTypeAnnotation(field.Value.FieldType, afterColon);
-                                collectedComments = collectedComments.AddRange(fieldTypeResult.Comments);
+                                var fieldTypeResult = FormatTypeAnnotation(field.Value.FieldType, afterColon.AddFormattedComments(recordFieldCtx.Comments));
 
                                 var formattedFieldNameNode = MakeNodeWithRange(fieldStartLoc, afterFieldName.CurrentLocation(), field.Value.FieldName.Value);
 
@@ -2331,14 +2257,14 @@ public class Avh4Format
                                 formattedRecordDef,
                                 recordCloseBraceLoc
                             );
-                            return FormattingResult<TypeAnnotation>.Create(formattedRecord, afterRecordCloseBrace, collectedComments);
+                            return FormattingResult<TypeAnnotation>.Create(formattedRecord, afterRecordCloseBrace);
                         }
                     }
 
                 case TypeAnnotation.GenericRecord genericRecord:
                     {
                         var genericRecordText = RenderTypeAnnotationText(typeAnnot);
-                        return FormattingResult<TypeAnnotation>.Create(genericRecord, context.Advance(genericRecordText.Length), emptyComments);
+                        return FormattingResult<TypeAnnotation>.Create(genericRecord, context.Advance(genericRecordText.Length));
                     }
 
                 default:
@@ -2397,27 +2323,24 @@ public class Avh4Format
 
         private FormattingResult<Stil4mElmSyntax7.Node<Expression>> FormatExpression(
             Stil4mElmSyntax7.Node<Expression> expr,
-            FormattingContext context,
-            ImmutableList<Stil4mElmSyntax7.Node<string>> comments)
+            FormattingContext context)
         {
             var startLoc = context.CurrentLocation();
-            var result = FormatExpressionValue(expr.Value, expr.Range, context, comments);
-            return new FormattingResult<Stil4mElmSyntax7.Node<Expression>>(
+            var result = FormatExpressionValue(expr.Value, expr.Range, context);
+            return FormattingResult<Stil4mElmSyntax7.Node<Expression>>.Create(
                 MakeNodeWithRange(startLoc, result.Context.CurrentLocation(), result.FormattedNode),
-                result.Context,
-                result.Comments);
+                result.Context);
         }
 
         private FormattingResult<Expression> FormatExpressionValue(
             Expression expr,
             Range originalRange,
-            FormattingContext context,
-            ImmutableList<Stil4mElmSyntax7.Node<string>> comments)
+            FormattingContext context)
         {
             switch (expr)
             {
                 case Expression.UnitExpr:
-                    return FormattingResult<Expression>.Create(expr, context.Advance(2), comments); // "()"
+                    return FormattingResult<Expression>.Create(expr, context.Advance(2)); // "()"
 
                 case Expression.Literal literal:
                     if (literal.IsTripleQuoted)
@@ -2440,44 +2363,43 @@ public class Avh4Format
                         }
 
                         var afterCloseQuotes = literalCtx.Advance(3); // """
-                        return FormattingResult<Expression>.Create(literal, afterCloseQuotes, comments);
+                        return FormattingResult<Expression>.Create(literal, afterCloseQuotes);
                     }
                     else
                     {
                         // Use the rendered representation to calculate the correct length
                         // since the value may contain escaped characters
                         var renderedLiteral = Rendering.RenderStringLiteral(literal.Value, isTripleQuoted: false);
-                        return FormattingResult<Expression>.Create(literal, context.Advance(renderedLiteral.Length), comments);
+                        return FormattingResult<Expression>.Create(literal, context.Advance(renderedLiteral.Length));
                     }
 
                 case Expression.CharLiteral charLit:
                     // Use the actual rendered length which varies for escaped characters
-                    return FormattingResult<Expression>.Create(charLit, context.Advance(Rendering.RenderCharLiteral(charLit.Value).Length), comments);
+                    return FormattingResult<Expression>.Create(charLit, context.Advance(Rendering.RenderCharLiteral(charLit.Value).Length));
 
                 case Expression.Integer intLit:
-                    return FormattingResult<Expression>.Create(intLit, context.Advance(intLit.Value.ToString().Length), comments);
+                    return FormattingResult<Expression>.Create(intLit, context.Advance(intLit.Value.ToString().Length));
 
                 case Expression.Hex hexLit:
                     // Use the same hex rendering logic as the Renderer
-                    return FormattingResult<Expression>.Create(hexLit, context.Advance(Rendering.RenderHexPattern(hexLit.Value).Length), comments);
+                    return FormattingResult<Expression>.Create(hexLit, context.Advance(Rendering.RenderHexPattern(hexLit.Value).Length));
 
                 case Expression.Floatable floatLit:
-                    return FormattingResult<Expression>.Create(floatLit, context.Advance(floatLit.Value.ToString().Length), comments);
+                    return FormattingResult<Expression>.Create(floatLit, context.Advance(floatLit.Value.ToString().Length));
 
                 case Expression.FunctionOrValue funcOrVal:
                     var funcName = funcOrVal.ModuleName.Count > 0
                         ? string.Join(".", funcOrVal.ModuleName) + "." + funcOrVal.Name
                         : funcOrVal.Name;
-                    return FormattingResult<Expression>.Create(funcOrVal, context.Advance(funcName.Length), comments);
+                    return FormattingResult<Expression>.Create(funcOrVal, context.Advance(funcName.Length));
 
                 case Expression.Negation negation:
                     {
                         var afterNegSign = context.Advance(1); // "-"
-                        var negResult = FormatExpression(negation.Expression, afterNegSign, comments);
-                        return new FormattingResult<Expression>(
+                        var negResult = FormatExpression(negation.Expression, afterNegSign);
+                        return FormattingResult<Expression>.Create(
                             new Expression.Negation(negResult.FormattedNode),
-                            negResult.Context,
-                            negResult.Comments);
+                            negResult.Context);
                     }
 
                 case Expression.Application app:
@@ -2487,7 +2409,7 @@ public class Avh4Format
 
                         var formattedArgs = new List<Stil4mElmSyntax7.Node<Expression>>();
                         var appCtx = context;
-                        var currentComments = comments;
+                        var currentComments = context.Comments;
 
                         if (isMultiline)
                         {
@@ -2539,7 +2461,7 @@ public class Avh4Format
                                             hadComments = true;
 
                                             // Only move to new line before the FIRST comment
-                                            // For subsequent comments, CreateContextAfterComment already positioned us
+                                            // For subsequent comments, FormatAndAddComment already positioned us
                                             if (ci is 0)
                                             {
                                                 appCtx = appCtx.ReturnToIndent(multilineTargetRef).NextRowToIndent();
@@ -2551,11 +2473,7 @@ public class Avh4Format
                                             }
 
                                             // Format the comment
-                                            var commentLocation = appCtx.CurrentLocation();
-                                            var (commentEnd, endsWithNewline) = CalculateCommentEndLocationEx(commentLocation, comment.Value.Text);
-                                            var formattedComment = comment.ToStringNodeWithRange(commentLocation, commentEnd);
-                                            currentComments = currentComments.Add(formattedComment);
-                                            appCtx = CreateContextAfterComment(appCtx, commentEnd, endsWithNewline);
+                                            appCtx = appCtx.FormatAndAddComment(comment);
                                         }
                                     }
 
@@ -2577,10 +2495,10 @@ public class Avh4Format
                                     appCtx = appCtx.Advance(1);
                                 }
 
-                                var argResult = FormatExpression(arg, appCtx, currentComments);
+                                var argResult = FormatExpression(arg, appCtx);
                                 formattedArgs.Add(argResult.FormattedNode);
                                 appCtx = argResult.Context.ReturnToIndent(context);
-                                currentComments = argResult.Comments;
+                                currentComments = argResult.Context.Comments;
                             }
                         }
                         else
@@ -2589,14 +2507,14 @@ public class Avh4Format
                             for (var i = 0; i < app.Arguments.Count; i++)
                             {
                                 if (i > 0) appCtx = appCtx.Advance(1); // space
-                                var argResult = FormatExpression(app.Arguments[i], appCtx, currentComments);
+                                var argResult = FormatExpression(app.Arguments[i], appCtx);
                                 formattedArgs.Add(argResult.FormattedNode);
                                 appCtx = argResult.Context;
-                                currentComments = argResult.Comments;
+                                currentComments = argResult.Context.Comments;
                             }
                         }
 
-                        return FormattingResult<Expression>.Create(new Expression.Application(formattedArgs), appCtx, currentComments);
+                        return FormattingResult<Expression>.Create(new Expression.Application(formattedArgs), appCtx);
                     }
 
                 case Expression.RecordExpr recordExpr:
@@ -2616,7 +2534,7 @@ public class Avh4Format
                         {
                             return FormattingResult<Expression>.Create(
                                 new Expression.RecordExpr(recordExpr.Fields),
-                                afterOpenBrace.Advance(1), comments); // "}"
+                                afterOpenBrace.Advance(1)); // "}"
                         }
 
                         // Check if record should be multiline based on the containing node's range only
@@ -2629,7 +2547,7 @@ public class Avh4Format
                             //                   }
                             var afterOpenSpace = afterOpenBrace.Advance(1); // " "
                             var recordCtx = afterOpenSpace;
-                            var currentComments = comments;
+                            var currentComments = context.Comments;
 
                             // Create reference context at opening brace column for field alignment
                             // (context is at {, so SetIndentToCurrentColumn captures the brace column)
@@ -2660,26 +2578,21 @@ public class Avh4Format
                                 var commentsBeforeValue = commentQueries.GetBetweenRows(equalsRow, valueStartRow);
                                 foreach (var comment in commentsBeforeValue)
                                 {
-                                    var commentLocation = valueContext.CurrentLocation();
-                                    var (commentEnd, endsWithNewline) = CalculateCommentEndLocationEx(commentLocation, comment.Value.Text);
-                                    var formattedComment = comment.ToStringNodeWithRange(commentLocation, commentEnd);
-                                    currentComments = currentComments.Add(formattedComment);
-                                    valueContext = CreateContextAfterComment(valueContext, commentEnd, endsWithNewline);
-                                    // CreateContextAfterComment already positions us on the correct row
+                                    valueContext = valueContext.FormatAndAddComment(comment);
+                                    // FormatAndAddComment already positions us on the correct row
                                     // (it advances to next row if comment didn't end with newline)
                                     // Just need to set the column
                                     valueContext = valueContext.ReturnToIndent(targetRef).SetIndentColumn();
                                 }
 
-                                firstFieldResult = FormatExpression(firstField.ValueExpr, valueContext, currentComments);
+                                firstFieldResult = FormatExpression(firstField.ValueExpr, valueContext);
                             }
                             else
                             {
                                 firstEqualsLoc = afterFirstFieldName.Advance(1).CurrentLocation(); // " = "
                                 var afterFirstEq = afterFirstFieldName.Advance(3); // " = "
-                                firstFieldResult = FormatExpression(firstField.ValueExpr, afterFirstEq, currentComments);
+                                firstFieldResult = FormatExpression(firstField.ValueExpr, afterFirstEq.AddFormattedComments(currentComments));
                             }
-                            currentComments = firstFieldResult.Comments;
 
                             var firstFieldNameNode = MakeNodeWithRange(firstFieldStartLoc, afterFirstFieldName.CurrentLocation(), firstField.FieldName.Value);
 
@@ -2722,11 +2635,7 @@ public class Avh4Format
                                         recordCtx = recordCtx.ReturnToIndent(fieldAlignRef).NextRowToIndent();
                                     }
 
-                                    var commentLocation = recordCtx.CurrentLocation();
-                                    var (commentEnd, endsWithNewline) = CalculateCommentEndLocationEx(commentLocation, comment.Value.Text);
-                                    var formattedComment = comment.ToStringNodeWithRange(commentLocation, commentEnd);
-                                    currentComments = currentComments.Add(formattedComment);
-                                    recordCtx = CreateContextAfterComment(recordCtx, commentEnd, endsWithNewline);
+                                    recordCtx = recordCtx.FormatAndAddComment(comment);
                                     lastCommentEndRow = comment.Range.End.Row;
                                 }
 
@@ -2752,12 +2661,8 @@ public class Avh4Format
 
                                 foreach (var comment in commentsAfterComma)
                                 {
-                                    var commentLocation = recordCtx.CurrentLocation();
-                                    var (commentEnd, endsWithNewline) = CalculateCommentEndLocationEx(commentLocation, comment.Value.Text);
-                                    var formattedComment = comment.ToStringNodeWithRange(commentLocation, commentEnd);
-                                    currentComments = currentComments.Add(formattedComment);
-                                    recordCtx = CreateContextAfterComment(recordCtx, commentEnd, endsWithNewline);
-                                    // After comment, reposition for field name (CreateContextAfterComment leaves us at column 1)
+                                    recordCtx = recordCtx.FormatAndAddComment(comment);
+                                    // After comment, reposition for field name (FormatAndAddComment leaves us at column 1)
                                     recordCtx = recordCtx.ReturnToIndent(afterCommaRef).SetIndentColumn(); // After ", "
                                 }
 
@@ -2784,25 +2689,20 @@ public class Avh4Format
                                     var commentsBeforeVal = commentQueries.GetBetweenRows(eqRow, valStartRow);
                                     foreach (var comment in commentsBeforeVal)
                                     {
-                                        var commentLocation = valueContext.CurrentLocation();
-                                        var (commentEnd, endsWithNewline) = CalculateCommentEndLocationEx(commentLocation, comment.Value.Text);
-                                        var formattedComment = comment.ToStringNodeWithRange(commentLocation, commentEnd);
-                                        currentComments = currentComments.Add(formattedComment);
-                                        valueContext = CreateContextAfterComment(valueContext, commentEnd, endsWithNewline);
-                                        // CreateContextAfterComment already positions us on the correct row
+                                        valueContext = valueContext.FormatAndAddComment(comment);
+                                        // FormatAndAddComment already positions us on the correct row
                                         // Just need to set the column
                                         valueContext = valueContext.ReturnToIndent(fieldIndentRef).SetIndentColumn();
                                     }
 
-                                    fieldResult = FormatExpression(field.ValueExpr, valueContext, currentComments);
+                                    fieldResult = FormatExpression(field.ValueExpr, valueContext);
                                 }
                                 else
                                 {
                                     equalsLoc = afterFieldName.Advance(1).CurrentLocation(); // " = "
                                     var afterEq = afterFieldName.Advance(3); // " = "
-                                    fieldResult = FormatExpression(field.ValueExpr, afterEq, currentComments);
+                                    fieldResult = FormatExpression(field.ValueExpr, afterEq.AddFormattedComments(recordCtx.Comments));
                                 }
-                                currentComments = fieldResult.Comments;
 
                                 var fieldNameNode = MakeNodeWithRange(fieldStartLoc, afterFieldName.CurrentLocation(), field.FieldName.Value);
 
@@ -2824,7 +2724,7 @@ public class Avh4Format
 
                             return FormattingResult<Expression>.Create(new Expression.RecordExpr(
                                 fieldsAsSeparatedList
-                            ), afterRecordClose.ReturnToIndent(context), currentComments);
+                            ), afterRecordClose.ReturnToIndent(context));
                         }
                         else
                         {
@@ -2832,7 +2732,7 @@ public class Avh4Format
                             var afterOpenSpace = afterOpenBrace.Advance(1); // " "
                             var formattedRecordFields = new List<RecordExprField>();
                             var recordCtx = afterOpenSpace;
-                            var currentComments = comments;
+                            var currentComments = context.Comments;
 
                             for (var i = 0; i < recordFields.Count; i++)
                             {
@@ -2842,8 +2742,8 @@ public class Avh4Format
                                 var afterFieldName = recordCtx.Advance(field.FieldName.Value.Length);
                                 var equalsLoc = afterFieldName.Advance(1).CurrentLocation(); // " = "
                                 var afterEq = afterFieldName.Advance(3); // " = "
-                                var fieldResult = FormatExpression(field.ValueExpr, afterEq, currentComments);
-                                currentComments = fieldResult.Comments;
+                                var fieldResult = FormatExpression(field.ValueExpr, afterEq);
+                                currentComments = fieldResult.Context.Comments;
 
                                 var fieldNameNode = MakeNodeWithRange(fieldStartLoc, afterFieldName.CurrentLocation(), field.FieldName.Value);
 
@@ -2857,7 +2757,7 @@ public class Avh4Format
 
                             return FormattingResult<Expression>.Create(new Expression.RecordExpr(
                                 ToSeparatedSyntaxList(formattedRecordFields)
-                            ), afterRecordClose, currentComments);
+                            ), afterRecordClose);
                         }
                     }
 
@@ -2870,7 +2770,7 @@ public class Avh4Format
                         {
                             return FormattingResult<Expression>.Create(
                                 new Expression.ListExpr(listExpr.Elements),
-                                context.Advance(2), comments); // "[]"
+                                context.Advance(2)); // "[]"
                         }
 
                         // Check if list should be multiline based on the container range only.
@@ -2885,8 +2785,6 @@ public class Avh4Format
                             //         , second_elem
                             //         ]
                             var afterListOpen = context.Advance(2); // "[ "
-                            var currentComments = comments;
-
                             // Create reference context at opening bracket column for alignment
                             var listAlignRef = context.SetIndentToCurrentColumn();
                             // Create reference for content indented past bracket
@@ -2903,21 +2801,13 @@ public class Avh4Format
                                 // Comment(s) after "[ " but before first element
                                 foreach (var comment in commentsBeforeFirst)
                                 {
-                                    var commentLocation = firstElemCtx.CurrentLocation();
-                                    var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value.Text);
-                                    var formattedComment = comment.ToStringNodeWithRange(commentLocation, commentEnd);
-                                    currentComments = currentComments.Add(formattedComment);
-                                    // Next line for element, indented
-                                    firstElemCtx = FormattingContext.AtPosition(
-                                        commentEnd.Row + 1,
-                                        listContentRef.CurrentColumn, // indent past bracket
-                                        listContentRef);
+                                    // Format the comment, add it to the context, and position at list content indent
+                                    firstElemCtx = firstElemCtx.ReturnToIndent(listContentRef).FormatAndAddComment(comment);
                                 }
                             }
 
                             // First element 
-                            var firstElemResult = FormatExpression(elements[0], firstElemCtx, currentComments);
-                            currentComments = firstElemResult.Comments;
+                            var firstElemResult = FormatExpression(elements[0], firstElemCtx);
                             var elemCtx = firstElemResult.Context;
 
                             // Check for trailing comment on the same row as the first element
@@ -2927,11 +2817,8 @@ public class Avh4Format
                             {
                                 // Add space and trailing comment
                                 elemCtx = elemCtx.Advance(1); // space before comment
-                                var trailingCommentLocation = elemCtx.CurrentLocation();
-                                var trailingCommentEnd = CalculateCommentEndLocation(trailingCommentLocation, firstElemTrailingComment.Value.Text);
-                                var formattedTrailingComment = firstElemTrailingComment.ToStringNodeWithRange(trailingCommentLocation, trailingCommentEnd);
-                                currentComments = currentComments.Add(formattedTrailingComment);
-                                elemCtx = FormattingContext.AtPosition(trailingCommentEnd.Row, trailingCommentEnd.Column, context);
+                                // Format the comment, add it to the context, and stay at the comment end position
+                                elemCtx = elemCtx.FormatAndAddCommentThenPositionAtEnd(firstElemTrailingComment);
                             }
 
                             // Build rest list with proper separator locations
@@ -2968,18 +2855,9 @@ public class Avh4Format
                                     {
                                         // Comment on same line as comma: ", -- comment\n  element"
                                         elemCtx = elemCtx.Advance(2); // ", "
-                                        var commentLocation = elemCtx.CurrentLocation();
-                                        var commentEnd = CalculateCommentEndLocation(commentLocation, firstComment.Value.Text);
-                                        var formattedComment = firstComment.ToStringNodeWithRange(commentLocation, commentEnd);
-                                        currentComments = currentComments.Add(formattedComment);
-
-                                        // Element on next line, indented by 2 more spaces
-                                        elemCtx = FormattingContext.AtPosition(
-                                            commentEnd.Row + 1,
-                                            listContentRef.CurrentColumn, // indent past comma
-                                            listContentRef);
-                                        var elemResult = FormatExpression(currElem, elemCtx, currentComments);
-                                        currentComments = elemResult.Comments;
+                                        // Format the comment, add it to the context, and position at list content indent
+                                        elemCtx = elemCtx.ReturnToIndent(listContentRef).FormatAndAddComment(firstComment);
+                                        var elemResult = FormatExpression(currElem, elemCtx);
                                         restItems.Add((separatorLoc, elemResult.FormattedNode));
                                         elemCtx = elemResult.Context.ReturnToIndent(context);
                                     }
@@ -2993,19 +2871,14 @@ public class Avh4Format
 
                                         foreach (var comment in commentsBetween)
                                         {
-                                            var commentLocation = elemCtx.CurrentLocation();
-                                            var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value.Text);
-                                            var formattedComment = comment.ToStringNodeWithRange(commentLocation, commentEnd);
-                                            currentComments = currentComments.Add(formattedComment);
-                                            // Next line for next comment or element
-                                            elemCtx = FormattingContext.AtPosition(commentEnd.Row + 1, listAlignRef.CurrentColumn, listAlignRef);
+                                            // Format the comment, add it to the context, and position at list align indent
+                                            elemCtx = elemCtx.ReturnToIndent(listAlignRef).FormatAndAddComment(comment);
                                         }
 
                                         // Now add the separator and element on this line
                                         separatorLoc = elemCtx.CurrentLocation();
                                         elemCtx = elemCtx.Advance(2); // ", "
-                                        var elemResult = FormatExpression(currElem, elemCtx, currentComments);
-                                        currentComments = elemResult.Comments;
+                                        var elemResult = FormatExpression(currElem, elemCtx);
                                         restItems.Add((separatorLoc, elemResult.FormattedNode));
                                         elemCtx = elemResult.Context.ReturnToIndent(context);
                                     }
@@ -3013,8 +2886,7 @@ public class Avh4Format
                                 else
                                 {
                                     elemCtx = elemCtx.Advance(2); // ", "
-                                    var elemResult = FormatExpression(currElem, elemCtx, currentComments);
-                                    currentComments = elemResult.Comments;
+                                    var elemResult = FormatExpression(currElem, elemCtx);
                                     restItems.Add((separatorLoc, elemResult.FormattedNode));
                                     elemCtx = elemResult.Context;
 
@@ -3025,11 +2897,8 @@ public class Avh4Format
                                     {
                                         // Add space and trailing comment
                                         elemCtx = elemCtx.Advance(1); // space before comment
-                                        var trailingCommentLocation = elemCtx.CurrentLocation();
-                                        var trailingCommentEnd = CalculateCommentEndLocation(trailingCommentLocation, trailingComment.Value.Text);
-                                        var formattedTrailingComment = trailingComment.ToStringNodeWithRange(trailingCommentLocation, trailingCommentEnd);
-                                        currentComments = currentComments.Add(formattedTrailingComment);
-                                        elemCtx = FormattingContext.AtPosition(trailingCommentEnd.Row, trailingCommentEnd.Column, context);
+                                        // Format the comment, add it to the context, and stay at the comment end position
+                                        elemCtx = elemCtx.FormatAndAddCommentThenPositionAtEnd(trailingComment);
                                     }
                                 }
                             }
@@ -3051,11 +2920,8 @@ public class Avh4Format
 
                                 // Comment on its own line
                                 elemCtx = elemCtx.ReturnToIndent(listAlignRef).NextRowToIndent();
-                                var commentLocation = elemCtx.CurrentLocation();
-                                var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value.Text);
-                                var formattedComment = comment.ToStringNodeWithRange(commentLocation, commentEnd);
-                                currentComments = currentComments.Add(formattedComment);
-                                elemCtx = FormattingContext.AtPosition(commentEnd.Row, commentEnd.Column, listAlignRef);
+                                // Format the comment, add it to the context, and stay at the comment end position
+                                elemCtx = elemCtx.FormatAndAddCommentThenPositionAtEnd(comment);
                             }
 
                             // Closing bracket on new line, aligned with opening bracket
@@ -3068,7 +2934,7 @@ public class Avh4Format
 
                             return FormattingResult<Expression>.Create(new Expression.ListExpr(
                                 multilineSeparatedList
-                            ), afterMultilineListClose.ReturnToIndent(context), currentComments);
+                            ), afterMultilineListClose.ReturnToIndent(context));
                         }
                         else
                         {
@@ -3076,13 +2942,13 @@ public class Avh4Format
                             var afterListOpen = context.Advance(2); // "[ "
                             var formattedElements = new List<Stil4mElmSyntax7.Node<Expression>>();
                             var listCtx = afterListOpen;
-                            var currentComments = comments;
+                            var currentComments = context.Comments;
 
                             for (var i = 0; i < elements.Count; i++)
                             {
                                 if (i > 0) listCtx = listCtx.Advance(2); // ", "
-                                var elemResult = FormatExpression(elements[i], listCtx, currentComments);
-                                currentComments = elemResult.Comments;
+                                var elemResult = FormatExpression(elements[i], listCtx);
+                                currentComments = elemResult.Context.Comments;
                                 formattedElements.Add(elemResult.FormattedNode);
                                 listCtx = elemResult.Context;
                             }
@@ -3092,7 +2958,7 @@ public class Avh4Format
 
                             return FormattingResult<Expression>.Create(new Expression.ListExpr(
                                 ToSeparatedSyntaxList(formattedElements)
-                            ), afterListClose, currentComments);
+                            ), afterListClose);
                         }
                     }
 
@@ -3113,7 +2979,7 @@ public class Avh4Format
                         var afterOpenParen = originalIsMultiline && containsLetExpr
                             ? context.SetIndentToCurrentColumn().Advance(1)
                             : context.Advance(1);
-                        var innerResult = FormatExpression(parenExpr.Expression, afterOpenParen, comments);
+                        var innerResult = FormatExpression(parenExpr.Expression, afterOpenParen);
 
                         // Determine if closing paren should be on new line.
                         // The closing paren goes on a new line if:
@@ -3157,15 +3023,15 @@ public class Avh4Format
                             afterCloseParen = innerResult.Context.Advance(1); // ")"
                         }
 
-                        return new FormattingResult<Expression>(
+                        return FormattingResult<Expression>.Create(
                             new Expression.ParenthesizedExpression(openParenLoc, innerResult.FormattedNode, closeParenLoc),
-                            afterCloseParen, innerResult.Comments);
+                            afterCloseParen);
                     }
 
                 case Expression.OperatorApplication opApp:
                     {
-                        var leftResult = FormatExpression(opApp.Left, context, comments);
-                        var currentComments = leftResult.Comments;
+                        var leftResult = FormatExpression(opApp.Left, context);
+                        var currentComments = leftResult.Context.Comments;
 
                         // Check if the right operand is on a new line in the original
                         var rightOnNewLine = opApp.Right.Range.Start.Row > opApp.Left.Range.End.Row;
@@ -3189,14 +3055,14 @@ public class Avh4Format
                                 // Create reference at current indent + 4
                                 var rightIndentRef = context.SetIndentColumn().AdvanceToNextIndentLevel().SetIndentToCurrentColumn();
                                 var pipeRightContext = pipeAfterOp.ReturnToIndent(rightIndentRef).NextRowToIndent();
-                                var pipeRightResult = FormatExpression(opApp.Right, pipeRightContext, currentComments);
+                                var pipeRightResult = FormatExpression(opApp.Right, pipeRightContext);
 
                                 return FormattingResult<Expression>.Create(new Expression.OperatorApplication(
                                     formattedOperator,
                                     opApp.Direction,
                                     leftResult.FormattedNode,
                                     pipeRightResult.FormattedNode
-                                ), pipeRightResult.Context.ReturnToIndent(context), pipeRightResult.Comments);
+                                ), pipeRightResult.Context.ReturnToIndent(context));
                             }
 
                             // Multiline: operator and right operand on new line
@@ -3239,11 +3105,7 @@ public class Avh4Format
                             // Format comments between left operand and operator
                             foreach (var comment in commentsBeforeOperator)
                             {
-                                var commentLocation = newLineCtx.CurrentLocation();
-                                var (commentEnd, endsWithNewline) = CalculateCommentEndLocationEx(commentLocation, comment.Value.Text);
-                                var formattedComment = comment.ToStringNodeWithRange(commentLocation, commentEnd);
-                                currentComments = currentComments.Add(formattedComment);
-                                newLineCtx = CreateContextAfterComment(newLineCtx, commentEnd, endsWithNewline);
+                                newLineCtx = newLineCtx.FormatAndAddComment(comment);
                                 // Align next comment or operator at target column
                                 newLineCtx = newLineCtx.ReturnToIndent(targetRef).SetIndentColumn();
                             }
@@ -3263,23 +3125,16 @@ public class Avh4Format
                             {
                                 // Comment immediately after operator: "&&" followed by " -- comment" then newline
                                 var afterOpSpace = afterOp.Advance(1); // " "
-                                var commentLocation = afterOpSpace.CurrentLocation();
-                                var (commentEnd, endsWithNewline) = CalculateCommentEndLocationEx(commentLocation, trailingOpComment.Value.Text);
-                                var formattedComment = trailingOpComment.ToStringNodeWithRange(commentLocation, commentEnd);
-                                currentComments = currentComments.Add(formattedComment);
-
-                                // After the comment, right operand goes on a new line at column after operator + space
-                                var afterCommentRow = commentEnd.Row + (endsWithNewline ? 0 : 1);
-                                // Align right operand to the column after operator + 1 space
-                                var rightIndentCol = opEnd.Column + 1;
-                                // Use newLineCtx which has the correct indent (targetColumn - 1)
-                                rightContext = FormattingContext.AtPosition(afterCommentRow, rightIndentCol, newLineCtx);
+                                // Format comment - this positions at indent column on new row
+                                var afterComment = afterOpSpace.FormatAndAddComment(trailingOpComment);
+                                // Right operand position: from indent, advance by operator width + 1 space
+                                rightContext = afterComment.Advance(opApp.Operator.Value.Length + 1);
                             }
                             else
                             {
                                 // No trailing comment - space after operator
                                 // IndentSpaces is already set to targetColumn - 1 from SetIndentToCurrentColumn
-                                rightContext = afterOp.Advance(1); // " "
+                                rightContext = afterOp.Advance(1).AddFormattedComments(newLineCtx.Comments); // " "
                             }
 
                             // Look for comments between operator and right operand (on separate lines)
@@ -3289,23 +3144,19 @@ public class Avh4Format
                             // Format comments between operator and right operand
                             foreach (var comment in commentsBeforeRight)
                             {
-                                var commentLocation = rightContext.CurrentLocation();
-                                var (commentEnd, endsWithNewline) = CalculateCommentEndLocationEx(commentLocation, comment.Value.Text);
-                                var formattedComment = comment.ToStringNodeWithRange(commentLocation, commentEnd);
-                                currentComments = currentComments.Add(formattedComment);
-                                rightContext = CreateContextAfterComment(rightContext, commentEnd, endsWithNewline);
+                                rightContext = rightContext.FormatAndAddComment(comment);
                                 // Maintain alignment for next comment or right operand
                                 rightContext = rightContext.SetIndentColumn();
                             }
 
-                            var rightResult = FormatExpression(opApp.Right, rightContext, currentComments);
+                            var rightResult = FormatExpression(opApp.Right, rightContext);
 
                             return FormattingResult<Expression>.Create(new Expression.OperatorApplication(
                                 formattedOp,
                                 opApp.Direction,
                                 leftResult.FormattedNode,
                                 rightResult.FormattedNode
-                            ), rightResult.Context.ReturnToIndent(context), rightResult.Comments);
+                            ), rightResult.Context.ReturnToIndent(context));
                         }
                         else
                         {
@@ -3315,7 +3166,7 @@ public class Avh4Format
                             var afterOp = afterLeftSpace.Advance(opApp.Operator.Value.Length);
                             var opEnd = afterOp.CurrentLocation();
                             var afterOpSpace = afterOp.Advance(1); // " "
-                            var rightResult = FormatExpression(opApp.Right, afterOpSpace, currentComments);
+                            var rightResult = FormatExpression(opApp.Right, afterOpSpace);
 
                             // Create operator node with its new position
                             var formattedOp = MakeNodeWithRange(opStart, opEnd, opApp.Operator.Value);
@@ -3325,16 +3176,16 @@ public class Avh4Format
                                 opApp.Direction,
                                 leftResult.FormattedNode,
                                 rightResult.FormattedNode
-                            ), rightResult.Context, rightResult.Comments);
+                            ), rightResult.Context);
                         }
                     }
 
                 case Expression.PrefixOperator prefixOp:
-                    return FormattingResult<Expression>.Create(prefixOp, context.Advance(prefixOp.Operator.Length + 2), comments); // "(op)"
+                    return FormattingResult<Expression>.Create(prefixOp, context.Advance(prefixOp.Operator.Length + 2)); // "(op)"
 
                 case Expression.RecordAccess recordAccess:
                     {
-                        var recordResult = FormatExpression(recordAccess.Record, context, comments);
+                        var recordResult = FormatExpression(recordAccess.Record, context);
                         var afterDot = recordResult.Context.Advance(1); // "."
                         var fieldNameLoc = afterDot.CurrentLocation();
                         var afterFieldAccess = afterDot.Advance(recordAccess.FieldName.Value.Length);
@@ -3342,29 +3193,29 @@ public class Avh4Format
 
                         return FormattingResult<Expression>.Create(
                             new Expression.RecordAccess(recordResult.FormattedNode, fieldNameWithLoc),
-                            afterFieldAccess, recordResult.Comments);
+                            afterFieldAccess);
                     }
 
                 case Expression.RecordAccessFunction accessFunc:
-                    return FormattingResult<Expression>.Create(accessFunc, context.Advance(accessFunc.FunctionName.Length), comments);
+                    return FormattingResult<Expression>.Create(accessFunc, context.Advance(accessFunc.FunctionName.Length));
 
                 case Expression.IfBlock ifBlock:
-                    return FormatIfBlock(ifBlock, context, comments);
+                    return FormatIfBlock(ifBlock, context);
 
                 case Expression.CaseExpression caseExpr:
-                    return FormatCaseExpression(caseExpr, context, comments);
+                    return FormatCaseExpression(caseExpr, context);
 
                 case Expression.LetExpression letExpr:
-                    return FormatLetExpression(letExpr, context, comments);
+                    return FormatLetExpression(letExpr, context);
 
                 case Expression.LambdaExpression lambdaExpr:
-                    return FormatLambdaExpression(lambdaExpr, context, comments);
+                    return FormatLambdaExpression(lambdaExpr, context);
 
                 case Expression.TupledExpression tupledExpr:
-                    return FormatTupledExpression(tupledExpr, originalRange, context, comments);
+                    return FormatTupledExpression(tupledExpr, originalRange, context);
 
                 case Expression.RecordUpdateExpression recordUpdate:
-                    return FormatRecordUpdateExpression(recordUpdate, originalRange, context, comments);
+                    return FormatRecordUpdateExpression(recordUpdate, originalRange, context);
 
                 default:
                     throw new System.NotImplementedException(
@@ -3376,7 +3227,6 @@ public class Avh4Format
         private FormattingResult<Expression> FormatIfBlock(
             Expression.IfBlock ifBlock,
             FormattingContext context,
-            ImmutableList<Stil4mElmSyntax7.Node<string>> comments,
             int? chainBaseColumn = null)
         {
             // Check if this is a chained else-if (else block is another if)
@@ -3395,7 +3245,7 @@ public class Avh4Format
                 // Only treat as else-if if no comments between else and if
                 isElseIf = !commentsBetweenElseAndIf && !commentsAfterElseOnSameLine;
             }
-            var currentComments = comments;
+            var currentComments = context.Comments;
 
             // Reference context for indented content (one indent level from base)
             var indentedRef = context.SetIndentColumn().AdvanceToNextIndentLevel().SetIndentToCurrentColumn();
@@ -3435,20 +3285,16 @@ public class Avh4Format
 
                 if (commentsBeforeCondition.Count > 0)
                 {
-                    var conditionColumn = conditionContext.CurrentColumn;
+                    var conditionIndentRef = conditionContext.SetIndentToCurrentColumn();
                     foreach (var comment in commentsBeforeCondition)
                     {
-                        var commentLocation = conditionContext.CurrentLocation();
-                        var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value.Text);
-                        var formattedComment = comment.ToStringNodeWithRange(commentLocation, commentEnd);
-                        currentComments = currentComments.Add(formattedComment);
-                        // Next line for next comment or condition
-                        conditionContext = FormattingContext.AtPosition(commentEnd.Row + 1, conditionColumn, context);
+                        // Format the comment, add it to the context, and position at condition indent
+                        conditionContext = conditionContext.ReturnToIndent(conditionIndentRef).FormatAndAddComment(comment);
                     }
                 }
 
-                conditionResult = FormatExpression(ifBlock.Condition, conditionContext, currentComments);
-                currentComments = conditionResult.Comments;
+                conditionResult = FormatExpression(ifBlock.Condition, conditionContext.AddFormattedComments(currentComments));
+                currentComments = conditionResult.Context.Comments;
 
                 // Check for comments between condition and "then"
                 var commentsAfterCondition = commentQueries.GetBetweenRows(
@@ -3462,11 +3308,8 @@ public class Avh4Format
                     foreach (var comment in commentsAfterCondition)
                     {
                         afterConditionCtx = afterConditionCtx.ReturnToIndent(bodyRef).NextRowToIndent();
-                        var commentLocation = afterConditionCtx.CurrentLocation();
-                        var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value.Text);
-                        var formattedComment = comment.ToStringNodeWithRange(commentLocation, commentEnd);
-                        currentComments = currentComments.Add(formattedComment);
-                        afterConditionCtx = FormattingContext.AtPosition(commentEnd.Row, commentEnd.Column, bodyRef);
+                        // Format the comment, add it to the context, and stay at the comment end position
+                        afterConditionCtx = afterConditionCtx.FormatAndAddCommentThenPositionAtEnd(comment);
                     }
                 }
 
@@ -3479,8 +3322,8 @@ public class Avh4Format
             {
                 // Single-line condition: "if condition then"
                 var afterIf = context.Advance(3); // "if "
-                conditionResult = FormatExpression(ifBlock.Condition, afterIf, currentComments);
-                currentComments = conditionResult.Comments;
+                conditionResult = FormatExpression(ifBlock.Condition, afterIf.AddFormattedComments(currentComments));
+                currentComments = conditionResult.Context.Comments;
 
                 // " then" (space before then)
                 var afterCondSpace = conditionResult.Context.Advance(1);
@@ -3500,21 +3343,16 @@ public class Avh4Format
 
             if (commentsBeforeThenBlock.Count > 0)
             {
-                var thenBodyColumn = thenContext.CurrentColumn;
+                var thenBodyIndentRef = thenContext.SetIndentToCurrentColumn();
                 foreach (var comment in commentsBeforeThenBlock)
                 {
-                    var commentLocation = thenContext.CurrentLocation();
-                    var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value.Text);
-                    var formattedComment = comment.ToStringNodeWithRange(commentLocation, commentEnd);
-                    currentComments = currentComments.Add(formattedComment);
-                    // Next line for next comment or then-block
-                    // Use thenContextReference which has the correct indent (bodyColumn - 1)
-                    thenContext = FormattingContext.AtPosition(commentEnd.Row + 1, thenBodyColumn, thenContextReference);
+                    // Format the comment, add it to the context, and position at then body indent
+                    thenContext = thenContext.ReturnToIndent(thenBodyIndentRef).FormatAndAddComment(comment);
                 }
             }
 
-            var thenResult = FormatExpression(ifBlock.ThenBlock, thenContext, currentComments);
-            currentComments = thenResult.Comments;
+            var thenResult = FormatExpression(ifBlock.ThenBlock, thenContext.AddFormattedComments(currentComments));
+            currentComments = thenResult.Context.Comments;
 
             // Check for comments between then-block and else
             var commentsAfterThenBlock = commentQueries.GetBetweenRows(
@@ -3532,11 +3370,8 @@ public class Avh4Format
 
                 foreach (var comment in commentsAfterThenBlock)
                 {
-                    var commentLocation = afterThenBlockContext.CurrentLocation();
-                    var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value.Text);
-                    var formattedComment = comment.ToStringNodeWithRange(commentLocation, commentEnd);
-                    currentComments = currentComments.Add(formattedComment);
-                    afterThenBlockContext = FormattingContext.AtPosition(commentEnd.Row + 1, 1, afterThenBlockContext).SetIndentColumn();
+                    // Format the comment, add it to the context, and position at indent on the next row
+                    afterThenBlockContext = afterThenBlockContext.FormatAndAddCommentThenNextRowToIndent(comment);
                 }
 
                 // After comments, we're already at the start of a new line
@@ -3581,19 +3416,15 @@ public class Avh4Format
 
                     if (commentsBeforeInnerCondition.Count > 0)
                     {
-                        var innerCondColumn = innerConditionContext.CurrentColumn;
+                        var innerCondIndentRef = innerConditionContext.SetIndentToCurrentColumn();
                         foreach (var comment in commentsBeforeInnerCondition)
                         {
-                            var commentLocation = innerConditionContext.CurrentLocation();
-                            var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value.Text);
-                            var formattedComment = comment.ToStringNodeWithRange(commentLocation, commentEnd);
-                            currentComments = currentComments.Add(formattedComment);
-                            innerConditionContext = FormattingContext.AtPosition(commentEnd.Row + 1, innerCondColumn, context);
+                            // Format the comment, add it to the context, and position at inner condition indent
+                            innerConditionContext = innerConditionContext.ReturnToIndent(innerCondIndentRef).FormatAndAddComment(comment);
                         }
                     }
 
-                    innerConditionResult = FormatExpression(innerIfBlock.Condition, innerConditionContext, currentComments);
-                    currentComments = innerConditionResult.Comments;
+                    innerConditionResult = FormatExpression(innerIfBlock.Condition, innerConditionContext);
 
                     // Check for comments between inner condition and inner "then"
                     var commentsAfterInnerCondition = commentQueries.GetBetweenRows(
@@ -3605,11 +3436,8 @@ public class Avh4Format
                         foreach (var comment in commentsAfterInnerCondition)
                         {
                             afterInnerConditionCtx = afterInnerConditionCtx.ReturnToIndent(bodyRef).NextRowToIndent();
-                            var commentLocation = afterInnerConditionCtx.CurrentLocation();
-                            var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value.Text);
-                            var formattedComment = comment.ToStringNodeWithRange(commentLocation, commentEnd);
-                            currentComments = currentComments.Add(formattedComment);
-                            afterInnerConditionCtx = FormattingContext.AtPosition(commentEnd.Row, commentEnd.Column, bodyRef);
+                            // Format the comment, add it to the context, and stay at the comment end position
+                            afterInnerConditionCtx = afterInnerConditionCtx.FormatAndAddCommentThenPositionAtEnd(comment);
                         }
                     }
 
@@ -3622,8 +3450,7 @@ public class Avh4Format
                 {
                     // Single-line inner condition: "if condition then"
                     var afterInnerIf = afterElse.Advance(3); // "if "
-                    innerConditionResult = FormatExpression(innerIfBlock.Condition, afterInnerIf, currentComments);
-                    currentComments = innerConditionResult.Comments;
+                    innerConditionResult = FormatExpression(innerIfBlock.Condition, afterInnerIf);
 
                     // " then"
                     var afterInnerCondSpace = innerConditionResult.Context.Advance(1);
@@ -3641,21 +3468,17 @@ public class Avh4Format
 
                 if (commentsBeforeInnerThenBlock.Count > 0)
                 {
-                    var innerThenBodyColumn = innerThenContext.CurrentColumn;
+                    var innerThenBodyIndentRef = innerThenContext.SetIndentToCurrentColumn();
                     foreach (var comment in commentsBeforeInnerThenBlock)
                     {
-                        var commentLocation = innerThenContext.CurrentLocation();
-                        var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value.Text);
-                        var formattedComment = comment.ToStringNodeWithRange(commentLocation, commentEnd);
-                        currentComments = currentComments.Add(formattedComment);
-                        // Use innerThenContextReference which has the correct indent (bodyColumn - 1)
-                        innerThenContext = FormattingContext.AtPosition(commentEnd.Row + 1, innerThenBodyColumn, innerThenContextReference);
+                        // Format the comment, add it to the context, and position at inner then body indent
+                        innerThenContext = innerThenContext.ReturnToIndent(innerThenBodyIndentRef).FormatAndAddComment(comment);
                     }
                 }
 
                 // Inner then block - indented from the base column (same as outer if)
-                var innerThenResult = FormatExpression(innerIfBlock.ThenBlock, innerThenContext, currentComments);
-                currentComments = innerThenResult.Comments;
+                var innerThenResult = FormatExpression(innerIfBlock.ThenBlock, innerThenContext);
+                currentComments = innerThenResult.Context.Comments;
 
                 // Check for comments between inner then-block and inner else
                 var commentsAfterInnerThenBlock = commentQueries.GetBetweenRows(
@@ -3672,11 +3495,8 @@ public class Avh4Format
 
                     foreach (var comment in commentsAfterInnerThenBlock)
                     {
-                        var commentLocation = afterInnerThenBlockContext.CurrentLocation();
-                        var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value.Text);
-                        var formattedComment = comment.ToStringNodeWithRange(commentLocation, commentEnd);
-                        currentComments = currentComments.Add(formattedComment);
-                        afterInnerThenBlockContext = FormattingContext.AtPosition(commentEnd.Row + 1, 1, afterInnerThenBlockContext).SetIndentColumn();
+                        // Format the comment, add it to the context, and position at indent on the next row
+                        afterInnerThenBlockContext = afterInnerThenBlockContext.FormatAndAddCommentThenNextRowToIndent(comment);
                     }
 
                     // After comments, we're already at the start of a new line
@@ -3698,8 +3518,8 @@ public class Avh4Format
                 {
                     // Continue the chain - pass the base column
                     var afterInnerElse = innerElseContext.Advance(5); // "else "
-                    var nestedIfResult = FormatIfBlock(nestedIf, afterInnerElse, currentComments, effectiveBaseColumn);
-                    currentComments = nestedIfResult.Comments;
+                    var nestedIfResult = FormatIfBlock(nestedIf, afterInnerElse.AddFormattedComments(currentComments), effectiveBaseColumn);
+                    currentComments = nestedIfResult.Context.Comments;
                     formattedInnerElseBlock = MakeNodeWithRange(afterInnerElse.CurrentLocation(), nestedIfResult.Context.CurrentLocation(), nestedIfResult.FormattedNode);
                     afterInnerElseBlock = nestedIfResult.Context;
                 }
@@ -3718,20 +3538,16 @@ public class Avh4Format
 
                     if (commentsBeforeInnerElseBlock.Count > 0)
                     {
-                        var innerElseBodyColumn = innerElseBodyContext.CurrentColumn;
+                        var innerElseBodyIndentRef = innerElseBodyContext.SetIndentToCurrentColumn();
                         foreach (var comment in commentsBeforeInnerElseBlock)
                         {
-                            var commentLocation = innerElseBodyContext.CurrentLocation();
-                            var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value.Text);
-                            var formattedComment = comment.ToStringNodeWithRange(commentLocation, commentEnd);
-                            currentComments = currentComments.Add(formattedComment);
-                            // Use innerElseBodyContextReference which has the correct indent (bodyColumn - 1)
-                            innerElseBodyContext = FormattingContext.AtPosition(commentEnd.Row + 1, innerElseBodyColumn, innerElseBodyContextReference);
+                            // Format the comment, add it to the context, and position at inner else body indent
+                            innerElseBodyContext = innerElseBodyContext.ReturnToIndent(innerElseBodyIndentRef).FormatAndAddComment(comment);
                         }
                     }
 
-                    var innerElseResult = FormatExpression(innerIfBlock.ElseBlock, innerElseBodyContext, currentComments);
-                    currentComments = innerElseResult.Comments;
+                    var innerElseResult = FormatExpression(innerIfBlock.ElseBlock, innerElseBodyContext);
+                    currentComments = innerElseResult.Context.Comments;
                     formattedInnerElseBlock = innerElseResult.FormattedNode;
                     afterInnerElseBlock = innerElseResult.Context;
                 }
@@ -3756,7 +3572,7 @@ public class Avh4Format
                     thenResult.FormattedNode,
                     elseTokenLoc,
                     formattedElseBlock
-                ), afterInnerElseBlock, currentComments);
+                ), afterInnerElseBlock.AddFormattedComments(currentComments));
             }
             else
             {
@@ -3781,20 +3597,15 @@ public class Avh4Format
 
                 if (commentsBeforeElseBlock.Count > 0)
                 {
-                    var elseBodyColumn = elseBlockContext.CurrentColumn;
+                    var elseBodyIndentRef = elseBlockContext.SetIndentToCurrentColumn();
                     foreach (var comment in commentsBeforeElseBlock)
                     {
-                        var commentLocation = elseBlockContext.CurrentLocation();
-                        var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value.Text);
-                        var formattedComment = comment.ToStringNodeWithRange(commentLocation, commentEnd);
-                        currentComments = currentComments.Add(formattedComment);
-                        // Next line for next comment or else-block
-                        // Use elseBlockContextReference which has the correct indent
-                        elseBlockContext = FormattingContext.AtPosition(commentEnd.Row + 1, elseBodyColumn, elseBlockContextReference);
+                        // Format the comment, add it to the context, and position at else body indent
+                        elseBlockContext = elseBlockContext.ReturnToIndent(elseBodyIndentRef).FormatAndAddComment(comment);
                     }
                 }
 
-                var elseResult = FormatExpression(ifBlock.ElseBlock, elseBlockContext, currentComments);
+                var elseResult = FormatExpression(ifBlock.ElseBlock, elseBlockContext.AddFormattedComments(currentComments));
 
                 return FormattingResult<Expression>.Create(new Expression.IfBlock(
                     ifTokenLoc,
@@ -3803,17 +3614,14 @@ public class Avh4Format
                     thenResult.FormattedNode,
                     elseTokenLoc,
                     elseResult.FormattedNode
-                ), elseResult.Context.ReturnToIndent(context), elseResult.Comments);
+                ), elseResult.Context.ReturnToIndent(context));
             }
         }
 
         private FormattingResult<Expression> FormatCaseExpression(
             Expression.CaseExpression caseExpr,
-            FormattingContext context,
-            ImmutableList<Stil4mElmSyntax7.Node<string>> comments)
+            FormattingContext context)
         {
-            var currentComments = comments;
-
             // Check if the scrutinee expression is on a new line in the original
             var scrutineeOnNewLine = caseExpr.CaseBlock.Expression.Range.Start.Row > caseExpr.CaseBlock.CaseTokenLocation.Row;
 
@@ -3834,17 +3642,16 @@ public class Avh4Format
                 var afterCase = context.Advance(4);
                 // Expression on new line, indented to next multiple of 4 from the case keyword position
                 var exprContext = afterCase.ReturnToIndent(caseIndentRef).NextRowToIndent();
-                exprResult = FormatExpression(caseExpr.CaseBlock.Expression, exprContext, currentComments);
+                exprResult = FormatExpression(caseExpr.CaseBlock.Expression, exprContext);
                 afterExpr = exprResult.Context;
             }
             else
             {
                 // "case " with trailing space
                 var afterCase = context.Advance(5);
-                exprResult = FormatExpression(caseExpr.CaseBlock.Expression, afterCase, currentComments);
+                exprResult = FormatExpression(caseExpr.CaseBlock.Expression, afterCase);
                 afterExpr = exprResult.Context;
             }
-            currentComments = exprResult.Comments;
 
             // " of" (space before of) or just "of" if scrutinee was on new line
             Location ofTokenLoc;
@@ -3889,42 +3696,16 @@ public class Avh4Format
 
                 foreach (var comment in commentsBeforePattern)
                 {
-                    var commentLocation = caseContext.CurrentLocation();
-                    var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value.Text);
-                    var formattedComment = comment.ToStringNodeWithRange(commentLocation, commentEnd);
-                    currentComments = currentComments.Add(formattedComment);
-                    caseContext = FormattingContext.AtPosition(commentEnd.Row + 1, 1, caseContext).SetIndentColumn();
+                    // Format the comment, add it to the context, and position at indent on the next row
+                    caseContext = caseContext.FormatAndAddCommentThenNextRowToIndent(comment);
                 }
 
-                // Pattern - format with inline comments
-                var patternStartLoc = caseContext.CurrentLocation();
+                // Format and transform the pattern with comments
+                var patternResult = FormatPattern(
+                    caseItem.Pattern, caseContext.AddFormattedComments(exprResult.Context.Comments));
+                var transformedPatternNode = patternResult.FormattedNode;
 
-                // Find comments that are within the pattern's range (inline comments)
-                var patternInlineComments = commentQueries.GetWithinRange(caseItem.Pattern.Range);
-
-                // For patterns with inline comments, we need to preserve them
-                // by adding them to the formatted comments list with positions relative to the pattern start
-                string patternText;
-                int patternLen;
-
-                if (patternInlineComments.Count > 0)
-                {
-                    // Format pattern with inline comments
-                    var (text, updatedComments, len) = FormatPatternWithInlineComments(
-                        caseItem.Pattern, caseContext, currentComments);
-                    patternText = text;
-                    patternLen = len;
-                    currentComments = updatedComments;
-                }
-                else
-                {
-                    // Simple case - no inline comments
-                    patternText = FormatPatternText(caseItem.Pattern.Value);
-                    patternLen = patternText.Length;
-                }
-
-                var afterPattern = caseContext.Advance(patternLen);
-                var patternRange = MakeRange(patternStartLoc, afterPattern.CurrentLocation());
+                var afterPattern = patternResult.Context;
 
                 // " ->" (space before arrow)
                 var afterPatternSpace = afterPattern.Advance(1);
@@ -3941,36 +3722,14 @@ public class Avh4Format
 
                 foreach (var comment in commentsBeforeExpr)
                 {
-                    var commentLocation = caseExprContext.CurrentLocation();
-                    var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value.Text);
-                    var formattedComment = comment.ToStringNodeWithRange(commentLocation, commentEnd);
-                    currentComments = currentComments.Add(formattedComment);
-                    caseExprContext = FormattingContext.AtPosition(
-                        commentEnd.Row + 1,
-                        1,
-                        caseExprContext).SetIndentColumn();
+                    // Format the comment, add it to the context, and position at indent on the next row
+                    caseExprContext = caseExprContext.FormatAndAddCommentThenNextRowToIndent(comment);
                 }
 
-                var caseExprResult = FormatExpression(caseItem.Expression, caseExprContext, currentComments);
-                currentComments = caseExprResult.Comments;
-
-                // Transform the pattern to have updated internal locations
-                Pattern transformedPattern;
-                if (patternInlineComments.Count > 0)
-                {
-                    // Use offset-based transformation for patterns with inline comments
-                    var (transformed, updatedComments) = TransformPatternWithLocationAndCommentsNew(
-                        caseItem.Pattern, patternStartLoc, patternLen, patternInlineComments, caseExprResult.Comments);
-                    transformedPattern = transformed;
-                    currentComments = updatedComments;
-                }
-                else
-                {
-                    transformedPattern = TransformPatternWithLocation(caseItem.Pattern.Value, patternStartLoc);
-                }
+                var caseExprResult = FormatExpression(caseItem.Expression, caseExprContext);
 
                 formattedCases.Add(new Case(
-                    MakeNodeWithRange(patternStartLoc, afterPattern.CurrentLocation(), transformedPattern),
+                    transformedPatternNode,
                     arrowLoc,
                     caseExprResult.FormattedNode
                 ));
@@ -3997,16 +3756,14 @@ public class Avh4Format
 
             return FormattingResult<Expression>.Create(
                 new Expression.CaseExpression(formattedCaseBlock),
-                caseContext.ReturnToIndent(context),
-                currentComments);
+                caseContext.ReturnToIndent(context));
         }
 
         private FormattingResult<Expression> FormatLetExpression(
             Expression.LetExpression letExpr,
-            FormattingContext context,
-            ImmutableList<Stil4mElmSyntax7.Node<string>> comments)
+            FormattingContext context)
         {
-            var currentComments = comments;
+            var currentComments = context.Comments;
 
             // Reference context for indented content (one indent level from base)
             var indentedRef = context.SetIndentColumn().AdvanceToNextIndentLevel().SetIndentToCurrentColumn();
@@ -4048,11 +3805,8 @@ public class Avh4Format
                 // Format comments before this declaration
                 foreach (var comment in commentsBefore)
                 {
-                    var commentLocation = declContext.CurrentLocation();
-                    var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value.Text);
-                    var formattedComment = comment.ToStringNodeWithRange(commentLocation, commentEnd);
-                    currentComments = currentComments.Add(formattedComment);
-                    declContext = FormattingContext.AtPosition(commentEnd.Row + 1, 1, declContext).SetIndentColumn();
+                    // Format the comment, add it to the context, and position at indent on the next row
+                    declContext = declContext.FormatAndAddCommentThenNextRowToIndent(comment);
                 }
 
                 // Add empty line between declarations (after first, and only if no comments were output)
@@ -4061,8 +3815,8 @@ public class Avh4Format
                     declContext = declContext.NextRowToIndent();
                 }
 
-                var declResult = FormatLetDeclaration(decl, declContext, currentComments);
-                currentComments = declResult.Comments;
+                var declResult = FormatLetDeclaration(decl, declContext.AddFormattedComments(currentComments));
+                currentComments = declResult.Context.Comments;
                 formattedDecls.Add(declResult.FormattedNode);
 
                 declContext = declResult.Context.NextRowToIndent();
@@ -4083,11 +3837,8 @@ public class Avh4Format
 
                 foreach (var comment in commentsBeforeIn)
                 {
-                    var commentLocation = declContext.CurrentLocation();
-                    var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value.Text);
-                    var formattedComment = comment.ToStringNodeWithRange(commentLocation, commentEnd);
-                    currentComments = currentComments.Add(formattedComment);
-                    declContext = FormattingContext.AtPosition(commentEnd.Row + 1, 1, declContext).SetIndentColumn();
+                    // Format the comment, add it to the context, and position at indent on the next row
+                    declContext = declContext.FormatAndAddCommentThenNextRowToIndent(comment);
                 }
             }
 
@@ -4106,14 +3857,11 @@ public class Avh4Format
             // Format comments between "in" and expression
             foreach (var comment in commentsBeforeExpr)
             {
-                var commentLocation = exprContext.CurrentLocation();
-                var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value.Text);
-                var formattedComment = comment.ToStringNodeWithRange(commentLocation, commentEnd);
-                currentComments = currentComments.Add(formattedComment);
-                exprContext = FormattingContext.AtPosition(commentEnd.Row + 1, 1, exprContext).SetIndentColumn();
+                // Format the comment, add it to the context, and position at indent on the next row
+                exprContext = exprContext.FormatAndAddCommentThenNextRowToIndent(comment);
             }
 
-            var exprResult = FormatExpression(letExpr.Value.Expression, exprContext, currentComments);
+            var exprResult = FormatExpression(letExpr.Value.Expression, exprContext.AddFormattedComments(currentComments));
 
             var formattedLet = new Expression.LetBlock(
                 letTokenLoc,
@@ -4124,14 +3872,12 @@ public class Avh4Format
 
             return FormattingResult<Expression>.Create(
                 new Expression.LetExpression(formattedLet),
-                exprResult.Context,
-                exprResult.Comments);
+                exprResult.Context);
         }
 
         private FormattingResult<Stil4mElmSyntax7.Node<Expression.LetDeclaration>> FormatLetDeclaration(
             Stil4mElmSyntax7.Node<Expression.LetDeclaration> letDecl,
-            FormattingContext context,
-            ImmutableList<Stil4mElmSyntax7.Node<string>> comments)
+            FormattingContext context)
         {
             // Reference context for indented content (one indent level from base)
             var indentedRef = context.SetIndentColumn().AdvanceToNextIndentLevel().SetIndentToCurrentColumn();
@@ -4162,36 +3908,32 @@ public class Avh4Format
                             var typeAnnotSpansMultipleLines = SpansMultipleRows(signature.Value.TypeAnnotation.Range);
                             var preserveMultilineFormat = typeAnnotOnNewLine && typeAnnotSpansMultipleLines;
 
-                            Stil4mElmSyntax7.Node<TypeAnnotation> formattedTypeAnnot;
-                            FormattingContext afterTypeAnnot;
-                            ImmutableList<Stil4mElmSyntax7.Node<string>> typeAnnotComments;
+                            FormattingResult<Stil4mElmSyntax7.Node<TypeAnnotation>> typeAnnotResult;
 
                             if (preserveMultilineFormat)
                             {
                                 // Type annotation on new line with extra indentation (for complex types like records)
                                 var afterColon = afterSigNameSpace.Advance(1); // just ":"
                                 var typeContext = afterColon.ReturnToIndent(indentedRef).NextRowToIndent();
-                                (formattedTypeAnnot, afterTypeAnnot, typeAnnotComments) = FormatTypeAnnotation(signature.Value.TypeAnnotation, typeContext);
+                                typeAnnotResult = FormatTypeAnnotation(signature.Value.TypeAnnotation, typeContext.AddFormattedComments(currentCtx.Comments));
                             }
                             else
                             {
                                 // Type annotation on same line after ": " (for simple types or when not on new line)
                                 var afterColon = afterSigNameSpace.Advance(2); // ": "
-                                (formattedTypeAnnot, afterTypeAnnot, typeAnnotComments) = FormatTypeAnnotation(signature.Value.TypeAnnotation, afterColon);
+                                typeAnnotResult = FormatTypeAnnotation(signature.Value.TypeAnnotation, afterColon.AddFormattedComments(currentCtx.Comments));
                             }
-
-                            comments = comments.AddRange(typeAnnotComments);
 
                             var formattedSigValue = new Signature(
                                 MakeNodeWithRange(sigNameLoc, afterSigName.CurrentLocation(), funcName),
                                 colonLoc,
-                                formattedTypeAnnot
+                                typeAnnotResult.FormattedNode
                             );
 
-                            formattedSignature = MakeNodeWithRange(sigNameLoc, afterTypeAnnot.CurrentLocation(), formattedSigValue);
+                            formattedSignature = MakeNodeWithRange(sigNameLoc, typeAnnotResult.Context.CurrentLocation(), formattedSigValue);
 
                             // Move to next line for function implementation
-                            currentCtx = afterTypeAnnot.ReturnToIndent(context).NextRowToIndent();
+                            currentCtx = typeAnnotResult.Context.ReturnToIndent(context).NextRowToIndent();
                         }
 
                         // Now format the function implementation
@@ -4204,13 +3946,9 @@ public class Avh4Format
                         foreach (var arg in letFunc.Function.Declaration.Value.Arguments)
                         {
                             afterArgs = afterArgs.Advance(1); // space before arg
-                            var argStartLoc = afterArgs.CurrentLocation();
-                            var patternText = FormatPatternText(arg.Value);
-                            afterArgs = afterArgs.Advance(patternText.Length);
-                            var argEndLoc = afterArgs.CurrentLocation();
-                            // Transform the pattern to have updated internal locations for correct rendering
-                            var transformedPattern = TransformPatternWithLocation(arg.Value, argStartLoc);
-                            formattedLetArgs.Add(MakeNodeWithRange(argStartLoc, argEndLoc, transformedPattern));
+                            var patternResult = FormatPattern(arg, afterArgs);
+                            afterArgs = patternResult.Context;
+                            formattedLetArgs.Add(patternResult.FormattedNode);
                         }
 
                         // " =" (space before equals)
@@ -4229,14 +3967,11 @@ public class Avh4Format
                         // Format comments between equals and expression
                         foreach (var comment in commentsBeforeExpr)
                         {
-                            var commentLocation = exprContext.CurrentLocation();
-                            var commentEnd = CalculateCommentEndLocation(commentLocation, comment.Value.Text);
-                            var formattedComment = comment.ToStringNodeWithRange(commentLocation, commentEnd);
-                            comments = comments.Add(formattedComment);
-                            exprContext = FormattingContext.AtPosition(commentEnd.Row + 1, 1, exprContext).SetIndentColumn();
+                            // Format the comment, add it to the context, and position at indent on the next row
+                            exprContext = exprContext.FormatAndAddCommentThenNextRowToIndent(comment);
                         }
 
-                        var exprResult = FormatExpression(letFunc.Function.Declaration.Value.Expression, exprContext, comments);
+                        var exprResult = FormatExpression(letFunc.Function.Declaration.Value.Expression, exprContext);
 
                         var formattedImpl = new FunctionImplementation(
                             MakeNodeWithRange(implStartLoc, afterName.CurrentLocation(), funcName),
@@ -4256,19 +3991,14 @@ public class Avh4Format
                         var range = MakeRange(startLoc, exprResult.Context.CurrentLocation());
                         return FormattingResult<Stil4mElmSyntax7.Node<Expression.LetDeclaration>>.Create(
                             new Stil4mElmSyntax7.Node<Expression.LetDeclaration>(range, formattedLetFunc),
-                            exprResult.Context.ReturnToIndent(context),
-                            exprResult.Comments);
+                            exprResult.Context.ReturnToIndent(context));
                     }
 
                 case Expression.LetDeclaration.LetDestructuring letDestructuring:
                     {
-                        var patternText = FormatPatternText(letDestructuring.Pattern.Value);
-                        var patternLoc = context.CurrentLocation();
-                        var afterPattern = context.Advance(patternText.Length);
-
-                        // Transform the pattern to have updated internal locations for correct rendering
-                        var transformedPattern = TransformPatternWithLocation(letDestructuring.Pattern.Value, patternLoc);
-                        var formattedPatternNode = MakeNodeWithRange(patternLoc, afterPattern.CurrentLocation(), transformedPattern);
+                        var patternResult = FormatPattern(letDestructuring.Pattern, context);
+                        var transformedPatternNode = patternResult.FormattedNode;
+                        var afterPattern = patternResult.Context;
 
                         // " =" (space before equals)
                         var afterPatternSpace = afterPattern.Advance(1);
@@ -4276,19 +4006,18 @@ public class Avh4Format
                         var afterDestructEquals = afterPatternSpace.Advance(1); // just "="
 
                         var destructExprContext = afterDestructEquals.ReturnToIndent(indentedRef).NextRowToIndent();
-                        var exprResult = FormatExpression(letDestructuring.Expression, destructExprContext, comments);
+                        var exprResult = FormatExpression(letDestructuring.Expression, destructExprContext);
 
                         var formattedDestructuring = new Expression.LetDeclaration.LetDestructuring(
-                            formattedPatternNode,
+                            transformedPatternNode,
                             destructEqualsLoc,
                             exprResult.FormattedNode
                         );
 
-                        var destructRange = MakeRange(patternLoc, exprResult.Context.CurrentLocation());
+                        var destructRange = MakeRange(context.CurrentLocation(), exprResult.Context.CurrentLocation());
                         return FormattingResult<Stil4mElmSyntax7.Node<Expression.LetDeclaration>>.Create(
                             new Stil4mElmSyntax7.Node<Expression.LetDeclaration>(destructRange, formattedDestructuring),
-                            exprResult.Context.ReturnToIndent(context),
-                            exprResult.Comments);
+                            exprResult.Context.ReturnToIndent(context));
                     }
 
                 default:
@@ -4300,8 +4029,7 @@ public class Avh4Format
 
         private FormattingResult<Expression> FormatLambdaExpression(
             Expression.LambdaExpression lambdaExpr,
-            FormattingContext context,
-            ImmutableList<Stil4mElmSyntax7.Node<string>> comments)
+            FormattingContext context)
         {
             // "\"
             var backslashLoc = context.CurrentLocation();
@@ -4314,17 +4042,10 @@ public class Avh4Format
             for (var i = 0; i < lambdaExpr.Lambda.Arguments.Count; i++)
             {
                 var arg = lambdaExpr.Lambda.Arguments[i];
-                var argText = FormatPatternText(arg.Value);
+                var patternResult = FormatPattern(arg, afterArgs);
+                formattedArgs.Add(patternResult.FormattedNode);
 
-                // Create new node with updated location and transformed pattern
-                var argLocation = afterArgs.CurrentLocation();
-                var transformedPattern = TransformPatternWithLocation(arg.Value, argLocation);
-                formattedArgs.Add(MakeNodeWithRange(
-                    argLocation,
-                    new Location(argLocation.Row, argLocation.Column + argText.Length),
-                    transformedPattern));
-
-                afterArgs = afterArgs.Advance(argText.Length);
+                afterArgs = patternResult.Context;
                 afterArgs = afterArgs.Advance(1); // space after each argument
             }
 
@@ -4336,7 +4057,6 @@ public class Avh4Format
             // Compare original body position to original arrow position
             var bodyOnNewLine = lambdaExpr.Lambda.Expression.Range.Start.Row > lambdaExpr.Lambda.ArrowLocation.Row;
 
-            var currentComments = comments;
             FormattingResult<Stil4mElmSyntax7.Node<Expression>> exprResult;
 
             if (bodyOnNewLine)
@@ -4355,22 +4075,18 @@ public class Avh4Format
                 // Format any comments that appear before the expression
                 foreach (var comment in commentsBeforeExpr)
                 {
-                    var commentLocation = bodyContext.CurrentLocation();
-                    var (commentEnd, endsWithNewline) = CalculateCommentEndLocationEx(commentLocation, comment.Value.Text);
-                    var formattedComment = comment.ToStringNodeWithRange(commentLocation, commentEnd);
-                    currentComments = currentComments.Add(formattedComment);
-                    bodyContext = CreateContextAfterComment(bodyContext, commentEnd, endsWithNewline);
+                    bodyContext = bodyContext.FormatAndAddComment(comment);
                     // Maintain the same indent level after the comment (column is 1-based)
                     bodyContext = bodyContext.SetIndentColumn();
                 }
 
-                exprResult = FormatExpression(lambdaExpr.Lambda.Expression, bodyContext, currentComments);
+                exprResult = FormatExpression(lambdaExpr.Lambda.Expression, bodyContext);
             }
             else
             {
                 // Body on same line after space
                 var afterSpace = afterArrow.Advance(1);
-                exprResult = FormatExpression(lambdaExpr.Lambda.Expression, afterSpace, currentComments);
+                exprResult = FormatExpression(lambdaExpr.Lambda.Expression, afterSpace);
             }
 
             var formattedLambda = new LambdaStruct(
@@ -4382,18 +4098,15 @@ public class Avh4Format
 
             return FormattingResult<Expression>.Create(
                 new Expression.LambdaExpression(formattedLambda),
-                exprResult.Context,
-                exprResult.Comments);
+                exprResult.Context);
         }
 
         private FormattingResult<Expression> FormatTupledExpression(
             Expression.TupledExpression tupledExpr,
             Range originalRange,
-            FormattingContext context,
-            ImmutableList<Stil4mElmSyntax7.Node<string>> comments)
+            FormattingContext context)
         {
             var elements = Stil4mElmSyntax7.FromStil4mConcretized.ToList(tupledExpr.Elements);
-            var currentComments = comments;
 
             // Check if tuple should be multiline based on the containing node's start and end locations
             var isMultiline = originalRange.End.Row > originalRange.Start.Row;
@@ -4428,33 +4141,15 @@ public class Avh4Format
                 if (commentsBeforeFirst.Count > 0)
                 {
                     // Format: ( -- comment\n      first_element
-                    var firstComment = commentsBeforeFirst[0];
-                    var commentLocation = firstElemStartCtx.CurrentLocation();
-                    var commentEnd = CalculateCommentEndLocation(commentLocation, firstComment.Value.Text);
-                    var formattedComment = firstComment.ToStringNodeWithRange(commentLocation, commentEnd);
-                    currentComments = currentComments.Add(formattedComment);
-
-                    // First element on next line, indented past the opening paren
-                    firstElemStartCtx = FormattingContext.AtPosition(
-                        commentEnd.Row + 1,
-                        elemContentRef.CurrentColumn, // indent past opening paren
-                        elemContentRef);
-
-                    // Handle any additional comments before first element
-                    for (var ci = 1; ci < commentsBeforeFirst.Count; ci++)
+                    foreach (var comment in commentsBeforeFirst)
                     {
-                        var additionalComment = commentsBeforeFirst[ci];
-                        var addCommentLoc = firstElemStartCtx.CurrentLocation();
-                        var addCommentEnd = CalculateCommentEndLocation(addCommentLoc, additionalComment.Value.Text);
-                        var formattedAddComment = additionalComment.ToStringNodeWithRange(addCommentLoc, addCommentEnd);
-                        currentComments = currentComments.Add(formattedAddComment);
-                        firstElemStartCtx = FormattingContext.AtPosition(addCommentEnd.Row + 1, elemContentRef.CurrentColumn, elemContentRef);
+                        // Format the comment, add it to the context, and position at element content indent
+                        firstElemStartCtx = firstElemStartCtx.ReturnToIndent(elemContentRef).FormatAndAddComment(comment);
                     }
                 }
 
                 // First element on same line as opening paren (or after comments)
-                var firstElemResult = FormatExpression(elements[0], firstElemStartCtx, currentComments);
-                currentComments = firstElemResult.Comments;
+                var firstElemResult = FormatExpression(elements[0], firstElemStartCtx);
                 var tupledCtx = firstElemResult.Context;
 
                 // Build rest with proper separator locations
@@ -4497,11 +4192,8 @@ public class Avh4Format
                     foreach (var comment in commentsBeforeComma)
                     {
                         tupledCtx = tupledCtx.ReturnToIndent(elemContentRef).NextRowToIndent();
-                        var commentLoc = tupledCtx.CurrentLocation();
-                        var commentEnd = CalculateCommentEndLocation(commentLoc, comment.Value.Text);
-                        var formattedComment = comment.ToStringNodeWithRange(commentLoc, commentEnd);
-                        currentComments = currentComments.Add(formattedComment);
-                        tupledCtx = FormattingContext.AtPosition(commentEnd.Row, commentEnd.Column, elemContentRef);
+                        // Format the comment, add it to the context, and stay at the comment end position
+                        tupledCtx = tupledCtx.FormatAndAddCommentThenPositionAtEnd(comment);
                     }
 
                     tupledCtx = tupledCtx.ReturnToIndent(elemAlignRef).NextRowToIndent();
@@ -4512,27 +4204,10 @@ public class Avh4Format
                         // Format: , -- comment\n      element
                         tupledCtx = tupledCtx.Advance(2); // ", "
 
-                        var firstAfterComment = commentsAfterComma[0];
-                        var afterCommentLoc = tupledCtx.CurrentLocation();
-                        var afterCommentEnd = CalculateCommentEndLocation(afterCommentLoc, firstAfterComment.Value.Text);
-                        var formattedAfterComment = firstAfterComment.ToStringNodeWithRange(afterCommentLoc, afterCommentEnd);
-                        currentComments = currentComments.Add(formattedAfterComment);
-
-                        // Element on next line, indented past the comma
-                        tupledCtx = FormattingContext.AtPosition(
-                            afterCommentEnd.Row + 1,
-                            elemContentRef.CurrentColumn, // indent past comma
-                            elemContentRef);
-
-                        // Handle additional comments after comma
-                        for (var ci = 1; ci < commentsAfterComma.Count; ci++)
+                        foreach (var comment in commentsAfterComma)
                         {
-                            var additionalComment = commentsAfterComma[ci];
-                            var addCommentLoc = tupledCtx.CurrentLocation();
-                            var addCommentEnd = CalculateCommentEndLocation(addCommentLoc, additionalComment.Value.Text);
-                            var formattedAddComment = additionalComment.ToStringNodeWithRange(addCommentLoc, addCommentEnd);
-                            currentComments = currentComments.Add(formattedAddComment);
-                            tupledCtx = FormattingContext.AtPosition(addCommentEnd.Row + 1, elemContentRef.CurrentColumn, elemContentRef);
+                            // Format the comment, add it to the context, and position at element content indent
+                            tupledCtx = tupledCtx.ReturnToIndent(elemContentRef).FormatAndAddComment(comment);
                         }
                     }
                     else
@@ -4540,8 +4215,7 @@ public class Avh4Format
                         tupledCtx = tupledCtx.Advance(2); // ", "
                     }
 
-                    var elemResult = FormatExpression(currElem, tupledCtx, currentComments);
-                    currentComments = elemResult.Comments;
+                    var elemResult = FormatExpression(currElem, tupledCtx);
                     restItems.Add((separatorLoc, elemResult.FormattedNode));
                     tupledCtx = elemResult.Context;
                 }
@@ -4554,11 +4228,8 @@ public class Avh4Format
                 foreach (var comment in commentsBeforeClose)
                 {
                     tupledCtx = tupledCtx.ReturnToIndent(elemContentRef).NextRowToIndent();
-                    var commentLoc = tupledCtx.CurrentLocation();
-                    var commentEnd = CalculateCommentEndLocation(commentLoc, comment.Value.Text);
-                    var formattedComment = comment.ToStringNodeWithRange(commentLoc, commentEnd);
-                    currentComments = currentComments.Add(formattedComment);
-                    tupledCtx = FormattingContext.AtPosition(commentEnd.Row, commentEnd.Column, elemContentRef);
+                    // Format the comment, add it to the context, and stay at the comment end position
+                    tupledCtx = tupledCtx.FormatAndAddCommentThenPositionAtEnd(comment);
                 }
 
                 // Closing paren on new line, aligned with opening paren
@@ -4570,7 +4241,7 @@ public class Avh4Format
 
                 return FormattingResult<Expression>.Create(new Expression.TupledExpression(
                     multilineSeparatedList
-                ), afterCloseParen.ReturnToIndent(context), currentComments);
+                ), afterCloseParen.ReturnToIndent(context));
             }
             else
             {
@@ -4583,8 +4254,7 @@ public class Avh4Format
                 for (var i = 0; i < elements.Count; i++)
                 {
                     if (i > 0) tupledCtx = tupledCtx.Advance(2); // ", "
-                    var elemResult = FormatExpression(elements[i], tupledCtx, currentComments);
-                    currentComments = elemResult.Comments;
+                    var elemResult = FormatExpression(elements[i], tupledCtx);
                     formattedElements.Add(elemResult.FormattedNode);
                     tupledCtx = elemResult.Context;
                 }
@@ -4595,18 +4265,17 @@ public class Avh4Format
 
                 return FormattingResult<Expression>.Create(new Expression.TupledExpression(
                     ToSeparatedSyntaxList(formattedElements)
-                ), afterCloseParen, currentComments);
+                ), afterCloseParen);
             }
         }
 
         private FormattingResult<Expression> FormatRecordUpdateExpression(
             Expression.RecordUpdateExpression recordUpdate,
             Range originalRange,
-            FormattingContext context,
-            ImmutableList<Stil4mElmSyntax7.Node<string>> comments)
+            FormattingContext context)
         {
             var fields = Stil4mElmSyntax7.FromStil4mConcretized.ToList(recordUpdate.Fields);
-            var currentComments = comments;
+            var currentComments = context.Comments;
 
             // Detect if record update should be multiline based on the containing node's range only
             var isMultiline = SpansMultipleRows(originalRange);
@@ -4674,8 +4343,8 @@ public class Avh4Format
                         valueContext = afterFieldName.Advance(3); // " = "
                     }
 
-                    var fieldResult = FormatExpression(field.ValueExpr, valueContext, currentComments);
-                    currentComments = fieldResult.Comments;
+                    var fieldResult = FormatExpression(field.ValueExpr, valueContext);
+                    currentComments = fieldResult.Context.Comments;
 
                     var fieldNameNode = MakeNodeWithRange(fieldStartLoc, afterFieldName.CurrentLocation(), field.FieldName.Value);
 
@@ -4711,7 +4380,7 @@ public class Avh4Format
                     MakeNodeWithRange(recordNameLoc, afterRecordName.CurrentLocation(), recordUpdate.RecordName.Value),
                     pipeLoc,
                     separatedFields
-                ), afterCloseBrace.ReturnToIndent(context), currentComments);
+                ), afterCloseBrace.ReturnToIndent(context).AddFormattedComments(currentComments));
             }
             else
             {
@@ -4733,8 +4402,8 @@ public class Avh4Format
                     var afterFieldName = fieldCtx.Advance(field.FieldName.Value.Length);
                     var equalsLoc = afterFieldName.Advance(1).CurrentLocation(); // " = "
                     var afterEq = afterFieldName.Advance(3); // " = "
-                    var fieldResult = FormatExpression(field.ValueExpr, afterEq, currentComments);
-                    currentComments = fieldResult.Comments;
+                    var fieldResult = FormatExpression(field.ValueExpr, afterEq);
+                    currentComments = fieldResult.Context.Comments;
 
                     var fieldNameNode = MakeNodeWithRange(fieldStartLoc, afterFieldName.CurrentLocation(), field.FieldName.Value);
 
@@ -4751,7 +4420,7 @@ public class Avh4Format
                     MakeNodeWithRange(recordNameLoc, afterRecordName.CurrentLocation(), recordUpdate.RecordName.Value),
                     pipeLoc,
                     ToSeparatedSyntaxList(formattedFields)
-                ), afterCloseBrace, currentComments);
+                ), afterCloseBrace.AddFormattedComments(currentComments));
             }
         }
 
@@ -4760,589 +4429,484 @@ public class Avh4Format
         #region Pattern Formatting
 
         /// <summary>
-        /// Formats a pattern with any inline comments that appear within its range.
-        /// Returns the formatted pattern text (with comments), the updated comments collection,
-        /// and the new end position.
+        /// Directly transforms a pattern into a node with correct positions.
+        /// This method builds the pattern node tree while tracking positions in the context,
+        /// avoiding any intermediate string representation.
         /// </summary>
-        private (string PatternTextWithComments, ImmutableList<Stil4mElmSyntax7.Node<string>> UpdatedComments, int TotalLength) FormatPatternWithInlineComments(
+        private FormattingResult<Stil4mElmSyntax7.Node<Pattern>> FormatPattern(
             Stil4mElmSyntax7.Node<Pattern> patternNode,
-            FormattingContext context,
-            ImmutableList<Stil4mElmSyntax7.Node<string>> comments)
+            FormattingContext context)
         {
-            // Find comments within the pattern's original range (on the same line)
-            var inlineComments = commentQueries.GetWithinRange(patternNode.Range);
-
-            if (inlineComments.Count is 0)
-            {
-                // No inline comments - just format the pattern normally
-                var text = FormatPatternText(patternNode.Value);
-                return (text, comments, text.Length);
-            }
-
-            // We have inline comments - need to build the pattern text with comments embedded
-            // The strategy is to use the original pattern structure to determine where comments go
-            var result = FormatPatternWithCommentsRecursive(patternNode.Value, patternNode.Range, context, comments, inlineComments);
-            return result;
-        }
-
-        /// <summary>
-        /// Recursively formats a pattern, inserting inline comments at their correct positions.
-        /// </summary>
-        private static (string PatternTextWithComments, ImmutableList<Stil4mElmSyntax7.Node<string>> UpdatedComments, int TotalLength)
-            FormatPatternWithCommentsRecursive(
-            Pattern pattern,
-            Range originalRange,
-            FormattingContext context,
-            ImmutableList<Stil4mElmSyntax7.Node<string>> comments,
-            IReadOnlyList<Stil4mElmSyntax7.Node<ParsedComment>> inlineComments)
-        {
-            var currentComments = comments;
-            var startColumn = context.CurrentColumn;
+            var pattern = patternNode.Value;
+            var originalRange = patternNode.Range;
+            var startLoc = context.CurrentLocation();
 
             switch (pattern)
             {
-                case Pattern.NamedPattern namedPattern when namedPattern.Arguments.Count > 0:
+                case Pattern.AllPattern:
                     {
-                        // Format: Name arg1 arg2 ... with possible comments before/within args
-                        var sb = new System.Text.StringBuilder();
+                        var endLoc = new Location(startLoc.Row, startLoc.Column + 1);
+                        var node = MakeNodeWithRange(startLoc, endLoc, pattern);
+                        return FormattingResult<Stil4mElmSyntax7.Node<Pattern>>.Create(
+                            node, context.Advance(1));
+                    }
+
+                case Pattern.VarPattern varPattern:
+                    {
+                        var len = varPattern.Name.Length;
+                        var endLoc = new Location(startLoc.Row, startLoc.Column + len);
+                        var node = MakeNodeWithRange(startLoc, endLoc, pattern);
+                        return FormattingResult<Stil4mElmSyntax7.Node<Pattern>>.Create(
+                            node, context.Advance(len));
+                    }
+
+                case Pattern.UnitPattern:
+                    {
+                        var endLoc = new Location(startLoc.Row, startLoc.Column + 2);
+                        var node = MakeNodeWithRange(startLoc, endLoc, pattern);
+                        return FormattingResult<Stil4mElmSyntax7.Node<Pattern>>.Create(
+                            node, context.Advance(2));
+                    }
+
+                case Pattern.CharPattern charPattern:
+                    {
+                        var text = $"'{EscapeCharForPattern((char)charPattern.Value)}'";
+                        var len = text.Length;
+                        var endLoc = new Location(startLoc.Row, startLoc.Column + len);
+                        var node = MakeNodeWithRange(startLoc, endLoc, pattern);
+                        return FormattingResult<Stil4mElmSyntax7.Node<Pattern>>.Create(
+                            node, context.Advance(len));
+                    }
+
+                case Pattern.StringPattern stringPattern:
+                    {
+                        var text = $"\"{stringPattern.Value}\"";
+                        var len = text.Length;
+                        var endLoc = new Location(startLoc.Row, startLoc.Column + len);
+                        var node = MakeNodeWithRange(startLoc, endLoc, pattern);
+                        return FormattingResult<Stil4mElmSyntax7.Node<Pattern>>.Create(
+                            node, context.Advance(len));
+                    }
+
+                case Pattern.IntPattern intPattern:
+                    {
+                        var text = intPattern.Value.ToString();
+                        var len = text.Length;
+                        var endLoc = new Location(startLoc.Row, startLoc.Column + len);
+                        var node = MakeNodeWithRange(startLoc, endLoc, pattern);
+                        return FormattingResult<Stil4mElmSyntax7.Node<Pattern>>.Create(
+                            node, context.Advance(len));
+                    }
+
+                case Pattern.HexPattern hexPattern:
+                    {
+                        var text = Rendering.RenderHexPattern(hexPattern.Value);
+                        var len = text.Length;
+                        var endLoc = new Location(startLoc.Row, startLoc.Column + len);
+                        var node = MakeNodeWithRange(startLoc, endLoc, pattern);
+                        return FormattingResult<Stil4mElmSyntax7.Node<Pattern>>.Create(
+                            node, context.Advance(len));
+                    }
+
+                case Pattern.FloatPattern floatPattern:
+                    {
+                        var text = Rendering.FormatFloatForElm(floatPattern.Value);
+                        var len = text.Length;
+                        var endLoc = new Location(startLoc.Row, startLoc.Column + len);
+                        var node = MakeNodeWithRange(startLoc, endLoc, pattern);
+                        return FormattingResult<Stil4mElmSyntax7.Node<Pattern>>.Create(
+                            node, context.Advance(len));
+                    }
+
+                case Pattern.RecordPattern recordPattern:
+                    {
+                        // Format: { field1, field2, ... }
+                        var openBraceLoc = startLoc;
+                        var currentContext = context.Advance(2); // "{ "
+
+                        SeparatedSyntaxList<Stil4mElmSyntax7.Node<string>> newFields;
+                        if (recordPattern.Fields.Count is 0)
+                        {
+                            newFields = new SeparatedSyntaxList<Stil4mElmSyntax7.Node<string>>.Empty();
+                        }
+                        else
+                        {
+                            // Process first field
+                            var firstFieldName = recordPattern.Fields[0].Value;
+                            var firstFieldStartLoc = currentContext.CurrentLocation();
+                            var firstFieldEndLoc = new Location(firstFieldStartLoc.Row, firstFieldStartLoc.Column + firstFieldName.Length);
+                            var firstField = MakeNodeWithRange(firstFieldStartLoc, firstFieldEndLoc, firstFieldName);
+                            currentContext = currentContext.Advance(firstFieldName.Length);
+
+                            // Process remaining fields
+                            var restFields = new List<(Location SeparatorLocation, Stil4mElmSyntax7.Node<string> Node)>();
+                            for (var i = 1; i < recordPattern.Fields.Count; i++)
+                            {
+                                // Record comma location and advance
+                                var commaLoc = currentContext.CurrentLocation();
+                                currentContext = currentContext.Advance(2); // ", "
+
+                                // Get field
+                                var fieldStartLoc = currentContext.CurrentLocation();
+                                var fieldName = recordPattern.Fields[i].Value;
+                                var fieldEndLoc = new Location(fieldStartLoc.Row, fieldStartLoc.Column + fieldName.Length);
+                                var fieldNode = MakeNodeWithRange(fieldStartLoc, fieldEndLoc, fieldName);
+                                restFields.Add((commaLoc, fieldNode));
+                                currentContext = currentContext.Advance(fieldName.Length);
+                            }
+
+                            newFields = new SeparatedSyntaxList<Stil4mElmSyntax7.Node<string>>.NonEmpty(
+                                firstField, restFields);
+                        }
+
+                        currentContext = currentContext.Advance(1); // " "
+                        var closeBraceLoc = currentContext.CurrentLocation();
+                        currentContext = currentContext.Advance(1); // "}"
+
+                        var endLoc = currentContext.CurrentLocation();
+                        Pattern newPattern = new Pattern.RecordPattern(openBraceLoc, newFields, closeBraceLoc);
+                        var node = MakeNodeWithRange(startLoc, endLoc, newPattern);
+                        return FormattingResult<Stil4mElmSyntax7.Node<Pattern>>.Create(node, currentContext);
+                    }
+
+                case Pattern.NamedPattern namedPattern when namedPattern.Arguments.Count is 0:
+                    {
+                        // Simple named pattern without arguments
                         var qualifiedName = FormatQualifiedName(namedPattern.Name);
-                        sb.Append(qualifiedName);
-                        var currentCol = startColumn + qualifiedName.Length;
+                        var len = qualifiedName.Length;
+                        var endLoc = new Location(startLoc.Row, startLoc.Column + len);
+                        var node = MakeNodeWithRange(startLoc, endLoc, pattern);
+                        return FormattingResult<Stil4mElmSyntax7.Node<Pattern>>.Create(
+                            node, context.Advance(len));
+                    }
+
+                case Pattern.NamedPattern namedPattern:
+                    {
+                        // Named pattern with arguments: Name arg1 arg2 ...
+                        var qualifiedName = FormatQualifiedName(namedPattern.Name);
+                        var currentContext = context.Advance(qualifiedName.Length);
+
+                        var newArguments = new List<Stil4mElmSyntax7.Node<Pattern>>();
 
                         foreach (var arg in namedPattern.Arguments)
                         {
-                            // Check for comments between current position and this argument
-                            var commentsBeforeArg = inlineComments
-                                .Where(c => c.Range.Start.Column > (currentCol - startColumn + originalRange.Start.Column) &&
-                                           c.Range.Start.Column < arg.Range.Start.Column)
-                                .OrderBy(c => c.Range.Start.Column)
-                                .ToList();
+                            // Space before each argument
+                            currentContext = currentContext.Advance(1);
 
-                            foreach (var comment in commentsBeforeArg)
-                            {
-                                sb.Append(' ');
-                                currentCol++;
-
-                                // Add the comment to the result
-                                var commentLoc = new Location(context.CurrentRow, currentCol);
-                                var commentEnd = CalculateCommentEndLocation(commentLoc, comment.Value.Text);
-                                currentComments = currentComments.Add(comment.ToStringNodeWithRange(commentLoc, commentEnd));
-                                sb.Append(comment.Value.Text);
-                                currentCol += comment.Value.Text.Length;
-                            }
-
-                            sb.Append(' ');
-                            currentCol++;
-
-                            // Check for comments within this argument's range
-                            var argComments = inlineComments
-                                .Where(c => c.Range.Start.Column >= arg.Range.Start.Column &&
-                                           c.Range.End.Column <= arg.Range.End.Column)
-                                .ToList();
-
-                            if (argComments.Count > 0)
-                            {
-                                // Recursively format the argument with its comments
-                                var argContext = FormattingContext.AtPosition(context.CurrentRow, currentCol, context);
-                                var (argText, updatedComments, argLen) = FormatPatternWithCommentsRecursive(
-                                    arg.Value, arg.Range, argContext, currentComments, argComments);
-                                sb.Append(argText);
-                                currentCol += argLen;
-                                currentComments = updatedComments;
-                            }
-                            else
-                            {
-                                // Just format the argument without special comment handling
-                                var argText = FormatPatternText(arg.Value);
-                                sb.Append(argText);
-                                currentCol += argText.Length;
-                            }
+                            var argResult = FormatPattern(arg, currentContext);
+                            newArguments.Add(argResult.FormattedNode);
+                            currentContext = argResult.Context;
                         }
 
-                        var resultText = sb.ToString();
-                        return (resultText, currentComments, resultText.Length);
+                        var endLoc = currentContext.CurrentLocation();
+                        Pattern newPattern = new Pattern.NamedPattern(namedPattern.Name, newArguments);
+                        var node = MakeNodeWithRange(startLoc, endLoc, newPattern);
+                        return FormattingResult<Stil4mElmSyntax7.Node<Pattern>>.Create(node, currentContext);
                     }
 
                 case Pattern.ParenthesizedPattern parenPattern:
                     {
-                        // Format: (inner_pattern) with possible comments
-                        var sb = new System.Text.StringBuilder();
-                        sb.Append('(');
-                        var currentCol = startColumn + 1;
+                        // Format: (inner_pattern)
+                        var openParenLoc = startLoc;
+                        var currentContext = context.Advance(1); // "("
 
-                        // Check for comments right after the opening paren
-                        var commentsAfterParen = inlineComments
-                            .Where(c => c.Range.Start.Column > originalRange.Start.Column &&
-                                       c.Range.Start.Column < parenPattern.Pattern.Range.Start.Column)
-                            .OrderBy(c => c.Range.Start.Column)
-                            .ToList();
+                        // Handle comments between opening paren and inner pattern
+                        var commentsAfterParen = commentQueries.GetOnRowBetweenColumns(
+                            originalRange.Start.Row,
+                            originalRange.Start.Column,
+                            parenPattern.Pattern.Range.Start.Column);
 
                         foreach (var comment in commentsAfterParen)
                         {
-                            var commentLoc = new Location(context.CurrentRow, currentCol);
-                            var commentEnd = CalculateCommentEndLocation(commentLoc, comment.Value.Text);
-                            currentComments = currentComments.Add(comment.ToStringNodeWithRange(commentLoc, commentEnd));
-                            sb.Append(comment.Value.Text);
-                            currentCol += comment.Value.Text.Length;
-                            sb.Append(' ');
-                            currentCol++;
+                            currentContext = currentContext.FormatAndAddCommentThenPositionAtEnd(comment);
+                            currentContext = currentContext.Advance(1); // space after comment
                         }
 
-                        // Recursively format the inner pattern with its comments
-                        var innerComments = inlineComments
-                            .Where(c => c.Range.Start.Column >= parenPattern.Pattern.Range.Start.Column &&
-                                       c.Range.End.Column <= parenPattern.Pattern.Range.End.Column)
-                            .ToList();
+                        var innerResult = FormatPattern(parenPattern.Pattern, currentContext);
+                        currentContext = innerResult.Context;
 
-                        if (innerComments.Count > 0)
+                        // Handle comments between inner pattern and closing paren
+                        var commentsBeforeCloseParen = commentQueries.GetOnRowBetweenColumns(
+                            originalRange.Start.Row,
+                            parenPattern.Pattern.Range.End.Column,
+                            originalRange.End.Column);
+
+                        foreach (var comment in commentsBeforeCloseParen)
                         {
-                            var innerContext = FormattingContext.AtPosition(context.CurrentRow, currentCol, context);
-                            var (innerText, updatedComments, innerLen) = FormatPatternWithCommentsRecursive(
-                                parenPattern.Pattern.Value, parenPattern.Pattern.Range, innerContext, currentComments, innerComments);
-                            sb.Append(innerText);
-                            currentCol += innerLen;
-                            currentComments = updatedComments;
-                        }
-                        else
-                        {
-                            var innerText = FormatPatternText(parenPattern.Pattern.Value);
-                            sb.Append(innerText);
-                            currentCol += innerText.Length;
+                            currentContext = currentContext.Advance(1); // space before comment
+                            currentContext = currentContext.FormatAndAddCommentThenPositionAtEnd(comment);
                         }
 
-                        sb.Append(')');
-                        var resultText = sb.ToString();
-                        return (resultText, currentComments, resultText.Length);
+                        var closeParenLoc = currentContext.CurrentLocation();
+                        currentContext = currentContext.Advance(1); // ")"
+
+                        var endLoc = currentContext.CurrentLocation();
+                        Pattern newPattern = new Pattern.ParenthesizedPattern(
+                            openParenLoc, innerResult.FormattedNode, closeParenLoc);
+                        var node = MakeNodeWithRange(startLoc, endLoc, newPattern);
+                        return FormattingResult<Stil4mElmSyntax7.Node<Pattern>>.Create(node, currentContext);
+                    }
+
+                case Pattern.TuplePattern tuplePattern:
+                    {
+                        // Format: ( elem1, elem2, ... )
+                        var openParenLoc = startLoc;
+                        var currentContext = context.Advance(2); // "( "
+
+                        Stil4mElmSyntax7.Node<Pattern>? firstElement = null;
+                        var restElements = new List<(Location SeparatorLocation, Stil4mElmSyntax7.Node<Pattern> Node)>();
+
+                        // Get the SeparatedSyntaxList as NonEmpty to access separator locations
+                        var elementsNonEmpty = tuplePattern.Elements as SeparatedSyntaxList<Stil4mElmSyntax7.Node<Pattern>>.NonEmpty;
+
+                        for (var i = 0; i < tuplePattern.Elements.Count; i++)
+                        {
+                            var elem = tuplePattern.Elements[i];
+
+                            Location? commaLoc = null;
+                            if (i > 0)
+                            {
+                                // Get the previous element to find comments between it and the comma
+                                var prevElem = tuplePattern.Elements[i - 1];
+
+                                // Get the original comma location from the SeparatedSyntaxList
+                                // Rest[i-1] gives (commaLocation, currentElement)
+                                var originalCommaColumn = elementsNonEmpty!.Rest[i - 1].SeparatorLocation.Column;
+
+                                // Comments that should appear AFTER previous element but BEFORE the comma
+                                var commentsBeforeComma = commentQueries.GetOnRowBetweenColumns(
+                                    originalRange.Start.Row,
+                                    prevElem.Range.End.Column,
+                                    originalCommaColumn);
+
+                                foreach (var comment in commentsBeforeComma)
+                                {
+                                    currentContext = currentContext.Advance(1); // space before comment
+                                    currentContext = currentContext.FormatAndAddCommentThenPositionAtEnd(comment);
+                                }
+
+                                // Record comma location
+                                commaLoc = currentContext.CurrentLocation();
+                                currentContext = currentContext.Advance(1); // ","
+
+                                // Comments that should appear AFTER the comma but BEFORE current element
+                                var commentsAfterComma = commentQueries.GetOnRowBetweenColumns(
+                                    originalRange.Start.Row,
+                                    originalCommaColumn,
+                                    elem.Range.Start.Column);
+
+                                foreach (var comment in commentsAfterComma)
+                                {
+                                    currentContext = currentContext.Advance(1); // space before comment
+                                    currentContext = currentContext.FormatAndAddCommentThenPositionAtEnd(comment);
+                                }
+
+                                currentContext = currentContext.Advance(1); // space before next element
+                            }
+                            else
+                            {
+                                // First element - handle comments after opening paren
+                                var commentsAfterParen = commentQueries.GetOnRowBetweenColumns(
+                                    originalRange.Start.Row,
+                                    originalRange.Start.Column,
+                                    elem.Range.Start.Column);
+
+                                foreach (var comment in commentsAfterParen)
+                                {
+                                    currentContext = currentContext.FormatAndAddCommentThenPositionAtEnd(comment);
+                                    currentContext = currentContext.Advance(1); // space after comment
+                                }
+                            }
+
+                            var elemResult = FormatPattern(elem, currentContext);
+                            currentContext = elemResult.Context;
+
+                            if (firstElement is null)
+                            {
+                                firstElement = elemResult.FormattedNode;
+                            }
+                            else
+                            {
+                                restElements.Add((commaLoc!, elemResult.FormattedNode));
+                            }
+
+                            // After the last element, handle comments before closing paren
+                            if (i == tuplePattern.Elements.Count - 1)
+                            {
+                                var commentsBeforeCloseParen = commentQueries.GetOnRowBetweenColumns(
+                                    originalRange.Start.Row,
+                                    elem.Range.End.Column,
+                                    originalRange.End.Column);
+
+                                foreach (var comment in commentsBeforeCloseParen)
+                                {
+                                    currentContext = currentContext.Advance(1); // space before comment
+                                    currentContext = currentContext.FormatAndAddCommentThenPositionAtEnd(comment);
+                                }
+                            }
+                        }
+
+                        currentContext = currentContext.Advance(1); // " " before close paren
+                        var closeParenLoc = currentContext.CurrentLocation();
+                        currentContext = currentContext.Advance(1); // ")"
+
+                        var endLoc = currentContext.CurrentLocation();
+                        var newElements = new SeparatedSyntaxList<Stil4mElmSyntax7.Node<Pattern>>.NonEmpty(
+                            firstElement!, restElements);
+                        Pattern newPattern = new Pattern.TuplePattern(openParenLoc, newElements, closeParenLoc);
+                        var node = MakeNodeWithRange(startLoc, endLoc, newPattern);
+                        return FormattingResult<Stil4mElmSyntax7.Node<Pattern>>.Create(node, currentContext);
+                    }
+
+                case Pattern.ListPattern listPattern:
+                    {
+                        if (listPattern.Elements.Count is 0)
+                        {
+                            var emptyEndLoc = new Location(startLoc.Row, startLoc.Column + 2);
+                            Pattern emptyPattern = new Pattern.ListPattern(startLoc,
+                                new SeparatedSyntaxList<Stil4mElmSyntax7.Node<Pattern>>.Empty(),
+                                new Location(startLoc.Row, startLoc.Column + 1));
+                            var emptyNode = MakeNodeWithRange(startLoc, emptyEndLoc, emptyPattern);
+                            return FormattingResult<Stil4mElmSyntax7.Node<Pattern>>.Create(
+                                emptyNode, context.Advance(2));
+                        }
+
+                        // Format: [ elem1, elem2, ... ]
+                        var openBracketLoc = startLoc;
+                        var currentContext = context.Advance(2); // "[ "
+
+                        Stil4mElmSyntax7.Node<Pattern>? firstElement = null;
+                        var restElements = new List<(Location SeparatorLocation, Stil4mElmSyntax7.Node<Pattern> Node)>();
+
+                        for (var i = 0; i < listPattern.Elements.Count; i++)
+                        {
+                            var elem = listPattern.Elements[i];
+
+                            Location? commaLoc = null;
+                            if (i > 0)
+                            {
+                                commaLoc = currentContext.CurrentLocation();
+                                currentContext = currentContext.Advance(2); // ", "
+                            }
+
+                            var elemResult = FormatPattern(elem, currentContext);
+                            currentContext = elemResult.Context;
+
+                            if (firstElement is null)
+                            {
+                                firstElement = elemResult.FormattedNode;
+                            }
+                            else
+                            {
+                                restElements.Add((commaLoc!, elemResult.FormattedNode));
+                            }
+                        }
+
+                        currentContext = currentContext.Advance(1); // " " before close bracket
+                        var closeBracketLoc = currentContext.CurrentLocation();
+                        currentContext = currentContext.Advance(1); // "]"
+
+                        var endLoc = currentContext.CurrentLocation();
+                        var newElements = new SeparatedSyntaxList<Stil4mElmSyntax7.Node<Pattern>>.NonEmpty(
+                            firstElement!, restElements);
+                        Pattern newPattern = new Pattern.ListPattern(openBracketLoc, newElements, closeBracketLoc);
+                        var node = MakeNodeWithRange(startLoc, endLoc, newPattern);
+                        return FormattingResult<Stil4mElmSyntax7.Node<Pattern>>.Create(node, currentContext);
                     }
 
                 case Pattern.UnConsPattern unConsPattern:
                     {
-                        // Format: head :: tail with possible comments
-                        var sb = new System.Text.StringBuilder();
-                        var currentCol = startColumn;
+                        // Format: head :: tail
+                        var headResult = FormatPattern(unConsPattern.Head, context);
+                        var currentContext = headResult.Context;
 
-                        // Head pattern
-                        var headComments = inlineComments
-                            .Where(c => c.Range.Start.Column >= originalRange.Start.Column &&
-                                       c.Range.End.Column <= unConsPattern.ConsOperatorLocation.Column)
-                            .ToList();
+                        // Handle comments between head and :: operator
+                        var commentsBeforeOp = commentQueries.GetOnRowBetweenColumns(
+                            originalRange.Start.Row,
+                            unConsPattern.Head.Range.End.Column,
+                            unConsPattern.ConsOperatorLocation.Column);
 
-                        if (headComments.Count > 0)
+                        foreach (var comment in commentsBeforeOp)
                         {
-                            var headContext = FormattingContext.AtPosition(context.CurrentRow, currentCol, context);
-                            var (headText, updatedComments, headLen) = FormatPatternWithCommentsRecursive(
-                                unConsPattern.Head.Value, unConsPattern.Head.Range, headContext, currentComments, headComments);
-                            sb.Append(headText);
-                            currentCol += headLen;
-                            currentComments = updatedComments;
+                            currentContext = currentContext.Advance(1); // space before comment
+                            currentContext = currentContext.FormatAndAddCommentThenPositionAtEnd(comment);
+                        }
+
+                        currentContext = currentContext.Advance(1); // space before ::
+                        var consOpLoc = currentContext.CurrentLocation();
+                        currentContext = currentContext.Advance(2); // "::" (2 chars)
+
+                        // Handle comments between :: and tail pattern
+                        var commentsAfterOp = commentQueries.GetOnRowBetweenColumns(
+                            originalRange.Start.Row,
+                            unConsPattern.ConsOperatorLocation.Column + 2, // After ::
+                            unConsPattern.Tail.Range.Start.Column);
+
+                        if (commentsAfterOp.Count > 0)
+                        {
+                            foreach (var comment in commentsAfterOp)
+                            {
+                                currentContext = currentContext.Advance(1); // space before comment
+                                currentContext = currentContext.FormatAndAddCommentThenPositionAtEnd(comment);
+                            }
+                            currentContext = currentContext.Advance(1); // space after last comment
                         }
                         else
                         {
-                            var headText = FormatPatternText(unConsPattern.Head.Value);
-                            sb.Append(headText);
-                            currentCol += headText.Length;
+                            currentContext = currentContext.Advance(1); // space after ::
                         }
 
-                        sb.Append(" :: ");
-                        currentCol += 4;
+                        var tailResult = FormatPattern(unConsPattern.Tail, currentContext);
+                        currentContext = tailResult.Context;
 
-                        // Tail pattern
-                        var tailComments = inlineComments
-                            .Where(c => c.Range.Start.Column >= unConsPattern.Tail.Range.Start.Column &&
-                                       c.Range.End.Column <= unConsPattern.Tail.Range.End.Column)
-                            .ToList();
+                        // Handle comments after tail (but within the overall pattern range)
+                        var commentsAfterTail = commentQueries.GetOnRowBetweenColumns(
+                            originalRange.Start.Row,
+                            unConsPattern.Tail.Range.End.Column,
+                            originalRange.End.Column);
 
-                        if (tailComments.Count > 0)
+                        foreach (var comment in commentsAfterTail)
                         {
-                            var tailContext = FormattingContext.AtPosition(context.CurrentRow, currentCol, context);
-                            var (tailText, updatedComments, tailLen) = FormatPatternWithCommentsRecursive(
-                                unConsPattern.Tail.Value, unConsPattern.Tail.Range, tailContext, currentComments, tailComments);
-                            sb.Append(tailText);
-                            currentComments = updatedComments;
-                        }
-                        else
-                        {
-                            var tailText = FormatPatternText(unConsPattern.Tail.Value);
-                            sb.Append(tailText);
+                            currentContext = currentContext.Advance(1); // space before comment
+                            currentContext = currentContext.FormatAndAddCommentThenPositionAtEnd(comment);
                         }
 
-                        var resultText = sb.ToString();
-                        return (resultText, currentComments, resultText.Length);
+                        var endLoc = currentContext.CurrentLocation();
+                        Pattern newPattern = new Pattern.UnConsPattern(
+                            headResult.FormattedNode, consOpLoc, tailResult.FormattedNode);
+                        var node = MakeNodeWithRange(startLoc, endLoc, newPattern);
+                        return FormattingResult<Stil4mElmSyntax7.Node<Pattern>>.Create(node, currentContext);
+                    }
+
+                case Pattern.AsPattern asPattern:
+                    {
+                        // Format: pattern as name
+                        var innerResult = FormatPattern(asPattern.Pattern, context);
+                        var currentContext = innerResult.Context;
+
+                        currentContext = currentContext.Advance(1); // space before "as"
+                        var asTokenLoc = currentContext.CurrentLocation();
+                        currentContext = currentContext.Advance(3); // "as "
+
+                        // name
+                        var nameLoc = currentContext.CurrentLocation();
+                        var nameLen = asPattern.Name.Value.Length;
+                        var nameEndLoc = new Location(nameLoc.Row, nameLoc.Column + nameLen);
+                        currentContext = currentContext.Advance(nameLen);
+
+                        var newNameNode = MakeNodeWithRange(nameLoc, nameEndLoc, asPattern.Name.Value);
+
+                        var endLoc = currentContext.CurrentLocation();
+                        Pattern newPattern = new Pattern.AsPattern(
+                            innerResult.FormattedNode, asTokenLoc, newNameNode);
+                        var node = MakeNodeWithRange(startLoc, endLoc, newPattern);
+                        return FormattingResult<Stil4mElmSyntax7.Node<Pattern>>.Create(node, currentContext);
                     }
 
                 default:
-                    {
-                        // For other patterns, just format without special comment handling
-                        var text = FormatPatternText(pattern);
-                        return (text, currentComments, text.Length);
-                    }
+                    throw new System.NotImplementedException(
+                        $"Pattern type '{pattern.GetType().Name}' not implemented in {nameof(FormatPattern)}");
             }
-        }
-
-        /// <summary>
-        /// Transforms a pattern to have updated internal locations based on the formatted position,
-        /// accounting for the total length which may include embedded comments.
-        /// </summary>
-        private static (Pattern TransformedPattern, ImmutableList<Stil4mElmSyntax7.Node<string>> Comments)
-            TransformPatternWithLocationAndCommentsNew(
-            Stil4mElmSyntax7.Node<Pattern> patternNode,
-            Location startLoc,
-            int totalLength,
-            IReadOnlyList<Stil4mElmSyntax7.Node<ParsedComment>> inlineComments,
-            ImmutableList<Stil4mElmSyntax7.Node<string>> currentComments)
-        {
-            if (inlineComments.Count is 0)
-            {
-                // No inline comments - use standard transformation
-                return (TransformPatternWithLocation(patternNode.Value, startLoc), currentComments);
-            }
-
-            // For patterns with inline comments, we use offset-based positioning
-            // The offset is: formatted start column - original start column
-            var offset = startLoc.Column - patternNode.Range.Start.Column;
-            var row = startLoc.Row;
-
-            // Offset all comments within the pattern
-            var updatedComments = currentComments;
-            foreach (var comment in inlineComments)
-            {
-                var newStartCol = comment.Range.Start.Column + offset;
-                var newEndCol = comment.Range.End.Column + offset;
-                var newStart = new Location(row, newStartCol);
-                var newEnd = new Location(row, newEndCol);
-                updatedComments = updatedComments.Add(comment.ToStringNodeWithRange(newStart, newEnd));
-            }
-
-            // Offset the pattern itself
-            var transformedPattern = OffsetPatternLocations(patternNode.Value, row, offset);
-
-            return (transformedPattern, updatedComments);
-        }
-
-        /// <summary>
-        /// Offsets all locations in a pattern by a fixed column amount.
-        /// </summary>
-        private static Pattern OffsetPatternLocations(Pattern pattern, int row, int columnOffset)
-        {
-            Location OffsetLoc(Location loc) => new(row, loc.Column + columnOffset);
-            Range OffsetRange(Range range) => new(OffsetLoc(range.Start), OffsetLoc(range.End));
-
-            return pattern switch
-            {
-                Pattern.AllPattern or
-                Pattern.VarPattern or
-                Pattern.UnitPattern or
-                Pattern.CharPattern or
-                Pattern.StringPattern or
-                Pattern.IntPattern or
-                Pattern.HexPattern or
-                Pattern.FloatPattern =>
-                    pattern,
-
-                Pattern.ListPattern listPattern =>
-                    new Pattern.ListPattern(
-                        OffsetLoc(listPattern.OpenBracketLocation),
-                        [.. listPattern.Elements.Select(e =>
-                            MakeNodeWithRange(OffsetRange(e.Range), OffsetPatternLocations(e.Value, row, columnOffset)))],
-                        OffsetLoc(listPattern.CloseBracketLocation)
-                    ),
-
-                Pattern.TuplePattern tuplePattern =>
-                    new Pattern.TuplePattern(
-                        OffsetLoc(tuplePattern.OpenParenLocation),
-                        [.. tuplePattern.Elements.Select(e =>
-                            MakeNodeWithRange(OffsetRange(e.Range), OffsetPatternLocations(e.Value, row, columnOffset)))],
-                        OffsetLoc(tuplePattern.CloseParenLocation)
-                    ),
-
-                Pattern.RecordPattern recordPattern =>
-                    new Pattern.RecordPattern(
-                        OffsetLoc(recordPattern.OpenBraceLocation),
-                        [.. recordPattern.Fields.Select(f =>
-                            MakeNodeWithRange(OffsetRange(f.Range), f.Value))],
-                        OffsetLoc(recordPattern.CloseBraceLocation)
-                    ),
-
-                Pattern.UnConsPattern unConsPattern =>
-                    new Pattern.UnConsPattern(
-                        MakeNodeWithRange(OffsetRange(unConsPattern.Head.Range),
-                            OffsetPatternLocations(unConsPattern.Head.Value, row, columnOffset)),
-                        OffsetLoc(unConsPattern.ConsOperatorLocation),
-                        MakeNodeWithRange(OffsetRange(unConsPattern.Tail.Range),
-                            OffsetPatternLocations(unConsPattern.Tail.Value, row, columnOffset))
-                    ),
-
-                Pattern.ParenthesizedPattern parenPattern =>
-                    new Pattern.ParenthesizedPattern(
-                        OffsetLoc(parenPattern.OpenParenLocation),
-                        MakeNodeWithRange(OffsetRange(parenPattern.Pattern.Range),
-                            OffsetPatternLocations(parenPattern.Pattern.Value, row, columnOffset)),
-                        OffsetLoc(parenPattern.CloseParenLocation)
-                    ),
-
-                Pattern.NamedPattern namedPattern =>
-                    new Pattern.NamedPattern(
-                        namedPattern.Name,  // QualifiedNameRef doesn't have internal locations
-                        [.. namedPattern.Arguments.Select(a =>
-                            MakeNodeWithRange(OffsetRange(a.Range),
-                                OffsetPatternLocations(a.Value, row, columnOffset)))]
-                    ),
-
-                Pattern.AsPattern asPattern =>
-                    new Pattern.AsPattern(
-                        MakeNodeWithRange(OffsetRange(asPattern.Pattern.Range),
-                            OffsetPatternLocations(asPattern.Pattern.Value, row, columnOffset)),
-                        OffsetLoc(asPattern.AsTokenLocation),
-                        MakeNodeWithRange(OffsetRange(asPattern.Name.Range), asPattern.Name.Value)
-                    ),
-
-                _ =>
-                throw new System.NotImplementedException(
-                    $"Pattern type not implemented: {pattern.GetType().FullName}")
-            };
-        }
-
-        /// <summary>
-        /// Transforms a pattern to have updated internal locations based on the formatted position.
-        /// This is necessary because patterns contain internal token locations (like OpenBracketLocation)
-        /// that the renderer uses, and these need to match the formatted output positions.
-        /// </summary>
-        private static Pattern TransformPatternWithLocation(Pattern pattern, Location startLoc)
-        {
-            var patternText = FormatPatternText(pattern);
-            var currentCol = startLoc.Column;
-
-            return pattern switch
-            {
-                Pattern.AllPattern or
-                Pattern.VarPattern or
-                Pattern.UnitPattern or
-                Pattern.CharPattern or
-                Pattern.StringPattern or
-                Pattern.IntPattern or
-                Pattern.HexPattern or
-                Pattern.FloatPattern =>
-                    // These patterns don't have internal locations that need updating
-                    pattern,
-
-                Pattern.ListPattern listPattern =>
-                    new Pattern.ListPattern(
-                        new Location(startLoc.Row, currentCol),  // OpenBracketLocation at "["
-                        listPattern.Elements.Count is 0
-                            ? []
-                            : TransformPatternListElements(listPattern.Elements, startLoc.Row, currentCol + 2), // After "[ "
-                        new Location(startLoc.Row, currentCol + patternText.Length - 1)  // CloseBracketLocation at "]"
-                    ),
-
-                Pattern.TuplePattern tuplePattern =>
-                    new Pattern.TuplePattern(
-                        new Location(startLoc.Row, currentCol),  // OpenParenLocation
-                        TransformPatternListElements(tuplePattern.Elements, startLoc.Row, currentCol + 2), // After "( "
-                        new Location(startLoc.Row, currentCol + patternText.Length - 1)  // CloseParenLocation
-                    ),
-
-                Pattern.RecordPattern recordPattern =>
-                    new Pattern.RecordPattern(
-                        new Location(startLoc.Row, currentCol),  // OpenBraceLocation
-                        TransformStringNodeList(recordPattern.Fields, startLoc.Row, currentCol + 2), // After "{ "
-                        new Location(startLoc.Row, currentCol + patternText.Length - 1)  // CloseBraceLocation
-                    ),
-
-                Pattern.UnConsPattern unConsPattern =>
-                    TransformUnConsPattern(unConsPattern, startLoc, patternText, currentCol),
-
-                Pattern.ParenthesizedPattern parenPattern =>
-                    TransformParenthesizedPattern(parenPattern, startLoc, patternText, currentCol),
-
-                Pattern.NamedPattern namedPattern =>
-                    TransformNamedPattern(namedPattern, startLoc, currentCol),
-
-                Pattern.AsPattern asPattern =>
-                    TransformAsPattern(asPattern, startLoc, patternText, currentCol),
-
-                _ =>
-                throw new System.NotImplementedException(
-                    $"Pattern type not implemented: {pattern.GetType().FullName}")
-            };
-        }
-
-        private static Pattern.UnConsPattern TransformUnConsPattern(
-            Pattern.UnConsPattern unConsPattern, Location startLoc, string patternText, int currentCol)
-        {
-            var headText = FormatPatternText(unConsPattern.Head.Value);
-            var headLoc = new Location(startLoc.Row, currentCol);
-            var headEndCol = currentCol + headText.Length;
-            var consOpCol = headEndCol + 1; // After " "
-            var tailCol = consOpCol + 3; // After ":: "
-
-            return new Pattern.UnConsPattern(
-                MakeNodeWithRange(headLoc, new Location(startLoc.Row, headEndCol),
-                    TransformPatternWithLocation(unConsPattern.Head.Value, headLoc)),
-                new Location(startLoc.Row, consOpCol),  // ConsOperatorLocation
-                MakeNodeWithRange(new Location(startLoc.Row, tailCol),
-                    new Location(startLoc.Row, currentCol + patternText.Length),
-                    TransformPatternWithLocation(unConsPattern.Tail.Value, new Location(startLoc.Row, tailCol)))
-            );
-        }
-
-        private static Pattern.ParenthesizedPattern TransformParenthesizedPattern(
-            Pattern.ParenthesizedPattern parenPattern, Location startLoc, string patternText, int currentCol)
-        {
-            var innerLoc = new Location(startLoc.Row, currentCol + 1); // After "("
-            return new Pattern.ParenthesizedPattern(
-                new Location(startLoc.Row, currentCol),  // OpenParenLocation
-                MakeNodeWithRange(innerLoc, new Location(startLoc.Row, currentCol + patternText.Length - 1),
-                    TransformPatternWithLocation(parenPattern.Pattern.Value, innerLoc)),
-                new Location(startLoc.Row, currentCol + patternText.Length - 1)  // CloseParenLocation
-            );
-        }
-
-        private static Pattern.NamedPattern TransformNamedPattern(
-            Pattern.NamedPattern namedPattern, Location startLoc, int currentCol)
-        {
-            var nameText = FormatQualifiedName(namedPattern.Name);
-            var afterNameCol = currentCol + nameText.Length;
-            var transformedArgs = new List<Stil4mElmSyntax7.Node<Pattern>>();
-            var argCol = afterNameCol + 1; // After space
-
-            foreach (var arg in namedPattern.Arguments)
-            {
-                var argText = FormatPatternText(arg.Value);
-                var argLoc = new Location(startLoc.Row, argCol);
-                transformedArgs.Add(MakeNodeWithRange(
-                    argLoc,
-                    new Location(startLoc.Row, argCol + argText.Length),
-                    TransformPatternWithLocation(arg.Value, argLoc)));
-                argCol += argText.Length + 1; // After arg and space
-            }
-
-            return new Pattern.NamedPattern(namedPattern.Name, transformedArgs);
-        }
-
-        private static Pattern.AsPattern TransformAsPattern(
-            Pattern.AsPattern asPattern, Location startLoc, string patternText, int currentCol)
-        {
-            var innerPatternText = FormatPatternText(asPattern.Pattern.Value);
-            var innerLoc = new Location(startLoc.Row, currentCol);
-            var asKeywordCol = currentCol + innerPatternText.Length + 1; // After pattern and space
-            var nameCol = asKeywordCol + 3; // After "as "
-
-            return new Pattern.AsPattern(
-                MakeNodeWithRange(innerLoc, new Location(startLoc.Row, currentCol + innerPatternText.Length),
-                    TransformPatternWithLocation(asPattern.Pattern.Value, innerLoc)),
-                new Location(startLoc.Row, asKeywordCol),  // AsTokenLocation
-                MakeNodeWithRange(new Location(startLoc.Row, nameCol),
-                    new Location(startLoc.Row, currentCol + patternText.Length),
-                    asPattern.Name.Value)
-            );
-        }
-
-        private static IReadOnlyList<Stil4mElmSyntax7.Node<Pattern>> TransformPatternListElements(
-            IReadOnlyList<Stil4mElmSyntax7.Node<Pattern>> elements, int row, int startCol)
-        {
-            var result = new List<Stil4mElmSyntax7.Node<Pattern>>();
-            var col = startCol;
-
-            for (var i = 0; i < elements.Count; i++)
-            {
-                var elem = elements[i];
-                var elemText = FormatPatternText(elem.Value);
-                var elemLoc = new Location(row, col);
-
-                result.Add(MakeNodeWithRange(
-                    elemLoc,
-                    new Location(row, col + elemText.Length),
-                    TransformPatternWithLocation(elem.Value, elemLoc)));
-
-                col += elemText.Length + 2; // After elem and ", "
-            }
-
-            return result;
-        }
-
-        private static IReadOnlyList<Stil4mElmSyntax7.Node<string>> TransformStringNodeList(
-            IReadOnlyList<Stil4mElmSyntax7.Node<string>> nodes, int row, int startCol)
-        {
-            var result = new List<Stil4mElmSyntax7.Node<string>>();
-            var col = startCol;
-
-            for (var i = 0; i < nodes.Count; i++)
-            {
-                var node = nodes[i];
-                var nodeText = node.Value;
-
-                result.Add(MakeNodeWithRange(
-                    new Location(row, col),
-                    new Location(row, col + nodeText.Length),
-                    nodeText));
-
-                col += nodeText.Length + 2; // After node and ", "
-            }
-
-            return result;
-        }
-
-        private static string FormatPatternText(Pattern pattern)
-        {
-            return pattern switch
-            {
-                Pattern.AllPattern =>
-                "_",
-
-                Pattern.VarPattern varPattern =>
-                varPattern.Name,
-
-                Pattern.UnitPattern =>
-                "()",
-
-                Pattern.CharPattern charPattern =>
-                $"'{EscapeCharForPattern((char)charPattern.Value)}'",
-
-                Pattern.StringPattern stringPattern =>
-                $"\"{stringPattern.Value}\"",
-
-                Pattern.IntPattern intPattern =>
-                intPattern.Value.ToString(),
-
-                Pattern.HexPattern hexPattern =>
-                Rendering.RenderHexPattern(hexPattern.Value),
-
-                Pattern.FloatPattern floatPattern =>
-                Rendering.FormatFloatForElm(floatPattern.Value),
-
-                Pattern.TuplePattern tuplePattern =>
-                $"( {string.Join(", ", tuplePattern.Elements.Select(e => FormatPatternText(e.Value)))} )",
-
-                Pattern.RecordPattern recordPattern =>
-                $"{{ {string.Join(", ", recordPattern.Fields.Select(f => f.Value))} }}",
-
-                Pattern.ListPattern listPattern =>
-                listPattern.Elements.Count is 0
-                ?
-                "[]"
-                :
-                $"[ {string.Join(", ", listPattern.Elements.Select(e => FormatPatternText(e.Value)))} ]",
-
-                Pattern.NamedPattern namedPattern =>
-                namedPattern.Arguments.Count > 0
-                ?
-                $"{FormatQualifiedName(namedPattern.Name)} {string.Join(" ", namedPattern.Arguments.Select(a => FormatPatternText(a.Value)))}"
-                :
-                FormatQualifiedName(namedPattern.Name),
-
-                Pattern.AsPattern asPattern =>
-                $"{FormatPatternText(asPattern.Pattern.Value)} as {asPattern.Name.Value}",
-
-                Pattern.ParenthesizedPattern parenPattern =>
-                $"({FormatPatternText(parenPattern.Pattern.Value)})",
-
-                Pattern.UnConsPattern unConsPattern =>
-                $"{FormatPatternText(unConsPattern.Head.Value)} :: {FormatPatternText(unConsPattern.Tail.Value)}",
-
-                _ =>
-                throw new System.NotImplementedException(
-                    $"Pattern type '{pattern.GetType().Name}' not implemented")
-            };
         }
 
         private static string EscapeCharForPattern(char ch) =>
@@ -5361,6 +4925,7 @@ public class Avh4Format
         {
             if (nameRef.ModuleName.Count > 0)
                 return string.Join(".", nameRef.ModuleName) + "." + nameRef.Name;
+
             return nameRef.Name;
         }
 

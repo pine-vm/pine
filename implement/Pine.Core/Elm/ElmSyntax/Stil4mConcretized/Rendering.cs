@@ -758,6 +758,21 @@ public class Rendering
         RenderExpression(field.ValueExpr, context);
     }
 
+    private static void RenderPatternNode(
+        Stil4mElmSyntax7.Node<Pattern> patternNode,
+        RenderContext context)
+    {
+        RenderPattern(patternNode, context);
+    }
+
+    private static void RenderRecordPatternField(
+        Stil4mElmSyntax7.Node<string> fieldNode,
+        RenderContext context)
+    {
+        context.AdvanceToLocation(fieldNode.Range.Start);
+        context.Append(fieldNode.Value);
+    }
+
     private static void RenderExpression(
         Stil4mElmSyntax7.Node<Expression> expressionNode,
         RenderContext context)
@@ -1029,11 +1044,7 @@ public class Rendering
             case Pattern.TuplePattern tuplePattern:
                 context.AdvanceToLocation(tuplePattern.OpenParenLocation);
                 context.Append("(");
-                for (var i = 0; i < tuplePattern.Elements.Count; i++)
-                {
-                    if (i > 0) context.Append(",");
-                    RenderPattern(tuplePattern.Elements[i], context);
-                }
+                RenderSeparatedList(tuplePattern.Elements, RenderPatternNode, context);
                 context.AdvanceToLocation(tuplePattern.CloseParenLocation);
                 context.Append(")");
                 break;
@@ -1041,12 +1052,7 @@ public class Rendering
             case Pattern.RecordPattern recordPattern:
                 context.AdvanceToLocation(recordPattern.OpenBraceLocation);
                 context.Append("{");
-                for (var i = 0; i < recordPattern.Fields.Count; i++)
-                {
-                    if (i > 0) context.Append(",");
-                    context.AdvanceToLocation(recordPattern.Fields[i].Range.Start);
-                    context.Append(recordPattern.Fields[i].Value);
-                }
+                RenderSeparatedList(recordPattern.Fields, RenderRecordPatternField, context);
                 context.AdvanceToLocation(recordPattern.CloseBraceLocation);
                 context.Append("}");
                 break;
@@ -1061,11 +1067,7 @@ public class Rendering
             case Pattern.ListPattern listPattern:
                 context.AdvanceToLocation(listPattern.OpenBracketLocation);
                 context.Append("[");
-                for (var i = 0; i < listPattern.Elements.Count; i++)
-                {
-                    if (i > 0) context.Append(",");
-                    RenderPattern(listPattern.Elements[i], context);
-                }
+                RenderSeparatedList(listPattern.Elements, RenderPatternNode, context);
                 context.AdvanceToLocation(listPattern.CloseBracketLocation);
                 context.Append("]");
                 break;
