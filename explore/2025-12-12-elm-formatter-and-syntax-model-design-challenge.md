@@ -88,5 +88,11 @@ decl a b =
 
 While this might be sufficient to achieve proper round-tripping aligned with avh4/elm-format, the implementation is somewhat hacky here: Since our architecture has a formatter separate from the renderer, the renderer has duplicate implementations of this placement logic.
 
+## Solution via Concretized Syntax Model
+
+Eventually, we solved these challenges by introducing a more concrete syntax model:
+
++ <https://github.com/pine-vm/pine/blob/b4028766240f6fc104bf75ff2d516a9cdb7097c6/guide/stil4m-concretized-syntax-model.md>
++ <https://github.com/pine-vm/pine/blob/b4028766240f6fc104bf75ff2d516a9cdb7097c6/implement/Pine.Core/Elm/ElmSyntax/Stil4mConcretized/Avh4Format.cs>
 
 tags:elm,parsing,formatting
