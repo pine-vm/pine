@@ -2546,7 +2546,6 @@ public class Avh4Format
 
                 case Expression.RecordExpr recordExpr:
                     {
-                        var openBraceLoc = context.CurrentLocation();
                         var afterOpenBrace = context.Advance(1); // "{"
                         var recordFields = Stil4mElmSyntax7.FromStil4mConcretized.ToList(recordExpr.Fields);
 
@@ -2991,67 +2990,33 @@ public class Avh4Format
 
                 case Expression.ParenthesizedExpression parenExpr:
                     {
-                        var openParenLoc = context.CurrentLocation();
-
                         // Create reference context at opening paren for close paren alignment
                         var openParenRef = context.SetIndentToCurrentColumn();
 
-                        // Check if the original content was multiline AND contains a let expression
-                        // Let expressions need IndentSpaces adjusted so `in` aligns with `let`
-                        var originalIsMultiline = parenExpr.CloseParenLocation.Row > parenExpr.OpenParenLocation.Row;
-                        var containsLetExpr = parenExpr.Expression.Value is Expression.LetExpression;
-
-                        // For multiline let expressions, set indent at `(` so nested `in` aligns with `(`
-                        // Set indent BEFORE advancing past `(`, then advance
-                        var afterOpenParen = originalIsMultiline && containsLetExpr
-                            ? context.SetIndentToCurrentColumn().Advance(1)
-                            : context.Advance(1);
+                        var afterOpenParen = context.Advance(1);
                         var innerResult = FormatExpression(parenExpr.Expression, afterOpenParen);
 
                         // Determine if closing paren should be on new line.
-                        // The closing paren goes on a new line if:
-                        // 1. It was on a different row than the end of the inner expression in the original source, OR
-                        // 2. The inner expression's Range.End.Row is artificially inflated (larger than CloseParenLocation.Row)
-                        //    AND the formatted content spans multiple rows
-                        //    (this handles cases where SnapshotTestFormat expands single-line parens to multiline)
-                        bool closeParenOnNewLine;
-                        if (parenExpr.CloseParenLocation.Row > parenExpr.Expression.Range.End.Row)
-                        {
-                            // Normal case: close paren is on a different row than expression end
-                            closeParenOnNewLine = true;
-                        }
-                        else if (parenExpr.Expression.Range.End.Row > parenExpr.CloseParenLocation.Row
-                            && innerResult.Context.CurrentRow > afterOpenParen.CurrentRow)
-                        {
-                            // Artificially inflated range AND formatted content is multiline
-                            // Put close paren on new line
-                            closeParenOnNewLine = true;
-                        }
-                        else
-                        {
-                            // Close paren is on same row as expression end (or very close) - stay on same line
-                            closeParenOnNewLine = false;
-                        }
+                        // The only condition for making ParenthesizedExpression multiline is the content expression being multiline.
+                        var formattedContentIsMultiline = innerResult.Context.CurrentRow > afterOpenParen.CurrentRow;
+                        var closeParenOnNewLine = formattedContentIsMultiline;
 
-                        Location closeParenLoc;
                         FormattingContext afterCloseParen;
 
                         if (closeParenOnNewLine)
                         {
                             // Closing paren on new line, aligned with opening paren
                             var closeCtx = innerResult.Context.ReturnToIndent(openParenRef).NextRowToIndent();
-                            closeParenLoc = closeCtx.CurrentLocation();
                             afterCloseParen = closeCtx.Advance(1); // ")"
                         }
                         else
                         {
                             // Closing paren on same line as end of inner expression
-                            closeParenLoc = innerResult.Context.CurrentLocation();
                             afterCloseParen = innerResult.Context.Advance(1); // ")"
                         }
 
                         return FormattingResult<Expression>.Create(
-                            new Expression.ParenthesizedExpression(openParenLoc, innerResult.FormattedNode, closeParenLoc),
+                            new Expression.ParenthesizedExpression(innerResult.FormattedNode),
                             afterCloseParen);
                     }
 
@@ -4548,7 +4513,6 @@ public class Avh4Format
                 case Pattern.RecordPattern recordPattern:
                     {
                         // Format: { field1, field2, ... }
-                        var openBraceLoc = startLoc;
                         var currentContext = context.Advance(2); // "{ "
 
                         SeparatedSyntaxList<Stil4mElmSyntax7.Node<string>> newFields;
@@ -4587,11 +4551,10 @@ public class Avh4Format
                         }
 
                         currentContext = currentContext.Advance(1); // " "
-                        var closeBraceLoc = currentContext.CurrentLocation();
                         currentContext = currentContext.Advance(1); // "}"
 
                         var endLoc = currentContext.CurrentLocation();
-                        Pattern newPattern = new Pattern.RecordPattern(openBraceLoc, newFields, closeBraceLoc);
+                        Pattern newPattern = new Pattern.RecordPattern(newFields);
                         var node = MakeNodeWithRange(startLoc, endLoc, newPattern);
                         return FormattingResult<Stil4mElmSyntax7.Node<Pattern>>.Create(node, currentContext);
                     }
@@ -4634,7 +4597,6 @@ public class Avh4Format
                 case Pattern.ParenthesizedPattern parenPattern:
                     {
                         // Format: (inner_pattern)
-                        var openParenLoc = startLoc;
                         var currentContext = context.Advance(1); // "("
 
                         // Handle comments between opening paren and inner pattern
@@ -4664,12 +4626,10 @@ public class Avh4Format
                             currentContext = currentContext.FormatAndAddCommentThenPositionAtEnd(comment);
                         }
 
-                        var closeParenLoc = currentContext.CurrentLocation();
                         currentContext = currentContext.Advance(1); // ")"
 
                         var endLoc = currentContext.CurrentLocation();
-                        Pattern newPattern = new Pattern.ParenthesizedPattern(
-                            openParenLoc, innerResult.FormattedNode, closeParenLoc);
+                        Pattern newPattern = new Pattern.ParenthesizedPattern(innerResult.FormattedNode);
                         var node = MakeNodeWithRange(startLoc, endLoc, newPattern);
                         return FormattingResult<Stil4mElmSyntax7.Node<Pattern>>.Create(node, currentContext);
                     }
@@ -4677,7 +4637,6 @@ public class Avh4Format
                 case Pattern.TuplePattern tuplePattern:
                     {
                         // Format: ( elem1, elem2, ... )
-                        var openParenLoc = startLoc;
                         var currentContext = context.Advance(2); // "( "
 
                         Stil4mElmSyntax7.Node<Pattern>? firstElement = null;
@@ -4774,13 +4733,12 @@ public class Avh4Format
                         }
 
                         currentContext = currentContext.Advance(1); // " " before close paren
-                        var closeParenLoc = currentContext.CurrentLocation();
                         currentContext = currentContext.Advance(1); // ")"
 
                         var endLoc = currentContext.CurrentLocation();
                         var newElements = new SeparatedSyntaxList<Stil4mElmSyntax7.Node<Pattern>>.NonEmpty(
                             firstElement!, restElements);
-                        Pattern newPattern = new Pattern.TuplePattern(openParenLoc, newElements, closeParenLoc);
+                        Pattern newPattern = new Pattern.TuplePattern(newElements);
                         var node = MakeNodeWithRange(startLoc, endLoc, newPattern);
                         return FormattingResult<Stil4mElmSyntax7.Node<Pattern>>.Create(node, currentContext);
                     }
@@ -4790,16 +4748,14 @@ public class Avh4Format
                         if (listPattern.Elements.Count is 0)
                         {
                             var emptyEndLoc = new Location(startLoc.Row, startLoc.Column + 2);
-                            Pattern emptyPattern = new Pattern.ListPattern(startLoc,
-                                new SeparatedSyntaxList<Stil4mElmSyntax7.Node<Pattern>>.Empty(),
-                                new Location(startLoc.Row, startLoc.Column + 1));
+                            Pattern emptyPattern = new Pattern.ListPattern(
+                                new SeparatedSyntaxList<Stil4mElmSyntax7.Node<Pattern>>.Empty());
                             var emptyNode = MakeNodeWithRange(startLoc, emptyEndLoc, emptyPattern);
                             return FormattingResult<Stil4mElmSyntax7.Node<Pattern>>.Create(
                                 emptyNode, context.Advance(2));
                         }
 
                         // Format: [ elem1, elem2, ... ]
-                        var openBracketLoc = startLoc;
                         var currentContext = context.Advance(2); // "[ "
 
                         Stil4mElmSyntax7.Node<Pattern>? firstElement = null;
@@ -4830,13 +4786,12 @@ public class Avh4Format
                         }
 
                         currentContext = currentContext.Advance(1); // " " before close bracket
-                        var closeBracketLoc = currentContext.CurrentLocation();
                         currentContext = currentContext.Advance(1); // "]"
 
                         var endLoc = currentContext.CurrentLocation();
                         var newElements = new SeparatedSyntaxList<Stil4mElmSyntax7.Node<Pattern>>.NonEmpty(
                             firstElement!, restElements);
-                        Pattern newPattern = new Pattern.ListPattern(openBracketLoc, newElements, closeBracketLoc);
+                        Pattern newPattern = new Pattern.ListPattern(newElements);
                         var node = MakeNodeWithRange(startLoc, endLoc, newPattern);
                         return FormattingResult<Stil4mElmSyntax7.Node<Pattern>>.Create(node, currentContext);
                     }
@@ -4944,8 +4899,12 @@ public class Avh4Format
                 '\t' => "\\t",
                 '\\' => "\\\\",
                 '\'' => "\\'",
-                _ when ch < 32 => $"\\u{{{(int)ch:X4}}}",
-                _ => ch.ToString()
+
+                _ when ch < 32 =>
+                $"\\u{{{(int)ch:X4}}}",
+
+                _ =>
+                ch.ToString()
             };
 
         private static string FormatQualifiedName(QualifiedNameRef nameRef)
@@ -4969,11 +4928,6 @@ public class Avh4Format
         Location end,
         T value) =>
         new(MakeRange(start, end), value);
-
-    private static Stil4mElmSyntax7.Node<T> MakeNodeWithRange<T>(
-        Range range,
-        T value) =>
-        new(range, value);
 
     /// <summary>
     /// Creates a Range from start and end locations.

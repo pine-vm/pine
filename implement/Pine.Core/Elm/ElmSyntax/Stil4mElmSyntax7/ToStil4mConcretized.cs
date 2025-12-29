@@ -382,15 +382,11 @@ public static class ToStil4mConcretized
 
             Pattern.TuplePattern tuplePattern =>
                 new ConcretizedTypes.Pattern.TuplePattern(
-                    OpenParenLocation: s_defaultLocation,
-                    Elements: ToSeparatedList(tuplePattern.Elements, ToConcretized),
-                    CloseParenLocation: s_defaultLocation),
+                    Elements: ToSeparatedList(tuplePattern.Elements, ToConcretized)),
 
             Pattern.RecordPattern recordPattern =>
                 new ConcretizedTypes.Pattern.RecordPattern(
-                    OpenBraceLocation: s_defaultLocation,
-                    Fields: ToSeparatedListPreserveValue(recordPattern.Fields),
-                    CloseBraceLocation: s_defaultLocation),
+                    Fields: ToSeparatedListPreserveValue(recordPattern.Fields)),
 
             Pattern.UnConsPattern unConsPattern =>
                 new ConcretizedTypes.Pattern.UnConsPattern(
@@ -400,9 +396,7 @@ public static class ToStil4mConcretized
 
             Pattern.ListPattern listPattern =>
                 new ConcretizedTypes.Pattern.ListPattern(
-                    OpenBracketLocation: s_defaultLocation,
-                    Elements: ToSeparatedList(listPattern.Elements, ToConcretized),
-                    CloseBracketLocation: s_defaultLocation),
+                    Elements: ToSeparatedList(listPattern.Elements, ToConcretized)),
 
             Pattern.NamedPattern namedPattern =>
                 new ConcretizedTypes.Pattern.NamedPattern(
@@ -417,9 +411,7 @@ public static class ToStil4mConcretized
 
             Pattern.ParenthesizedPattern parenthesizedPattern =>
                 new ConcretizedTypes.Pattern.ParenthesizedPattern(
-                    OpenParenLocation: s_defaultLocation,
-                    Pattern: ConvertNode(parenthesizedPattern.Pattern, ToConcretized),
-                    CloseParenLocation: s_defaultLocation),
+                    Pattern: ConvertNode(parenthesizedPattern.Pattern, ToConcretized)),
 
             _ =>
                 throw new System.NotImplementedException(
@@ -487,9 +479,7 @@ public static class ToStil4mConcretized
 
             Expression.ParenthesizedExpression parenthesizedExpression =>
                 new ConcretizedTypes.Expression.ParenthesizedExpression(
-                    OpenParenLocation: s_defaultLocation,
-                    Expression: ConvertNode(parenthesizedExpression.Expression, ToConcretized),
-                    CloseParenLocation: s_defaultLocation),
+                    Expression: ConvertNode(parenthesizedExpression.Expression, ToConcretized)),
 
             Expression.Application application =>
                 new ConcretizedTypes.Expression.Application(

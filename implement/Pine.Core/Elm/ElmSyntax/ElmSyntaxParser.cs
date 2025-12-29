@@ -3200,9 +3200,7 @@ public class ElmSyntaxParser
                     {
                         var parenthesizedExpr =
                             new SyntaxTypes.Expression.ParenthesizedExpression(
-                                OpenParenLocation: parenOpenToken.Start,
-                                Expression: firstItemExpr,
-                                CloseParenLocation: parenCloseToken.Start);
+                                Expression: firstItemExpr);
 
                         return new Node<SyntaxTypes.Expression>(parenRange, parenthesizedExpr);
                     }
@@ -3687,18 +3685,14 @@ public class ElmSyntaxParser
                             new Node<SyntaxTypes.Pattern>(
                                 parenRange,
                                 new SyntaxTypes.Pattern.ParenthesizedPattern(
-                                    OpenParenLocation: parenOpenToken.Start,
-                                    Pattern: firstPattern,
-                                    CloseParenLocation: parenCloseToken.Start));
+                                    Pattern: firstPattern));
                     }
 
                     var tupledPattern =
                         new SyntaxTypes.Pattern.TuplePattern(
-                            OpenParenLocation: parenOpenToken.Start,
                             Elements: new SyntaxTypes.SeparatedSyntaxList<Node<SyntaxTypes.Pattern>>.NonEmpty(
                                 firstPattern,
-                                furtherPatternsWithCommas),
-                            CloseParenLocation: parenCloseToken.Start);
+                                furtherPatternsWithCommas));
 
                     return
                         new Node<SyntaxTypes.Pattern>(
@@ -3818,9 +3812,7 @@ public class ElmSyntaxParser
 
                 var listPatternValue =
                     new SyntaxTypes.Pattern.ListPattern(
-                        OpenBracketLocation: listOpenToken.Start,
-                        Elements: elementsList,
-                        CloseBracketLocation: listCloseToken.Start);
+                        Elements: elementsList);
 
                 return new Node<SyntaxTypes.Pattern>(listRange, listPatternValue);
             }
@@ -3872,9 +3864,7 @@ public class ElmSyntaxParser
 
                 var recordPattern =
                     new SyntaxTypes.Pattern.RecordPattern(
-                        OpenBraceLocation: recordOpenToken.Start,
-                        Fields: fieldsList,
-                        CloseBraceLocation: recordCloseToken.Start);
+                        Fields: fieldsList);
 
                 return new Node<SyntaxTypes.Pattern>(recordRange, recordPattern);
             }

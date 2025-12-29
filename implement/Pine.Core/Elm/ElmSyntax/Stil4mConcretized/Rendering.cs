@@ -797,10 +797,12 @@ public class Rendering
                 break;
 
             case Expression.ParenthesizedExpression parenExpr:
-                context.AdvanceToLocation(parenExpr.OpenParenLocation);
+                // expressionNode.Range.Start is the open paren location (already advanced to)
                 context.Append("(");
                 RenderExpression(parenExpr.Expression, context);
-                context.AdvanceToLocation(parenExpr.CloseParenLocation);
+                // Derive close paren location from the containing node's Range.End
+                // (Range.End is after the ')', so adjust column by -1)
+                context.AdvanceToLocation(expressionNode.Range.End with { Column = expressionNode.Range.End.Column - 1 });
                 context.Append(")");
                 break;
 
@@ -992,18 +994,22 @@ public class Rendering
                 break;
 
             case Pattern.TuplePattern tuplePattern:
-                context.AdvanceToLocation(tuplePattern.OpenParenLocation);
+                // patternNode.Range.Start is the open paren location (already advanced to)
                 context.Append("(");
                 RenderSeparatedList(tuplePattern.Elements, RenderPatternNode, context);
-                context.AdvanceToLocation(tuplePattern.CloseParenLocation);
+                // Derive close paren location from the containing node's Range.End
+                // (Range.End is after the ')', so adjust column by -1)
+                context.AdvanceToLocation(patternNode.Range.End with { Column = patternNode.Range.End.Column - 1 });
                 context.Append(")");
                 break;
 
             case Pattern.RecordPattern recordPattern:
-                context.AdvanceToLocation(recordPattern.OpenBraceLocation);
+                // patternNode.Range.Start is the open brace location (already advanced to)
                 context.Append("{");
                 RenderSeparatedList(recordPattern.Fields, RenderRecordPatternField, context);
-                context.AdvanceToLocation(recordPattern.CloseBraceLocation);
+                // Derive close brace location from the containing node's Range.End
+                // (Range.End is after the '}', so adjust column by -1)
+                context.AdvanceToLocation(patternNode.Range.End with { Column = patternNode.Range.End.Column - 1 });
                 context.Append("}");
                 break;
 
@@ -1015,10 +1021,12 @@ public class Rendering
                 break;
 
             case Pattern.ListPattern listPattern:
-                context.AdvanceToLocation(listPattern.OpenBracketLocation);
+                // patternNode.Range.Start is the open bracket location (already advanced to)
                 context.Append("[");
                 RenderSeparatedList(listPattern.Elements, RenderPatternNode, context);
-                context.AdvanceToLocation(listPattern.CloseBracketLocation);
+                // Derive close bracket location from the containing node's Range.End
+                // (Range.End is after the ']', so adjust column by -1)
+                context.AdvanceToLocation(patternNode.Range.End with { Column = patternNode.Range.End.Column - 1 });
                 context.Append("]");
                 break;
 
@@ -1048,10 +1056,12 @@ public class Rendering
                 break;
 
             case Pattern.ParenthesizedPattern parenPattern:
-                context.AdvanceToLocation(parenPattern.OpenParenLocation);
+                // patternNode.Range.Start is the open paren location (already advanced to)
                 context.Append("(");
                 RenderPattern(parenPattern.Pattern, context);
-                context.AdvanceToLocation(parenPattern.CloseParenLocation);
+                // Derive close paren location from the containing node's Range.End
+                // (Range.End is after the ')', so adjust column by -1)
+                context.AdvanceToLocation(patternNode.Range.End with { Column = patternNode.Range.End.Column - 1 });
                 context.Append(")");
                 break;
 

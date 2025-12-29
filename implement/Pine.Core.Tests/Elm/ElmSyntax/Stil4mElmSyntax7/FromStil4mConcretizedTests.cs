@@ -283,11 +283,7 @@ public class FromStil4mConcretizedTests
         var elements = new ConcretizedTypes.SeparatedSyntaxList<Node<ConcretizedTypes.Pattern>>.NonEmpty(
             firstElem, [(new Location(1, 5), secondElem)]);
 
-        var concretizedPattern = new ConcretizedTypes.Pattern.TuplePattern(
-            openLoc,
-            elements,
-            closeLoc
-        );
+        var concretizedPattern = new ConcretizedTypes.Pattern.TuplePattern(elements);
 
         var result = FromStil4mConcretized.Convert(concretizedPattern);
 

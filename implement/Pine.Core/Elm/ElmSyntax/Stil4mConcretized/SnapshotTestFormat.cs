@@ -117,9 +117,7 @@ public class SnapshotTestFormat
             ),
 
             Expression.ParenthesizedExpression paren => new Expression.ParenthesizedExpression(
-                OpenParenLocation: paren.OpenParenLocation,
-                Expression: FormatExpression(paren.Expression),
-                CloseParenLocation: paren.CloseParenLocation
+                Expression: FormatExpression(paren.Expression)
             ),
 
             Expression.LambdaExpression lambda =>

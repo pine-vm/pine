@@ -389,22 +389,12 @@ public class TypesTests
     public void Pattern_TuplePattern_value_equality()
     {
         var range = new Range(new Location(1, 1), new Location(1, 10));
-        var openLoc = new Location(1, 1);
-        var closeLoc = new Location(1, 10);
 
         var elemNode = new Node<SyntaxTypes.Pattern>(range, new SyntaxTypes.Pattern.VarPattern("x"));
         var elements = new SyntaxTypes.SeparatedSyntaxList<Node<SyntaxTypes.Pattern>>.NonEmpty(elemNode, []);
 
-        var pattern1 = new SyntaxTypes.Pattern.TuplePattern(
-            openLoc,
-            elements,
-            closeLoc
-        );
-        var pattern2 = new SyntaxTypes.Pattern.TuplePattern(
-            openLoc,
-            elements,
-            closeLoc
-        );
+        var pattern1 = new SyntaxTypes.Pattern.TuplePattern(elements);
+        var pattern2 = new SyntaxTypes.Pattern.TuplePattern(elements);
 
         pattern1.Should().Be(pattern2);
         pattern1.GetHashCode().Should().Be(pattern2.GetHashCode());
@@ -414,22 +404,12 @@ public class TypesTests
     public void Pattern_ListPattern_value_equality()
     {
         var range = new Range(new Location(1, 1), new Location(1, 10));
-        var openLoc = new Location(1, 1);
-        var closeLoc = new Location(1, 10);
 
         var elemNode = new Node<SyntaxTypes.Pattern>(range, new SyntaxTypes.Pattern.VarPattern("x"));
         var elements = new SyntaxTypes.SeparatedSyntaxList<Node<SyntaxTypes.Pattern>>.NonEmpty(elemNode, []);
 
-        var pattern1 = new SyntaxTypes.Pattern.ListPattern(
-            openLoc,
-            elements,
-            closeLoc
-        );
-        var pattern2 = new SyntaxTypes.Pattern.ListPattern(
-            openLoc,
-            elements,
-            closeLoc
-        );
+        var pattern1 = new SyntaxTypes.Pattern.ListPattern(elements);
+        var pattern2 = new SyntaxTypes.Pattern.ListPattern(elements);
 
         pattern1.Should().Be(pattern2);
         pattern1.GetHashCode().Should().Be(pattern2.GetHashCode());
@@ -439,22 +419,12 @@ public class TypesTests
     public void Pattern_RecordPattern_value_equality()
     {
         var range = new Range(new Location(1, 1), new Location(1, 10));
-        var openLoc = new Location(1, 1);
-        var closeLoc = new Location(1, 10);
 
         var fieldNode = new Node<string>(range, "field1");
         var fields = new SyntaxTypes.SeparatedSyntaxList<Node<string>>.NonEmpty(fieldNode, []);
 
-        var pattern1 = new SyntaxTypes.Pattern.RecordPattern(
-            openLoc,
-            fields,
-            closeLoc
-        );
-        var pattern2 = new SyntaxTypes.Pattern.RecordPattern(
-            openLoc,
-            fields,
-            closeLoc
-        );
+        var pattern1 = new SyntaxTypes.Pattern.RecordPattern(fields);
+        var pattern2 = new SyntaxTypes.Pattern.RecordPattern(fields);
 
         pattern1.Should().Be(pattern2);
         pattern1.GetHashCode().Should().Be(pattern2.GetHashCode());

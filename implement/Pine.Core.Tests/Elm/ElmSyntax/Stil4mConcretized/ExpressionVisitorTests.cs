@@ -167,12 +167,8 @@ public class ExpressionVisitorTests
     public void Visit_ParenthesizedExpression_dispatches_correctly()
     {
         var range = new Range(new Location(1, 1), new Location(1, 10));
-        var openLoc = new Location(1, 1);
-        var closeLoc = new Location(1, 10);
         var expr = new SyntaxTypes.Expression.ParenthesizedExpression(
-            openLoc,
-            new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer(42)),
-            closeLoc);
+            new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer(42)));
 
         var result = _visitor.Visit(expr, null);
 

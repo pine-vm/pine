@@ -670,16 +670,12 @@ public abstract record Pattern
 
     /// <summary>Pattern matching a tuple.</summary>
     public sealed record TuplePattern(
-        Location OpenParenLocation,
-        SeparatedSyntaxList<Node<Pattern>> Elements,
-        Location CloseParenLocation)
+        SeparatedSyntaxList<Node<Pattern>> Elements)
         : Pattern;
 
     /// <summary>Pattern matching a record with specified fields.</summary>
     public sealed record RecordPattern(
-        Location OpenBraceLocation,
-        SeparatedSyntaxList<Node<string>> Fields,
-        Location CloseBraceLocation)
+        SeparatedSyntaxList<Node<string>> Fields)
         : Pattern;
 
     /// <summary>List cons pattern separating head and tail.</summary>
@@ -691,9 +687,7 @@ public abstract record Pattern
 
     /// <summary>Pattern matching a list of elements.</summary>
     public sealed record ListPattern(
-        Location OpenBracketLocation,
-        SeparatedSyntaxList<Node<Pattern>> Elements,
-        Location CloseBracketLocation)
+        SeparatedSyntaxList<Node<Pattern>> Elements)
         : Pattern;
 
     /// <summary>Pattern matching a named constructor with arguments.</summary>
@@ -739,9 +733,7 @@ public abstract record Pattern
 
     /// <summary>Pattern wrapped in parentheses.</summary>
     public sealed record ParenthesizedPattern(
-        Location OpenParenLocation,
-        Node<Pattern> Pattern,
-        Location CloseParenLocation)
+        Node<Pattern> Pattern)
         : Pattern;
 }
 
@@ -927,9 +919,7 @@ public abstract record Expression
 
     /// <summary>Parenthesized subexpression.</summary>
     public sealed record ParenthesizedExpression(
-        Location OpenParenLocation,
-        Node<Expression> Expression,
-        Location CloseParenLocation)
+        Node<Expression> Expression)
         : Expression;
 
     /// <summary>Function application expression.</summary>

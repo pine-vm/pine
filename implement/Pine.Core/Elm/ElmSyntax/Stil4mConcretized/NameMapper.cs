@@ -303,9 +303,7 @@ public class NameMapper
 
             Expression.ParenthesizedExpression parenExpr =>
                 new Expression.ParenthesizedExpression(
-                    OpenParenLocation: parenExpr.OpenParenLocation,
-                    Expression: MapExpression(parenExpr.Expression, mapQualifiedName),
-                    CloseParenLocation: parenExpr.CloseParenLocation),
+                    Expression: MapExpression(parenExpr.Expression, mapQualifiedName)),
 
             Expression.RecordAccess recordAccess =>
                 new Expression.RecordAccess(
