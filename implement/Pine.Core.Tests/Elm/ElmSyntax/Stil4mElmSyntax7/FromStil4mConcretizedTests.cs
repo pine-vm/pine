@@ -140,9 +140,17 @@ public class FromStil4mConcretizedTests
     public void Exposing_Explicit_converts_correctly()
     {
         var range = new Range(new Location(1, 1), new Location(1, 10));
+        var nodeRange = new Range(new Location(1, 2), new Location(1, 6));
+
+        var node = new Node<ConcretizedTypes.TopLevelExpose>(nodeRange, new ConcretizedTypes.TopLevelExpose.FunctionExpose("test"));
+        var nodesList = new ConcretizedTypes.SeparatedSyntaxList<Node<ConcretizedTypes.TopLevelExpose>>.NonEmpty(
+            node,
+            []);
 
         var concretizedExposing = new ConcretizedTypes.Exposing.Explicit(
-            [new Node<ConcretizedTypes.TopLevelExpose>(range, new ConcretizedTypes.TopLevelExpose.FunctionExpose("test"))]
+            OpenParenLocation: new Location(1, 1),
+            Nodes: nodesList,
+            CloseParenLocation: new Location(1, 7)
         );
 
         var result = FromStil4mConcretized.Convert(concretizedExposing);

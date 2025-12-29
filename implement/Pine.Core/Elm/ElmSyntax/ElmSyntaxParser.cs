@@ -1564,29 +1564,46 @@ public class ElmSyntaxParser
             }
 
             {
-                var explicitNodes = new List<Node<SyntaxTypes.TopLevelExpose>>();
+                Node<SyntaxTypes.TopLevelExpose>? firstNode = null;
+                var restNodes = new List<(Location SeparatorLocation, Node<SyntaxTypes.TopLevelExpose> Node)>();
 
                 while (Peek.Type is not TokenType.CloseParen)
                 {
-                    if (0 < explicitNodes.Count)
+                    if (firstNode is not null)
                     {
-                        Consume(TokenType.Comma);
+                        var commaToken = Consume(TokenType.Comma);
+
+                        ConsumeAllTrivia();
+
+                        var topLevelExposeNode = ParseTopLevelExpose();
+
+                        restNodes.Add((commaToken.Start, topLevelExposeNode));
 
                         ConsumeAllTrivia();
                     }
+                    else
+                    {
+                        firstNode = ParseTopLevelExpose();
 
-                    var topLevelExposeNode = ParseTopLevelExpose();
-
-                    explicitNodes.Add(topLevelExposeNode);
-
-                    ConsumeAllTrivia();
+                        ConsumeAllTrivia();
+                    }
                 }
 
                 var closeParen = Consume(TokenType.CloseParen);
 
+                SyntaxTypes.SeparatedSyntaxList<Node<SyntaxTypes.TopLevelExpose>> nodesList =
+                    firstNode is null
+                    ? new SyntaxTypes.SeparatedSyntaxList<Node<SyntaxTypes.TopLevelExpose>>.Empty()
+                    : new SyntaxTypes.SeparatedSyntaxList<Node<SyntaxTypes.TopLevelExpose>>.NonEmpty(
+                        First: firstNode,
+                        Rest: restNodes);
+
                 return new Node<SyntaxTypes.Exposing>(
                     MakeRange(keyword.Start, closeParen.End),
-                    new SyntaxTypes.Exposing.Explicit(explicitNodes));
+                    new SyntaxTypes.Exposing.Explicit(
+                        OpenParenLocation: openParen.Start,
+                        Nodes: nodesList,
+                        CloseParenLocation: closeParen.Start));
             }
         }
 

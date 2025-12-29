@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text;
 
 using Location = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7.Location;
@@ -326,63 +325,12 @@ public class Rendering
                 break;
 
             case Exposing.Explicit explicitExposing:
-                // Check if multiline by looking at whether nodes span multiple rows
-                var isMultiline = explicitExposing.Nodes.Count >= 2 &&
-                    explicitExposing.Nodes.Any(n => n.Range.Start.Row != explicitExposing.Nodes[0].Range.Start.Row);
-
-                if (isMultiline)
-                {
-                    // Multiline format: 
-                    // exposing
-                    //     ( first
-                    //     , second
-                    //     , third
-                    //     )
-                    var firstNode = explicitExposing.Nodes[0];
-
-                    // Go to the line where ( and first element should be
-                    // The ( should be 2 columns before the first element
-                    context.AdvanceToLocation(new Location(firstNode.Range.Start.Row, firstNode.Range.Start.Column - 2), minSpaces: 0);
-                    context.Append("(");
-                    context.AdvanceByMinimum(1);
-                    RenderTopLevelExpose(firstNode, context);
-
-                    for (var i = 1; i < explicitExposing.Nodes.Count; i++)
-                    {
-                        var expose = explicitExposing.Nodes[i];
-                        // Comma comes at start of line, 2 columns before the element
-                        context.AdvanceToLocation(new Location(expose.Range.Start.Row, expose.Range.Start.Column - 2), minSpaces: 0);
-                        context.Append(",");
-                        context.AdvanceByMinimum(1);
-                        RenderTopLevelExpose(expose, context);
-                    }
-
-                    // Closing paren on its own line at same column as opening paren
-                    var lastNode = explicitExposing.Nodes[explicitExposing.Nodes.Count - 1];
-                    context.AdvanceToLocation(new Location(lastNode.Range.End.Row + 1, firstNode.Range.Start.Column - 2), minSpaces: 0);
-                    context.Append(")");
-                }
-                else
-                {
-                    // Single line format: exposing (a, b, c)
-                    context.AdvanceByMinimum(1);
-                    context.Append("(");
-                    for (var i = 0; i < explicitExposing.Nodes.Count; i++)
-                    {
-                        var expose = explicitExposing.Nodes[i];
-                        if (i > 0)
-                        {
-                            context.Append(",");
-                            context.AdvanceToLocation(expose.Range.Start);
-                        }
-                        else
-                        {
-                            context.AdvanceToLocation(expose.Range.Start);
-                        }
-                        RenderTopLevelExpose(expose, context);
-                    }
-                    context.Append(")");
-                }
+                // Render using stored locations for precise whitespace preservation
+                context.AdvanceToLocation(explicitExposing.OpenParenLocation);
+                context.Append("(");
+                RenderSeparatedList(explicitExposing.Nodes, RenderTopLevelExpose, context);
+                context.AdvanceToLocation(explicitExposing.CloseParenLocation);
+                context.Append(")");
                 break;
 
             default:
@@ -394,6 +342,8 @@ public class Rendering
         Stil4mElmSyntax7.Node<TopLevelExpose> exposeNode,
         RenderContext context)
     {
+        context.AdvanceToLocation(exposeNode.Range.Start);
+
         switch (exposeNode.Value)
         {
             case TopLevelExpose.InfixExpose infix:

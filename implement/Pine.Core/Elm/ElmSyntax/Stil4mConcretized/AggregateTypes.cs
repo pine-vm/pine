@@ -256,32 +256,10 @@ public abstract record Exposing
 
     /// <summary>Explicit list of exposed top-level items.</summary>
     public sealed record Explicit(
-        IReadOnlyList<Node<TopLevelExpose>> Nodes)
-        : Exposing
-    {
-        /// <inheritdoc/>
-        public bool Equals(Explicit? other)
-        {
-            if (ReferenceEquals(this, other))
-                return true;
-
-            if (other is null)
-                return false;
-
-            return Enumerable.SequenceEqual(Nodes, other.Nodes);
-        }
-
-        /// <inheritdoc/>
-        public override int GetHashCode()
-        {
-            var hashCode = new System.HashCode();
-
-            foreach (var item in Nodes)
-                hashCode.Add(item);
-
-            return hashCode.ToHashCode();
-        }
-    }
+        Location OpenParenLocation,
+        SeparatedSyntaxList<Node<TopLevelExpose>> Nodes,
+        Location CloseParenLocation)
+        : Exposing;
 }
 
 /// <summary>

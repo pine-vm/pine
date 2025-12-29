@@ -69,7 +69,7 @@ public class RenderingCompleteTests
         AssertRoundtrip(input);
     }
 
-    [Fact(Skip = "Preservation of delimiter token in exposing list not implemented yet")]
+    [Fact]
     public void Roundtrip_module_with_import_not_formatted()
     {
         var input =

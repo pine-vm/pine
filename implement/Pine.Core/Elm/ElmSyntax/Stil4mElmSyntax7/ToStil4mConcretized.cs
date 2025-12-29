@@ -106,7 +106,9 @@ public static class ToStil4mConcretized
 
             Exposing.Explicit @explicit =>
                 new ConcretizedTypes.Exposing.Explicit(
-                    ConvertNodes(@explicit.Nodes, ToConcretized)),
+                    OpenParenLocation: s_defaultLocation,
+                    Nodes: ToSeparatedList(@explicit.Nodes, ToConcretized),
+                    CloseParenLocation: s_defaultLocation),
 
             _ =>
                 throw new System.NotImplementedException(

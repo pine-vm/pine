@@ -151,13 +151,24 @@ public class TypesTests
     [Fact]
     public void Exposing_Explicit_value_equality()
     {
-        var range = new Range(new Location(1, 1), new Location(1, 10));
+        var nodeRange = new Range(new Location(1, 2), new Location(1, 6));
+
+        var node1 = new Node<SyntaxTypes.TopLevelExpose>(nodeRange, new SyntaxTypes.TopLevelExpose.FunctionExpose("test"));
+        var nodesList1 = new SyntaxTypes.SeparatedSyntaxList<Node<SyntaxTypes.TopLevelExpose>>.NonEmpty(node1, []);
 
         var exposing1 = new SyntaxTypes.Exposing.Explicit(
-            [new Node<SyntaxTypes.TopLevelExpose>(range, new SyntaxTypes.TopLevelExpose.FunctionExpose("test"))]
+            OpenParenLocation: new Location(1, 1),
+            Nodes: nodesList1,
+            CloseParenLocation: new Location(1, 7)
         );
+
+        var node2 = new Node<SyntaxTypes.TopLevelExpose>(nodeRange, new SyntaxTypes.TopLevelExpose.FunctionExpose("test"));
+        var nodesList2 = new SyntaxTypes.SeparatedSyntaxList<Node<SyntaxTypes.TopLevelExpose>>.NonEmpty(node2, []);
+
         var exposing2 = new SyntaxTypes.Exposing.Explicit(
-            [new Node<SyntaxTypes.TopLevelExpose>(range, new SyntaxTypes.TopLevelExpose.FunctionExpose("test"))]
+            OpenParenLocation: new Location(1, 1),
+            Nodes: nodesList2,
+            CloseParenLocation: new Location(1, 7)
         );
 
         exposing1.Should().Be(exposing2);

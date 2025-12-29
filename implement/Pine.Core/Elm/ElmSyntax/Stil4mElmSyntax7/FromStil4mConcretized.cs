@@ -93,7 +93,7 @@ public static class FromStil4mConcretized
 
             ConcretizedTypes.Exposing.Explicit @explicit =>
                 new Exposing.Explicit(
-                    ConvertNodes(@explicit.Nodes, Convert)),
+                    ConvertSeparatedNodes(@explicit.Nodes, Convert)),
 
             _ =>
                 throw new System.NotImplementedException(

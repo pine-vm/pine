@@ -778,21 +778,40 @@ public class Avh4Format
             {
                 var afterOpenParen = context.Advance(Keywords.ExposingOpen.Length);
                 var currentContext = afterOpenParen;
-                var formattedNodes = new List<Stil4mElmSyntax7.Node<TopLevelExpose>>();
 
-                for (var i = 0; i < explicitList.Nodes.Count; i++)
+                if (explicitList.Nodes.Count is 0)
                 {
-                    var node = explicitList.Nodes[i];
-                    var (formattedNode, nextContext) = FormatTopLevelExpose(node, currentContext);
-                    formattedNodes.Add(formattedNode);
-
-                    currentContext = i < explicitList.Nodes.Count - 1
-                        ? nextContext.Advance(Keywords.Comma.Length)
-                        : nextContext.Advance(Keywords.CloseParen.Length);
+                    var closeContext = currentContext.Advance(Keywords.CloseParen.Length);
+                    var emptyRange = MakeRange(context.CurrentLocation(), closeContext.CurrentLocation());
+                    return (new Stil4mElmSyntax7.Node<Exposing>(emptyRange, new Exposing.Explicit(
+                        OpenParenLocation: context.CurrentLocation(),
+                        Nodes: new SeparatedSyntaxList<Stil4mElmSyntax7.Node<TopLevelExpose>>.Empty(),
+                        CloseParenLocation: closeContext.CurrentLocation() with { Column = closeContext.CurrentLocation().Column - 1 })), closeContext);
                 }
 
+                // Parse first node
+                var (firstNode, afterFirst) = FormatTopLevelExpose(explicitList.Nodes[0], currentContext);
+                currentContext = afterFirst;
+
+                var restNodes = new List<(Location SeparatorLocation, Stil4mElmSyntax7.Node<TopLevelExpose> Node)>();
+
+                for (var i = 1; i < explicitList.Nodes.Count; i++)
+                {
+                    var node = explicitList.Nodes[i];
+                    var commaLocation = currentContext.CurrentLocation();
+                    currentContext = currentContext.Advance(Keywords.Comma.Length);
+                    var (formattedNode, nextContext) = FormatTopLevelExpose(node, currentContext);
+                    restNodes.Add((commaLocation, formattedNode));
+                    currentContext = nextContext;
+                }
+
+                currentContext = currentContext.Advance(Keywords.CloseParen.Length);
                 var range = MakeRange(context.CurrentLocation(), currentContext.CurrentLocation());
-                return (new Stil4mElmSyntax7.Node<Exposing>(range, new Exposing.Explicit(formattedNodes)), currentContext);
+                var nodesList = new SeparatedSyntaxList<Stil4mElmSyntax7.Node<TopLevelExpose>>.NonEmpty(firstNode, restNodes);
+                return (new Stil4mElmSyntax7.Node<Exposing>(range, new Exposing.Explicit(
+                    OpenParenLocation: context.CurrentLocation(),
+                    Nodes: nodesList,
+                    CloseParenLocation: currentContext.CurrentLocation() with { Column = currentContext.CurrentLocation().Column - 1 })), currentContext);
             }
             else
             {
@@ -808,14 +827,15 @@ public class Avh4Format
                 var parentContext = afterExposingKeyword;
                 var parenLineContext = afterExposingKeyword.ReturnToIndent(indentedRef).NextRowToIndent();
 
+                var openParenLocation = parenLineContext.CurrentLocation();
                 var afterOpenParen = parenLineContext.Advance(Keywords.TupleOpen.Length);
-                var formattedNodes = new List<Stil4mElmSyntax7.Node<TopLevelExpose>>();
 
                 var (firstNode, afterFirst) = FormatTopLevelExpose(explicitList.Nodes[0], afterOpenParen);
-                formattedNodes.Add(firstNode);
 
                 var itemContext = afterFirst;
                 var previousRow = explicitList.Nodes[0].Range.Start.Row;
+
+                var restNodes = new List<(Location SeparatorLocation, Stil4mElmSyntax7.Node<TopLevelExpose> Node)>();
 
                 for (var i = 1; i < explicitList.Nodes.Count; i++)
                 {
@@ -828,17 +848,19 @@ public class Avh4Format
                     {
                         // Item is on a new line - format with comma at start of new line
                         itemContext = itemContext.NextRowToIndent();
+                        var commaLocation = itemContext.CurrentLocation();
                         var afterComma = itemContext.Advance(Keywords.Comma.Length);
                         var (formattedNode, nextContext) = FormatTopLevelExpose(node, afterComma);
-                        formattedNodes.Add(formattedNode);
+                        restNodes.Add((commaLocation, formattedNode));
                         itemContext = nextContext;
                     }
                     else
                     {
                         // Item is on the same line - add comma and item on same line
+                        var commaLocation = itemContext.CurrentLocation();
                         var afterComma = itemContext.Advance(Keywords.Comma.Length);
                         var (formattedNode, nextContext) = FormatTopLevelExpose(node, afterComma);
-                        formattedNodes.Add(formattedNode);
+                        restNodes.Add((commaLocation, formattedNode));
                         itemContext = nextContext;
                     }
 
@@ -847,10 +869,15 @@ public class Avh4Format
 
                 // Closing paren on its own line
                 itemContext = itemContext.NextRowToIndent();
+                var closeParenLocation = itemContext.CurrentLocation();
                 var afterCloseParen = itemContext.Advance(Keywords.CloseParen.Length);
                 var finalContext = afterCloseParen.ReturnToIndent(parentContext);
                 var range = MakeRange(context.CurrentLocation(), finalContext.CurrentLocation());
-                return (new Stil4mElmSyntax7.Node<Exposing>(range, new Exposing.Explicit(formattedNodes)), finalContext);
+                var nodesList = new SeparatedSyntaxList<Stil4mElmSyntax7.Node<TopLevelExpose>>.NonEmpty(firstNode, restNodes);
+                return (new Stil4mElmSyntax7.Node<Exposing>(range, new Exposing.Explicit(
+                    OpenParenLocation: openParenLocation,
+                    Nodes: nodesList,
+                    CloseParenLocation: closeParenLocation)), finalContext);
             }
         }
 
@@ -869,7 +896,7 @@ public class Avh4Format
 
             // Group items by row
             var itemsByRow = new Dictionary<int, List<int>>();
-            foreach (var node in explicitList.Nodes)
+            foreach (var node in explicitList.Nodes.Nodes)
             {
                 var row = node.Range.Start.Row;
                 if (!itemsByRow.ContainsKey(row))
@@ -897,7 +924,7 @@ public class Avh4Format
 
         private static bool IsExposingListMultiLine(Exposing.Explicit explicitList)
         {
-            return NodesSpanMultipleRows(explicitList.Nodes);
+            return NodesSpanMultipleRows([.. explicitList.Nodes.Nodes]);
         }
 
         private static string GetTopLevelExposeName(TopLevelExpose expose)
