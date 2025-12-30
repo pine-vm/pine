@@ -150,9 +150,6 @@ public class Avh4Format
         public Location CurrentLocation() =>
             new(CurrentRow, CurrentColumn);
 
-        private FormattingContext NextRow() =>
-            new(CurrentRow + 1, currentColumn: 1, IndentSpaces, Comments);
-
         /// <summary>
         /// Advances to the next row and stays at the current indent column.
         /// </summary>
@@ -160,11 +157,10 @@ public class Avh4Format
             new(CurrentRow + 1, 1 + IndentSpaces, IndentSpaces, Comments);
 
         /// <summary>
-        /// Adds a blank line by advancing two rows.
-        /// Equivalent to NextRow().NextRow().
+        /// Adds a blank line by advancing two rows and positioning at the indent column.
         /// </summary>
         public FormattingContext WithBlankLine() =>
-            NextRow().NextRow();
+            NextRowToIndent().NextRowToIndent();
 
         /// <summary>
         /// Advances the column by count characters without changing indent.
@@ -271,12 +267,12 @@ public class Avh4Format
             if (commentEndsWithNewline)
             {
                 // Comment ends with newline - we're already at the start of a new line (commentEnd.Row)
-                return new FormattingContext(commentEnd.Row, 1, IndentSpaces, updatedComments).SetIndentColumn();
+                return new FormattingContext(commentEnd.Row, 1 + IndentSpaces, IndentSpaces, updatedComments);
             }
             else
             {
                 // Comment doesn't end with newline - move to the next row
-                return new FormattingContext(commentEnd.Row + 1, 1, IndentSpaces, updatedComments).SetIndentColumn();
+                return new FormattingContext(commentEnd.Row + 1, 1 + IndentSpaces, IndentSpaces, updatedComments);
             }
         }
 
@@ -309,30 +305,17 @@ public class Avh4Format
         /// Formats a sequence of comments and adds them to this context, returning an updated context.
         /// </summary>
         public FormattingContext FormatAndAddComments(
-            IReadOnlyList<Stil4mElmSyntax7.Node<ParsedComment>> commentsToFormat,
-            bool setIndentAfterEach = false)
+            IReadOnlyList<Stil4mElmSyntax7.Node<ParsedComment>> commentsToFormat)
         {
             var currentContext = this;
 
             foreach (var comment in commentsToFormat)
             {
                 currentContext = currentContext.FormatAndAddComment(comment);
-
-                // If requested, set indent column after each comment
-                if (setIndentAfterEach)
-                {
-                    currentContext = currentContext.SetIndentColumn();
-                }
             }
 
             return currentContext;
         }
-
-        /// <summary>
-        /// Adds a pre-formatted comment to the context.
-        /// </summary>
-        public FormattingContext AddFormattedComment(Stil4mElmSyntax7.Node<string> formattedComment) =>
-            new(CurrentRow, CurrentColumn, IndentSpaces, Comments.Add(formattedComment));
 
         /// <summary>
         /// Adds multiple pre-formatted comments to the context.
@@ -365,7 +348,7 @@ public class Avh4Format
             var (commentEnd, _) = CalculateCommentEndLocation(commentLocation, comment.Value.Text);
             var formattedComment = comment.ToStringNodeWithRange(commentLocation, commentEnd);
             var updatedComments = Comments.Add(formattedComment);
-            return new FormattingContext(commentEnd.Row + 1, 1, IndentSpaces, updatedComments).SetIndentColumn();
+            return new FormattingContext(commentEnd.Row + 1, 1 + IndentSpaces, IndentSpaces, updatedComments);
         }
     }
 
@@ -1333,7 +1316,7 @@ public class Avh4Format
             var commentsBeforeExpr = commentQueries.GetBetweenRows(equalsRow, exprStartRow);
 
             // Format any comments that appear before the expression
-            exprContext = exprContext.FormatAndAddComments(commentsBeforeExpr, setIndentAfterEach: true);
+            exprContext = exprContext.FormatAndAddComments(commentsBeforeExpr);
 
             // Format the expression with updated locations
             var exprResult = FormatExpression(impl.Expression, exprContext);
@@ -2688,8 +2671,8 @@ public class Avh4Format
                                 foreach (var comment in commentsAfterComma)
                                 {
                                     recordCtx = recordCtx.FormatAndAddComment(comment);
-                                    // After comment, reposition for field name (FormatAndAddComment leaves us at column 1)
-                                    recordCtx = recordCtx.ReturnToIndent(afterCommaRef).SetIndentColumn(); // After ", "
+                                    // After comment, reposition for field name at afterCommaRef's indent
+                                    recordCtx = recordCtx.ReturnToIndent(afterCommaRef).SetIndentColumn();
                                 }
 
                                 var fieldStartLoc = recordCtx.CurrentLocation();
@@ -3137,8 +3120,6 @@ public class Avh4Format
                             foreach (var comment in commentsBeforeRight)
                             {
                                 rightContext = rightContext.FormatAndAddComment(comment);
-                                // Maintain alignment for next comment or right operand
-                                rightContext = rightContext.SetIndentColumn();
                             }
 
                             var rightResult = FormatExpression(opApp.Right, rightContext);
@@ -4068,8 +4049,6 @@ public class Avh4Format
                 foreach (var comment in commentsBeforeExpr)
                 {
                     bodyContext = bodyContext.FormatAndAddComment(comment);
-                    // Maintain the same indent level after the comment (column is 1-based)
-                    bodyContext = bodyContext.SetIndentColumn();
                 }
 
                 exprResult = FormatExpression(lambdaExpr.Lambda.Expression, bodyContext);
