@@ -289,7 +289,7 @@ public static class ToStil4mConcretized
 
             TypeAnnotation.FunctionTypeAnnotation functionType =>
                 new ConcretizedTypes.TypeAnnotation.FunctionTypeAnnotation(
-                    ArgumentType: ConvertNode(functionType.ArgumentType, ToConcretized),
+                    ArgumentType: ConvertFunctionTypeArgument(functionType.ArgumentType),
                     ArrowLocation: s_defaultLocation,
                     ReturnType: ConvertNode(functionType.ReturnType, ToConcretized)),
 
@@ -597,6 +597,35 @@ public static class ToStil4mConcretized
         };
 
     // Helper methods for converting nodes and lists
+
+    /// <summary>
+    /// Converts a function type argument, wrapping it in parentheses if it's itself a function type.
+    /// This is necessary because in Elm, function types are right-associative, so
+    /// `(a -> b) -> c` is different from `a -> b -> c` (which equals `a -> (b -> c)`).
+    /// 
+    /// Implementation note: In the concretized syntax tree, parentheses around type annotations
+    /// are represented using <see cref="ConcretizedTypes.TypeAnnotation.Tupled"/> with a single
+    /// element. The formatter recognizes this pattern and renders it as `(element)` rather than
+    /// `( element )` which would be used for multi-element tuples.
+    /// </summary>
+    private static Node<ConcretizedTypes.TypeAnnotation> ConvertFunctionTypeArgument(
+        Node<TypeAnnotation> node)
+    {
+        if (node.Value is TypeAnnotation.FunctionTypeAnnotation)
+        {
+            // Wrap in parentheses using Tupled with a single element
+            var convertedInner = ToConcretized(node.Value);
+            var innerNode = new Node<ConcretizedTypes.TypeAnnotation>(s_defaultRange, convertedInner);
+            var tupled = new ConcretizedTypes.TypeAnnotation.Tupled(
+                OpenParenLocation: s_defaultLocation,
+                TypeAnnotations: new ConcretizedTypes.SeparatedSyntaxList<Node<ConcretizedTypes.TypeAnnotation>>.NonEmpty(
+                    innerNode, []),
+                CloseParenLocation: s_defaultLocation);
+            return new Node<ConcretizedTypes.TypeAnnotation>(s_defaultRange, tupled);
+        }
+
+        return ConvertNode(node, ToConcretized);
+    }
 
     private static Node<TResult> ConvertNode<TSource, TResult>(
         Node<TSource> node,

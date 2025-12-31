@@ -119,10 +119,15 @@ public class ElmCompiler
             .WhereNotNull()
             .ToList();
 
+        // Lambda lifting stage: Transform closures into top-level functions
+        var lambdaLiftedModules = canonicalizedModules
+            .Select(LambdaLifting.LiftLambdas)
+            .ToList();
+
         var allFunctions =
             new Dictionary<string, (string moduleName, string functionName, SyntaxTypes.Declaration.FunctionDeclaration declaration)>();
 
-        foreach (var elmModuleSyntax in canonicalizedModules)
+        foreach (var elmModuleSyntax in lambdaLiftedModules)
         {
             var moduleName =
                 SyntaxTypes.Module.GetModuleName(elmModuleSyntax.ModuleDefinition.Value).Value;
@@ -157,7 +162,7 @@ public class ElmCompiler
         // Second pass: Compile each module with access to all functions
         var compiledModuleEntries = new List<PineValue>();
 
-        foreach (var parsedModule in canonicalizedModules)
+        foreach (var parsedModule in lambdaLiftedModules)
         {
             var moduleNameFlattened =
                 string.Join('.', SyntaxTypes.Module.GetModuleName(parsedModule.ModuleDefinition.Value).Value);

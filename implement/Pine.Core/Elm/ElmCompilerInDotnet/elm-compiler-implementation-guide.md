@@ -56,6 +56,28 @@ For function applications where the function is a value of unknown origin, the E
 
 When emitting a function value, the compiler creates a corresponding wrapper matching the number of parameters. On application of the last argument, the wrapper uses an environment structure as described in the 'Full Function Applications' section.
 
+### Closures
+
+The Elm programming language supports closures that capture the values of bindings in scope. Following is an example:
+
+```Elm
+map : (a -> b) -> List a -> List b
+map f xs =
+    foldr (\x acc -> f x :: acc) [] xs
+```
+
+The compiler resolves closures via lambda lifting in an early step in the compilation pipeline. The code below shows the result of the lambda lifting stage for the earlier example of a closure:
+
+```Elm
+map : (a -> b) -> List a -> List b
+map f xs =
+    foldr (map__lifted__lambda1 f) [] xs
+
+
+map__lifted__lambda1 f x acc =
+    f x :: acc
+```
+
 ## Extensible Records
 
 The Elm language supports records that can be extended with additional fields, often called “extensible records” or “row polymorphism”.
