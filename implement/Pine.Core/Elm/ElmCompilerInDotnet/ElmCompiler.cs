@@ -505,7 +505,7 @@ public class ElmCompiler
         SyntaxTypes.Expression expression,
         ExpressionCompilationContext context)
     {
-        var result = ExpressionCompiler.Instance.Compile(expression, context);
+        var result = ExpressionCompiler.Compile(expression, context);
 
         if (result.IsErrOrNull() is { } error)
         {

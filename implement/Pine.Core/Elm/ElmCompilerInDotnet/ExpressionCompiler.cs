@@ -11,10 +11,9 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
 /// <summary>
 /// Compiles Elm expressions to Pine expressions.
-/// Uses the visitor pattern for type-safe expression handling.
+/// Uses recursive mapping for type-safe expression handling.
 /// </summary>
 public class ExpressionCompiler
-    : SyntaxTypes.ExpressionVisitorBase<ExpressionCompilationContext, Result<CompilationError, Expression>>
 {
     /// <summary>
     /// Shared instance of the expression compiler.
@@ -27,37 +26,64 @@ public class ExpressionCompiler
     /// <param name="expression">The Elm expression to compile.</param>
     /// <param name="context">The compilation context.</param>
     /// <returns>A result containing the compiled Pine expression or a compilation error.</returns>
-    public Result<CompilationError, Expression> Compile(
+    public static Result<CompilationError, Expression> Compile(
         SyntaxTypes.Expression expression,
         ExpressionCompilationContext context) =>
-        Visit(expression, context);
+        expression switch
+        {
+            SyntaxTypes.Expression.Integer expr =>
+                CompileInteger(expr),
 
-    /// <inheritdoc/>
-    protected override Result<CompilationError, Expression> VisitUnknown(
-        SyntaxTypes.Expression expr,
-        ExpressionCompilationContext context) =>
-        new CompilationError.UnsupportedExpression(expr.GetType().Name);
+            SyntaxTypes.Expression.Literal expr =>
+                CompileLiteral(expr),
 
-    /// <inheritdoc/>
-    public override Result<CompilationError, Expression> VisitInteger(
-        SyntaxTypes.Expression.Integer expr,
-        ExpressionCompilationContext context) =>
+            SyntaxTypes.Expression.CharLiteral expr =>
+                CompileCharLiteral(expr),
+
+            SyntaxTypes.Expression.FunctionOrValue expr =>
+                CompileFunctionOrValue(expr, context),
+
+            SyntaxTypes.Expression.Application expr =>
+                CompileApplication(expr, context),
+
+            SyntaxTypes.Expression.ListExpr expr =>
+                CompileListExpr(expr, context),
+
+            SyntaxTypes.Expression.OperatorApplication expr =>
+                CompileOperatorApplication(expr, context),
+
+            SyntaxTypes.Expression.ParenthesizedExpression expr =>
+                CompileParenthesizedExpression(expr, context),
+
+            SyntaxTypes.Expression.Negation expr =>
+                CompileNegation(expr, context),
+
+            SyntaxTypes.Expression.IfBlock expr =>
+                CompileIfBlock(expr, context),
+
+            SyntaxTypes.Expression.CaseExpression expr =>
+                CompileCaseExpression(expr, context),
+
+            SyntaxTypes.Expression.LetExpression expr =>
+                CompileLetExpression(expr, context),
+
+            _ =>
+                new CompilationError.UnsupportedExpression(expression.GetType().Name)
+        };
+
+    private static Result<CompilationError, Expression> CompileInteger(
+        SyntaxTypes.Expression.Integer expr) =>
         Expression.LiteralInstance(EmitIntegerLiteral(expr.Value));
 
-    /// <inheritdoc/>
-    public override Result<CompilationError, Expression> VisitLiteral(
-        SyntaxTypes.Expression.Literal expr,
-        ExpressionCompilationContext context) =>
+    private static Result<CompilationError, Expression> CompileLiteral(
+        SyntaxTypes.Expression.Literal expr) =>
         Expression.LiteralInstance(EmitStringLiteral(expr.Value));
 
-    /// <inheritdoc/>
-    public override Result<CompilationError, Expression> VisitCharLiteral(
-        SyntaxTypes.Expression.CharLiteral expr,
-        ExpressionCompilationContext context) =>
+    private static Result<CompilationError, Expression> CompileCharLiteral(
+        SyntaxTypes.Expression.CharLiteral expr) =>
         Expression.LiteralInstance(EmitCharLiteral(expr.Value));
 
-    /// <inheritdoc/>
-    public override Result<CompilationError, Expression> VisitFunctionOrValue(
+    private static Result<CompilationError, Expression> CompileFunctionOrValue(
         SyntaxTypes.Expression.FunctionOrValue expr,
         ExpressionCompilationContext context)
     {
@@ -106,8 +132,7 @@ public class ExpressionCompiler
         return new CompilationError.UnresolvedReference(expr.Name, context.CurrentModuleName);
     }
 
-    /// <inheritdoc/>
-    public override Result<CompilationError, Expression> VisitApplication(
+    private static Result<CompilationError, Expression> CompileApplication(
         SyntaxTypes.Expression.Application expr,
         ExpressionCompilationContext context)
     {
@@ -124,7 +149,7 @@ public class ExpressionCompiler
             context.ModuleCompilationContext.IsPineKernelModule(kernelFunc.ModuleName[0]))
         {
             var kernelInput = expr.Arguments[1].Value;
-            var compiledInputResult = Visit(kernelInput, context);
+            var compiledInputResult = Compile(kernelInput, context);
 
             if (compiledInputResult.IsErrOrNull() is { } err)
             {
@@ -147,7 +172,7 @@ public class ExpressionCompiler
                 var compiledArguments = new List<Expression>();
                 for (var i = 1; i < expr.Arguments.Count; i++)
                 {
-                    var argResult = Visit(expr.Arguments[i].Value, context);
+                    var argResult = Compile(expr.Arguments[i].Value, context);
                     if (argResult.IsErrOrNull() is { } err)
                     {
                         return err;
@@ -173,7 +198,7 @@ public class ExpressionCompiler
                 return new CompilationError.FunctionNotInDependencyLayout(qualifiedFunctionName);
             }
 
-            var argumentResult = Visit(expr.Arguments[1].Value, context);
+            var argumentResult = Compile(expr.Arguments[1].Value, context);
             if (argumentResult.IsErrOrNull() is { } argErr)
             {
                 return argErr;
@@ -201,15 +226,14 @@ public class ExpressionCompiler
         return new CompilationError.UnsupportedApplicationType();
     }
 
-    /// <inheritdoc/>
-    public override Result<CompilationError, Expression> VisitListExpr(
+    private static Result<CompilationError, Expression> CompileListExpr(
         SyntaxTypes.Expression.ListExpr expr,
         ExpressionCompilationContext context)
     {
         var compiledElements = new List<Expression>();
         foreach (var elem in expr.Elements)
         {
-            var result = Visit(elem.Value, context);
+            var result = Compile(elem.Value, context);
             if (result.IsErrOrNull() is { } err)
             {
                 return err;
@@ -220,20 +244,17 @@ public class ExpressionCompiler
         return Expression.ListInstance(compiledElements);
     }
 
-    /// <inheritdoc/>
-    public override Result<CompilationError, Expression> VisitOperatorApplication(
+    private static Result<CompilationError, Expression> CompileOperatorApplication(
         SyntaxTypes.Expression.OperatorApplication expr,
         ExpressionCompilationContext context) =>
-        OperatorCompiler.Compile(expr, context, this);
+        OperatorCompiler.Compile(expr, context);
 
-    /// <inheritdoc/>
-    public override Result<CompilationError, Expression> VisitParenthesizedExpression(
+    private static Result<CompilationError, Expression> CompileParenthesizedExpression(
         SyntaxTypes.Expression.ParenthesizedExpression expr,
         ExpressionCompilationContext context) =>
-        Visit(expr.Expression.Value, context);
+        Compile(expr.Expression.Value, context);
 
-    /// <inheritdoc/>
-    public override Result<CompilationError, Expression> VisitNegation(
+    private static Result<CompilationError, Expression> CompileNegation(
         SyntaxTypes.Expression.Negation expr,
         ExpressionCompilationContext context)
     {
@@ -242,7 +263,7 @@ public class ExpressionCompiler
             return Expression.LiteralInstance(EmitIntegerLiteral(-intLiteral.Value));
         }
 
-        var innerResult = Visit(expr.Expression.Value, context);
+        var innerResult = Compile(expr.Expression.Value, context);
         if (innerResult.IsErrOrNull() is { } err)
         {
             return err;
@@ -252,24 +273,23 @@ public class ExpressionCompiler
         return BuiltinHelpers.ApplyBuiltinIntMul([negativeOne, innerResult.IsOkOrNull()!]);
     }
 
-    /// <inheritdoc/>
-    public override Result<CompilationError, Expression> VisitIfBlock(
+    private static Result<CompilationError, Expression> CompileIfBlock(
         SyntaxTypes.Expression.IfBlock expr,
         ExpressionCompilationContext context)
     {
-        var conditionResult = Visit(expr.Condition.Value, context);
+        var conditionResult = Compile(expr.Condition.Value, context);
         if (conditionResult.IsErrOrNull() is { } condErr)
         {
             return condErr;
         }
 
-        var trueBranchResult = Visit(expr.ThenBlock.Value, context);
+        var trueBranchResult = Compile(expr.ThenBlock.Value, context);
         if (trueBranchResult.IsErrOrNull() is { } trueErr)
         {
             return trueErr;
         }
 
-        var falseBranchResult = Visit(expr.ElseBlock.Value, context);
+        var falseBranchResult = Compile(expr.ElseBlock.Value, context);
         if (falseBranchResult.IsErrOrNull() is { } falseErr)
         {
             return falseErr;
@@ -281,19 +301,17 @@ public class ExpressionCompiler
             trueBranch: trueBranchResult.IsOkOrNull()!);
     }
 
-    /// <inheritdoc/>
-    public override Result<CompilationError, Expression> VisitCaseExpression(
+    private static Result<CompilationError, Expression> CompileCaseExpression(
         SyntaxTypes.Expression.CaseExpression expr,
         ExpressionCompilationContext context) =>
-        PatternCompiler.CompileCaseExpression(expr.CaseBlock, context, this);
+        PatternCompiler.CompileCaseExpression(expr.CaseBlock, context);
 
-    /// <inheritdoc/>
-    public override Result<CompilationError, Expression> VisitLetExpression(
+    private static Result<CompilationError, Expression> CompileLetExpression(
         SyntaxTypes.Expression.LetExpression expr,
         ExpressionCompilationContext context) =>
-        CompileLetExpression(expr.Value, context);
+        CompileLetExpressionBody(expr.Value, context);
 
-    private Result<CompilationError, Expression> CompileLetExpression(
+    private static Result<CompilationError, Expression> CompileLetExpressionBody(
         SyntaxTypes.Expression.LetBlock letBlock,
         ExpressionCompilationContext context)
     {
@@ -364,7 +382,7 @@ public class ExpressionCompiler
 
                     if (funcArgs.Count is 0)
                     {
-                        var compiledBodyResult = Visit(funcBody, letContext);
+                        var compiledBodyResult = Compile(funcBody, letContext);
 
                         if (compiledBodyResult.IsErrOrNull() is { } bodyErr)
                         {
@@ -380,7 +398,7 @@ public class ExpressionCompiler
                     break;
 
                 case SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestructuring:
-                    var destructuredResult = Visit(letDestructuring.Expression.Value, letContext);
+                    var destructuredResult = Compile(letDestructuring.Expression.Value, letContext);
                     if (destructuredResult.IsErrOrNull() is { } destrErr)
                     {
                         return destrErr;
@@ -398,7 +416,7 @@ public class ExpressionCompiler
             }
         }
 
-        return Visit(letBlock.Expression.Value, letContext);
+        return Compile(letBlock.Expression.Value, letContext);
     }
 
     #region Helper Methods

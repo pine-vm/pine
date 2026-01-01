@@ -12,12 +12,10 @@ public class OperatorCompiler
     /// </summary>
     /// <param name="operatorApp">The operator application to compile.</param>
     /// <param name="context">The compilation context.</param>
-    /// <param name="expressionCompiler">The expression compiler for recursive compilation.</param>
     /// <returns>A result containing the compiled Pine expression or a compilation error.</returns>
     public static Result<CompilationError, Expression> Compile(
         SyntaxTypes.Expression.OperatorApplication operatorApp,
-        ExpressionCompilationContext context,
-        ExpressionCompiler expressionCompiler)
+        ExpressionCompilationContext context)
     {
         // Use type inference to determine the operation type
         var expressionType = TypeInference.InferExpressionType(
@@ -27,7 +25,7 @@ public class OperatorCompiler
 
         if (expressionType is TypeInference.InferredType.IntType)
         {
-            return CompileIntegerOperator(operatorApp, context, expressionCompiler);
+            return CompileIntegerOperator(operatorApp, context);
         }
 
         return new CompilationError.UnsupportedOperator(operatorApp.Operator);
@@ -35,16 +33,15 @@ public class OperatorCompiler
 
     private static Result<CompilationError, Expression> CompileIntegerOperator(
         SyntaxTypes.Expression.OperatorApplication operatorApp,
-        ExpressionCompilationContext context,
-        ExpressionCompiler expressionCompiler)
+        ExpressionCompilationContext context)
     {
-        var leftResult = expressionCompiler.Compile(operatorApp.Left.Value, context);
+        var leftResult = ExpressionCompiler.Compile(operatorApp.Left.Value, context);
         if (leftResult.IsErrOrNull() is { } leftErr)
         {
             return leftErr;
         }
 
-        var rightResult = expressionCompiler.Compile(operatorApp.Right.Value, context);
+        var rightResult = ExpressionCompiler.Compile(operatorApp.Right.Value, context);
         if (rightResult.IsErrOrNull() is { } rightErr)
         {
             return rightErr;

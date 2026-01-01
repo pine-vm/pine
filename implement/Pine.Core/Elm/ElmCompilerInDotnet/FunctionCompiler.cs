@@ -86,7 +86,7 @@ public class FunctionCompiler
             ModuleCompilationContext: context);
 
         // Compile the function body
-        var compiledBodyResult = ExpressionCompiler.Instance.Compile(functionBody, expressionContext);
+        var compiledBodyResult = ExpressionCompiler.Compile(functionBody, expressionContext);
         if (compiledBodyResult.IsErrOrNull() is { } err)
         {
             return err;

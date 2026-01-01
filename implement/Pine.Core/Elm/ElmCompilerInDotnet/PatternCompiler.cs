@@ -64,10 +64,9 @@ public class PatternCompiler
     /// </summary>
     public static Result<CompilationError, Expression> CompileCaseExpression(
         SyntaxTypes.CaseBlock caseBlock,
-        ExpressionCompilationContext context,
-        ExpressionCompiler expressionCompiler)
+        ExpressionCompilationContext context)
     {
-        var scrutineeResult = expressionCompiler.Compile(caseBlock.Expression.Value, context);
+        var scrutineeResult = ExpressionCompiler.Compile(caseBlock.Expression.Value, context);
         if (scrutineeResult.IsErrOrNull() is { } scrutineeErr)
         {
             return scrutineeErr;
@@ -87,7 +86,7 @@ public class PatternCompiler
                 ? context.WithLocalBindings(patternBindings)
                 : context;
 
-            var caseBodyResult = expressionCompiler.Compile(caseItem.Expression.Value, caseContext);
+            var caseBodyResult = ExpressionCompiler.Compile(caseItem.Expression.Value, caseContext);
             if (caseBodyResult.IsErrOrNull() is { } caseErr)
             {
                 return caseErr;
