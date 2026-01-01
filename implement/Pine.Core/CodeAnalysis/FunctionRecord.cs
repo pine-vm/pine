@@ -19,7 +19,7 @@ public record FunctionRecord(
     /// <summary>
     /// Analog to the 'parseFunctionRecordFromValueTagged' function in FirCompiler.elm.
     /// Accepts either a tagged value ("Function"), a nested wrapper form from 
-    /// <see cref="PartialApplicationWrapper.EmitFunctionValue"/>, or a raw value (zero-argument function literal shortcut).
+    /// <see cref="FunctionValueBuilder.EmitFunctionValue"/>, or a raw value (zero-argument function literal shortcut).
     /// </summary>
     /// <param name="pineValue">Encoded value representing a function (possibly tagged).</param>
     /// <param name="parseCache">Cache used to parse the inner expression.</param>
@@ -69,7 +69,7 @@ public record FunctionRecord(
 
     /// <summary>
     /// Parses a function record from the nested wrapper form emitted by 
-    /// <see cref="PartialApplicationWrapper.EmitFunctionValue"/> for 0 or 1 parameter functions.
+    /// <see cref="FunctionValueBuilder.EmitFunctionValue"/> for 0 or 1 parameter functions.
     /// </summary>
     private static Result<string, FunctionRecord> ParseNestedWrapperForm(
         PineValue encodedWrapper,
