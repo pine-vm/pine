@@ -98,7 +98,7 @@ public class FunctionCompiler
         if (compiledBodyExpression is Expression.Literal literalExpr)
         {
             var result = EmitPlainValueDeclaration(literalExpr.Value);
-            return (result, context.WithCompiledFunction(qualifiedFunctionName, result));
+            return (result, context.WithCompiledFunction(qualifiedFunctionName, result, dependencyLayout));
         }
 
         // For functions with parameters, create a FunctionRecord
@@ -112,7 +112,7 @@ public class FunctionCompiler
                 EnvFunctions: envFunctionsList.ToArray(),
                 ArgumentsAlreadyCollected: ReadOnlyMemory<PineValue>.Empty));
 
-        context = context.WithCompiledFunction(qualifiedFunctionName, placeholderResult);
+        context = context.WithCompiledFunction(qualifiedFunctionName, placeholderResult, dependencyLayout);
 
         // Compile dependencies
         foreach (var depQualifiedName in dependencies)
@@ -155,7 +155,7 @@ public class FunctionCompiler
                 EnvFunctions: envFunctionsList.ToArray(),
                 ArgumentsAlreadyCollected: ReadOnlyMemory<PineValue>.Empty));
 
-        return (finalResult, context.WithCompiledFunction(qualifiedFunctionName, finalResult));
+        return (finalResult, context.WithCompiledFunction(qualifiedFunctionName, finalResult, dependencyLayout));
     }
 
     private static Dictionary<string, TypeInference.InferredType> ExtractParameterTypes(

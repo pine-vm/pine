@@ -1,5 +1,9 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
+using Pine.Core.CommonEncodings;
+using Pine.Core.Elm;
+using System;
+using System.Linq;
 using Xunit;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.ElmCompilerTests;
@@ -65,5 +69,153 @@ public class SimpleRecursiveFunctionTests
                         ]
             """"
             .Trim());
+
+        // Dynamic test: invoke the fibonacci function and verify results
+        var testModule =
+            parsedEnv.Modules.FirstOrDefault(c => c.moduleName is "Test");
+
+        var fibonacciDecl =
+            testModule.moduleContent.FunctionDeclarations
+            .FirstOrDefault(decl => decl.Key is "fibonacci");
+
+        var fibonacciParsed =
+            FunctionRecord.ParseFunctionRecordTagged(fibonacciDecl.Value, parseCache)
+            .Extract(err => throw new Exception("Failed parsing fibonacci: " + err));
+
+        var invokeFunction = ElmCompilerTestHelper.CreateFunctionInvocationDelegate(fibonacciParsed);
+
+        PineValue ApplyForArgument(PineValue argument)
+        {
+            var (applyRunResult, _) = invokeFunction([argument]);
+            return applyRunResult;
+        }
+
+        string ResultAsExpressionString(int n)
+        {
+            var result = ApplyForArgument(IntegerEncoding.EncodeSignedInteger(n));
+
+            var resultAsElmValue =
+                ElmValueEncoding.PineValueAsElmValue(result, null, null);
+
+            var resultAsElmExpr =
+                ElmValue.RenderAsElmExpression(
+                    resultAsElmValue
+                    .Extract(err => throw new Exception("Failed decoding result as Elm value: " + err)));
+
+            return resultAsElmExpr.expressionString;
+        }
+
+        // Test Fibonacci values based on implementation:
+        // Note: This implementation uses base case 'if n <= 2, return n'
+        // which differs from the standard Fibonacci sequence (where fib(2)=1).
+        // With this base case: fib(0)=0, fib(1)=1, fib(2)=2, fib(3)=fib(1)+fib(2)=3, etc.
+        ResultAsExpressionString(0).Should().Be("0");
+        ResultAsExpressionString(1).Should().Be("1");
+        ResultAsExpressionString(2).Should().Be("2");
+        ResultAsExpressionString(3).Should().Be("3");
+        ResultAsExpressionString(4).Should().Be("5");
+        ResultAsExpressionString(5).Should().Be("8");
+        ResultAsExpressionString(6).Should().Be("13");
+        ResultAsExpressionString(7).Should().Be("21");
+    }
+
+    [Fact]
+    public void Function_Mutual_Recursion_IsEven_IsOdd()
+    {
+        var elmModuleText =
+            """
+            module Test exposing (..)
+
+
+            isEven x =
+                if Pine_kernel.equal [ x, 0 ] then
+                    True
+
+                else
+                    isOdd (Pine_kernel.int_add [ x, -1 ])
+
+
+            isOdd y =
+                if Pine_kernel.equal [ y, 0 ] then
+                    False
+
+                else
+                    isEven (Pine_kernel.int_add [ y, -1 ])
+
+            """;
+
+        var parseCache = new PineVMParseCache();
+
+        var (parsedEnv, _) =
+            ElmCompilerTestHelper.StaticProgramFromElmModules(
+                [elmModuleText],
+                disableInlining: true,
+                includeDeclaration: qualifiedName => qualifiedName.DeclName is "isEven" or "isOdd",
+                parseCache: parseCache);
+
+        // Dynamic test: invoke the functions and verify results
+        var testModule =
+            parsedEnv.Modules.FirstOrDefault(c => c.moduleName is "Test");
+
+        var isEvenDecl =
+            testModule.moduleContent.FunctionDeclarations
+            .FirstOrDefault(decl => decl.Key is "isEven");
+
+        var isEvenParsed =
+            FunctionRecord.ParseFunctionRecordTagged(isEvenDecl.Value, parseCache)
+            .Extract(err => throw new Exception("Failed parsing isEven: " + err));
+
+        var invokeIsEven = ElmCompilerTestHelper.CreateFunctionInvocationDelegate(isEvenParsed);
+
+        var isOddDecl =
+            testModule.moduleContent.FunctionDeclarations
+            .FirstOrDefault(decl => decl.Key is "isOdd");
+
+        var isOddParsed =
+            FunctionRecord.ParseFunctionRecordTagged(isOddDecl.Value, parseCache)
+            .Extract(err => throw new Exception("Failed parsing isOdd: " + err));
+
+        var invokeIsOdd = ElmCompilerTestHelper.CreateFunctionInvocationDelegate(isOddParsed);
+
+        PineValue ApplyIsEven(int n)
+        {
+            var (result, _) = invokeIsEven([IntegerEncoding.EncodeSignedInteger(n)]);
+            return result;
+        }
+
+        PineValue ApplyIsOdd(int n)
+        {
+            var (result, _) = invokeIsOdd([IntegerEncoding.EncodeSignedInteger(n)]);
+            return result;
+        }
+
+        string ResultAsExpressionString(PineValue result)
+        {
+            var resultAsElmValue =
+                ElmValueEncoding.PineValueAsElmValue(result, null, null);
+
+            var resultAsElmExpr =
+                ElmValue.RenderAsElmExpression(
+                    resultAsElmValue
+                    .Extract(err => throw new Exception("Failed decoding result as Elm value: " + err)));
+
+            return resultAsElmExpr.expressionString;
+        }
+
+        // Test isEven: 0 is even, 1 is not, 2 is even, etc.
+        ResultAsExpressionString(ApplyIsEven(0)).Should().Be("True");
+        ResultAsExpressionString(ApplyIsEven(1)).Should().Be("False");
+        ResultAsExpressionString(ApplyIsEven(2)).Should().Be("True");
+        ResultAsExpressionString(ApplyIsEven(3)).Should().Be("False");
+        ResultAsExpressionString(ApplyIsEven(4)).Should().Be("True");
+        ResultAsExpressionString(ApplyIsEven(5)).Should().Be("False");
+
+        // Test isOdd: 0 is not odd, 1 is odd, 2 is not odd, etc.
+        ResultAsExpressionString(ApplyIsOdd(0)).Should().Be("False");
+        ResultAsExpressionString(ApplyIsOdd(1)).Should().Be("True");
+        ResultAsExpressionString(ApplyIsOdd(2)).Should().Be("False");
+        ResultAsExpressionString(ApplyIsOdd(3)).Should().Be("True");
+        ResultAsExpressionString(ApplyIsOdd(4)).Should().Be("False");
+        ResultAsExpressionString(ApplyIsOdd(5)).Should().Be("True");
     }
 }

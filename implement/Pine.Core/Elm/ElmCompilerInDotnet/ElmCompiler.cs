@@ -152,14 +152,20 @@ public class ElmCompiler
             }
         }
 
-        // Create compilation context with all available functions and a cache
-        var compilationContext =
+        // Create initial compilation context with all available functions
+        var initialContext =
             new ModuleCompilationContext(
                 allFunctions,
                 CompiledFunctionsCache: [],
                 PineKernelModuleNames: s_pineKernelModuleNamesDefault);
 
-        // Second pass: Compile each module with access to all functions
+        // Pre-compute dependency layouts for all functions BEFORE compilation
+        var dependencyLayouts = ComputeDependencyLayouts(allFunctions, initialContext);
+
+        // Create compilation context with pre-computed dependency layouts
+        var compilationContext = initialContext.WithDependencyLayouts(dependencyLayouts);
+
+        // Second pass: Compile each module with access to all functions and dependency layouts
         var compiledModuleEntries = new List<PineValue>();
 
         foreach (var parsedModule in lambdaLiftedModules)
@@ -187,6 +193,39 @@ public class ElmCompiler
                 ]);
 
         return compiledEnvValue;
+    }
+
+    /// <summary>
+    /// Computes dependency layouts for all functions in a module.
+    /// This is the first pass of the two-pass compilation approach.
+    /// Each function's layout contains: [self, sorted_dependencies...]
+    /// Dependencies are sorted alphabetically for consistent ordering.
+    /// </summary>
+    /// <param name="allFunctions">Dictionary of all functions keyed by qualified name.</param>
+    /// <param name="context">The module compilation context.</param>
+    /// <returns>Dictionary mapping qualified function names to their dependency layouts.</returns>
+    public static IReadOnlyDictionary<string, IReadOnlyList<string>> ComputeDependencyLayouts(
+        IReadOnlyDictionary<string, (string moduleName, string functionName, SyntaxTypes.Declaration.FunctionDeclaration declaration)> allFunctions,
+        ModuleCompilationContext context)
+    {
+        var dependencyLayouts = new Dictionary<string, IReadOnlyList<string>>();
+
+        foreach (var (qualifiedName, (moduleName, functionName, declaration)) in allFunctions)
+        {
+            var functionBody = declaration.Function.Declaration.Value.Expression.Value;
+            var dependencies = AnalyzeFunctionDependencies(functionBody, moduleName, context);
+
+            // Sort dependencies alphabetically for consistent ordering
+            var sortedDependencies = dependencies.OrderBy(d => d).ToList();
+
+            // Layout is: [self, sorted_dependencies...]
+            // Self is always first for snapshot test name rendering
+            var layout = new List<string> { qualifiedName };
+            layout.AddRange(sortedDependencies);
+            dependencyLayouts[qualifiedName] = layout;
+        }
+
+        return dependencyLayouts;
     }
 
     private static (PineValue moduleValue, ModuleCompilationContext updatedContext) CompileModule(
@@ -316,7 +355,7 @@ public class ElmCompiler
         if (compiledBodyExpression is Expression.Literal literalExpr)
         {
             var result = EmitPlainValueDeclaration(literalExpr.Value);
-            return (result, context.WithCompiledFunction(qualifiedFunctionName, result));
+            return (result, context.WithCompiledFunction(qualifiedFunctionName, result, dependencyLayout));
         }
 
         // For functions with parameters, create a FunctionRecord
@@ -335,7 +374,7 @@ public class ElmCompiler
                     EnvFunctions: envFunctionsList.ToArray(),
                     ArgumentsAlreadyCollected: ReadOnlyMemory<PineValue>.Empty));
 
-        context = context.WithCompiledFunction(qualifiedFunctionName, placeholderResult);
+        context = context.WithCompiledFunction(qualifiedFunctionName, placeholderResult, dependencyLayout);
 
         // Now compile dependencies (they can reference this function via the cache)
         foreach (var depQualifiedName in dependencies)
@@ -373,7 +412,7 @@ public class ElmCompiler
                     EnvFunctions: envFunctionsList.ToArray(),
                     ArgumentsAlreadyCollected: ReadOnlyMemory<PineValue>.Empty));
 
-        return (finalResult, context.WithCompiledFunction(qualifiedFunctionName, finalResult));
+        return (finalResult, context.WithCompiledFunction(qualifiedFunctionName, finalResult, dependencyLayout));
     }
 
     private static IReadOnlySet<string> AnalyzeFunctionDependencies(

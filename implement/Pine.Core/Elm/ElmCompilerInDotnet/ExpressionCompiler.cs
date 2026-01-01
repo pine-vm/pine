@@ -192,8 +192,7 @@ public class ExpressionCompiler
                 ? string.Join(".", funcRef.ModuleName) + "." + funcRef.Name
                 : context.CurrentModuleName + "." + funcRef.Name;
 
-            var functionIndex = context.GetFunctionIndexInLayout(qualifiedFunctionName);
-            if (functionIndex < 0)
+            if (context.GetFunctionIndexInLayout(qualifiedFunctionName) is not { } functionIndex)
             {
                 return new CompilationError.FunctionNotInDependencyLayout(qualifiedFunctionName);
             }
@@ -208,13 +207,52 @@ public class ExpressionCompiler
                 [0, functionIndex],
                 Expression.EnvironmentInstance);
 
-            var functionList = ExpressionBuilder.BuildExpressionForPathInExpression(
-                [0],
-                Expression.EnvironmentInstance);
+            // Build the environment for the called function
+            // We need to construct an environment that matches what the called function expects
+            Expression callEnvFunctions;
+
+            // Check if we have pre-computed dependency layout for the called function
+            if (context.ModuleCompilationContext.TryGetDependencyLayout(qualifiedFunctionName, out var calledFuncLayout) &&
+                calledFuncLayout is not null &&
+                calledFuncLayout.Count > 0)
+            {
+                // Build environment by mapping the called function's dependency layout
+                // to indices in the current function's environment
+                var envFunctionExpressions = new List<Expression>();
+
+                foreach (var depName in calledFuncLayout)
+                {
+                    if (context.GetFunctionIndexInLayout(depName) is { } depIndex)
+                    {
+                        // Get this dependency from the current environment
+                        var depRef =
+                            ExpressionBuilder.BuildExpressionForPathInExpression(
+                                [0, depIndex],
+                                Expression.EnvironmentInstance);
+
+                        envFunctionExpressions.Add(depRef);
+                    }
+                    else
+                    {
+                        // Dependency not found in current layout - this shouldn't happen
+                        // if dependencies are properly analyzed
+                        return new CompilationError.FunctionNotInDependencyLayout(depName);
+                    }
+                }
+
+                callEnvFunctions = Expression.ListInstance(envFunctionExpressions);
+            }
+            else
+            {
+                // No dependency info available, fall back to passing current env functions
+                callEnvFunctions = ExpressionBuilder.BuildExpressionForPathInExpression(
+                    [0],
+                    Expression.EnvironmentInstance);
+            }
 
             var callEnvironment = Expression.ListInstance(
             [
-                functionList,
+                callEnvFunctions,
                 Expression.ListInstance([argumentResult.IsOkOrNull()!])
             ]);
 

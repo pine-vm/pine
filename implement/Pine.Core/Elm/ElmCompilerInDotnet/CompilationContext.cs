@@ -7,26 +7,59 @@ using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
 /// <summary>
+/// Information about a compiled function including its dependency layout.
+/// </summary>
+/// <param name="CompiledValue">The compiled Pine value for the function.</param>
+/// <param name="DependencyLayout">
+/// The list of qualified function names this function depends on (in order).
+/// The first element is always the function itself, followed by its direct dependencies.
+/// This ordering is used to build the runtime environment when calling the function.
+/// </param>
+public record CompiledFunctionInfo(
+    PineValue CompiledValue,
+    IReadOnlyList<string> DependencyLayout);
+
+/// <summary>
 /// Immutable context for module compilation.
 /// Uses builder pattern for state changes instead of mutable cache.
 /// This is the new immutable version of ModuleCompilationContext.
 /// </summary>
 /// <param name="AllFunctions">All available functions across all modules.</param>
-/// <param name="CompiledFunctionsCache">Cache of already compiled functions (immutable).</param>
+/// <param name="CompiledFunctionsCache">Cache of already compiled functions with their dependency layouts.</param>
 /// <param name="PineKernelModuleNames">Names of Pine kernel modules.</param>
+/// <param name="FunctionDependencyLayouts">Pre-computed dependency layouts for all functions (populated before compilation).</param>
 public record ModuleCompilationContext(
     IReadOnlyDictionary<string, (string moduleName, string functionName, SyntaxTypes.Declaration.FunctionDeclaration declaration)> AllFunctions,
-    ImmutableDictionary<string, PineValue> CompiledFunctionsCache,
-    FrozenSet<string> PineKernelModuleNames)
+    ImmutableDictionary<string, CompiledFunctionInfo> CompiledFunctionsCache,
+    FrozenSet<string> PineKernelModuleNames,
+    IReadOnlyDictionary<string, IReadOnlyList<string>>? FunctionDependencyLayouts = null)
 {
     /// <summary>
     /// Creates a new context with the specified function added to the cache.
     /// </summary>
     /// <param name="name">The qualified function name.</param>
     /// <param name="value">The compiled Pine value.</param>
+    /// <param name="dependencyLayout">The function's dependency layout.</param>
+    /// <returns>A new context with the updated cache.</returns>
+    public ModuleCompilationContext WithCompiledFunction(string name, PineValue value, IReadOnlyList<string> dependencyLayout) =>
+        this with { CompiledFunctionsCache = CompiledFunctionsCache.SetItem(name, new CompiledFunctionInfo(value, dependencyLayout)) };
+
+    /// <summary>
+    /// Creates a new context with the specified function added to the cache (without dependency layout for backward compatibility).
+    /// </summary>
+    /// <param name="name">The qualified function name.</param>
+    /// <param name="value">The compiled Pine value.</param>
     /// <returns>A new context with the updated cache.</returns>
     public ModuleCompilationContext WithCompiledFunction(string name, PineValue value) =>
-        this with { CompiledFunctionsCache = CompiledFunctionsCache.SetItem(name, value) };
+        WithCompiledFunction(name, value, []);
+
+    /// <summary>
+    /// Creates a new context with the specified dependency layouts.
+    /// </summary>
+    /// <param name="layouts">The dependency layouts dictionary.</param>
+    /// <returns>A new context with the dependency layouts.</returns>
+    public ModuleCompilationContext WithDependencyLayouts(IReadOnlyDictionary<string, IReadOnlyList<string>> layouts) =>
+        this with { FunctionDependencyLayouts = layouts };
 
     /// <summary>
     /// Checks if a function is already in the cache.
@@ -42,8 +75,42 @@ public record ModuleCompilationContext(
     /// <param name="qualifiedName">The qualified function name.</param>
     /// <param name="value">The compiled value if found.</param>
     /// <returns>True if the function was found.</returns>
-    public bool TryGetCompiledFunction(string qualifiedName, out PineValue? value) =>
-        CompiledFunctionsCache.TryGetValue(qualifiedName, out value);
+    public bool TryGetCompiledFunction(string qualifiedName, out PineValue? value)
+    {
+        if (CompiledFunctionsCache.TryGetValue(qualifiedName, out var info))
+        {
+            value = info.CompiledValue;
+            return true;
+        }
+        value = null;
+        return false;
+    }
+
+    /// <summary>
+    /// Gets compiled function info including dependency layout from the cache.
+    /// </summary>
+    /// <param name="qualifiedName">The qualified function name.</param>
+    /// <param name="info">The compiled function info if found.</param>
+    /// <returns>True if the function was found.</returns>
+    public bool TryGetCompiledFunctionInfo(string qualifiedName, out CompiledFunctionInfo? info) =>
+        CompiledFunctionsCache.TryGetValue(qualifiedName, out info);
+
+    /// <summary>
+    /// Gets the pre-computed dependency layout for a function.
+    /// </summary>
+    /// <param name="qualifiedName">The qualified function name.</param>
+    /// <param name="layout">The dependency layout if found.</param>
+    /// <returns>True if the layout was found.</returns>
+    public bool TryGetDependencyLayout(string qualifiedName, out IReadOnlyList<string>? layout)
+    {
+        if (FunctionDependencyLayouts?.TryGetValue(qualifiedName, out var result) ?? false)
+        {
+            layout = result;
+            return true;
+        }
+        layout = null;
+        return false;
+    }
 
     /// <summary>
     /// Gets function info from the all functions dictionary.
@@ -160,8 +227,8 @@ public record ExpressionCompilationContext(
     /// Gets the index of a function in the dependency layout.
     /// </summary>
     /// <param name="qualifiedName">The qualified function name.</param>
-    /// <returns>The index, or -1 if not found.</returns>
-    public int GetFunctionIndexInLayout(string qualifiedName)
+    /// <returns>The index, or null if not found.</returns>
+    public int? GetFunctionIndexInLayout(string qualifiedName)
     {
         for (var i = 0; i < DependencyLayout.Count; i++)
         {
@@ -170,6 +237,7 @@ public record ExpressionCompilationContext(
                 return i;
             }
         }
-        return -1;
+
+        return null;
     }
 }
