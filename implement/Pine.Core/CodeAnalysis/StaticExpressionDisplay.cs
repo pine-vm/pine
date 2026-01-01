@@ -40,6 +40,10 @@ public static class StaticExpressionDisplay
     /// <param name="environmentPathReferenceRenderer">Function to render environment path references.</param>
     /// <param name="indentString">String used for one indentation step (e.g., two spaces).</param>
     /// <param name="indentLevel">Initial indentation level to apply to the root expression.</param>
+    /// <param name="kernelApplicationPrefix">
+    /// Prefix to use when rendering kernel applications (e.g., <c>"Pine_kernel"</c> or <c>"Pine_builtin"</c>).
+    /// Defaults to <c>"Pine_kernel"</c>.
+    /// </param>
     /// <returns>Formatted string representation using only <c>\n</c> as line terminators.</returns>
     public static string RenderToString<TFunctionName>(
         this StaticExpression<TFunctionName> expression,
@@ -47,7 +51,8 @@ public static class StaticExpressionDisplay
         Func<TFunctionName, FunctionApplicationRendering> functionApplicationRenderer,
         Func<IReadOnlyList<int>, string?> environmentPathReferenceRenderer,
         string indentString,
-        int indentLevel = 0)
+        int indentLevel = 0,
+        string kernelApplicationPrefix = "Pine_kernel")
     {
         var result = new System.Text.StringBuilder();
 
@@ -58,7 +63,8 @@ public static class StaticExpressionDisplay
                 functionApplicationRenderer,
                 environmentPathReferenceRenderer,
                 indentLevel,
-                containerDelimits: true))
+                containerDelimits: true,
+                kernelApplicationPrefix: kernelApplicationPrefix))
         {
             for (var i = 0; i < indent; ++i)
             {
@@ -85,6 +91,10 @@ public static class StaticExpressionDisplay
     /// If <c>true</c>, the renderer assumes the container (caller) handles delimiters for grouped constructs.
     /// If <c>false</c>, the renderer wraps grouped constructs in parentheses where applicable.
     /// </param>
+    /// <param name="kernelApplicationPrefix">
+    /// Prefix to use when rendering kernel applications (e.g., <c>"Pine_kernel"</c> or <c>"Pine_builtin"</c>).
+    /// Defaults to <c>"Pine_kernel"</c>.
+    /// </param>
     /// <returns>Sequence of pairs (indent, text) that together form the full rendering.</returns>
     public static IEnumerable<(int indent, string text)> RenderToLines<TFunctionName>(
         StaticExpression<TFunctionName> expression,
@@ -92,7 +102,8 @@ public static class StaticExpressionDisplay
         Func<TFunctionName, FunctionApplicationRendering> functionApplicationRenderer,
         Func<IReadOnlyList<int>, string?> environmentPathReferenceRenderer,
         int indentLevel,
-        bool containerDelimits)
+        bool containerDelimits,
+        string kernelApplicationPrefix = "Pine_kernel")
     {
         if (StaticExpressionExtension.TryParseAsPathToExpression(expression, StaticExpression<TFunctionName>.EnvironmentInstance) is { } path)
         {
@@ -145,7 +156,8 @@ public static class StaticExpressionDisplay
                                     functionApplicationRenderer,
                                     environmentPathReferenceRenderer,
                                     indentLevel,
-                                    containerDelimits: true)
+                                    containerDelimits: true,
+                                    kernelApplicationPrefix: kernelApplicationPrefix)
                                 .ToList();
 
                             var isChildAList = item is StaticExpression<TFunctionName>.List;
@@ -189,7 +201,7 @@ public static class StaticExpressionDisplay
                     var prefix = containerDelimits ? string.Empty : "(";
 
                     // Function name on its own line, input indented beneath
-                    yield return (indentLevel, prefix + "Pine_kernel." + kernel.Function);
+                    yield return (indentLevel, prefix + kernelApplicationPrefix + "." + kernel.Function);
 
                     foreach (var line in RenderToLines(
                         kernel.Input,
@@ -197,7 +209,8 @@ public static class StaticExpressionDisplay
                         functionApplicationRenderer,
                         environmentPathReferenceRenderer,
                         indentLevel + 1,
-                        containerDelimits: false))
+                        containerDelimits: false,
+                        kernelApplicationPrefix: kernelApplicationPrefix))
                     {
                         yield return line;
                     }
@@ -231,7 +244,8 @@ public static class StaticExpressionDisplay
                             functionApplicationRenderer,
                             environmentPathReferenceRenderer,
                             indentLevel + 1,
-                            containerDelimits: false))
+                            containerDelimits: false,
+                            kernelApplicationPrefix: kernelApplicationPrefix))
                         .ToList();
 
                     if (argumentsLines.Count is 0)
@@ -281,7 +295,8 @@ public static class StaticExpressionDisplay
                         functionApplicationRenderer,
                         environmentPathReferenceRenderer,
                         indentLevel + 1,
-                        containerDelimits: true))
+                        containerDelimits: true,
+                        kernelApplicationPrefix: kernelApplicationPrefix))
                     {
                         yield return line;
                     }
@@ -294,7 +309,8 @@ public static class StaticExpressionDisplay
                         functionApplicationRenderer,
                         environmentPathReferenceRenderer,
                         indentLevel + 1,
-                        containerDelimits: true))
+                        containerDelimits: true,
+                        kernelApplicationPrefix: kernelApplicationPrefix))
                     {
                         yield return line;
                     }
@@ -319,7 +335,8 @@ public static class StaticExpressionDisplay
                             functionApplicationRenderer,
                             environmentPathReferenceRenderer,
                             indentLevel + 1,
-                            containerDelimits: true))
+                            containerDelimits: true,
+                            kernelApplicationPrefix: kernelApplicationPrefix))
                         {
                             yield return line;
                         }
@@ -332,7 +349,8 @@ public static class StaticExpressionDisplay
                             functionApplicationRenderer,
                             environmentPathReferenceRenderer,
                             indentLevel + 1,
-                            containerDelimits: true))
+                            containerDelimits: true,
+                            kernelApplicationPrefix: kernelApplicationPrefix))
                         {
                             yield return line;
                         }
@@ -350,7 +368,8 @@ public static class StaticExpressionDisplay
                         functionApplicationRenderer,
                         environmentPathReferenceRenderer,
                         indentLevel + 1,
-                        containerDelimits: true))
+                        containerDelimits: true,
+                        kernelApplicationPrefix: kernelApplicationPrefix))
                     {
                         yield return line;
                     }
@@ -479,8 +498,14 @@ public static class StaticExpressionDisplay
     /// and joining them with a blank line between definitions.
     /// </summary>
     /// <param name="staticProgram">The static program to render.</param>
+    /// <param name="kernelApplicationPrefix">
+    /// Prefix to use when rendering kernel applications (e.g., <c>"Pine_kernel"</c> or <c>"Pine_builtin"</c>).
+    /// Defaults to <c>"Pine_kernel"</c>.
+    /// </param>
     /// <returns>A textual representation of the program using LF line endings.</returns>
-    public static string RenderStaticProgram(StaticProgram staticProgram)
+    public static string RenderStaticProgram(
+        StaticProgram staticProgram,
+        string kernelApplicationPrefix = "Pine_kernel")
     {
         static string? SubstituteEnvironmentPath(IReadOnlyList<int> path, string leafExpr)
         {
@@ -494,7 +519,7 @@ public static class StaticExpressionDisplay
             }
         }
 
-        return RenderStaticProgram(staticProgram, SubstituteEnvironmentPath);
+        return RenderStaticProgram(staticProgram, SubstituteEnvironmentPath, kernelApplicationPrefix);
     }
 
     /// <summary>
@@ -507,10 +532,15 @@ public static class StaticExpressionDisplay
     /// matched parameter prefix (e.g., "param_0"). It should return a replacement string to use, or <see langword="null"/>
     /// to fall back to the default rendering. Signature: <c>(IReadOnlyList&lt;int&gt; pathTail, string leafExpr) =&gt; string?</c>.
     /// </param>
+    /// <param name="kernelApplicationPrefix">
+    /// Prefix to use when rendering kernel applications (e.g., <c>"Pine_kernel"</c> or <c>"Pine_builtin"</c>).
+    /// Defaults to <c>"Pine_kernel"</c>.
+    /// </param>
     /// <returns>A textual representation of the program using LF line endings.</returns>
     public static string RenderStaticProgram(
         StaticProgram staticProgram,
-        Func<IReadOnlyList<int>, string, string?>? substituteEnvironmentPath)
+        Func<IReadOnlyList<int>, string, string?>? substituteEnvironmentPath,
+        string kernelApplicationPrefix = "Pine_kernel")
     {
         IReadOnlyList<string> namedFunctionsTexts =
             [..staticProgram.NamedFunctions
@@ -520,7 +550,8 @@ public static class StaticExpressionDisplay
                 staticProgram,
                 kvp.Key,
                 kvp.Value.body,
-                substituteEnvironmentPath: substituteEnvironmentPath))];
+                substituteEnvironmentPath: substituteEnvironmentPath,
+                kernelApplicationPrefix: kernelApplicationPrefix))];
 
         var wholeProgramText =
             string.Join(
@@ -543,12 +574,17 @@ public static class StaticExpressionDisplay
     /// matched parameter prefix (e.g., "param_0"). It should return a replacement string to use, or <c>null</c> to
     /// fall back to the default rendering. Signature: <c>(IReadOnlyList&lt;int&gt; pathTail, string leafExpr) =&gt; string?</c>.
     /// </param>
+    /// <param name="kernelApplicationPrefix">
+    /// Prefix to use when rendering kernel applications (e.g., <c>"Pine_kernel"</c> or <c>"Pine_builtin"</c>).
+    /// Defaults to <c>"Pine_kernel"</c>.
+    /// </param>
     /// <returns>The full function definition text.</returns>
     public static string RenderNamedFunction(
         StaticProgram staticProgram,
         DeclQualifiedName functionName,
         StaticExpression<DeclQualifiedName> functionBody,
-        Func<IReadOnlyList<int>, string, string?>? substituteEnvironmentPath)
+        Func<IReadOnlyList<int>, string, string?>? substituteEnvironmentPath,
+        string kernelApplicationPrefix = "Pine_kernel")
     {
         var functionInterface =
             staticProgram.GetFunctionApplicationRendering(functionName).FunctionInterface;
@@ -592,7 +628,8 @@ public static class StaticExpressionDisplay
                 functionApplicationRenderer: staticProgram.GetFunctionApplicationRendering,
                 environmentPathReferenceRenderer: RenderParamRefCombined,
                 indentString: "    ",
-                indentLevel: 1);
+                indentLevel: 1,
+                kernelApplicationPrefix: kernelApplicationPrefix);
     }
 
     /// <summary>

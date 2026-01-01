@@ -8,22 +8,22 @@ using Xunit;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.ElmCompilerTests;
 
-public class KernelApplicationTests
+public class BuiltinApplicationTests
 {
     [Fact]
-    public void Kernel_application_int_add_binary()
+    public void Int_add_binary()
     {
         var elmModuleText =
-            """
+            """"
             module Test exposing (..)
 
 
             alfa : Int -> Int
             alfa x =
-                Pine_kernel.int_add
+                Pine_builtin.int_add
                     [ x, 41 ]
 
-            """;
+            """";
 
         var parseCache = new PineVMParseCache();
 
@@ -34,13 +34,15 @@ public class KernelApplicationTests
                 includeDeclaration: qualifiedName => qualifiedName.DeclName is "alfa",
                 parseCache: parseCache);
 
-        var wholeProgramText = StaticExpressionDisplay.RenderStaticProgram(staticProgram);
+        var wholeProgramText = StaticExpressionDisplay.RenderStaticProgram(
+            staticProgram,
+            kernelApplicationPrefix: "Pine_builtin");
 
         wholeProgramText.Trim().Should().Be(
             """"
 
             Test.alfa param_1_0 =
-                Pine_kernel.int_add
+                Pine_builtin.int_add
                     [ param_1_0
                     , 41
                     ]
@@ -76,19 +78,19 @@ public class KernelApplicationTests
     }
 
     [Fact]
-    public void Kernel_application_int_add_ternary()
+    public void Int_add_ternary()
     {
         var elmModuleText =
-            """
+            """"
             module Test exposing (..)
 
 
             alfa : Int -> Int -> Int
             alfa x y =
-                Pine_kernel.int_add
+                Pine_builtin.int_add
                     [ x, 41, y ]
 
-            """;
+            """";
 
         var parseCache = new PineVMParseCache();
 
@@ -99,13 +101,15 @@ public class KernelApplicationTests
                 includeDeclaration: qualifiedName => qualifiedName.DeclName is "alfa",
                 parseCache: parseCache);
 
-        var wholeProgramText = StaticExpressionDisplay.RenderStaticProgram(staticProgram);
+        var wholeProgramText = StaticExpressionDisplay.RenderStaticProgram(
+            staticProgram,
+            kernelApplicationPrefix: "Pine_builtin");
 
         wholeProgramText.Trim().Should().Be(
             """"
 
             Test.alfa param_1_0 param_1_1 =
-                Pine_kernel.int_add
+                Pine_builtin.int_add
                     [ param_1_0
                     , 41
                     , param_1_1
@@ -116,19 +120,19 @@ public class KernelApplicationTests
     }
 
     [Fact]
-    public void Kernel_application_int_mul_binary()
+    public void Int_mul_binary()
     {
         var elmModuleText =
-            """
+            """"
             module Test exposing (..)
 
 
             alfa : Int -> Int
             alfa x =
-                Pine_kernel.int_mul
+                Pine_builtin.int_mul
                     [ x, 17 ]
 
-            """;
+            """";
 
         var parseCache = new PineVMParseCache();
 
@@ -139,13 +143,15 @@ public class KernelApplicationTests
                 includeDeclaration: qualifiedName => qualifiedName.DeclName is "alfa",
                 parseCache: parseCache);
 
-        var wholeProgramText = StaticExpressionDisplay.RenderStaticProgram(staticProgram);
+        var wholeProgramText = StaticExpressionDisplay.RenderStaticProgram(
+            staticProgram,
+            kernelApplicationPrefix: "Pine_builtin");
 
         wholeProgramText.Trim().Should().Be(
             """"
 
             Test.alfa param_1_0 =
-                Pine_kernel.int_mul
+                Pine_builtin.int_mul
                     [ param_1_0
                     , 17
                     ]
