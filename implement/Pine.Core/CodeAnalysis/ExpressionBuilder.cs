@@ -6,7 +6,7 @@ namespace Pine.Core.CodeAnalysis;
 
 /// <summary>
 /// Shared utility methods for building Pine expressions.
-/// Used by <see cref="PartialApplicationWrapper"/> and <see cref="FunctionRecord"/> for consistent expression construction.
+/// Used by <see cref="FunctionValueBuilder"/> and <see cref="FunctionRecord"/> for consistent expression construction.
 /// </summary>
 public static class ExpressionBuilder
 {
