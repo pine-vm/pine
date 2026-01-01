@@ -12,7 +12,7 @@ For example, a recursive function, when calling itself via 'ParseAndEval', compo
 ### Full Function Applications
 
 For function applications where the number of arguments equals the number of parameters of the function (non-partial application), we use the following pattern to compile Elm function applications, as a convention:
-The environment is a list with two items. The first item in this list contains all the encoded functions needed for further applications. The second item in the list contains the arguments from the source Elm code.
+The environment is a list with two items. The first item in this list contains all the encoded function bodies needed for further applications. This set contains all the transitivels referenced functions that have not been inlined. The second item in the list contains the arguments from the source Elm code.
 
 The following example illustrates the pattern using a concrete recursive function:
 
@@ -48,11 +48,13 @@ Because of the direct recursion, the calling function happens to be the called f
 
 Following this pattern ensures that common inspection and profiling tooling can parse and analyze the invocations. We also use these tools to derive symbols for pseudo-functions rendered as part of snapshot tests.
 
-### Function Values And Partial Application
+### Function Values And Generic Function Application
 
-The Elm programming language supports closures and partial application. When a function (with remaining parameters) escapes a scope as a value, the Elm compiler emits a representation of this partially applied function that allows adding more arguments sometime later.
+The Elm programming language supports first-class functions and partial application. When a function whose declaration we know (it is not a parameter in the current context) escapes the current context, the Elm compiler emits a representation of this function as a value that can then be freely passed around to other parts of the program and applied sometime later.
 
-For function applications where the function is a value of unknown origin, the Elm compiler emits an expression that adds the given arguments using a form that allows for generic partial application. It emits this partial application as `ParseAndEvalExpression`, where the `Environment` contains the argument value. (If the Elm application expression contains multiple arguments, the compiler nests this pattern recursively)
+This function value contains not only an encoding of the function body, but also a list of the encoded function bodies the wrapped function depends on, including transitive dependencies.
+
+For function applications where the function is a value of unknown origin, the compiler emits an expression that adds the given arguments using a form that allows for generic partial application. It emits this partial application as `ParseAndEvalExpression`, where the `Environment` contains the argument value. (If the Elm application expression contains multiple arguments, the compiler nests this pattern recursively)
 
 When emitting a function value, the compiler creates a corresponding wrapper matching the number of parameters. On application of the last argument, the wrapper uses an environment structure as described in the 'Full Function Applications' section.
 
