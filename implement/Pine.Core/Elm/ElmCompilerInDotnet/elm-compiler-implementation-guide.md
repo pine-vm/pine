@@ -56,7 +56,7 @@ For function applications where the function is a value of unknown origin, the E
 
 When emitting a function value, the compiler creates a corresponding wrapper matching the number of parameters. On application of the last argument, the wrapper uses an environment structure as described in the 'Full Function Applications' section.
 
-### Closures
+## Closures
 
 The Elm programming language supports closures that capture the values of bindings in scope. Following is an example:
 
@@ -78,8 +78,43 @@ map__lifted__lambda1 f x acc =
     f x :: acc
 ```
 
-## Extensible Records
+## Type Inference
 
+This Elm compiler implements only partial type inference. Since it is not sufficient to detect all type mismatches, users also want to use an additional type checker to verify that a given Elm program is valid.
+
+Another implication of this partial type inference is that adding type annotations can yield more efficient code.
+
+The limited type inference here supports:
+
++ Type of binding from type annotation, if it does not contain any type variable or open record.
+  + This also covers infix operators that constrain to a concrete type, like `//` and `/`.
++ Type of function argument from function type.
+  + This function type does not have to come from an annotation, but could also have been inferred.
+  + Includes function applications using choice type tags (e.g., `Maybe.Just`, `Result.Ok`)
+  + Includes applications of functions implied by record type alias declarations.
++ Picking up primitive types from int pattern, hex pattern, string pattern, etc.
++ Type of tuple from tuple expression. (item -> tuple)
++ Type of tuple item from tuple expression. (tuple -> item)
++ Type of tuple item from tuple pattern.
++ Type of list item from list pattern.
++ Type of list item from uncons pattern.
++ Type of list from list expression.
++ Type of argument from 'named' pattern (deconstruction of choice type tag).
++ Type of record from record expression.
++ Type of record field from record access.
++ Type of record field from record update.
++ Distinction between `String` and `List a` to emit specialized code where the `++` operator (`appendable` type class) is applied.
++ Propagation via arithmetic operators like `+` `-` (`number` type class) to distinguish between `Int` and `Float` and emit specialized code for `Int` arithmetic.
+
+## Record Access and Record Update
+
+How we emit record access and record update depends on how much we know about the record type: when we have inferred a concrete list of field names, we use the field name index to perform an index-based lookup or insertion. However, due to row polymorphism, that index can vary across call sites. In these cases, we emit a function that recursively scans the record to find the field with the matching name.
+
+## Future Exploration - Monomorphizing Extensible Records
+
+The following is an idea to further optimize programs with row polymorphism for throughput:
+
+```
 The Elm language supports records that can be extended with additional fields, often called “extensible records” or “row polymorphism”.
 Instead of only using fixed shapes like `{ name : String, age : Int }`, Elm also allows types such as `{ r | name : String }`, which means “any record that has at least a name : String field, plus possibly more fields collected in r.” This feature lets a function say, in its type, “I need these fields, but I do not care what else is in the record.”
 
@@ -88,3 +123,4 @@ The compiler monomorphizes functions that accept extensible records. This monomo
 + When emitting a record access or record update, the concrete record fields are known from prior type inference, allowing the compiler to use an index to access the field value.
 + The compiler does not support entry points accepting extensible records. If the application author selects such a function as a compilation entry point, the compiler returns an error message.
 
+```
