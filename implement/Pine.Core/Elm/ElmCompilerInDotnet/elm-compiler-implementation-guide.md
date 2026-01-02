@@ -108,6 +108,15 @@ The limited type inference here supports:
 + Distinction between `String` and `List a` to emit specialized code where the `++` operator (`appendable` type class) is applied.
 + Propagation via arithmetic operators like `+` `-` (`number` type class) to distinguish between `Int` and `Float` and emit specialized code for `Int` arithmetic.
 
+## Arithmetic Operations
+
+The Elm core library offers arithmetic operations that are polymorphic and work on the `number` type class. The core library exposes these only as operator symbols.
+For example, it [exposes `Basics.add` as an infix operator `+`](https://github.com/elm/core/blob/84f38891468e8e153fc85a9b63bdafd81b24664e/src/Basics.elm#L82), which also implies the availability as a function named `(+)`.
+
+For operations where we prove the type must be `Int`, we emit specialized code accordingly. In cases where the type is `Float` or an unconstrained `number`, we emit a function that works with any `number` values.
+
+Where the type is constrained to `Int`, we map `Basics.add` and `Basics.mul` operations from Elm directly to the `int_add` and `int_mul` Pine builtin functions. For other operations, we attach the corresponding function in Pine code locally, so that code analysis does not need to follow references to the environment when parsing these operations. Tooling for inspection, such as snapshot tests for the compiler, maps these particular Pine expressions to identifiers like `ElmCore.int_div`, `ElmCore.number_mul`, etc. for better readability.
+
 ## Record Access and Record Update
 
 How we emit record access and record update depends on how much we know about the record type: when we have inferred a concrete list of field names, we use the field name index to perform an index-based lookup or insertion. However, due to row polymorphism, that index can vary across call sites. In these cases, we emit a function that recursively scans the record to find the field with the matching name.

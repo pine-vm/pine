@@ -59,19 +59,13 @@ public class OperatorCompiler
             BuiltinHelpers.ApplyBuiltinIntAdd([leftCompiled, rightCompiled]),
 
             "-" =>
-            // Subtraction: a - b = a + (-1 * b)
-            BuiltinHelpers.ApplyBuiltinIntAdd(
-                [
-                    leftCompiled,
-                    BuiltinHelpers.ApplyBuiltinIntMul(
-                    [
-                        Expression.LiteralInstance(ExpressionCompiler.EmitIntegerLiteral(-1)),
-                        rightCompiled
-                    ])
-                ]),
+            BasicArithmetic.Int_sub(leftCompiled, rightCompiled),
 
             "*" =>
             BuiltinHelpers.ApplyBuiltinIntMul([leftCompiled, rightCompiled]),
+
+            "//" =>
+            BasicArithmetic.Int_div(leftCompiled, rightCompiled),
 
             _ =>
             new CompilationError.UnsupportedOperator(operatorApp.Operator)

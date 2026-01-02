@@ -1,7 +1,6 @@
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Interpreter.IntermediateVM;
-using Pine.Core.PineVM;
 using Pine.Core.Tests.Elm.ElmCompilerTests;
 using System;
 using System.Collections.Frozen;
@@ -14,7 +13,7 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
 public class ElmCompilerTestHelper
 {
-    private static readonly FrozenSet<string> PineKernelModuleNames =
+    private static readonly FrozenSet<string> s_pineKernelModuleNames =
         FrozenSet.Create(["Pine_builtin", "Pine_kernel"]);
 
     /// <summary>
@@ -123,7 +122,7 @@ public class ElmCompilerTestHelper
         foreach (var moduleFile in elmModuleFiles)
         {
             var moduleText = Encoding.UTF8.GetString(moduleFile.fileContent.Span);
-            var parseResult = Pine.Core.Elm.ElmSyntax.ElmSyntaxParser.ParseModuleText(moduleText);
+            var parseResult = Core.Elm.ElmSyntax.ElmSyntaxParser.ParseModuleText(moduleText);
 
             if (parseResult.IsErrOrNull() is { } err)
             {
@@ -136,13 +135,13 @@ public class ElmCompilerTestHelper
             }
 
             var parseModuleAst =
-                Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7.FromStil4mConcretized.Convert(parseModuleOk);
+                Core.Elm.ElmSyntax.Stil4mElmSyntax7.FromStil4mConcretized.Convert(parseModuleOk);
 
             parsedModulesBeforeCanonicalize.Add(parseModuleAst);
         }
 
         var canonicalizationResult =
-            Pine.Core.Elm.ElmCompilerInDotnet.Canonicalization.Canonicalize(parsedModulesBeforeCanonicalize);
+            Canonicalization.Canonicalize(parsedModulesBeforeCanonicalize);
 
         if (canonicalizationResult.IsErrOrNull() is { } canonErr)
         {
@@ -161,7 +160,7 @@ public class ElmCompilerTestHelper
             .ToList();
 
         var lambdaLiftedModules = canonicalizedModules
-            .Select(Pine.Core.Elm.ElmCompilerInDotnet.LambdaLifting.LiftLambdas)
+            .Select(LambdaLifting.LiftLambdas)
             .ToList();
 
         // Collect all functions
@@ -171,7 +170,7 @@ public class ElmCompilerTestHelper
         foreach (var elmModuleSyntax in lambdaLiftedModules)
         {
             var moduleName =
-                Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7.Module.GetModuleName(elmModuleSyntax.ModuleDefinition.Value).Value;
+                Core.Elm.ElmSyntax.Stil4mElmSyntax7.Module.GetModuleName(elmModuleSyntax.ModuleDefinition.Value).Value;
 
             var moduleNameFlattened = string.Join(".", moduleName);
 
@@ -193,7 +192,7 @@ public class ElmCompilerTestHelper
             new ModuleCompilationContext(
                 allFunctions,
                 CompiledFunctionsCache: [],
-                PineKernelModuleNames: PineKernelModuleNames);
+                PineKernelModuleNames: s_pineKernelModuleNames);
 
         // Compute and return dependency layouts
         return ElmCompiler.ComputeDependencyLayouts(allFunctions, initialContext);
@@ -202,7 +201,7 @@ public class ElmCompilerTestHelper
     /// <summary>
     /// Create a VM with all optimizations disabled, to support repeatable profiling.
     /// </summary>
-    public static IPineVM PineVMForProfiling(
+    public static Core.Interpreter.IntermediateVM.PineVM PineVMForProfiling(
         Action<EvaluationReport> reportFunctionApplication)
     {
         var vm =
@@ -223,5 +222,23 @@ public class ElmCompilerTestHelper
                 cacheFileStore: null);
 
         return vm;
+    }
+
+    public static (EvaluationReport evalReport, IReadOnlyList<EvaluationReport> invocations)
+        EvaluateWithProfiling(
+        Expression expression,
+        PineValue environment)
+    {
+        var invocationReports = new List<EvaluationReport>();
+        var vm = PineVMForProfiling(invocationReports.Add);
+
+        var evalResult =
+            vm.EvaluateExpressionOnCustomStack(
+                expression,
+                environment,
+                config: new Core.Interpreter.IntermediateVM.PineVM.EvaluationConfig(ParseAndEvalCountLimit: null))
+            .Extract(err => throw new Exception(err));
+
+        return (evalResult, invocationReports);
     }
 }
