@@ -363,6 +363,15 @@ public class ElmCompiler
                 functionBody,
                 expressionContext);
 
+        // Create a parse cache to be reused for reduction and dependency parsing
+        var parseCache = new PineVMParseCache();
+
+        // Apply reduction to simplify expressions like head([a, b]) → a
+        compiledBodyExpression =
+            ReducePineExpression.ReduceExpressionBottomUp(
+                compiledBodyExpression,
+                parseCache);
+
         // For zero-parameter functions, check if it's a simple literal value
         if (compiledBodyExpression is Expression.Literal literalExpr)
         {
@@ -398,7 +407,6 @@ public class ElmCompiler
                 context = updatedContext;
 
                 // Parse the FunctionRecord to extract the InnerFunction expression
-                var parseCache = new PineVMParseCache();
                 var parsedFuncResult = FunctionRecord.ParseFunctionRecordTagged(depCompiled, parseCache);
 
                 if (parsedFuncResult.IsOkOrNull() is { } parsedFunc)
