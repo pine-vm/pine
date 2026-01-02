@@ -770,7 +770,7 @@ public class Program
                     siteDefaultPassword: actualPassword,
                     promptForPasswordOnConsole: true);
 
-            var console = (Pine.IConsole)StaticConsole.Instance;
+            var console = (IConsole)StaticConsole.Instance;
 
             return
             listFunctionsResult
@@ -2530,14 +2530,14 @@ public class Program
         return (elmEngineOption, parseElmEngineTypeFromOption);
     }
 
-    private static (Option<string?> elmCompilerOption, Func<Pine.IConsole, FileTree> loadElmCompilerFromOption)
+    private static (Option<string?> elmCompilerOption, Func<IConsole, FileTree> loadElmCompilerFromOption)
         CreateElmCompilerOption()
     {
         var defaultCompiler = ElmCompiler.CompilerSourceFilesDefault.Value;
 
         var elmCompilerOption = new Option<string?>("--elm-compiler");
 
-        FileTree parseElmCompilerFromOption(Pine.IConsole console)
+        FileTree parseElmCompilerFromOption(IConsole console)
         {
             // Simplified - would need to handle option value
             return defaultCompiler;
@@ -2629,7 +2629,7 @@ public class Program
             var scenarioSources = parseResult.GetValue(scenarioOption) ?? [];
             var scenariosSources = parseResult.GetValue(scenariosOption) ?? [];
 
-            var console = (Pine.IConsole)StaticConsole.Instance;
+            var console = (IConsole)StaticConsole.Instance;
 
             console.WriteLine("Got " + scenarioSources.Length + " source(s) for an individual scenario to load...");
             console.WriteLine("Got " + scenariosSources.Length + " source(s) for a directory of scenarios to load...");
@@ -2764,7 +2764,7 @@ public class Program
             var submitsFromOption = parseResult.GetValue(submitOption) ?? [];
             var saveToFile = parseResult.GetValue(saveToFileOption);
 
-            var console = (Pine.IConsole)StaticConsole.Instance;
+            var console = (IConsole)StaticConsole.Instance;
 
             var compileElmProgramCodeFiles = loadElmCompilerFromOption(parseResult, console);
             var elmEngineType = parseElmEngineTypeFromOption(parseResult);
@@ -3000,7 +3000,7 @@ public class Program
         return (elmEngineOption, parseElmEngineTypeFromOption);
     }
 
-    private static (Option<string?> elmCompilerOption, Func<ParseResult, Pine.IConsole, FileTree> loadElmCompilerFromOption)
+    private static (Option<string?> elmCompilerOption, Func<ParseResult, IConsole, FileTree> loadElmCompilerFromOption)
         CreateElmCompilerOption(Command cmd)
     {
         var defaultCompiler = ElmCompiler.CompilerSourceFilesDefault.Value;
@@ -3011,7 +3011,7 @@ public class Program
             Arity = ArgumentArity.ZeroOrOne
         };
 
-        FileTree parseElmCompilerFromOption(ParseResult parseResult, Pine.IConsole console)
+        FileTree parseElmCompilerFromOption(ParseResult parseResult, IConsole console)
         {
             if (parseResult.GetValue(elmCompilerOption) is { } compilerAsString)
             {

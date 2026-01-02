@@ -280,7 +280,7 @@ public class ElmSyntaxParser
             return string.Empty;
         }
 
-        var sb = new System.Text.StringBuilder();
+        var sb = new StringBuilder();
         Token? previousToken = null;
 
         foreach (var token in tokens)

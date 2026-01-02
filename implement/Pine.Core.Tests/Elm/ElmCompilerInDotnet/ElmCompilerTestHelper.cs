@@ -50,7 +50,7 @@ public class ElmCompilerTestHelper
         StaticProgramFromElmModules(
         IReadOnlyList<string> elmModulesTexts,
         bool disableInlining,
-        System.Func<DeclQualifiedName, bool> includeDeclaration,
+        Func<DeclQualifiedName, bool> includeDeclaration,
         PineVMParseCache parseCache)
     {
         var testCase =
@@ -68,7 +68,7 @@ public class ElmCompilerTestHelper
         StaticProgramFromTestCase(
         TestCase testCase,
         bool disableInlining,
-        System.Func<DeclQualifiedName, bool> includeDeclaration,
+        Func<DeclQualifiedName, bool> includeDeclaration,
         PineVMParseCache parseCache)
     {
         var appCodeTree = testCase.AsFileTree();
@@ -84,11 +84,11 @@ public class ElmCompilerTestHelper
                 appCodeTree,
                 rootFilePaths: rootFilePaths,
                 disableInlining: disableInlining)
-            .Extract(err => throw new System.Exception(err));
+            .Extract(err => throw new Exception(err));
 
         var parsedEnv =
             ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnv)
-            .Extract(err => throw new System.Exception("Failed parsing interactive environment: " + err));
+            .Extract(err => throw new Exception("Failed parsing interactive environment: " + err));
 
         var staticProgram =
             TestCase.ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
@@ -118,7 +118,7 @@ public class ElmCompilerTestHelper
             .ToImmutableArray();
 
         var parsedModulesBeforeCanonicalize =
-            new List<Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7.File>();
+            new List<Core.Elm.ElmSyntax.Stil4mElmSyntax7.File>();
 
         foreach (var moduleFile in elmModuleFiles)
         {
@@ -166,7 +166,7 @@ public class ElmCompilerTestHelper
 
         // Collect all functions
         var allFunctions =
-            new Dictionary<string, (string moduleName, string functionName, Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7.Declaration.FunctionDeclaration declaration)>();
+            new Dictionary<string, (string moduleName, string functionName, Core.Elm.ElmSyntax.Stil4mElmSyntax7.Declaration.FunctionDeclaration declaration)>();
 
         foreach (var elmModuleSyntax in lambdaLiftedModules)
         {
@@ -178,7 +178,7 @@ public class ElmCompilerTestHelper
             var declarations =
                 elmModuleSyntax.Declarations
                 .Select(declNode => declNode.Value)
-                .OfType<Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7.Declaration.FunctionDeclaration>();
+                .OfType<Core.Elm.ElmSyntax.Stil4mElmSyntax7.Declaration.FunctionDeclaration>();
 
             foreach (var declaration in declarations)
             {
@@ -203,7 +203,7 @@ public class ElmCompilerTestHelper
     /// Create a VM with all optimizations disabled, to support repeatable profiling.
     /// </summary>
     public static IPineVM PineVMForProfiling(
-        System.Action<Core.Interpreter.IntermediateVM.EvaluationReport> reportFunctionApplication)
+        Action<EvaluationReport> reportFunctionApplication)
     {
         var vm =
             Core.Interpreter.IntermediateVM.PineVM.CreateCustom(
@@ -216,7 +216,7 @@ public class ElmCompilerTestHelper
                 skipInlineForExpression: _ => false,
                 enableTailRecursionOptimization: false,
                 parseCache: null,
-                precompiledLeaves: ImmutableDictionary<PineValue, System.Func<PineValue, PineValue?>>.Empty,
+                precompiledLeaves: ImmutableDictionary<PineValue, Func<PineValue, PineValue?>>.Empty,
                 reportEnterPrecompiledLeaf: null,
                 reportExitPrecompiledLeaf: null,
                 optimizationParametersSerial: null,
