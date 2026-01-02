@@ -2,6 +2,7 @@ using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 
 using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 
@@ -160,10 +161,10 @@ public class FunctionCompiler
         return (finalResult, context.WithCompiledFunction(qualifiedFunctionName, finalResult, dependencyLayout));
     }
 
-    private static Dictionary<string, TypeInference.InferredType> ExtractParameterTypes(
+    private static ImmutableDictionary<string, TypeInference.InferredType> ExtractParameterTypes(
         SyntaxTypes.FunctionStruct function)
     {
-        var parameterTypes = new Dictionary<string, TypeInference.InferredType>();
+        var parameterTypes = ImmutableDictionary<string, TypeInference.InferredType>.Empty;
 
         if (function.Signature?.Value is { } signature)
         {
@@ -181,7 +182,7 @@ public class FunctionCompiler
 
                 // Extract binding types from the pattern
                 // This handles both simple VarPattern and complex patterns like TuplePattern
-                TypeInference.ExtractPatternBindingTypes(paramPattern, paramTypeAnnotation, parameterTypes);
+                parameterTypes = TypeInference.ExtractPatternBindingTypes(paramPattern, paramTypeAnnotation, parameterTypes);
 
                 currentType = funcType.ReturnType.Value;
                 paramIndex++;

@@ -92,8 +92,11 @@ public class PatternCompiler
             var patternBindings = ExtractPatternBindings(pattern, scrutinee);
 
             // Extract binding types from the pattern
-            var patternBindingTypes = new Dictionary<string, TypeInference.InferredType>();
-            TypeInference.ExtractPatternBindingTypesFromInferred(pattern, scrutineeType, patternBindingTypes);
+            var patternBindingTypes = TypeInference.ExtractPatternBindingTypesFromInferred(
+                pattern,
+                scrutineeType,
+                ImmutableDictionary<string, TypeInference.InferredType>.Empty,
+                context.ModuleCompilationContext.ConstructorArgumentTypes);
 
             // Create case context with both bindings and binding types
             var caseContext = context;
@@ -104,18 +107,9 @@ public class PatternCompiler
             if (patternBindingTypes.Count > 0)
             {
                 // Merge existing binding types with new pattern binding types
-                var mergedBindingTypes = new Dictionary<string, TypeInference.InferredType>();
-                if (context.LocalBindingTypes is { } existingTypes)
-                {
-                    foreach (var kvp in existingTypes)
-                    {
-                        mergedBindingTypes[kvp.Key] = kvp.Value;
-                    }
-                }
-                foreach (var kvp in patternBindingTypes)
-                {
-                    mergedBindingTypes[kvp.Key] = kvp.Value;
-                }
+                var mergedBindingTypes = context.LocalBindingTypes is { } existingTypes
+                    ? existingTypes.ToImmutableDictionary().SetItems(patternBindingTypes)
+                    : patternBindingTypes;
                 caseContext = caseContext.WithReplacedLocalBindingsAndTypes(caseContext.LocalBindings, mergedBindingTypes);
             }
 

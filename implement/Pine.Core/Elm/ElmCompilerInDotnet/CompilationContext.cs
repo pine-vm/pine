@@ -29,12 +29,16 @@ public record CompiledFunctionInfo(
 /// <param name="PineKernelModuleNames">Names of Pine kernel modules.</param>
 /// <param name="FunctionDependencyLayouts">Pre-computed dependency layouts for all functions (populated before compilation).</param>
 /// <param name="FunctionReturnTypes">Map of qualified function names to their return types.</param>
+/// <param name="ConstructorArgumentTypes">Map of constructor names to their argument types (for type inference from NamedPatterns).</param>
+/// <param name="FunctionParameterTypes">Map of qualified function names to their parameter types (for type inference from function applications).</param>
 public record ModuleCompilationContext(
     IReadOnlyDictionary<string, (string moduleName, string functionName, SyntaxTypes.Declaration.FunctionDeclaration declaration)> AllFunctions,
     ImmutableDictionary<string, CompiledFunctionInfo> CompiledFunctionsCache,
     FrozenSet<string> PineKernelModuleNames,
     IReadOnlyDictionary<string, IReadOnlyList<string>>? FunctionDependencyLayouts = null,
-    IReadOnlyDictionary<string, TypeInference.InferredType>? FunctionReturnTypes = null)
+    IReadOnlyDictionary<string, TypeInference.InferredType>? FunctionReturnTypes = null,
+    IReadOnlyDictionary<string, IReadOnlyList<TypeInference.InferredType>>? ConstructorArgumentTypes = null,
+    IReadOnlyDictionary<string, IReadOnlyList<TypeInference.InferredType>>? FunctionParameterTypes = null)
 {
     /// <summary>
     /// Creates a new context with the specified function added to the cache.
@@ -140,6 +144,23 @@ public record ModuleCompilationContext(
     /// <returns>True if it's a kernel module.</returns>
     public bool IsPineKernelModule(string moduleName) =>
         PineKernelModuleNames.Contains(moduleName);
+
+    /// <summary>
+    /// Tries to get the argument types for a constructor by name.
+    /// </summary>
+    /// <param name="constructorName">The constructor name (e.g., "TagAlfa").</param>
+    /// <param name="argumentTypes">The list of argument types if found.</param>
+    /// <returns>True if the constructor was found.</returns>
+    public bool TryGetConstructorArgumentTypes(string constructorName, out IReadOnlyList<TypeInference.InferredType>? argumentTypes)
+    {
+        if (ConstructorArgumentTypes?.TryGetValue(constructorName, out var types) ?? false)
+        {
+            argumentTypes = types;
+            return true;
+        }
+        argumentTypes = null;
+        return false;
+    }
 }
 
 /// <summary>

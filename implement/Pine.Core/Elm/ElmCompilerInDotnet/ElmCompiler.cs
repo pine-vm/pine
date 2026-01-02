@@ -160,13 +160,54 @@ public class ElmCompiler
             functionReturnTypes[qualifiedName] = returnType;
         }
 
+        // Build function parameter types dictionary for type inference from function applications
+        var functionParameterTypes = new Dictionary<string, IReadOnlyList<TypeInference.InferredType>>();
+        foreach (var (qualifiedName, (_, _, declaration)) in allFunctions)
+        {
+            var paramTypes = TypeInference.GetFunctionParameterTypes(declaration);
+            if (paramTypes.Count > 0)
+            {
+                functionParameterTypes[qualifiedName] = paramTypes;
+            }
+        }
+
+        // Build constructor argument types dictionary for type inference from NamedPatterns
+        var constructorArgumentTypes = new Dictionary<string, IReadOnlyList<TypeInference.InferredType>>();
+        foreach (var elmModuleSyntax in lambdaLiftedModules)
+        {
+            var typeDeclarations =
+                elmModuleSyntax.Declarations
+                .Select(declNode => declNode.Value)
+                .OfType<SyntaxTypes.Declaration.CustomTypeDeclaration>();
+
+            foreach (var typeDecl in typeDeclarations)
+            {
+                foreach (var ctorNode in typeDecl.TypeDeclaration.Constructors)
+                {
+                    var ctor = ctorNode.Value;
+                    var ctorName = ctor.Name.Value;
+
+                    var argTypes = new List<TypeInference.InferredType>();
+                    foreach (var argNode in ctor.Arguments)
+                    {
+                        var argType = TypeInference.TypeAnnotationToInferredType(argNode.Value);
+                        argTypes.Add(argType);
+                    }
+
+                    constructorArgumentTypes[ctorName] = argTypes;
+                }
+            }
+        }
+
         // Create initial compilation context with all available functions
         var initialContext =
             new ModuleCompilationContext(
                 allFunctions,
                 CompiledFunctionsCache: [],
                 PineKernelModuleNames: s_pineKernelModuleNamesDefault,
-                FunctionReturnTypes: functionReturnTypes);
+                FunctionReturnTypes: functionReturnTypes,
+                ConstructorArgumentTypes: constructorArgumentTypes,
+                FunctionParameterTypes: functionParameterTypes);
 
         // Pre-compute dependency layouts for all functions BEFORE compilation
         var dependencyLayouts = ComputeDependencyLayouts(allFunctions, initialContext);
@@ -329,8 +370,12 @@ public class ElmCompiler
 
         var parameterCount = arguments.Count;
 
-        // Extract parameter types from the function signature if available
-        var parameterTypes = ExtractParameterTypes(functionDeclaration.Function);
+        // Extract parameter types from the function signature if available, and from NamedPatterns using constructor types
+        var parameterTypes = ExtractParameterTypes(
+            functionDeclaration.Function,
+            context.ConstructorArgumentTypes,
+            context.FunctionParameterTypes,
+            currentModuleName);
 
         // Analyze dependencies to determine which functions this function calls
         var dependencies =
@@ -507,6 +552,23 @@ public class ElmCompiler
                     AnalyzeExpression(ifBlock.ElseBlock.Value);
                     break;
 
+                case SyntaxTypes.Expression.LetExpression letExpr:
+                    foreach (var decl in letExpr.Value.Declarations)
+                    {
+                        switch (decl.Value)
+                        {
+                            case SyntaxTypes.Expression.LetDeclaration.LetFunction letFunc:
+                                AnalyzeExpression(letFunc.Function.Declaration.Value.Expression.Value);
+                                break;
+
+                            case SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr:
+                                AnalyzeExpression(letDestr.Expression.Value);
+                                break;
+                        }
+                    }
+                    AnalyzeExpression(letExpr.Value.Expression.Value);
+                    break;
+
                 case SyntaxTypes.Expression.ListExpr listExpr:
                     foreach (var elem in listExpr.Elements)
                     {
@@ -529,10 +591,13 @@ public class ElmCompiler
         return dependencies;
     }
 
-    private static Dictionary<string, TypeInference.InferredType> ExtractParameterTypes(
-        SyntaxTypes.FunctionStruct function)
+    private static ImmutableDictionary<string, TypeInference.InferredType> ExtractParameterTypes(
+        SyntaxTypes.FunctionStruct function,
+        IReadOnlyDictionary<string, IReadOnlyList<TypeInference.InferredType>>? constructorArgumentTypes,
+        IReadOnlyDictionary<string, IReadOnlyList<TypeInference.InferredType>>? functionParameterTypes,
+        string currentModuleName)
     {
-        var parameterTypes = new Dictionary<string, TypeInference.InferredType>();
+        var parameterTypes = ImmutableDictionary<string, TypeInference.InferredType>.Empty;
 
         if (function.Signature?.Value is { } signature)
         {
@@ -551,11 +616,45 @@ public class ElmCompiler
 
                 // Extract binding types from the pattern
                 // This handles both simple VarPattern and complex patterns like TuplePattern
-                TypeInference.ExtractPatternBindingTypes(paramPattern, paramTypeAnnotation, parameterTypes);
+                parameterTypes = TypeInference.ExtractPatternBindingTypes(paramPattern, paramTypeAnnotation, parameterTypes);
 
                 currentType = funcType.ReturnType.Value;
                 paramIndex++;
             }
+        }
+
+        // Also extract types from NamedPattern parameters using constructor argument types
+        // This handles cases where the function has no type signature but uses choice type patterns
+        if (constructorArgumentTypes is not null)
+        {
+            var parameters = function.Declaration.Value.Arguments;
+            foreach (var paramNode in parameters)
+            {
+                parameterTypes = TypeInference.ExtractPatternBindingTypesWithConstructors(
+                    paramNode.Value,
+                    constructorArgumentTypes,
+                    parameterTypes);
+            }
+
+            // Also analyze the function body for tag applications that constrain parameter types
+            // For example, in `alfa a b = let c = TagAlfa a in ...`, we infer that `a` is Int
+            var functionBody = function.Declaration.Value.Expression.Value;
+            parameterTypes = TypeInference.ExtractTypeConstraintsFromTagApplications(
+                functionBody,
+                constructorArgumentTypes,
+                parameterTypes);
+        }
+
+        // Also analyze the function body for function applications that constrain parameter types
+        // For example, in `beta a b = let c = alfa a in ...` where `alfa : Int -> String`, we infer that `a` is Int
+        if (functionParameterTypes is not null)
+        {
+            var functionBody = function.Declaration.Value.Expression.Value;
+            parameterTypes = TypeInference.ExtractTypeConstraintsFromFunctionApplications(
+                functionBody,
+                functionParameterTypes,
+                currentModuleName,
+                parameterTypes);
         }
 
         return parameterTypes;

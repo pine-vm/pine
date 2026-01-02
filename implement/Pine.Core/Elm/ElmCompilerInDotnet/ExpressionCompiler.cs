@@ -2,6 +2,7 @@ using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Numerics;
 
@@ -379,21 +380,15 @@ public class ExpressionCompiler
         ExpressionCompilationContext context)
     {
         var newBindings = new Dictionary<string, Expression>();
-        var newBindingTypes = new Dictionary<string, TypeInference.InferredType>();
+        var newBindingTypes = context.LocalBindingTypes is { } existingBindingTypes
+            ? existingBindingTypes.ToImmutableDictionary()
+            : ImmutableDictionary<string, TypeInference.InferredType>.Empty;
 
         if (context.LocalBindings is { } existingBindings)
         {
             foreach (var kvp in existingBindings)
             {
                 newBindings[kvp.Key] = kvp.Value;
-            }
-        }
-
-        if (context.LocalBindingTypes is { } existingBindingTypes)
-        {
-            foreach (var kvp in existingBindingTypes)
-            {
-                newBindingTypes[kvp.Key] = kvp.Value;
             }
         }
 
@@ -464,7 +459,7 @@ public class ExpressionCompiler
                             context.CurrentModuleName,
                             context.FunctionReturnTypes);
 
-                        newBindingTypes[funcName] = bindingType;
+                        newBindingTypes = newBindingTypes.SetItem(funcName, bindingType);
 
                         // Update the let context with the new type before compiling
                         letContext = letContext.WithReplacedLocalBindingsAndTypes(newBindings, newBindingTypes);
@@ -495,7 +490,7 @@ public class ExpressionCompiler
                         context.FunctionReturnTypes);
 
                     // Extract binding types from the pattern using the inferred type
-                    TypeInference.ExtractPatternBindingTypesFromInferred(
+                    newBindingTypes = TypeInference.ExtractPatternBindingTypesFromInferred(
                         letDestructuring.Pattern.Value,
                         destructuredExprType,
                         newBindingTypes);
