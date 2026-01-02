@@ -75,6 +75,15 @@ public class PatternCompiler
         var scrutinee = scrutineeResult.IsOkOrNull()!;
         Expression? result = null;
 
+        // Infer the type of the scrutinee for pattern type extraction
+        var scrutineeType = TypeInference.InferExpressionType(
+            caseBlock.Expression.Value,
+            context.ParameterNames,
+            context.ParameterTypes,
+            context.LocalBindingTypes,
+            context.CurrentModuleName,
+            context.FunctionReturnTypes);
+
         for (var i = caseBlock.Cases.Count - 1; i >= 0; i--)
         {
             var caseItem = caseBlock.Cases[i];
@@ -82,9 +91,33 @@ public class PatternCompiler
 
             var patternBindings = ExtractPatternBindings(pattern, scrutinee);
 
-            var caseContext = patternBindings.Count > 0
-                ? context.WithLocalBindings(patternBindings)
-                : context;
+            // Extract binding types from the pattern
+            var patternBindingTypes = new Dictionary<string, TypeInference.InferredType>();
+            TypeInference.ExtractPatternBindingTypesFromInferred(pattern, scrutineeType, patternBindingTypes);
+
+            // Create case context with both bindings and binding types
+            var caseContext = context;
+            if (patternBindings.Count > 0)
+            {
+                caseContext = caseContext.WithLocalBindings(patternBindings);
+            }
+            if (patternBindingTypes.Count > 0)
+            {
+                // Merge existing binding types with new pattern binding types
+                var mergedBindingTypes = new Dictionary<string, TypeInference.InferredType>();
+                if (context.LocalBindingTypes is { } existingTypes)
+                {
+                    foreach (var kvp in existingTypes)
+                    {
+                        mergedBindingTypes[kvp.Key] = kvp.Value;
+                    }
+                }
+                foreach (var kvp in patternBindingTypes)
+                {
+                    mergedBindingTypes[kvp.Key] = kvp.Value;
+                }
+                caseContext = caseContext.WithReplacedLocalBindingsAndTypes(caseContext.LocalBindings, mergedBindingTypes);
+            }
 
             var caseBodyResult = ExpressionCompiler.Compile(caseItem.Expression.Value, caseContext);
             if (caseBodyResult.IsErrOrNull() is { } caseErr)
@@ -511,7 +544,8 @@ public class PatternCompiler
             SyntaxTypes.Pattern.RecordPattern =>
                 null, // Record pattern always binds variables
 
-            _ => throw new NotImplementedException(
+            _ =>
+            throw new NotImplementedException(
                 $"Pattern type not yet supported for constant analysis: {pattern.GetType().Name}")
         };
     }
@@ -523,8 +557,10 @@ public class PatternCompiler
         for (var i = 0; i < listPattern.Elements.Count; i++)
         {
             var elementValue = AsConstantPattern(listPattern.Elements[i].Value);
+
             if (elementValue is null)
                 return null;
+
             elements[i] = elementValue;
         }
 
@@ -538,8 +574,10 @@ public class PatternCompiler
         for (var i = 0; i < tuplePattern.Elements.Count; i++)
         {
             var elementValue = AsConstantPattern(tuplePattern.Elements[i].Value);
+
             if (elementValue is null)
                 return null;
+
             elements[i] = elementValue;
         }
 

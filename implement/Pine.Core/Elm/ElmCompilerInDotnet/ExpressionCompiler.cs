@@ -49,6 +49,9 @@ public class ExpressionCompiler
             SyntaxTypes.Expression.ListExpr expr =>
                 CompileListExpr(expr, context),
 
+            SyntaxTypes.Expression.TupledExpression expr =>
+                CompileTupledExpression(expr, context),
+
             SyntaxTypes.Expression.OperatorApplication expr =>
                 CompileOperatorApplication(expr, context),
 
@@ -188,9 +191,12 @@ public class ExpressionCompiler
             }
 
             // Determine qualified function name
-            string qualifiedFunctionName = funcRef.ModuleName.Count > 0
-                ? string.Join(".", funcRef.ModuleName) + "." + funcRef.Name
-                : context.CurrentModuleName + "." + funcRef.Name;
+            var qualifiedFunctionName =
+                funcRef.ModuleName.Count > 0
+                ?
+                string.Join(".", funcRef.ModuleName) + "." + funcRef.Name
+                :
+                context.CurrentModuleName + "." + funcRef.Name;
 
             if (context.GetFunctionIndexInLayout(qualifiedFunctionName) is not { } functionIndex)
             {
@@ -282,6 +288,25 @@ public class ExpressionCompiler
         return Expression.ListInstance(compiledElements);
     }
 
+    private static Result<CompilationError, Expression> CompileTupledExpression(
+        SyntaxTypes.Expression.TupledExpression expr,
+        ExpressionCompilationContext context)
+    {
+        // A tuple in Elm is represented as a list in Pine
+        var compiledElements = new List<Expression>();
+        foreach (var elem in expr.Elements)
+        {
+            var result = Compile(elem.Value, context);
+            if (result.IsErrOrNull() is { } err)
+            {
+                return err;
+            }
+            compiledElements.Add(result.IsOkOrNull()!);
+        }
+
+        return Expression.ListInstance(compiledElements);
+    }
+
     private static Result<CompilationError, Expression> CompileOperatorApplication(
         SyntaxTypes.Expression.OperatorApplication expr,
         ExpressionCompilationContext context) =>
@@ -354,12 +379,21 @@ public class ExpressionCompiler
         ExpressionCompilationContext context)
     {
         var newBindings = new Dictionary<string, Expression>();
+        var newBindingTypes = new Dictionary<string, TypeInference.InferredType>();
 
         if (context.LocalBindings is { } existingBindings)
         {
             foreach (var kvp in existingBindings)
             {
                 newBindings[kvp.Key] = kvp.Value;
+            }
+        }
+
+        if (context.LocalBindingTypes is { } existingBindingTypes)
+        {
+            foreach (var kvp in existingBindingTypes)
+            {
+                newBindingTypes[kvp.Key] = kvp.Value;
             }
         }
 
@@ -405,7 +439,7 @@ public class ExpressionCompiler
         }
 
         var sortedIndices = sortedIndicesResult.IsOkOrNull()!;
-        var letContext = context.WithReplacedLocalBindings(newBindings);
+        var letContext = context.WithReplacedLocalBindingsAndTypes(newBindings, newBindingTypes);
 
         foreach (var idx in sortedIndices)
         {
@@ -420,6 +454,21 @@ public class ExpressionCompiler
 
                     if (funcArgs.Count is 0)
                     {
+                        // Infer the type of the bound expression BEFORE compiling
+                        // This allows us to propagate types from parameters through let bindings
+                        var bindingType = TypeInference.InferExpressionType(
+                            funcBody,
+                            context.ParameterNames,
+                            context.ParameterTypes,
+                            newBindingTypes.Count > 0 ? newBindingTypes : null,
+                            context.CurrentModuleName,
+                            context.FunctionReturnTypes);
+
+                        newBindingTypes[funcName] = bindingType;
+
+                        // Update the let context with the new type before compiling
+                        letContext = letContext.WithReplacedLocalBindingsAndTypes(newBindings, newBindingTypes);
+
                         var compiledBodyResult = Compile(funcBody, letContext);
 
                         if (compiledBodyResult.IsErrOrNull() is { } bodyErr)
@@ -436,6 +485,24 @@ public class ExpressionCompiler
                     break;
 
                 case SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestructuring:
+                    // Infer the type of the expression being destructured
+                    var destructuredExprType = TypeInference.InferExpressionType(
+                        letDestructuring.Expression.Value,
+                        context.ParameterNames,
+                        context.ParameterTypes,
+                        newBindingTypes.Count > 0 ? newBindingTypes : null,
+                        context.CurrentModuleName,
+                        context.FunctionReturnTypes);
+
+                    // Extract binding types from the pattern using the inferred type
+                    TypeInference.ExtractPatternBindingTypesFromInferred(
+                        letDestructuring.Pattern.Value,
+                        destructuredExprType,
+                        newBindingTypes);
+
+                    // Update the let context with the new types
+                    letContext = letContext.WithReplacedLocalBindingsAndTypes(newBindings, newBindingTypes);
+
                     var destructuredResult = Compile(letDestructuring.Expression.Value, letContext);
                     if (destructuredResult.IsErrOrNull() is { } destrErr)
                     {
@@ -450,6 +517,9 @@ public class ExpressionCompiler
                     {
                         newBindings[kvp.Key] = kvp.Value;
                     }
+
+                    // Update the let context with the new bindings
+                    letContext = letContext.WithReplacedLocalBindingsAndTypes(newBindings, newBindingTypes);
                     break;
             }
         }

@@ -21,7 +21,10 @@ public class OperatorCompiler
         var expressionType = TypeInference.InferExpressionType(
             operatorApp,
             context.ParameterNames,
-            context.ParameterTypes);
+            context.ParameterTypes,
+            context.LocalBindingTypes,
+            context.CurrentModuleName,
+            context.FunctionReturnTypes);
 
         if (expressionType is TypeInference.InferredType.IntType)
         {
@@ -52,11 +55,12 @@ public class OperatorCompiler
 
         return operatorApp.Operator switch
         {
-            "+" => BuiltinHelpers.ApplyBuiltinIntAdd([leftCompiled, rightCompiled]),
+            "+" =>
+            BuiltinHelpers.ApplyBuiltinIntAdd([leftCompiled, rightCompiled]),
 
             "-" =>
-                // Subtraction: a - b = a + (-1 * b)
-                BuiltinHelpers.ApplyBuiltinIntAdd(
+            // Subtraction: a - b = a + (-1 * b)
+            BuiltinHelpers.ApplyBuiltinIntAdd(
                 [
                     leftCompiled,
                     BuiltinHelpers.ApplyBuiltinIntMul(
@@ -66,9 +70,11 @@ public class OperatorCompiler
                     ])
                 ]),
 
-            "*" => BuiltinHelpers.ApplyBuiltinIntMul([leftCompiled, rightCompiled]),
+            "*" =>
+            BuiltinHelpers.ApplyBuiltinIntMul([leftCompiled, rightCompiled]),
 
-            _ => new CompilationError.UnsupportedOperator(operatorApp.Operator)
+            _ =>
+            new CompilationError.UnsupportedOperator(operatorApp.Operator)
         };
     }
 }

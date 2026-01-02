@@ -267,9 +267,9 @@ public static class LambdaLifting
                 var funcExpr = letFunc.Function.Declaration.Value.Expression;
 
                 // Check if this is a lambda assignment or a local function with parameters
-                bool isLambdaAssignment = funcExpr.Value is SyntaxTypes.Expression.LambdaExpression &&
+                var isLambdaAssignment = funcExpr.Value is SyntaxTypes.Expression.LambdaExpression &&
                     letFunc.Function.Declaration.Value.Arguments.Count is 0;
-                bool isLocalFunctionWithParams = letFunc.Function.Declaration.Value.Arguments.Count > 0;
+                var isLocalFunctionWithParams = letFunc.Function.Declaration.Value.Arguments.Count > 0;
 
                 if (isLambdaAssignment || isLocalFunctionWithParams)
                 {

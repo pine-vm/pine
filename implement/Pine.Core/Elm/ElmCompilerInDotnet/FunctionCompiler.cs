@@ -82,8 +82,10 @@ public class FunctionCompiler
             CurrentModuleName: currentModuleName,
             CurrentFunctionName: functionName,
             LocalBindings: localBindings.Count > 0 ? localBindings : null,
+            LocalBindingTypes: null,
             DependencyLayout: dependencyLayout,
-            ModuleCompilationContext: context);
+            ModuleCompilationContext: context,
+            FunctionReturnTypes: context.FunctionReturnTypes);
 
         // Compile the function body
         var compiledBodyResult = ExpressionCompiler.Compile(functionBody, expressionContext);
@@ -174,11 +176,12 @@ public class FunctionCompiler
             while (currentType is SyntaxTypes.TypeAnnotation.FunctionTypeAnnotation funcType &&
                    paramIndex < parameters.Count)
             {
-                if (parameters[paramIndex].Value is SyntaxTypes.Pattern.VarPattern varPattern)
-                {
-                    var paramType = TypeInference.TypeAnnotationToInferredType(funcType.ArgumentType.Value);
-                    parameterTypes[varPattern.Name] = paramType;
-                }
+                var paramPattern = parameters[paramIndex].Value;
+                var paramTypeAnnotation = funcType.ArgumentType.Value;
+
+                // Extract binding types from the pattern
+                // This handles both simple VarPattern and complex patterns like TuplePattern
+                TypeInference.ExtractPatternBindingTypes(paramPattern, paramTypeAnnotation, parameterTypes);
 
                 currentType = funcType.ReturnType.Value;
                 paramIndex++;
@@ -221,9 +224,12 @@ public class FunctionCompiler
                             break;
                         }
 
-                        string qualifiedName = funcRef.ModuleName.Count > 0
-                            ? string.Join(".", funcRef.ModuleName) + "." + funcRef.Name
-                            : currentModuleName + "." + funcRef.Name;
+                        var qualifiedName =
+                            funcRef.ModuleName.Count > 0
+                            ?
+                            string.Join(".", funcRef.ModuleName) + "." + funcRef.Name
+                            :
+                            currentModuleName + "." + funcRef.Name;
 
                         dependencies.Add(qualifiedName);
                     }

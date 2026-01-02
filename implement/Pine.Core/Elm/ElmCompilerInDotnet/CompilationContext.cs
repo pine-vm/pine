@@ -28,11 +28,13 @@ public record CompiledFunctionInfo(
 /// <param name="CompiledFunctionsCache">Cache of already compiled functions with their dependency layouts.</param>
 /// <param name="PineKernelModuleNames">Names of Pine kernel modules.</param>
 /// <param name="FunctionDependencyLayouts">Pre-computed dependency layouts for all functions (populated before compilation).</param>
+/// <param name="FunctionReturnTypes">Map of qualified function names to their return types.</param>
 public record ModuleCompilationContext(
     IReadOnlyDictionary<string, (string moduleName, string functionName, SyntaxTypes.Declaration.FunctionDeclaration declaration)> AllFunctions,
     ImmutableDictionary<string, CompiledFunctionInfo> CompiledFunctionsCache,
     FrozenSet<string> PineKernelModuleNames,
-    IReadOnlyDictionary<string, IReadOnlyList<string>>? FunctionDependencyLayouts = null)
+    IReadOnlyDictionary<string, IReadOnlyList<string>>? FunctionDependencyLayouts = null,
+    IReadOnlyDictionary<string, TypeInference.InferredType>? FunctionReturnTypes = null)
 {
     /// <summary>
     /// Creates a new context with the specified function added to the cache.
@@ -150,16 +152,20 @@ public record ModuleCompilationContext(
 /// <param name="CurrentModuleName">Name of the module being compiled.</param>
 /// <param name="CurrentFunctionName">Name of the function being compiled (if any).</param>
 /// <param name="LocalBindings">Local variable bindings from let expressions or patterns.</param>
+/// <param name="LocalBindingTypes">Mapping from local binding names to their inferred types.</param>
 /// <param name="DependencyLayout">Layout of function dependencies for the current function.</param>
 /// <param name="ModuleCompilationContext">The parent module compilation context.</param>
+/// <param name="FunctionReturnTypes">Mapping from qualified function names to their return types.</param>
 public record ExpressionCompilationContext(
     IReadOnlyDictionary<string, int> ParameterNames,
     IReadOnlyDictionary<string, TypeInference.InferredType> ParameterTypes,
     string CurrentModuleName,
     string? CurrentFunctionName,
     IReadOnlyDictionary<string, Expression>? LocalBindings,
+    IReadOnlyDictionary<string, TypeInference.InferredType>? LocalBindingTypes,
     IReadOnlyList<string> DependencyLayout,
-    ModuleCompilationContext ModuleCompilationContext)
+    ModuleCompilationContext ModuleCompilationContext,
+    IReadOnlyDictionary<string, TypeInference.InferredType>? FunctionReturnTypes = null)
 {
     /// <summary>
     /// Creates a new context with additional local bindings.
@@ -196,6 +202,34 @@ public record ExpressionCompilationContext(
     /// <returns>A new context with the new bindings.</returns>
     public ExpressionCompilationContext WithReplacedLocalBindings(IReadOnlyDictionary<string, Expression>? bindings) =>
         this with { LocalBindings = bindings };
+
+    /// <summary>
+    /// Creates a new context with updated local bindings and their types (replacing existing).
+    /// </summary>
+    /// <param name="bindings">The new bindings dictionary.</param>
+    /// <param name="bindingTypes">The new binding types dictionary.</param>
+    /// <returns>A new context with the new bindings and types.</returns>
+    public ExpressionCompilationContext WithReplacedLocalBindingsAndTypes(
+        IReadOnlyDictionary<string, Expression>? bindings,
+        IReadOnlyDictionary<string, TypeInference.InferredType>? bindingTypes) =>
+        this with { LocalBindings = bindings, LocalBindingTypes = bindingTypes };
+
+    /// <summary>
+    /// Tries to get the type of a local binding by name.
+    /// </summary>
+    /// <param name="name">The binding name.</param>
+    /// <param name="type">The type if found.</param>
+    /// <returns>True if the binding type was found.</returns>
+    public bool TryGetLocalBindingType(string name, out TypeInference.InferredType? type)
+    {
+        if (LocalBindingTypes is { } types && types.TryGetValue(name, out var t))
+        {
+            type = t;
+            return true;
+        }
+        type = null;
+        return false;
+    }
 
     /// <summary>
     /// Tries to get a local binding by name.

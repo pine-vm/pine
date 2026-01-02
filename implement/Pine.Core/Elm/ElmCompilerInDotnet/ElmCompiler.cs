@@ -152,12 +152,21 @@ public class ElmCompiler
             }
         }
 
+        // Build function return types dictionary for type inference
+        var functionReturnTypes = new Dictionary<string, TypeInference.InferredType>();
+        foreach (var (qualifiedName, (_, _, declaration)) in allFunctions)
+        {
+            var returnType = TypeInference.GetFunctionReturnType(declaration);
+            functionReturnTypes[qualifiedName] = returnType;
+        }
+
         // Create initial compilation context with all available functions
         var initialContext =
             new ModuleCompilationContext(
                 allFunctions,
                 CompiledFunctionsCache: [],
-                PineKernelModuleNames: s_pineKernelModuleNamesDefault);
+                PineKernelModuleNames: s_pineKernelModuleNamesDefault,
+                FunctionReturnTypes: functionReturnTypes);
 
         // Pre-compute dependency layouts for all functions BEFORE compilation
         var dependencyLayouts = ComputeDependencyLayouts(allFunctions, initialContext);
@@ -286,7 +295,6 @@ public class ElmCompiler
         }
 
         var arguments = functionDeclaration.Function.Declaration.Value.Arguments;
-        var parameterCount = arguments.Count;
 
         var functionBody =
             functionDeclaration.Function.Declaration.Value.Expression.Value;
@@ -307,7 +315,7 @@ public class ElmCompiler
             }
             else
             {
-                // For non-VarPattern arguments, extract bindings from the pattern
+                // For non-VarPattern arguments (including TuplePattern), extract bindings from the pattern
                 // The scrutinee is the parameter at index i
                 var paramExpr = BuiltinHelpers.BuildPathToParameter(i);
                 // Analyze the pattern and merge bindings (ignoring the condition)
@@ -318,6 +326,8 @@ public class ElmCompiler
                 }
             }
         }
+
+        var parameterCount = arguments.Count;
 
         // Extract parameter types from the function signature if available
         var parameterTypes = ExtractParameterTypes(functionDeclaration.Function);
@@ -342,8 +352,10 @@ public class ElmCompiler
             CurrentModuleName: currentModuleName,
             CurrentFunctionName: functionName,
             LocalBindings: localBindings.Count > 0 ? localBindings : null,
+            LocalBindingTypes: null,
             DependencyLayout: dependencyLayout,
-            ModuleCompilationContext: context);
+            ModuleCompilationContext: context,
+            FunctionReturnTypes: context.FunctionReturnTypes);
 
         // Compile the function body with knowledge of the dependency layout
         var compiledBodyExpression =
@@ -526,11 +538,12 @@ public class ElmCompiler
             while (currentType is SyntaxTypes.TypeAnnotation.FunctionTypeAnnotation funcType &&
                    paramIndex < parameters.Count)
             {
-                if (parameters[paramIndex].Value is SyntaxTypes.Pattern.VarPattern varPattern)
-                {
-                    var paramType = TypeInference.TypeAnnotationToInferredType(funcType.ArgumentType.Value);
-                    parameterTypes[varPattern.Name] = paramType;
-                }
+                var paramPattern = parameters[paramIndex].Value;
+                var paramTypeAnnotation = funcType.ArgumentType.Value;
+
+                // Extract binding types from the pattern
+                // This handles both simple VarPattern and complex patterns like TuplePattern
+                TypeInference.ExtractPatternBindingTypes(paramPattern, paramTypeAnnotation, parameterTypes);
 
                 currentType = funcType.ReturnType.Value;
                 paramIndex++;

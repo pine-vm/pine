@@ -262,7 +262,7 @@ public record FunctionRecord(
         // Level 1..N-2: List expression with similar structure, using concat for captured args
         // Level N-1 (innermost): ParseAndEval(innerExpr, [envFuncs, concat(captured, [env])])
 
-        int levels = 1;
+        var levels = 1;
         var currentValue = encodedWrapper;
 
         while (true)
