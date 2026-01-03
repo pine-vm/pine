@@ -1,5 +1,6 @@
 using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
+using System.Collections.Generic;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
@@ -14,11 +15,56 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 /// specified in elm-compiler-implementation-guide.md
 /// </para>
 /// <para>
+/// The variants producing 'number' results, like <see cref="Generic_Add"/>, support both integers and floats,
+/// and reduce the result to a plain integer when possible.
+/// </para>
+/// <para>
 /// Does not contain addition or multiplication for integers, as those are translated directly to Pine_builtin functions.
 /// </para>
 /// </summary>
 public class BasicArithmetic
 {
+    public static (string declName, IReadOnlyList<Expression> argsExprs)? TryInterpret(
+        Expression expr)
+    {
+        if (TryParseAsBinaryApplication(expr) is { } binaryApp)
+        {
+            var (functionValue, leftExpr, rightExpr) = binaryApp;
+
+            if (functionValue == Add_FunctionValue())
+            {
+                return ("number_add", [leftExpr, rightExpr]);
+            }
+
+            if (functionValue == Sub_FunctionValue())
+            {
+                return ("number_sub", [leftExpr, rightExpr]);
+            }
+
+            if (functionValue == Mul_FunctionValue())
+            {
+                return ("number_mul", [leftExpr, rightExpr]);
+            }
+
+            if (functionValue == Int_div_FunctionValue())
+            {
+                return ("int_div", [leftExpr, rightExpr]);
+            }
+
+            if (functionValue == Int_modBy_FunctionValue())
+            {
+                return ("modBy", [leftExpr, rightExpr]);
+            }
+
+            if (functionValue == RemainderBy_FunctionValue())
+            {
+                return ("remainderBy", [leftExpr, rightExpr]);
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>
     /// (-) : number -> number -> number
     /// <para>
@@ -39,12 +85,174 @@ public class BasicArithmetic
     }
 
     /// <summary>
+    /// (+) : number -> number -> number
+    /// <para>
+    /// <see href="https://package.elm-lang.org/packages/elm/core/latest/Basics#(+)"/>
+    /// </para>
+    /// </summary>
+    public static Expression Generic_Add(
+        Expression left,
+        Expression right)
+    {
+        return
+            BinaryApplication(
+                functionValue: Add_FunctionValue(),
+                left: left,
+                right: right);
+    }
+
+    /// <summary>
+    /// (+) : number -> number -> number
+    /// <para>
+    /// <see href="https://package.elm-lang.org/packages/elm/core/latest/Basics#(+)"/>
+    /// </para>
+    /// </summary>
+    public static PineValue Add_FunctionValue()
+    {
+        return BinaryFunctionValue(Internal_Generic_Add);
+    }
+
+    /// <summary>
+    /// (-) : number -> number -> number
+    /// <para>
+    /// <see href="https://package.elm-lang.org/packages/elm/core/latest/Basics#(-)"/>
+    /// </para>
+    /// </summary>
+    public static Expression Generic_Sub(
+        Expression minuend,
+        Expression subtrahend)
+    {
+        return
+            BinaryApplication(
+                functionValue: Sub_FunctionValue(),
+                left: minuend,
+                right: subtrahend);
+    }
+
+    /// <summary>
+    /// (-) : number -> number -> number
+    /// <para>
+    /// <see href="https://package.elm-lang.org/packages/elm/core/latest/Basics#(-)"/>
+    /// </para>
+    /// </summary>
+    public static PineValue Sub_FunctionValue()
+    {
+        return BinaryFunctionValue(Internal_Generic_Sub);
+    }
+
+    /// <summary>
+    /// (*) : number -> number -> number
+    /// <para>
+    /// <see href="https://package.elm-lang.org/packages/elm/core/latest/Basics#(*)"/>
+    /// </para>
+    /// </summary>
+    public static Expression Generic_Mul(
+        Expression left,
+        Expression right)
+    {
+        return
+            BinaryApplication(
+                functionValue: Mul_FunctionValue(),
+                left: left,
+                right: right);
+    }
+
+    /// <summary>
+    /// (*) : number -> number -> number
+    /// <para>
+    /// <see href="https://package.elm-lang.org/packages/elm/core/latest/Basics#(*)"/>
+    /// </para>
+    /// </summary>
+    public static PineValue Mul_FunctionValue()
+    {
+        return BinaryFunctionValue(Internal_Generic_Mul);
+    }
+
+    /// <summary>
     /// (//) : Int -> Int -> Int
     /// <para>
     /// <see href="https://package.elm-lang.org/packages/elm/core/latest/Basics#(//)"/>
     /// </para>
     /// </summary>
     public static Expression Int_div(
+        Expression dividend,
+        Expression divisor)
+    {
+        return
+            BinaryApplication(
+                functionValue: Int_div_FunctionValue(),
+                left: dividend,
+                right: divisor);
+    }
+
+    /// <summary>
+    /// (//) : Int -> Int -> Int
+    /// <para>
+    /// <see href="https://package.elm-lang.org/packages/elm/core/latest/Basics#(//)"/>
+    /// </para>
+    /// </summary>
+    public static PineValue Int_div_FunctionValue()
+    {
+        return BinaryFunctionValue(Internal_Int_div);
+    }
+
+    /// <summary>
+    /// modBy : Int -> Int -> Int
+    /// <para>
+    /// <see href="https://package.elm-lang.org/packages/elm/core/latest/Basics#modBy"/>
+    /// </para>
+    /// </summary>
+    public static Expression Int_modBy(
+        Expression divisor,
+        Expression dividend)
+    {
+        return
+            BinaryApplication(
+                functionValue: Int_modBy_FunctionValue(),
+                left: divisor,
+                right: dividend);
+    }
+
+    /// <summary>
+    /// modBy : Int -> Int -> Int
+    /// <para>
+    /// <see href="https://package.elm-lang.org/packages/elm/core/latest/Basics#modBy"/>
+    /// </para>
+    /// </summary>
+    public static PineValue Int_modBy_FunctionValue()
+    {
+        return BinaryFunctionValue(Internal_Int_modBy);
+    }
+
+    /// <summary>
+    /// remainderBy : Int -> Int -> Int
+    /// <para>
+    /// <see href="https://package.elm-lang.org/packages/elm/core/latest/Basics#remainderBy"/>
+    /// </para>
+    /// </summary>
+    public static Expression Int_remainderBy(
+        Expression divisor,
+        Expression dividend)
+    {
+        return
+            BinaryApplication(
+                functionValue: RemainderBy_FunctionValue(),
+                left: divisor,
+                right: dividend);
+    }
+
+    /// <summary>
+    /// remainderBy : Int -> Int -> Int
+    /// <para>
+    /// <see href="https://package.elm-lang.org/packages/elm/core/latest/Basics#remainderBy"/>
+    /// </para>
+    /// </summary>
+    public static PineValue RemainderBy_FunctionValue()
+    {
+        return BinaryFunctionValue(Internal_Int_remainderBy);
+    }
+
+    private static Expression Internal_Int_div(
         Expression dividend,
         Expression divisor)
     {
@@ -267,7 +475,7 @@ public class BasicArithmetic
     /// <see href="https://package.elm-lang.org/packages/elm/core/latest/Basics#modBy"/>
     /// </para>
     /// </summary>
-    public static Expression Int_modBy(
+    public static Expression Internal_Int_modBy(
         Expression divisor,
         Expression dividend)
     {
@@ -294,7 +502,7 @@ public class BasicArithmetic
         var divisorIsOne = BuiltinHelpers.ApplyBuiltinEqualBinary(divisor, one);
 
         // Compute remainder
-        var remainder = Int_remainderBy(divisor, dividend);
+        var remainder = Internal_Int_remainderBy(divisor, dividend);
 
         // Check if remainder is non-negative
         var remainderNonNegative = BuiltinIntIsSortedAsc(zero, remainder);
@@ -313,13 +521,7 @@ public class BasicArithmetic
             falseBranch: adjustedRemainder);
     }
 
-    /// <summary>
-    /// remainderBy : Int -> Int -> Int
-    /// <para>
-    /// <see href="https://package.elm-lang.org/packages/elm/core/latest/Basics#remainderBy"/>
-    /// </para>
-    /// </summary>
-    public static Expression Int_remainderBy(
+    private static Expression Internal_Int_remainderBy(
         Expression divisor,
         Expression dividend)
     {
@@ -447,13 +649,166 @@ public class BasicArithmetic
             ExpressionEncoding.EncodeExpressionAsValue(asExpr);
     }
 
-    /// <summary>
-    /// (-) : number -> number -> number
-    /// <para>
-    /// <see href="https://package.elm-lang.org/packages/elm/core/latest/Basics#(-)"/>
-    /// </para>
-    /// </summary>
-    public static Expression Generic_Subtract(
+    private static Expression Internal_Generic_Add(
+        Expression augend,
+        Expression addend)
+    {
+        /*
+         * Float addition:
+         * a/b + c/d = (a*d + c*b) / (b*d)
+         * 
+         * Float + Int:
+         * a/b + c = (a + c*b) / b
+         * 
+         * Int + Float:
+         * a + c/d = (a*d + c) / d
+         */
+
+        // Check if augend is a float
+        var augendIsFloat =
+            BuiltinHelpers.ApplyBuiltinEqualBinary(
+                BuiltinHelpers.ApplyBuiltinHead(augend),
+                s_elmFloatTypeTagNameLiteral);
+
+        // Check if addend is a float
+        var addendIsFloat =
+            BuiltinHelpers.ApplyBuiltinEqualBinary(
+                BuiltinHelpers.ApplyBuiltinHead(addend),
+                s_elmFloatTypeTagNameLiteral);
+
+        // Extract float components for augend
+        var augendTagArgs = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, augend));
+        var augendNumerator = BuiltinHelpers.ApplyBuiltinHead(augendTagArgs);
+        var augendDenominator = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, augendTagArgs));
+
+        // Extract float components for addend
+        var addendTagArgs = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, addend));
+        var addendNumerator = BuiltinHelpers.ApplyBuiltinHead(addendTagArgs);
+        var addendDenominator = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, addendTagArgs));
+
+        // Int + Int case: use builtin addition
+        var intAddition = BuiltinAdd(augend, addend);
+
+        // Float + Float case: (numA * denomB + numB * denomA) / (denomA * denomB)
+        var floatFloatNumerator =
+            BuiltinAdd(
+                BuiltinMul(augendNumerator, addendDenominator),
+                BuiltinMul(addendNumerator, augendDenominator));
+
+        var floatFloatDenominator = BuiltinMul(augendDenominator, addendDenominator);
+        var floatFloatResult = NormalizeFloatResult(floatFloatNumerator, floatFloatDenominator);
+
+        // Float + Int case: (numA + intB * denomA) / denomA
+        var floatIntNumerator =
+            BuiltinAdd(
+                augendNumerator,
+                BuiltinMul(addend, augendDenominator));
+
+        var floatIntResult = NormalizeFloatResult(floatIntNumerator, augendDenominator);
+
+        // Int + Float case: (intA * denomB + numB) / denomB
+        var intFloatNumerator =
+            BuiltinAdd(
+                BuiltinMul(augend, addendDenominator),
+                addendNumerator);
+        var intFloatResult = NormalizeFloatResult(intFloatNumerator, addendDenominator);
+
+        // When augend is float
+        var augendFloatBranch =
+            Expression.ConditionalInstance(
+                condition: addendIsFloat,
+                trueBranch: floatFloatResult,
+                falseBranch: floatIntResult);
+
+        // When augend is not float
+        var augendNotFloatBranch =
+            Expression.ConditionalInstance(
+                condition: addendIsFloat,
+                trueBranch: intFloatResult,
+                falseBranch: intAddition);
+
+        return
+            Expression.ConditionalInstance(
+                condition: augendIsFloat,
+                trueBranch: augendFloatBranch,
+                falseBranch: augendNotFloatBranch);
+    }
+
+    private static Expression Internal_Generic_Mul(
+        Expression left,
+        Expression right)
+    {
+        /*
+         * Float multiplication:
+         * (a/b) * (c/d) = (a*c) / (b*d)
+         * 
+         * Float * Int:
+         * (a/b) * c = (a*c) / b
+         * 
+         * Int * Float:
+         * a * (c/d) = (a*c) / d
+         */
+
+        // Check if multiplicand is a float
+        var multiplicandIsFloat =
+            BuiltinHelpers.ApplyBuiltinEqualBinary(
+                BuiltinHelpers.ApplyBuiltinHead(left),
+                s_elmFloatTypeTagNameLiteral);
+
+        // Check if multiplier is a float
+        var multiplierIsFloat =
+            BuiltinHelpers.ApplyBuiltinEqualBinary(
+                BuiltinHelpers.ApplyBuiltinHead(right),
+                s_elmFloatTypeTagNameLiteral);
+
+        // Extract float components for multiplicand
+        var multiplicandTagArgs = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, left));
+        var multiplicandNumerator = BuiltinHelpers.ApplyBuiltinHead(multiplicandTagArgs);
+        var multiplicandDenominator = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, multiplicandTagArgs));
+
+        // Extract float components for multiplier
+        var multiplierTagArgs = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, right));
+        var multiplierNumerator = BuiltinHelpers.ApplyBuiltinHead(multiplierTagArgs);
+        var multiplierDenominator = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, multiplierTagArgs));
+
+        // Int * Int case: use builtin multiplication
+        var intMultiplication = BuiltinMul(left, right);
+
+        // Float * Float case: (numA * numB) / (denomA * denomB)
+        var floatFloatNumerator = BuiltinMul(multiplicandNumerator, multiplierNumerator);
+        var floatFloatDenominator = BuiltinMul(multiplicandDenominator, multiplierDenominator);
+        var floatFloatResult = NormalizeFloatResult(floatFloatNumerator, floatFloatDenominator);
+
+        // Float * Int case: (numA * intB) / denomA
+        var floatIntNumerator = BuiltinMul(multiplicandNumerator, right);
+        var floatIntResult = NormalizeFloatResult(floatIntNumerator, multiplicandDenominator);
+
+        // Int * Float case: (intA * numB) / denomB
+        var intFloatNumerator = BuiltinMul(left, multiplierNumerator);
+        var intFloatResult = NormalizeFloatResult(intFloatNumerator, multiplierDenominator);
+
+        // When multiplicand is float
+        var multiplicandFloatBranch =
+            Expression.ConditionalInstance(
+                condition: multiplierIsFloat,
+                trueBranch: floatFloatResult,
+                falseBranch: floatIntResult);
+
+        // When multiplicand is not float
+        var multiplicandNotFloatBranch =
+            Expression.ConditionalInstance(
+                condition: multiplierIsFloat,
+                trueBranch: intFloatResult,
+                falseBranch: intMultiplication);
+
+        return
+            Expression.ConditionalInstance(
+                condition: multiplicandIsFloat,
+                trueBranch: multiplicandFloatBranch,
+                falseBranch: multiplicandNotFloatBranch);
+    }
+
+    private static Expression Internal_Generic_Sub(
         Expression minuend,
         Expression subtrahend)
     {
@@ -505,13 +860,9 @@ public class BasicArithmetic
                 BuiltinMul(
                     LiteralInt(-1),
                     BuiltinMul(subtrahendNumerator, minuendDenominator)));
+
         var floatFloatDenominator = BuiltinMul(minuendDenominator, subtrahendDenominator);
-        var floatFloatResult =
-            Expression.ListInstance(
-                [
-                    s_elmFloatTypeTagNameLiteral,
-                    Expression.ListInstance([floatFloatNumerator, floatFloatDenominator])
-                ]);
+        var floatFloatResult = NormalizeFloatResult(floatFloatNumerator, floatFloatDenominator);
 
         // Float - Int case: (numA - intB * denomA) / denomA
         var floatIntNumerator =
@@ -520,12 +871,8 @@ public class BasicArithmetic
                 BuiltinMul(
                     LiteralInt(-1),
                     BuiltinMul(subtrahend, minuendDenominator)));
-        var floatIntResult =
-            Expression.ListInstance(
-                [
-                    s_elmFloatTypeTagNameLiteral,
-                    Expression.ListInstance([floatIntNumerator, minuendDenominator])
-                ]);
+
+        var floatIntResult = NormalizeFloatResult(floatIntNumerator, minuendDenominator);
 
         // Int - Float case: (intA * denomB - numB) / denomB
         var intFloatNumerator =
@@ -534,12 +881,7 @@ public class BasicArithmetic
                 BuiltinMul(
                     LiteralInt(-1),
                     subtrahendNumerator));
-        var intFloatResult =
-            Expression.ListInstance(
-                [
-                    s_elmFloatTypeTagNameLiteral,
-                    Expression.ListInstance([intFloatNumerator, subtrahendDenominator])
-                ]);
+        var intFloatResult = NormalizeFloatResult(intFloatNumerator, subtrahendDenominator);
 
         // When minuend is float
         var minuendFloatBranch =
@@ -562,13 +904,8 @@ public class BasicArithmetic
                 falseBranch: minuendNotFloatBranch);
     }
 
-    /// <summary>
-    /// (-) : number -> number -> number
-    /// <para>
-    /// <see href="https://package.elm-lang.org/packages/elm/core/latest/Basics#(-)"/>
-    /// </para>
-    /// </summary>
-    public static PineValue Subtract_FunctionValue()
+    private static PineValue BinaryFunctionValue(
+        System.Func<Expression, Expression, Expression> buildFunctionBody)
     {
         var leftExpr =
             ExpressionBuilder.BuildExpressionForPathInExpression(
@@ -581,7 +918,7 @@ public class BasicArithmetic
                 Expression.EnvironmentInstance);
 
         var asExpr =
-            Generic_Subtract(leftExpr, rightExpr);
+            buildFunctionBody(leftExpr, rightExpr);
 
         var wrappedExpr =
             FunctionValueBuilder.EmitFunctionValue(
@@ -621,32 +958,40 @@ public class BasicArithmetic
     }
 
     /// <summary>
-    /// (+) : number -> number -> number
-    /// <para>
-    /// <see href="https://package.elm-lang.org/packages/elm/core/latest/Basics#(+)"/>
-    /// </para>
+    /// Normalizes a float result by reducing it to an integer if the denominator divides evenly into the numerator.
+    /// When numerator % denominator == 0, returns numerator / denominator as an integer.
+    /// Otherwise, returns the float structure [Elm_Float, [numerator, denominator]].
     /// </summary>
-    public static PineValue Add_FunctionValue()
+    private static Expression NormalizeFloatResult(Expression numerator, Expression denominator)
     {
-        var leftExpr =
-            ExpressionBuilder.BuildExpressionForPathInExpression(
-                [1, 0],
-                Expression.EnvironmentInstance);
+        // Check if denominator is 1
+        var denominatorIsOne = BuiltinHelpers.ApplyBuiltinEqualBinary(denominator, LiteralInt(1));
 
-        var rightExpr =
-            ExpressionBuilder.BuildExpressionForPathInExpression(
-                [1, 1],
-                Expression.EnvironmentInstance);
+        // Compute remainder of numerator / denominator to check if it divides evenly
+        var remainder = Internal_Int_remainderBy(denominator, numerator);
+        var dividesEvenly = BuiltinHelpers.ApplyBuiltinEqualBinary(remainder, LiteralInt(0));
 
-        var asExpr = BuiltinAdd(leftExpr, rightExpr);
+        // Compute the quotient (numerator / denominator) for when it divides evenly
+        var quotient = Int_div(numerator, denominator);
 
-        var wrappedExpr =
-            FunctionValueBuilder.EmitFunctionValue(
-                asExpr,
-                parameterCount: 2,
-                envFunctions: []);
+        // Float result: [Elm_Float, [numerator, denominator]]
+        var floatResult =
+            Expression.ListInstance(
+                [
+                    s_elmFloatTypeTagNameLiteral,
+                    Expression.ListInstance([numerator, denominator])
+                ]);
 
-        return wrappedExpr;
+        // If denominator is 1, just return numerator as integer
+        // If it divides evenly, return the quotient as integer
+        // Otherwise, return the float structure
+        return Expression.ConditionalInstance(
+            condition: denominatorIsOne,
+            trueBranch: numerator,
+            falseBranch: Expression.ConditionalInstance(
+                condition: dividesEvenly,
+                trueBranch: quotient,
+                falseBranch: floatResult));
     }
 
     private static Expression.ParseAndEval ApplyUnary(
@@ -657,6 +1002,47 @@ public class BasicArithmetic
             new Expression.ParseAndEval(
                 encoded: Expression.LiteralInstance(encodedFunctionValue),
                 environment: argument);
+    }
+
+    private static (PineValue functionValue, Expression left, Expression right)?
+        TryParseAsBinaryApplication(Expression expr)
+    {
+        if (expr is Expression.ParseAndEval parseAndEvalRight)
+        {
+            var right = parseAndEvalRight.Environment;
+
+            if (parseAndEvalRight.Encoded is Expression.ParseAndEval parseAndEvalLeft)
+            {
+                var left = parseAndEvalLeft.Environment;
+
+                if (parseAndEvalLeft.Encoded is Expression.Literal functionLiteral)
+                {
+                    var functionValue = functionLiteral.Value;
+
+                    return (functionValue, left, right);
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static Expression BinaryApplication(
+        PineValue functionValue,
+        Expression left,
+        Expression right)
+    {
+        var leftApplied =
+            new Expression.ParseAndEval(
+                encoded: Expression.LiteralInstance(functionValue),
+                environment: left);
+
+        var fullExpr =
+            new Expression.ParseAndEval(
+                encoded: leftApplied,
+                environment: right);
+
+        return fullExpr;
     }
 
     private readonly static Expression s_envFirstItem =
