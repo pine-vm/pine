@@ -60,7 +60,8 @@ public class SimpleLetBlockTests
         PineValue ApplyForArgument(PineValue argument)
         {
             var (applyRunResult, _) = invokeFunction([argument]);
-            return applyRunResult;
+
+            return applyRunResult.ReturnValue.Evaluate();
         }
 
         string ResultAsExpressionString(PineValue argument)
@@ -156,7 +157,8 @@ public class SimpleLetBlockTests
         PineValue ApplyForArgument(PineValue argument)
         {
             var (applyRunResult, _) = invokeFunction([argument]);
-            return applyRunResult;
+
+            return applyRunResult.ReturnValue.Evaluate();
         }
 
         string ResultAsExpressionString(PineValue argument)
@@ -252,7 +254,8 @@ public class SimpleLetBlockTests
         PineValue ApplyForArgument(PineValue argument)
         {
             var (applyRunResult, _) = invokeFunction([argument]);
-            return applyRunResult;
+
+            return applyRunResult.ReturnValue.Evaluate();
         }
 
         string ResultAsExpressionString(PineValue argument)
@@ -344,7 +347,8 @@ public class SimpleLetBlockTests
         PineValue ApplyForArgument(PineValue argument)
         {
             var (applyRunResult, _) = invokeFunction([argument]);
-            return applyRunResult;
+
+            return applyRunResult.ReturnValue.Evaluate();
         }
 
         string ResultAsExpressionString(PineValue argument)

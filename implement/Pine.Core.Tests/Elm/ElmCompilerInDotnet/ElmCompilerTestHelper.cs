@@ -16,6 +16,115 @@ public class ElmCompilerTestHelper
     private static readonly FrozenSet<string> s_pineKernelModuleNames =
         FrozenSet.Create(["Pine_builtin", "Pine_kernel"]);
 
+
+    /// <summary>
+    /// Creates a delegate for invoking an Elm function value (from PartialApplicationWrapper) directly.
+    /// This method treats the function value as an expression that expects arguments passed one at a time.
+    /// </summary>
+    /// <param name="functionValue">The encoded function value (from PartialApplicationWrapper).</param>
+    /// <param name="parseCache">Cache for parsing expressions.</param>
+    /// <returns>
+    /// A delegate that takes a list of arguments and returns a tuple containing:
+    /// - The return value of the invoked function
+    /// - The list of profiling invocation reports collected during execution
+    /// </returns>
+    public static Func<IReadOnlyList<PineValue>, (PineValue returnValue, IReadOnlyList<EvaluationReport> invocationReports)>
+        CreateFunctionValueInvocationDelegate(PineValue functionValue, PineVMParseCache parseCache)
+    {
+        if (FunctionRecord.ParseFunctionRecordTagged(functionValue, parseCache).IsOkOrNull() is { } functionRecord)
+        {
+            var withOverallReportDelegate = CreateFunctionInvocationDelegate(functionRecord);
+
+            return arguments =>
+            {
+                var (evalReport, invocationReports) = withOverallReportDelegate(arguments);
+
+                return (evalReport.ReturnValue.Evaluate(), invocationReports);
+            };
+        }
+
+        return arguments =>
+        {
+            var invocationReports = new List<EvaluationReport>();
+
+            var vm = PineVMForProfiling(invocationReports.Add);
+
+            // Apply arguments one at a time by evaluating the wrapper expression
+            var currentValue = functionValue;
+
+            for (var argIndex = 0; argIndex < arguments.Count; argIndex++)
+            {
+                var arg = arguments[argIndex];
+
+                // Parse the current value as an expression
+                var parseResult = parseCache.ParseExpression(currentValue);
+
+                if (parseResult.IsErrOrNull() is { } parseErr)
+                {
+                    throw new Exception(
+                        "Failed to parse function value as expression: " + parseErr +
+                        " (argument index: " + argIndex + ")");
+                }
+
+                if (parseResult.IsOkOrNull() is not { } expression)
+                {
+                    throw new Exception("Failed to extract parsed expression");
+                }
+
+                // Evaluate the expression with the argument as environment
+                var evalResult = vm.EvaluateExpression(expression, arg);
+
+                if (evalResult.IsErrOrNull() is { } evalErr)
+                {
+                    throw new Exception("Failed to evaluate function value: " + evalErr);
+                }
+
+                if (evalResult.IsOkOrNull() is not { } resultValue)
+                {
+                    throw new Exception("Failed to extract evaluation result");
+                }
+
+                currentValue = resultValue;
+            }
+
+            return (currentValue, invocationReports);
+        };
+    }
+
+    /// <summary>
+    /// Compiles Elm modules and returns the parsed environment without static program analysis.
+    /// Use this for tests that only need to invoke functions at runtime without static analysis.
+    /// </summary>
+    public static ElmInteractiveEnvironment.ParsedInteractiveEnvironment
+        CompileElmModules(
+        IReadOnlyList<string> elmModulesTexts,
+        bool disableInlining)
+    {
+        var testCase =
+            TestCase.DefaultAppWithoutPackages(elmModulesTexts);
+
+        var appCodeTree = testCase.AsFileTree();
+
+        var rootFilePaths =
+            appCodeTree.EnumerateFilesTransitive()
+            .Where(b => b.path[^1].EndsWith(".elm"))
+            .Select(b => b.path)
+            .ToList();
+
+        var compiledEnv =
+            ElmCompiler.CompileInteractiveEnvironment(
+                appCodeTree,
+                rootFilePaths: rootFilePaths,
+                disableInlining: disableInlining)
+            .Extract(err => throw new Exception(err));
+
+        var parsedEnv =
+            ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnv)
+            .Extract(err => throw new Exception("Failed parsing interactive environment: " + err));
+
+        return parsedEnv;
+    }
+
     /// <summary>
     /// Creates a delegate for invoking an Elm function and collecting profiling reports.
     /// </summary>
@@ -25,23 +134,16 @@ public class ElmCompilerTestHelper
     /// - The return value of the invoked function
     /// - The list of profiling invocation reports collected during execution
     /// </returns>
-    public static Func<IReadOnlyList<PineValue>, (PineValue returnValue, IReadOnlyList<EvaluationReport> invocationReports)>
+    public static Func<IReadOnlyList<PineValue>, (EvaluationReport evalReport, IReadOnlyList<EvaluationReport> invocationReports)>
         CreateFunctionInvocationDelegate(FunctionRecord functionRecord)
     {
         return arguments =>
         {
-            var invocationReports = new List<EvaluationReport>();
+            var composed =
+            ElmInteractiveEnvironment.ApplyFunctionArgumentsForEvalExpr(functionRecord, appendArguments: arguments)
+            .Extract(err => throw new Exception(err));
 
-            var vm = PineVMForProfiling(invocationReports.Add);
-
-            var applyRunResult =
-                ElmInteractiveEnvironment.ApplyFunction(
-                    vm,
-                    functionRecord,
-                    arguments: arguments)
-                .Extract(err => throw new Exception(err));
-
-            return (applyRunResult, invocationReports);
+            return EvaluateWithProfiling(composed.expression, composed.environment);
         };
     }
 

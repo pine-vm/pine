@@ -54,7 +54,8 @@ public class ListPatternMatchingTests
         PineValue ApplyForArgument(PineValue argument)
         {
             var (applyRunResult, _) = invokeFunction([argument]);
-            return applyRunResult;
+
+            return applyRunResult.ReturnValue.Evaluate();
         }
 
         {
@@ -151,7 +152,8 @@ public class ListPatternMatchingTests
         PineValue ApplyForArgument(PineValue argument)
         {
             var (applyRunResult, _) = invokeFunction([argument]);
-            return applyRunResult;
+
+            return applyRunResult.ReturnValue.Evaluate();
         }
 
         string ResultAsExpressionString(PineValue argument)
@@ -345,7 +347,7 @@ public class ListPatternMatchingTests
         PineValue ApplyForArgument(PineValue argument)
         {
             var (applyRunResult, _) = invokeFunction([argument]);
-            return applyRunResult;
+            return applyRunResult.ReturnValue.Evaluate();
         }
 
         string ApplyForArgumentAsExpressionString(PineValue argument)

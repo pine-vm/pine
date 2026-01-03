@@ -63,11 +63,12 @@ public class BuiltinApplicationTests
 
         var invokeFunction = ElmCompilerTestHelper.CreateFunctionInvocationDelegate(alfaDeclParsed);
 
-        var (applyRunResult, invocationReports) =
-            invokeFunction([IntegerEncoding.EncodeSignedInteger(13)]);
+        var returnValue =
+            invokeFunction([IntegerEncoding.EncodeSignedInteger(13)])
+            .evalReport.ReturnValue.Evaluate();
 
         var resultAsElmValue =
-            ElmValueEncoding.PineValueAsElmValue(applyRunResult, null, null)
+            ElmValueEncoding.PineValueAsElmValue(returnValue, null, null)
             .Extract(err => throw new Exception("Failed decoding result as Elm value: " + err));
 
         var resultAsElmExpr =

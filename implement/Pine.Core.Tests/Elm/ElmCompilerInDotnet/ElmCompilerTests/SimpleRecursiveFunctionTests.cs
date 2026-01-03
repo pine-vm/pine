@@ -87,7 +87,8 @@ public class SimpleRecursiveFunctionTests
         PineValue ApplyForArgument(PineValue argument)
         {
             var (applyRunResult, _) = invokeFunction([argument]);
-            return applyRunResult;
+
+            return applyRunResult.ReturnValue.Evaluate();
         }
 
         string ResultAsExpressionString(int n)
@@ -180,13 +181,15 @@ public class SimpleRecursiveFunctionTests
         PineValue ApplyIsEven(int n)
         {
             var (result, _) = invokeIsEven([IntegerEncoding.EncodeSignedInteger(n)]);
-            return result;
+
+            return result.ReturnValue.Evaluate();
         }
 
         PineValue ApplyIsOdd(int n)
         {
             var (result, _) = invokeIsOdd([IntegerEncoding.EncodeSignedInteger(n)]);
-            return result;
+
+            return result.ReturnValue.Evaluate();
         }
 
         string ResultAsExpressionString(PineValue result)

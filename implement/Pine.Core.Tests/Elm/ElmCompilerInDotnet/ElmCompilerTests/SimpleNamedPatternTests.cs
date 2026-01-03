@@ -76,7 +76,8 @@ public class SimpleNamedPatternTests
         PineValue ApplyForArgument(PineValue argument)
         {
             var (applyRunResult, _) = invokeFunction([argument]);
-            return applyRunResult;
+
+            return applyRunResult.ReturnValue.Evaluate();
         }
 
         string ApplyForArgumentAsExpressionString(PineValue argument)
