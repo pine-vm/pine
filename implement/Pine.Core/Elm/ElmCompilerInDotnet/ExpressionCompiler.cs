@@ -53,6 +53,9 @@ public class ExpressionCompiler
             SyntaxTypes.Expression.TupledExpression expr =>
                 CompileTupledExpression(expr, context),
 
+            SyntaxTypes.Expression.RecordExpr expr =>
+                CompileRecordExpr(expr, context),
+
             SyntaxTypes.Expression.OperatorApplication expr =>
                 CompileOperatorApplication(expr, context),
 
@@ -306,6 +309,48 @@ public class ExpressionCompiler
         }
 
         return Expression.ListInstance(compiledElements);
+    }
+
+    private static Result<CompilationError, Expression> CompileRecordExpr(
+        SyntaxTypes.Expression.RecordExpr expr,
+        ExpressionCompilationContext context)
+    {
+        // Sort fields by name alphabetically (as per Elm record encoding)
+        var sortedFields = expr.Fields
+            .OrderBy(f => f.Value.fieldName.Value, StringComparer.Ordinal)
+            .ToList();
+
+        var compiledFieldPairs = new List<Expression>();
+        foreach (var field in sortedFields)
+        {
+            var fieldName = field.Value.fieldName.Value;
+            var fieldValueExpr = field.Value.valueExpr.Value;
+
+            var compiledValue = Compile(fieldValueExpr, context);
+            if (compiledValue.IsErrOrNull() is { } err)
+            {
+                return err;
+            }
+
+            // Each field is encoded as [fieldName, fieldValue]
+            var fieldPair = Expression.ListInstance(
+            [
+                Expression.LiteralInstance(StringEncoding.ValueFromString(fieldName)),
+                compiledValue.IsOkOrNull()!
+            ]);
+
+            compiledFieldPairs.Add(fieldPair);
+        }
+
+        // A record is encoded as [recordTypeTag, [[field1, field2, ...]]]
+        var fieldsListExpr = Expression.ListInstance(compiledFieldPairs);
+        var innerListExpr = Expression.ListInstance([fieldsListExpr]);
+
+        return Expression.ListInstance(
+        [
+            Expression.LiteralInstance(ElmValue.ElmRecordTypeTagNameAsValue),
+            innerListExpr
+        ]);
     }
 
     private static Result<CompilationError, Expression> CompileOperatorApplication(
