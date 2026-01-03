@@ -52,6 +52,24 @@ public class ElmCompilerTestHelper
         Func<DeclQualifiedName, bool> includeDeclaration,
         PineVMParseCache parseCache)
     {
+        return
+            StaticProgramFromElmModules(
+                elmModulesTexts,
+                disableInlining,
+                includeDeclaration,
+                parseCache,
+                extractFunctionApplication: TestCase.ExtractFunctionApplicationDefault);
+    }
+
+
+    public static (ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedEnv, StaticProgram staticProgram)
+        StaticProgramFromElmModules(
+        IReadOnlyList<string> elmModulesTexts,
+        bool disableInlining,
+        Func<DeclQualifiedName, bool> includeDeclaration,
+        PineVMParseCache parseCache,
+        Func<Expression, (DeclQualifiedName, IReadOnlyList<Expression>)?>? extractFunctionApplication)
+    {
         var testCase =
             TestCase.DefaultAppWithoutPackages(elmModulesTexts);
 
@@ -60,7 +78,8 @@ public class ElmCompilerTestHelper
                 testCase,
                 disableInlining: disableInlining,
                 includeDeclaration,
-                parseCache);
+                parseCache,
+                extractFunctionApplication: extractFunctionApplication);
     }
 
     public static (ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedEnv, StaticProgram staticProgram)
@@ -68,7 +87,8 @@ public class ElmCompilerTestHelper
         TestCase testCase,
         bool disableInlining,
         Func<DeclQualifiedName, bool> includeDeclaration,
-        PineVMParseCache parseCache)
+        PineVMParseCache parseCache,
+        Func<Expression, (DeclQualifiedName, IReadOnlyList<Expression>)?>? extractFunctionApplication)
     {
         var appCodeTree = testCase.AsFileTree();
 
@@ -93,7 +113,8 @@ public class ElmCompilerTestHelper
             TestCase.ParseAsStaticMonomorphicProgramAndCrashOnAnyFailure(
                 parsedEnv,
                 includeDeclaration: includeDeclaration,
-                parseCache);
+                parseCache,
+                extractFunctionApplication: extractFunctionApplication);
 
         return (parsedEnv, staticProgram);
     }

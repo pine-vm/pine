@@ -38,7 +38,7 @@ public class BasicArithmeticTests
     {
         var resultValue =
             ApplyGeneric(
-                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Subtract_FunctionValue(),
+                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Sub_FunctionValue(),
                 [
                     ElmValue.Integer(13),
                     ElmValue.Integer(17)
@@ -48,11 +48,25 @@ public class BasicArithmeticTests
     }
 
     [Fact]
+    public void Generic_sub_float_3_point_7_negative_float_0_point_3()
+    {
+        var resultValue =
+            ApplyGeneric(
+                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Sub_FunctionValue(),
+                [
+                    ElmValue.ElmFloat.Convert(3.7),
+                    ElmValue.ElmFloat.Convert(-0.3),
+                ]);
+
+        resultValue.Should().Be(ElmValue.Integer(4));
+    }
+
+    [Fact]
     public void Generic_sub_int_13_float_zero_point_1()
     {
         var resultValue =
             ApplyGeneric(
-                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Subtract_FunctionValue(),
+                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Sub_FunctionValue(),
                 [
                     ElmValue.ElmFloat.Convert(13),
                     ElmValue.ElmFloat.Convert(0.1),
@@ -212,6 +226,92 @@ public class BasicArithmeticTests
         resultValue.Should().Be(ElmValue.Integer(-2));
     }
 
+    [Fact]
+    public void Generic_add_float_1_point_5_float_2_point_5()
+    {
+        var resultValue =
+            ApplyGeneric(
+                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Add_FunctionValue(),
+                [
+                    ElmValue.ElmFloat.Convert(1.5),
+                    ElmValue.ElmFloat.Convert(2.5)
+                ]);
+
+        resultValue.Should().Be(ElmValue.Integer(4));
+    }
+
+    // ========== Tests for Int_div_FunctionValue ==========
+
+    [Fact]
+    public void Int_div_FunctionValue_10_by_3()
+    {
+        var resultValue =
+            ApplyGeneric(
+                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_div_FunctionValue(),
+                [
+                    ElmValue.Integer(10),
+                    ElmValue.Integer(3)
+                ]);
+
+        resultValue.Should().Be(ElmValue.Integer(3));
+    }
+
+    [Fact]
+    public void Int_div_FunctionValue_negative_10_by_3()
+    {
+        var resultValue =
+            ApplyGeneric(
+                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_div_FunctionValue(),
+                [
+                    ElmValue.Integer(-10),
+                    ElmValue.Integer(3)
+                ]);
+
+        resultValue.Should().Be(ElmValue.Integer(-3));
+    }
+
+    [Fact]
+    public void Int_div_FunctionValue_10_by_negative_3()
+    {
+        var resultValue =
+            ApplyGeneric(
+                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_div_FunctionValue(),
+                [
+                    ElmValue.Integer(10),
+                    ElmValue.Integer(-3)
+                ]);
+
+        resultValue.Should().Be(ElmValue.Integer(-3));
+    }
+
+    [Fact]
+    public void Int_div_FunctionValue_by_zero_returns_zero()
+    {
+        var resultValue =
+            ApplyGeneric(
+                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_div_FunctionValue(),
+                [
+                    ElmValue.Integer(10),
+                    ElmValue.Integer(0)
+                ]);
+
+        resultValue.Should().Be(ElmValue.Integer(0));
+    }
+
+    [Fact]
+    public void Int_div_FunctionValue_1000_by_17()
+    {
+        var resultValue =
+            ApplyGeneric(
+                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_div_FunctionValue(),
+                [
+                    ElmValue.Integer(1_000),
+                    ElmValue.Integer(17)
+                ]);
+
+        resultValue.Should().Be(ElmValue.Integer(58));
+    }
+
     // ========== Tests for modBy ==========
 
     [Fact]
@@ -238,6 +338,84 @@ public class BasicArithmeticTests
                 ElmValue.Integer(-10));
 
         evalResult.value.Should().Be(ElmValue.Integer(2));
+    }
+
+    [Fact]
+    public void Int_modBy_4_of_12()
+    {
+        // modBy 4 12 == 0  (exactly divisible)
+        var evalResult =
+            ApplyDirectBinary(
+                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_modBy,
+                ElmValue.Integer(4),
+                ElmValue.Integer(12));
+
+        evalResult.value.Should().Be(ElmValue.Integer(0));
+    }
+
+    [Fact]
+    public void Int_modBy_5_of_3()
+    {
+        // modBy 5 3 == 3  (dividend < divisor)
+        var evalResult =
+            ApplyDirectBinary(
+                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_modBy,
+                ElmValue.Integer(5),
+                ElmValue.Integer(3));
+
+        evalResult.value.Should().Be(ElmValue.Integer(3));
+    }
+
+    [Fact]
+    public void Int_modBy_7_of_negative_3()
+    {
+        // modBy 7 -3 == 4  (result is always non-negative when divisor is positive)
+        var evalResult =
+            ApplyDirectBinary(
+                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_modBy,
+                ElmValue.Integer(7),
+                ElmValue.Integer(-3));
+
+        evalResult.value.Should().Be(ElmValue.Integer(4));
+    }
+
+    [Fact]
+    public void Int_modBy_1_of_100()
+    {
+        // modBy 1 100 == 0  (any number mod 1 is 0)
+        var evalResult =
+            ApplyDirectBinary(
+                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_modBy,
+                ElmValue.Integer(1),
+                ElmValue.Integer(100));
+
+        evalResult.value.Should().Be(ElmValue.Integer(0));
+    }
+
+    [Fact]
+    public void Int_modBy_17_of_1000()
+    {
+        // modBy 17 1000 == 14  (1000 = 58*17 + 14)
+        var evalResult =
+            ApplyDirectBinary(
+                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_modBy,
+                ElmValue.Integer(17),
+                ElmValue.Integer(1000));
+
+        evalResult.value.Should().Be(ElmValue.Integer(14));
+    }
+
+    [Fact]
+    public void Int_modBy_10_of_0()
+    {
+        // modBy 10 0 == 0  (0 mod anything is 0)
+        var evalResult =
+            ApplyDirectBinary(
+                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_modBy,
+                ElmValue.Integer(10),
+                ElmValue.Integer(0));
+
+        evalResult.value.Should().Be(ElmValue.Integer(0));
     }
 
     // ========== Tests for remainderBy ==========
@@ -268,7 +446,285 @@ public class BasicArithmeticTests
         evalResult.value.Should().Be(ElmValue.Integer(-1));
     }
 
+    [Fact]
+    public void Int_remainderBy_4_of_12()
+    {
+        // remainderBy 4 12 == 0  (exactly divisible)
+        var evalResult =
+            ApplyDirectBinary(
+                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_remainderBy,
+                ElmValue.Integer(4),
+                ElmValue.Integer(12));
+
+        evalResult.value.Should().Be(ElmValue.Integer(0));
+    }
+
+    [Fact]
+    public void Int_remainderBy_5_of_3()
+    {
+        // remainderBy 5 3 == 3  (dividend < divisor)
+        var evalResult =
+            ApplyDirectBinary(
+                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_remainderBy,
+                ElmValue.Integer(5),
+                ElmValue.Integer(3));
+
+        evalResult.value.Should().Be(ElmValue.Integer(3));
+    }
+
+    [Fact]
+    public void Int_remainderBy_7_of_negative_3()
+    {
+        // remainderBy 7 -3 == -3  (sign follows dividend)
+        var evalResult =
+            ApplyDirectBinary(
+                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_remainderBy,
+                ElmValue.Integer(7),
+                ElmValue.Integer(-3));
+
+        evalResult.value.Should().Be(ElmValue.Integer(-3));
+    }
+
+    [Fact]
+    public void Int_remainderBy_1_of_100()
+    {
+        // remainderBy 1 100 == 0  (any number remainder 1 is 0)
+        var evalResult =
+            ApplyDirectBinary(
+                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_remainderBy,
+                ElmValue.Integer(1),
+                ElmValue.Integer(100));
+
+        evalResult.value.Should().Be(ElmValue.Integer(0));
+    }
+
+    [Fact]
+    public void Int_remainderBy_17_of_1000()
+    {
+        // remainderBy 17 1000 == 14  (1000 = 58*17 + 14)
+        var evalResult =
+            ApplyDirectBinary(
+                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_remainderBy,
+                ElmValue.Integer(17),
+                ElmValue.Integer(1000));
+
+        evalResult.value.Should().Be(ElmValue.Integer(14));
+    }
+
+    [Fact]
+    public void Int_remainderBy_17_of_negative_1000()
+    {
+        // remainderBy 17 -1000 == -14  (sign follows dividend)
+        var evalResult =
+            ApplyDirectBinary(
+                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_remainderBy,
+                ElmValue.Integer(17),
+                ElmValue.Integer(-1000));
+
+        evalResult.value.Should().Be(ElmValue.Integer(-14));
+    }
+
+    [Fact]
+    public void Int_remainderBy_10_of_0()
+    {
+        // remainderBy 10 0 == 0  (0 remainder anything is 0)
+        var evalResult =
+            ApplyDirectBinary(
+                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_remainderBy,
+                ElmValue.Integer(10),
+                ElmValue.Integer(0));
+
+        evalResult.value.Should().Be(ElmValue.Integer(0));
+    }
+
+    // ========== Tests for modBy FunctionValue ==========
+
+    [Fact]
+    public void Int_modBy_FunctionValue_3_of_10()
+    {
+        var resultValue =
+            ApplyGeneric(
+                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_modBy_FunctionValue(),
+                [
+                    ElmValue.Integer(3),
+                    ElmValue.Integer(10)
+                ]);
+
+        resultValue.Should().Be(ElmValue.Integer(1));
+    }
+
+    [Fact]
+    public void Int_modBy_FunctionValue_3_of_negative_10()
+    {
+        var resultValue =
+            ApplyGeneric(
+                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_modBy_FunctionValue(),
+                [
+                    ElmValue.Integer(3),
+                    ElmValue.Integer(-10)
+                ]);
+
+        resultValue.Should().Be(ElmValue.Integer(2));
+    }
+
+    // ========== Tests for remainderBy FunctionValue ==========
+
+    [Fact]
+    public void Int_remainderBy_FunctionValue_3_of_10()
+    {
+        var resultValue =
+            ApplyGeneric(
+                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.RemainderBy_FunctionValue(),
+                [
+                    ElmValue.Integer(3),
+                    ElmValue.Integer(10)
+                ]);
+
+        resultValue.Should().Be(ElmValue.Integer(1));
+    }
+
+    [Fact]
+    public void Int_remainderBy_FunctionValue_3_of_negative_10()
+    {
+        var resultValue =
+            ApplyGeneric(
+                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.RemainderBy_FunctionValue(),
+                [
+                    ElmValue.Integer(3),
+                    ElmValue.Integer(-10)
+                ]);
+
+        resultValue.Should().Be(ElmValue.Integer(-1));
+    }
+
     private static readonly PineVMParseCache s_pineVMParseCache = new();
+
+    #region TryInterpret Tests
+
+    [Fact]
+    public void TryInterpret_Add_returns_number_add()
+    {
+        var leftExpr =
+            Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(13)));
+
+        var rightExpr =
+            Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(17)));
+
+        var composed =
+            Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Generic_Add(leftExpr, rightExpr);
+
+        var result = Core.Elm.ElmCompilerInDotnet.BasicArithmetic.TryInterpret(composed);
+
+        result.Should().NotBeNull();
+
+        result.Value.declName.Should().Be("number_add");
+
+        result.Value.argsExprs.Should().Equal([leftExpr, rightExpr]);
+    }
+
+    [Fact]
+    public void TryInterpret_Sub_returns_number_sub()
+    {
+        var leftExpr =
+            Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(13)));
+
+        var rightExpr =
+            Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(17)));
+
+        var composed =
+            Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Generic_Sub(leftExpr, rightExpr);
+
+        var result = Core.Elm.ElmCompilerInDotnet.BasicArithmetic.TryInterpret(composed);
+
+        result.Should().NotBeNull();
+
+        result.Value.declName.Should().Be("number_sub");
+
+        result.Value.argsExprs.Should().Equal([leftExpr, rightExpr]);
+    }
+
+    [Fact]
+    public void TryInterpret_Mul_returns_number_mul()
+    {
+        var leftExpr =
+            Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(13)));
+
+        var rightExpr =
+            Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(17)));
+
+        var composed =
+            Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Generic_Mul(leftExpr, rightExpr);
+
+        var result = Core.Elm.ElmCompilerInDotnet.BasicArithmetic.TryInterpret(composed);
+
+        result.Should().NotBeNull();
+        result.Value.declName.Should().Be("number_mul");
+        result.Value.argsExprs.Should().Equal([leftExpr, rightExpr]);
+    }
+
+    [Fact]
+    public void TryInterpret_Int_div_returns_int_div()
+    {
+        var leftExpr =
+            Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(21)));
+
+        var rightExpr =
+            Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(7)));
+
+        var composed =
+            Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_div(leftExpr, rightExpr);
+
+        var result = Core.Elm.ElmCompilerInDotnet.BasicArithmetic.TryInterpret(composed);
+
+        result.Should().NotBeNull();
+        result.Value.declName.Should().Be("int_div");
+        result.Value.argsExprs.Should().Equal([leftExpr, rightExpr]);
+    }
+
+    [Fact]
+    public void TryInterpret_non_arithmetic_returns_null()
+    {
+        // A ParseAndEval that doesn't match any arithmetic pattern
+        var someExpr = Expression.LiteralInstance(PineValue.EmptyList);
+
+        var parseAndEval = new Expression.ParseAndEval(
+            encoded: Expression.LiteralInstance(PineValue.EmptyList),
+            environment: Expression.ListInstance([someExpr, someExpr]));
+
+        var result = Core.Elm.ElmCompilerInDotnet.BasicArithmetic.TryInterpret(parseAndEval);
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public void TryInterpret_non_ParseAndEval_returns_null()
+    {
+        // A non-ParseAndEval expression
+        var literalExpr =
+            Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(42)));
+
+        var result = Core.Elm.ElmCompilerInDotnet.BasicArithmetic.TryInterpret(literalExpr);
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public void TryInterpret_wrong_environment_shape_returns_null()
+    {
+        // ParseAndEval with environment that's not a 2-element list
+        var singleArgExpr =
+            Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1)));
+
+        var parseAndEval = new Expression.ParseAndEval(
+            encoded: Expression.LiteralInstance(Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Add_FunctionValue()),
+            environment: Expression.ListInstance([singleArgExpr])); // Only 1 argument
+
+        var result = Core.Elm.ElmCompilerInDotnet.BasicArithmetic.TryInterpret(parseAndEval);
+
+        result.Should().BeNull();
+    }
+
+    #endregion
 
     private static (ElmValue value, EvaluationReport profile) ApplyDirectBinary(
         System.Func<Expression, Expression, Expression> function,

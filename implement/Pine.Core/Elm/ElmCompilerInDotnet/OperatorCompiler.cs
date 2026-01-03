@@ -18,40 +18,89 @@ public class OperatorCompiler
         ExpressionCompilationContext context)
     {
         // Use type inference to determine the operation type
-        var expressionType = TypeInference.InferExpressionType(
-            operatorApp,
-            context.ParameterNames,
-            context.ParameterTypes,
-            context.LocalBindingTypes,
-            context.CurrentModuleName,
-            context.FunctionReturnTypes);
+        var expressionType =
+            TypeInference.InferExpressionType(
+                operatorApp,
+                context.ParameterNames,
+                context.ParameterTypes,
+                context.LocalBindingTypes,
+                context.CurrentModuleName,
+                context.FunctionReturnTypes);
+
+        var leftResult = ExpressionCompiler.Compile(operatorApp.Left.Value, context);
+
+        if (leftResult.IsErrOrNull() is { } leftErr)
+        {
+            return
+                CompilationError.Scoped(
+                    leftErr,
+                    "compiling left side of operator " + operatorApp.Operator);
+        }
+
+        var rightResult = ExpressionCompiler.Compile(operatorApp.Right.Value, context);
+
+        if (rightResult.IsErrOrNull() is { } rightErr)
+        {
+            return
+                CompilationError.Scoped(
+                    rightErr,
+                    "compiling right side of operator " + operatorApp.Operator);
+        }
+
+        if (leftResult.IsOkOrNull() is not { } leftCompiled)
+        {
+            throw new System.NotImplementedException(
+                "Unexpected return type compiling left: " + leftResult.GetType());
+        }
+
+        if (rightResult.IsOkOrNull() is not { } rightCompiled)
+        {
+            throw new System.NotImplementedException(
+                "Unexpected return type compiling right: " + rightResult.GetType());
+        }
 
         if (expressionType is TypeInference.InferredType.IntType)
         {
-            return CompileIntegerOperator(operatorApp, context);
+            return
+                CompileIntegerOperator(
+                    operatorApp,
+                    leftCompiled,
+                    rightCompiled);
         }
 
-        return new CompilationError.UnsupportedOperator(operatorApp.Operator);
+        if (operatorApp.Operator is "//")
+        {
+            return BasicArithmetic.Int_div(leftCompiled, rightCompiled);
+        }
+
+        if (operatorApp.Operator is "+")
+        {
+            return BasicArithmetic.Generic_Add(leftCompiled, rightCompiled);
+        }
+
+        if (operatorApp.Operator is "-")
+        {
+            return BasicArithmetic.Generic_Sub(leftCompiled, rightCompiled);
+        }
+
+        if (operatorApp.Operator is "*")
+        {
+            return BasicArithmetic.Generic_Mul(leftCompiled, rightCompiled);
+        }
+
+        if (operatorApp.Operator is "/")
+        {
+            return CompilationError.UnsupportedOperator(operatorApp.Operator);
+        }
+
+        return CompilationError.UnsupportedOperator(operatorApp.Operator);
     }
 
     private static Result<CompilationError, Expression> CompileIntegerOperator(
         SyntaxTypes.Expression.OperatorApplication operatorApp,
-        ExpressionCompilationContext context)
+        Expression leftCompiled,
+        Expression rightCompiled)
     {
-        var leftResult = ExpressionCompiler.Compile(operatorApp.Left.Value, context);
-        if (leftResult.IsErrOrNull() is { } leftErr)
-        {
-            return leftErr;
-        }
-
-        var rightResult = ExpressionCompiler.Compile(operatorApp.Right.Value, context);
-        if (rightResult.IsErrOrNull() is { } rightErr)
-        {
-            return rightErr;
-        }
-
-        var leftCompiled = leftResult.IsOkOrNull()!;
-        var rightCompiled = rightResult.IsOkOrNull()!;
 
         return operatorApp.Operator switch
         {
@@ -68,7 +117,7 @@ public class OperatorCompiler
             BasicArithmetic.Int_div(leftCompiled, rightCompiled),
 
             _ =>
-            new CompilationError.UnsupportedOperator(operatorApp.Operator)
+            CompilationError.UnsupportedOperator(operatorApp.Operator)
         };
     }
 }

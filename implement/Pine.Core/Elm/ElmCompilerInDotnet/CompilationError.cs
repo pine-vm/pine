@@ -9,6 +9,28 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 public abstract record CompilationError
 {
     /// <summary>
+    /// Describe the context of an error as a string.
+    /// </summary>
+    public static CompilationError Scoped(CompilationError innerError, string scopeDescription) =>
+        new ScopedError(innerError, scopeDescription);
+
+    /// <summary>
+    /// The specified operator is not supported by the compiler.
+    /// </summary>
+    public static CompilationError UnsupportedOperator(string operatorSymbol) =>
+        new UnsupportedOperatorError(operatorSymbol);
+
+    /// <summary>
+    /// Describe the context of an error as a string.
+    /// </summary>
+    public sealed record ScopedError(CompilationError InnerError, string ScopeDescription) : CompilationError
+    {
+        /// <inheritdoc/>
+        public override string ToString() =>
+            $"In scope '{ScopeDescription}': {InnerError}";
+    }
+
+    /// <summary>
     /// An expression type is not supported by the compiler.
     /// </summary>
     public sealed record UnsupportedExpression(string ExpressionType) : CompilationError
@@ -19,9 +41,9 @@ public abstract record CompilationError
     }
 
     /// <summary>
-    /// An operator is not supported by the compiler.
+    /// The specified operator is not supported by the compiler.
     /// </summary>
-    public sealed record UnsupportedOperator(string Operator) : CompilationError
+    public sealed record UnsupportedOperatorError(string Operator) : CompilationError
     {
         /// <inheritdoc/>
         public override string ToString() =>
