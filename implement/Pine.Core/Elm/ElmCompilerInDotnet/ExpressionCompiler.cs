@@ -74,6 +74,12 @@ public class ExpressionCompiler
             SyntaxTypes.Expression.LetExpression expr =>
                 CompileLetExpression(expr, context),
 
+            SyntaxTypes.Expression.RecordUpdateExpression expr =>
+                CompileRecordUpdateExpression(expr, context),
+
+            SyntaxTypes.Expression.RecordAccess expr =>
+                CompileRecordAccess(expr, context),
+
             _ =>
                 new CompilationError.UnsupportedExpression(expression.GetType().Name)
         };
@@ -171,6 +177,69 @@ public class ExpressionCompiler
         // Check if this is a function application or choice type tag application
         if (firstArg is SyntaxTypes.Expression.FunctionOrValue funcRef)
         {
+            // Check if this is a record type alias constructor application
+            // Record type alias constructors also have uppercase names, so check this first
+            var qualifiedConstructorName =
+                funcRef.ModuleName.Count > 0
+                ?
+                string.Join(".", funcRef.ModuleName) + "." + funcRef.Name
+                :
+                context.CurrentModuleName + "." + funcRef.Name;
+
+            if (context.ModuleCompilationContext.TryGetRecordConstructorFieldNames(qualifiedConstructorName) is { } fieldNamesInDeclOrder)
+            {
+                // This is a record type alias constructor application
+                // Arguments are in declaration order (same as fieldNamesInDeclOrder)
+                // We need to construct a record with fields sorted alphabetically
+
+                var argumentCount = expr.Arguments.Count - 1;  // First arg is the constructor itself
+                if (argumentCount != fieldNamesInDeclOrder.Count)
+                {
+                    // Partial application not supported yet - fall through to other handling
+                    // For now, only handle full application
+                    return new CompilationError.UnsupportedExpression(
+                        $"Record constructor partial application not supported: {funcRef.Name} expects {fieldNamesInDeclOrder.Count} arguments but got {argumentCount}");
+                }
+
+                // Compile all arguments
+                var compiledArguments = new List<Expression>();
+                for (var i = 1; i < expr.Arguments.Count; i++)
+                {
+                    var argResult = Compile(expr.Arguments[i].Value, context);
+                    if (argResult.IsErrOrNull() is { } err)
+                    {
+                        return err;
+                    }
+                    compiledArguments.Add(argResult.IsOkOrNull()!);
+                }
+
+                // Create pairs of (fieldName, argExpression) in declaration order
+                var fieldArgPairs = fieldNamesInDeclOrder
+                    .Select((fieldName, index) => (fieldName, expr: compiledArguments[index]))
+                    .ToList();
+
+                // Sort pairs alphabetically by field name for the record representation
+                var sortedPairs = fieldArgPairs
+                    .OrderBy(pair => pair.fieldName, StringComparer.Ordinal)
+                    .ToList();
+
+                // Build the record field expressions
+                var recordFieldExprs = sortedPairs
+                    .Select(pair => Expression.ListInstance(
+                    [
+                        Expression.LiteralInstance(StringEncoding.ValueFromString(pair.fieldName)),
+                        pair.expr
+                    ]))
+                    .ToList();
+
+                // Build the record: [ElmRecordTag, [[field1, field2, ...]]]
+                return Expression.ListInstance(
+                [
+                    Expression.LiteralInstance(ElmValue.ElmRecordTypeTagNameAsValue),
+                    Expression.ListInstance([Expression.ListInstance(recordFieldExprs)])
+                ]);
+            }
+
             // Check if this is a choice type tag application
             if (ElmValueEncoding.StringIsValidTagName(funcRef.Name))
             {
@@ -222,8 +291,7 @@ public class ExpressionCompiler
             Expression callEnvFunctions;
 
             // Check if we have pre-computed dependency layout for the called function
-            if (context.ModuleCompilationContext.TryGetDependencyLayout(qualifiedFunctionName, out var calledFuncLayout) &&
-                calledFuncLayout is not null &&
+            if (context.ModuleCompilationContext.TryGetDependencyLayout(qualifiedFunctionName) is { } calledFuncLayout &&
                 calledFuncLayout.Count > 0)
             {
                 // Build environment by mapping the called function's dependency layout
@@ -351,6 +419,300 @@ public class ExpressionCompiler
             Expression.LiteralInstance(ElmValue.ElmRecordTypeTagNameAsValue),
             innerListExpr
         ]);
+    }
+
+    private static Result<CompilationError, Expression> CompileRecordUpdateExpression(
+        SyntaxTypes.Expression.RecordUpdateExpression expr,
+        ExpressionCompilationContext context)
+    {
+        // Get the original record value from the record name variable
+        var recordName = expr.RecordName.Value;
+
+        Expression recordExpr;
+        TypeInference.InferredType.RecordType? recordType = null;
+
+        // Check if it's a local binding first
+        if (context.TryGetLocalBinding(recordName, out var bindingExpr) && bindingExpr is not null)
+        {
+            recordExpr = bindingExpr;
+            // Try to get the type from local bindings
+            if (context.TryGetLocalBindingType(recordName, out var localType) &&
+                localType is TypeInference.InferredType.RecordType localRecordType)
+            {
+                recordType = localRecordType;
+            }
+        }
+        // Check if it's a parameter reference
+        else if (context.TryGetParameterIndex(recordName, out var paramIndex))
+        {
+            recordExpr = BuiltinHelpers.BuildPathToParameter(paramIndex);
+            // Try to get the type from parameter types
+            if (context.ParameterTypes.TryGetValue(recordName, out var paramType) &&
+                paramType is TypeInference.InferredType.RecordType paramRecordType)
+            {
+                recordType = paramRecordType;
+            }
+        }
+        else
+        {
+            return new CompilationError.UnresolvedReference(recordName, context.CurrentModuleName);
+        }
+
+        // Compile each field update and sort by field name alphabetically.
+        // This ordering is required because the runtime update function relies on both 
+        // the record fields and updates being sorted in the same order to efficiently 
+        // merge them in a single pass.
+        var sortedFields = expr.Fields
+            .OrderBy(f => f.Value.fieldName.Value, StringComparer.Ordinal)
+            .ToList();
+
+        // Compile update values
+        var compiledUpdateValues = new List<(string fieldName, Expression valueExpr)>();
+        foreach (var field in sortedFields)
+        {
+            var fieldName = field.Value.fieldName.Value;
+            var fieldValueExpr = field.Value.valueExpr.Value;
+
+            var compiledValue = Compile(fieldValueExpr, context);
+            if (compiledValue.IsErrOrNull() is { } err)
+            {
+                return err;
+            }
+
+            compiledUpdateValues.Add((fieldName, compiledValue.IsOkOrNull()!));
+        }
+
+        // If we know the record type at compile time, use direct field update
+        if (recordType is not null)
+        {
+            // Build a map of field name to index
+            var fieldIndices = recordType.FieldNames
+                .Select((name, idx) => (name, idx))
+                .ToDictionary(x => x.name, x => x.idx);
+
+            // Check if all update field names exist in the record type
+            var allFieldsKnown = compiledUpdateValues.All(u => fieldIndices.ContainsKey(u.fieldName));
+
+            if (allFieldsKnown)
+            {
+                // Use compile-time field index computation
+                return CompileRecordUpdateWithKnownIndices(
+                    recordExpr,
+                    recordType.FieldNames.Count,
+                    compiledUpdateValues.Select(u => (fieldIndices[u.fieldName], u.valueExpr)).ToList());
+            }
+        }
+
+        // Fall back to runtime field update when type is not known
+        var compiledUpdates = new List<Expression>();
+        foreach (var (fieldName, valueExpr) in compiledUpdateValues)
+        {
+            // Each update is encoded as [fieldName, newValue]
+            var updatePair = Expression.ListInstance(
+            [
+                Expression.LiteralInstance(StringEncoding.ValueFromString(fieldName)),
+                valueExpr
+            ]);
+
+            compiledUpdates.Add(updatePair);
+        }
+
+        var updatesListExpr = Expression.ListInstance(compiledUpdates);
+
+        // Build the call to the record update function
+        // The environment for the function is: [record, updates]
+        var callEnv = Expression.ListInstance([recordExpr, updatesListExpr]);
+
+        return new Expression.ParseAndEval(
+            encoded: Expression.LiteralInstance(RecordRuntime.PineFunctionForRecordUpdateAsValue),
+            environment: callEnv);
+    }
+
+    /// <summary>
+    /// Compiles a record update when field indices are known at compile time.
+    /// This avoids runtime iteration through fields.
+    /// </summary>
+    private static Expression CompileRecordUpdateWithKnownIndices(
+        Expression recordExpr,
+        int totalFieldCount,
+        IReadOnlyList<(int fieldIndex, Expression newValue)> updates)
+    {
+        // Record structure: [ElmRecordTag, [[field1, field2, ...]]]
+        // Each field is [fieldName, fieldValue]
+        // 
+        // We need to construct a new record with the same structure but updated values.
+        // Strategy: Get the fields list, then construct a new list with updated values.
+
+        // Get record tag
+        var recordTagExpr = BuiltinHelpers.ApplyBuiltinHead(recordExpr);
+
+        // Get record[1] (skip tag)
+        var recordContentExpr = BuiltinHelpers.ApplyBuiltinHead(
+            BuiltinHelpers.ApplyBuiltinSkip(1, recordExpr));
+
+        // Get record[1][0] = [field1, field2, ...]
+        var fieldsListExpr = BuiltinHelpers.ApplyBuiltinHead(recordContentExpr);
+
+        // Build the updated fields list
+        // For each field position, either use the original field or the new value
+        var updatesDict = updates.ToDictionary(u => u.fieldIndex, u => u.newValue);
+
+        var updatedFieldExprs = new List<Expression>();
+        for (int i = 0; i < totalFieldCount; i++)
+        {
+            Expression fieldPairExpr;
+
+            // Get the original field at index i
+            if (i == 0)
+            {
+                fieldPairExpr = BuiltinHelpers.ApplyBuiltinHead(fieldsListExpr);
+            }
+            else
+            {
+                fieldPairExpr = BuiltinHelpers.ApplyBuiltinHead(
+                    BuiltinHelpers.ApplyBuiltinSkip(i, fieldsListExpr));
+            }
+
+            if (updatesDict.TryGetValue(i, out var newValueExpr))
+            {
+                // This field is being updated
+                // Get the field name from the original field
+                var fieldNameExpr = BuiltinHelpers.ApplyBuiltinHead(fieldPairExpr);
+
+                // Create new field pair with updated value
+                updatedFieldExprs.Add(Expression.ListInstance([fieldNameExpr, newValueExpr]));
+            }
+            else
+            {
+                // Keep the original field unchanged
+                updatedFieldExprs.Add(fieldPairExpr);
+            }
+        }
+
+        // Construct the new record: [tag, [[updatedFields]]]
+        var updatedFieldsListExpr = Expression.ListInstance(updatedFieldExprs);
+        return Expression.ListInstance(
+        [
+            recordTagExpr,
+            Expression.ListInstance([updatedFieldsListExpr])
+        ]);
+    }
+
+    private static Result<CompilationError, Expression> CompileRecordAccess(
+        SyntaxTypes.Expression.RecordAccess expr,
+        ExpressionCompilationContext context)
+    {
+        // Compile the record expression
+        var recordResult = Compile(expr.Record.Value, context);
+        if (recordResult.IsErrOrNull() is { } err)
+        {
+            return err;
+        }
+
+        var recordExpr = recordResult.IsOkOrNull()!;
+        var fieldName = expr.FieldName.Value;
+
+        // Try to get the record type to compute field index at compile time
+        var recordType = TryGetRecordType(expr.Record.Value, context);
+        if (recordType is not null)
+        {
+            // We know the record field layout at compile time
+            // Find the index of the field in the sorted field list
+            var fieldIndex = recordType.FieldNames
+                .Select((name, idx) => (name, idx))
+                .FirstOrDefault(x => x.name == fieldName);
+
+            if (fieldIndex.name == fieldName)
+            {
+                // Emit direct field access using the known index
+                // Record structure: [ElmRecordTag, [[field1, field2, ...]]]
+                // Each field is [fieldName, fieldValue]
+                // To get field at index N: skip N fields, take head, get value (index 1)
+                return CompileRecordAccessWithKnownIndex(recordExpr, fieldIndex.idx);
+            }
+        }
+
+        // Fall back to runtime field lookup when type is not known
+        // Build the call to the record access function
+        // The environment for the function is: [record, fieldName]
+        var callEnv = Expression.ListInstance(
+        [
+            recordExpr,
+            Expression.LiteralInstance(StringEncoding.ValueFromString(fieldName))
+        ]);
+
+        return new Expression.ParseAndEval(
+            encoded: Expression.LiteralInstance(RecordRuntime.PineFunctionForRecordAccessAsValue),
+            environment: callEnv);
+    }
+
+    /// <summary>
+    /// Compiles a record field access when the field index is known at compile time.
+    /// This avoids runtime iteration through fields.
+    /// </summary>
+    private static Expression CompileRecordAccessWithKnownIndex(Expression recordExpr, int fieldIndex)
+    {
+        // Record structure: [ElmRecordTag, [[field1, field2, ...]]]
+        // field at index N: record[1][0][N][1]
+        // 
+        // record[1] = [[field1, field2, ...]]
+        // record[1][0] = [field1, field2, ...]
+        // record[1][0][N] = [fieldName_N, fieldValue_N]
+        // record[1][0][N][1] = fieldValue_N
+
+        // Get record[1] (skip tag)
+        var recordContentExpr = BuiltinHelpers.ApplyBuiltinHead(
+            BuiltinHelpers.ApplyBuiltinSkip(1, recordExpr));
+
+        // Get record[1][0] (unwrap the inner list)
+        var fieldsListExpr = BuiltinHelpers.ApplyBuiltinHead(recordContentExpr);
+
+        // Get field at index N
+        Expression fieldPairExpr;
+        if (fieldIndex == 0)
+        {
+            fieldPairExpr = BuiltinHelpers.ApplyBuiltinHead(fieldsListExpr);
+        }
+        else
+        {
+            fieldPairExpr = BuiltinHelpers.ApplyBuiltinHead(
+                BuiltinHelpers.ApplyBuiltinSkip(fieldIndex, fieldsListExpr));
+        }
+
+        // Get the field value (index 1 in the pair)
+        return BuiltinHelpers.ApplyBuiltinHead(
+            BuiltinHelpers.ApplyBuiltinSkip(1, fieldPairExpr));
+    }
+
+    /// <summary>
+    /// Tries to determine if an expression has a known record type with field names.
+    /// </summary>
+    private static TypeInference.InferredType.RecordType? TryGetRecordType(
+        SyntaxTypes.Expression expression,
+        ExpressionCompilationContext context)
+    {
+        // Check if the expression is a simple variable reference
+        if (expression is SyntaxTypes.Expression.FunctionOrValue funcOrValue &&
+            funcOrValue.ModuleName.Count == 0)
+        {
+            var varName = funcOrValue.Name;
+
+            // Check local binding types first
+            if (context.TryGetLocalBindingType(varName, out var localType) &&
+                localType is TypeInference.InferredType.RecordType localRecordType)
+            {
+                return localRecordType;
+            }
+
+            // Check parameter types
+            if (context.ParameterTypes.TryGetValue(varName, out var paramType) &&
+                paramType is TypeInference.InferredType.RecordType paramRecordType)
+            {
+                return paramRecordType;
+            }
+        }
+
+        return null;
     }
 
     private static Result<CompilationError, Expression> CompileOperatorApplication(

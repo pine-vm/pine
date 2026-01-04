@@ -117,11 +117,25 @@ For operations where we prove the type must be `Int`, we emit specialized code a
 
 Where the type is constrained to `Int`, we map `Basics.add` and `Basics.mul` operations from Elm directly to the `int_add` and `int_mul` Pine builtin functions. For other operations, we attach the corresponding function in Pine code locally, so that code analysis does not need to follow references to the environment when parsing these operations. Tooling for inspection, such as snapshot tests for the compiler, maps these particular Pine expressions to identifiers like `ElmCore.int_div`, `ElmCore.number_mul`, etc. for better readability.
 
-## Record Access and Record Update
+## Records
 
-How we emit record access and record update depends on how much we know about the record type: when we have inferred a concrete list of field names, we use the field name index to perform an index-based lookup or insertion. However, due to row polymorphism, that index can vary across call sites. In these cases, we emit a function that recursively scans the record to find the field with the matching name.
+For Elm code producing record values, we always produce records with fields sorted alphabetically by field name. This makes subsequent operations on these values, like equality checks, simpler.
 
-## Future Exploration - Monomorphizing Extensible Records
+### Record Access and Record Update
+
+How we handle record access and record updates depends on how much we know about the record type at compile time: when we have inferred a closed set of field names, we use the field-name index to perform an index-based lookup or insertion.
+
+However, due to row polymorphism, that index can vary across call sites if the function we emit has not been narrowed to a closed set of field names. In these cases, we emit a function that recursively scans the record to find the field with the matching name.
+
+### Record Constructors
+
+In Elm, a type alias declaration of a record type also implies the creation of a function of the same name. These record constructors can be used like other functions, including partial application.
+
+The order of arguments is the same as the order in which the fields appear in the type alias declaration code. This means that multiple record type alias declarations can produce the same type, but different constructors.
+
+## Future Exploration
+
+### Future Exploration - Monomorphizing Extensible Records
 
 The following is an idea to further optimize programs with row polymorphism for throughput:
 

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Linq;
 using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
@@ -35,6 +36,9 @@ public static class TypeInference
 
         /// <summary>Tuple type with element types.</summary>
         public sealed record TupleType(IReadOnlyList<InferredType> ElementTypes) : InferredType;
+
+        /// <summary>Record type with field names (sorted alphabetically).</summary>
+        public sealed record RecordType(IReadOnlyList<string> FieldNames) : InferredType;
 
         /// <summary>Unknown or unresolved type.</summary>
         public sealed record UnknownType : InferredType;
@@ -152,6 +156,17 @@ public static class TypeInference
                 elementTypes.Add(TypeAnnotationToInferredType(elementNode.Value));
             }
             return new InferredType.TupleType(elementTypes);
+        }
+
+        // Handle record type annotations
+        if (typeAnnotation is SyntaxTypes.TypeAnnotation.Record recordType)
+        {
+            // Extract field names and sort them alphabetically (as Elm records are stored)
+            var fieldNames = recordType.RecordDefinition.Fields
+                .Select(f => f.Value.FieldName.Value)
+                .OrderBy(name => name, System.StringComparer.Ordinal)
+                .ToList();
+            return new InferredType.RecordType(fieldNames);
         }
 
         return s_unknownType;

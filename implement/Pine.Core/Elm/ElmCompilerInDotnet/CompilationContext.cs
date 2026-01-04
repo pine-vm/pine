@@ -31,6 +31,7 @@ public record CompiledFunctionInfo(
 /// <param name="FunctionReturnTypes">Map of qualified function names to their return types.</param>
 /// <param name="ConstructorArgumentTypes">Map of constructor names to their argument types (for type inference from NamedPatterns).</param>
 /// <param name="FunctionParameterTypes">Map of qualified function names to their parameter types (for type inference from function applications).</param>
+/// <param name="RecordTypeAliasConstructors">Map of qualified record type alias names to their field names in declaration order (for record constructors).</param>
 public record ModuleCompilationContext(
     IReadOnlyDictionary<string, (string moduleName, string functionName, SyntaxTypes.Declaration.FunctionDeclaration declaration)> AllFunctions,
     ImmutableDictionary<string, CompiledFunctionInfo> CompiledFunctionsCache,
@@ -38,7 +39,8 @@ public record ModuleCompilationContext(
     IReadOnlyDictionary<string, IReadOnlyList<string>>? FunctionDependencyLayouts = null,
     IReadOnlyDictionary<string, TypeInference.InferredType>? FunctionReturnTypes = null,
     IReadOnlyDictionary<string, IReadOnlyList<TypeInference.InferredType>>? ConstructorArgumentTypes = null,
-    IReadOnlyDictionary<string, IReadOnlyList<TypeInference.InferredType>>? FunctionParameterTypes = null)
+    IReadOnlyDictionary<string, IReadOnlyList<TypeInference.InferredType>>? FunctionParameterTypes = null,
+    IReadOnlyDictionary<string, IReadOnlyList<string>>? RecordTypeAliasConstructors = null)
 {
     /// <summary>
     /// Creates a new context with the specified function added to the cache.
@@ -79,17 +81,14 @@ public record ModuleCompilationContext(
     /// Gets a compiled function from the cache.
     /// </summary>
     /// <param name="qualifiedName">The qualified function name.</param>
-    /// <param name="value">The compiled value if found.</param>
-    /// <returns>True if the function was found.</returns>
-    public bool TryGetCompiledFunction(string qualifiedName, out PineValue? value)
+    public PineValue? TryGetCompiledFunctionValue(string qualifiedName)
     {
         if (CompiledFunctionsCache.TryGetValue(qualifiedName, out var info))
         {
-            value = info.CompiledValue;
-            return true;
+            return info.CompiledValue;
         }
-        value = null;
-        return false;
+
+        return null;
     }
 
     /// <summary>
@@ -105,17 +104,14 @@ public record ModuleCompilationContext(
     /// Gets the pre-computed dependency layout for a function.
     /// </summary>
     /// <param name="qualifiedName">The qualified function name.</param>
-    /// <param name="layout">The dependency layout if found.</param>
-    /// <returns>True if the layout was found.</returns>
-    public bool TryGetDependencyLayout(string qualifiedName, out IReadOnlyList<string>? layout)
+    public IReadOnlyList<string>? TryGetDependencyLayout(string qualifiedName)
     {
         if (FunctionDependencyLayouts?.TryGetValue(qualifiedName, out var result) ?? false)
         {
-            layout = result;
-            return true;
+            return result;
         }
-        layout = null;
-        return false;
+
+        return null;
     }
 
     /// <summary>
@@ -146,20 +142,18 @@ public record ModuleCompilationContext(
         PineKernelModuleNames.Contains(moduleName);
 
     /// <summary>
-    /// Tries to get the argument types for a constructor by name.
+    /// Tries to get the field names for a record type alias constructor.
+    /// The field names are returned in the order they appear in the type alias declaration,
+    /// which determines the order of constructor arguments.
     /// </summary>
-    /// <param name="constructorName">The constructor name (e.g., "TagAlfa").</param>
-    /// <param name="argumentTypes">The list of argument types if found.</param>
-    /// <returns>True if the constructor was found.</returns>
-    public bool TryGetConstructorArgumentTypes(string constructorName, out IReadOnlyList<TypeInference.InferredType>? argumentTypes)
+    public IReadOnlyList<string>? TryGetRecordConstructorFieldNames(string qualifiedName)
     {
-        if (ConstructorArgumentTypes?.TryGetValue(constructorName, out var types) ?? false)
+        if (RecordTypeAliasConstructors?.TryGetValue(qualifiedName, out var names) ?? false)
         {
-            argumentTypes = types;
-            return true;
+            return names;
         }
-        argumentTypes = null;
-        return false;
+
+        return null;
     }
 }
 

@@ -34,7 +34,7 @@ public class FunctionCompiler
         var qualifiedFunctionName = currentModuleName + "." + functionName;
 
         // Check if we've already compiled this function
-        if (context.TryGetCompiledFunction(qualifiedFunctionName, out var cachedValue) && cachedValue is not null)
+        if (context.TryGetCompiledFunctionValue(qualifiedFunctionName) is { } cachedValue)
         {
             return (cachedValue, context);
         }

@@ -199,6 +199,40 @@ public class ElmCompiler
             }
         }
 
+        // Build record type alias constructors dictionary
+        // A type alias for a record type creates an implicit constructor function
+        // where argument order matches the field order in the type alias declaration
+        var recordTypeAliasConstructors = new Dictionary<string, IReadOnlyList<string>>();
+        foreach (var elmModuleSyntax in lambdaLiftedModules)
+        {
+            var moduleName =
+                SyntaxTypes.Module.GetModuleName(elmModuleSyntax.ModuleDefinition.Value).Value;
+            var moduleNameFlattened = string.Join(".", moduleName);
+
+            var aliasDeclarations =
+                elmModuleSyntax.Declarations
+                .Select(declNode => declNode.Value)
+                .OfType<SyntaxTypes.Declaration.AliasDeclaration>();
+
+            foreach (var aliasDecl in aliasDeclarations)
+            {
+                var aliasName = aliasDecl.TypeAlias.Name.Value;
+                var typeAnnotation = aliasDecl.TypeAlias.TypeAnnotation.Value;
+
+                // Check if the type alias is for a record type
+                if (typeAnnotation is SyntaxTypes.TypeAnnotation.Record recordType)
+                {
+                    // Extract field names in declaration order
+                    var fieldNames = recordType.RecordDefinition.Fields
+                        .Select(f => f.Value.FieldName.Value)
+                        .ToList();
+
+                    var qualifiedName = moduleNameFlattened + "." + aliasName;
+                    recordTypeAliasConstructors[qualifiedName] = fieldNames;
+                }
+            }
+        }
+
         // Create initial compilation context with all available functions
         var initialContext =
             new ModuleCompilationContext(
@@ -207,7 +241,8 @@ public class ElmCompiler
                 PineKernelModuleNames: s_pineKernelModuleNamesDefault,
                 FunctionReturnTypes: functionReturnTypes,
                 ConstructorArgumentTypes: constructorArgumentTypes,
-                FunctionParameterTypes: functionParameterTypes);
+                FunctionParameterTypes: functionParameterTypes,
+                RecordTypeAliasConstructors: recordTypeAliasConstructors);
 
         // Pre-compute dependency layouts for all functions BEFORE compilation
         var dependencyLayouts = ComputeDependencyLayouts(allFunctions, initialContext);
@@ -330,7 +365,7 @@ public class ElmCompiler
             currentModuleName + "." + functionName;
 
         // Check if we've already compiled this function (to avoid infinite recursion)
-        if (context.TryGetCompiledFunction(qualifiedFunctionName, out var cachedValue) && cachedValue is not null)
+        if (context.TryGetCompiledFunctionValue(qualifiedFunctionName) is { } cachedValue)
         {
             return (cachedValue, context);
         }
