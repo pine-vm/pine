@@ -44,7 +44,7 @@
     <PackageReference Include="Microsoft.AspNetCore.Http.Abstractions" Version="2.3.0" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="5.0.0" />
     <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="10.0.1" />
-    <PackageReference Include="SharpCompress" Version="0.42.1" />
+    <PackageReference Include="SharpCompress" Version="0.43.0" />
   </ItemGroup>
 
 </Project>
