@@ -237,6 +237,94 @@ public class FormatCompleteTests
     }
 
     [Fact]
+    public void Trims_linebreaks_and_whitespaces_in_case_block()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl a b c =
+                
+                case   a    of
+                
+                    
+                    Just   x    ->
+                    
+                          b + x
+            
+                    Nothing->
+
+                       c
+            """";
+
+        var expected =
+            """"
+            module Test exposing (..)
+
+
+            decl a b c =
+                case a of
+                    Just x ->
+                        b + x
+
+                    Nothing ->
+                        c
+            """";
+
+        AssertModuleTextFormatsToExpected(input, expected);
+    }
+
+    [Fact]
+    public void Supports_varying_indent_of_arms_in_case_block()
+    {
+        /*
+         * The original avh4/elm-format failed to format this module.
+         * The original Elm compiler gave the following parsing error:
+         * 
+         * Detected problems in 1 module.
+         * -- UNEXPECTED NAME ------------------------------------------------ src\Test.elm
+         * 
+         * I got stuck on this name:
+         * 
+         * 9|        Nothing ->
+         *           ^^^^^^^
+         * It is confusing me a lot! Normally I can give fairly specific hints, but
+         * something is really tripping me up this time.
+         * */
+
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl a =
+                case a of
+                     Just x ->
+                        b
+            
+                 Nothing ->
+                        c
+            """";
+
+        var expected =
+            """"
+            module Test exposing (..)
+
+
+            decl a =
+                case a of
+                    Just x ->
+                        b
+
+                    Nothing ->
+                        c
+            """";
+
+        AssertModuleTextFormatsToExpected(input, expected);
+    }
+
+    [Fact]
     public void Adds_linebreak_between_top_level_declarations()
     {
         var input =
@@ -2360,6 +2448,137 @@ public class FormatCompleteTests
                         71
                 in
                 inner
+
+            """";
+
+        AssertModuleTextFormatsToExpected(input, expected);
+    }
+
+    [Fact]
+    public void Preserves_parens_around_infix_operators_depending_on_precedence()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            declA a b c d =
+                (a + b) * (c - d)
+
+
+            declB =
+                (a == b) || ((c /= d) && (e < f))
+
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
+    public void Preserves_single_superfluous_parens_around_infix_operators()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            declA =
+                (a + b) + c
+
+
+            declB =
+                a + (b + c)
+
+
+            declC =
+                (a * b) * c
+
+
+            declD =
+                ((a + b) + c) + d
+
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
+    public void Trims_duplicate_superfluous_parens_around_infix_operators()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            declA a b c d =
+                ((a + b)) * (((c - d)))
+
+            declB =
+                (((a == b))) || ((((c /= d)) && ((e < f))))
+
+            """";
+
+        var expected =
+            """"
+            module Test exposing (..)
+
+
+            declA a b c d =
+                (a + b) * (c - d)
+
+
+            declB =
+                (a == b) || ((c /= d) && (e < f))
+
+            """";
+
+        AssertModuleTextFormatsToExpected(input, expected);
+    }
+
+    [Fact]
+    public void Trims_superfluous_parens_around_literals_and_names()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            declA =
+                ("test")
+
+
+            declB =
+                (17)
+
+
+            declC =
+                (True)
+
+
+            declD =
+                (test)
+
+            """";
+
+        var expected =
+            """"
+            module Test exposing (..)
+
+
+            declA =
+                "test"
+
+
+            declB =
+                17
+
+
+            declC =
+                True
+
+
+            declD =
+                test
 
             """";
 

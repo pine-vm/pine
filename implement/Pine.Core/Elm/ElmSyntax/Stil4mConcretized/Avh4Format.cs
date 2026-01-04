@@ -417,6 +417,24 @@ public class Avh4Format
         return nodes.Skip(1).Any(node => node.Range.Start.Row != firstRow);
     }
 
+    /// <summary>
+    /// Determines if an expression is "simple" enough that it doesn't need parentheses.
+    /// Simple expressions include literals, names, unit, records, lists, and tuples
+    /// (which already have their own delimiters).
+    /// </summary>
+    private static bool IsSimpleExpressionThatDoesNotNeedParens(Expression expr) =>
+        expr is Expression.Literal
+            or Expression.CharLiteral
+            or Expression.Integer
+            or Expression.Hex
+            or Expression.Floatable
+            or Expression.FunctionOrValue
+            or Expression.UnitExpr
+            or Expression.RecordExpr
+            or Expression.ListExpr
+            or Expression.TupledExpression
+            or Expression.RecordAccessFunction;
+
     #endregion
 
     #region Visitor Implementation
@@ -2973,11 +2991,30 @@ public class Avh4Format
 
                 case Expression.ParenthesizedExpression parenExpr:
                     {
+                        // Trim duplicate parentheses: ((expr)) -> (expr)
+                        // Following elm-format behavior, when there are multiple levels of nested
+                        // parentheses around an expression, we reduce them to a single level.
+                        // This is safe because the AST is an immutable tree parsed from source code,
+                        // so circular references are not possible and depth is bounded by source nesting.
+                        var innerExpr = parenExpr.Expression;
+                        while (innerExpr.Value is Expression.ParenthesizedExpression nestedParen)
+                        {
+                            innerExpr = nestedParen.Expression;
+                        }
+
+                        // Also remove parentheses around simple expressions that don't need them:
+                        // literals, names, unit, etc.
+                        if (IsSimpleExpressionThatDoesNotNeedParens(innerExpr.Value))
+                        {
+                            // Skip the parentheses entirely and just format the inner expression
+                            return FormatExpressionValue(innerExpr.Value, innerExpr.Range, context);
+                        }
+
                         // Create reference context at opening paren for close paren alignment
                         var openParenRef = context.SetIndentToCurrentColumn();
 
                         var afterOpenParen = context.Advance(1);
-                        var innerResult = FormatExpression(parenExpr.Expression, afterOpenParen);
+                        var innerResult = FormatExpression(innerExpr, afterOpenParen);
 
                         // Determine if closing paren should be on new line.
                         // The only condition for making ParenthesizedExpression multiline is the content expression being multiline.

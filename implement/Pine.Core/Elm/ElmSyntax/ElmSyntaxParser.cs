@@ -3004,12 +3004,19 @@ public class ElmSyntaxParser
                     ConsumeAllTrivia();
 
                     var casesIndentMin = Peek.Start.Column;
+                    // For robustness with inconsistently indented case arms, we also accept
+                    // arms that are strictly indented more than the 'case' keyword itself.
+                    // This handles malformed input like:
+                    //     case x of
+                    //          Just y -> ...   (column 10)
+                    //         Nothing -> ...   (column 9, still > case keyword column)
+                    var caseKeywordColumn = firstIdentifierToken.Range.Start.Column;
 
                     var caseBranches = new List<SyntaxTypes.Case>();
 
                     while (
                         !IsAtEnd() &&
-                        casesIndentMin <= Peek.Start.Column &&
+                        (casesIndentMin <= Peek.Start.Column || caseKeywordColumn < Peek.Start.Column) &&
                         Peek.Type is not TokenType.Comma &&
                         Peek.Type is not TokenType.CloseParen &&
                         Peek.Type is not TokenType.CloseBracket &&

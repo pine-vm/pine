@@ -307,7 +307,7 @@ public class LambdaLiftingTests
 
             double : List Int -> List Int
             double items =
-                List.map (double__lifted__lambda1) items
+                List.map double__lifted__lambda1 items
 
 
             double__lifted__lambda1 x =
