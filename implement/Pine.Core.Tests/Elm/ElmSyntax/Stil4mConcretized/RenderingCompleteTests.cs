@@ -13,7 +13,7 @@ public class RenderingCompleteTests
 {
     private static File ParseModule(string input)
     {
-        return ElmSyntaxParser.ParseModuleText(input, enableMaxPreservation: true)
+        return ElmSyntaxParser.ParseModuleText(input)
             .Extract(err => throw new Exception($"Parsing failed: {err}"));
     }
 

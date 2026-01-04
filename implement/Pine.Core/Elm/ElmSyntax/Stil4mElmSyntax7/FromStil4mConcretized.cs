@@ -222,6 +222,8 @@ public static class FromStil4mConcretized
 
     /// <summary>
     /// Converts a Stil4mConcretized.TypeAnnotation to a Stil4mElmSyntax7.TypeAnnotation.
+    /// Single-element tuples (parenthesized types) are unwrapped to match the
+    /// original stil4m/elm-syntax behavior that doesn't emit parenthesized nodes for type arguments.
     /// </summary>
     public static TypeAnnotation Convert(
         ConcretizedTypes.TypeAnnotation typeAnnotation) =>
@@ -233,14 +235,13 @@ public static class FromStil4mConcretized
             ConcretizedTypes.TypeAnnotation.Typed typed =>
                 new TypeAnnotation.Typed(
                     typed.TypeName,
-                    ConvertNodes(typed.TypeArguments, Convert)),
+                    ConvertTypeAnnotationNodes(typed.TypeArguments)),
 
             ConcretizedTypes.TypeAnnotation.Unit =>
                 new TypeAnnotation.Unit(),
 
             ConcretizedTypes.TypeAnnotation.Tupled tupled =>
-                new TypeAnnotation.Tupled(
-                    ConvertSeparatedNodes(tupled.TypeAnnotations, Convert)),
+                ConvertTupledTypeAnnotation(tupled),
 
             ConcretizedTypes.TypeAnnotation.Record record =>
                 new TypeAnnotation.Record(
@@ -253,13 +254,48 @@ public static class FromStil4mConcretized
 
             ConcretizedTypes.TypeAnnotation.FunctionTypeAnnotation functionType =>
                 new TypeAnnotation.FunctionTypeAnnotation(
-                    ConvertNode(functionType.ArgumentType, Convert),
-                    ConvertNode(functionType.ReturnType, Convert)),
+                    ConvertTypeAnnotationNode(functionType.ArgumentType),
+                    ConvertTypeAnnotationNode(functionType.ReturnType)),
 
             _ =>
                 throw new System.NotImplementedException(
                     "Unexpected type annotation type: " + typeAnnotation.GetType().Name),
         };
+
+    /// <summary>
+    /// Converts a Tupled type annotation. Single-element tuples are unwrapped
+    /// to match the original stil4m/elm-syntax behavior.
+    /// </summary>
+    private static TypeAnnotation ConvertTupledTypeAnnotation(
+        ConcretizedTypes.TypeAnnotation.Tupled tupled)
+    {
+        // Unwrap single-element tuples (parenthesized types)
+        if (tupled.TypeAnnotations is ConcretizedTypes.SeparatedSyntaxList<Node<ConcretizedTypes.TypeAnnotation>>.NonEmpty { Rest.Count: 0 } nonEmpty)
+        {
+            // Single element - unwrap it
+            return Convert(nonEmpty.First.Value);
+        }
+
+        // Multiple elements - keep as tuple
+        return new TypeAnnotation.Tupled(
+            ConvertSeparatedNodes(tupled.TypeAnnotations, Convert));
+    }
+
+    /// <summary>
+    /// Converts a Node of TypeAnnotation, unwrapping single-element tuples.
+    /// This preserves the outer range but unwraps the inner value.
+    /// </summary>
+    private static Node<TypeAnnotation> ConvertTypeAnnotationNode(
+        Node<ConcretizedTypes.TypeAnnotation> node) =>
+        new(node.Range, Convert(node.Value));
+
+    /// <summary>
+    /// Converts a list of TypeAnnotation nodes (for type arguments).
+    /// Single-element tuples in type arguments are unwrapped.
+    /// </summary>
+    private static IReadOnlyList<Node<TypeAnnotation>> ConvertTypeAnnotationNodes(
+        IReadOnlyList<Node<ConcretizedTypes.TypeAnnotation>> nodes) =>
+        [.. nodes.Select(ConvertTypeAnnotationNode)];
 
     /// <summary>
     /// Converts a Stil4mConcretized.RecordDefinition to a Stil4mElmSyntax7.RecordDefinition.

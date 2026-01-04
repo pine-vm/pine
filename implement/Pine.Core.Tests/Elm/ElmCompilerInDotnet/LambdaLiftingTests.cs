@@ -26,7 +26,7 @@ public class LambdaLiftingTests
     private static File ParseModuleText(string moduleText)
     {
         var concreteSyntax =
-            ElmSyntaxParser.ParseModuleText(moduleText, enableMaxPreservation: false)
+            ElmSyntaxParser.ParseModuleText(moduleText)
             .Extract(err => throw new Exception("Failed parsing: " + err));
 
         return FromStil4mConcretized.Convert(concreteSyntax);

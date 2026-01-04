@@ -48,29 +48,25 @@ public class ElmSyntaxParser
 
     /// <summary>
     /// Parses Elm module text into the classic syntax tree representation.
+    /// The parser always preserves parentheses/tuples in the syntax tree.
+    /// Use <see cref="Stil4mElmSyntax7.FromStil4mConcretized.Convert"/> to get the
+    /// abstract syntax model that matches the original stil4m/elm-syntax behavior
+    /// (with single-element tuples unwrapped).
     /// </summary>
     /// <param name="elmModuleText">
     /// Source code of the Elm module to parse.
-    /// </param>
-    /// <param name="enableMaxPreservation">
-    /// Enable maximum source preservation, to support applications like code formatters.
-    /// Enabling this will retain more parenthesis than the original parser in the stil4m/elm-syntax project.
     /// </param>
     /// <returns>
     /// Result containing either the parsed file structure or an error description.
     /// </returns>
     public static Result<string, SyntaxTypes.File> ParseModuleText(
-        string elmModuleText,
-        bool enableMaxPreservation = false)
+        string elmModuleText)
     {
         var tokenizer = new Tokenizer(elmModuleText);
 
         var tokens = tokenizer.Tokenize().ToArray();
 
-        var parser =
-            new Parser(
-                tokens,
-                enableMaxPreservation: enableMaxPreservation);
+        var parser = new Parser(tokens);
 
         return parser.ParseFile();
     }
@@ -996,8 +992,7 @@ public class ElmSyntaxParser
     }
 
     private class Parser(
-        ReadOnlyMemory<Token> tokens,
-        bool enableMaxPreservation)
+        ReadOnlyMemory<Token> tokens)
     {
         private int _current = 0;
 
@@ -1958,29 +1953,6 @@ public class ElmSyntaxParser
                         var argumentAnnotation =
                             ParseTypeAnnotationTypedArg(indentMin: constructorNameToken.Start.Column);
 
-                        if (!enableMaxPreservation)
-                        {
-                            /*
-                               * For type arguments,
-                               * https://github.com/stil4m/elm-syntax/tree/58671250026416cdae72100bb0c67da17dec92ee/src does not
-                               * emit a 'parenthesized' node for type arguments.
-                               * 
-                               * See https://github.com/stil4m/elm-syntax/issues/211 for how this might change in future versions.
-                               * */
-
-                            if (argumentAnnotation.Value is SyntaxTypes.TypeAnnotation.Tupled typeArgTupled &&
-                                typeArgTupled.TypeAnnotations is SyntaxTypes.SeparatedSyntaxList<Node<SyntaxTypes.TypeAnnotation>>.NonEmpty nonEmptyTupled &&
-                                nonEmptyTupled.Rest.Count is 0)
-                            {
-                                argumentAnnotation =
-                                    nonEmptyTupled.First
-                                    with
-                                    {
-                                        Range = argumentAnnotation.Range
-                                    };
-                            }
-                        }
-
                         constructorArguments.Add(argumentAnnotation);
 
                         ConsumeAllTrivia();
@@ -2167,21 +2139,6 @@ public class ElmSyntaxParser
 
             ConsumeAllTrivia();
 
-            if (!enableMaxPreservation)
-            {
-                if (paramType.Value is SyntaxTypes.TypeAnnotation.Tupled paramTupled &&
-                    paramTupled.TypeAnnotations is SyntaxTypes.SeparatedSyntaxList<Node<SyntaxTypes.TypeAnnotation>>.NonEmpty nonEmptyParamTupled &&
-                    nonEmptyParamTupled.Rest.Count is 0)
-                {
-                    paramType =
-                        nonEmptyParamTupled.First
-                        with
-                        {
-                            Range = paramType.Range
-                        };
-                }
-            }
-
             if (NextTokenMatches(peek => peek.Type is TokenType.Arrow))
             {
                 var arrowToken = Consume(TokenType.Arrow);
@@ -2229,29 +2186,6 @@ public class ElmSyntaxParser
                 {
                     var typeArgument =
                         ParseTypeAnnotationTypedArg(indentMin: indentMin);
-
-                    if (!enableMaxPreservation)
-                    {
-                        /*
-                         * For type arguments,
-                         * https://github.com/stil4m/elm-syntax/tree/58671250026416cdae72100bb0c67da17dec92ee/src does not
-                         * emit a 'parenthesized' node for type arguments.
-                         * 
-                         * See https://github.com/stil4m/elm-syntax/issues/211 for how this might change in future versions.
-                         * */
-
-                        if (typeArgument.Value is SyntaxTypes.TypeAnnotation.Tupled typeArgTupled &&
-                            typeArgTupled.TypeAnnotations is SyntaxTypes.SeparatedSyntaxList<Node<SyntaxTypes.TypeAnnotation>>.NonEmpty nonEmptyTypeArgTupled &&
-                            nonEmptyTypeArgTupled.Rest.Count is 0)
-                        {
-                            typeArgument =
-                                nonEmptyTypeArgTupled.First
-                                with
-                                {
-                                    Range = typeArgument.Range
-                                };
-                        }
-                    }
 
                     typeArguments.Add(typeArgument);
 

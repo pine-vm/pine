@@ -41,7 +41,7 @@ public class InliningTestHelper
         var parsedModules =
             elmModulesTexts
             .Select(text =>
-                ElmSyntaxParser.ParseModuleText(text, enableMaxPreservation: true)
+                ElmSyntaxParser.ParseModuleText(text)
                 .Extract(err => throw new System.Exception("Failed parsing: " + err)))
             .Select(SyntaxV7.FromStil4mConcretized.Convert)
             .ToList();

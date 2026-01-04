@@ -125,9 +125,7 @@ public class ElmFormatCommand
                 var originalContent = File.ReadAllText(filePath);
 
                 var parseResult =
-                    ElmSyntaxParser.ParseModuleText(
-                        originalContent,
-                        enableMaxPreservation: true);
+                    ElmSyntaxParser.ParseModuleText(originalContent);
 
                 if (parseResult.IsErrOrNull() is { } parseErr)
                 {

@@ -14,9 +14,7 @@ public class RenderIncompleteTests
     private static File ParseModule(string input)
     {
         return
-            ElmSyntaxParser.ParseModuleText(
-                input,
-                enableMaxPreservation: true)
+            ElmSyntaxParser.ParseModuleText(input)
             .Extract(err => throw new Exception($"Parsing failed: {err}"));
     }
 

@@ -11,9 +11,7 @@ public class FormatTestHelper
 {
     public static File ParseFile(string input)
     {
-        return ElmSyntaxParser.ParseModuleText(
-            input,
-            enableMaxPreservation: true)
+        return ElmSyntaxParser.ParseModuleText(input)
             .Extract(err => throw new Exception($"Parsing failed: {err}"));
     }
 
@@ -21,7 +19,7 @@ public class FormatTestHelper
         string input)
     {
         var parsed =
-            ElmSyntaxParser.ParseModuleText(input, enableMaxPreservation: true)
+            ElmSyntaxParser.ParseModuleText(input)
             .Extract(err => throw new Exception($"Parsing failed: {err}"));
 
         return Avh4Format.FormatToString(parsed);
@@ -57,11 +55,11 @@ public class FormatTestHelper
          * */
 
         var parsed_0 =
-            ElmSyntaxParser.ParseModuleText(elmModuleText, enableMaxPreservation: true)
+            ElmSyntaxParser.ParseModuleText(elmModuleText)
             .Extract(err => throw new Exception("Parsing failed: " + err.ToString()));
 
         var parsed_1 =
-            ElmSyntaxParser.ParseModuleText(elmModuleText, enableMaxPreservation: true)
+            ElmSyntaxParser.ParseModuleText(elmModuleText)
             .Extract(err => throw new Exception("Reparsing failed: " + err.ToString()));
 
         parsed_0.Should().Be(parsed_1);

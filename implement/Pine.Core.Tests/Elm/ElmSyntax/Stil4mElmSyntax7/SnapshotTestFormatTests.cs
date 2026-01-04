@@ -19,7 +19,7 @@ public class SnapshotTestFormatTests
         string input)
     {
         var parsed =
-            ElmSyntaxParser.ParseModuleText(input, enableMaxPreservation: true)
+            ElmSyntaxParser.ParseModuleText(input)
             .Extract(err => throw new System.Exception($"Parsing failed: {err}"));
 
         return FormatConcretized(parsed);

@@ -43,7 +43,7 @@ public class CanonicalizationTests
         var parsedModules =
             elmModulesTexts
             .Select(text =>
-                ElmSyntaxParser.ParseModuleText(text, enableMaxPreservation: true)
+                ElmSyntaxParser.ParseModuleText(text)
                 .Extract(err => throw new System.Exception("Failed parsing: " + err)))
             .Select(FromStil4mConcretized.Convert)
             .ToList();
@@ -64,7 +64,7 @@ public class CanonicalizationTests
     private static File ParseModuleText(string moduleTex)
     {
         var concreteSyntax =
-            ElmSyntaxParser.ParseModuleText(moduleTex, enableMaxPreservation: false)
+            ElmSyntaxParser.ParseModuleText(moduleTex)
             .Extract(err => throw new System.Exception("Failed parsing: " + err));
 
         return FromStil4mConcretized.Convert(concreteSyntax);
