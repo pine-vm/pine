@@ -5,8 +5,6 @@ using Location = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7.Location;
 
 namespace Pine.Core.Tests.Elm.ElmSyntax.Stil4mConcretized.Avh4Format;
 
-using static FormatTestHelper;
-
 public class FormatIncompleteTests
 {
     /*
@@ -32,7 +30,7 @@ public class FormatIncompleteTests
             decl =
             """";
 
-        AssertModuleTextFormatsToExpected(input, expected);
+        FormatTestHelper.AssertModuleTextFormatsToExpected(input, expected);
     }
 
     [Fact]
@@ -65,18 +63,17 @@ public class FormatIncompleteTests
                 42
             """";
 
-        AssertModuleTextFormatsToExpected(input, expected);
+        FormatTestHelper.AssertModuleTextFormatsToExpected(input, expected);
 
         // Also verify that we have proper error information
-        var parsed = ParseFile(input);
+        var parsed = FormatTestHelper.ParseFile(input);
 
         parsed.IncompleteDeclarations.Should().HaveCount(1);
 
         var incompleteDecl = parsed.IncompleteDeclarations[0];
 
         // The Range should point to the start of the incomplete declaration "decl =" at row 4
-        incompleteDecl.Range.Start.Row.Should().Be(4);
-        incompleteDecl.Range.Start.Column.Should().Be(1);
+        incompleteDecl.Range.Start.Should().Be(new Location(4, 1));
 
         // The ErrorLocation should point to where the actual error occurred (somewhere after the comma)
         incompleteDecl.Value.ErrorLocation.Row.Should().BeGreaterThanOrEqualTo(6);
@@ -137,10 +134,10 @@ public class FormatIncompleteTests
 
             """";
 
-        AssertModuleTextFormatsToExpected(input, expected);
+        FormatTestHelper.AssertModuleTextFormatsToExpected(input, expected);
 
         // Also verify that we have proper error information
-        var parsed = ParseFile(input);
+        var parsed = FormatTestHelper.ParseFile(input);
 
         parsed.IncompleteDeclarations.Should().HaveCount(1);
 

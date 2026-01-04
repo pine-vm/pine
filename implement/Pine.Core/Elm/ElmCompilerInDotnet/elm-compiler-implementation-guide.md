@@ -2,7 +2,7 @@
 
 ## Encoding of Elm Values as Pine Values
 
-For the encoding of Elm values as Pine values, the Elm compiler follows the model established in the `ElmValueEncoding.cs` file. The definitions in `ElmValueEncoding.cs` cover the encoding of all Elm values except functions.
+For the encoding of Elm values as Pine values, the compiler follows the model established in the `ElmValueEncoding.cs` file. The definitions in `ElmValueEncoding.cs` cover the encoding of all Elm values except functions.
 
 ## Emitting Function Applications
 
@@ -129,7 +129,7 @@ However, due to row polymorphism, that index can vary across call sites if the f
 
 ### Record Constructors
 
-In Elm, a type alias declaration of a record type also implies the creation of a function of the same name. These record constructors can be used like other functions, including partial application.
+In Elm, a `type alias` declaration of a record type also implies the creation of a function of the same name. These record constructors can be used like other functions, including partial application.
 
 The order of arguments is the same as the order in which the fields appear in the type alias declaration code. This means that multiple record type alias declarations can produce the same type, but different constructors.
 
