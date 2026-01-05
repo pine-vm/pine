@@ -643,15 +643,11 @@ public static class TypeInference
                             var argExpr = application.Arguments[i].Value;
                             var paramType = paramTypes[argIndex];
 
-                            // If the argument is a simple variable reference, constrain its type
-                            // (only if not already constrained and param type is known)
-                            if (argExpr is SyntaxTypes.Expression.FunctionOrValue varRef &&
-                                varRef.ModuleName.Count is 0 &&
-                                !ElmValueEncoding.StringIsValidTagName(varRef.Name) &&
-                                !constraints.ContainsKey(varRef.Name) &&
-                                paramType is not InferredType.UnknownType)
+                            // Extract type constraints from the argument expression
+                            // This handles both simple variable references and operator expressions
+                            if (paramType is not InferredType.UnknownType)
                             {
-                                constraints = constraints.SetItem(varRef.Name, paramType);
+                                constraints = ExtractTypeConstraintsFromExpression(argExpr, paramType, constraints);
                             }
                         }
                     }
@@ -722,6 +718,66 @@ public static class TypeInference
 
             default:
                 // Other expression types that don't introduce constraints
+                return constraints;
+        }
+    }
+
+    /// <summary>
+    /// Extracts type constraints from an expression given a target type.
+    /// For example, if the expression is `x + 7` and the target type is Int,
+    /// we infer that `x` must be Int (since Int + number = Int).
+    /// This recursively processes operator expressions, parenthesized expressions, etc.
+    /// </summary>
+    private static ImmutableDictionary<string, InferredType> ExtractTypeConstraintsFromExpression(
+        SyntaxTypes.Expression expression,
+        InferredType targetType,
+        ImmutableDictionary<string, InferredType> constraints)
+    {
+        switch (expression)
+        {
+            case SyntaxTypes.Expression.FunctionOrValue varRef:
+                // Simple variable reference - constrain its type if not already constrained
+                if (varRef.ModuleName.Count is 0 &&
+                    !ElmValueEncoding.StringIsValidTagName(varRef.Name) &&
+                    !constraints.ContainsKey(varRef.Name))
+                {
+                    constraints = constraints.SetItem(varRef.Name, targetType);
+                }
+                return constraints;
+
+            case SyntaxTypes.Expression.OperatorApplication opApp:
+                // For arithmetic operators where result type is known, propagate to operands
+                if (targetType is InferredType.IntType)
+                {
+                    // When the result is Int, operands must also be Int (for arithmetic operators)
+                    // Integer division (//) and modulo operators also force Int
+                    if (opApp.Operator is "+" or "-" or "*" or "//" or "%" or "^")
+                    {
+                        constraints = ExtractTypeConstraintsFromExpression(opApp.Left.Value, targetType, constraints);
+                        constraints = ExtractTypeConstraintsFromExpression(opApp.Right.Value, targetType, constraints);
+                    }
+                }
+                else if (targetType is InferredType.FloatType)
+                {
+                    // When the result is Float, operands must also be Float (for float division)
+                    if (opApp.Operator is "/")
+                    {
+                        constraints = ExtractTypeConstraintsFromExpression(opApp.Left.Value, targetType, constraints);
+                        constraints = ExtractTypeConstraintsFromExpression(opApp.Right.Value, targetType, constraints);
+                    }
+                }
+                return constraints;
+
+            case SyntaxTypes.Expression.ParenthesizedExpression parenExpr:
+                // Propagate through parentheses
+                return ExtractTypeConstraintsFromExpression(parenExpr.Expression.Value, targetType, constraints);
+
+            case SyntaxTypes.Expression.Negation negation:
+                // Negation preserves numeric type
+                return ExtractTypeConstraintsFromExpression(negation.Expression.Value, targetType, constraints);
+
+            default:
+                // Other expression types - no additional constraints to extract
                 return constraints;
         }
     }
