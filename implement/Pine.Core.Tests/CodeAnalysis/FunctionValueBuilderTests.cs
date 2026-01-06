@@ -855,7 +855,8 @@ public class FunctionValueBuilderTests
     public void EmitFunctionExpression_ThreeParameters_WithEnvFunctions_IncrementalApplication()
     {
         // Inner expression returns [envFunc0, (arg0 * arg1 + arg2), envFunc1]
-        // This test verifies that environment functions are correctly integrated across all wrapper levels
+        // This test verifies that environment functions are correctly captured from the outer
+        // environment during the first evaluation.
 
         var envFunc0 =
             StringEncoding.ValueFromString("Arancini");
@@ -888,9 +889,11 @@ public class FunctionValueBuilderTests
         // Return [envFunc0, sum, envFunc1]
         var innerExpression = Expression.ListInstance([envFunc0Access, sumExpr, envFunc1Access]);
 
-        // Use Literal expressions for env functions - simplest way to test
-        var envFuncExpr0 = Expression.LiteralInstance(envFunc0);
-        var envFuncExpr1 = Expression.LiteralInstance(envFunc1);
+        // Use environment-dependent expressions for env functions.
+        // These expressions reference the outer environment where the function expression will be evaluated.
+        // outer env = [envFunc0, envFunc1]
+        var envFuncExpr0 = BuildExpressionForPathInEnvironment([0]);
+        var envFuncExpr1 = BuildExpressionForPathInEnvironment([1]);
 
         var functionExpression =
             FunctionValueBuilder.EmitFunctionExpression(
@@ -898,16 +901,18 @@ public class FunctionValueBuilderTests
                 parameterCount: 3,
                 envFunctionsExprs: [envFuncExpr0, envFuncExpr1]);
 
-        // Evaluate the expression (env doesn't matter since we use Literal)
-        var functionValue = EvaluateExpression(functionExpression, PineValue.EmptyList);
+        // Evaluate the expression with an outer environment containing the env functions.
+        var outerEnv = PineValue.List([envFunc0, envFunc1]);
+        var functionValue = EvaluateExpression(functionExpression, outerEnv);
 
-        // TODO: Re-enable once implementation produces exact same structure
-        // var expectedFunctionValue =
-        //     PartialApplicationWrapper.EmitFunctionValue(
-        //         innerExpression,
-        //         parameterCount: 3,
-        //         envFunctions: [envFunc0, envFunc1]);
-        // functionValue.Should().Be(expectedFunctionValue);
+        // Verify the function value matches what EmitFunctionValueWithEnvFunctions produces
+        var expectedFunctionValue =
+            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
+                innerExpression,
+                parameterCount: 3,
+                envFunctions: [envFunc0, envFunc1]);
+
+        functionValue.Should().Be(expectedFunctionValue);
 
         // Verify the function works correctly
         var arg0 = IntegerEncoding.EncodeSignedInteger(13);
@@ -940,6 +945,8 @@ public class FunctionValueBuilderTests
     public void EmitFunctionExpression_TwoParameters_WithEnvFunctions_IncrementalApplication()
     {
         // A function that uses env functions and returns [envFunc0, envFunc1, arg0 + arg1]
+        // The env functions are fetched from the outer environment (not literals),
+        // so they must be captured during the first evaluation.
         var envFunc0Access = BuildExpressionForPathInEnvironment([0, 0]);
         var envFunc1Access = BuildExpressionForPathInEnvironment([0, 1]);
         var arg0Access = BuildExpressionForPathInEnvironment([1, 0]);
@@ -955,9 +962,11 @@ public class FunctionValueBuilderTests
         var envFunc0 = PineValue.Blob([100]);
         var envFunc1 = PineValue.Blob([200]);
 
-        // Use Literal expressions for env functions - simplest way to test
-        var envFuncExpr0 = Expression.LiteralInstance(envFunc0);
-        var envFuncExpr1 = Expression.LiteralInstance(envFunc1);
+        // Use environment-dependent expressions for env functions.
+        // These expressions reference the outer environment where the function expression will be evaluated.
+        // outer env = [envFunc0, envFunc1]
+        var envFuncExpr0 = BuildExpressionForPathInEnvironment([0]);
+        var envFuncExpr1 = BuildExpressionForPathInEnvironment([1]);
 
         var functionExpression =
             FunctionValueBuilder.EmitFunctionExpression(
@@ -965,16 +974,19 @@ public class FunctionValueBuilderTests
                 parameterCount: 2,
                 envFunctionsExprs: [envFuncExpr0, envFuncExpr1]);
 
-        // Evaluate the expression (env doesn't matter since we use Literal)
-        var functionValue = EvaluateExpression(functionExpression, PineValue.EmptyList);
+        // Evaluate the expression with an outer environment containing the env functions.
+        // The function expression should capture these values during this first evaluation.
+        var outerEnv = PineValue.List([envFunc0, envFunc1]);
+        var functionValue = EvaluateExpression(functionExpression, outerEnv);
 
-        // TODO: Re-enable once implementation produces exact same structure
-        // var expectedFunctionValue =
-        //     PartialApplicationWrapper.EmitFunctionValue(
-        //         innerExpression,
-        //         parameterCount: 2,
-        //         envFunctions: [envFunc0, envFunc1]);
-        // functionValue.Should().Be(expectedFunctionValue);
+        // Verify the function value matches what EmitFunctionValueWithEnvFunctions produces
+        var expectedFunctionValue =
+            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
+                innerExpression,
+                parameterCount: 2,
+                envFunctions: [envFunc0, envFunc1]);
+
+        functionValue.Should().Be(expectedFunctionValue);
 
         // Verify the function works correctly
         var arg0 = IntegerEncoding.EncodeSignedInteger(10);
