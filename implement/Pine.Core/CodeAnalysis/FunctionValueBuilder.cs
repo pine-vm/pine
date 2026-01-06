@@ -38,6 +38,7 @@ public static class FunctionValueBuilder
     /// <summary>
     /// Composes a function value in a form that supports incremental argument application via
     /// <see cref="Expression.ParseAndEval"/> expressions.
+    /// The inner expression will receive environment as [envFunctions, [args]].
     /// </summary>
     /// <param name="innerExpression">The inner function expression body.</param>
     /// <param name="parameterCount">Total number of parameters expected by the function.</param>
@@ -46,7 +47,7 @@ public static class FunctionValueBuilder
     /// A <see cref="PineValue"/> representing the nested wrapper expression encoded as a value.
     /// When evaluated with the first argument, it produces the next wrapper (or final result).
     /// </returns>
-    public static PineValue EmitFunctionValue(
+    public static PineValue EmitFunctionValueWithEnvFunctions(
         Expression innerExpression,
         int parameterCount,
         IReadOnlyList<PineValue> envFunctions)
@@ -68,9 +69,41 @@ public static class FunctionValueBuilder
     }
 
     /// <summary>
+    /// Composes a function value in a form that supports incremental argument application via
+    /// <see cref="Expression.ParseAndEval"/> expressions.
+    /// The inner expression will receive environment directly as the list of arguments [arg0, arg1, ...].
+    /// This is a simpler form without env functions support, producing more compact programs.
+    /// </summary>
+    /// <param name="innerExpression">The inner function expression body.</param>
+    /// <param name="parameterCount">Total number of parameters expected by the function.</param>
+    /// <returns>
+    /// A <see cref="PineValue"/> representing the nested wrapper expression encoded as a value.
+    /// When evaluated with the first argument, it produces the next wrapper (or final result).
+    /// </returns>
+    public static PineValue EmitFunctionValueWithoutEnvFunctions(
+        Expression innerExpression,
+        int parameterCount)
+    {
+        if (parameterCount <= 0)
+        {
+            // Zero parameters: direct invocation
+            return EmitZeroParameterWrapperWithoutEnvFunctions(innerExpression);
+        }
+
+        if (parameterCount is 1)
+        {
+            // Single parameter: simple wrapper that takes env as the argument
+            return EmitSingleParameterWrapperWithoutEnvFunctions(innerExpression);
+        }
+
+        // Multiple parameters: build recursive wrapper structure
+        return EmitMultiParameterWrapperWithoutEnvFunctions(innerExpression, parameterCount);
+    }
+
+    /// <summary>
     /// Composes a function expression that, when evaluated, produces a function value
     /// supporting incremental argument application via <see cref="Expression.ParseAndEval"/> expressions.
-    /// Unlike <see cref="EmitFunctionValue"/>, this method takes expressions for env functions
+    /// Unlike <see cref="EmitFunctionValueWithEnvFunctions"/>, this method takes expressions for env functions
     /// that will be evaluated to get the actual values at expression evaluation time.
     /// </summary>
     /// <param name="innerExpression">The inner function expression body.</param>
@@ -773,4 +806,246 @@ public static class FunctionValueBuilder
         Expression.KernelApplicationInstance(
             function: nameof(KernelFunction.concat),
             input: Expression.ListInstance([left, right]));
+
+    /// <summary>
+    /// Creates a wrapper for a zero-parameter function without env functions - immediate invocation.
+    /// The inner expression receives empty list as environment.
+    /// </summary>
+    private static PineValue EmitZeroParameterWrapperWithoutEnvFunctions(
+        Expression innerExpression)
+    {
+        // ParseAndEval(innerExpr, [])
+        var invocationExpr =
+            new Expression.ParseAndEval(
+                encoded: Expression.LiteralInstance(ExpressionEncoding.EncodeExpressionAsValue(innerExpression)),
+                environment: Expression.EmptyList);
+
+        return ExpressionEncoding.EncodeExpressionAsValue(invocationExpr);
+    }
+
+    /// <summary>
+    /// Creates a wrapper for a single-parameter function without env functions.
+    /// When evaluated with arg as env, invokes innerExpr with [arg].
+    /// </summary>
+    private static PineValue EmitSingleParameterWrapperWithoutEnvFunctions(
+        Expression innerExpression)
+    {
+        // Expression: ParseAndEval(innerExpr, [env])
+        // Where env is the single argument, wrapped in a list
+        var argsListExpr = Expression.ListInstance([Expression.EnvironmentInstance]);
+
+        var invocationExpr =
+            new Expression.ParseAndEval(
+                encoded: Expression.LiteralInstance(ExpressionEncoding.EncodeExpressionAsValue(innerExpression)),
+                environment: argsListExpr);
+
+        return ExpressionEncoding.EncodeExpressionAsValue(invocationExpr);
+    }
+
+    /// <summary>
+    /// Creates a nested wrapper for a multi-parameter function (N >= 2) without env functions.
+    /// 
+    /// The structure is built from outside in:
+    /// - Level 0 (outermost): receives arg0, returns encoded Level 1 with arg0 embedded
+    /// - Level 1: receives arg1, returns encoded Level 2 with [arg0, arg1] embedded
+    /// - ...
+    /// - Level N-1 (innermost): receives argN-1, invokes inner function with [arg0..argN-1]
+    /// </summary>
+    private static PineValue EmitMultiParameterWrapperWithoutEnvFunctions(
+        Expression innerExpression,
+        int parameterCount)
+    {
+        // Build from innermost to outermost
+        // Innermost level: takes last arg, invokes function with all args
+        // Each outer level: takes an arg, returns encoded inner level with arg captured
+
+        // Start with the innermost expression (level N-1)
+        // This level receives: [[arg0..argN-2], argN-1] as environment
+        // and invokes: ParseAndEval(innerExpr, concat(env[0], [env[1]]))
+        var innermostExpr = BuildInnermostExpressionWithoutEnvFunctions(innerExpression);
+
+        // Build outer levels from N-2 down to 0
+        PineValue currentEncoded = ExpressionEncoding.EncodeExpressionAsValue(innermostExpr);
+
+        for (var level = parameterCount - 2; level >= 0; level--)
+        {
+            currentEncoded = BuildIntermediateLevelWithoutEnvFunctions(currentEncoded, level);
+        }
+
+        return currentEncoded;
+    }
+
+    /// <summary>
+    /// Builds the innermost expression that invokes the inner function without env functions.
+    /// 
+    /// Environment structure: [[arg0, arg1, ..., argN-2], argN-1]
+    /// Invocation: ParseAndEval(innerExpr, concat(env[0], [env[1]]))
+    /// </summary>
+    private static Expression BuildInnermostExpressionWithoutEnvFunctions(
+        Expression innerExpression)
+    {
+        // env[0] = list of previously collected args
+        // env[1] = last argument
+        var capturedArgsExpr =
+            ExpressionBuilder.BuildExpressionForPathInExpression([0], Expression.EnvironmentInstance);
+
+        var lastArgExpr =
+            ExpressionBuilder.BuildExpressionForPathInExpression([1], Expression.EnvironmentInstance);
+
+        // Full args = concat(captured, [lastArg])
+        var fullArgsExpr =
+            BuiltinAppConcatBinary(
+                capturedArgsExpr,
+                Expression.ListInstance([lastArgExpr]));
+
+        // ParseAndEval(innerExpr, fullArgs) - env is just the args list
+        return
+            new Expression.ParseAndEval(
+                encoded: Expression.LiteralInstance(ExpressionEncoding.EncodeExpressionAsValue(innerExpression)),
+                environment: fullArgsExpr);
+    }
+
+    /// <summary>
+    /// Builds an intermediate level wrapper without env functions.
+    /// 
+    /// For level 0: env = arg0, returns encoded next level with [[arg0]] as captured
+    /// For level > 0: env = [[captured_so_far], current_arg], returns encoded next level with updated captured
+    /// 
+    /// The returned expression, when evaluated, produces the next level's encoded expression
+    /// with the current argument captured.
+    /// </summary>
+    private static PineValue BuildIntermediateLevelWithoutEnvFunctions(PineValue nextLevelEncoded, int level)
+    {
+        Expression wrapperExpr;
+
+        if (level is 0)
+        {
+            // Level 0: env = arg0 directly
+            wrapperExpr = BuildLevel0ExpressionWithoutEnvFunctions(nextLevelEncoded);
+        }
+        else
+        {
+            // Level > 0: env = [[captured_so_far], current_arg]
+            wrapperExpr = BuildLevelNExpressionWithoutEnvFunctions(nextLevelEncoded);
+        }
+
+        return ExpressionEncoding.EncodeExpressionAsValue(wrapperExpr);
+    }
+
+    /// <summary>
+    /// Builds the level 0 expression without env functions.
+    /// 
+    /// This expression receives arg0 as its environment and produces an encoded expression
+    /// that expects arg1 and has [[arg0]] as captured arguments.
+    /// </summary>
+    private static Expression BuildLevel0ExpressionWithoutEnvFunctions(PineValue nextLevelEncoded)
+    {
+        // Encode the next level as a literal: ["Literal", [nextLevelValue]]
+        var nextLevelLiteralEncoded =
+            Expression.ListInstance(
+                [
+                s_literalTag,
+                Expression.ListInstance([Expression.LiteralInstance(nextLevelEncoded)])
+                ]);
+
+        // Encode Environment expression: ["Environment", []]
+        var environmentEncoded =
+            Expression.ListInstance(
+                [
+                s_environmentTag,
+                Expression.EmptyList
+                ]);
+
+        // Encode captured args [arg0]:
+        // At this level, env = arg0 directly
+        // We need to build Literal([env]) which when evaluated produces [arg0]
+        // capturedArgsEncoded = ["Literal", [[env]]]
+        var capturedArgsEncoded =
+            Expression.ListInstance(
+                [
+                s_literalTag,
+                Expression.ListInstance([Expression.ListInstance([Expression.EnvironmentInstance])])
+                ]);
+
+        // Encode the full env structure: ["List", [[capturedArgsEncoded, environmentEncoded]]]
+        // This produces [[captured_args], next_env] when evaluated
+        var envStructureEncoded =
+            Expression.ListInstance(
+                [
+                s_listTag,
+                Expression.ListInstance([Expression.ListInstance([capturedArgsEncoded, environmentEncoded])])
+                ]);
+
+        // Final ParseAndEval encoding: ["ParseAndEval", [nextLevelLiteralEncoded, envStructureEncoded]]
+        return
+            Expression.ListInstance(
+                [
+                s_parseAndEvalTag,
+                Expression.ListInstance([nextLevelLiteralEncoded, envStructureEncoded])
+                ]);
+    }
+
+    /// <summary>
+    /// Builds a level N (N > 0) expression without env functions.
+    /// 
+    /// This expression receives [[captured_so_far], current_arg] as env and produces
+    /// an encoded expression for the next level with updated captured arguments.
+    /// </summary>
+    private static Expression BuildLevelNExpressionWithoutEnvFunctions(PineValue nextLevelEncoded)
+    {
+        // Environment at this level: [[captured_so_far], current_arg]
+        // env[0] = [captured_so_far], env[1] = current_arg
+        // new_captured = concat(captured_so_far, [current_arg])
+        //
+        // Return encoded: ParseAndEval(nextLevel, [[new_captured], env_of_returned_expr])
+
+        // Get captured_so_far and current_arg from environment
+        var capturedSoFar =
+            ExpressionBuilder.BuildExpressionForPathInExpression([0], Expression.EnvironmentInstance);
+
+        var currentArg =
+            ExpressionBuilder.BuildExpressionForPathInExpression([1], Expression.EnvironmentInstance);
+
+        // new_captured = concat(captured_so_far, [current_arg])
+        var newCapturedExpr =
+            BuiltinAppConcatBinary(
+                capturedSoFar,
+                Expression.ListInstance([currentArg]));
+
+        // Encode nextLevel as literal
+        var nextLevelLiteralEncoded =
+            Expression.ListInstance(
+                [
+                s_literalTag,
+                Expression.ListInstance([Expression.LiteralInstance(nextLevelEncoded)])
+                ]);
+
+        // Encode Environment for the returned expression
+        var environmentEncoded = Expression.ListInstance(
+            [s_environmentTag, Expression.EmptyList]);
+
+        // Encode captured as literal: ["Literal", [newCaptured]]
+        // Note: newCapturedExpr is evaluated at THIS level's eval time
+        // This produces [new_captured] when evaluated
+        var capturedLiteralEncoded = Expression.ListInstance(
+            [
+                s_literalTag,
+                Expression.ListInstance([newCapturedExpr])
+            ]);
+
+        // Encode env structure: ["List", [[capturedLiteralEncoded, environmentEncoded]]]
+        // This produces [[new_captured], next_env] when evaluated
+        var envStructureEncoded = Expression.ListInstance(
+            [
+                s_listTag,
+                Expression.ListInstance([Expression.ListInstance([capturedLiteralEncoded, environmentEncoded])])
+            ]);
+
+        // Final: ["ParseAndEval", [nextLevelLiteralEncoded, envStructureEncoded]]
+        return Expression.ListInstance(
+            [
+                s_parseAndEvalTag,
+                Expression.ListInstance([nextLevelLiteralEncoded, envStructureEncoded])
+            ]);
+    }
 }

@@ -907,24 +907,24 @@ public class BasicArithmetic
     private static PineValue BinaryFunctionValue(
         System.Func<Expression, Expression, Expression> buildFunctionBody)
     {
+        // For WithoutEnvFunctions variant, env is directly the args list: [arg0, arg1]
         var leftExpr =
             ExpressionBuilder.BuildExpressionForPathInExpression(
-                [1, 0],
+                [0],
                 Expression.EnvironmentInstance);
 
         var rightExpr =
             ExpressionBuilder.BuildExpressionForPathInExpression(
-                [1, 1],
+                [1],
                 Expression.EnvironmentInstance);
 
         var asExpr =
             buildFunctionBody(leftExpr, rightExpr);
 
         var wrappedExpr =
-            FunctionValueBuilder.EmitFunctionValue(
+            FunctionValueBuilder.EmitFunctionValueWithoutEnvFunctions(
                 asExpr,
-                parameterCount: 2,
-                envFunctions: []);
+                parameterCount: 2);
 
         return wrappedExpr;
     }

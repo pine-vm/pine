@@ -19,7 +19,7 @@ public record FunctionRecord(
     /// <summary>
     /// Analog to the 'parseFunctionRecordFromValueTagged' function in FirCompiler.elm.
     /// Accepts either a tagged value ("Function"), a nested wrapper form from 
-    /// <see cref="FunctionValueBuilder.EmitFunctionValue"/>, or a raw value (zero-argument function literal shortcut).
+    /// <see cref="FunctionValueBuilder.EmitFunctionValueWithEnvFunctions"/>, or a raw value (zero-argument function literal shortcut).
     /// </summary>
     /// <param name="pineValue">Encoded value representing a function (possibly tagged).</param>
     /// <param name="parseCache">Cache used to parse the inner expression.</param>
@@ -69,7 +69,7 @@ public record FunctionRecord(
 
     /// <summary>
     /// Parses a function record from the nested wrapper form emitted by 
-    /// <see cref="FunctionValueBuilder.EmitFunctionValue"/> for 0 or 1 parameter functions.
+    /// <see cref="FunctionValueBuilder.EmitFunctionValueWithEnvFunctions"/> for 0 or 1 parameter functions.
     /// </summary>
     private static Result<string, FunctionRecord> ParseNestedWrapperForm(
         PineValue encodedWrapper,
@@ -206,7 +206,7 @@ public record FunctionRecord(
     /// Parses a function record from a multi-parameter nested wrapper form.
     /// Multi-parameter wrappers use List expressions that build encoding dynamically.
     /// 
-    /// Expected structure matches what PartialApplicationWrapper.EmitFunctionValue produces:
+    /// Expected structure matches what FunctionValueBuilder.EmitFunctionValueWithEnvFunctions produces:
     /// - Level 0: List expression producing ["ParseAndEval", [Literal(level1), ...]]
     /// - Level 1..N-2: List expression producing ["ParseAndEval", [Literal(levelN), ...]]
     /// - Level N-1 (innermost): ParseAndEval(innerExpr, [envFuncs, ...])
@@ -250,7 +250,7 @@ public record FunctionRecord(
 
     /// <summary>
     /// Strictly traverses multi-parameter wrapper structure following the exact expected pattern.
-    /// Returns error if the structure doesn't match what PartialApplicationWrapper produces.
+    /// Returns error if the structure doesn't match what FunctionValueBuilder produces.
     /// </summary>
     private static Result<string, (int paramCount, Expression innerExpr, PineValue[] envFuncs)> TraverseMultiParamWrapperStrict(
         PineValue encodedWrapper,

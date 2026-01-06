@@ -3,6 +3,7 @@ using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
 using System;
 using System.Collections.Immutable;
+using System.Linq;
 using Xunit;
 
 namespace Pine.Core.Tests.CodeAnalysis;
@@ -32,7 +33,7 @@ public class FunctionValueBuilderTests
         var innerExpression = Expression.LiteralInstance(literalResult);
 
         var functionValue =
-            FunctionValueBuilder.EmitFunctionValue(
+            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                 innerExpression,
                 parameterCount: 0,
                 envFunctions: []);
@@ -50,7 +51,7 @@ public class FunctionValueBuilderTests
         var innerExpression = Expression.LiteralInstance(expectedResult);
 
         var functionValue =
-            FunctionValueBuilder.EmitFunctionValue(
+            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                 innerExpression,
                 parameterCount: 0,
                 envFunctions: []);
@@ -73,7 +74,7 @@ public class FunctionValueBuilderTests
         var innerExpression = BuildExpressionForPathInEnvironment([0, 0]);
 
         var functionValue =
-            FunctionValueBuilder.EmitFunctionValue(
+            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                 innerExpression,
                 parameterCount: 1,
                 envFunctions: []);
@@ -92,7 +93,7 @@ public class FunctionValueBuilderTests
         var innerExpression = BuildExpressionForPathInEnvironment([1, 0]);
 
         var functionValue =
-            FunctionValueBuilder.EmitFunctionValue(
+            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                 innerExpression,
                 parameterCount: 1,
                 envFunctions: []);
@@ -119,7 +120,7 @@ public class FunctionValueBuilderTests
         var innerExpression = Expression.ListInstance([envFuncAccess, argAccess]);
 
         var functionValue =
-            FunctionValueBuilder.EmitFunctionValue(
+            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                 innerExpression,
                 parameterCount: 1,
                 envFunctions: [envFunction]);
@@ -149,7 +150,7 @@ public class FunctionValueBuilderTests
         var innerExpression = Expression.ListInstance([arg0Access, arg1Access]);
 
         var functionValue =
-            FunctionValueBuilder.EmitFunctionValue(
+            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                 innerExpression,
                 parameterCount: 2,
                 envFunctions: []);
@@ -170,7 +171,7 @@ public class FunctionValueBuilderTests
         var innerExpression = Expression.ListInstance([arg0Access, arg1Access]);
 
         var functionValue =
-            FunctionValueBuilder.EmitFunctionValue(
+            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                 innerExpression,
                 parameterCount: 2,
                 envFunctions: []);
@@ -211,7 +212,7 @@ public class FunctionValueBuilderTests
         var innerExpression = Expression.ListInstance([arg0Access, arg1Access, arg2Access]);
 
         var functionValue =
-            FunctionValueBuilder.EmitFunctionValue(
+            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                 innerExpression,
                 parameterCount: 3,
                 envFunctions: []);
@@ -277,7 +278,7 @@ public class FunctionValueBuilderTests
         var innerExpression = Expression.ListInstance([envFunc0Access, sumExpr, envFunc1Access]);
 
         var functionValue =
-            FunctionValueBuilder.EmitFunctionValue(
+            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                 innerExpression,
                 parameterCount: 3,
                 envFunctions: [envFunc0, envFunc1]);
@@ -319,7 +320,7 @@ public class FunctionValueBuilderTests
 
         // Encode as nested wrapper
         var functionValue =
-            FunctionValueBuilder.EmitFunctionValue(
+            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                 innerExpression,
                 parameterCount: 0,
                 envFunctions: []);
@@ -337,7 +338,7 @@ public class FunctionValueBuilderTests
 
         // Encode as nested wrapper
         var functionValue =
-            FunctionValueBuilder.EmitFunctionValue(
+            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                 innerExpression,
                 parameterCount: 1,
                 envFunctions: []);
@@ -359,7 +360,7 @@ public class FunctionValueBuilderTests
 
         // Encode as nested wrapper
         var functionValue =
-            FunctionValueBuilder.EmitFunctionValue(
+            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                 innerExpression,
                 parameterCount: 1,
                 envFunctions: [envFunction]);
@@ -396,7 +397,7 @@ public class FunctionValueBuilderTests
 
         // Encode as nested wrapper
         var functionValue =
-            FunctionValueBuilder.EmitFunctionValue(
+            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                 innerExpression,
                 parameterCount: 2,
                 envFunctions: [envFunc0, envFunc1]);
@@ -429,7 +430,7 @@ public class FunctionValueBuilderTests
         var innerExpression = BuildExpressionForPathInEnvironment([1, 0]);
 
         var functionValue =
-            FunctionValueBuilder.EmitFunctionValue(
+            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                 innerExpression,
                 parameterCount: 1,
                 envFunctions: []);
@@ -448,7 +449,7 @@ public class FunctionValueBuilderTests
         var innerExpression = BuildExpressionForPathInEnvironment([1, 0]);
 
         var functionValue =
-            FunctionValueBuilder.EmitFunctionValue(
+            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                 innerExpression,
                 parameterCount: 2,
                 envFunctions: []);
@@ -480,7 +481,7 @@ public class FunctionValueBuilderTests
                 input: Expression.ListInstance([arg0, arg1]));
 
         var functionValue =
-            FunctionValueBuilder.EmitFunctionValue(
+            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                 innerExpression,
                 parameterCount: 2,
                 envFunctions: []);
@@ -509,7 +510,7 @@ public class FunctionValueBuilderTests
         var innerExpression = Expression.LiteralInstance(expectedResult);
 
         var functionValue =
-            FunctionValueBuilder.EmitFunctionValue(
+            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                 innerExpression,
                 parameterCount: 0,
                 envFunctions: []);
@@ -531,7 +532,7 @@ public class FunctionValueBuilderTests
         var innerExpression = BuildExpressionForPathInEnvironment([1, 0]);
 
         var functionValue =
-            FunctionValueBuilder.EmitFunctionValue(
+            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                 innerExpression,
                 parameterCount: 1,
                 envFunctions: []);
@@ -561,7 +562,7 @@ public class FunctionValueBuilderTests
             ]);
 
         var functionValue =
-            FunctionValueBuilder.EmitFunctionValue(
+            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                 innerExpression,
                 parameterCount: 1,
                 envFunctions: [envFunc0, envFunc1]);
@@ -593,7 +594,7 @@ public class FunctionValueBuilderTests
             ]);
 
         var functionValue =
-            FunctionValueBuilder.EmitFunctionValue(
+            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                 innerExpression,
                 parameterCount: 2,
                 envFunctions: []);
@@ -620,7 +621,7 @@ public class FunctionValueBuilderTests
             ]);
 
         var functionValue =
-            FunctionValueBuilder.EmitFunctionValue(
+            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                 innerExpression,
                 parameterCount: 3,
                 envFunctions: []);
@@ -659,7 +660,7 @@ public class FunctionValueBuilderTests
 
         // Verify it produces the same result as EmitFunctionValue
         var expectedFunctionValue =
-            FunctionValueBuilder.EmitFunctionValue(
+            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                 innerExpression,
                 parameterCount: 0,
                 envFunctions: []);
@@ -689,7 +690,7 @@ public class FunctionValueBuilderTests
 
         // Verify it produces the same result as EmitFunctionValue
         var expectedFunctionValue =
-            FunctionValueBuilder.EmitFunctionValue(
+            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                 innerExpression,
                 parameterCount: 1,
                 envFunctions: []);
@@ -731,7 +732,7 @@ public class FunctionValueBuilderTests
 
         // Verify it produces the same result as EmitFunctionValue
         var expectedFunctionValue =
-            FunctionValueBuilder.EmitFunctionValue(
+            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
                 innerExpression,
                 parameterCount: 1,
                 envFunctions: [envFunction]);
@@ -994,6 +995,372 @@ public class FunctionValueBuilderTests
                 IntegerEncoding.EncodeSignedInteger(42)
                 ]));
     }
+
+    #endregion
+
+    #region EmitFunctionValueWithoutEnvFunctions Tests
+
+    [Fact]
+    public void EmitFunctionValueWithoutEnvFunctions_ZeroParameters_EvaluatesCorrectly()
+    {
+        // Inner expression returns a constant
+        var expectedResult = PineValue.Blob([1, 2, 3]);
+        var innerExpression = Expression.LiteralInstance(expectedResult);
+
+        var functionValue =
+            FunctionValueBuilder.EmitFunctionValueWithoutEnvFunctions(
+                innerExpression,
+                parameterCount: 0);
+
+        // Evaluate the wrapper with empty environment (no args needed)
+        var result = EvaluateEncodedExpression(functionValue, PineValue.EmptyList);
+        result.Should().Be(expectedResult);
+    }
+
+    [Fact]
+    public void EmitFunctionValueWithoutEnvFunctions_SingleParameter_ReturnsValidWrapper()
+    {
+        // Inner expression returns its argument (identity function)
+        // For WithoutEnvFunctions, env = [arg], so arg is at env[0]
+        var innerExpression = BuildExpressionForPathInEnvironment([0]);
+
+        var functionValue =
+            FunctionValueBuilder.EmitFunctionValueWithoutEnvFunctions(
+                innerExpression,
+                parameterCount: 1);
+
+        // Should be parseable
+        var parseResult = s_parseCache.ParseExpression(functionValue);
+        parseResult.IsOkOrNull().Should().NotBeNull();
+    }
+
+    [Fact]
+    public void EmitFunctionValueWithoutEnvFunctions_SingleParameter_EvaluatesCorrectly()
+    {
+        // Inner expression returns its single argument
+        // For WithoutEnvFunctions, env = [arg], so arg is at env[0]
+        var innerExpression = BuildExpressionForPathInEnvironment([0]);
+
+        var functionValue =
+            FunctionValueBuilder.EmitFunctionValueWithoutEnvFunctions(
+                innerExpression,
+                parameterCount: 1);
+
+        // Evaluate with arg = [10, 20, 30]
+        var argValue = PineValue.List([PineValue.Blob([10]), PineValue.Blob([20]), PineValue.Blob([30])]);
+        var result = EvaluateEncodedExpression(functionValue, argValue);
+
+        result.Should().Be(argValue);
+    }
+
+    [Fact]
+    public void EmitFunctionValueWithoutEnvFunctions_TwoParameters_ReturnsValidWrapper()
+    {
+        // Inner expression returns [arg0, arg1]
+        // For WithoutEnvFunctions, env = [arg0, arg1]
+        var arg0Access = BuildExpressionForPathInEnvironment([0]);
+        var arg1Access = BuildExpressionForPathInEnvironment([1]);
+
+        var innerExpression = Expression.ListInstance([arg0Access, arg1Access]);
+
+        var functionValue =
+            FunctionValueBuilder.EmitFunctionValueWithoutEnvFunctions(
+                innerExpression,
+                parameterCount: 2);
+
+        // Should be parseable
+        var parseResult = s_parseCache.ParseExpression(functionValue);
+        parseResult.IsOkOrNull().Should().NotBeNull();
+    }
+
+    [Fact]
+    public void EmitFunctionValueWithoutEnvFunctions_TwoParameters_IncrementalApplication()
+    {
+        // Inner expression returns [arg0, arg1]
+        // For WithoutEnvFunctions, env = [arg0, arg1]
+        var arg0Access = BuildExpressionForPathInEnvironment([0]);
+        var arg1Access = BuildExpressionForPathInEnvironment([1]);
+
+        var innerExpression = Expression.ListInstance([arg0Access, arg1Access]);
+
+        var functionValue =
+            FunctionValueBuilder.EmitFunctionValueWithoutEnvFunctions(
+                innerExpression,
+                parameterCount: 2);
+
+        var arg0 = PineValue.Blob([11, 22]);
+        var arg1 = PineValue.Blob([33, 44]);
+
+        // Step 1: Apply first argument (arg0)
+        var partiallyApplied = EvaluateEncodedExpression(functionValue, arg0);
+
+        // partiallyApplied should be an encoded expression (a list representing ParseAndEval encoding)
+        partiallyApplied.Should().BeOfType<PineValue.ListValue>();
+
+        // Step 2: Apply second argument (arg1)
+        var finalResult = EvaluateEncodedExpression(partiallyApplied, arg1);
+
+        // Should be [arg0, arg1]
+        finalResult.Should().Be(
+            PineValue.List(
+                [
+                arg0,
+                arg1
+                ]));
+    }
+
+    [Fact]
+    public void EmitFunctionValueWithoutEnvFunctions_ThreeParameters_IncrementalApplication()
+    {
+        // Inner expression returns [arg0, arg1, arg2]
+        // For WithoutEnvFunctions, env = [arg0, arg1, arg2]
+        var arg0Access = BuildExpressionForPathInEnvironment([0]);
+        var arg1Access = BuildExpressionForPathInEnvironment([1]);
+        var arg2Access = BuildExpressionForPathInEnvironment([2]);
+
+        var innerExpression = Expression.ListInstance([arg0Access, arg1Access, arg2Access]);
+
+        var functionValue =
+            FunctionValueBuilder.EmitFunctionValueWithoutEnvFunctions(
+                innerExpression,
+                parameterCount: 3);
+
+        var arg0 = PineValue.Blob([1]);
+        var arg1 = PineValue.Blob([2]);
+        var arg2 = PineValue.Blob([3]);
+
+        // Step 1: Apply arg0
+        var partial1 = EvaluateEncodedExpression(functionValue, arg0);
+
+        // Step 2: Apply arg1
+        var partial2 = EvaluateEncodedExpression(partial1, arg1);
+
+        // Step 3: Apply arg2
+        var finalResult = EvaluateEncodedExpression(partial2, arg2);
+
+        // Should be [arg0, arg1, arg2]
+        finalResult.Should().Be(
+            PineValue.List(
+                [
+                arg0,
+                arg1,
+                arg2
+                ]));
+    }
+
+    [Fact]
+    public void EmitFunctionValueWithoutEnvFunctions_IntAddition_TwoParameters()
+    {
+        // Create a function that adds two integers
+        // For WithoutEnvFunctions, env = [a, b]
+        var arg0 = BuildExpressionForPathInEnvironment([0]);
+        var arg1 = BuildExpressionForPathInEnvironment([1]);
+
+        var innerExpression =
+            Expression.KernelApplicationInstance(
+                function: nameof(KernelFunction.int_add),
+                input: Expression.ListInstance([arg0, arg1]));
+
+        var functionValue =
+            FunctionValueBuilder.EmitFunctionValueWithoutEnvFunctions(
+                innerExpression,
+                parameterCount: 2);
+
+        var a = IntegerEncoding.EncodeSignedInteger(10);
+        var b = IntegerEncoding.EncodeSignedInteger(32);
+
+        // First evaluation: apply a
+        var partial = EvaluateEncodedExpression(functionValue, a);
+
+        // Second evaluation: apply b
+        var finalResult = EvaluateEncodedExpression(partial, b);
+
+        // Should be 10 + 32 = 42
+        finalResult.Should().Be(IntegerEncoding.EncodeSignedInteger(42));
+    }
+
+    [Fact]
+    public void EmitFunctionValueWithoutEnvFunctions_FourParameters_IncrementalApplication()
+    {
+        // Test with 4 parameters to ensure the wrapper chain works for more complex cases
+        // Inner expression returns [arg0, arg1, arg2, arg3]
+        var arg0Access = BuildExpressionForPathInEnvironment([0]);
+        var arg1Access = BuildExpressionForPathInEnvironment([1]);
+        var arg2Access = BuildExpressionForPathInEnvironment([2]);
+        var arg3Access = BuildExpressionForPathInEnvironment([3]);
+
+        var innerExpression = Expression.ListInstance([arg0Access, arg1Access, arg2Access, arg3Access]);
+
+        var functionValue =
+            FunctionValueBuilder.EmitFunctionValueWithoutEnvFunctions(
+                innerExpression,
+                parameterCount: 4);
+
+        var arg0 = PineValue.Blob([10]);
+        var arg1 = PineValue.Blob([20]);
+        var arg2 = PineValue.Blob([30]);
+        var arg3 = PineValue.Blob([40]);
+
+        // Apply arguments one by one
+        var partial1 = EvaluateEncodedExpression(functionValue, arg0);
+        var partial2 = EvaluateEncodedExpression(partial1, arg1);
+        var partial3 = EvaluateEncodedExpression(partial2, arg2);
+        var finalResult = EvaluateEncodedExpression(partial3, arg3);
+
+        // Should be [arg0, arg1, arg2, arg3]
+        finalResult.Should().Be(
+            PineValue.List(
+                [
+                arg0,
+                arg1,
+                arg2,
+                arg3
+                ]));
+    }
+
+    [Fact]
+    public void EmitFunctionValueWithoutEnvFunctions_IntMultiplication_TwoParameters()
+    {
+        // Create a function that multiplies two integers
+        // For WithoutEnvFunctions, env = [a, b]
+        var arg0 = BuildExpressionForPathInEnvironment([0]);
+        var arg1 = BuildExpressionForPathInEnvironment([1]);
+
+        var innerExpression =
+            Expression.KernelApplicationInstance(
+                function: nameof(KernelFunction.int_mul),
+                input: Expression.ListInstance([arg0, arg1]));
+
+        var functionValue =
+            FunctionValueBuilder.EmitFunctionValueWithoutEnvFunctions(
+                innerExpression,
+                parameterCount: 2);
+
+        var a = IntegerEncoding.EncodeSignedInteger(7);
+        var b = IntegerEncoding.EncodeSignedInteger(6);
+
+        // First evaluation: apply a
+        var partial = EvaluateEncodedExpression(functionValue, a);
+
+        // Second evaluation: apply b
+        var finalResult = EvaluateEncodedExpression(partial, b);
+
+        // Should be 7 * 6 = 42
+        finalResult.Should().Be(IntegerEncoding.EncodeSignedInteger(42));
+    }
+
+    [Fact]
+    public void EmitFunctionValueWithoutEnvFunctions_ThreeParameters_ComplexExpression()
+    {
+        // Create a function that computes (arg0 * arg1) + arg2
+        // For WithoutEnvFunctions, env = [arg0, arg1, arg2]
+        var arg0Access = BuildExpressionForPathInEnvironment([0]);
+        var arg1Access = BuildExpressionForPathInEnvironment([1]);
+        var arg2Access = BuildExpressionForPathInEnvironment([2]);
+
+        // Create product expression: arg0 * arg1
+        var productExpr =
+            Expression.KernelApplicationInstance(
+                function: nameof(KernelFunction.int_mul),
+                input: Expression.ListInstance([arg0Access, arg1Access]));
+
+        // Create sum expression: (arg0 * arg1) + arg2
+        var sumExpr =
+            Expression.KernelApplicationInstance(
+                function: nameof(KernelFunction.int_add),
+                input: Expression.ListInstance([productExpr, arg2Access]));
+
+        var functionValue =
+            FunctionValueBuilder.EmitFunctionValueWithoutEnvFunctions(
+                sumExpr,
+                parameterCount: 3);
+
+        var arg0 = IntegerEncoding.EncodeSignedInteger(5);
+        var arg1 = IntegerEncoding.EncodeSignedInteger(8);
+        var arg2 = IntegerEncoding.EncodeSignedInteger(2);
+
+        // Step 1: Apply arg0
+        var partial1 = EvaluateEncodedExpression(functionValue, arg0);
+
+        // Step 2: Apply arg1
+        var partial2 = EvaluateEncodedExpression(partial1, arg1);
+
+        // Step 3: Apply arg2
+        var finalResult = EvaluateEncodedExpression(partial2, arg2);
+
+        // Should be (5 * 8) + 2 = 42
+        finalResult.Should().Be(IntegerEncoding.EncodeSignedInteger(42));
+    }
+
+    [Fact]
+    public void EmitFunctionValueWithoutEnvFunctions_SingleParameter_ReturnsConstant()
+    {
+        // A function that ignores its argument and returns a constant
+        var constantResult = PineValue.Blob([99, 88, 77]);
+        var innerExpression = Expression.LiteralInstance(constantResult);
+
+        var functionValue =
+            FunctionValueBuilder.EmitFunctionValueWithoutEnvFunctions(
+                innerExpression,
+                parameterCount: 1);
+
+        // Evaluate with any argument
+        var argValue = PineValue.Blob([1, 2, 3]);
+        var result = EvaluateEncodedExpression(functionValue, argValue);
+
+        result.Should().Be(constantResult);
+    }
+
+    [Fact]
+    public void EmitFunctionValueWithoutEnvFunctions_IsMoreCompact_ThanWithEnvFunctions()
+    {
+        // Verify that WithoutEnvFunctions produces smaller function values
+        // when env functions are empty
+        var arg0Access_without = BuildExpressionForPathInEnvironment([0]);
+        var arg1Access_without = BuildExpressionForPathInEnvironment([1]);
+        var innerExpression_without = Expression.ListInstance([arg0Access_without, arg1Access_without]);
+
+        var arg0Access_with = BuildExpressionForPathInEnvironment([1, 0]);
+        var arg1Access_with = BuildExpressionForPathInEnvironment([1, 1]);
+        var innerExpression_with = Expression.ListInstance([arg0Access_with, arg1Access_with]);
+
+        var functionValue_without =
+            FunctionValueBuilder.EmitFunctionValueWithoutEnvFunctions(
+                innerExpression_without,
+                parameterCount: 2);
+
+        var functionValue_with =
+            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
+                innerExpression_with,
+                parameterCount: 2,
+                envFunctions: []);
+
+        // Both should work correctly
+        var arg0 = PineValue.Blob([10]);
+        var arg1 = PineValue.Blob([20]);
+
+        var partial_without = EvaluateEncodedExpression(functionValue_without, arg0);
+        var result_without = EvaluateEncodedExpression(partial_without, arg1);
+
+        var partial_with = EvaluateEncodedExpression(functionValue_with, arg0);
+        var result_with = EvaluateEncodedExpression(partial_with, arg1);
+
+        result_without.Should().Be(result_with);
+
+        // WithoutEnvFunctions should be more compact (smaller serialized size)
+        var size_without = GetValueSize(functionValue_without);
+        var size_with = GetValueSize(functionValue_with);
+
+        size_without.Should().BeLessThan(size_with);
+    }
+
+    private static int GetValueSize(PineValue value) =>
+        value switch
+        {
+            PineValue.BlobValue blob => blob.Bytes.Length,
+            PineValue.ListValue list => list.Items.Span.ToArray().Sum(GetValueSize) + 1,
+            _ => 0
+        };
 
     #endregion
 
