@@ -637,6 +637,148 @@ public class FunctionValueBuilderTests
         record.ArgumentsAlreadyCollected.Length.Should().Be(0);
     }
 
+    [Fact]
+    public void ParseFunctionRecord_FourParameters_ParsesParameterCount()
+    {
+        var innerExpression = Expression.ListInstance(
+            [
+            BuildExpressionForPathInEnvironment([1, 0]),
+            BuildExpressionForPathInEnvironment([1, 1]),
+            BuildExpressionForPathInEnvironment([1, 2]),
+            BuildExpressionForPathInEnvironment([1, 3])
+            ]);
+
+        var functionValue =
+            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
+                innerExpression,
+                parameterCount: 4,
+                envFunctions: []);
+
+        // Parse the nested wrapper form
+        var parseResult = FunctionRecord.ParseFunctionRecordTagged(functionValue, s_parseCache);
+
+        parseResult.IsOkOrNull().Should().NotBeNull();
+        var record = parseResult.IsOkOrNull()!;
+
+        record.ParameterCount.Should().Be(4);
+        record.EnvFunctions.Length.Should().Be(0);
+        record.ArgumentsAlreadyCollected.Length.Should().Be(0);
+    }
+
+    [Fact]
+    public void ParseFunctionRecord_TwoParameters_WithMultipleEnvFunctions_ParsesCorrectly()
+    {
+        var envFunc0 = PineValue.Blob([100]);
+        var envFunc1 = PineValue.Blob([200]);
+        var envFunc2 = PineValue.Blob([250]);
+
+        var innerExpression = Expression.ListInstance(
+            [
+            BuildExpressionForPathInEnvironment([0, 0]),
+            BuildExpressionForPathInEnvironment([0, 1]),
+            BuildExpressionForPathInEnvironment([0, 2]),
+            BuildExpressionForPathInEnvironment([1, 0]),
+            BuildExpressionForPathInEnvironment([1, 1])
+            ]);
+
+        var functionValue =
+            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
+                innerExpression,
+                parameterCount: 2,
+                envFunctions: [envFunc0, envFunc1, envFunc2]);
+
+        // Parse the nested wrapper form
+        var parseResult = FunctionRecord.ParseFunctionRecordTagged(functionValue, s_parseCache);
+
+        parseResult.IsOkOrNull().Should().NotBeNull();
+        var record = parseResult.IsOkOrNull()!;
+
+        record.ParameterCount.Should().Be(2);
+        record.ArgumentsAlreadyCollected.Length.Should().Be(0);
+
+        // Verify env functions are correctly parsed
+        record.EnvFunctions.Length.Should().Be(3);
+        record.EnvFunctions.Span[0].Should().Be(envFunc0);
+        record.EnvFunctions.Span[1].Should().Be(envFunc1);
+        record.EnvFunctions.Span[2].Should().Be(envFunc2);
+    }
+
+    [Fact]
+    public void ParseFunctionRecord_ThreeParameters_WithMultipleEnvFunctions_ParsesCorrectly()
+    {
+        var envFunc0 = StringEncoding.ValueFromString("Env0");
+        var envFunc1 = StringEncoding.ValueFromString("Env1");
+
+        var innerExpression = Expression.ListInstance(
+            [
+            BuildExpressionForPathInEnvironment([0, 0]),
+            BuildExpressionForPathInEnvironment([0, 1]),
+            BuildExpressionForPathInEnvironment([1, 0]),
+            BuildExpressionForPathInEnvironment([1, 1]),
+            BuildExpressionForPathInEnvironment([1, 2])
+            ]);
+
+        var functionValue =
+            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
+                innerExpression,
+                parameterCount: 3,
+                envFunctions: [envFunc0, envFunc1]);
+
+        // Parse the nested wrapper form
+        var parseResult = FunctionRecord.ParseFunctionRecordTagged(functionValue, s_parseCache);
+
+        parseResult.IsOkOrNull().Should().NotBeNull();
+        var record = parseResult.IsOkOrNull()!;
+
+        record.ParameterCount.Should().Be(3);
+        record.ArgumentsAlreadyCollected.Length.Should().Be(0);
+
+        // Verify env functions are correctly parsed
+        record.EnvFunctions.Length.Should().Be(2);
+        record.EnvFunctions.Span[0].Should().Be(envFunc0);
+        record.EnvFunctions.Span[1].Should().Be(envFunc1);
+    }
+
+    [Fact]
+    public void ParseFunctionRecord_FourParameters_WithMultipleEnvFunctions_ParsesCorrectly()
+    {
+        var envFunc0 = PineValue.Blob([10]);
+        var envFunc1 = PineValue.Blob([20]);
+        var envFunc2 = PineValue.Blob([30]);
+
+        var innerExpression = Expression.ListInstance(
+            [
+            BuildExpressionForPathInEnvironment([0, 0]),
+            BuildExpressionForPathInEnvironment([0, 1]),
+            BuildExpressionForPathInEnvironment([0, 2]),
+            BuildExpressionForPathInEnvironment([1, 0]),
+            BuildExpressionForPathInEnvironment([1, 1]),
+            BuildExpressionForPathInEnvironment([1, 2]),
+            BuildExpressionForPathInEnvironment([1, 3])
+            ]);
+
+        var functionValue =
+            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
+                innerExpression,
+                parameterCount: 4,
+                envFunctions: [envFunc0, envFunc1, envFunc2]);
+
+        // Parse the nested wrapper form
+        var parseResult = FunctionRecord.ParseFunctionRecordTagged(functionValue, s_parseCache);
+
+        parseResult.IsOkOrNull().Should().NotBeNull();
+        var record = parseResult.IsOkOrNull()!;
+
+        record.ParameterCount.Should().Be(4);
+        record.ArgumentsAlreadyCollected.Length.Should().Be(0);
+
+        // Verify env functions are correctly parsed
+        record.EnvFunctions.Length.Should().Be(3);
+        record.EnvFunctions.Span[0].Should().Be(envFunc0);
+        record.EnvFunctions.Span[1].Should().Be(envFunc1);
+        record.EnvFunctions.Span[2].Should().Be(envFunc2);
+    }
+
     #endregion
 
     #region EmitFunctionExpression Tests

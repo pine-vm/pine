@@ -16,6 +16,12 @@ public record FunctionRecord(
     ReadOnlyMemory<PineValue> EnvFunctions,
     ReadOnlyMemory<PineValue> ArgumentsAlreadyCollected)
 {
+    /*
+     * TODO: Rename to 'FunctionValueParser' for symmetry with 'FunctionValueBuilder'?
+     * 
+     * TODO: Phase out older representation, tagged with "Function"
+     * */
+
     /// <summary>
     /// Analog to the 'parseFunctionRecordFromValueTagged' function in FirCompiler.elm.
     /// Accepts either a tagged value ("Function"), a nested wrapper form from 
@@ -50,13 +56,11 @@ public record FunctionRecord(
             }
         }
 
-        if (parseTaggedResult.IsErrOrNull() is { } err)
-        {
-            return "Failed to parse tagged function record: " + err;
-        }
-
         /*
          * If the declaration has zero parameters, it could be encoded as plain value without wrapping in a 'Function' record.
+         * This handles both:
+         * - Blob values (integers, etc.) which fail ParseTagged with "Expected list"
+         * - List values with unrecognized tags
          * */
 
         return
