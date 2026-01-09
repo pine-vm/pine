@@ -200,15 +200,6 @@ public class Rendering
     /// </summary>
     public static string ToString(File file)
     {
-        return ToStringWithoutFormatting(file);
-    }
-
-    /// <summary>
-    /// Renders a file to a string without applying formatting.
-    /// The file should already have proper token locations.
-    /// </summary>
-    internal static string ToStringWithoutFormatting(File file)
-    {
         // Combine comments and incomplete declarations into a unified list of insertables
         var insertables = new List<InsertableItem>();
 

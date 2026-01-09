@@ -8,7 +8,7 @@ using Range = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7.Range;
 namespace Pine.Core.Elm.ElmSyntax.Stil4mConcretized;
 
 /// <summary>
-/// Format Elm modules following the style of https://github.com/avh4/elm-format
+/// Format Elm modules following the style of <see href="https://github.com/avh4/elm-format"/>
 /// </summary>
 public class Avh4Format
 {
@@ -21,7 +21,8 @@ public class Avh4Format
     public static string FormatToString(File file)
     {
         var formatted = Format(file);
-        return Rendering.ToStringWithoutFormatting(formatted);
+
+        return Rendering.ToString(formatted);
     }
 
     /// <summary>
