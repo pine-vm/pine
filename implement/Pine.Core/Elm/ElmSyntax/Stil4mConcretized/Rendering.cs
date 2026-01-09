@@ -18,12 +18,23 @@ public class Rendering
     private readonly record struct InsertableItem(
         Location StartLocation,
         string Text)
+        : IComparable<InsertableItem>
     {
         public static InsertableItem FromComment(Stil4mElmSyntax7.Node<string> node) =>
             new(node.Range.Start, node.Value);
 
         public static InsertableItem FromIncompleteDeclaration(Stil4mElmSyntax7.Node<IncompleteDeclaration> node) =>
             new(node.Range.Start, node.Value.OriginalText);
+
+        public int CompareTo(InsertableItem other)
+        {
+            var rowCompare = StartLocation.Row.CompareTo(other.StartLocation.Row);
+
+            if (rowCompare is not 0)
+                return rowCompare;
+
+            return StartLocation.Column.CompareTo(other.StartLocation.Column);
+        }
     }
 
     /// <summary>
@@ -214,11 +225,7 @@ public class Rendering
         }
 
         // Sort by position (row, then column)
-        insertables.Sort((a, b) =>
-        {
-            var rowCompare = a.StartLocation.Row.CompareTo(b.StartLocation.Row);
-            return rowCompare != 0 ? rowCompare : a.StartLocation.Column.CompareTo(b.StartLocation.Column);
-        });
+        insertables.Sort();
 
         var context = new RenderContext
         {
