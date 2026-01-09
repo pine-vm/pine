@@ -1088,6 +1088,7 @@ public class Rendering
             // For triple-quoted strings, escape special characters but keep newlines as-is
             // (since they're literal in triple-quoted strings)
             var escaped = EscapeTripleQuotedString(value);
+
             return "\"\"\"" + escaped + "\"\"\"";
         }
 
@@ -1110,22 +1111,42 @@ public class Rendering
     private static string EscapeTripleQuotedString(string value)
     {
         var sb = new StringBuilder();
+
         foreach (var ch in value)
         {
-            sb.Append(EscapeCharForTripleQuoted(ch));
+            if (EscapeCharForTripleQuoted(ch) is { } escaped)
+            {
+                sb.Append(escaped);
+            }
+            else
+            {
+                sb.Append(ch);
+            }
         }
+
         return sb.ToString();
     }
 
-    private static string EscapeCharForTripleQuoted(char ch) =>
+    private static string? EscapeCharForTripleQuoted(char ch) =>
         ch switch
         {
-            '\n' => "\n",  // Literal newlines are preserved
-            '\t' => "\\t", // Tabs are escaped
-            '\r' => "\\u{000D}", // Carriage return uses Unicode escape
-            '\\' => "\\\\", // Backslashes are escaped
-            _ when ch < 32 => $"\\u{{{(int)ch:X4}}}", // Other control chars use Unicode escape
-            _ => ch.ToString()
+            '\n' =>
+            null,  // Literal newlines are preserved
+
+            '\t' =>
+            "\\t", // Tabs are escaped
+
+            '\r' =>
+            "\\u{000D}", // Carriage return uses Unicode escape
+
+            '\\' =>
+            "\\\\", // Backslashes are escaped
+
+            _ when ch < 32 =>
+            $"\\u{{{(int)ch:X4}}}", // Other control chars use Unicode escape
+
+            _ =>
+            null
         };
 
     internal static string RenderCharLiteral(int value)
