@@ -528,7 +528,7 @@ public static class FromStil4mConcretized
     /// This method handles RecordExpr and RecordUpdateExpression specially by using
     /// the node's range to compute the closing brace location.
     /// </summary>
-    private static Node<Expression> ConvertExpressionNode(
+    public static Node<Expression> ConvertExpressionNode(
         Node<ConcretizedTypes.Expression> node)
     {
         // For RecordExpr and RecordUpdateExpression, we need the node's range to compute closing brace location

@@ -95,7 +95,7 @@ public class PatternCompiler
             var patternBindingTypes = TypeInference.ExtractPatternBindingTypesFromInferred(
                 pattern,
                 scrutineeType,
-                ImmutableDictionary<string, TypeInference.InferredType>.Empty,
+                [],
                 context.ModuleCompilationContext.ConstructorArgumentTypes);
 
             // Create case context with both bindings and binding types

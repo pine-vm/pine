@@ -32,13 +32,28 @@ public static class TypeInference
         public sealed record BoolType : InferredType;
 
         /// <summary>Number type (polymorphic numeric type that could be Int or Float).</summary>
-        public sealed record NumberType : InferredType;
+        public sealed record NumberType
+            : InferredType;
 
         /// <summary>Tuple type with element types.</summary>
-        public sealed record TupleType(IReadOnlyList<InferredType> ElementTypes) : InferredType;
+        public sealed record TupleType(IReadOnlyList<InferredType> ElementTypes)
+            : InferredType;
 
-        /// <summary>Record type with field names (sorted alphabetically).</summary>
-        public sealed record RecordType(IReadOnlyList<string> FieldNames) : InferredType;
+        /// <summary>Record type with field names and their types (sorted alphabetically by field name).</summary>
+        public sealed record RecordType(IReadOnlyList<(string FieldName, InferredType FieldType)> Fields)
+            : InferredType;
+
+        /// <summary>Function type with argument type and return type.</summary>
+        public sealed record FunctionType(InferredType ArgumentType, InferredType ReturnType)
+            : InferredType;
+
+        /// <summary>List type with element type.</summary>
+        public sealed record ListType(InferredType ElementType)
+            : InferredType;
+
+        /// <summary>Choice type with module name, type name, and type arguments.</summary>
+        public sealed record ChoiceType(IReadOnlyList<string> ModuleName, string TypeName, IReadOnlyList<InferredType> TypeArguments)
+            : InferredType;
 
         /// <summary>Unknown or unresolved type.</summary>
         public sealed record UnknownType : InferredType;
@@ -151,22 +166,38 @@ public static class TypeInference
         if (typeAnnotation is SyntaxTypes.TypeAnnotation.Tupled tupled)
         {
             var elementTypes = new List<InferredType>();
+
             foreach (var elementNode in tupled.TypeAnnotations)
             {
                 elementTypes.Add(TypeAnnotationToInferredType(elementNode.Value));
             }
+
             return new InferredType.TupleType(elementTypes);
         }
 
         // Handle record type annotations
         if (typeAnnotation is SyntaxTypes.TypeAnnotation.Record recordType)
         {
-            // Extract field names and sort them alphabetically (as Elm records are stored)
-            var fieldNames = recordType.RecordDefinition.Fields
-                .Select(f => f.Value.FieldName.Value)
-                .OrderBy(name => name, System.StringComparer.Ordinal)
+            // Extract field names and types, sorted alphabetically (as Elm records are stored)
+            var fields =
+                recordType.RecordDefinition.Fields
+                .Select(f => (f.Value.FieldName.Value, TypeAnnotationToInferredType(f.Value.FieldType.Value)))
+                .OrderBy(f => f.Value, System.StringComparer.Ordinal)
                 .ToList();
-            return new InferredType.RecordType(fieldNames);
+
+            return new InferredType.RecordType(fields);
+        }
+
+        // Handle function type annotations
+        if (typeAnnotation is SyntaxTypes.TypeAnnotation.FunctionTypeAnnotation funcType)
+        {
+            var argType =
+                TypeAnnotationToInferredType(funcType.ArgumentType.Value);
+
+            var returnType =
+                TypeAnnotationToInferredType(funcType.ReturnType.Value);
+
+            return new InferredType.FunctionType(argType, returnType);
         }
 
         return s_unknownType;
@@ -348,6 +379,32 @@ public static class TypeInference
             return localType;
         }
 
+        // Function or constructor reference - look up type from function signatures
+        // This handles cases like `ChoiceD` which should return `Bool -> Beta`
+        if (expression is SyntaxTypes.Expression.FunctionOrValue funcOrValueRef &&
+            functionReturnTypes is not null)
+        {
+            // Build the qualified name
+            string qualifiedFuncName;
+            if (funcOrValueRef.ModuleName.Count > 0)
+            {
+                qualifiedFuncName = string.Join(".", funcOrValueRef.ModuleName) + "." + funcOrValueRef.Name;
+            }
+            else if (currentModuleName is not null)
+            {
+                qualifiedFuncName = currentModuleName + "." + funcOrValueRef.Name;
+            }
+            else
+            {
+                qualifiedFuncName = funcOrValueRef.Name;
+            }
+
+            if (functionReturnTypes.TryGetValue(qualifiedFuncName, out var funcOrValueType))
+            {
+                return funcOrValueType;
+            }
+        }
+
         // Operator application - infer from operands
         if (expression is SyntaxTypes.Expression.OperatorApplication operatorApp)
         {
@@ -392,15 +449,158 @@ public static class TypeInference
                 qualifiedName = funcRef.Name;
             }
 
-            // Look up the return type
-            if (functionReturnTypes.TryGetValue(qualifiedName, out var returnType))
+            // Look up the function type
+            if (functionReturnTypes.TryGetValue(qualifiedName, out var funcType))
             {
-                return returnType;
+                // Compute the return type by "applying" arguments to the function type
+                // For a function type A -> B -> C with 2 arguments, the return type is C
+                var appliedArgCount = application.Arguments.Count - 1; // Exclude the function itself
+                var resultType = funcType;
+
+                for (var i = 0; i < appliedArgCount && resultType is InferredType.FunctionType ft; i++)
+                {
+                    resultType = ft.ReturnType;
+                }
+
+                return resultType;
             }
+        }
+
+        // Record expression - infer type from field names and values
+        if (expression is SyntaxTypes.Expression.RecordExpr recordExpr)
+        {
+            var fields = new List<(string FieldName, InferredType FieldType)>();
+            foreach (var field in recordExpr.Fields)
+            {
+                var fieldName = field.Value.fieldName.Value;
+                var fieldType = InferExpressionType(field.Value.valueExpr.Value, parameterNames, parameterTypes, localBindingTypes, currentModuleName, functionReturnTypes);
+                fields.Add((fieldName, fieldType));
+            }
+            // Sort fields alphabetically by field name
+            fields.Sort((a, b) => string.Compare(a.FieldName, b.FieldName, System.StringComparison.Ordinal));
+            return new InferredType.RecordType(fields);
+        }
+
+        // Let expression - infer types for local bindings and then the body
+        if (expression is SyntaxTypes.Expression.LetExpression letExpr)
+        {
+            // Build local binding types from the let declarations
+            var extendedLocalBindings =
+                localBindingTypes?.ToImmutableDictionary() ?? [];
+
+            foreach (var decl in letExpr.Value.Declarations)
+            {
+                if (decl.Value is SyntaxTypes.Expression.LetDeclaration.LetFunction letFunc)
+                {
+                    var funcName = letFunc.Function.Declaration.Value.Name.Value;
+
+                    var funcType = InferExpressionType(
+                        letFunc.Function.Declaration.Value.Expression.Value,
+                        parameterNames,
+                        parameterTypes,
+                        extendedLocalBindings,
+                        currentModuleName,
+                        functionReturnTypes);
+                    extendedLocalBindings = extendedLocalBindings.SetItem(funcName, funcType);
+                }
+                else if (decl.Value is SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr)
+                {
+                    // For destructuring, we would need pattern matching support
+                    // For now, just recurse into the expression
+                    var exprType = InferExpressionType(
+                        letDestr.Expression.Value,
+                        parameterNames,
+                        parameterTypes,
+                        extendedLocalBindings,
+                        currentModuleName,
+                        functionReturnTypes);
+
+                    // Try to extract binding names from the pattern
+                    foreach (var binding in ExtractBindingsFromPattern(letDestr.Pattern.Value))
+                    {
+                        extendedLocalBindings = extendedLocalBindings.SetItem(binding, exprType);
+                    }
+                }
+            }
+
+            // The type of the let expression is the type of its body
+            return InferExpressionType(
+                letExpr.Value.Expression.Value,
+                parameterNames,
+                parameterTypes,
+                extendedLocalBindings,
+                currentModuleName,
+                functionReturnTypes);
+        }
+
+        // List expression - infer type from element types
+        if (expression is SyntaxTypes.Expression.ListExpr listExpr)
+        {
+            if (listExpr.Elements.Count is 0)
+            {
+                // Empty list - cannot determine element type
+                return s_unknownType;
+            }
+
+            // Infer type from first element
+            var firstElementType = InferExpressionType(
+                listExpr.Elements[0].Value,
+                parameterNames,
+                parameterTypes,
+                localBindingTypes,
+                currentModuleName,
+                functionReturnTypes);
+
+            return new InferredType.ListType(firstElementType);
         }
 
         // For other expressions, we cannot infer the type yet
         return s_unknownType;
+    }
+
+    /// <summary>
+    /// Extracts binding names from a pattern.
+    /// </summary>
+    private static IEnumerable<string> ExtractBindingsFromPattern(SyntaxTypes.Pattern pattern)
+    {
+        switch (pattern)
+        {
+            case SyntaxTypes.Pattern.VarPattern var:
+                yield return var.Name;
+                break;
+
+            case SyntaxTypes.Pattern.TuplePattern tuple:
+                foreach (var elem in tuple.Elements)
+                {
+                    foreach (var binding in ExtractBindingsFromPattern(elem.Value))
+                    {
+                        yield return binding;
+                    }
+                }
+                break;
+
+            case SyntaxTypes.Pattern.RecordPattern record:
+                foreach (var field in record.Fields)
+                {
+                    yield return field.Value;
+                }
+                break;
+
+            case SyntaxTypes.Pattern.AsPattern asPattern:
+                yield return asPattern.Name.Value;
+                foreach (var binding in ExtractBindingsFromPattern(asPattern.Pattern.Value))
+                {
+                    yield return binding;
+                }
+                break;
+
+            case SyntaxTypes.Pattern.ParenthesizedPattern paren:
+                foreach (var binding in ExtractBindingsFromPattern(paren.Pattern.Value))
+                {
+                    yield return binding;
+                }
+                break;
+        }
     }
 
     /// <summary>
@@ -1006,5 +1206,355 @@ public static class TypeInference
                 // Additional patterns can be added as needed
                 return bindings;
         }
+    }
+
+    /// <summary>
+    /// Builds a map of function signatures from a file for type inference.
+    /// Includes function declarations, choice type constructors, and type alias record constructors.
+    /// </summary>
+    /// <param name="file">The parsed Elm file.</param>
+    /// <param name="moduleName">The module name for qualifying function names.</param>
+    /// <returns>A dictionary mapping qualified function names to their inferred types.</returns>
+    public static ImmutableDictionary<string, InferredType> BuildFunctionSignaturesMap(
+        SyntaxTypes.File file,
+        string moduleName)
+    {
+        var signatures = ImmutableDictionary<string, InferredType>.Empty;
+
+        foreach (var declaration in file.Declarations)
+        {
+            if (declaration.Value is SyntaxTypes.Declaration.FunctionDeclaration funcDecl)
+            {
+                var funcName = funcDecl.Function.Declaration.Value.Name.Value;
+                var qualifiedName = moduleName + "." + funcName;
+
+                if (funcDecl.Function.Signature?.Value is { } signature)
+                {
+                    var inferredType = TypeAnnotationToInferredType(signature.TypeAnnotation.Value);
+                    signatures = signatures.Add(qualifiedName, inferredType);
+                }
+            }
+            else if (declaration.Value is SyntaxTypes.Declaration.CustomTypeDeclaration choiceTypeDecl)
+            {
+                var typeName = choiceTypeDecl.TypeDeclaration.Name.Value;
+
+                // Build constructor types for each value constructor
+                foreach (var constructorNode in choiceTypeDecl.TypeDeclaration.Constructors)
+                {
+                    var constructorName = constructorNode.Value.Name.Value;
+                    var qualifiedConstructorName = moduleName + "." + constructorName;
+
+                    // The constructor result type is the choice type itself
+                    // Empty module name (current module) and no type arguments for simplicity
+                    InferredType resultType = new InferredType.ChoiceType(
+                        ModuleName: [],
+                        TypeName: typeName,
+                        TypeArguments: []);
+
+                    // Build the constructor type: arg1 -> arg2 -> ... -> ResultType
+                    var constructorType = resultType;
+
+                    // Process arguments in reverse to build the function type correctly
+                    for (var i = constructorNode.Value.Arguments.Count - 1; i >= 0; i--)
+                    {
+                        var argTypeAnnotation = constructorNode.Value.Arguments[i].Value;
+                        var argType = TypeAnnotationToInferredType(argTypeAnnotation);
+                        constructorType = new InferredType.FunctionType(argType, constructorType);
+                    }
+
+                    signatures = signatures.Add(qualifiedConstructorName, constructorType);
+                }
+            }
+            else if (declaration.Value is SyntaxTypes.Declaration.AliasDeclaration aliasDecl)
+            {
+                // Type alias record constructors - if the type alias is for a record type,
+                // it creates an implicit constructor: FieldType1 -> FieldType2 -> ... -> { field1: T1, field2: T2, ... }
+                var aliasName = aliasDecl.TypeAlias.Name.Value;
+                var qualifiedAliasName = moduleName + "." + aliasName;
+
+                // Check if the type annotation is a record type
+                if (aliasDecl.TypeAlias.TypeAnnotation.Value is SyntaxTypes.TypeAnnotation.Record recordType &&
+                    recordType.RecordDefinition.Fields.Count > 0)
+                {
+                    // Convert the full record type annotation to InferredType for the result type
+                    var resultType = TypeAnnotationToInferredType(aliasDecl.TypeAlias.TypeAnnotation.Value);
+
+                    // Collect all fields in order
+                    var allFields = recordType.RecordDefinition.Fields;
+
+                    // Build the constructor type: field1Type -> field2Type -> ... -> RecordType
+                    // Fields must be in declaration order
+                    var constructorType = resultType;
+
+                    // Process fields in reverse to build the function type correctly
+                    for (var i = allFields.Count - 1; i >= 0; i--)
+                    {
+                        var field = allFields[i];
+                        var fieldTypeAnnotation = field.Value.FieldType.Value;
+                        var fieldType = TypeAnnotationToInferredType(fieldTypeAnnotation);
+                        constructorType = new InferredType.FunctionType(fieldType, constructorType);
+                    }
+
+                    signatures = signatures.Add(qualifiedAliasName, constructorType);
+                }
+            }
+        }
+
+        return signatures;
+    }
+
+    /// <summary>
+    /// Infers the type of a function declaration, including parameter types inferred from usage context.
+    /// </summary>
+    /// <param name="expression">The function body expression.</param>
+    /// <param name="arguments">The function arguments (patterns).</param>
+    /// <param name="moduleName">The current module name.</param>
+    /// <param name="functionSignatures">Map of known function signatures.</param>
+    /// <returns>A tuple containing the return type and inferred parameter types.</returns>
+    public static (InferredType returnType, ImmutableDictionary<string, InferredType> parameterTypes) InferFunctionDeclarationType(
+        SyntaxTypes.Expression expression,
+        IReadOnlyList<SyntaxTypes.Node<SyntaxTypes.Pattern>> arguments,
+        string moduleName,
+        IReadOnlyDictionary<string, InferredType> functionSignatures)
+    {
+        // Build parameter names dictionary
+        var parameterNames = new Dictionary<string, int>();
+        for (var i = 0; i < arguments.Count; i++)
+        {
+            if (arguments[i].Value is SyntaxTypes.Pattern.VarPattern varPattern)
+            {
+                parameterNames[varPattern.Name] = i;
+            }
+        }
+
+        // Infer parameter types from usage context (function applications)
+        var parameterTypes = InferParameterTypesFromUsage(
+            expression,
+            parameterNames,
+            functionSignatures);
+
+        var localBindingTypes = ImmutableDictionary<string, InferredType>.Empty;
+
+        var returnType = InferExpressionType(
+            expression,
+            parameterNames,
+            parameterTypes,
+            localBindingTypes,
+            moduleName,
+            functionSignatures);
+
+        return (returnType, parameterTypes);
+    }
+
+    /// <summary>
+    /// Builds a full function type from parameter types and return type.
+    /// For a function with parameters (a, b) and return type T, creates: paramTypeA -> paramTypeB -> T
+    /// </summary>
+    /// <param name="arguments">The function arguments (patterns).</param>
+    /// <param name="parameterTypes">Map of parameter names to their inferred types.</param>
+    /// <param name="returnType">The return type of the function.</param>
+    /// <returns>The complete function type.</returns>
+    public static InferredType BuildFunctionType(
+        IReadOnlyList<SyntaxTypes.Node<SyntaxTypes.Pattern>> arguments,
+        ImmutableDictionary<string, InferredType> parameterTypes,
+        InferredType returnType)
+    {
+        if (arguments.Count is 0)
+        {
+            return returnType;
+        }
+
+        var result = returnType;
+
+        // Build from right to left: paramN -> (paramN-1 -> (... -> returnType))
+        for (var i = arguments.Count - 1; i >= 0; i--)
+        {
+            InferredType paramType;
+
+            if (arguments[i].Value is SyntaxTypes.Pattern.VarPattern varPattern &&
+                parameterTypes.TryGetValue(varPattern.Name, out var inferredParamType))
+            {
+                paramType = inferredParamType;
+            }
+            else
+            {
+                // Default to number type for parameters in numeric functions
+                paramType = s_numberType;
+            }
+
+            result = new InferredType.FunctionType(paramType, result);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Infers parameter types from how they are used in function applications.
+    /// </summary>
+    /// <param name="expression">The expression to analyze.</param>
+    /// <param name="parameterNames">Map of parameter names to their indices.</param>
+    /// <param name="functionSignatures">Map of known function signatures.</param>
+    /// <returns>A dictionary mapping parameter names to their inferred types.</returns>
+    public static ImmutableDictionary<string, InferredType> InferParameterTypesFromUsage(
+        SyntaxTypes.Expression expression,
+        IReadOnlyDictionary<string, int> parameterNames,
+        IReadOnlyDictionary<string, InferredType> functionSignatures)
+    {
+        var parameterTypes = ImmutableDictionary<string, InferredType>.Empty;
+
+        // Recursively scan expressions to find function applications
+        parameterTypes = ScanExpressionForParameterTypes(expression, parameterNames, functionSignatures, parameterTypes);
+
+        return parameterTypes;
+    }
+
+    /// <summary>
+    /// Scans an expression recursively to infer parameter types from function applications.
+    /// </summary>
+    private static ImmutableDictionary<string, InferredType> ScanExpressionForParameterTypes(
+        SyntaxTypes.Expression expression,
+        IReadOnlyDictionary<string, int> parameterNames,
+        IReadOnlyDictionary<string, InferredType> functionSignatures,
+        ImmutableDictionary<string, InferredType> parameterTypes)
+    {
+        switch (expression)
+        {
+            case SyntaxTypes.Expression.Application app when app.Arguments.Count >= 2:
+                // Check if first argument is a function reference with known signature
+                if (app.Arguments[0].Value is SyntaxTypes.Expression.FunctionOrValue funcRef)
+                {
+                    var qualifiedName = funcRef.ModuleName.Count > 0
+                        ? string.Join(".", funcRef.ModuleName) + "." + funcRef.Name
+                        : funcRef.Name;
+
+                    // Try both qualified and unqualified names
+                    InferredType? funcType = null;
+                    if (functionSignatures.TryGetValue(qualifiedName, out var ft))
+                    {
+                        funcType = ft;
+                    }
+                    else
+                    {
+                        // Try to find by scanning all keys
+                        foreach (var kvp in functionSignatures)
+                        {
+                            if (kvp.Key.EndsWith("." + funcRef.Name))
+                            {
+                                funcType = kvp.Value;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (funcType is not null)
+                    {
+                        // Extract parameter types from function type
+                        var argTypes = ExtractArgumentTypesFromFunctionType(funcType);
+
+                        // Match application arguments with function parameter types
+                        for (var i = 1; i < app.Arguments.Count && i - 1 < argTypes.Count; i++)
+                        {
+                            if (app.Arguments[i].Value is SyntaxTypes.Expression.FunctionOrValue argRef &&
+                                argRef.ModuleName.Count is 0 &&
+                                parameterNames.ContainsKey(argRef.Name) &&
+                                !parameterTypes.ContainsKey(argRef.Name))
+                            {
+                                parameterTypes = parameterTypes.Add(argRef.Name, argTypes[i - 1]);
+                            }
+                        }
+                    }
+                }
+
+                // Recurse into application arguments
+                foreach (var arg in app.Arguments)
+                {
+                    parameterTypes = ScanExpressionForParameterTypes(arg.Value, parameterNames, functionSignatures, parameterTypes);
+                }
+                break;
+
+            case SyntaxTypes.Expression.LetExpression letExpr:
+                foreach (var decl in letExpr.Value.Declarations)
+                {
+                    if (decl.Value is SyntaxTypes.Expression.LetDeclaration.LetFunction letFunc)
+                    {
+                        parameterTypes = ScanExpressionForParameterTypes(letFunc.Function.Declaration.Value.Expression.Value, parameterNames, functionSignatures, parameterTypes);
+                    }
+                    else if (decl.Value is SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr)
+                    {
+                        parameterTypes = ScanExpressionForParameterTypes(letDestr.Expression.Value, parameterNames, functionSignatures, parameterTypes);
+                    }
+                }
+                parameterTypes = ScanExpressionForParameterTypes(letExpr.Value.Expression.Value, parameterNames, functionSignatures, parameterTypes);
+                break;
+
+            case SyntaxTypes.Expression.IfBlock ifBlock:
+                parameterTypes = ScanExpressionForParameterTypes(ifBlock.Condition.Value, parameterNames, functionSignatures, parameterTypes);
+                parameterTypes = ScanExpressionForParameterTypes(ifBlock.ThenBlock.Value, parameterNames, functionSignatures, parameterTypes);
+                parameterTypes = ScanExpressionForParameterTypes(ifBlock.ElseBlock.Value, parameterNames, functionSignatures, parameterTypes);
+                break;
+
+            case SyntaxTypes.Expression.CaseExpression caseExpr:
+                parameterTypes = ScanExpressionForParameterTypes(caseExpr.CaseBlock.Expression.Value, parameterNames, functionSignatures, parameterTypes);
+                foreach (var caseCase in caseExpr.CaseBlock.Cases)
+                {
+                    parameterTypes = ScanExpressionForParameterTypes(caseCase.Expression.Value, parameterNames, functionSignatures, parameterTypes);
+                }
+                break;
+
+            case SyntaxTypes.Expression.OperatorApplication opApp:
+                parameterTypes = ScanExpressionForParameterTypes(opApp.Left.Value, parameterNames, functionSignatures, parameterTypes);
+                parameterTypes = ScanExpressionForParameterTypes(opApp.Right.Value, parameterNames, functionSignatures, parameterTypes);
+                break;
+
+            case SyntaxTypes.Expression.ParenthesizedExpression paren:
+                parameterTypes = ScanExpressionForParameterTypes(paren.Expression.Value, parameterNames, functionSignatures, parameterTypes);
+                break;
+
+            case SyntaxTypes.Expression.LambdaExpression lambda:
+                parameterTypes = ScanExpressionForParameterTypes(lambda.Lambda.Expression.Value, parameterNames, functionSignatures, parameterTypes);
+                break;
+
+            case SyntaxTypes.Expression.TupledExpression tuple:
+                foreach (var elem in tuple.Elements)
+                {
+                    parameterTypes = ScanExpressionForParameterTypes(elem.Value, parameterNames, functionSignatures, parameterTypes);
+                }
+                break;
+
+            case SyntaxTypes.Expression.ListExpr list:
+                foreach (var elem in list.Elements)
+                {
+                    parameterTypes = ScanExpressionForParameterTypes(elem.Value, parameterNames, functionSignatures, parameterTypes);
+                }
+                break;
+
+            case SyntaxTypes.Expression.RecordExpr record:
+                foreach (var field in record.Fields)
+                {
+                    parameterTypes = ScanExpressionForParameterTypes(field.Value.valueExpr.Value, parameterNames, functionSignatures, parameterTypes);
+                }
+                break;
+        }
+
+        return parameterTypes;
+    }
+
+    /// <summary>
+    /// Extracts argument types from a function type.
+    /// </summary>
+    /// <param name="funcType">The function type to extract from.</param>
+    /// <returns>A list of argument types in order.</returns>
+    public static IReadOnlyList<InferredType> ExtractArgumentTypesFromFunctionType(InferredType funcType)
+    {
+        var argTypes = new List<InferredType>();
+        var current = funcType;
+
+        while (current is InferredType.FunctionType ft)
+        {
+            argTypes.Add(ft.ArgumentType);
+            current = ft.ReturnType;
+        }
+
+        return argTypes;
     }
 }

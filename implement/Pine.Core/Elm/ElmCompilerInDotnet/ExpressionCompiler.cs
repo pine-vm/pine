@@ -486,9 +486,9 @@ public class ExpressionCompiler
         if (recordType is not null)
         {
             // Build a map of field name to index
-            var fieldIndices = recordType.FieldNames
-                .Select((name, idx) => (name, idx))
-                .ToDictionary(x => x.name, x => x.idx);
+            var fieldIndices = recordType.Fields
+                .Select((field, idx) => (field.FieldName, idx))
+                .ToDictionary(x => x.FieldName, x => x.idx);
 
             // Check if all update field names exist in the record type
             var allFieldsKnown = compiledUpdateValues.All(u => fieldIndices.ContainsKey(u.fieldName));
@@ -498,7 +498,7 @@ public class ExpressionCompiler
                 // Use compile-time field index computation
                 return CompileRecordUpdateWithKnownIndices(
                     recordExpr,
-                    recordType.FieldNames.Count,
+                    recordType.Fields.Count,
                     compiledUpdateValues.Select(u => (fieldIndices[u.fieldName], u.valueExpr)).ToList());
             }
         }
@@ -618,11 +618,11 @@ public class ExpressionCompiler
         {
             // We know the record field layout at compile time
             // Find the index of the field in the sorted field list
-            var fieldIndex = recordType.FieldNames
-                .Select((name, idx) => (name, idx))
-                .FirstOrDefault(x => x.name == fieldName);
+            var fieldIndex = recordType.Fields
+                .Select((field, idx) => (field.FieldName, idx))
+                .FirstOrDefault(x => x.FieldName == fieldName);
 
-            if (fieldIndex.name == fieldName)
+            if (fieldIndex.FieldName == fieldName)
             {
                 // Emit direct field access using the known index
                 // Record structure: [ElmRecordTag, [[field1, field2, ...]]]
@@ -789,7 +789,7 @@ public class ExpressionCompiler
         var newBindings = new Dictionary<string, Expression>();
         var newBindingTypes = context.LocalBindingTypes is { } existingBindingTypes
             ? existingBindingTypes.ToImmutableDictionary()
-            : ImmutableDictionary<string, TypeInference.InferredType>.Empty;
+            : [];
 
         if (context.LocalBindings is { } existingBindings)
         {
