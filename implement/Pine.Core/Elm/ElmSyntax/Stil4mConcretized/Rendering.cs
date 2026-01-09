@@ -185,6 +185,21 @@ public class Rendering
             CurrentColumn += minSpaces;
         }
 
+        public void Append(char ch)
+        {
+            Output.Append(ch);
+
+            if (ch is '\n')
+            {
+                CurrentRow++;
+                CurrentColumn = 1;
+            }
+            else
+            {
+                CurrentColumn++;
+            }
+        }
+
         public void Append(string text)
         {
             Output.Append(text);
@@ -734,7 +749,23 @@ public class Rendering
                 break;
 
             case Expression.Literal literal:
-                context.Append($"{RenderStringLiteral(literal.Value, isTripleQuoted: literal.IsTripleQuoted)}");
+
+                if (literal.IsTripleQuoted)
+                {
+                    context.Append("\"\"\"");
+
+                    EscapeTripleQuotedString(
+                        literal.Value,
+                        context.Append,
+                        context.Append);
+
+                    context.Append("\"\"\"");
+                }
+                else
+                {
+                    context.Append($"{RenderStringLiteral(literal.Value)}");
+                }
+
                 break;
 
             case Expression.CharLiteral charLiteral:
@@ -976,7 +1007,7 @@ public class Rendering
                 break;
 
             case Pattern.StringPattern stringPattern:
-                context.Append($"{RenderStringLiteral(stringPattern.Value, isTripleQuoted: false)}");
+                context.Append($"{RenderStringLiteral(stringPattern.Value)}");
                 break;
 
             case Pattern.IntPattern intPattern:
@@ -1072,33 +1103,46 @@ public class Rendering
         string.Join(".", moduleName);
 
     /// <summary>
-    /// Converts the specified string to a source code string literal, using either standard or triple-quoted syntax as
-    /// appropriate.
+    /// Converts the specified string to a simple source code string literal.
     /// </summary>
-    /// <remarks>If triple-quoted syntax is used, the value is included without escaping special characters.
-    /// Otherwise, special characters such as backslashes, quotes, and control characters are escaped to produce a valid
-    /// string literal.</remarks>
-    public static string RenderStringLiteral(string value, bool isTripleQuoted)
+    /// <remarks>
+    /// Special characters such as backslashes, quotes, and control characters are escaped to produce a valid string literal.
+    /// </remarks>
+    public static string RenderStringLiteral(string value)
     {
-        // Use triple quotes only if explicitly requested (based on original source formatting)
-        if (isTripleQuoted)
-        {
-            // For triple-quoted strings, escape special characters but keep newlines as-is
-            // (since they're literal in triple-quoted strings)
-            var escaped = EscapeTripleQuotedString(value);
+        var sb = new StringBuilder();
 
-            return "\"\"\"" + escaped + "\"\"\"";
+        foreach (var ch in value)
+        {
+            switch (ch)
+            {
+                case '\\':
+                    sb.Append("\\\\");
+                    break;
+
+                case '\"':
+                    sb.Append("\\\"");
+                    break;
+
+                case '\n':
+                    sb.Append("\\n");
+                    break;
+
+                case '\r':
+                    sb.Append("\\r");
+                    break;
+
+                case '\t':
+                    sb.Append("\\t");
+                    break;
+
+                default:
+                    sb.Append(ch);
+                    break;
+            }
         }
 
-        // Escape special characters for regular strings
-        var escapedRegular = value
-            .Replace("\\", "\\\\")
-            .Replace("\"", "\\\"")
-            .Replace("\n", "\\n")
-            .Replace("\r", "\\r")
-            .Replace("\t", "\\t");
-
-        return "\"" + escapedRegular + "\"";
+        return "\"" + sb.ToString() + "\"";
     }
 
     /// <summary>
@@ -1106,23 +1150,19 @@ public class Rendering
     /// In Elm triple-quoted strings, newlines and tabs are literal, but backslashes
     /// and certain control characters need escaping.
     /// </summary>
-    private static string EscapeTripleQuotedString(string value)
+    private static void EscapeTripleQuotedString(string value, Action<char> appendChar, Action<string> appendString)
     {
-        var sb = new StringBuilder();
-
         foreach (var ch in value)
         {
             if (EscapeCharForTripleQuoted(ch) is { } escaped)
             {
-                sb.Append(escaped);
+                appendString(escaped);
             }
             else
             {
-                sb.Append(ch);
+                appendChar(ch);
             }
         }
-
-        return sb.ToString();
     }
 
     private static string? EscapeCharForTripleQuoted(char ch) =>

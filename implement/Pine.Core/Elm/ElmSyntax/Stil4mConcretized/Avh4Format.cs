@@ -2398,7 +2398,7 @@ public class Avh4Format
                     {
                         // Use the rendered representation to calculate the correct length
                         // since the value may contain escaped characters
-                        var renderedLiteral = Rendering.RenderStringLiteral(literal.Value, isTripleQuoted: false);
+                        var renderedLiteral = Rendering.RenderStringLiteral(literal.Value);
                         return FormattingResult<Expression>.Create(literal, context.Advance(renderedLiteral.Length));
                     }
 
