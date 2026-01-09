@@ -97,6 +97,7 @@ public class AddInferredTypeAnnotations
 
         // Dictionary to store parsed files by module name
         var parsedFilesByModuleName = new Dictionary<string, ConcretizedTypes.File>(StringComparer.Ordinal);
+        var abstractFilesList = new List<AbstractSyntaxTypes.File>();
 
         foreach (var moduleFile in elmModuleFiles)
         {
@@ -111,13 +112,49 @@ public class AddInferredTypeAnnotations
 
             if (parseResult.IsOkOrNull() is not { } parsedFile)
             {
-                return "Unexpected parse result type";
+                throw new NotImplementedException(
+                    "Unexpected result type from ParseModuleText: " + parseResult.GetType().FullName);
             }
 
             var moduleName = ConcretizedTypes.Module.GetModuleName(parsedFile.ModuleDefinition.Value).Value;
             var moduleNameStr = string.Join(".", moduleName);
 
             parsedFilesByModuleName[moduleNameStr] = parsedFile;
+
+            // Convert to abstract syntax for canonicalization
+            var abstractFile = AbstractSyntaxTypes.FromStil4mConcretized.Convert(parsedFile);
+            abstractFilesList.Add(abstractFile);
+        }
+
+        // Apply canonicalization to resolve all references to fully qualified forms
+        // Use CanonicalizeAllowingErrors to continue even with undefined local variable references
+        // This enables IDE functionality (like "add inferred type annotation") even when
+        // the file contains some invalid references
+        var canonicalizeResult = Canonicalization.CanonicalizeAllowingErrors(abstractFilesList);
+
+        if (canonicalizeResult.IsErrOrNull() is { } canonErr)
+        {
+            return $"Canonicalization failed: {canonErr}";
+        }
+
+        var canonicalizedModules =
+            canonicalizeResult.IsOkOrNull() ??
+            throw new NotImplementedException(
+                "Unexpected result type from Canonicalization: " + canonicalizeResult.GetType().FullName);
+
+        // Build combined function signatures from ALL canonicalized modules
+        var allSignatures = ImmutableDictionary<string, TypeInference.InferredType>.Empty;
+        var canonicalizedFilesByModuleName = new Dictionary<string, AbstractSyntaxTypes.File>(StringComparer.Ordinal);
+
+        foreach (var (moduleName, (canonicalizedFile, _errors)) in canonicalizedModules)
+        {
+            // We ignore canonicalization errors (like undefined local variables) since they
+            // don't prevent us from inferring types for cross-module references
+            var moduleNameStr = string.Join(".", moduleName);
+            canonicalizedFilesByModuleName[moduleNameStr] = canonicalizedFile;
+
+            var moduleSignatures = TypeInference.BuildFunctionSignaturesMap(canonicalizedFile, moduleNameStr);
+            allSignatures = allSignatures.SetItems(moduleSignatures);
         }
 
         Result<string, Func<Func<IReadOnlyList<string>, bool>, ConcretizedTypes.File>> TypeAnnotationsForModuleName(
@@ -131,12 +168,18 @@ public class AddInferredTypeAnnotations
                     $"Module not found: {moduleNameStr}");
             }
 
+            if (!canonicalizedFilesByModuleName.TryGetValue(moduleNameStr, out var canonicalizedFile))
+            {
+                return Result<string, Func<Func<IReadOnlyList<string>, bool>, ConcretizedTypes.File>>.err(
+                    $"Canonicalized module not found: {moduleNameStr}");
+            }
+
             ConcretizedTypes.File GetAnnotatedFile(Func<IReadOnlyList<string>, bool> includeDeclaration)
             {
-                // Infer type annotations for each declaration
-                var typeAnnotations = InferTypeAnnotationsForFile(parsedFile, moduleNameStr, includeDeclaration);
+                // Infer type annotations using canonicalized file and combined signatures from all modules
+                var typeAnnotations = InferTypeAnnotationsForFile(canonicalizedFile, moduleNameStr, includeDeclaration, allSignatures);
 
-                // Apply type annotations using SetTypeAnnotation
+                // Apply type annotations to the original (non-canonicalized) file for output
                 return ConcretizedTypes.SetTypeAnnotation.SetTypeAnnotations(
                     parsedFile,
                     typeAnnotations,
@@ -155,22 +198,20 @@ public class AddInferredTypeAnnotations
     /// Infers type annotations for all declarations in a file, including local declarations in let-blocks.
     /// </summary>
     private static ImmutableDictionary<IReadOnlyList<string>, ConcretizedTypes.TypeAnnotation> InferTypeAnnotationsForFile(
-        ConcretizedTypes.File file,
+        AbstractSyntaxTypes.File file,
         string moduleName,
-        Func<IReadOnlyList<string>, bool> includeDeclaration)
+        Func<IReadOnlyList<string>, bool> includeDeclaration,
+        ImmutableDictionary<string, TypeInference.InferredType> allModuleSignatures)
     {
         var annotations = ImmutableDictionary<IReadOnlyList<string>, ConcretizedTypes.TypeAnnotation>.Empty
             .WithComparers(EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
 
-        // Convert the concretized file to abstract syntax for type inference
-        var abstractFile = AbstractSyntaxTypes.FromStil4mConcretized.Convert(file);
-
-        // Build a map of function signatures from the file using TypeInference
-        var functionSignatures = TypeInference.BuildFunctionSignaturesMap(abstractFile, moduleName);
+        // Use the combined signatures from all modules
+        var functionSignatures = allModuleSignatures;
 
         foreach (var declaration in file.Declarations)
         {
-            if (declaration.Value is ConcretizedTypes.Declaration.FunctionDeclaration funcDecl)
+            if (declaration.Value is AbstractSyntaxTypes.Declaration.FunctionDeclaration funcDecl)
             {
                 var funcName = funcDecl.Function.Declaration.Value.Name.Value;
                 var declarationPath = new[] { funcName };
@@ -180,14 +221,9 @@ public class AddInferredTypeAnnotations
                     continue;
                 }
 
-                // Convert expression and arguments to abstract syntax
-                var abstractExpression = AbstractSyntaxTypes.FromStil4mConcretized.ConvertExpressionNode(
-                    funcDecl.Function.Declaration.Value.Expression);
-                var abstractArguments = funcDecl.Function.Declaration.Value.Arguments
-                    .Select(arg => new AbstractSyntaxTypes.Node<AbstractSyntaxTypes.Pattern>(
-                        arg.Range,
-                        AbstractSyntaxTypes.FromStil4mConcretized.Convert(arg.Value)))
-                    .ToList();
+                // Expression and arguments are already in abstract syntax (canonicalized)
+                var abstractExpression = funcDecl.Function.Declaration.Value.Expression;
+                var abstractArguments = funcDecl.Function.Declaration.Value.Arguments;
 
                 // Skip if already has a type annotation
                 if (funcDecl.Function.Signature is not null)
@@ -426,6 +462,10 @@ public class AddInferredTypeAnnotations
             TypeInference.InferredType.NumberType =>
                 // "number" is the polymorphic numeric type in Elm
                 new ConcretizedTypes.TypeAnnotation.GenericType("number"),
+
+            TypeInference.InferredType.TypeVariable typeVar =>
+                // Type variable like 'a', 'b', etc.
+                new ConcretizedTypes.TypeAnnotation.GenericType(typeVar.Name),
 
             TypeInference.InferredType.TupleType tupleType =>
                 CreateTupleTypeAnnotation(tupleType.ElementTypes),

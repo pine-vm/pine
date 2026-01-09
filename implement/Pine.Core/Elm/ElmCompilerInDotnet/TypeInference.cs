@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -17,19 +18,24 @@ public static class TypeInference
     public abstract record InferredType
     {
         /// <summary>Integer type.</summary>
-        public sealed record IntType : InferredType;
+        public sealed record IntType
+            : InferredType;
 
         /// <summary>Float type.</summary>
-        public sealed record FloatType : InferredType;
+        public sealed record FloatType
+            : InferredType;
 
         /// <summary>String type.</summary>
-        public sealed record StringType : InferredType;
+        public sealed record StringType
+            : InferredType;
 
         /// <summary>Char type.</summary>
-        public sealed record CharType : InferredType;
+        public sealed record CharType
+            : InferredType;
 
         /// <summary>Boolean type.</summary>
-        public sealed record BoolType : InferredType;
+        public sealed record BoolType
+            : InferredType;
 
         /// <summary>Number type (polymorphic numeric type that could be Int or Float).</summary>
         public sealed record NumberType
@@ -55,8 +61,55 @@ public static class TypeInference
         public sealed record ChoiceType(IReadOnlyList<string> ModuleName, string TypeName, IReadOnlyList<InferredType> TypeArguments)
             : InferredType;
 
+        /// <summary>Type variable (e.g., 'a', 'b' in generic type definitions).</summary>
+        public sealed record TypeVariable(string Name)
+            : InferredType;
+
         /// <summary>Unknown or unresolved type.</summary>
-        public sealed record UnknownType : InferredType;
+        public sealed record UnknownType
+            : InferredType;
+
+        /// <summary>
+        /// Returns the inferred type that represents an integer.
+        /// </summary>
+        public static InferredType Int() =>
+            s_intType;
+
+        /// <summary>
+        /// Returns the inferred type that represents a floating-point number.
+        /// </summary>
+        public static InferredType Float() =>
+            s_floatType;
+
+        /// <summary>
+        /// Returns the inferred type that represents a string.
+        /// </summary>
+        public static InferredType String() =>
+            s_stringType;
+
+        /// <summary>
+        /// Returns the inferred type that represents a character.
+        /// </summary>
+        public static InferredType Char() =>
+            s_charType;
+
+        /// <summary>
+        /// Returns the inferred type that represents a boolean.
+        /// </summary>
+        public static InferredType Bool() =>
+            s_boolType;
+
+        /// <summary>
+        /// Returns the inferred type that represents a number (polymorphic numeric type).
+        /// </summary>
+        public static InferredType Number() =>
+            s_numberType;
+
+        /// <summary>
+        /// Build a function type that represents a mapping from the specified argument type to the specified return type.
+        /// </summary>
+        public static InferredType Function(InferredType argType, InferredType returnType) =>
+            new FunctionType(argType, returnType);
     }
 
     private static readonly InferredType.IntType s_intType = new();
@@ -66,6 +119,211 @@ public static class TypeInference
     private static readonly InferredType.BoolType s_boolType = new();
     private static readonly InferredType.NumberType s_numberType = new();
     private static readonly InferredType.UnknownType s_unknownType = new();
+
+    /// <summary>
+    /// Unifies two inferred types, returning the more specific type when possible.
+    /// For example, Int and number unify to Int (Int is more specific than number).
+    /// </summary>
+    private static InferredType UnifyTypes(InferredType type1, InferredType type2)
+    {
+        // If types are equal, return either
+        if (type1.Equals(type2))
+            return type1;
+
+        // Unknown can unify with anything - return the other type
+        if (type1 is InferredType.UnknownType)
+            return type2;
+        if (type2 is InferredType.UnknownType)
+            return type1;
+
+        // Number is the polymorphic numeric type - more specific numeric types take precedence
+        // Int is more specific than number
+        if (type1 is InferredType.NumberType && type2 is InferredType.IntType)
+            return type2;
+        if (type1 is InferredType.IntType && type2 is InferredType.NumberType)
+            return type1;
+
+        // Float is more specific than number
+        if (type1 is InferredType.NumberType && type2 is InferredType.FloatType)
+            return type2;
+        if (type1 is InferredType.FloatType && type2 is InferredType.NumberType)
+            return type1;
+
+        // If one is Int and other is Float, they don't unify (this is a type error in Elm)
+        // Return the first one (arbitrary choice since this shouldn't happen in valid Elm code)
+        if ((type1 is InferredType.IntType && type2 is InferredType.FloatType) ||
+            (type1 is InferredType.FloatType && type2 is InferredType.IntType))
+            return type1;
+
+        // For list types, unify element types
+        if (type1 is InferredType.ListType list1 && type2 is InferredType.ListType list2)
+        {
+            var unifiedElement = UnifyTypes(list1.ElementType, list2.ElementType);
+            return new InferredType.ListType(unifiedElement);
+        }
+
+        // For tuple types, unify element types
+        if (type1 is InferredType.TupleType tuple1 && type2 is InferredType.TupleType tuple2 &&
+            tuple1.ElementTypes.Count == tuple2.ElementTypes.Count)
+        {
+            var unifiedElements = new List<InferredType>();
+            for (var i = 0; i < tuple1.ElementTypes.Count; i++)
+            {
+                unifiedElements.Add(UnifyTypes(tuple1.ElementTypes[i], tuple2.ElementTypes[i]));
+            }
+            return new InferredType.TupleType(unifiedElements);
+        }
+
+        // For function types, unify argument and return types
+        if (type1 is InferredType.FunctionType func1 && type2 is InferredType.FunctionType func2)
+        {
+            var unifiedArg = UnifyTypes(func1.ArgumentType, func2.ArgumentType);
+            var unifiedRet = UnifyTypes(func1.ReturnType, func2.ReturnType);
+            return new InferredType.FunctionType(unifiedArg, unifiedRet);
+        }
+
+        // For record types with same fields, unify field types (comparing by name, not position)
+        if (type1 is InferredType.RecordType record1 && type2 is InferredType.RecordType record2 &&
+            record1.Fields.Count == record2.Fields.Count)
+        {
+            // Create a lookup for record2 fields by name
+            var record2FieldsByName = record2.Fields.ToDictionary(f => f.FieldName, f => f.FieldType);
+
+            // Check if all fields from record1 exist in record2 and unify their types
+            var unifiedFields = new List<(string FieldName, InferredType FieldType)>();
+            foreach (var field1 in record1.Fields)
+            {
+                if (!record2FieldsByName.TryGetValue(field1.FieldName, out var field2Type))
+                {
+                    // Field name not found in record2 - records have different structure
+                    // Return type1 as fallback since we can't unify incompatible record types
+                    return type1;
+                }
+                unifiedFields.Add((field1.FieldName, UnifyTypes(field1.FieldType, field2Type)));
+            }
+            return new InferredType.RecordType(unifiedFields);
+        }
+
+        // Type variables can unify with any type - return the concrete type
+        if (type1 is InferredType.TypeVariable)
+            return type2;
+        if (type2 is InferredType.TypeVariable)
+            return type1;
+
+        // For choice types with the same name, unify type arguments
+        if (type1 is InferredType.ChoiceType choice1 && type2 is InferredType.ChoiceType choice2 &&
+            choice1.TypeName == choice2.TypeName &&
+            choice1.ModuleName.SequenceEqual(choice2.ModuleName) &&
+            choice1.TypeArguments.Count == choice2.TypeArguments.Count)
+        {
+            var unifiedArgs = new List<InferredType>();
+            for (var i = 0; i < choice1.TypeArguments.Count; i++)
+            {
+                unifiedArgs.Add(UnifyTypes(choice1.TypeArguments[i], choice2.TypeArguments[i]));
+            }
+            return new InferredType.ChoiceType(choice1.ModuleName, choice1.TypeName, unifiedArgs);
+        }
+
+        // Types don't unify - return the first one as a fallback
+        // (in a full type system, this would typically be a type error)
+        return type1;
+    }
+
+    /// <summary>
+    /// Collects substitutions for type variables by matching an expected type against an actual type.
+    /// For example, if expected is `TypeVariable("a")` and actual is `StringType`, adds `a -> String` to substitutions.
+    /// </summary>
+    private static void CollectTypeVariableSubstitutions(
+        InferredType expected,
+        InferredType actual,
+        Dictionary<string, InferredType> substitutions)
+    {
+        if (expected is InferredType.TypeVariable typeVar)
+        {
+            // If we haven't seen this type variable yet, or if we can unify with the existing substitution
+            if (!substitutions.TryGetValue(typeVar.Name, out var existingType))
+            {
+                substitutions[typeVar.Name] = actual;
+            }
+            else
+            {
+                // Unify with existing substitution
+                substitutions[typeVar.Name] = UnifyTypes(existingType, actual);
+            }
+            return;
+        }
+
+        // Recursively match nested types
+        switch ((expected, actual))
+        {
+            case (InferredType.ListType expList, InferredType.ListType actList):
+                CollectTypeVariableSubstitutions(expList.ElementType, actList.ElementType, substitutions);
+                break;
+
+            case (InferredType.FunctionType expFunc, InferredType.FunctionType actFunc):
+                CollectTypeVariableSubstitutions(expFunc.ArgumentType, actFunc.ArgumentType, substitutions);
+                CollectTypeVariableSubstitutions(expFunc.ReturnType, actFunc.ReturnType, substitutions);
+                break;
+
+            case (InferredType.TupleType expTuple, InferredType.TupleType actTuple)
+                when expTuple.ElementTypes.Count == actTuple.ElementTypes.Count:
+                for (var i = 0; i < expTuple.ElementTypes.Count; i++)
+                {
+                    CollectTypeVariableSubstitutions(expTuple.ElementTypes[i], actTuple.ElementTypes[i], substitutions);
+                }
+                break;
+
+            case (InferredType.ChoiceType expChoice, InferredType.ChoiceType actChoice)
+                when expChoice.TypeName == actChoice.TypeName &&
+                     expChoice.TypeArguments.Count == actChoice.TypeArguments.Count:
+                for (var i = 0; i < expChoice.TypeArguments.Count; i++)
+                {
+                    CollectTypeVariableSubstitutions(expChoice.TypeArguments[i], actChoice.TypeArguments[i], substitutions);
+                }
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Applies type variable substitutions to a type, replacing type variables with their concrete types.
+    /// </summary>
+    private static InferredType ApplyTypeSubstitutions(
+        InferredType type,
+        IReadOnlyDictionary<string, InferredType> substitutions)
+    {
+        if (substitutions.Count is 0)
+            return type;
+
+        return type switch
+        {
+            InferredType.TypeVariable typeVar when substitutions.TryGetValue(typeVar.Name, out var subst) =>
+                subst,
+
+            InferredType.ListType listType =>
+                new InferredType.ListType(ApplyTypeSubstitutions(listType.ElementType, substitutions)),
+
+            InferredType.FunctionType funcType =>
+                new InferredType.FunctionType(
+                    ApplyTypeSubstitutions(funcType.ArgumentType, substitutions),
+                    ApplyTypeSubstitutions(funcType.ReturnType, substitutions)),
+
+            InferredType.TupleType tupleType =>
+                new InferredType.TupleType(
+                    tupleType.ElementTypes.Select(et => ApplyTypeSubstitutions(et, substitutions)).ToList()),
+
+            InferredType.ChoiceType choiceType =>
+                new InferredType.ChoiceType(
+                    choiceType.ModuleName,
+                    choiceType.TypeName,
+                    choiceType.TypeArguments.Select(ta => ApplyTypeSubstitutions(ta, substitutions)).ToList()),
+
+            InferredType.RecordType recordType =>
+                new InferredType.RecordType(
+                    recordType.Fields.Select(f => (f.FieldName, ApplyTypeSubstitutions(f.FieldType, substitutions))).ToList()),
+
+            _ => type
+        };
+    }
 
     /// <summary>
     /// Describes type constraints for an infix operator.
@@ -160,6 +418,20 @@ public static class TypeInference
 
                 }
             }
+
+            // Handle List type specially
+            if (name is "List" && moduleName.Count is 0 && typed.TypeArguments.Count is 1)
+            {
+                var elementType = TypeAnnotationToInferredType(typed.TypeArguments[0].Value);
+                return new InferredType.ListType(elementType);
+            }
+
+            // Handle custom types (including those with type arguments)
+            var typeArguments = typed.TypeArguments
+                .Select(arg => TypeAnnotationToInferredType(arg.Value))
+                .ToList();
+
+            return new InferredType.ChoiceType(moduleName.ToList(), name, typeArguments);
         }
 
         // Handle tuple type annotations
@@ -198,6 +470,12 @@ public static class TypeInference
                 TypeAnnotationToInferredType(funcType.ReturnType.Value);
 
             return new InferredType.FunctionType(argType, returnType);
+        }
+
+        // Handle generic type (type variable like 'a', 'b', etc.)
+        if (typeAnnotation is SyntaxTypes.TypeAnnotation.GenericType genericType)
+        {
+            return new InferredType.TypeVariable(genericType.Name);
         }
 
         return s_unknownType;
@@ -450,19 +728,32 @@ public static class TypeInference
             }
 
             // Look up the function type
+            // After canonicalization, all references should be fully qualified
             if (functionReturnTypes.TryGetValue(qualifiedName, out var funcType))
             {
+                // Build a substitution map from type variables to concrete types
+                var substitution = new Dictionary<string, InferredType>();
+
                 // Compute the return type by "applying" arguments to the function type
                 // For a function type A -> B -> C with 2 arguments, the return type is C
+                // Also infer type variable substitutions from argument types
                 var appliedArgCount = application.Arguments.Count - 1; // Exclude the function itself
                 var resultType = funcType;
 
                 for (var i = 0; i < appliedArgCount && resultType is InferredType.FunctionType ft; i++)
                 {
+                    // Infer the actual argument type
+                    var argExpr = application.Arguments[i + 1].Value; // +1 to skip the function itself
+                    var actualArgType = InferExpressionType(argExpr, parameterNames, parameterTypes, localBindingTypes, currentModuleName, functionReturnTypes);
+
+                    // Collect type variable substitutions from matching expected vs actual arg types
+                    CollectTypeVariableSubstitutions(ft.ArgumentType, actualArgType, substitution);
+
                     resultType = ft.ReturnType;
                 }
 
-                return resultType;
+                // Apply substitutions to the result type
+                return ApplyTypeSubstitutions(resultType, substitution);
             }
         }
 
@@ -552,6 +843,63 @@ public static class TypeInference
                 functionReturnTypes);
 
             return new InferredType.ListType(firstElementType);
+        }
+
+        // If-block expression - unify types from all branches
+        if (expression is SyntaxTypes.Expression.IfBlock ifBlock)
+        {
+            var thenType = InferExpressionType(
+                ifBlock.ThenBlock.Value,
+                parameterNames,
+                parameterTypes,
+                localBindingTypes,
+                currentModuleName,
+                functionReturnTypes);
+
+            var elseType = InferExpressionType(
+                ifBlock.ElseBlock.Value,
+                parameterNames,
+                parameterTypes,
+                localBindingTypes,
+                currentModuleName,
+                functionReturnTypes);
+
+            // Unify types: If one branch is more specific (e.g., Int vs number), use the more specific type
+            return UnifyTypes(thenType, elseType);
+        }
+
+        // Case expression - unify types from all case arm expressions
+        if (expression is SyntaxTypes.Expression.CaseExpression caseExpr)
+        {
+            if (caseExpr.CaseBlock.Cases.Count is 0)
+            {
+                return s_unknownType;
+            }
+
+            // Start with the type of the first case arm
+            var unifiedType = InferExpressionType(
+                caseExpr.CaseBlock.Cases[0].Expression.Value,
+                parameterNames,
+                parameterTypes,
+                localBindingTypes,
+                currentModuleName,
+                functionReturnTypes);
+
+            // Unify with remaining case arm types
+            for (var i = 1; i < caseExpr.CaseBlock.Cases.Count; i++)
+            {
+                var armType = InferExpressionType(
+                    caseExpr.CaseBlock.Cases[i].Expression.Value,
+                    parameterNames,
+                    parameterTypes,
+                    localBindingTypes,
+                    currentModuleName,
+                    functionReturnTypes);
+
+                unifiedType = UnifyTypes(unifiedType, armType);
+            }
+
+            return unifiedType;
         }
 
         // For other expressions, we cannot infer the type yet
@@ -1238,18 +1586,27 @@ public static class TypeInference
             {
                 var typeName = choiceTypeDecl.TypeDeclaration.Name.Value;
 
+                // Get the type parameters (generics) for this type
+                var typeParams = choiceTypeDecl.TypeDeclaration.Generics
+                    .Select(g => g.Value)
+                    .ToList();
+
                 // Build constructor types for each value constructor
                 foreach (var constructorNode in choiceTypeDecl.TypeDeclaration.Constructors)
                 {
                     var constructorName = constructorNode.Value.Name.Value;
                     var qualifiedConstructorName = moduleName + "." + constructorName;
 
-                    // The constructor result type is the choice type itself
-                    // Empty module name (current module) and no type arguments for simplicity
+                    // The constructor result type is the choice type with type variables as arguments
+                    // e.g., for `type ChoiceType a b = ...`, the result type is `ChoiceType a b`
+                    var typeArguments = typeParams
+                        .Select(p => (InferredType)new InferredType.TypeVariable(p))
+                        .ToList();
+
                     InferredType resultType = new InferredType.ChoiceType(
                         ModuleName: [],
                         TypeName: typeName,
-                        TypeArguments: []);
+                        TypeArguments: typeArguments);
 
                     // Build the constructor type: arg1 -> arg2 -> ... -> ResultType
                     var constructorType = resultType;
@@ -1502,6 +1859,30 @@ public static class TypeInference
                 break;
 
             case SyntaxTypes.Expression.OperatorApplication opApp:
+                // Check if the operator forces specific operand types
+                if (s_operatorConstraints.TryGetValue(opApp.Operator, out var constraints))
+                {
+                    // If the operator forces left operand type, constrain any parameter variables
+                    if (constraints.LeftOperandType is not null)
+                    {
+                        parameterTypes = ExtractTypeConstraintFromExpression(
+                            opApp.Left.Value,
+                            constraints.LeftOperandType,
+                            parameterNames,
+                            parameterTypes);
+                    }
+
+                    // If the operator forces right operand type, constrain any parameter variables
+                    if (constraints.RightOperandType is not null)
+                    {
+                        parameterTypes = ExtractTypeConstraintFromExpression(
+                            opApp.Right.Value,
+                            constraints.RightOperandType,
+                            parameterNames,
+                            parameterTypes);
+                    }
+                }
+
                 parameterTypes = ScanExpressionForParameterTypes(opApp.Left.Value, parameterNames, functionSignatures, parameterTypes);
                 parameterTypes = ScanExpressionForParameterTypes(opApp.Right.Value, parameterNames, functionSignatures, parameterTypes);
                 break;
@@ -1537,6 +1918,54 @@ public static class TypeInference
         }
 
         return parameterTypes;
+    }
+
+    /// <summary>
+    /// Extracts type constraints from an expression for parameter variables.
+    /// When an expression like 'a + b' is known to be Int (due to operator constraints),
+    /// this method extracts constraints for parameter variables like 'a' and 'b'.
+    /// </summary>
+    private static ImmutableDictionary<string, InferredType> ExtractTypeConstraintFromExpression(
+        SyntaxTypes.Expression expression,
+        InferredType targetType,
+        IReadOnlyDictionary<string, int> parameterNames,
+        ImmutableDictionary<string, InferredType> parameterTypes)
+    {
+        switch (expression)
+        {
+            case SyntaxTypes.Expression.FunctionOrValue varRef:
+                // If this is a parameter variable, constrain its type
+                if (varRef.ModuleName.Count is 0 &&
+                    parameterNames.ContainsKey(varRef.Name) &&
+                    !parameterTypes.ContainsKey(varRef.Name))
+                {
+                    parameterTypes = parameterTypes.Add(varRef.Name, targetType);
+                }
+                else if (varRef.ModuleName.Count is 0 &&
+                    parameterNames.ContainsKey(varRef.Name) &&
+                    parameterTypes.TryGetValue(varRef.Name, out var existingType))
+                {
+                    // Unify with existing constraint if present
+                    var unifiedType = UnifyTypes(existingType, targetType);
+                    parameterTypes = parameterTypes.SetItem(varRef.Name, unifiedType);
+                }
+                return parameterTypes;
+
+            case SyntaxTypes.Expression.ParenthesizedExpression paren:
+                return ExtractTypeConstraintFromExpression(paren.Expression.Value, targetType, parameterNames, parameterTypes);
+
+            case SyntaxTypes.Expression.OperatorApplication nestedOpApp:
+                // For arithmetic operators that preserve numeric type, propagate constraints to operands
+                if (nestedOpApp.Operator is "+" or "-" or "*" or "//" or "%" or "^")
+                {
+                    parameterTypes = ExtractTypeConstraintFromExpression(nestedOpApp.Left.Value, targetType, parameterNames, parameterTypes);
+                    parameterTypes = ExtractTypeConstraintFromExpression(nestedOpApp.Right.Value, targetType, parameterNames, parameterTypes);
+                }
+                return parameterTypes;
+
+            default:
+                return parameterTypes;
+        }
     }
 
     /// <summary>

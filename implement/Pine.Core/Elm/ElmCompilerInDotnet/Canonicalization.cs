@@ -100,6 +100,52 @@ public class Canonicalization
     public static Result<string, IReadOnlyDictionary<ModuleName, Result<string, SyntaxTypes.File>>> Canonicalize(
         IReadOnlyList<SyntaxTypes.File> modules)
     {
+        // Use CanonicalizeAllowingErrors and convert results to error format when there are errors
+        var allowingErrorsResult = CanonicalizeAllowingErrors(modules);
+
+        if (allowingErrorsResult.IsErrOrNull() is { } err)
+        {
+            return Result<string, IReadOnlyDictionary<ModuleName, Result<string, SyntaxTypes.File>>>.err(err);
+        }
+
+        var allowingErrorsModules =
+            allowingErrorsResult.IsOkOrNull() ??
+            throw new NotImplementedException(
+                "Unexpected result type from CanonicalizeAllowingErrors");
+
+        var resultDictionary = new Dictionary<ModuleName, Result<string, SyntaxTypes.File>>(
+            EnumerableExtensions.EqualityComparer<ModuleName>());
+
+        foreach (var (moduleName, (file, errors)) in allowingErrorsModules)
+        {
+            if (errors.Count > 0)
+            {
+                resultDictionary[moduleName] = RenderErrors(errors);
+            }
+            else
+            {
+                resultDictionary[moduleName] = Result<string, SyntaxTypes.File>.ok(file);
+            }
+        }
+
+        return resultDictionary;
+    }
+
+    /// <summary>
+    /// Canonicalizes a list of Elm modules, resolving all references to their fully qualified forms.
+    /// Unlike <see cref="Canonicalize"/>, this method always returns the canonicalized files even when
+    /// there are errors (such as undefined references). This is useful for type inference where
+    /// partial canonicalization (resolving cross-module references) is still valuable even if
+    /// some local references cannot be resolved.
+    /// </summary>
+    /// <param name="modules">The modules to canonicalize.</param>
+    /// <returns>
+    /// On success, returns a dictionary mapping module names to tuples of (canonicalized file, errors).
+    /// On failure (e.g., duplicate module names), returns an error message.
+    /// </returns>
+    public static Result<string, IReadOnlyDictionary<ModuleName, (SyntaxTypes.File File, IReadOnlyList<CanonicalizationError> Errors)>> CanonicalizeAllowingErrors(
+        IReadOnlyList<SyntaxTypes.File> modules)
+    {
         // Check for duplicate module names
         var moduleNameGroups =
             modules
@@ -118,14 +164,14 @@ public class Canonicalization
                 .Select(g => string.Join(".", g.Key))
                 .ToList();
 
-            return Result<string, IReadOnlyDictionary<ModuleName, Result<string, SyntaxTypes.File>>>.err(
+            return Result<string, IReadOnlyDictionary<ModuleName, (SyntaxTypes.File, IReadOnlyList<CanonicalizationError>)>>.err(
                 $"Duplicate module names: {string.Join(", ", duplicateNames)}");
         }
 
         // Build module exports map for resolving exposing (..)
         var moduleExportsMap = BuildModuleExportsMap(modules);
 
-        var resultDictionary = new Dictionary<ModuleName, Result<string, SyntaxTypes.File>>(
+        var resultDictionary = new Dictionary<ModuleName, (SyntaxTypes.File File, IReadOnlyList<CanonicalizationError> Errors)>(
             EnumerableExtensions.EqualityComparer<ModuleName>());
 
         foreach (var module in modules)
@@ -139,17 +185,14 @@ public class Canonicalization
             // Build set of module-level declarations (top-level names declared in this module)
             var moduleLevelDeclarations = BuildLocalDeclarations(module);
 
-            // Check for clashing imports in both namespaces
+            // Check for clashing imports in both namespaces and convert to CanonicalizationError
             var typeClashErrors = DetectImportClashes(typeImportMap, "Type");
             var valueClashErrors = DetectImportClashes(valueImportMap, "Value");
-            var clashErrors = typeClashErrors.Concat(valueClashErrors).ToList();
-
-            if (clashErrors.Any())
-            {
-                resultDictionary[currentModuleName] = string.Join("\n", clashErrors);
-
-                continue;
-            }
+            var clashErrors = typeClashErrors.Concat(valueClashErrors)
+                .Select(errMsg => new CanonicalizationError(
+                    new SyntaxTypes.Range(new SyntaxTypes.Location(0, 0), new SyntaxTypes.Location(0, 0)),
+                    errMsg))
+                .ToList();
 
             // Create canonicalization context for this module
             var context = new CanonicalizationContext(
@@ -166,10 +209,10 @@ public class Canonicalization
                 .Select(decl => CanonicalizeDeclaration(decl, context))
                 .ToList();
 
-            // Aggregate all errors from declarations
+            // Aggregate all errors from declarations plus any clash errors
             var allErrors =
-                canonicalizedDeclarationsWithErrors
-                .SelectMany(result => result.Errors)
+                clashErrors
+                .Concat(canonicalizedDeclarationsWithErrors.SelectMany(result => result.Errors))
                 .ToList();
 
             // Extract canonicalized declarations
@@ -187,15 +230,8 @@ public class Canonicalization
                     Imports = []
                 };
 
-            // If there are errors, return error result for this module
-            if (allErrors.Count > 0)
-            {
-                resultDictionary[currentModuleName] = RenderErrors(allErrors);
-            }
-            else
-            {
-                resultDictionary[currentModuleName] = Result<string, SyntaxTypes.File>.ok(canonicalizedModule);
-            }
+            // Always return the file along with any errors
+            resultDictionary[currentModuleName] = (canonicalizedModule, allErrors);
         }
 
         return resultDictionary;

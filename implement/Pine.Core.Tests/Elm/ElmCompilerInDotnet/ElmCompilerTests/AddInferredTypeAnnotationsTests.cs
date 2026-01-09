@@ -4,7 +4,10 @@ using Pine.Core.Elm.ElmSyntax.Stil4mConcretized;
 using Pine.Core.Tests.Elm.ElmCompilerTests;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Xunit;
+
+using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.ElmCompilerTests;
 
@@ -440,6 +443,206 @@ public class AddInferredTypeAnnotationsTests
     }
 
     [Fact]
+    public void Infers_type_int_from_chained_if_block_subexpression()
+    {
+        // Use integer-specific operator in one of the branches to constrain the return type to Int.
+
+        var moduleText =
+            """"
+            module Test exposing (..)
+
+
+            alfa a b =
+                if a > b then
+                    a * b
+                else if a == b then
+                    a // b
+                else
+                    a - b
+
+            """";
+
+        var inferredType = GetInferredTypeForDeclaration(moduleText, "alfa");
+
+        // Expected type: Int -> Int -> Int
+
+        inferredType.Should().Be(
+            TypeInference.InferredType.Function(
+                argType: TypeInference.InferredType.Int(),
+                returnType: TypeInference.InferredType.Function(
+                    argType: TypeInference.InferredType.Int(),
+                    returnType: TypeInference.InferredType.Int())));
+    }
+
+    [Fact]
+    public void Infers_type_int_from_case_arm_expression()
+    {
+        // Use integer-specific operator in one of the branches to constrain the return type to Int.
+
+        var moduleText =
+            """"
+            module Test exposing (..)
+
+
+            alfa a b =
+                case compare a b of
+                    GT ->
+                        a * b
+                    EQ ->
+                        a // b
+                    LT ->
+                        a - b
+
+            """";
+
+        var inferredType = GetInferredTypeForDeclaration(moduleText, "alfa");
+
+        // Expected type: Int -> Int -> Int
+
+        inferredType.Should().Be(
+            TypeInference.InferredType.Function(
+                argType: TypeInference.InferredType.Int(),
+                returnType: TypeInference.InferredType.Function(
+                    argType: TypeInference.InferredType.Int(),
+                    returnType: TypeInference.InferredType.Int())));
+    }
+
+    [Fact]
+    public void Infers_type_float_from_let_block_expression_subexpression()
+    {
+        var moduleText =
+            """"
+            module Test exposing (..)
+
+
+            alfa a b =
+                let
+                    t0 =
+                        a / b
+                in
+                t0 + 1.0
+
+            """";
+
+        var inferredType = GetInferredTypeForDeclaration(moduleText, "alfa");
+
+        // Expected type: Float -> Float -> Float
+
+        inferredType.Should().Be(
+            TypeInference.InferredType.Function(
+                argType: TypeInference.InferredType.Float(),
+                returnType: TypeInference.InferredType.Function(
+                    argType: TypeInference.InferredType.Float(),
+                    returnType: TypeInference.InferredType.Float())));
+    }
+
+    [Fact]
+    public void Infers_concrete_choice_type_from_application_of_generic_tag_with_concrete_argument_type()
+    {
+        var moduleText =
+            """"
+            module Test exposing (..)
+
+
+            type ChoiceType a b
+                = ChoiceOne a
+                | ChoiceTwo b
+
+
+            alfa =
+                if a < b then
+                    ChoiceOne "Test"
+
+                else
+                    ChoiceTwo (b // 13)
+
+            """";
+
+        var expectedModuleText =
+            """"
+            module Test exposing (..)
+            
+            
+            type ChoiceType a b
+                = ChoiceOne a
+                | ChoiceTwo b
+
+
+            alfa : ChoiceType String Int
+            alfa =
+                if a < b then
+                    ChoiceOne "Test"
+            
+                else
+                    ChoiceTwo (b // 13)
+            
+            """";
+
+        var result =
+            AddAllTypeAnnotationsAndFormatToString(
+                TestCase.DefaultAppWithoutPackages([moduleText]),
+                ["Test"]);
+
+        result.Trim().Should().Be(expectedModuleText.Trim());
+    }
+
+    [Fact]
+    public void Infers_concrete_choice_type_from_foreign_module_with_concrete_argument_type()
+    {
+        // Type declaration is in a separate "Types" module, imported by the main module
+        var typesModuleText =
+            """"
+            module Types exposing (..)
+
+
+            type ChoiceType a b
+                = ChoiceOne a
+                | ChoiceTwo b
+
+            """";
+
+        var mainModuleText =
+            """"
+            module Test exposing (..)
+
+            import Types exposing (ChoiceType(..))
+
+
+            alfa =
+                if a < b then
+                    ChoiceOne "Test"
+
+                else
+                    ChoiceTwo (b // 13)
+
+            """";
+
+        var expectedModuleText =
+            """"
+            module Test exposing (..)
+
+            import Types exposing (ChoiceType(..))
+
+
+            alfa : ChoiceType String Int
+            alfa =
+                if a < b then
+                    ChoiceOne "Test"
+
+                else
+                    ChoiceTwo (b // 13)
+
+            """";
+
+        var result =
+            AddAllTypeAnnotationsAndFormatToString(
+                TestCase.DefaultAppWithoutPackages([typesModuleText, mainModuleText]),
+                ["Test"]);
+
+        result.Trim().Should().Be(expectedModuleText.Trim());
+    }
+
+    [Fact]
     public void Infers_type_from_top_level_record_expression()
     {
         var scenario = TestCase.DefaultAppWithoutPackages(
@@ -578,5 +781,73 @@ public class AddInferredTypeAnnotationsTests
             fileQueryable(includeDeclaration);
 
         return Avh4Format.FormatToString(fileWithAnnotations);
+    }
+
+    /// <summary>
+    /// Gets the inferred type for a specific top-level declaration in a module.
+    /// </summary>
+    private static TypeInference.InferredType GetInferredTypeForDeclaration(
+        string moduleText,
+        string declarationName)
+    {
+        var parseResult = Core.Elm.ElmSyntax.ElmSyntaxParser.ParseModuleText(moduleText);
+
+        if (parseResult.IsErrOrNull() is { } err)
+        {
+            throw new Exception($"Failed to parse module: {err}");
+        }
+
+        if (parseResult.IsOkOrNull() is not { } parsedFile)
+        {
+            throw new NotImplementedException("Unexpected parse result type");
+        }
+
+        var moduleName = Module.GetModuleName(parsedFile.ModuleDefinition.Value).Value;
+        var moduleNameStr = string.Join(".", moduleName);
+
+        // Convert the concretized file to abstract syntax for type inference
+        var abstractFile = SyntaxTypes.FromStil4mConcretized.Convert(parsedFile);
+
+        // Build a map of function signatures from the file using TypeInference
+        var functionSignatures = TypeInference.BuildFunctionSignaturesMap(abstractFile, moduleNameStr);
+
+        // Find the declaration
+        foreach (var declaration in parsedFile.Declarations)
+        {
+            if (declaration.Value is Declaration.FunctionDeclaration funcDecl)
+            {
+                var funcName = funcDecl.Function.Declaration.Value.Name.Value;
+
+                if (funcName != declarationName)
+                {
+                    continue;
+                }
+
+                // Convert expression and arguments to abstract syntax
+                var abstractExpression = SyntaxTypes.FromStil4mConcretized.ConvertExpressionNode(
+                    funcDecl.Function.Declaration.Value.Expression);
+
+                var abstractArguments = funcDecl.Function.Declaration.Value.Arguments
+                    .Select(arg => new SyntaxTypes.Node<SyntaxTypes.Pattern>(
+                        arg.Range,
+                        SyntaxTypes.FromStil4mConcretized.Convert(arg.Value)))
+                    .ToList();
+
+                // Use TypeInference to infer the function type
+                var (returnType, parameterTypes) = TypeInference.InferFunctionDeclarationType(
+                    abstractExpression.Value,
+                    abstractArguments,
+                    moduleNameStr,
+                    functionSignatures);
+
+                // Build the full function type using TypeInference
+                return TypeInference.BuildFunctionType(
+                    abstractArguments,
+                    parameterTypes,
+                    returnType);
+            }
+        }
+
+        throw new Exception($"Declaration '{declarationName}' not found in module");
     }
 }
