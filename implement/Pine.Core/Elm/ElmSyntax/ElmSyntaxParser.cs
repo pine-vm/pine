@@ -49,7 +49,7 @@ public class ElmSyntaxParser
     /// <summary>
     /// Parses Elm module text into the classic syntax tree representation.
     /// The parser always preserves parentheses/tuples in the syntax tree.
-    /// Use <see cref="Stil4mElmSyntax7.FromStil4mConcretized.Convert"/> to get the
+    /// Use <see cref="FromStil4mConcretized.Convert"/> to get the
     /// abstract syntax model that matches the original stil4m/elm-syntax behavior
     /// (with single-element tuples unwrapped).
     /// </summary>

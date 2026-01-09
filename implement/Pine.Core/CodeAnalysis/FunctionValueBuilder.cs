@@ -275,7 +275,7 @@ public static class FunctionValueBuilder
         var innermostEncodingExpr = BuildInnermostEncodingWithLiteralEnvFuncs(innerExpression, envFunctionsExprs);
 
         // Build outer wrapper levels from N-2 down to 0
-        Expression currentEncodingExpr = innermostEncodingExpr;
+        var currentEncodingExpr = innermostEncodingExpr;
 
         for (var level = parameterCount - 2; level >= 0; level--)
         {

@@ -439,7 +439,7 @@ public class AddInferredTypeAnnotations
             TypeInference.InferredType.ListType listType =>
                 CreateListTypeAnnotation(listType.ElementType),
 
-            TypeInference.InferredType.CustomType customType =>
+            TypeInference.InferredType.ChoiceType customType =>
                 CreateCustomTypeAnnotation(customType.ModuleName, customType.TypeName, customType.TypeArguments),
 
             _ => null
