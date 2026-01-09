@@ -1787,13 +1787,13 @@ public class Avh4Format
 
                                 var elemResult = FormatTypeAnnotation(elem, tupledCtx);
 
-                                if (i is 0)
+                                if (!separatorLoc.HasValue)
                                 {
                                     firstElem = elemResult.FormattedNode;
                                 }
                                 else
                                 {
-                                    restElems.Add((separatorLoc!, elemResult.FormattedNode));
+                                    restElems.Add((separatorLoc.Value, elemResult.FormattedNode));
                                 }
 
                                 tupledCtx = elemResult.Context.ReturnToIndent(context);
@@ -2167,13 +2167,13 @@ public class Avh4Format
 
                                 var formattedFieldNode = MakeNodeWithRange(fieldStartLoc, fieldTypeResult.Context.CurrentLocation(), formattedField);
 
-                                if (i is 0)
+                                if (!separatorLoc.HasValue)
                                 {
                                     firstField = formattedFieldNode;
                                 }
                                 else
                                 {
-                                    restFields.Add((separatorLoc!, formattedFieldNode));
+                                    restFields.Add((separatorLoc.Value, formattedFieldNode));
                                 }
 
                                 recordFieldCtx = fieldTypeResult.Context.ReturnToIndent(context);
@@ -4359,13 +4359,13 @@ public class Avh4Format
 
                     var formattedField = new RecordExprField(fieldNameNode, equalsLoc, fieldResult.FormattedNode);
 
-                    if (i is 0)
+                    if (!separatorLoc.HasValue)
                     {
                         firstField = formattedField;
                     }
                     else
                     {
-                        restFields.Add((separatorLoc!, formattedField));
+                        restFields.Add((separatorLoc.Value, formattedField));
                     }
 
                     fieldCtx = fieldResult.Context.ReturnToIndent(context);
@@ -4667,6 +4667,7 @@ public class Avh4Format
                             var elem = tuplePattern.Elements[i];
 
                             Location? commaLoc = null;
+
                             if (i > 0)
                             {
                                 // Get the previous element to find comments between it and the comma
@@ -4724,13 +4725,13 @@ public class Avh4Format
                             var elemResult = FormatPattern(elem, currentContext);
                             currentContext = elemResult.Context;
 
-                            if (firstElement is null)
+                            if (!commaLoc.HasValue)
                             {
                                 firstElement = elemResult.FormattedNode;
                             }
                             else
                             {
-                                restElements.Add((commaLoc!, elemResult.FormattedNode));
+                                restElements.Add((commaLoc.Value, elemResult.FormattedNode));
                             }
 
                             // After the last element, handle comments before closing paren
@@ -4783,6 +4784,7 @@ public class Avh4Format
                             var elem = listPattern.Elements[i];
 
                             Location? commaLoc = null;
+
                             if (i > 0)
                             {
                                 commaLoc = currentContext.CurrentLocation();
@@ -4792,13 +4794,13 @@ public class Avh4Format
                             var elemResult = FormatPattern(elem, currentContext);
                             currentContext = elemResult.Context;
 
-                            if (firstElement is null)
+                            if (!commaLoc.HasValue)
                             {
                                 firstElement = elemResult.FormattedNode;
                             }
                             else
                             {
-                                restElements.Add((commaLoc!, elemResult.FormattedNode));
+                                restElements.Add((commaLoc.Value, elemResult.FormattedNode));
                             }
                         }
 

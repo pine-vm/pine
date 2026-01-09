@@ -105,7 +105,7 @@ public record Range(
 /// <summary>
 /// One-based line and column within source text.
 /// </summary>
-public record Location(
+public readonly record struct Location(
     int Row,
     int Column);
 

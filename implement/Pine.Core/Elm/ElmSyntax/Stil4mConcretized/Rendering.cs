@@ -28,12 +28,25 @@ public class Rendering
 
         public int CompareTo(InsertableItem other)
         {
-            var rowCompare = StartLocation.Row.CompareTo(other.StartLocation.Row);
+            if (other.StartLocation.Row < StartLocation.Row)
+            {
+                return 1;
+            }
+            else if (other.StartLocation.Row > StartLocation.Row)
+            {
+                return -1;
+            }
 
-            if (rowCompare is not 0)
-                return rowCompare;
+            if (other.StartLocation.Column < StartLocation.Column)
+            {
+                return 1;
+            }
+            else if (other.StartLocation.Column > StartLocation.Column)
+            {
+                return -1;
+            }
 
-            return StartLocation.Column.CompareTo(other.StartLocation.Column);
+            return 0;
         }
     }
 
