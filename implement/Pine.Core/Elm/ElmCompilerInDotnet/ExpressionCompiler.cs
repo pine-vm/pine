@@ -17,11 +17,6 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 public class ExpressionCompiler
 {
     /// <summary>
-    /// Shared instance of the expression compiler.
-    /// </summary>
-    public static ExpressionCompiler Instance { get; } = new();
-
-    /// <summary>
     /// Compiles an Elm expression to a Pine expression.
     /// </summary>
     /// <param name="expression">The Elm expression to compile.</param>
