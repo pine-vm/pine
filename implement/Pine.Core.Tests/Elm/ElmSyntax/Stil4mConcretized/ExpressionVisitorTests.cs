@@ -368,7 +368,7 @@ public class ExpressionVisitorTests
     [Fact]
     public void Visit_Floatable_dispatches_correctly()
     {
-        var expr = new SyntaxTypes.Expression.Floatable(3.14);
+        var expr = new SyntaxTypes.Expression.Floatable("3.14");
 
         var result = _visitor.Visit(expr, null);
 

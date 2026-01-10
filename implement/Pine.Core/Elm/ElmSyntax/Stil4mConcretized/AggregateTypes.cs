@@ -843,8 +843,12 @@ public abstract record Expression
         : Expression;
 
     /// <summary>Floating-point literal expression.</summary>
+    /// <remarks>
+    /// The original literal string is preserved to enable exact roundtripping of source code.
+    /// Use <see cref="FloatLiteralConversion.ToElmFloat(string)"/> to convert to the numeric representation.
+    /// </remarks>
     public sealed record Floatable(
-        double Value)
+        string LiteralText)
         : Expression;
 
     /// <summary>Arithmetic negation of an expression.</summary>

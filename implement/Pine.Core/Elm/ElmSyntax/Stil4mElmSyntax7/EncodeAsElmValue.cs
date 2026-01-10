@@ -584,7 +584,7 @@ public class EncodeAsElmValue
             Expression.Floatable value =>
                 ElmValue.TagInstance(
                     "Floatable",
-                    [ElmValue.ElmFloat.Convert(value.Value)]),
+                    [Stil4mConcretized.FloatLiteralConversion.ToElmFloat(value.LiteralText)]),
 
             // | Negation (Node Expression)
             Expression.Negation negation =>

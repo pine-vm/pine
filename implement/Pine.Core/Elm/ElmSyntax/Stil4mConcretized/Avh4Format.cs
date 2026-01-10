@@ -2420,7 +2420,7 @@ public class Avh4Format
                     return FormattingResult<Expression>.Create(hexLit, context.Advance(Rendering.RenderHexPattern(hexLit.Value).Length));
 
                 case Expression.Floatable floatLit:
-                    return FormattingResult<Expression>.Create(floatLit, context.Advance(floatLit.Value.ToString().Length));
+                    return FormattingResult<Expression>.Create(floatLit, context.Advance(floatLit.LiteralText.Length));
 
                 case Expression.FunctionOrValue funcOrVal:
                     var funcName = funcOrVal.ModuleName.Count > 0

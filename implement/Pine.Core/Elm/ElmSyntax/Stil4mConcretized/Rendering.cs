@@ -917,7 +917,7 @@ public class Rendering
                 break;
 
             case Expression.Floatable floatable:
-                context.Append(FormatFloatForElm(floatable.Value));
+                context.Append(floatable.LiteralText);
                 break;
 
             case Expression.Negation negation:

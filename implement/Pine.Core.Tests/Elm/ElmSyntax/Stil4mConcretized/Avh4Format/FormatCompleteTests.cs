@@ -2586,6 +2586,43 @@ public class FormatCompleteTests
     }
 
     [Fact]
+    public void Preserve_float_expressions_in_various_forms()
+    {
+        /*
+         * Test we avoid these issues:
+         * 
+         * + https://github.com/avh4/elm-format/issues/680
+         * + https://github.com/stil4m/elm-syntax/issues/108
+         * */
+
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                [ 6.022e23
+                , 3.0e8
+                , 1.6e-19
+                , 2.99792458e8
+                , 9.81e0
+                , 1.0e-10
+                , 5.0e4
+                , 1.0e12
+                , 7.5e-3
+                , 6.000022e39
+                , 18446744073709549568.0
+                , 18446744073709550000.0
+                , 0.000000000000000000123456789e-20
+                , 1.000
+                ]
+
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
     public void Stable_configurations_units()
     {
         /*

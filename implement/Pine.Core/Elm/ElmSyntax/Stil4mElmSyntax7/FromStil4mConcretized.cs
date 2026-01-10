@@ -445,7 +445,7 @@ public static class FromStil4mConcretized
                 new Expression.Hex(hex.Value),
 
             ConcretizedTypes.Expression.Floatable floatable =>
-                new Expression.Floatable(floatable.Value),
+                new Expression.Floatable(floatable.LiteralText),
 
             ConcretizedTypes.Expression.Negation negation =>
                 new Expression.Negation(

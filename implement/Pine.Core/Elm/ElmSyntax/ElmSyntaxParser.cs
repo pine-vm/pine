@@ -3394,8 +3394,7 @@ public class ElmSyntaxParser
             if (expression.Contains('.') || expression.Contains('e') || expression.Contains('E'))
             {
                 // Float number
-                var floatValue = double.Parse(expression, System.Globalization.CultureInfo.InvariantCulture);
-                return new SyntaxTypes.Expression.Floatable(floatValue);
+                return new SyntaxTypes.Expression.Floatable(expression);
             }
 
             var dec = long.Parse(expression);
