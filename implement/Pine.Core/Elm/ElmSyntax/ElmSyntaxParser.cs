@@ -49,7 +49,7 @@ public class ElmSyntaxParser
     /// <summary>
     /// Parses Elm module text into the classic syntax tree representation.
     /// The parser always preserves parentheses/tuples in the syntax tree.
-    /// Use <see cref="FromStil4mConcretized.Convert"/> to get the
+    /// Use <see cref="FromStil4mConcretized.Convert(SyntaxTypes.Expression)"/> to get the
     /// abstract syntax model that matches the original stil4m/elm-syntax behavior
     /// (with single-element tuples unwrapped).
     /// </summary>
@@ -475,16 +475,16 @@ public class ElmSyntaxParser
                 }
                 else
                 {
-                    var whitespace = "";
+                    var whitespace = new StringBuilder(capacity: 16);
 
                     while (!IsAtEnd() && char.IsWhiteSpace(Peek()) && Peek() is not '\n')
                     {
-                        whitespace += Advance();
+                        whitespace.Append(Advance());
                     }
 
                     Location end = new(_line, _column);
 
-                    return new Token(TokenType.Whitespace, whitespace, start, end);
+                    return new Token(TokenType.Whitespace, whitespace.ToString(), start, end);
                 }
             }
 
@@ -625,7 +625,9 @@ public class ElmSyntaxParser
 
                 while (!IsAtEnd())
                 {
-                    if (!(isHex && char.IsAsciiHexDigit(Peek()) || char.IsDigit(Peek())))
+                    var nextPeeked = Peek();
+
+                    if (!(isHex && char.IsAsciiHexDigit(nextPeeked) || char.IsDigit(nextPeeked)))
                     {
                         break;
                     }
@@ -4024,10 +4026,10 @@ public class ElmSyntaxParser
             new(start, end);
 
         private bool IsAtEnd() =>
-            !EnumerateFollowingTokens().Any();
+            _current >= tokens.Length;
 
         private Token Peek =>
-            EnumerateFollowingTokens().First();
+            tokens.Span[_current];
 
         private Token Advance() =>
             tokens.Span[_current++];
