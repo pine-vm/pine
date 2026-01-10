@@ -1332,7 +1332,7 @@ public class FormatCompleteTests
     }
 
     [Fact]
-    public void Roundtrip_list_containing_escaped_char()
+    public void Roundtrip_char_expressions_in_various_forms()
     {
         var input =
             """"
@@ -1340,7 +1340,53 @@ public class FormatCompleteTests
 
 
             decl =
-                [ '\\', 'n' ]
+                [ '\\', '\n', '\u{000D}', '🌈', '🔥', '\u{2028}', '\u{2029}' ]
+
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
+    public void Roundtrip_string_expressions_in_various_forms()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                [ "\\", "\n", "\u{000D}", "🌈", "🔥", "\u{2028}", "\u{000D}  ", "\u{001B}[0m", "\u{001B}[4:2m" ]
+
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
+    public void Roundtrip_string_patterns_in_various_forms()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl match =
+                case match of
+                    "\\n" ->
+                        "\n"
+
+                    "\\\"" ->
+                        "\""
+
+                    "\\'" ->
+                        "'"
+
+                    "\\\\" ->
+                        "\\"
+
+                    _ ->
+                        match
 
             """";
 
@@ -3380,6 +3426,12 @@ public class FormatCompleteTests
 
                     '\u{00A0}' ->
                         91
+
+                    '\u{2028}' ->
+                        97
+
+                    '\u{2029}' ->
+                        101
 
                     _ ->
                         0

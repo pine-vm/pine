@@ -905,7 +905,7 @@ public class Rendering
                 break;
 
             case Expression.CharLiteral charLiteral:
-                context.Append($"{RenderCharLiteral((char)charLiteral.Value)}");
+                context.Append(RenderCharLiteral(charLiteral.Value));
                 break;
 
             case Expression.Integer integer:
@@ -1139,7 +1139,7 @@ public class Rendering
                 break;
 
             case Pattern.CharPattern charPattern:
-                context.Append($"{RenderCharLiteral((char)charPattern.Value)}");
+                context.Append(RenderCharLiteral(charPattern.Value));
                 break;
 
             case Pattern.StringPattern stringPattern:
@@ -1242,14 +1242,22 @@ public class Rendering
     /// Converts the specified string to a simple source code string literal.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Special characters such as backslashes, quotes, and control characters are escaped to produce a valid string literal.
+    /// </para>
+    /// <para>
+    /// Character escaping follows avh4/elm-format behavior:
+    /// <see href="https://github.com/avh4/elm-format/blob/e7e5da37716acbfb4954a88128b5cc72b2c911d9/elm-format-lib/src/ElmFormat/Render/Box.hs#L897-L928"/>
+    /// </para>
     /// </remarks>
     public static string RenderStringLiteral(string value)
     {
         var sb = new StringBuilder();
 
-        foreach (var ch in value)
+        for (var i = 0; i < value.Length; i++)
         {
+            var ch = value[i];
+
             switch (ch)
             {
                 case '\\':
@@ -1265,7 +1273,8 @@ public class Rendering
                     break;
 
                 case '\r':
-                    sb.Append("\\r");
+                    // avh4/elm-format uses Unicode escape for carriage return
+                    sb.Append("\\u{000D}");
                     break;
 
                 case '\t':
@@ -1273,7 +1282,26 @@ public class Rendering
                     break;
 
                 default:
-                    sb.Append(ch);
+                    // Check for surrogate pairs (emoji and other characters above U+FFFF)
+                    if (char.IsHighSurrogate(ch) && i + 1 < value.Length && char.IsLowSurrogate(value[i + 1]))
+                    {
+                        var codePoint = char.ConvertToUtf32(ch, value[i + 1]);
+                        i++; // Skip the low surrogate
+                        sb.Append(char.ConvertFromUtf32(codePoint));
+                    }
+                    // Escape non-printable characters and whitespace (except regular space).
+                    // This matches avh4/elm-format behavior which uses Haskell's:
+                    //   - `not (Char.isPrint c)` for non-printable characters
+                    //   - `Char.isSpace c` (except ' ') for whitespace that needs escaping
+                    // In C#, this is equivalent to: IsControl OR (IsWhiteSpace AND not regular space)
+                    else if (CharacterNeedsEscaping(ch))
+                    {
+                        sb.Append($"\\u{{{(int)ch:X4}}}");
+                    }
+                    else
+                    {
+                        sb.Append(ch);
+                    }
                     break;
             }
         }
@@ -1281,11 +1309,32 @@ public class Rendering
         return "\"" + sb.ToString() + "\"";
     }
 
+    /// <summary>
+    /// Determines whether a character needs to be escaped in Elm string/char literals.
+    /// </summary>
+    /// <remarks>
+    /// Matches avh4/elm-format escaping behavior which escapes:
+    /// - Non-printable characters (control characters)
+    /// - Whitespace characters except regular space (U+0020)
+    /// <para>
+    /// Reference: <see href="https://github.com/avh4/elm-format/blob/e7e5da37716acbfb4954a88128b5cc72b2c911d9/elm-format-lib/src/ElmFormat/Render/Box.hs#L897-L928"/>
+    /// </para>
+    /// </remarks>
+    private static bool CharacterNeedsEscaping(char ch) =>
+        char.IsControl(ch) || (char.IsWhiteSpace(ch) && ch != ' ');
+
+    /// <summary>
+    /// Escapes a character for use in triple-quoted strings.
+    /// </summary>
+    /// <remarks>
+    /// Character escaping follows avh4/elm-format behavior:
+    /// <see href="https://github.com/avh4/elm-format/blob/e7e5da37716acbfb4954a88128b5cc72b2c911d9/elm-format-lib/src/ElmFormat/Render/Box.hs#L897-L928"/>
+    /// </remarks>
     private static string? EscapeCharForTripleQuoted(char ch) =>
         ch switch
         {
             '\n' =>
-            null,  // Literal newlines are preserved
+            null,  // Literal newlines are preserved in triple-quoted strings
 
             '\t' =>
             "\\t", // Tabs are escaped
@@ -1296,13 +1345,21 @@ public class Rendering
             '\\' =>
             "\\\\", // Backslashes are escaped
 
-            _ when ch < 32 =>
-            $"\\u{{{(int)ch:X4}}}", // Other control chars use Unicode escape
+            // Escape non-printable characters and whitespace (except regular space)
+            _ when CharacterNeedsEscaping(ch) =>
+            $"\\u{{{(int)ch:X4}}}",
 
             _ =>
             null
         };
 
+    /// <summary>
+    /// Renders a character literal from its Unicode code point.
+    /// </summary>
+    /// <remarks>
+    /// Character escaping follows avh4/elm-format behavior:
+    /// <see href="https://github.com/avh4/elm-format/blob/e7e5da37716acbfb4954a88128b5cc72b2c911d9/elm-format-lib/src/ElmFormat/Render/Box.hs#L897-L928"/>
+    /// </remarks>
     internal static string RenderCharLiteral(int value)
     {
         var c = char.ConvertFromUtf32(value);
@@ -1317,15 +1374,18 @@ public class Rendering
             return "'\\n'";
 
         if (c is "\r")
-            return "'\\u{000D}'";  // elm-format uses Unicode escape for carriage return
+            return "'\\u{000D}'";  // avh4/elm-format uses Unicode escape for carriage return
 
         if (c is "\t")
             return "'\\t'";
 
-        // Handle control characters and other non-printable characters with Unicode escapes
-        // This includes null (0), backspace (8), form feed (12), and other control characters
-        // Also includes characters in the C1 control block (127-159) and non-breaking space (160)
-        if (value < 32 || (value >= 127 && value <= 160))
+        // Escape non-printable characters and whitespace (except regular space).
+        // This matches avh4/elm-format behavior which uses Haskell's:
+        //   - `not (Char.isPrint c)` for non-printable characters
+        //   - `Char.isSpace c` (except ' ') for whitespace that needs escaping
+        // In C#, this is equivalent to: IsControl OR (IsWhiteSpace AND not regular space)
+        // For code points > 0xFFFF (like emoji), we check using the first character of the surrogate pair.
+        if (value <= 0xFFFF && CharacterNeedsEscaping((char)value))
         {
             // Use Unicode escape sequence for control characters
             // Format with uppercase hex, padded to 4 digits minimum
@@ -1336,7 +1396,7 @@ public class Rendering
     }
 
     /// <summary>
-    /// Formats a hexadecimal pattern with padding to match elm-format behavior.
+    /// Formats a hexadecimal pattern with padding to match avh4/elm-format behavior.
     /// Pads to lengths of 2, 4, 8, or multiples of 8 (e.g., 8, 16, 32...).
     /// </summary>
     internal static string RenderHexPattern(long value)
@@ -1345,7 +1405,7 @@ public class Rendering
         var hex = value.ToString("X");
 
         // Determine target length: 2, 4, 8, 16, 32, etc.
-        // Matches elm-format padding behavior
+        // Matches avh4/elm-format padding behavior
 
         int targetLength;
 

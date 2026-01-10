@@ -4493,7 +4493,7 @@ public class Avh4Format
 
                 case Pattern.CharPattern charPattern:
                     {
-                        var text = $"'{EscapeCharForPattern((char)charPattern.Value)}'";
+                        var text = Rendering.RenderCharLiteral(charPattern.Value);
                         var len = text.Length;
                         var endLoc = new Location(startLoc.Row, startLoc.Column + len);
                         var node = MakeNodeWithRange(startLoc, endLoc, pattern);
@@ -4503,7 +4503,7 @@ public class Avh4Format
 
                 case Pattern.StringPattern stringPattern:
                     {
-                        var text = $"\"{stringPattern.Value}\"";
+                        var text = Rendering.RenderStringLiteral(stringPattern.Value);
                         var len = text.Length;
                         var endLoc = new Location(startLoc.Row, startLoc.Column + len);
                         var node = MakeNodeWithRange(startLoc, endLoc, pattern);

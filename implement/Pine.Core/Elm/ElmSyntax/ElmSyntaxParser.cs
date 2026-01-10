@@ -3393,7 +3393,7 @@ public class ElmSyntaxParser
             // Check if the number contains a decimal point or exponent notation
             if (expression.Contains('.') || expression.Contains('e') || expression.Contains('E'))
             {
-                // Float number
+                // Float number - preserve the original literal string for exact roundtripping
                 return new SyntaxTypes.Expression.Floatable(expression);
             }
 
@@ -3704,7 +3704,7 @@ public class ElmSyntaxParser
                 var literalToken = Consume(TokenType.CharLiteral);
 
                 var charPattern =
-                    new SyntaxTypes.Pattern.CharPattern(literalToken.Lexeme.Single());
+                    new SyntaxTypes.Pattern.CharPattern(char.ConvertToUtf32(literalToken.Lexeme, 0));
 
                 return
                     new Node<SyntaxTypes.Pattern>(
