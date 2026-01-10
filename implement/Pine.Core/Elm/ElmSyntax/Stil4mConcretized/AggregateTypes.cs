@@ -818,6 +818,12 @@ public abstract record Expression
          * https://github.com/stil4m/elm-syntax/issues/57
          * https://github.com/stil4m/elm-syntax/commit/25403ee0b4e2f78265f37fd27b0682fe6f89ea71
          * */
+
+        /*
+         * TODO: Consider adding a dedicated variant 'TripleQuotedLiteral' or 'MultilineLiteral' for
+         * the multiline string literals, and modelling the content as list of lines to better support
+         * roundtripping original content.
+         * */
         bool IsTripleQuoted = false)
         : Expression;
 

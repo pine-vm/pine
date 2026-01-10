@@ -142,8 +142,12 @@ public class ElmFormatCommand
                 var formatted =
                     Core.Elm.ElmSyntax.Stil4mConcretized.Avh4Format.Format(parsed);
 
+                // Detect linebreak style from original content and use it for rendering
+                var linebreakStyle =
+                    Core.Elm.ElmSyntax.Stil4mConcretized.Rendering.DetectLinebreakStyle(originalContent);
+
                 var rendered =
-                    Core.Elm.ElmSyntax.Stil4mConcretized.Rendering.ToString(formatted);
+                    Core.Elm.ElmSyntax.Stil4mConcretized.Rendering.ToString(formatted, linebreakStyle);
 
                 // Check if content changed
                 if (originalContent == rendered)

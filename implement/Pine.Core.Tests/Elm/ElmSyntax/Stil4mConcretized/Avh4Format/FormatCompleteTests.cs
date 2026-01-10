@@ -3997,11 +3997,7 @@ public class FormatCompleteTests
 
             try
             {
-                AssertSyntaxNodesValueEqualityForModuleText(testCase);
-
-                var formatted = FormatString(testCase);
-
-                formatted.Trim().Should().Be(testCase.Trim());
+                AssertModuleTextFormatsToItself(testCase);
             }
             catch (Exception ex)
             {

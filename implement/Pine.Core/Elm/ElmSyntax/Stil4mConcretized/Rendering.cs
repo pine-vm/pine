@@ -7,11 +7,41 @@ using Location = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7.Location;
 namespace Pine.Core.Elm.ElmSyntax.Stil4mConcretized;
 
 /// <summary>
+/// Specifies the linebreak style to use when rendering Elm source files.
+/// </summary>
+public enum LinebreakStyle
+{
+    /// <summary>
+    /// Unix-style line endings (LF, \n)
+    /// </summary>
+    LF,
+
+    /// <summary>
+    /// Windows-style line endings (CRLF, \r\n)
+    /// </summary>
+    CRLF
+}
+
+/// <summary>
 /// Functionality for rendering Elm source files from the concretized syntax model.
 /// This model preserves token locations, enabling more precise rendering.
 /// </summary>
 public class Rendering
 {
+    /// <summary>
+    /// Detects the linebreak style used in the given text.
+    /// Returns LF if no CRLF is found (default style), otherwise returns CRLF.
+    /// </summary>
+    public static LinebreakStyle DetectLinebreakStyle(string text)
+    {
+        // Check for CRLF first since it contains LF
+        if (text.Contains("\r\n"))
+        {
+            return LinebreakStyle.CRLF;
+        }
+
+        return LinebreakStyle.LF;
+    }
     /// <summary>
     /// Represents an item that can be inserted during rendering (comment or incomplete declaration).
     /// </summary>
@@ -53,7 +83,7 @@ public class Rendering
     /// <summary>
     /// Context for tracking position while rendering with location preservation.
     /// </summary>
-    private class RenderContext
+    private class RenderContext(LinebreakStyle linebreakStyle)
     {
         public StringBuilder Output { get; } = new();
 
@@ -62,11 +92,31 @@ public class Rendering
         public int CurrentColumn { get; set; } = 1;
 
         /// <summary>
+        /// The linebreak style to use when rendering newlines.
+        /// </summary>
+        public LinebreakStyle LinebreakStyle { get; } = linebreakStyle;
+
+        /// <summary>
         /// Combined list of comments and incomplete declarations, sorted by position.
         /// </summary>
         public IReadOnlyList<InsertableItem> Insertables { get; set; } = [];
 
         private int _nextInsertableIndex = 0;
+
+        /// <summary>
+        /// Appends a newline using the configured linebreak style.
+        /// </summary>
+        private void AppendNewline()
+        {
+            if (LinebreakStyle is LinebreakStyle.CRLF)
+            {
+                Output.Append("\r\n");
+            }
+            else
+            {
+                Output.Append('\n');
+            }
+        }
 
         /// <summary>
         /// Advances to the given location by adding spaces or newlines as needed.
@@ -81,7 +131,7 @@ public class Rendering
             // Handle row changes
             while (CurrentRow < targetLocation.Row)
             {
-                Output.Append('\n');
+                AppendNewline();
                 CurrentRow++;
                 CurrentColumn = 1;
             }
@@ -134,16 +184,36 @@ public class Rendering
         private void RenderInsertableItem(InsertableItem item)
         {
             AdvanceToLocationSimple(item.StartLocation);
-            Output.Append(item.Text);
 
-            foreach (var ch in item.Text)
+            // Append the text, converting newlines to the configured style
+            AppendTextWithLinebreakConversion(item.Text);
+        }
+
+        /// <summary>
+        /// Appends text to the output, converting any embedded newlines to the configured linebreak style.
+        /// </summary>
+        private void AppendTextWithLinebreakConversion(string text)
+        {
+            // First normalize all line breaks to LF, then convert to desired style
+            var normalizedText = text.Replace("\r\n", "\n").Replace("\r", "\n");
+
+            if (LinebreakStyle is LinebreakStyle.CRLF)
+            {
+                // Convert all LF to CRLF
+                normalizedText = normalizedText.Replace("\n", "\r\n");
+            }
+
+            Output.Append(normalizedText);
+
+            // Track position - count only actual newlines (LF), not CR
+            foreach (var ch in text)
             {
                 if (ch is '\n')
                 {
                     CurrentRow++;
                     CurrentColumn = 1;
                 }
-                else
+                else if (ch is not '\r')  // Skip CR when counting position
                 {
                     CurrentColumn++;
                 }
@@ -154,7 +224,7 @@ public class Rendering
         {
             while (CurrentRow < targetLocation.Row)
             {
-                Output.Append('\n');
+                AppendNewline();
                 CurrentRow++;
                 CurrentColumn = 1;
             }
@@ -230,14 +300,57 @@ public class Rendering
                 }
             }
         }
+
+        /// <summary>
+        /// Renders the content of a triple-quoted string, escaping special characters
+        /// and using the appropriate linebreak style for literal newlines.
+        /// </summary>
+        public void AppendTripleQuotedStringContent(string value)
+        {
+            foreach (var ch in value)
+            {
+                if (ch is '\n')
+                {
+                    // Use the configured linebreak style for newlines in triple-quoted strings
+                    // These are literal characters inside the string, so they should be output
+                    // with the same linebreak style as the rest of the file
+                    AppendNewline();
+
+                    // Track the newline for row/column counting
+                    CurrentRow++;
+                    CurrentColumn = 1;
+                    continue;
+                }
+
+                if (EscapeCharForTripleQuoted(ch) is { } escaped)
+                {
+                    Output.Append(escaped);
+                    CurrentColumn += escaped.Length;
+                    continue;
+                }
+
+                Output.Append(ch);
+                CurrentColumn++;
+            }
+        }
     }
 
     /// <summary>
     /// Renders a file to a string while preserving the original source locations.
+    /// Uses LF linebreaks by default.
     /// Note: If the file has not been formatted (e.g., from ToStil4mConcretized with default locations),
     /// consider using Avh4Format.FormatToString instead which formats before rendering.
     /// </summary>
-    public static string ToString(File file)
+    public static string ToString(File file) =>
+        ToString(file, LinebreakStyle.LF);
+
+    /// <summary>
+    /// Renders a file to a string while preserving the original source locations.
+    /// Uses the specified linebreak style for all newlines.
+    /// Note: If the file has not been formatted (e.g., from ToStil4mConcretized with default locations),
+    /// consider using Avh4Format.FormatToString instead which formats before rendering.
+    /// </summary>
+    public static string ToString(File file, LinebreakStyle linebreakStyle)
     {
         // Combine comments and incomplete declarations into a unified list of insertables
         var insertables = new List<InsertableItem>();
@@ -255,7 +368,7 @@ public class Rendering
         // Sort by position (row, then column)
         insertables.Sort();
 
-        var context = new RenderContext
+        var context = new RenderContext(linebreakStyle)
         {
             Insertables = insertables
         };
@@ -283,9 +396,22 @@ public class Rendering
 
         // Ensure file ends with a trailing newline (AVH4 elm-format style)
         var result = context.Output.ToString();
-        if (!result.EndsWith('\n'))
+
+        // Use the appropriate newline based on linebreak style
+        var trailingNewline = linebreakStyle is LinebreakStyle.CRLF ? "\r\n" : "\n";
+
+        if (!result.EndsWith(trailingNewline))
         {
-            result += "\n";
+            // Also check for mismatched linebreak at end
+            if (linebreakStyle is LinebreakStyle.CRLF && result.EndsWith('\n') && !result.EndsWith("\r\n"))
+            {
+                // Remove trailing LF and add CRLF
+                result = result[..^1] + "\r\n";
+            }
+            else if (!result.EndsWith('\n'))
+            {
+                result += trailingNewline;
+            }
         }
 
         return result;
@@ -767,10 +893,7 @@ public class Rendering
                 {
                     context.Append("\"\"\"");
 
-                    EscapeTripleQuotedString(
-                        literal.Value,
-                        context.Append,
-                        context.Append);
+                    context.AppendTripleQuotedStringContent(literal.Value);
 
                     context.Append("\"\"\"");
                 }
@@ -1156,26 +1279,6 @@ public class Rendering
         }
 
         return "\"" + sb.ToString() + "\"";
-    }
-
-    /// <summary>
-    /// Escapes a string for use in a triple-quoted string literal.
-    /// In Elm triple-quoted strings, newlines and tabs are literal, but backslashes
-    /// and certain control characters need escaping.
-    /// </summary>
-    private static void EscapeTripleQuotedString(string value, Action<char> appendChar, Action<string> appendString)
-    {
-        foreach (var ch in value)
-        {
-            if (EscapeCharForTripleQuoted(ch) is { } escaped)
-            {
-                appendString(escaped);
-            }
-            else
-            {
-                appendChar(ch);
-            }
-        }
     }
 
     private static string? EscapeCharForTripleQuoted(char ch) =>

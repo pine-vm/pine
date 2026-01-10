@@ -444,6 +444,12 @@ public class ElmSyntaxParser
                 _line++;
                 _column = 1;
             }
+            else if (current is '\r')
+            {
+                // \r does not affect position tracking - it's part of CRLF line ending
+                // and will be handled as part of the newline sequence
+                // We don't increment column for \r since it's not visible content
+            }
             else
             {
                 // Only increment column for non-surrogate characters and low surrogates
@@ -465,6 +471,7 @@ public class ElmSyntaxParser
             var current = Peek();
 
             // Handle whitespace and newlines
+            // We treat \n, \r\n, and lone \r all as line breaks
             if (char.IsWhiteSpace(current))
             {
                 if (current is '\n')
@@ -473,11 +480,29 @@ public class ElmSyntaxParser
                     Location end = new(_line, _column);
                     return new Token(TokenType.Newline, "\n", start, end);
                 }
+                else if (current is '\r')
+                {
+                    // Handle \r\n (CRLF) or lone \r as a single newline
+                    Advance(); // Consume \r (doesn't affect line count, column stays same)
+                    if (Peek() is '\n')
+                    {
+                        Advance(); // Consume \n following \r (this increments line)
+                    }
+                    else
+                    {
+                        // Lone \r - manually increment line since Advance() on \r doesn't
+                        _line++;
+                        _column = 1;
+                    }
+                    Location end = new(_line, _column);
+                    return new Token(TokenType.Newline, "\n", start, end);
+                }
                 else
                 {
                     var whitespace = new StringBuilder(capacity: 16);
 
-                    while (!IsAtEnd() && char.IsWhiteSpace(Peek()) && Peek() is not '\n')
+                    // Stop at \r or \n since both can be line endings
+                    while (!IsAtEnd() && char.IsWhiteSpace(Peek()) && Peek() is not '\n' && Peek() is not '\r')
                     {
                         whitespace.Append(Advance());
                     }
@@ -493,7 +518,8 @@ public class ElmSyntaxParser
             {
                 var comment = "";
 
-                while (!IsAtEnd() && Peek() is not '\n')
+                // Stop at either \r or \n since both can be line endings
+                while (!IsAtEnd() && Peek() is not '\n' && Peek() is not '\r')
                 {
                     comment += Advance();
                 }
@@ -982,6 +1008,18 @@ public class ElmSyntaxParser
                             sb.Append(escaped);
                         }
                     }
+                }
+                else if (Peek() is '\r')
+                {
+                    // Normalize line endings inside string literals:
+                    // \r\n -> \n (CRLF)
+                    // \r -> \n (lone CR)
+                    Advance(); // Consume the \r
+                    if (Peek() is '\n')
+                    {
+                        Advance(); // Consume the \n following \r
+                    }
+                    sb.Append('\n'); // Always append just \n
                 }
                 else
                 {

@@ -14,15 +14,29 @@ public class Avh4Format
 {
     /// <summary>
     /// Format an Elm file using AVH4 formatting style and return the formatted source code as a string.
+    /// Uses LF linebreaks by default.
     /// This is a convenience method that combines formatting and rendering.
     /// </summary>
     /// <param name="file">The File to format.</param>
     /// <returns>The formatted Elm source code as a string.</returns>
     public static string FormatToString(File file)
     {
+        return FormatToString(file, LinebreakStyle.LF);
+    }
+
+    /// <summary>
+    /// Format an Elm file using AVH4 formatting style and return the formatted source code as a string.
+    /// Uses the specified linebreak style for all newlines.
+    /// This is a convenience method that combines formatting and rendering.
+    /// </summary>
+    /// <param name="file">The File to format.</param>
+    /// <param name="linebreakStyle">The linebreak style to use (LF or CRLF).</param>
+    /// <returns>The formatted Elm source code as a string.</returns>
+    public static string FormatToString(File file, LinebreakStyle linebreakStyle)
+    {
         var formatted = Format(file);
 
-        return Rendering.ToString(formatted);
+        return Rendering.ToString(formatted, linebreakStyle);
     }
 
     /// <summary>

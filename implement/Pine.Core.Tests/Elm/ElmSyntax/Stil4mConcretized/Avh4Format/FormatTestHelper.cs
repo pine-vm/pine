@@ -22,12 +22,68 @@ public class FormatTestHelper
             ElmSyntaxParser.ParseModuleText(input)
             .Extract(err => throw new Exception($"Parsing failed: {err}"));
 
-        return Avh4Format.FormatToString(parsed);
+        // Detect linebreak style from input and use it for output
+        var linebreakStyle = Rendering.DetectLinebreakStyle(input);
+
+        return Avh4Format.FormatToString(parsed, linebreakStyle);
     }
 
     public static void AssertModuleTextFormatsToItself(
         string elmModuleText)
     {
+        /*
+         * Verify formatting is stable with various linebreak styles:
+         * One variant is using LF linebreaks only,
+         * the other variant is using CRLF linebreaks only.
+         * */
+
+        var elmModuleText_LF =
+            elmModuleText.Replace("\r\n", "\n");
+
+        var elmModuleText_CRLF =
+            elmModuleText.Replace("\n", "\r\n");
+
+        try
+        {
+            AssertSyntaxNodesValueEqualityForModuleText(elmModuleText);
+        }
+        catch (Exception ex)
+        {
+            throw new Exception(
+                "Value equality assertion failed for original module text.",
+                ex);
+        }
+
+        try
+        {
+            AssertModuleTextFormatsToItselfOnlyWithGivenLinebreaks(
+                elmModuleText_LF);
+        }
+        catch (Exception ex)
+        {
+            throw new Exception(
+                "Formatting stability assertion failed for LF-only linebreaks.",
+                ex);
+        }
+
+        try
+        {
+            AssertModuleTextFormatsToItselfOnlyWithGivenLinebreaks(
+                elmModuleText_CRLF);
+        }
+        catch (Exception ex)
+        {
+            throw new Exception(
+                "Formatting stability assertion failed for CRLF-only linebreaks.",
+                ex);
+        }
+    }
+
+    private static void AssertModuleTextFormatsToItselfOnlyWithGivenLinebreaks(
+        string elmModuleText)
+    {
+        AssertSyntaxNodesValueEqualityForModuleText(elmModuleText);
+
         var formatted = FormatString(elmModuleText);
 
         formatted.Trim().Should().Be(elmModuleText.Trim());
