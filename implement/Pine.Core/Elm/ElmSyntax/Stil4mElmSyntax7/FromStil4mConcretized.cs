@@ -518,6 +518,9 @@ public static class FromStil4mConcretized
                 throw new System.InvalidOperationException(
                     "RecordUpdateExpression must be converted via ConvertExpressionNode to access the containing node's range"),
 
+            ConcretizedTypes.Expression.GLSLExpression glslExpression =>
+                new Expression.GLSLExpression(glslExpression.ShaderCode),
+
             _ =>
                 throw new System.NotImplementedException(
                     "Unexpected expression type: " + expression.GetType().Name),

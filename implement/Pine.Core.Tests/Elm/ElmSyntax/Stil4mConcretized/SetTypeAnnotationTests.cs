@@ -856,9 +856,7 @@ public class SetTypeAnnotationTests
         if (elements.Length is 0)
         {
             return new TypeAnnotation.Tupled(
-                OpenParenLocation: s_locationZero,
-                TypeAnnotations: new SeparatedSyntaxList<Core.Elm.ElmSyntax.Stil4mElmSyntax7.Node<TypeAnnotation>>.Empty(),
-                CloseParenLocation: s_locationZero);
+                TypeAnnotations: new SeparatedSyntaxList<Core.Elm.ElmSyntax.Stil4mElmSyntax7.Node<TypeAnnotation>>.Empty());
         }
 
         var first =
@@ -870,9 +868,7 @@ public class SetTypeAnnotationTests
             .ToList();
 
         return new TypeAnnotation.Tupled(
-            OpenParenLocation: s_locationZero,
-            TypeAnnotations: new SeparatedSyntaxList<Core.Elm.ElmSyntax.Stil4mElmSyntax7.Node<TypeAnnotation>>.NonEmpty(first, rest),
-            CloseParenLocation: s_locationZero);
+            TypeAnnotations: new SeparatedSyntaxList<Core.Elm.ElmSyntax.Stil4mElmSyntax7.Node<TypeAnnotation>>.NonEmpty(first, rest));
     }
 
     private static TypeAnnotation.GenericType GenericAnnotation(string name)
@@ -885,10 +881,8 @@ public class SetTypeAnnotationTests
         if (fields.Length is 0)
         {
             return new TypeAnnotation.Record(
-                OpenBraceLocation: s_locationZero,
                 RecordDefinition: new RecordDefinition(
-                    Fields: new SeparatedSyntaxList<Core.Elm.ElmSyntax.Stil4mElmSyntax7.Node<RecordField>>.Empty()),
-                CloseBraceLocation: s_locationZero);
+                    Fields: new SeparatedSyntaxList<Core.Elm.ElmSyntax.Stil4mElmSyntax7.Node<RecordField>>.Empty()));
         }
 
         var firstField = new RecordField(
@@ -904,11 +898,9 @@ public class SetTypeAnnotationTests
             .ToList();
 
         return new TypeAnnotation.Record(
-            OpenBraceLocation: s_locationZero,
             RecordDefinition: new RecordDefinition(
                 Fields: new SeparatedSyntaxList<Core.Elm.ElmSyntax.Stil4mElmSyntax7.Node<RecordField>>.NonEmpty(
-                    MakeNode(firstField, s_rangeZero), restFields)),
-            CloseBraceLocation: s_locationZero);
+                    MakeNode(firstField, s_rangeZero), restFields)));
     }
 
     private static readonly Location s_locationZero = new(0, 0);

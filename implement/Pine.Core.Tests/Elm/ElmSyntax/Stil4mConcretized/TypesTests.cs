@@ -343,22 +343,16 @@ public class TypesTests
     public void TypeAnnotation_Tupled_value_equality()
     {
         var range = new Range(new Location(1, 1), new Location(1, 10));
-        var openLoc = new Location(1, 1);
-        var closeLoc = new Location(1, 10);
 
         var typeAnnotations = new SyntaxTypes.SeparatedSyntaxList<Node<SyntaxTypes.TypeAnnotation>>.NonEmpty(
             new Node<SyntaxTypes.TypeAnnotation>(range, new SyntaxTypes.TypeAnnotation.GenericType("a")),
             []);
 
         var type1 = new SyntaxTypes.TypeAnnotation.Tupled(
-            openLoc,
-            typeAnnotations,
-            closeLoc
+            typeAnnotations
         );
         var type2 = new SyntaxTypes.TypeAnnotation.Tupled(
-            openLoc,
-            typeAnnotations,
-            closeLoc
+            typeAnnotations
         );
 
         type1.Should().Be(type2);

@@ -550,9 +550,16 @@ public class ParseElmModuleTextToPineValueTests
     }
 
 
-    [Fact]
+    [Fact(Skip = "Disabled because of Elm-based implementation producing bad ranges of field nodes in record type definition")]
     public void Dotnet_parser_results_in_same_expression_as_Elm_parser_small_set()
     {
+        /*
+         * 2026-01-11 Failure seen in the Elm-based parser:
+         * That parser extended the range of a field node in a record type annotation to include trailing whitespace up to
+         * the token separating the following item or ending the record type.
+         * That inclusion of trailing whitespace in the range caused problems with placing comments following the field.
+         * */
+
         IReadOnlyList<string> testCases =
             [
             """""
@@ -1880,9 +1887,31 @@ public class ParseElmModuleTextToPineValueTests
         Exception? Failure);
 
 
-    [Fact]
+    [Fact(Skip = "Disabled because of Elm-based implementation producing bad ranges of field nodes in record type definition")]
     public async Task Dotnet_parser_results_in_same_expression_as_Elm_parser_large_set()
     {
+        /*
+         * 2026-01-11 Failure seen in the Elm-based parser:
+         * That parser extended the range of a field node in a record type annotation to include trailing whitespace up to
+         * the token separating the following item or ending the record type.
+         * That inclusion of trailing whitespace in the range caused problems with placing comments following the field.
+         * 
+         * Error message of failing test:
+         * ----
+         * System.Exception : Failed for Elm module file: Codec/Archive/Zip.elm from source directory: https://github.com/guida-lang/compiler/tree/8af68e3c4124f52a60ceb4b66193cc5b46962562/src (parsed in 3_251 ms)
+         * ---- AwesomeAssertions.Execution.AssertionFailedException : Failed in chunk 0 of 1
+         * Chunks differ at char index 2206:
+         * ↓ (actual)
+         * = { column = 23, row = 29 } } ([], "FilePath")) []) ], Node { end = { column = 21, row = 30 }, start = { column = 7, row = 30 } } [ Node { end = { column = 12,
+         * <vs>
+         * = { column = 23, row = 29 } } ([], "FilePath")) []) ], Node { end = { column = 5, row = 31 }, start = { column = 7, row = 30 } } [ Node { end = { column = 12, 
+         * ↑ (expected)
+         * 
+         * ----
+         * See the file at https://github.com/guida-lang/compiler/blob/8af68e3c4124f52a60ceb4b66193cc5b46962562/src/Codec/Archive/Zip.elm#L29-L30
+         * 
+         * */
+
         var allWorkItems = new List<ElmModuleWorkItem>();
 
         static bool AssumeIsElmModuleFile(

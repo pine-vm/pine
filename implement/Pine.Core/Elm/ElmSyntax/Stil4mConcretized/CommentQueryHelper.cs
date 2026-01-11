@@ -81,10 +81,10 @@ public class CommentQueryHelper
         [.. _allComments.Where(c => c.Range.Start.Row > after.End.Row && c.Range.Start.Row < before.Start.Row)];
 
     /// <summary>
-    /// Get a trailing comment on the same row as the element, after the element ends.
+    /// Get a trailing comment on the same row as the element ends, after the element ends.
     /// </summary>
     public Node<ParsedComment>? GetTrailing(Range elementRange) =>
-        _byStartRow.TryGetValue(elementRange.Start.Row, out var rowComments)
+        _byStartRow.TryGetValue(elementRange.End.Row, out var rowComments)
             ? rowComments.FirstOrDefault(c => c.Range.Start.Column > elementRange.End.Column)
             : null;
 
@@ -144,11 +144,13 @@ public class CommentQueryHelper
         _allComments.Any(c => c.Range.Start.Row > afterRow && c.Range.Start.Row < beforeRow);
 
     /// <summary>
-    /// Check if there are any comments on a specific row after a given column.
+    /// Get all comments on a specific row that start after a given column.
+    /// Returns comments ordered by column.
     /// </summary>
-    public bool HasOnRowAfterColumn(int row, int afterColumn) =>
-        _byStartRow.TryGetValue(row, out var rowComments) &&
-        rowComments.Any(c => c.Range.Start.Column > afterColumn);
+    public IReadOnlyList<Node<ParsedComment>> GetOnRowAfterColumn(int row, int afterColumn) =>
+        _byStartRow.TryGetValue(row, out var rowComments)
+            ? [.. rowComments.Where(c => c.Range.Start.Column > afterColumn)]
+            : [];
 
     /// <summary>
     /// Get comments on a specific row that start after one column and end before another column.
@@ -160,4 +162,11 @@ public class CommentQueryHelper
             ? [.. rowComments.Where(c => c.Range.Start.Column > afterColumn &&
                                          c.Range.End.Column <= beforeColumn)]
             : [];
+
+    /// <summary>
+    /// Get the first doc comment that starts after a given row.
+    /// Used to find the module documentation comment after the module definition.
+    /// </summary>
+    public Node<ParsedComment>? GetFirstDocCommentAfterRow(int afterRow) =>
+        _allComments.FirstOrDefault(c => c.Range.Start.Row > afterRow && c.Value.IsDocComment);
 }

@@ -1235,6 +1235,11 @@ public abstract record Expression
             return hashCode.ToHashCode();
         }
     }
+
+    /// <summary>GLSL shader expression [glsl| ... |].</summary>
+    public sealed record GLSLExpression(
+        string ShaderCode)
+        : Expression;
 }
 
 /// <summary>

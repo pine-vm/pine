@@ -176,6 +176,7 @@ public class ElmSyntaxParser
         TripleQuotedStringLiteral,
         CharLiteral,
         NumberLiteral,
+        GLSLLiteral,
         OpenParen,
         CloseParen,
         OpenBrace,
@@ -409,6 +410,19 @@ public class ElmSyntaxParser
             '\0'
             :
             _input[_position];
+
+        private bool LookAhead(string expected)
+        {
+            if (_position + expected.Length > _input.Length)
+                return false;
+
+            for (var i = 0; i < expected.Length; i++)
+            {
+                if (_input[_position + i] != expected[i])
+                    return false;
+            }
+            return true;
+        }
 
         private char PeekNext() =>
             PeekNext(1);
@@ -734,6 +748,29 @@ public class ElmSyntaxParser
 
                 case '[':
                     Advance();
+
+                    // Check for GLSL literal: [glsl| ... |]
+                    if (LookAhead("glsl|"))
+                    {
+                        // Consume "glsl|"
+                        for (var k = 0; k < 5; k++) Advance();
+
+                        // Read until |]
+                        var glslContent = new StringBuilder();
+                        while (!IsAtEnd())
+                        {
+                            if (Peek() is '|' && PeekNext() is ']')
+                            {
+                                Advance(); // |
+                                Advance(); // ]
+                                break;
+                            }
+                            glslContent.Append(Advance());
+                        }
+
+                        return new Token(TokenType.GLSLLiteral, glslContent.ToString(), start, new Location(_line, _column));
+                    }
+
                     return new Token(TokenType.OpenBracket, "[", start, new Location(_line, _column));
 
                 case ']':
@@ -1084,6 +1121,15 @@ public class ElmSyntaxParser
 
                     bool CanAttachComment(Token commentToken)
                     {
+                        // Check if there are any other comments (non-doc) between this doc comment and the declaration
+                        var hasInterveningComments = allComments.Any(c =>
+                            !c.Lexeme.StartsWith("{-|") && // not a doc comment
+                            c.Start.Row > commentToken.End.Row && // after this doc comment
+                            c.Start.Row < Peek.Start.Row); // before the declaration
+
+                        if (hasInterveningComments)
+                            return false;
+
                         if (declarations.Count is 0)
                         {
                             if (imports.LastOrDefault() is { } lastImport &&
@@ -2322,11 +2368,9 @@ public class ElmSyntaxParser
                         new Node<SyntaxTypes.TypeAnnotation>(
                             range,
                             new SyntaxTypes.TypeAnnotation.Tupled(
-                                OpenParenLocation: openToken.Start,
                                 TypeAnnotations: new SyntaxTypes.SeparatedSyntaxList<Node<SyntaxTypes.TypeAnnotation>>.NonEmpty(
                                     First: firstTypeAnnotation,
-                                    Rest: restItems),
-                                CloseParenLocation: closingToken.Start));
+                                    Rest: restItems)));
                 }
 
                 {
@@ -2338,11 +2382,9 @@ public class ElmSyntaxParser
                         new Node<SyntaxTypes.TypeAnnotation>(
                             range,
                             new SyntaxTypes.TypeAnnotation.Tupled(
-                                OpenParenLocation: openToken.Start,
                                 TypeAnnotations: new SyntaxTypes.SeparatedSyntaxList<Node<SyntaxTypes.TypeAnnotation>>.NonEmpty(
                                     First: firstTypeAnnotation,
-                                    Rest: []),
-                                CloseParenLocation: closingToken.Start));
+                                    Rest: [])));
                 }
             }
 
@@ -2414,7 +2456,8 @@ public class ElmSyntaxParser
 
                             ConsumeAllTrivia();
 
-                            var nextFieldRangeEnd = EnumeratePrecedingTokensBackwards().First().End;
+                            // Use the type annotation's range end - field range should end at type, not include trailing trivia
+                            var nextFieldRangeEnd = nextFieldTypeAnnotation.Range.End;
 
                             var nextField =
                                 new Node<SyntaxTypes.RecordField>(
@@ -2448,7 +2491,8 @@ public class ElmSyntaxParser
 
                         ConsumeAllTrivia();
 
-                        var fieldRangeEnd = EnumeratePrecedingTokensBackwards().First().End;
+                        // Use the type annotation's range end - field range should end at type, not include trailing trivia
+                        var fieldRangeEnd = fieldTypeAnnotation.Range.End;
 
                         firstField =
                             new Node<SyntaxTypes.RecordField>(
@@ -2478,7 +2522,8 @@ public class ElmSyntaxParser
 
                             ConsumeAllTrivia();
 
-                            var nextFieldRangeEnd = EnumeratePrecedingTokensBackwards().First().End;
+                            // Use the type annotation's range end - field range should end at type, not include trailing trivia
+                            var nextFieldRangeEnd = nextFieldTypeAnnotation.Range.End;
 
                             var nextField =
                                 new Node<SyntaxTypes.RecordField>(
@@ -2519,7 +2564,6 @@ public class ElmSyntaxParser
                         new Node<SyntaxTypes.TypeAnnotation>(
                             range,
                             new SyntaxTypes.TypeAnnotation.GenericRecord(
-                                OpenBraceLocation: openToken.Start,
                                 GenericName: new Node<string>(
                                     genericName.Range,
                                     genericName.Lexeme),
@@ -2532,17 +2576,14 @@ public class ElmSyntaxParser
                                             Column = genericName.Range.End.Column + 2
                                         },
                                         recordDefinitionEnd),
-                                    new SyntaxTypes.RecordDefinition(fieldsList)),
-                                CloseBraceLocation: closingToken.Start));
+                                    new SyntaxTypes.RecordDefinition(fieldsList))));
                 }
 
                 return
                     new Node<SyntaxTypes.TypeAnnotation>(
                         range,
                         new SyntaxTypes.TypeAnnotation.Record(
-                            OpenBraceLocation: openToken.Start,
-                            RecordDefinition: new SyntaxTypes.RecordDefinition(fieldsList),
-                            CloseBraceLocation: closingToken.Start));
+                            RecordDefinition: new SyntaxTypes.RecordDefinition(fieldsList)));
             }
 
             if (start.Type is TokenType.Identifier)
@@ -3204,6 +3245,16 @@ public class ElmSyntaxParser
                     new Node<SyntaxTypes.Expression>(
                         start.Range,
                         ParseNumber(start.Lexeme));
+            }
+
+            if (start.Type is TokenType.GLSLLiteral)
+            {
+                var glslToken = Consume(TokenType.GLSLLiteral);
+
+                return
+                    new Node<SyntaxTypes.Expression>(
+                        glslToken.Range,
+                        new SyntaxTypes.Expression.GLSLExpression(glslToken.Lexeme));
             }
 
             if (start.Type is TokenType.Negation)

@@ -756,30 +756,33 @@ public class Rendering
                 break;
 
             case TypeAnnotation.Tupled tupled:
-                context.AdvanceToLocation(tupled.OpenParenLocation);
+                // Open paren location is at the node's range start
                 context.Append("(");
                 RenderSeparatedList(tupled.TypeAnnotations, RenderTypeAnnotation, context);
-                context.AdvanceToLocation(tupled.CloseParenLocation);
+                // Close paren location is at the node's range end - 1 (since range end is after the paren)
+                context.AdvanceToLocation(typeAnnotationNode.Range.End with { Column = typeAnnotationNode.Range.End.Column - 1 });
                 context.Append(")");
                 break;
 
             case TypeAnnotation.Record record:
-                context.AdvanceToLocation(record.OpenBraceLocation);
+                // Open brace location is at the node's range start
                 context.Append("{");
                 RenderRecordDefinition(record.RecordDefinition, context);
-                context.AdvanceToLocation(record.CloseBraceLocation);
+                // Close brace location is at the node's range end - 1 (since range end is after the brace)
+                context.AdvanceToLocation(typeAnnotationNode.Range.End with { Column = typeAnnotationNode.Range.End.Column - 1 });
                 context.Append("}");
                 break;
 
             case TypeAnnotation.GenericRecord genericRecord:
-                context.AdvanceToLocation(genericRecord.OpenBraceLocation);
+                // Open brace location is at the node's range start
                 context.Append("{");
                 context.AdvanceToLocation(genericRecord.GenericName.Range.Start);
                 context.Append(genericRecord.GenericName.Value);
                 context.AdvanceToLocation(genericRecord.PipeLocation);
                 context.Append("|");
                 RenderRecordDefinition(genericRecord.RecordDefinition.Value, context);
-                context.AdvanceToLocation(genericRecord.CloseBraceLocation);
+                // Close brace location is at the node's range end - 1 (since range end is after the brace)
+                context.AdvanceToLocation(typeAnnotationNode.Range.End with { Column = typeAnnotationNode.Range.End.Column - 1 });
                 context.Append("}");
                 break;
 
@@ -1067,6 +1070,12 @@ public class Rendering
                 // The closing brace is at the end of the expression range (column - 1 since Range.End is after the brace)
                 context.AdvanceToLocation(expressionNode.Range.End with { Column = expressionNode.Range.End.Column - 1 });
                 context.Append("}");
+                break;
+
+            case Expression.GLSLExpression glsl:
+                context.Append("[glsl|");
+                context.Append(glsl.ShaderCode);
+                context.Append("|]");
                 break;
 
             default:

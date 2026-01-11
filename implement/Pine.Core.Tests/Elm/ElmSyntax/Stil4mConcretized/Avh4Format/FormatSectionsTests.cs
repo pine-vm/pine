@@ -33,7 +33,13 @@ public class FormatSectionsTests
 
 
             a =
-                ()
+                []
+
+
+
+            -- Another comment block
+            -- More detail
+
 
             """";
 
@@ -139,6 +145,122 @@ public class FormatSectionsTests
 
             a =
                 ()
+
+            """";
+
+        AssertModuleTextFormatsToExpected(input, expected);
+    }
+
+    [Fact]
+    public void Formats_stray_doc_comment_appearing_before_section_before_value_decl()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+            import Dict
+
+
+            declA =
+                13
+
+
+
+
+
+            {-| indexedTraverse and indexedForA are defined on `Utils`
+            -}
+
+            -- VERIFIED/INDEXED ZIP
+
+
+            declB =
+                17
+
+            """";
+
+
+        var expected =
+            """"
+            module Test exposing (..)
+
+            import Dict
+
+
+            declA =
+                13
+
+
+            {-| indexedTraverse and indexedForA are defined on `Utils`
+            -}
+
+
+
+            -- VERIFIED/INDEXED ZIP
+
+
+            declB =
+                17
+
+            """";
+
+        AssertModuleTextFormatsToExpected(input, expected);
+    }
+
+    [Fact]
+    public void Formats_stray_doc_comment_appearing_before_section_before_type_decl()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+            import Dict
+
+
+            declA =
+                13
+
+
+
+
+
+
+            {-| indexedTraverse and indexedForA are defined on `Utils`
+            -}
+
+            -- VERIFIED/INDEXED ZIP
+
+
+            type RootLocation
+                = LInside ModuleName.Raw
+                | LOutside FilePath
+
+            """";
+
+
+        var expected =
+            """"
+            module Test exposing (..)
+
+            import Dict
+
+
+            declA =
+                13
+
+
+            {-| indexedTraverse and indexedForA are defined on `Utils`
+            -}
+
+
+
+            -- VERIFIED/INDEXED ZIP
+
+
+            type RootLocation
+                = LInside ModuleName.Raw
+                | LOutside FilePath
+            
 
             """";
 

@@ -306,16 +306,12 @@ public class FromStil4mConcretizedTests
     public void TypeAnnotation_Tupled_converts_correctly()
     {
         var range = new Range(new Location(1, 1), new Location(1, 10));
-        var openLoc = new Location(1, 1);
-        var closeLoc = new Location(1, 10);
         var commaLoc = new Location(1, 5);
 
         var concretizedType = new ConcretizedTypes.TypeAnnotation.Tupled(
-            openLoc,
             new ConcretizedTypes.SeparatedSyntaxList<Node<ConcretizedTypes.TypeAnnotation>>.NonEmpty(
                 new Node<ConcretizedTypes.TypeAnnotation>(range, new ConcretizedTypes.TypeAnnotation.GenericType("a")),
-                [(commaLoc, new Node<ConcretizedTypes.TypeAnnotation>(range, new ConcretizedTypes.TypeAnnotation.GenericType("b")))]),
-            closeLoc
+                [(commaLoc, new Node<ConcretizedTypes.TypeAnnotation>(range, new ConcretizedTypes.TypeAnnotation.GenericType("b")))])
         );
 
         var result = FromStil4mConcretized.Convert(concretizedType);

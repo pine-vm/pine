@@ -514,9 +514,7 @@ public class FormatCompleteTests
             
             """";
 
-        var formatted = FormatString(input);
-
-        formatted.Trim().Should().Be(
+        var expected =
             """"
             module Test exposing (..)
 
@@ -525,8 +523,65 @@ public class FormatCompleteTests
 
             decl =
                 1
+
+            """";
+
+        AssertModuleTextFormatsToExpected(input, expected);
+    }
+
+    [Fact]
+    public void Formats_import_single_line()
+    {
+        // Content of exposing list is single line
+
+        var input =
             """"
-            .Trim());
+            module Test exposing (..)
+
+            import OtherModule
+                exposing (a, b, c)
+            
+            """";
+
+        var expected =
+            """"
+            module Test exposing (..)
+
+            import OtherModule exposing (a, b, c)
+
+            """";
+
+        AssertModuleTextFormatsToExpected(input, expected);
+    }
+
+    [Fact]
+    public void Formats_import_multi_line()
+    {
+        // Content of exposing list is multiline
+
+        var input =
+            """"
+            module Test exposing (..)
+
+            import OtherModule exposing (a, b, c
+            )
+
+            """";
+
+        var expected =
+            """"
+            module Test exposing (..)
+
+            import OtherModule
+                exposing
+                    ( a
+                    , b
+                    , c
+                    )
+
+            """";
+
+        AssertModuleTextFormatsToExpected(input, expected);
     }
 
     [Fact]
@@ -1061,7 +1116,7 @@ public class FormatCompleteTests
 
 
             type String
-                = String Int
+                = String Int     -- some tag
             -- another tag
                 | AnyOtherKind_String
 
@@ -1075,7 +1130,7 @@ public class FormatCompleteTests
 
 
             type String
-                = String Int
+                = String Int -- some tag
                   -- another tag
                 | AnyOtherKind_String
 
@@ -1528,6 +1583,71 @@ public class FormatCompleteTests
     }
 
     [Fact]
+    public void Preserve_comments_in_left_pipe_application()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                a <|
+                    -- a comment
+                    b c
+
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
+    public void Preserve_comments_in_parens_expression()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                if a then
+                    b
+
+                else
+                    (-- a comment
+                     c b
+                    )
+
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
+    public void Preserve_comments_in_nested_parens_expression()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                if a then
+                    b
+
+                else
+                    (-- a comment
+                     (-- another comment
+                      c b
+                     )
+                        + d
+                    )
+
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
     public void Roundtrip_comments_in_record_expression()
     {
         var input =
@@ -1553,7 +1673,14 @@ public class FormatCompleteTests
                      tipico delle razze
                      ma si distinguono
                   -}
-                  field_alfa = 73
+                  -- da esse
+                  -- per la
+                  field_alfa =
+                    -- presenza di
+                    73
+
+                -- fessure branchiali
+                , field_gamma = 79 -- ai lati del capo
                 }
 
             """";
@@ -1580,9 +1707,10 @@ public class FormatCompleteTests
 
                 -- sono situate invece
                 , -- in posizione
-                  b : String
+                  b : String -- ventrale
 
-                -- ventrale
+                -- In molte specie
+                -- il capo fa parte
                 }
 
             """";
@@ -1618,6 +1746,41 @@ public class FormatCompleteTests
 
                 {- ventrale -}
                 }
+
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
+    public void Roundtrip_comments_in_generic_record_type_annotation()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl :
+                -- Nelle razze,
+                { other
+                    | -- le cinque
+                      a
+                      -- o sei
+                        :
+                        -- paia di branchie
+                        Int
+
+                    -- sono situate invece
+                    , -- in posizione
+                      b : String -- ventrale
+
+                    -- In molte specie
+                    -- il capo fa parte
+                }
+                -> Int
+            decl r =
+                r.a
+            
 
             """";
 
@@ -2059,6 +2222,194 @@ public class FormatCompleteTests
     }
 
     [Fact]
+    public void Preserve_comments_in_choice_type_declarations()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            type Types
+                = -- PERF profile Opt.Global representation
+                  -- current representation needs less allocation
+                  -- but maybe the lookup is much worse
+                  Types (Dict (List String) IO.Canonical Types_)
+
+
+            type Pattern_
+                = PAnything
+                | PCtor
+                    -- CACHE p_home, p_type, and p_vars for type inference
+                    -- CACHE p_index to replace p_name in PROD code gen
+                    -- CACHE p_opts to allocate less in PROD code gen
+                    -- CACHE p_alts and p_numAlts for exhaustiveness checker
+                    { home : IO.Canonical
+                    , args : List PatternCtorArg
+                    }
+
+
+            type TypeParensRequired
+                = {- 0 -} NotRequired
+                | {- 1 -} ForLambda
+                | {- 2 -} ForCtor
+
+
+            type KnownContents
+                = KnownContents (String -> Maybe (List String)) -- return Nothing if the contents are unknown
+
+
+            type ImportInfo
+                = ImportInfo
+                    { exposed : Dict String String String
+                    , directImports : EverySet String String -- other trailing
+                    , ambiguous : Dict String String (List String)
+                    , unresolvedExposingAll : EverySet String String -- any modules with exposing(..) and we didn't know the module contents
+                    }
+
+
+            type Inline
+                = Str String
+                | Space
+                | Link Inlines LinkTarget {- URL -} String {- title -}
+                | Image Inlines String {- URL -} String {- title -}
+                | Entity String
+                | RawHtml String
+
+
+            type Options
+                = Options
+                    { sanitize : Bool -- ^ Sanitize raw HTML, link/image attributes
+                    , allowRawHtml : Bool -- ^ Allow raw HTML (if false it gets escaped)
+                    , preserveHardBreaks : Bool -- ^ Preserve hard line breaks in the source
+                    }
+
+
+            type ContainerStack
+                = ContainerStack {- top -} Container {- rest -} (List Container)
+
+
+            type BlinkSpeed
+                = SlowBlink -- ^ Less than 150 blinks per minute
+                | RapidBlink -- ^ More than 150 blinks per minute
+                | NoBlink
+
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
+    public void Preserve_comments_in_operator_applications()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            isHex : Char -> Bool
+            isHex word =
+                let
+                    code : Int
+                    code =
+                        Char.toCode word
+                in
+                (0x30 {- 0 -} <= code)
+                    && (code <= 0x39 {- 9 -})
+                    || (0x61 {- a -} <= code)
+                    && (code <= 0x66 {- f -})
+                    || (0x41 {- A -} <= code)
+                    && (code <= 0x46 {- F -})
+
+
+            chompInt : String -> Int -> Int -> Int -> ( IntStatus, Int, Int )
+            chompInt src pos end n =
+                if pos < end then
+                    let
+                        word : Char
+                        word =
+                            P.unsafeIndex src pos
+                    in
+                    if isDecimalDigit word then
+                        let
+                            m : Int
+                            m =
+                                10 * n + (Char.toCode word - 0x30 {- 0 -})
+                        in
+                        chompInt src (pos + 1) end m
+
+                    else if word == '.' || word == 'e' || word == 'E' then
+                        ( BadIntEnd, n, pos )
+
+                    else
+                        ( GoodInt, n, pos )
+
+                else
+                    ( GoodInt, n, pos )
+
+
+            getInnerWidthHelp : String -> Int -> Int -> Char -> Int
+            getInnerWidthHelp src pos _ word =
+                let
+                    code : Int
+                    code =
+                        Char.toCode word
+                in
+                if code >= 0x61 {- a -} && code <= 0x7A {- z -} then
+                    1
+
+                else if code >= 0x41 {- A -} && code <= 0x5A {- Z -} then
+                    1
+
+                else if code >= 0x30 {- 0 -} && code <= 0x39 {- 9 -} then
+                    1
+
+                else if code == 0x5F {- _ -} then
+                    1
+
+                else
+                    0
+
+
+            isDecimalDigit : Char -> Bool
+            isDecimalDigit word =
+                let
+                    code : Int
+                    code =
+                        Char.toCode word
+                in
+                code <= 0x39 {- 9 -} && code >= {- 0 -} 0x30
+
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
+    public void Preserve_comments_in_let_deconstruction()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                let
+                    ( pre_, e_ ) =
+                        -- TODO
+                        -- case e of
+                        --     Parens (C ( pre__, [] ) e__) ->
+                        --         ( pre ++ pre__, e__ )
+                        --     _ ->
+                        ( pre, e )
+                in
+                []            
+
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
     public void Roundtrip_multiple_multiline_imports()
     {
         var input =
@@ -2300,6 +2651,10 @@ public class FormatCompleteTests
             """"
             module Test exposing (..)
 
+
+
+            import Array exposing (Array)
+
             
             declA =
                 [
@@ -2366,6 +2721,8 @@ public class FormatCompleteTests
         var expected =
             """"
             module Test exposing (..)
+
+            import Array exposing (Array)
 
             
             declA =
@@ -2549,6 +2906,77 @@ public class FormatCompleteTests
     }
 
     [Fact]
+    public void Preserves_port_declarations()
+    {
+        var input =
+            """"
+            port module Ports exposing (..)
+
+            import Json.Decode as Decode
+
+
+            {-| The port names are prefixed to reduce the likelihood of the project
+            having a port with the same name, which is a compile error.
+            -}
+            port elmTestPort__send : String -> Cmd msg
+
+
+            port elmTestPort__receive : (Decode.Value -> msg) -> Sub msg
+
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
+    public void Preserves_glsl_declarations()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            other =
+                1
+
+
+
+            -- SHADERS
+
+
+            vertexShader : WebGL.Shader Vertex Uniforms { vcolor : Vec3 }
+            vertexShader =
+                [glsl|
+                    attribute vec3 position;
+                    attribute vec3 color;
+                    uniform mat4 perspective;
+                    varying vec3 vcolor;
+
+                    void main () {
+                        gl_Position = perspective * vec4(position, 1.0);
+                        vcolor = color;
+                    }
+                |]
+
+
+            fragmentShader : WebGL.Shader {} Uniforms { vcolor : Vec3 }
+            fragmentShader =
+                [glsl|
+                    precision mediump float;
+                    varying vec3 vcolor;
+
+                    void main () {
+                        gl_FragColor = vec4(vcolor, 1.0);
+                    }
+                |]
+            
+
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
     public void Trims_duplicate_superfluous_parens_around_infix_operators()
     {
         var input =
@@ -2625,6 +3053,155 @@ public class FormatCompleteTests
 
             declD =
                 test
+
+            """";
+
+        AssertModuleTextFormatsToExpected(input, expected);
+    }
+
+    [Fact]
+    public void Aligns_grouping_of_module_exports_with_module_documentation()
+    {
+        var input =
+            """"
+            module System.IO exposing
+                ( Program,Model,   Msg, run, FilePath
+                , Handle(..)
+                , stdout
+                , stderr
+                , IOMode(..), withFile
+                , ReplState(..)
+                , getLine
+                , hClose
+                , hFileSize, hFlush, hIsTerminalDevice, hPutStr, hPutStrLn, initialReplState, putStr, putStrLn, writeString
+                )
+
+            {-| Ref.: <https://hackage.haskell.org/package/base-4.20.0.1/docs/System-IO.html>
+
+            @docs Program, Model, Msg, run
+
+
+            # Files and handles
+
+            @docs FilePath, Handle
+
+
+            # Standard handles
+
+            @docs stdout, stderr
+
+
+            # Opening files
+
+            @docs withFile, IOMode
+
+            -}
+
+            """";
+
+        var expected =
+            """"
+            module System.IO exposing
+                ( Program, Model, Msg, run
+                , FilePath, Handle(..)
+                , stdout, stderr
+                , withFile, IOMode(..)
+                , ReplState(..), getLine, hClose, hFileSize, hFlush, hIsTerminalDevice, hPutStr, hPutStrLn, initialReplState, putStr, putStrLn, writeString
+                )
+
+            {-| Ref.: <https://hackage.haskell.org/package/base-4.20.0.1/docs/System-IO.html>
+
+            @docs Program, Model, Msg, run
+
+
+            # Files and handles
+
+            @docs FilePath, Handle
+
+
+            # Standard handles
+
+            @docs stdout, stderr
+
+
+            # Opening files
+
+            @docs withFile, IOMode
+
+            -}
+
+            """";
+
+        AssertModuleTextFormatsToExpected(input, expected);
+    }
+
+    [Fact]
+    public void Maintains_module_exports_multiline()
+    {
+        var input =
+            """"
+            module Codec.Archive.Zip exposing ( Archive, Entry, FilePath, eRelativePath, fromEntry    , zEntries
+              )
+
+            {-| The module provides everything you may need to manipulate Zip archives.
+            There are three things that should be clarified right away, to avoid confusion.
+
+            Ref.: <https://hackage.haskell.org/package/zip-2.1.0/docs/Codec-Archive-Zip.html>
+
+            -}
+
+            """";
+
+        var expected =
+            """"
+            module Codec.Archive.Zip exposing
+                ( Archive
+                , Entry
+                , FilePath
+                , eRelativePath
+                , fromEntry
+                , zEntries
+                )
+
+            {-| The module provides everything you may need to manipulate Zip archives.
+            There are three things that should be clarified right away, to avoid confusion.
+
+            Ref.: <https://hackage.haskell.org/package/zip-2.1.0/docs/Codec-Archive-Zip.html>
+
+            -}
+
+            """";
+
+        AssertModuleTextFormatsToExpected(input, expected);
+    }
+
+    [Fact]
+    public void Maintains_module_exports_singleline()
+    {
+        var input =
+            """"
+            module Codec.Archive.Zip
+                exposing ( Archive, Entry,   FilePath, eRelativePath, fromEntry  , zEntries)
+
+            {-| The module provides everything you may need to manipulate Zip archives.
+            There are three things that should be clarified right away, to avoid confusion.
+
+            Ref.: <https://hackage.haskell.org/package/zip-2.1.0/docs/Codec-Archive-Zip.html>
+
+            -}
+
+            """";
+
+        var expected =
+            """"
+            module Codec.Archive.Zip exposing (Archive, Entry, FilePath, eRelativePath, fromEntry, zEntries)
+
+            {-| The module provides everything you may need to manipulate Zip archives.
+            There are three things that should be clarified right away, to avoid confusion.
+
+            Ref.: <https://hackage.haskell.org/package/zip-2.1.0/docs/Codec-Archive-Zip.html>
+
+            -}
 
             """";
 
@@ -3147,6 +3724,20 @@ public class FormatCompleteTests
             type Maybe a
                 = Nothing
                 | Just a
+
+            """",
+
+            """"
+            module Test exposing (..)
+
+
+            type Tracker a
+                = Tracker
+                    (Int
+                     -> EverySet (List String) Opt.Global
+                     -> Dict String Name Int
+                     -> TResult a
+                    )
 
             """",
 

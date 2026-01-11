@@ -516,9 +516,7 @@ public class AddInferredTypeAnnotations
             .ToList();
 
         return new ConcretizedTypes.TypeAnnotation.Tupled(
-            s_locationZero,
-            new ConcretizedTypes.SeparatedSyntaxList<AbstractSyntaxTypes.Node<ConcretizedTypes.TypeAnnotation>>.NonEmpty(first, rest),
-            s_locationZero);
+            new ConcretizedTypes.SeparatedSyntaxList<AbstractSyntaxTypes.Node<ConcretizedTypes.TypeAnnotation>>.NonEmpty(first, rest));
     }
 
     /// <summary>
@@ -531,10 +529,8 @@ public class AddInferredTypeAnnotations
         {
             // Empty record
             return new ConcretizedTypes.TypeAnnotation.Record(
-                s_locationZero,
                 new ConcretizedTypes.RecordDefinition(
-                    new ConcretizedTypes.SeparatedSyntaxList<AbstractSyntaxTypes.Node<ConcretizedTypes.RecordField>>.Empty()),
-                s_locationZero);
+                    new ConcretizedTypes.SeparatedSyntaxList<AbstractSyntaxTypes.Node<ConcretizedTypes.RecordField>>.Empty()));
         }
 
         var recordFields = new List<AbstractSyntaxTypes.Node<ConcretizedTypes.RecordField>>();
@@ -563,10 +559,8 @@ public class AddInferredTypeAnnotations
             .ToList();
 
         return new ConcretizedTypes.TypeAnnotation.Record(
-            s_locationZero,
             new ConcretizedTypes.RecordDefinition(
-                new ConcretizedTypes.SeparatedSyntaxList<AbstractSyntaxTypes.Node<ConcretizedTypes.RecordField>>.NonEmpty(first, rest)),
-            s_locationZero);
+                new ConcretizedTypes.SeparatedSyntaxList<AbstractSyntaxTypes.Node<ConcretizedTypes.RecordField>>.NonEmpty(first, rest)));
     }
 
     /// <summary>

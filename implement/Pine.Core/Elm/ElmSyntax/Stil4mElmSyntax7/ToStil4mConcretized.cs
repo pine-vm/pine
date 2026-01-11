@@ -269,23 +269,17 @@ public static class ToStil4mConcretized
 
             TypeAnnotation.Tupled tupled =>
                 new ConcretizedTypes.TypeAnnotation.Tupled(
-                    OpenParenLocation: s_defaultLocation,
-                    TypeAnnotations: ToSeparatedList(tupled.TypeAnnotations, ToConcretized),
-                    CloseParenLocation: s_defaultLocation),
+                    TypeAnnotations: ToSeparatedList(tupled.TypeAnnotations, ToConcretized)),
 
             TypeAnnotation.Record record =>
                 new ConcretizedTypes.TypeAnnotation.Record(
-                    OpenBraceLocation: s_defaultLocation,
-                    RecordDefinition: ToConcretized(record.RecordDefinition),
-                    CloseBraceLocation: s_defaultLocation),
+                    RecordDefinition: ToConcretized(record.RecordDefinition)),
 
             TypeAnnotation.GenericRecord genericRecord =>
                 new ConcretizedTypes.TypeAnnotation.GenericRecord(
-                    OpenBraceLocation: s_defaultLocation,
                     GenericName: ConvertNodePreserveValue(genericRecord.GenericName),
                     PipeLocation: s_defaultLocation,
-                    RecordDefinition: ConvertNode(genericRecord.RecordDefinition, ToConcretized),
-                    CloseBraceLocation: s_defaultLocation),
+                    RecordDefinition: ConvertNode(genericRecord.RecordDefinition, ToConcretized)),
 
             TypeAnnotation.FunctionTypeAnnotation functionType =>
                 new ConcretizedTypes.TypeAnnotation.FunctionTypeAnnotation(
@@ -526,6 +520,9 @@ public static class ToStil4mConcretized
                     PipeLocation: s_defaultLocation,
                     Fields: ToSeparatedRecordFields(recordUpdateExpression.Fields)),
 
+            Expression.GLSLExpression glslExpression =>
+                new ConcretizedTypes.Expression.GLSLExpression(glslExpression.ShaderCode),
+
             _ =>
                 throw new System.NotImplementedException(
                     "Unexpected expression type: " + expression.GetType().Name),
@@ -617,10 +614,8 @@ public static class ToStil4mConcretized
             var convertedInner = ToConcretized(node.Value);
             var innerNode = new Node<ConcretizedTypes.TypeAnnotation>(s_defaultRange, convertedInner);
             var tupled = new ConcretizedTypes.TypeAnnotation.Tupled(
-                OpenParenLocation: s_defaultLocation,
                 TypeAnnotations: new ConcretizedTypes.SeparatedSyntaxList<Node<ConcretizedTypes.TypeAnnotation>>.NonEmpty(
-                    innerNode, []),
-                CloseParenLocation: s_defaultLocation);
+                    innerNode, []));
             return new Node<ConcretizedTypes.TypeAnnotation>(s_defaultRange, tupled);
         }
 

@@ -171,25 +171,19 @@ public class NameMapper
 
             TypeAnnotation.Tupled tupled =>
                 new TypeAnnotation.Tupled(
-                    OpenParenLocation: tupled.OpenParenLocation,
-                    TypeAnnotations: MapSeparatedList(tupled.TypeAnnotations, t => MapTypeAnnotation(t, mapQualifiedName)),
-                    CloseParenLocation: tupled.CloseParenLocation),
+                    TypeAnnotations: MapSeparatedList(tupled.TypeAnnotations, t => MapTypeAnnotation(t, mapQualifiedName))),
 
             TypeAnnotation.Record record =>
                 new TypeAnnotation.Record(
-                    OpenBraceLocation: record.OpenBraceLocation,
-                    RecordDefinition: MapRecordDefinition(record.RecordDefinition, mapQualifiedName),
-                    CloseBraceLocation: record.CloseBraceLocation),
+                    RecordDefinition: MapRecordDefinition(record.RecordDefinition, mapQualifiedName)),
 
             TypeAnnotation.GenericRecord genericRecord =>
                 new TypeAnnotation.GenericRecord(
-                    OpenBraceLocation: genericRecord.OpenBraceLocation,
                     GenericName: genericRecord.GenericName,
                     PipeLocation: genericRecord.PipeLocation,
                     RecordDefinition: new Stil4mElmSyntax7.Node<RecordDefinition>(
                         genericRecord.RecordDefinition.Range,
-                        MapRecordDefinition(genericRecord.RecordDefinition.Value, mapQualifiedName)),
-                    CloseBraceLocation: genericRecord.CloseBraceLocation),
+                        MapRecordDefinition(genericRecord.RecordDefinition.Value, mapQualifiedName))),
 
             // These don't contain type names to map
             TypeAnnotation.GenericType or TypeAnnotation.Unit =>

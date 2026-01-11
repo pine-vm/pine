@@ -523,26 +523,35 @@ public abstract record TypeAnnotation
         : TypeAnnotation;
 
     /// <summary>Tuple type annotation.</summary>
+    /// <remarks>
+    /// The open and close parenthesis locations can be derived from the containing node's range:
+    /// - OpenParenLocation = ContainingNode.Range.Start
+    /// - CloseParenLocation = ContainingNode.Range.End with Column - 1
+    /// </remarks>
     public sealed record Tupled(
-        Location OpenParenLocation,
-        SeparatedSyntaxList<Node<TypeAnnotation>> TypeAnnotations,
-        Location CloseParenLocation)
+        SeparatedSyntaxList<Node<TypeAnnotation>> TypeAnnotations)
         : TypeAnnotation;
 
     /// <summary>Record type annotation.</summary>
+    /// <remarks>
+    /// The open and close brace locations can be derived from the containing node's range:
+    /// - OpenBraceLocation = ContainingNode.Range.Start
+    /// - CloseBraceLocation = ContainingNode.Range.End with Column - 1
+    /// </remarks>
     public sealed record Record(
-        Location OpenBraceLocation,
-        RecordDefinition RecordDefinition,
-        Location CloseBraceLocation)
+        RecordDefinition RecordDefinition)
         : TypeAnnotation;
 
     /// <summary>Record type annotation that extends a generic record.</summary>
+    /// <remarks>
+    /// The open and close brace locations can be derived from the containing node's range:
+    /// - OpenBraceLocation = ContainingNode.Range.Start
+    /// - CloseBraceLocation = ContainingNode.Range.End with Column - 1
+    /// </remarks>
     public sealed record GenericRecord(
-        Location OpenBraceLocation,
         Node<string> GenericName,
         Location PipeLocation,
-        Node<RecordDefinition> RecordDefinition,
-        Location CloseBraceLocation)
+        Node<RecordDefinition> RecordDefinition)
         : TypeAnnotation;
 
     /// <summary>Function type annotation mapping argument to return.</summary>
@@ -1070,6 +1079,11 @@ public abstract record Expression
         Node<string> RecordName,
         Location PipeLocation,
         SeparatedSyntaxList<RecordExprField> Fields)
+        : Expression;
+
+    /// <summary>GLSL shader expression [glsl| ... |].</summary>
+    public sealed record GLSLExpression(
+        string ShaderCode)
         : Expression;
 }
 
