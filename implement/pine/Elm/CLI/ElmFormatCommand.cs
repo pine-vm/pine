@@ -124,30 +124,19 @@ public class ElmFormatCommand
             {
                 var originalContent = File.ReadAllText(filePath);
 
-                var parseResult =
-                    ElmSyntaxParser.ParseModuleText(originalContent);
+                var formatResult = ElmFormat.FormatModuleText(originalContent);
 
-                if (parseResult.IsErrOrNull() is { } parseErr)
+                if (formatResult.IsErrOrNull() is { } formatErr)
                 {
-                    parseErrors.Add((filePath, parseErr));
+                    parseErrors.Add((filePath, formatErr));
                     return;
                 }
 
-                if (parseResult.IsOkOrNull() is not { } parsed)
+                if (formatResult.IsOkOrNull() is not { } rendered)
                 {
-                    parseErrors.Add((filePath, "Unexpected parse result type"));
+                    parseErrors.Add((filePath, "Unexpected format result type"));
                     return;
                 }
-
-                var formatted =
-                    Core.Elm.ElmSyntax.Stil4mConcretized.Avh4Format.Format(parsed);
-
-                // Detect linebreak style from original content and use it for rendering
-                var linebreakStyle =
-                    Core.Elm.ElmSyntax.Stil4mConcretized.Rendering.DetectLinebreakStyle(originalContent);
-
-                var rendered =
-                    Core.Elm.ElmSyntax.Stil4mConcretized.Rendering.ToString(formatted, linebreakStyle);
 
                 // Check if content changed
                 if (originalContent == rendered)

@@ -830,24 +830,63 @@ public class LanguageServer(
     {
         if (textDocument.Uri.EndsWith(".elm"))
         {
-            try
+            // Check if the environment variable is set to use the old AVH4 binary approach
+            var useAvh4Binary = System.Environment.GetEnvironmentVariable("ELM_LS_FORMAT_VIA_AVH4");
+
+            if (!string.IsNullOrEmpty(useAvh4Binary))
             {
-                var binaryClock = System.Diagnostics.Stopwatch.StartNew();
+                try
+                {
+                    var binaryClock = System.Diagnostics.Stopwatch.StartNew();
 
-                var elmFormatted =
-                    CommonBinaries.AVH4ElmFormatBinaries.RunElmFormat(textDocumentContentBefore);
+                    var elmFormatted =
+                        CommonBinaries.AVH4ElmFormatBinaries.RunElmFormat(textDocumentContentBefore);
 
-                binaryClock.Stop();
+                    binaryClock.Stop();
 
-                Log("Completed elm-format on " + textDocument.Uri + " in " +
-                    CommandLineInterface.FormatIntegerForDisplay((int)binaryClock.Elapsed.TotalMilliseconds)
-                    + " ms");
+                    Log("Completed elm-format (via AVH4 binary) on " + textDocument.Uri + " in " +
+                        CommandLineInterface.FormatIntegerForDisplay((int)binaryClock.Elapsed.TotalMilliseconds)
+                        + " ms");
 
-                return elmFormatted;
+                    return elmFormatted;
+                }
+                catch (System.Exception e)
+                {
+                    Log("Error: Failed running elm-format via AVH4 binary: " + e);
+                }
             }
-            catch (System.Exception e)
+            else
             {
-                Log("Error: Failed running elm-format: " + e);
+                try
+                {
+                    var formatClock = System.Diagnostics.Stopwatch.StartNew();
+
+                    var formatResult = ElmFormat.FormatModuleText(textDocumentContentBefore);
+
+                    if (formatResult.IsErrOrNull() is { } formatErr)
+                    {
+                        Log("Error: Failed formatting Elm module: " + formatErr);
+                        return null;
+                    }
+
+                    if (formatResult.IsOkOrNull() is not { } rendered)
+                    {
+                        Log("Error: Unexpected format result type");
+                        return null;
+                    }
+
+                    formatClock.Stop();
+
+                    Log("Completed elm-format on " + textDocument.Uri + " in " +
+                        CommandLineInterface.FormatIntegerForDisplay((int)formatClock.Elapsed.TotalMilliseconds)
+                        + " ms");
+
+                    return rendered;
+                }
+                catch (System.Exception e)
+                {
+                    Log("Error: Failed formatting Elm module: " + e);
+                }
             }
         }
 
