@@ -239,7 +239,7 @@ public class SnapshotTestFormat
             if (formattedList.Elements.Count > 0)
             {
                 var firstElem = formattedList.Elements[0];
-                var lastElem = formattedList.Elements[formattedList.Elements.Count - 1];
+                var lastElem = formattedList.Elements[^1];
 
                 var newRange = new Range(
                     Start: new Location(Row: firstElem.Range.Start.Row, Column: 1),
@@ -586,7 +586,7 @@ public class SnapshotTestFormat
 
                 // Create a multiline range based on the formatted elements
                 var firstElem = formattedList.Elements[0];
-                var lastElem = formattedList.Elements[formattedList.Elements.Count - 1];
+                var lastElem = formattedList.Elements[^1];
                 var multilineRange = new Range(
                     Start: new Location(Row: firstElem.Range.Start.Row, Column: 1),
                     End: new Location(Row: lastElem.Range.End.Row, Column: 15)

@@ -558,7 +558,7 @@ public class ExpressionCompiler
         var updatesDict = updates.ToDictionary(u => u.fieldIndex, u => u.newValue);
 
         var updatedFieldExprs = new List<Expression>();
-        for (int i = 0; i < totalFieldCount; i++)
+        for (var i = 0; i < totalFieldCount; i++)
         {
             Expression fieldPairExpr;
 

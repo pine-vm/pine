@@ -427,8 +427,8 @@ public class FormatCSharpSyntaxRewriter(
             // Add empty line after section (except for last section)
             if (!isLastSection && formattedStatements.Count > 0)
             {
-                var lastStatement = formattedStatements[formattedStatements.Count - 1];
-                formattedStatements[formattedStatements.Count - 1] =
+                var lastStatement = formattedStatements[^1];
+                formattedStatements[^1] =
                     lastStatement.WithTrailingTrivia(SyntaxFactory.LineFeed, SyntaxFactory.LineFeed);
             }
 
