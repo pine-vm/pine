@@ -3283,8 +3283,21 @@ public class Avh4Format
                 var afterOpenParen = context.Advance(1);  // "("
 
                 var elemResult = FormatTypeAnnotation(singleElement, afterOpenParen);
+                var currentCtx = elemResult.Context;
 
-                var afterCloseParen = elemResult.Context.Advance(1); // ")"
+                // Check for trailing comment between the element and closing paren
+                var trailingComment = commentQueries.GetOnRowBetweenColumns(
+                    originalRange.End.Row,
+                    singleElement.Range.End.Column,
+                    originalRange.End.Column);
+
+                foreach (var comment in trailingComment)
+                {
+                    currentCtx = currentCtx.Advance(1); // space before comment
+                    currentCtx = currentCtx.FormatAndAddComment(comment);
+                }
+
+                var afterCloseParen = currentCtx.Advance(1); // ")"
 
                 var separatedElems = new SeparatedSyntaxList<Stil4mElmSyntax7.Node<TypeAnnotation>>.NonEmpty(
                     elemResult.FormattedNode,
@@ -3894,8 +3907,9 @@ public class Avh4Format
                                 var formattedOperator = MakeNode(operatorStart, operatorEnd, opApp.Operator.Value);
 
                                 // Right operand on new line with extra indentation
-                                // Create reference at current indent + 4
-                                var rightIndentRef = context.CreateIndentedRef();
+                                // Create reference at next indent level based on current column
+                                // (not based on IndentSpaces, which may not reflect the actual position)
+                                var rightIndentRef = context.AdvanceToNextIndentLevel().SetIndentToCurrentColumn();
                                 var pipeRightContext = pipeAfterOp.ReturnToIndent(rightIndentRef).NextRowToIndent();
 
                                 // Look for comments between operator and right operand

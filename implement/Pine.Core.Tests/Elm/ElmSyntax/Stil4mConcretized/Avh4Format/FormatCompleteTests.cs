@@ -2293,6 +2293,11 @@ public class FormatCompleteTests
                 | RapidBlink -- ^ More than 150 blinks per minute
                 | NoBlink
 
+
+            type ValidOutline
+                = ValidApp (NE.Nonempty Outline.SrcDir)
+                | ValidPkg Pkg.Name (List ModuleName.Raw) (Dict ( String, String ) Pkg.Name V.Version {- for docs in reactor -})
+
             """";
 
         AssertModuleTextFormatsToItself(input);
@@ -3240,6 +3245,32 @@ public class FormatCompleteTests
                 , 1.000
                 ]
 
+            """";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
+    public void Preserves_indent_for_case_block_under_left_pipe_in_nested_tuple()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                ( ( 123
+                  , a b c <|
+                        case upper of
+                            17 ->
+                                21
+
+                            _ ->
+                                23
+                  )
+                , end
+                )
+            
             """";
 
         AssertModuleTextFormatsToItself(input);
