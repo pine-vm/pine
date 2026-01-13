@@ -510,6 +510,12 @@ public class AddInferredTypeAnnotationsTests
     [Fact]
     public void Infers_type_float_from_let_block_expression_subexpression()
     {
+        /*
+         * 'a' is connected via arithmetic operations to a Float literal (t0 + 1.0).
+         * 
+         * 'b' is only used in an addition with an Int literal (b + 7), which constrains it to the Number type class.
+         * */
+
         var moduleText =
             """"
             module Test exposing (..)
@@ -518,7 +524,10 @@ public class AddInferredTypeAnnotationsTests
             alfa a b =
                 let
                     t0 =
-                        a / b
+                        a * 13
+
+                    t1 =
+                        b + 7
                 in
                 t0 + 1.0
 
@@ -526,13 +535,13 @@ public class AddInferredTypeAnnotationsTests
 
         var inferredType = GetInferredTypeForDeclaration(moduleText, "alfa");
 
-        // Expected type: Float -> Float -> Float
+        // Expected type: Float -> number -> Float
 
         inferredType.Should().Be(
             TypeInference.InferredType.Function(
                 argType: TypeInference.InferredType.Float(),
                 returnType: TypeInference.InferredType.Function(
-                    argType: TypeInference.InferredType.Float(),
+                    argType: TypeInference.InferredType.Number(),
                     returnType: TypeInference.InferredType.Float())));
     }
 

@@ -1772,7 +1772,24 @@ public static class TypeInference
         SyntaxTypes.Expression expression,
         IReadOnlyDictionary<string, int> parameterNames,
         IReadOnlyDictionary<string, InferredType> functionSignatures,
-        ImmutableDictionary<string, InferredType> parameterTypes)
+        ImmutableDictionary<string, InferredType> parameterTypes) =>
+        ScanExpressionForParameterTypes(
+            expression,
+            parameterNames,
+            functionSignatures,
+            parameterTypes,
+            localBindingDefinitions: []);
+
+    /// <summary>
+    /// Scans an expression recursively to infer parameter types from function applications,
+    /// with support for tracking local binding definitions for constraint propagation.
+    /// </summary>
+    private static ImmutableDictionary<string, InferredType> ScanExpressionForParameterTypes(
+        SyntaxTypes.Expression expression,
+        IReadOnlyDictionary<string, int> parameterNames,
+        IReadOnlyDictionary<string, InferredType> functionSignatures,
+        ImmutableDictionary<string, InferredType> parameterTypes,
+        ImmutableDictionary<string, SyntaxTypes.Expression> localBindingDefinitions)
     {
         switch (expression)
         {
@@ -1780,7 +1797,8 @@ public static class TypeInference
                 // Check if first argument is a function reference with known signature
                 if (app.Arguments[0].Value is SyntaxTypes.Expression.FunctionOrValue funcRef)
                 {
-                    var qualifiedName = funcRef.ModuleName.Count > 0
+                    var qualifiedName =
+                        funcRef.ModuleName.Count > 0
                         ? string.Join(".", funcRef.ModuleName) + "." + funcRef.Name
                         : funcRef.Name;
 
@@ -1825,36 +1843,41 @@ public static class TypeInference
                 // Recurse into application arguments
                 foreach (var arg in app.Arguments)
                 {
-                    parameterTypes = ScanExpressionForParameterTypes(arg.Value, parameterNames, functionSignatures, parameterTypes);
+                    parameterTypes = ScanExpressionForParameterTypes(arg.Value, parameterNames, functionSignatures, parameterTypes, localBindingDefinitions);
                 }
                 break;
 
             case SyntaxTypes.Expression.LetExpression letExpr:
+                // Build a map of local binding definitions for constraint propagation
+                var extendedLocalBindings = localBindingDefinitions;
                 foreach (var decl in letExpr.Value.Declarations)
                 {
                     if (decl.Value is SyntaxTypes.Expression.LetDeclaration.LetFunction letFunc)
                     {
-                        parameterTypes = ScanExpressionForParameterTypes(letFunc.Function.Declaration.Value.Expression.Value, parameterNames, functionSignatures, parameterTypes);
+                        var bindingName = letFunc.Function.Declaration.Value.Name.Value;
+                        var bindingExpr = letFunc.Function.Declaration.Value.Expression.Value;
+                        extendedLocalBindings = extendedLocalBindings.SetItem(bindingName, bindingExpr);
+                        parameterTypes = ScanExpressionForParameterTypes(bindingExpr, parameterNames, functionSignatures, parameterTypes, extendedLocalBindings);
                     }
                     else if (decl.Value is SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr)
                     {
-                        parameterTypes = ScanExpressionForParameterTypes(letDestr.Expression.Value, parameterNames, functionSignatures, parameterTypes);
+                        parameterTypes = ScanExpressionForParameterTypes(letDestr.Expression.Value, parameterNames, functionSignatures, parameterTypes, extendedLocalBindings);
                     }
                 }
-                parameterTypes = ScanExpressionForParameterTypes(letExpr.Value.Expression.Value, parameterNames, functionSignatures, parameterTypes);
+                parameterTypes = ScanExpressionForParameterTypes(letExpr.Value.Expression.Value, parameterNames, functionSignatures, parameterTypes, extendedLocalBindings);
                 break;
 
             case SyntaxTypes.Expression.IfBlock ifBlock:
-                parameterTypes = ScanExpressionForParameterTypes(ifBlock.Condition.Value, parameterNames, functionSignatures, parameterTypes);
-                parameterTypes = ScanExpressionForParameterTypes(ifBlock.ThenBlock.Value, parameterNames, functionSignatures, parameterTypes);
-                parameterTypes = ScanExpressionForParameterTypes(ifBlock.ElseBlock.Value, parameterNames, functionSignatures, parameterTypes);
+                parameterTypes = ScanExpressionForParameterTypes(ifBlock.Condition.Value, parameterNames, functionSignatures, parameterTypes, localBindingDefinitions);
+                parameterTypes = ScanExpressionForParameterTypes(ifBlock.ThenBlock.Value, parameterNames, functionSignatures, parameterTypes, localBindingDefinitions);
+                parameterTypes = ScanExpressionForParameterTypes(ifBlock.ElseBlock.Value, parameterNames, functionSignatures, parameterTypes, localBindingDefinitions);
                 break;
 
             case SyntaxTypes.Expression.CaseExpression caseExpr:
-                parameterTypes = ScanExpressionForParameterTypes(caseExpr.CaseBlock.Expression.Value, parameterNames, functionSignatures, parameterTypes);
+                parameterTypes = ScanExpressionForParameterTypes(caseExpr.CaseBlock.Expression.Value, parameterNames, functionSignatures, parameterTypes, localBindingDefinitions);
                 foreach (var caseCase in caseExpr.CaseBlock.Cases)
                 {
-                    parameterTypes = ScanExpressionForParameterTypes(caseCase.Expression.Value, parameterNames, functionSignatures, parameterTypes);
+                    parameterTypes = ScanExpressionForParameterTypes(caseCase.Expression.Value, parameterNames, functionSignatures, parameterTypes, localBindingDefinitions);
                 }
                 break;
 
@@ -1869,7 +1892,8 @@ public static class TypeInference
                             opApp.Left.Value,
                             constraints.LeftOperandType,
                             parameterNames,
-                            parameterTypes);
+                            parameterTypes,
+                            localBindingDefinitions);
                     }
 
                     // If the operator forces right operand type, constrain any parameter variables
@@ -1879,40 +1903,68 @@ public static class TypeInference
                             opApp.Right.Value,
                             constraints.RightOperandType,
                             parameterNames,
-                            parameterTypes);
+                            parameterTypes,
+                            localBindingDefinitions);
                     }
                 }
 
-                parameterTypes = ScanExpressionForParameterTypes(opApp.Left.Value, parameterNames, functionSignatures, parameterTypes);
-                parameterTypes = ScanExpressionForParameterTypes(opApp.Right.Value, parameterNames, functionSignatures, parameterTypes);
+                // For arithmetic operators, check if one operand is a Float literal
+                // If so, propagate Float constraint to the other operand
+                if (opApp.Operator is "+" or "-" or "*" or "^" or "%")
+                {
+                    // Check if left operand is a Float literal
+                    if (opApp.Left.Value is SyntaxTypes.Expression.Floatable)
+                    {
+                        parameterTypes = ExtractTypeConstraintFromExpression(
+                            opApp.Right.Value,
+                            s_floatType,
+                            parameterNames,
+                            parameterTypes,
+                            localBindingDefinitions);
+                    }
+
+                    // Check if right operand is a Float literal
+                    if (opApp.Right.Value is SyntaxTypes.Expression.Floatable)
+                    {
+                        parameterTypes = ExtractTypeConstraintFromExpression(
+                            opApp.Left.Value,
+                            s_floatType,
+                            parameterNames,
+                            parameterTypes,
+                            localBindingDefinitions);
+                    }
+                }
+
+                parameterTypes = ScanExpressionForParameterTypes(opApp.Left.Value, parameterNames, functionSignatures, parameterTypes, localBindingDefinitions);
+                parameterTypes = ScanExpressionForParameterTypes(opApp.Right.Value, parameterNames, functionSignatures, parameterTypes, localBindingDefinitions);
                 break;
 
             case SyntaxTypes.Expression.ParenthesizedExpression paren:
-                parameterTypes = ScanExpressionForParameterTypes(paren.Expression.Value, parameterNames, functionSignatures, parameterTypes);
+                parameterTypes = ScanExpressionForParameterTypes(paren.Expression.Value, parameterNames, functionSignatures, parameterTypes, localBindingDefinitions);
                 break;
 
             case SyntaxTypes.Expression.LambdaExpression lambda:
-                parameterTypes = ScanExpressionForParameterTypes(lambda.Lambda.Expression.Value, parameterNames, functionSignatures, parameterTypes);
+                parameterTypes = ScanExpressionForParameterTypes(lambda.Lambda.Expression.Value, parameterNames, functionSignatures, parameterTypes, localBindingDefinitions);
                 break;
 
             case SyntaxTypes.Expression.TupledExpression tuple:
                 foreach (var elem in tuple.Elements)
                 {
-                    parameterTypes = ScanExpressionForParameterTypes(elem.Value, parameterNames, functionSignatures, parameterTypes);
+                    parameterTypes = ScanExpressionForParameterTypes(elem.Value, parameterNames, functionSignatures, parameterTypes, localBindingDefinitions);
                 }
                 break;
 
             case SyntaxTypes.Expression.ListExpr list:
                 foreach (var elem in list.Elements)
                 {
-                    parameterTypes = ScanExpressionForParameterTypes(elem.Value, parameterNames, functionSignatures, parameterTypes);
+                    parameterTypes = ScanExpressionForParameterTypes(elem.Value, parameterNames, functionSignatures, parameterTypes, localBindingDefinitions);
                 }
                 break;
 
             case SyntaxTypes.Expression.RecordExpr record:
                 foreach (var field in record.Fields)
                 {
-                    parameterTypes = ScanExpressionForParameterTypes(field.Value.valueExpr.Value, parameterNames, functionSignatures, parameterTypes);
+                    parameterTypes = ScanExpressionForParameterTypes(field.Value.valueExpr.Value, parameterNames, functionSignatures, parameterTypes, localBindingDefinitions);
                 }
                 break;
         }
@@ -1929,7 +1981,26 @@ public static class TypeInference
         SyntaxTypes.Expression expression,
         InferredType targetType,
         IReadOnlyDictionary<string, int> parameterNames,
-        ImmutableDictionary<string, InferredType> parameterTypes)
+        ImmutableDictionary<string, InferredType> parameterTypes) =>
+        ExtractTypeConstraintFromExpression(
+            expression,
+            targetType,
+            parameterNames,
+            parameterTypes,
+            localBindingDefinitions: []);
+
+    /// <summary>
+    /// Extracts type constraints from an expression for parameter variables,
+    /// with support for tracking local binding definitions for constraint propagation.
+    /// When an expression like 'a + b' is known to be Int (due to operator constraints),
+    /// this method extracts constraints for parameter variables like 'a' and 'b'.
+    /// </summary>
+    private static ImmutableDictionary<string, InferredType> ExtractTypeConstraintFromExpression(
+        SyntaxTypes.Expression expression,
+        InferredType targetType,
+        IReadOnlyDictionary<string, int> parameterNames,
+        ImmutableDictionary<string, InferredType> parameterTypes,
+        ImmutableDictionary<string, SyntaxTypes.Expression> localBindingDefinitions)
     {
         switch (expression)
         {
@@ -1949,17 +2020,24 @@ public static class TypeInference
                     var unifiedType = UnifyTypes(existingType, targetType);
                     parameterTypes = parameterTypes.SetItem(varRef.Name, unifiedType);
                 }
+                // If this is a local binding, look up its definition and propagate the constraint
+                else if (varRef.ModuleName.Count is 0 &&
+                    localBindingDefinitions.TryGetValue(varRef.Name, out var bindingExpr))
+                {
+                    parameterTypes = ExtractTypeConstraintFromExpression(
+                        bindingExpr, targetType, parameterNames, parameterTypes, localBindingDefinitions);
+                }
                 return parameterTypes;
 
             case SyntaxTypes.Expression.ParenthesizedExpression paren:
-                return ExtractTypeConstraintFromExpression(paren.Expression.Value, targetType, parameterNames, parameterTypes);
+                return ExtractTypeConstraintFromExpression(paren.Expression.Value, targetType, parameterNames, parameterTypes, localBindingDefinitions);
 
             case SyntaxTypes.Expression.OperatorApplication nestedOpApp:
                 // For arithmetic operators that preserve numeric type, propagate constraints to operands
-                if (nestedOpApp.Operator is "+" or "-" or "*" or "//" or "%" or "^")
+                if (nestedOpApp.Operator is "+" or "-" or "*" or "/" or "//" or "%" or "^")
                 {
-                    parameterTypes = ExtractTypeConstraintFromExpression(nestedOpApp.Left.Value, targetType, parameterNames, parameterTypes);
-                    parameterTypes = ExtractTypeConstraintFromExpression(nestedOpApp.Right.Value, targetType, parameterNames, parameterTypes);
+                    parameterTypes = ExtractTypeConstraintFromExpression(nestedOpApp.Left.Value, targetType, parameterNames, parameterTypes, localBindingDefinitions);
+                    parameterTypes = ExtractTypeConstraintFromExpression(nestedOpApp.Right.Value, targetType, parameterNames, parameterTypes, localBindingDefinitions);
                 }
                 return parameterTypes;
 
