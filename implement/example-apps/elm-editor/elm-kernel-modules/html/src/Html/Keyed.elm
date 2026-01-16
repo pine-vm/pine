@@ -1,8 +1,8 @@
 module Html.Keyed exposing
-  ( node
-  , ol
-  , ul
-  )
+    ( node
+    , ol, ul
+    )
+
 {-| A keyed node helps optimize cases where children are getting added, moved,
 removed, etc. Common examples include:
 
@@ -14,13 +14,17 @@ When you use a keyed node, every child is paired with a string identifier. This
 makes it possible for the underlying diffing algorithm to reuse nodes more
 efficiently.
 
+
 # Keyed Nodes
+
 @docs node
 
-# Commonly Keyed Nodes
-@docs ol, ul
--}
 
+# Commonly Keyed Nodes
+
+@docs ol, ul
+
+-}
 
 import Html exposing (Attribute, Html)
 import VirtualDom
@@ -33,16 +37,16 @@ the DOM modifications more efficient.
 -}
 node : String -> List (Attribute msg) -> List ( String, Html msg ) -> Html msg
 node =
-  VirtualDom.keyedNode
+    VirtualDom.keyedNode
 
 
-{-|-}
+{-| -}
 ol : List (Attribute msg) -> List ( String, Html msg ) -> Html msg
 ol =
-  node "ol"
+    node "ol"
 
 
-{-|-}
+{-| -}
 ul : List (Attribute msg) -> List ( String, Html msg ) -> Html msg
 ul =
-  node "ul"
+    node "ul"

@@ -1,38 +1,48 @@
 module Html.Events exposing
-  ( onClick, onDoubleClick
-  , onMouseDown, onMouseUp
-  , onMouseEnter, onMouseLeave
-  , onMouseOver, onMouseOut
-  , onInput, onCheck, onSubmit
-  , onBlur, onFocus
-  , on, stopPropagationOn, preventDefaultOn, custom
-  , targetValue, targetChecked, keyCode
-  )
+    ( onClick, onDoubleClick
+    , onMouseDown, onMouseUp
+    , onMouseEnter, onMouseLeave
+    , onMouseOver, onMouseOut
+    , onInput, onCheck, onSubmit
+    , onBlur, onFocus
+    , on, stopPropagationOn, preventDefaultOn, custom
+    , targetValue, targetChecked, keyCode
+    )
 
-{-|
-It is often helpful to create an [Custom Type][] so you can have many different kinds
-of events as seen in the [TodoMVC][] example.
+{-| It is often helpful to create an [Custom Type] so you can have many different kinds
+of events as seen in the [TodoMVC] example.
 
 [Custom Type]: https://guide.elm-lang.org/types/custom_types.html
 [TodoMVC]: https://github.com/evancz/elm-todomvc/blob/master/Todo.elm
 
+
 # Mouse
-@docs onClick, onDoubleClick,
-      onMouseDown, onMouseUp,
-      onMouseEnter, onMouseLeave,
-      onMouseOver, onMouseOut
+
+@docs onClick, onDoubleClick
+@docs onMouseDown, onMouseUp
+@docs onMouseEnter, onMouseLeave
+@docs onMouseOver, onMouseOut
+
 
 # Forms
+
 @docs onInput, onCheck, onSubmit
 
+
 # Focus
+
 @docs onBlur, onFocus
 
+
 # Custom
+
 @docs on, stopPropagationOn, preventDefaultOn, custom
 
+
 ## Custom Decoders
+
 @docs targetValue, targetChecked, keyCode
+
 -}
 
 import Html exposing (Attribute)
@@ -44,52 +54,52 @@ import VirtualDom
 -- MOUSE EVENTS
 
 
-{-|-}
+{-| -}
 onClick : msg -> Attribute msg
 onClick msg =
-  on "click" (Json.succeed msg)
+    on "click" (Json.succeed msg)
 
 
-{-|-}
+{-| -}
 onDoubleClick : msg -> Attribute msg
 onDoubleClick msg =
-  on "dblclick" (Json.succeed msg)
+    on "dblclick" (Json.succeed msg)
 
 
-{-|-}
+{-| -}
 onMouseDown : msg -> Attribute msg
 onMouseDown msg =
-  on "mousedown" (Json.succeed msg)
+    on "mousedown" (Json.succeed msg)
 
 
-{-|-}
+{-| -}
 onMouseUp : msg -> Attribute msg
 onMouseUp msg =
-  on "mouseup" (Json.succeed msg)
+    on "mouseup" (Json.succeed msg)
 
 
-{-|-}
+{-| -}
 onMouseEnter : msg -> Attribute msg
 onMouseEnter msg =
-  on "mouseenter" (Json.succeed msg)
+    on "mouseenter" (Json.succeed msg)
 
 
-{-|-}
+{-| -}
 onMouseLeave : msg -> Attribute msg
 onMouseLeave msg =
-  on "mouseleave" (Json.succeed msg)
+    on "mouseleave" (Json.succeed msg)
 
 
-{-|-}
+{-| -}
 onMouseOver : msg -> Attribute msg
 onMouseOver msg =
-  on "mouseover" (Json.succeed msg)
+    on "mouseover" (Json.succeed msg)
 
 
-{-|-}
+{-| -}
 onMouseOut : msg -> Attribute msg
 onMouseOut msg =
-  on "mouseout" (Json.succeed msg)
+    on "mouseout" (Json.succeed msg)
 
 
 
@@ -111,15 +121,16 @@ of the event. This is important for complicated reasons explained [here][1] and
 
 [1]: /packages/elm/virtual-dom/latest/VirtualDom#Handler
 [2]: https://github.com/elm/virtual-dom/issues/125
+
 -}
 onInput : (String -> msg) -> Attribute msg
 onInput tagger =
-  stopPropagationOn "input" (Json.map alwaysStop (Json.map tagger targetValue))
+    stopPropagationOn "input" (Json.map alwaysStop (Json.map tagger targetValue))
 
 
-alwaysStop : a -> (a, Bool)
+alwaysStop : a -> ( a, Bool )
 alwaysStop x =
-  (x, True)
+    ( x, True )
 
 
 {-| Detect [change](https://developer.mozilla.org/en-US/docs/Web/Events/change)
@@ -127,10 +138,11 @@ events on checkboxes. It will grab the boolean value from `event.target.checked`
 on any input event.
 
 Check out [`targetChecked`](#targetChecked) for more details on how this works.
+
 -}
 onCheck : (Bool -> msg) -> Attribute msg
 onCheck tagger =
-  on "change" (Json.map tagger targetChecked)
+    on "change" (Json.map tagger targetChecked)
 
 
 {-| Detect a [submit](https://developer.mozilla.org/en-US/docs/Web/Events/submit)
@@ -140,28 +152,28 @@ different behavior, create a custom event handler.
 -}
 onSubmit : msg -> Attribute msg
 onSubmit msg =
-  preventDefaultOn "submit" (Json.map alwaysPreventDefault (Json.succeed msg))
+    preventDefaultOn "submit" (Json.map alwaysPreventDefault (Json.succeed msg))
 
 
 alwaysPreventDefault : msg -> ( msg, Bool )
 alwaysPreventDefault msg =
-  ( msg, True )
+    ( msg, True )
 
 
 
 -- FOCUS EVENTS
 
 
-{-|-}
+{-| -}
 onBlur : msg -> Attribute msg
 onBlur msg =
-  on "blur" (Json.succeed msg)
+    on "blur" (Json.succeed msg)
 
 
-{-|-}
+{-| -}
 onFocus : msg -> Attribute msg
 onFocus msg =
-  on "focus" (Json.succeed msg)
+    on "focus" (Json.succeed msg)
 
 
 
@@ -175,7 +187,7 @@ you have the power! Here is how `onClick` is defined for example:
 
     onClick : msg -> Attribute msg
     onClick message =
-      on "click" (Decode.succeed message)
+        on "click" (Decode.succeed message)
 
 The first argument is the event name in the same format as with JavaScript's
 [`addEventListener`][aEL] function.
@@ -192,14 +204,15 @@ It really helps!
 [decoder]: /packages/elm/json/latest/Json-Decode
 [tutorial]: https://github.com/evancz/elm-architecture-tutorial/
 
-**Note:** This creates a [passive][] event listener, enabling optimizations for
+**Note:** This creates a [passive] event listener, enabling optimizations for
 touch, scroll, and wheel events in some browsers.
 
 [passive]: https://github.com/WICG/EventListenerOptions/blob/gh-pages/explainer.md
+
 -}
 on : String -> Json.Decoder msg -> Attribute msg
 on event decoder =
-  VirtualDom.on event (VirtualDom.Normal decoder)
+    VirtualDom.on event (VirtualDom.Normal decoder)
 
 
 {-| Create an event listener that may [`stopPropagation`][stop]. Your decoder
@@ -208,36 +221,38 @@ be called.
 
 [stop]: https://developer.mozilla.org/en-US/docs/Web/API/Event/stopPropagation
 
-**Note:** This creates a [passive][] event listener, enabling optimizations for
+**Note:** This creates a [passive] event listener, enabling optimizations for
 touch, scroll, and wheel events in some browsers.
 
 [passive]: https://github.com/WICG/EventListenerOptions/blob/gh-pages/explainer.md
+
 -}
-stopPropagationOn : String -> Json.Decoder (msg, Bool) -> Attribute msg
+stopPropagationOn : String -> Json.Decoder ( msg, Bool ) -> Attribute msg
 stopPropagationOn event decoder =
-  VirtualDom.on event (VirtualDom.MayStopPropagation decoder)
+    VirtualDom.on event (VirtualDom.MayStopPropagation decoder)
 
 
 {-| Create an event listener that may [`preventDefault`][prevent]. Your decoder
 must produce a message and a `Bool` that decides if `preventDefault` should
 be called.
 
-For example, the `onSubmit` function in this library *always* prevents the
+For example, the `onSubmit` function in this library _always_ prevents the
 default behavior:
 
 [prevent]: https://developer.mozilla.org/en-US/docs/Web/API/Event/preventDefault
 
     onSubmit : msg -> Attribute msg
     onSubmit msg =
-      preventDefaultOn "submit" (Json.map alwaysPreventDefault (Json.succeed msg))
+        preventDefaultOn "submit" (Json.map alwaysPreventDefault (Json.succeed msg))
 
     alwaysPreventDefault : msg -> ( msg, Bool )
     alwaysPreventDefault msg =
-      ( msg, True )
+        ( msg, True )
+
 -}
-preventDefaultOn : String -> Json.Decoder (msg, Bool) -> Attribute msg
+preventDefaultOn : String -> Json.Decoder ( msg, Bool ) -> Attribute msg
 preventDefaultOn event decoder =
-  VirtualDom.on event (VirtualDom.MayPreventDefault decoder)
+    VirtualDom.on event (VirtualDom.MayPreventDefault decoder)
 
 
 {-| Create an event listener that may [`stopPropagation`][stop] or
@@ -250,10 +265,11 @@ preventDefaultOn event decoder =
 **Note:** Check out the lower-level event API in `elm/virtual-dom` for more
 information on exactly how events work, especially the [`Handler`][handler]
 docs.
+
 -}
 custom : String -> Json.Decoder { message : msg, stopPropagation : Bool, preventDefault : Bool } -> Attribute msg
 custom event decoder =
-  VirtualDom.on event (VirtualDom.Custom decoder)
+    VirtualDom.on event (VirtualDom.Custom decoder)
 
 
 
@@ -267,19 +283,20 @@ custom event decoder =
 
     onInput : (String -> msg) -> Attribute msg
     onInput tagger =
-      stopPropagationOn "input" <|
-        Json.map alwaysStop (Json.map tagger targetValue)
+        stopPropagationOn "input" <|
+            Json.map alwaysStop (Json.map tagger targetValue)
 
-    alwaysStop : a -> (a, Bool)
+    alwaysStop : a -> ( a, Bool )
     alwaysStop x =
-      (x, True)
+        ( x, True )
 
 You probably will never need this, but hopefully it gives some insights into
 how to make custom event handlers.
+
 -}
 targetValue : Json.Decoder String
 targetValue =
-  Json.at ["target", "value"] Json.string
+    Json.at [ "target", "value" ] Json.string
 
 
 {-| A `Json.Decoder` for grabbing `event.target.checked`. We use this to define
@@ -289,11 +306,12 @@ targetValue =
 
     onCheck : (Bool -> msg) -> Attribute msg
     onCheck tagger =
-      on "input" (Json.map tagger targetChecked)
+        on "input" (Json.map tagger targetChecked)
+
 -}
 targetChecked : Json.Decoder Bool
 targetChecked =
-  Json.at ["target", "checked"] Json.bool
+    Json.at [ "target", "checked" ] Json.bool
 
 
 {-| A `Json.Decoder` for grabbing `event.keyCode`. This helps you define
@@ -303,12 +321,13 @@ keyboard listeners like this:
 
     onKeyUp : (Int -> msg) -> Attribute msg
     onKeyUp tagger =
-      on "keyup" (Json.map tagger keyCode)
+        on "keyup" (Json.map tagger keyCode)
 
 **Note:** It looks like the spec is moving away from `event.keyCode` and
 towards `event.key`. Once this is supported in more browsers, we may add
 helpers here for `onKeyUp`, `onKeyDown`, `onKeyPress`, etc.
+
 -}
 keyCode : Json.Decoder Int
 keyCode =
-  Json.field "keyCode" Json.int
+    Json.field "keyCode" Json.int

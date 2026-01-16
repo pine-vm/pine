@@ -1,9 +1,7 @@
-module TestParser exposing( .. )
-
+module TestParser exposing (..)
 
 import Url
 import Url.Parser exposing ((</>))
-
 
 
 type Route
