@@ -21,17 +21,17 @@
 
   <ItemGroup>
     <PackageReference Include="AwesomeAssertions" Version="9.3.0" />
-    <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="10.0.1" />
-    <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="10.0.1" />
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="10.0.2" />
+    <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="10.0.2" />
     <PackageReference Include="Microsoft.Testing.Extensions.TrxReport" Version="1.9.0" />
     <PackageReference Include="morelinq" Version="4.4.0" />
     <PackageReference Include="coverlet.collector" Version="6.0.4">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="SharpCompress" Version="0.43.0" />
+    <PackageReference Include="SharpCompress" Version="0.44.0" />
     <PackageReference Include="StreamJsonRpc" Version="2.22.23" />
-    <PackageReference Include="xunit.v3.core" Version="3.1.0" />
+    <PackageReference Include="xunit.v3.core" Version="3.2.2" />
   </ItemGroup>
 
   <ItemGroup>
