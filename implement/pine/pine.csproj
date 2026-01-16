@@ -5,7 +5,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <AssemblyName>pine</AssemblyName>
     <RootNamespace>Pine</RootNamespace>
-    <Version>0.4.27</Version>
+    <Version>0.4.28</Version>
     <InformationalVersion>pine $(Version)</InformationalVersion>
     <SourceRevisionId></SourceRevisionId>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
