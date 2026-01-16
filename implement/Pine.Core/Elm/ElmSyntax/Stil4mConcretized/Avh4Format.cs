@@ -82,6 +82,7 @@ public class Avh4Format
         public const string Module = "module";
         public const string Port = "port";
         public const string Effect = "effect";
+        public const string Infix = "infix";
         public const string Alias = "alias";
         public const string ExposingAll = "exposing (..)";
         public const string Exposing = "exposing";
@@ -1289,9 +1290,24 @@ public class Avh4Format
             File file,
             FormattingContext context)
         {
+            // Check for comments before the module definition (at the beginning of the file)
+            var commentsBeforeModule = commentQueries.GetBeforeRow(file.ModuleDefinition.Range.Start.Row);
+
+            FormattingContext contextBeforeModule = context;
+            if (commentsBeforeModule.Count > 0)
+            {
+                // Format comments that appear before the module definition
+                foreach (var comment in commentsBeforeModule)
+                {
+                    contextBeforeModule = contextBeforeModule.FormatAndAddCommentAndNextRowToIndent(comment);
+                }
+                // Add two blank lines after comments before module (like WithBlankLine does)
+                contextBeforeModule = contextBeforeModule.NextRowToIndent().NextRowToIndent();
+            }
+
             // Format module definition
             var (formattedModule, contextAfterModule) =
-                FormatModuleDefinition(file.ModuleDefinition, context, commentQueries);
+                FormatModuleDefinition(file.ModuleDefinition, contextBeforeModule, commentQueries);
 
             // Check for comments associated with first import (leading comments)
             var firstImport = file.Imports.FirstOrDefault();
@@ -1898,6 +1914,16 @@ public class Avh4Format
                         .Split(',')
                         .Select(n => n.Trim())
                         .Where(n => !string.IsNullOrEmpty(n))
+                        .Select(n =>
+                        {
+                            // Strip parentheses from operator names like "(+)" -> "+"
+                            // Must have at least 3 chars to have content between parens: "(x)"
+                            if (n.Length > 2 && n.StartsWith("(") && n.EndsWith(")"))
+                            {
+                                return n.Substring(1, n.Length - 2);
+                            }
+                            return n;
+                        })
                         .ToList();
 
                     if (names.Count > 0)
@@ -2214,19 +2240,19 @@ public class Avh4Format
             return decl.Value switch
             {
                 Declaration.FunctionDeclaration funcDecl =>
-                    FormatFunctionDeclaration(funcDecl, decl.Range, context),
+                FormatFunctionDeclaration(funcDecl, decl.Range, context),
 
                 Declaration.AliasDeclaration aliasDecl =>
-                    FormatAliasDeclaration(aliasDecl, context),
+                FormatAliasDeclaration(aliasDecl, context),
 
                 Declaration.CustomTypeDeclaration customTypeDecl =>
-                    FormatCustomTypeDeclaration(customTypeDecl, context),
+                FormatCustomTypeDeclaration(customTypeDecl, context),
 
                 Declaration.InfixDeclaration infixDecl =>
-                    FormatInfixDeclaration(infixDecl, decl.Range, context),
+                FormatInfixDeclaration(infixDecl, context),
 
                 Declaration.PortDeclaration portDecl =>
-                    FormatPortDeclaration(portDecl, context),
+                FormatPortDeclaration(portDecl, context),
 
                 _ =>
                 throw new System.NotImplementedException(
@@ -2792,28 +2818,94 @@ public class Avh4Format
 
         private static FormattingResult<Stil4mElmSyntax7.Node<Declaration>> FormatInfixDeclaration(
             Declaration.InfixDeclaration infixDecl,
-            Range originalRange,
             FormattingContext context)
         {
+            // Direction field width for alignment: "right" (5), "left" (4), "non" (3)
+            // Pad to 6 chars to align precedence across all infix declarations
+            const int DirectionFieldWidth = 6;
+
+            // "infix "
             var infixTokenLoc = context.CurrentLocation();
+            var afterInfixKeyword = context.Advance(Keywords.Infix.Length).AdvanceSpaceSeparator();
 
-            // Simplified: just preserve the original length
-            var lineLength = originalRange.End.Column - originalRange.Start.Column;
-            var afterInfix = context.Advance(lineLength);
+            // Direction (left/right/non) - elm-format aligns precedence by padding direction
+            var directionLoc = afterInfixKeyword.CurrentLocation();
 
-            var range = MakeRange(context.CurrentLocation(), afterInfix.CurrentLocation());
+            var directionText =
+                infixDecl.Infix.Direction.Value switch
+                {
+                    Stil4mElmSyntax7.InfixDirection.Left =>
+                    "left",
+
+                    Stil4mElmSyntax7.InfixDirection.Right =>
+                    "right",
+
+                    Stil4mElmSyntax7.InfixDirection.Non =>
+                    "non",
+
+                    _ =>
+                    throw new System.NotImplementedException(
+                        $"InfixDirection '{infixDecl.Infix.Direction.Value}' not supported")
+                };
+
+            var afterDirection = afterInfixKeyword.Advance(directionText.Length);
+
+            // Pad to align precedence
+            var paddingSpaces = System.Math.Max(0, DirectionFieldWidth - directionText.Length);
+            var afterDirectionPadding = afterDirection.Advance(paddingSpaces);
+
+            // Precedence
+            var precedenceLoc = afterDirectionPadding.CurrentLocation();
+            var precedenceText = infixDecl.Infix.Precedence.Value.ToString();
+            var afterPrecedence = afterDirectionPadding.Advance(precedenceText.Length).AdvanceSpaceSeparator();
+
+            // Operator "(op)"
+            var operatorLoc = afterPrecedence.CurrentLocation();
+            var operatorText = $"({infixDecl.Infix.Operator.Value})";
+            var afterOperator = afterPrecedence.Advance(operatorText.Length).AdvanceSpaceSeparator();
+
+            // "="
+            var equalsLoc = afterOperator.CurrentLocation();
+            var afterEquals = afterOperator.Advance(1).AdvanceSpaceSeparator();
+
+            // Function name
+            var functionNameLoc = afterEquals.CurrentLocation();
+            var afterFunctionName = afterEquals.Advance(infixDecl.Infix.FunctionName.Value.Length);
+
+            var range = MakeRange(context.CurrentLocation(), afterFunctionName.CurrentLocation());
+
+            var formattedDirection = MakeNode(
+                directionLoc,
+                afterInfixKeyword.Advance(directionText.Length).CurrentLocation(),
+                infixDecl.Infix.Direction.Value);
+
+            var formattedPrecedence = MakeNode(
+                precedenceLoc,
+                afterDirectionPadding.Advance(precedenceText.Length).CurrentLocation(),
+                infixDecl.Infix.Precedence.Value);
+
+            var formattedOperator = MakeNode(
+                operatorLoc,
+                afterPrecedence.Advance(operatorText.Length).CurrentLocation(),
+                infixDecl.Infix.Operator.Value);
+
+            var formattedFunctionName = MakeNode(
+                functionNameLoc,
+                afterFunctionName.CurrentLocation(),
+                infixDecl.Infix.FunctionName.Value);
+
             var formattedInfix = new Infix(
                 InfixTokenLocation: infixTokenLoc,
-                Direction: infixDecl.Infix.Direction,
-                Precedence: infixDecl.Infix.Precedence,
-                Operator: infixDecl.Infix.Operator,
-                EqualsTokenLocation: infixDecl.Infix.EqualsTokenLocation,
-                FunctionName: infixDecl.Infix.FunctionName
+                Direction: formattedDirection,
+                Precedence: formattedPrecedence,
+                Operator: formattedOperator,
+                EqualsTokenLocation: equalsLoc,
+                FunctionName: formattedFunctionName
             );
 
             return FormattingResult<Stil4mElmSyntax7.Node<Declaration>>.Create(
                 MakeNode<Declaration>(range, new Declaration.InfixDeclaration(formattedInfix)),
-                afterInfix);
+                afterFunctionName);
         }
 
         private static FormattingResult<Stil4mElmSyntax7.Node<Declaration>> FormatPortDeclaration(
@@ -2860,10 +2952,11 @@ public class Avh4Format
         private FormattingResult<Stil4mElmSyntax7.Node<TypeAnnotation>> FormatTypeAnnotation(
             Stil4mElmSyntax7.Node<TypeAnnotation> typeAnnot,
             FormattingContext context,
-            FormattingContext? arrowBaseRef = null)
+            FormattingContext? arrowBaseRef = null,
+            bool forceMultilineArrows = false)
         {
             var startLoc = context.CurrentLocation();
-            var typeResult = FormatTypeAnnotationValue(typeAnnot.Value, typeAnnot.Range, context, arrowBaseRef);
+            var typeResult = FormatTypeAnnotationValue(typeAnnot.Value, typeAnnot.Range, context, arrowBaseRef, forceMultilineArrows);
             return FormattingResult<Stil4mElmSyntax7.Node<TypeAnnotation>>.Create(
                 MakeNode(startLoc, typeResult.Context.CurrentLocation(), typeResult.FormattedNode),
                 typeResult.Context);
@@ -2873,7 +2966,8 @@ public class Avh4Format
             TypeAnnotation typeAnnot,
             Range originalRange,
             FormattingContext context,
-            FormattingContext? arrowBaseRef = null)
+            FormattingContext? arrowBaseRef = null,
+            bool forceMultilineArrows = false)
         {
             // Reference context for indented content (one indent level from current position)
             var indentedRef = context.CreateIndentedRef();
@@ -2886,9 +2980,12 @@ public class Avh4Format
                 case TypeAnnotation.Typed typed:
                     {
                         var typeName = typed.TypeName.Value;
-                        var typeNameText = typeName.ModuleName.Count > 0
+
+                        var typeNameText =
+                            typeName.ModuleName.Count > 0
                             ? string.Join(".", typeName.ModuleName) + "." + typeName.Name
                             : typeName.Name;
+
                         var afterTypeName = context.Advance(typeNameText.Length);
 
                         var formattedArgs = new List<Stil4mElmSyntax7.Node<TypeAnnotation>>();
@@ -2987,7 +3084,14 @@ public class Avh4Format
                 case TypeAnnotation.FunctionTypeAnnotation funcType:
                     {
                         // Check if the function type is multiline based on original layout
-                        var returnTypeOnNewLine = funcType.ReturnType.Range.Start.Row > funcType.ArgumentType.Range.Start.Row;
+                        // We need to check if ANY part of the function type annotation spans multiple lines
+                        // If so, ALL arrows should be formatted on new lines
+                        var overallMultiline = originalRange.End.Row > originalRange.Start.Row || forceMultilineArrows;
+                        var returnTypeOnNewLine = funcType.ReturnType.Range.Start.Row > funcType.ArgumentType.Range.Start.Row ||
+                                                  overallMultiline;
+
+                        // Propagate multiline flag to nested function types
+                        var propagateMultiline = returnTypeOnNewLine;
 
                         // Check if the return type is on a separate line from the arrow
                         // This happens when -> is on its own line
@@ -2996,7 +3100,7 @@ public class Avh4Format
                         // Use passed reference or create one at current column if first encounter
                         var effectiveArrowBaseRef = arrowBaseRef ?? context.SetIndentToCurrentColumn();
 
-                        var argTypeResult = FormatTypeAnnotation(funcType.ArgumentType, context, effectiveArrowBaseRef);
+                        var argTypeResult = FormatTypeAnnotation(funcType.ArgumentType, context, effectiveArrowBaseRef, propagateMultiline);
 
                         Location arrowLocation;
                         FormattingResult<Stil4mElmSyntax7.Node<TypeAnnotation>> returnTypeResult;
@@ -3015,13 +3119,13 @@ public class Avh4Format
                                 var resultTypeRef = effectiveArrowBaseRef.CreateIndentedRef();
                                 var resultTypeCtx = afterArrow.ReturnToIndent(resultTypeRef).NextRowToIndent();
                                 // Pass effectiveArrowBaseRef so nested function type arrows align properly
-                                returnTypeResult = FormatTypeAnnotation(funcType.ReturnType, resultTypeCtx, effectiveArrowBaseRef);
+                                returnTypeResult = FormatTypeAnnotation(funcType.ReturnType, resultTypeCtx, effectiveArrowBaseRef, propagateMultiline);
                             }
                             else
                             {
                                 // Arrow on new line, but result type on same line as arrow
                                 var arrowCtx = newLineCtx.Advance(3); // "-> "
-                                returnTypeResult = FormatTypeAnnotation(funcType.ReturnType, arrowCtx, effectiveArrowBaseRef);
+                                returnTypeResult = FormatTypeAnnotation(funcType.ReturnType, arrowCtx, effectiveArrowBaseRef, propagateMultiline);
                             }
                         }
                         else
@@ -3030,7 +3134,7 @@ public class Avh4Format
                             var arrowCtx = argTypeResult.Context.Advance(1); // space before arrow
                             arrowLocation = arrowCtx.CurrentLocation();
                             var afterArrow = arrowCtx.Advance(3); // "-> "
-                            returnTypeResult = FormatTypeAnnotation(funcType.ReturnType, afterArrow, effectiveArrowBaseRef);
+                            returnTypeResult = FormatTypeAnnotation(funcType.ReturnType, afterArrow, effectiveArrowBaseRef, propagateMultiline);
                         }
 
                         var formattedFuncType = new TypeAnnotation.FunctionTypeAnnotation(
@@ -4600,8 +4704,13 @@ public class Avh4Format
             Expression.CaseExpression caseExpr,
             FormattingContext context)
         {
-            // Check if the scrutinee expression is on a new line in the original
+            // Check if the case expression spans multiple lines
+            // This can happen if:
+            // 1. The scrutinee expression starts on a new line from the case keyword
+            // 2. The "of" keyword is on a different line from the scrutinee
             var scrutineeOnNewLine = caseExpr.CaseBlock.Expression.Range.Start.Row > caseExpr.CaseBlock.CaseTokenLocation.Row;
+            var ofOnDifferentLine = caseExpr.CaseBlock.OfTokenLocation.Row > caseExpr.CaseBlock.Expression.Range.End.Row;
+            var isMultilineCaseHeader = scrutineeOnNewLine || ofOnDifferentLine;
 
             // "case" or "case "
             var caseTokenLoc = context.CurrentLocation();
@@ -4614,7 +4723,7 @@ public class Avh4Format
             FormattingResult<Stil4mElmSyntax7.Node<Expression>> exprResult;
             FormattingContext afterExpr;
 
-            if (scrutineeOnNewLine)
+            if (isMultilineCaseHeader)
             {
                 // "case" without trailing space
                 var afterCase = context.Advance(Keywords.Case.Length);
@@ -4634,7 +4743,7 @@ public class Avh4Format
             // " of" (space before of) or just "of" if scrutinee was on new line
             Location ofTokenLoc;
             FormattingContext afterOf;
-            if (scrutineeOnNewLine)
+            if (isMultilineCaseHeader)
             {
                 // "of" on new line, aligned with "case" keyword
                 var ofContext = afterExpr.ReturnToIndent(caseTokenRef).NextRowToIndent();
@@ -5044,8 +5153,15 @@ public class Avh4Format
             var afterArrow = afterArgs.Advance(2); // "->"
 
             // Check if body should be on a new line
-            // Compare original body position to original arrow position
-            var bodyOnNewLine = lambdaExpr.Lambda.Expression.Range.Start.Row > lambdaExpr.Lambda.ArrowLocation.Row;
+            // Body goes on new line if:
+            // 1. Original body was on a new line, OR
+            // 2. The body expression spans multiple lines (multiline function application etc.)
+            var bodyStartRow = lambdaExpr.Lambda.Expression.Range.Start.Row;
+            var bodyEndRow = lambdaExpr.Lambda.Expression.Range.End.Row;
+            var arrowRow = lambdaExpr.Lambda.ArrowLocation.Row;
+            var bodyWasOnNewLine = bodyStartRow > arrowRow;
+            var bodySpansMultipleLines = bodyEndRow > bodyStartRow;
+            var bodyOnNewLine = bodyWasOnNewLine || bodySpansMultipleLines;
 
             FormattingResult<Stil4mElmSyntax7.Node<Expression>> exprResult;
 
@@ -5058,9 +5174,7 @@ public class Avh4Format
                 var bodyContext = afterArrow.ReturnToIndent(bodyRef).NextRowToIndent();
 
                 // Check for comments between arrow and body expression in original
-                var arrowRow = lambdaExpr.Lambda.ArrowLocation.Row;
-                var exprStartRow = lambdaExpr.Lambda.Expression.Range.Start.Row;
-                var commentsBeforeExpr = commentQueries.GetBetweenRows(arrowRow, exprStartRow);
+                var commentsBeforeExpr = commentQueries.GetBetweenRows(arrowRow, bodyStartRow);
 
                 // Format any comments that appear before the expression
                 foreach (var comment in commentsBeforeExpr)

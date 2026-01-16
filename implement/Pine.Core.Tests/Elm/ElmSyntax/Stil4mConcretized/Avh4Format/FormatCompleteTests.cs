@@ -2556,7 +2556,15 @@ public class FormatCompleteTests
         var input =
             """"
             module Test exposing (..)
-
+            
+            import Other
+                exposing ( CookedDocumentation, Declaration, DeclarationRange, delta
+                    )
+            
+            infix right 0 (<|) = apL
+            infix left  0 (|>) = apR
+            infix right 2 (||) = or
+            infix right 3 (&&) = and
             
             declA =
                 [ 31, 37, 41
@@ -2592,17 +2600,9 @@ public class FormatCompleteTests
 
             declD :
                 List Int
-                -> Int
-                -> Int
-                -> Int
+                -> Int -> Int -> Int
             declD a ( b, c ) =
-            
-               case
-            
-            
-                    a
-                
-                    
+                case a
                  of
                     [] ->
                         b + c
@@ -2647,7 +2647,21 @@ public class FormatCompleteTests
             """"
             module Test exposing (..)
 
-            
+            import Other
+                exposing
+                    ( CookedDocumentation
+                    , Declaration
+                    , DeclarationRange
+                    , delta
+                    )
+
+
+            infix right 0 (<|) = apL
+            infix left  0 (|>) = apR
+            infix right 2 (||) = or
+            infix right 3 (&&) = and
+
+
             declA =
                 [ 31
                 , 37
@@ -2718,7 +2732,7 @@ public class FormatCompleteTests
                                             case i of
                                                 Nothing ->
                                                     []
-            
+
                                                 Just fst ->
                                                     fst
                                                         |> (\( ia, ib, ic ) ->
@@ -2874,6 +2888,42 @@ public class FormatCompleteTests
 
         AssertModuleTextFormatsToExpected(input, expected);
     }
+
+    [Fact]
+    public void Formats_multiline_function_application_inside_record_and_lambda()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                { functionName = ""
+                , mapFunctionLines =
+                    \{ generatedModuleName } -> always
+                        abc
+                }
+
+            """";
+
+        var expected =
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                { functionName = ""
+                , mapFunctionLines =
+                    \{ generatedModuleName } ->
+                        always
+                            abc
+                }
+
+            """";
+
+        AssertModuleTextFormatsToExpected(input, expected);
+    }
+
 
     [Fact]
     public void Restores_let_declaration_from_type_annotation_broken_colon_on_new_line()
@@ -3228,6 +3278,189 @@ public class FormatCompleteTests
     }
 
     [Fact]
+    public void Aligns_grouping_of_module_exports_containing_infix_operators_with_module_documentation()
+    {
+        var input =
+            """"
+            module Basics exposing
+                ( Int, Float, (+), (-), (*), (/), (//), (^)
+                , toFloat, round, floor, ceiling, truncate
+                , (/=), (==)
+                , (>), (<=)
+                , (>=), max, min, compare, Order(..)
+                , Bool(..), not, (&&), (||), xor
+                , (++)
+                , modBy, remainderBy, negate, abs, clamp, sqrt, logBase, e
+                , degrees, radians, turns
+                , pi, cos, sin, tan
+                , acos, asin, atan, atan2
+                , toPolar, fromPolar
+                , (<)
+                , isNaN, isInfinite
+                , identity, always, (<|), (|>), (<<), (>>), Never, never
+                )
+
+            {-| Tons of useful functions that get imported by default.
+
+
+            # Math
+
+            @docs Int, Float, (+), (-), (*), (/), (//), (^)
+
+
+            # Int to Float / Float to Int
+
+            @docs toFloat, round, floor, ceiling, truncate
+
+
+            # Equality
+
+            @docs (==), (/=)
+
+
+            # Comparison
+
+            These functions only work on `comparable` types. This includes numbers,
+            characters, strings, lists of comparable things, and tuples of comparable
+            things.
+
+            @docs (<), (>), (<=), (>=), max, min, compare, Order
+
+
+            # Booleans
+
+            @docs Bool, not, (&&), (||), xor
+
+
+            # Append Strings and Lists
+
+            @docs (++)
+
+
+            # Fancier Math
+
+            @docs modBy, remainderBy, negate, abs, clamp, sqrt, logBase, e
+
+
+            # Angles
+
+            @docs degrees, radians, turns
+
+
+            # Trigonometry
+
+            @docs pi, cos, sin, tan, acos, asin, atan, atan2
+
+
+            # Polar Coordinates
+
+            @docs toPolar, fromPolar
+
+
+            # Floating Point Checks
+
+            @docs isNaN, isInfinite
+
+
+            # Function Helpers
+
+            @docs identity, always, (<|), (|>), (<<), (>>), Never, never
+
+            -}
+
+            """";
+
+        var expected =
+            """"
+            module Basics exposing
+                ( Int, Float, (+), (-), (*), (/), (//), (^)
+                , toFloat, round, floor, ceiling, truncate
+                , (==), (/=)
+                , (<), (>), (<=), (>=), max, min, compare, Order(..)
+                , Bool(..), not, (&&), (||), xor
+                , (++)
+                , modBy, remainderBy, negate, abs, clamp, sqrt, logBase, e
+                , degrees, radians, turns
+                , pi, cos, sin, tan, acos, asin, atan, atan2
+                , toPolar, fromPolar
+                , isNaN, isInfinite
+                , identity, always, (<|), (|>), (<<), (>>), Never, never
+                )
+
+            {-| Tons of useful functions that get imported by default.
+
+
+            # Math
+
+            @docs Int, Float, (+), (-), (*), (/), (//), (^)
+
+
+            # Int to Float / Float to Int
+
+            @docs toFloat, round, floor, ceiling, truncate
+
+
+            # Equality
+
+            @docs (==), (/=)
+
+
+            # Comparison
+
+            These functions only work on `comparable` types. This includes numbers,
+            characters, strings, lists of comparable things, and tuples of comparable
+            things.
+
+            @docs (<), (>), (<=), (>=), max, min, compare, Order
+
+
+            # Booleans
+
+            @docs Bool, not, (&&), (||), xor
+
+
+            # Append Strings and Lists
+
+            @docs (++)
+
+
+            # Fancier Math
+
+            @docs modBy, remainderBy, negate, abs, clamp, sqrt, logBase, e
+
+
+            # Angles
+
+            @docs degrees, radians, turns
+
+
+            # Trigonometry
+
+            @docs pi, cos, sin, tan, acos, asin, atan, atan2
+
+
+            # Polar Coordinates
+
+            @docs toPolar, fromPolar
+
+
+            # Floating Point Checks
+
+            @docs isNaN, isInfinite
+
+
+            # Function Helpers
+
+            @docs identity, always, (<|), (|>), (<<), (>>), Never, never
+
+            -}
+
+            """";
+
+        AssertModuleTextFormatsToExpected(input, expected);
+    }
+
+    [Fact]
     public void Maintains_module_exports_multiline()
     {
         var input =
@@ -3268,7 +3501,7 @@ public class FormatCompleteTests
     }
 
     [Fact]
-    public void Maintains_module_exports_singleline()
+    public void Formats_module_exports_singleline()
     {
         var input =
             """"
@@ -3298,6 +3531,40 @@ public class FormatCompleteTests
             """";
 
         AssertModuleTextFormatsToExpected(input, expected);
+    }
+
+    [Fact]
+    public void Preserves_multiline_comment_at_beginning_of_file()
+    {
+        var input =
+            """"
+            {- For documentation of the compilation interface,
+               see <https://github.com/pine-vm/pine/blob/main/guide/customizing-elm-app-builds-with-compilation-interfaces.md#compilationinterfacesourcefiles-elm-module>
+            -}
+
+
+            module CompilationInterface.SourceFiles exposing (..)
+
+            import Bytes
+            import Bytes.Encode
+
+
+            file____README_md : { utf8 : String }
+            file____README_md =
+                { utf8 = "The compiler replaces this value." }
+
+
+            file____static_chat_message_added_0_mp3 : { bytes : Bytes.Bytes }
+            file____static_chat_message_added_0_mp3 =
+                { bytes =
+                    "The compiler replaces this value."
+                        |> Bytes.Encode.string
+                        |> Bytes.Encode.encode
+                }
+
+            """";
+
+        AssertModuleTextFormatsToItself(input);
     }
 
     [Fact]

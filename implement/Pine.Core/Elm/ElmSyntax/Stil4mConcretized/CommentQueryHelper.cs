@@ -67,6 +67,13 @@ public class CommentQueryHelper
         [.. _allComments.Where(c => c.Range.Start.Row > afterRow && c.Range.Start.Row < beforeRow)];
 
     /// <summary>
+    /// Get comments that appear before a given row.
+    /// Returns comments ordered by row then column.
+    /// </summary>
+    public IReadOnlyList<Node<ParsedComment>> GetBeforeRow(int beforeRow) =>
+        [.. _allComments.Where(c => c.Range.Start.Row < beforeRow)];
+
+    /// <summary>
     /// Get comments that appear after a given row.
     /// Returns comments ordered by row then column.
     /// </summary>
