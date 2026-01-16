@@ -20,7 +20,7 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 /// and
 /// <see href="https://github.com/pine-vm/pine/blob/391100e6734a50d2bede29ee49bca1afc8868fed/implement/pine/Elm/elm-compiler/src/ElmCompiler.elm"></see>
 /// <para>
-/// For an overview of the compiler implementation, see <see href="https://github.com/pine-vm/pine/blob/a54d2c794ae8ebae0b34e52937cadcdaebb162a6/implement/Pine.Core/Elm/ElmCompilerInDotnet/elm-compiler-implementation-guide.md"/>
+/// For an overview of the compiler implementation, see the file `elm-compiler-implementation-guide.md`
 /// </para>
 /// </summary>
 public class ElmCompiler
@@ -261,7 +261,9 @@ public class ElmCompiler
             var moduleNameFlattened =
                 string.Join('.', SyntaxTypes.Module.GetModuleName(parsedModule.ModuleDefinition.Value).Value);
 
-            var (moduleValue, updatedContext) = CompileModule(parsedModule, moduleNameFlattened, compilationContext);
+            var (moduleValue, updatedContext) =
+                CompileModule(parsedModule, moduleNameFlattened, compilationContext);
+
             compilationContext = updatedContext;
 
             var namedModuleEntry =

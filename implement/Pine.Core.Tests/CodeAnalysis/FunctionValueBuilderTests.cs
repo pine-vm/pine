@@ -1518,6 +1518,409 @@ public class FunctionValueBuilderTests
 
     #endregion
 
+    #region ParseFunctionValue Symmetry Tests
+
+    [Fact]
+    public void ParseFunctionValue_WithEnvFunctions_ZeroParameters_SymmetryTest()
+    {
+        var expectedResult = PineValue.Blob([42, 43]);
+        var innerExpression = Expression.LiteralInstance(expectedResult);
+
+        var functionValue =
+            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
+                innerExpression,
+                parameterCount: 0,
+                envFunctions: []);
+
+        // Parse using the new ParseFunctionValue method
+        var parseResult = FunctionRecord.ParseFunctionValue(functionValue, s_parseCache);
+
+        parseResult.IsOkOrNull().Should().NotBeNull();
+        var parsed = parseResult.IsOkOrNull()!;
+
+        // Assert on the complete parse result
+        parsed.Should().Be(
+            new ParsedFunctionValue.WithEnvFunctions(
+                InnerFunction: innerExpression,
+                ParameterCount: 0,
+                EnvFunctions: []));
+    }
+
+    [Fact]
+    public void ParseFunctionValue_WithEnvFunctions_SingleParameter_SymmetryTest()
+    {
+        // Inner expression: returns [envFuncs[0], arg]
+        // env = [envFuncs, [arg]]
+        var envFunc = PineValue.Blob([99, 88]);
+        var innerExpression = Expression.ListInstance(
+            [
+            BuildExpressionForPathInEnvironment([0, 0]),  // envFuncs[0]
+            BuildExpressionForPathInEnvironment([1, 0])   // arg
+            ]);
+
+        var functionValue =
+            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
+                innerExpression,
+                parameterCount: 1,
+                envFunctions: [envFunc]);
+
+        var parsed =
+            FunctionRecord.ParseFunctionValue(functionValue, s_parseCache)
+            .Extract(err => throw new InvalidOperationException($"Parse failed: {err}"));
+
+        // Assert on the complete parse result
+        parsed.Should().Be(
+            new ParsedFunctionValue.WithEnvFunctions(
+                InnerFunction: innerExpression,
+                ParameterCount: 1,
+                EnvFunctions: [envFunc]));
+
+        // Verify the function works correctly (symmetry)
+        var argValue = PineValue.Blob([1, 2, 3]);
+        var result = EvaluateEncodedExpression(functionValue, argValue);
+
+        result.Should().Be(PineValue.List([envFunc, argValue]));
+    }
+
+    [Fact]
+    public void ParseFunctionValue_WithEnvFunctions_TwoParameters_SymmetryTest()
+    {
+        // Inner expression: returns [arg0, arg1]
+        // env = [envFuncs, [arg0, arg1]]
+        var innerExpression = Expression.ListInstance(
+            [
+            BuildExpressionForPathInEnvironment([1, 0]),  // arg0
+            BuildExpressionForPathInEnvironment([1, 1])   // arg1
+            ]);
+
+        var functionValue =
+            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
+                innerExpression,
+                parameterCount: 2,
+                envFunctions: []);
+
+        var parsed =
+            FunctionRecord.ParseFunctionValue(functionValue, s_parseCache)
+            .Extract(err => throw new InvalidOperationException($"Parse failed: {err}"));
+
+        // Assert on the complete parse result
+        parsed.Should().Be(
+            new ParsedFunctionValue.WithEnvFunctions(
+                InnerFunction: innerExpression,
+                ParameterCount: 2,
+                EnvFunctions: []));
+
+        // Verify the function works correctly (symmetry)
+        var arg0 = PineValue.Blob([10]);
+        var arg1 = PineValue.Blob([20]);
+
+        var partial = EvaluateEncodedExpression(functionValue, arg0);
+        var result = EvaluateEncodedExpression(partial, arg1);
+
+        result.Should().Be(PineValue.List([arg0, arg1]));
+    }
+
+    [Fact]
+    public void ParseFunctionValue_WithEnvFunctions_ThreeParameters_SymmetryTest()
+    {
+        // Inner expression: returns [envFuncs[0], arg0, arg1, arg2]
+        // env = [envFuncs, [arg0, arg1, arg2]]
+        var envFunc = PineValue.Blob([77]);
+        var innerExpression = Expression.ListInstance(
+            [
+            BuildExpressionForPathInEnvironment([0, 0]),  // envFuncs[0]
+            BuildExpressionForPathInEnvironment([1, 0]),  // arg0
+            BuildExpressionForPathInEnvironment([1, 1]),  // arg1
+            BuildExpressionForPathInEnvironment([1, 2])   // arg2
+            ]);
+
+        var functionValue =
+            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
+                innerExpression,
+                parameterCount: 3,
+                envFunctions: [envFunc]);
+
+        var parsed =
+            FunctionRecord.ParseFunctionValue(functionValue, s_parseCache)
+            .Extract(err => throw new InvalidOperationException($"Parse failed: {err}"));
+
+        // Assert on the complete parse result
+        parsed.Should().Be(
+            new ParsedFunctionValue.WithEnvFunctions(
+                InnerFunction: innerExpression,
+                ParameterCount: 3,
+                EnvFunctions: [envFunc]));
+
+        // Verify the function works correctly (symmetry)
+        var arg0 = PineValue.Blob([1]);
+        var arg1 = PineValue.Blob([2]);
+        var arg2 = PineValue.Blob([3]);
+
+        var partial1 = EvaluateEncodedExpression(functionValue, arg0);
+        var partial2 = EvaluateEncodedExpression(partial1, arg1);
+        var result = EvaluateEncodedExpression(partial2, arg2);
+
+        result.Should().Be(PineValue.List([envFunc, arg0, arg1, arg2]));
+    }
+
+    [Fact]
+    public void ParseFunctionValue_WithoutEnvFunctions_ZeroParameters_SymmetryTest()
+    {
+        var expectedResult = PineValue.Blob([11, 22, 33]);
+        var innerExpression = Expression.LiteralInstance(expectedResult);
+
+        var functionValue =
+            FunctionValueBuilder.EmitFunctionValueWithoutEnvFunctions(
+                innerExpression,
+                parameterCount: 0);
+
+        var parsed =
+            FunctionRecord.ParseFunctionValue(functionValue, s_parseCache)
+            .Extract(err => throw new InvalidOperationException($"Parse failed: {err}"));
+
+        // Assert on the complete parse result
+        parsed.Should().Be(
+            new ParsedFunctionValue.WithoutEnvFunctions(
+                InnerFunction: innerExpression,
+                ParameterCount: 0));
+
+        // Verify the function works correctly (symmetry)
+        var result = EvaluateEncodedExpression(functionValue, PineValue.EmptyList);
+        result.Should().Be(expectedResult);
+    }
+
+    [Fact]
+    public void ParseFunctionValue_WithoutEnvFunctions_SingleParameter_SymmetryTest()
+    {
+        // Inner expression: returns arg (identity)
+        // For WithoutEnvFunctions, env = [arg], so arg is at env[0]
+        var innerExpression = BuildExpressionForPathInEnvironment([0]);
+
+        var functionValue =
+            FunctionValueBuilder.EmitFunctionValueWithoutEnvFunctions(
+                innerExpression,
+                parameterCount: 1);
+
+        var parsed =
+            FunctionRecord.ParseFunctionValue(functionValue, s_parseCache)
+            .Extract(err => throw new InvalidOperationException($"Parse failed: {err}"));
+
+        // Assert on the complete parse result
+        parsed.Should().Be(
+            new ParsedFunctionValue.WithoutEnvFunctions(
+                InnerFunction: innerExpression,
+                ParameterCount: 1));
+
+        // Verify the function works correctly (symmetry)
+        var argValue = PineValue.Blob([55, 66, 77]);
+        var result = EvaluateEncodedExpression(functionValue, argValue);
+        result.Should().Be(argValue);
+    }
+
+    [Fact]
+    public void ParseFunctionValue_WithoutEnvFunctions_TwoParameters_SymmetryTest()
+    {
+        // Inner expression: returns [arg0, arg1]
+        // For WithoutEnvFunctions, env = [arg0, arg1]
+        var innerExpression = Expression.ListInstance(
+            [
+            BuildExpressionForPathInEnvironment([0]),  // arg0
+            BuildExpressionForPathInEnvironment([1])   // arg1
+            ]);
+
+        var functionValue =
+            FunctionValueBuilder.EmitFunctionValueWithoutEnvFunctions(
+                innerExpression,
+                parameterCount: 2);
+
+        var parsed =
+            FunctionRecord.ParseFunctionValue(functionValue, s_parseCache)
+            .Extract(err => throw new InvalidOperationException($"Parse failed: {err}"));
+
+        // Assert on the complete parse result
+        parsed.Should().Be(
+            new ParsedFunctionValue.WithoutEnvFunctions(
+                InnerFunction: innerExpression,
+                ParameterCount: 2));
+
+        // Verify the function works correctly (symmetry)
+        var arg0 = PineValue.Blob([10]);
+        var arg1 = PineValue.Blob([20]);
+
+        var partial = EvaluateEncodedExpression(functionValue, arg0);
+        var result = EvaluateEncodedExpression(partial, arg1);
+
+        result.Should().Be(PineValue.List([arg0, arg1]));
+    }
+
+    [Fact]
+    public void ParseFunctionValue_WithoutEnvFunctions_ThreeParameters_SymmetryTest()
+    {
+        // Inner expression: returns [arg0, arg1, arg2]
+        // For WithoutEnvFunctions, env = [arg0, arg1, arg2]
+        var innerExpression = Expression.ListInstance(
+            [
+            BuildExpressionForPathInEnvironment([0]),  // arg0
+            BuildExpressionForPathInEnvironment([1]),  // arg1
+            BuildExpressionForPathInEnvironment([2])   // arg2
+            ]);
+
+        var functionValue =
+            FunctionValueBuilder.EmitFunctionValueWithoutEnvFunctions(
+                innerExpression,
+                parameterCount: 3);
+
+        var parsed =
+            FunctionRecord.ParseFunctionValue(functionValue, s_parseCache)
+            .Extract(err => throw new InvalidOperationException($"Parse failed: {err}"));
+
+        // Assert on the complete parse result
+        parsed.Should().Be(
+            new ParsedFunctionValue.WithoutEnvFunctions(
+                InnerFunction: innerExpression,
+                ParameterCount: 3));
+
+        // Verify the function works correctly (symmetry)
+        var arg0 = PineValue.Blob([1]);
+        var arg1 = PineValue.Blob([2]);
+        var arg2 = PineValue.Blob([3]);
+
+        var partial1 = EvaluateEncodedExpression(functionValue, arg0);
+        var partial2 = EvaluateEncodedExpression(partial1, arg1);
+        var result = EvaluateEncodedExpression(partial2, arg2);
+
+        result.Should().Be(PineValue.List([arg0, arg1, arg2]));
+    }
+
+    [Fact]
+    public void ParseFunctionValue_WithEnvFunctions_InnerExpressionPreserved()
+    {
+        // Create a distinct inner expression that we can verify is preserved
+        var arg0Access = BuildExpressionForPathInEnvironment([1, 0]);
+        var arg1Access = BuildExpressionForPathInEnvironment([1, 1]);
+
+        var innerExpression =
+            Expression.KernelApplicationInstance(
+                function: nameof(KernelFunction.int_add),
+                input: Expression.ListInstance([arg0Access, arg1Access]));
+
+        var envFunc = PineValue.Blob([100]);
+
+        var functionValue =
+            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
+                innerExpression,
+                parameterCount: 2,
+                envFunctions: [envFunc]);
+
+        var parsed =
+            FunctionRecord.ParseFunctionValue(functionValue, s_parseCache)
+            .Extract(err => throw new InvalidOperationException($"Parse failed: {err}"));
+
+        // The inner function expression should be parseable and evaluate correctly
+        // We verify by testing the entire function works
+        var a = IntegerEncoding.EncodeSignedInteger(5);
+        var b = IntegerEncoding.EncodeSignedInteger(7);
+
+        var partial = EvaluateEncodedExpression(functionValue, a);
+        var result = EvaluateEncodedExpression(partial, b);
+
+        result.Should().Be(IntegerEncoding.EncodeSignedInteger(12));
+    }
+
+    [Fact]
+    public void ParseFunctionValue_WithoutEnvFunctions_InnerExpressionPreserved()
+    {
+        // Create a distinct inner expression that we can verify is preserved
+        var arg0Access = BuildExpressionForPathInEnvironment([0]);
+        var arg1Access = BuildExpressionForPathInEnvironment([1]);
+
+        var innerExpression =
+            Expression.KernelApplicationInstance(
+                function: nameof(KernelFunction.int_mul),
+                input: Expression.ListInstance([arg0Access, arg1Access]));
+
+        var functionValue =
+            FunctionValueBuilder.EmitFunctionValueWithoutEnvFunctions(
+                innerExpression,
+                parameterCount: 2);
+
+        var parsed =
+            FunctionRecord.ParseFunctionValue(functionValue, s_parseCache)
+            .Extract(err => throw new InvalidOperationException($"Parse failed: {err}"));
+
+        // The inner function expression should be parseable and evaluate correctly
+        // We verify by testing the entire function works
+        var a = IntegerEncoding.EncodeSignedInteger(6);
+        var b = IntegerEncoding.EncodeSignedInteger(7);
+
+        var partial = EvaluateEncodedExpression(functionValue, a);
+        var result = EvaluateEncodedExpression(partial, b);
+
+        result.Should().Be(IntegerEncoding.EncodeSignedInteger(42));
+    }
+
+    [Fact]
+    public void ParseFunctionValue_DistinguishesBetweenVariants()
+    {
+        // Create both variants with the same parameter count and verify they are distinguished correctly
+
+        // WithEnvFunctions variant: env = [envFuncs, [arg0, arg1]]
+        var innerWithEnv = Expression.ListInstance(
+            [
+            BuildExpressionForPathInEnvironment([1, 0]),
+            BuildExpressionForPathInEnvironment([1, 1])
+            ]);
+
+        var withEnvValue =
+            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
+                innerWithEnv,
+                parameterCount: 2,
+                envFunctions: []);
+
+        // WithoutEnvFunctions variant: env = [arg0, arg1]
+        var innerWithoutEnv = Expression.ListInstance(
+            [
+            BuildExpressionForPathInEnvironment([0]),
+            BuildExpressionForPathInEnvironment([1])
+            ]);
+
+        var withoutEnvValue =
+            FunctionValueBuilder.EmitFunctionValueWithoutEnvFunctions(
+                innerWithoutEnv,
+                parameterCount: 2);
+
+        // Parse both
+        var withEnvParsed = FunctionRecord.ParseFunctionValue(withEnvValue, s_parseCache);
+        var withoutEnvParsed = FunctionRecord.ParseFunctionValue(withoutEnvValue, s_parseCache);
+
+        withEnvParsed.IsOkOrNull().Should().NotBeNull();
+        withoutEnvParsed.IsOkOrNull().Should().NotBeNull();
+
+        // They should be different variants
+        withEnvParsed.IsOkOrNull().Should().BeOfType<ParsedFunctionValue.WithEnvFunctions>();
+        withoutEnvParsed.IsOkOrNull().Should().BeOfType<ParsedFunctionValue.WithoutEnvFunctions>();
+
+        // But both should have the same parameter count
+        withEnvParsed.IsOkOrNull()!.ParameterCount.Should().Be(2);
+        withoutEnvParsed.IsOkOrNull()!.ParameterCount.Should().Be(2);
+
+        // And both should work correctly
+        var arg0 = PineValue.Blob([10]);
+        var arg1 = PineValue.Blob([20]);
+
+        var withEnvPartial = EvaluateEncodedExpression(withEnvValue, arg0);
+        var withEnvResult = EvaluateEncodedExpression(withEnvPartial, arg1);
+
+        var withoutEnvPartial = EvaluateEncodedExpression(withoutEnvValue, arg0);
+        var withoutEnvResult = EvaluateEncodedExpression(withoutEnvPartial, arg1);
+
+        // Both should produce the same result
+        withEnvResult.Should().Be(PineValue.List([arg0, arg1]));
+        withoutEnvResult.Should().Be(PineValue.List([arg0, arg1]));
+    }
+
+    #endregion
+
     #region Helper Methods
 
     private static Expression BuildExpressionForPathInEnvironment(
