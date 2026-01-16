@@ -3583,8 +3583,12 @@ public class Avh4Format
                                 }
                                 else if (i is 1)
                                 {
-                                    // First applied argument: keep on same line if it was on same line as function
-                                    putOnNewLine = arg.Range.Start.Row > functionRow;
+                                    // First applied argument: keep on same line only if:
+                                    // 1. It was originally on the same line as the function, AND
+                                    // 2. It doesn't span multiple lines (is not multiline itself)
+                                    var argStartsOnFunctionLine = arg.Range.Start.Row == functionRow;
+                                    var argIsMultiline = SpansMultipleRows(arg.Range);
+                                    putOnNewLine = !argStartsOnFunctionLine || argIsMultiline;
                                 }
                                 else
                                 {

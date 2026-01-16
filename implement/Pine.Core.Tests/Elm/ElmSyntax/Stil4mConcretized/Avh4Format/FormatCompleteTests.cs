@@ -1237,6 +1237,73 @@ public class FormatCompleteTests
     }
 
     [Fact]
+    public void Format_function_application_with_first_arg_on_first_line()
+    {
+        /*
+         * Rule of avh4/elm-format:
+         * Even if the overall application expression is multi-line,
+         * the first argument is allowed to stay on the same line as the function name.
+         * */
+
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl a b c d =
+               a   b
+                  [
+                  ]
+                     c
+                  d
+            """";
+
+        var expected =
+            """"
+            module Test exposing (..)
+
+
+            decl a b c d =
+                a b
+                    []
+                    c
+                    d
+            """";
+
+        AssertModuleTextFormatsToExpected(input, expected);
+    }
+
+    [Fact]
+    public void Format_function_application_with_multiline_first_arg_starting_on_first_line()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+
+            decl a b c d =
+                a [
+                    ]
+                    c
+                    d
+            """";
+
+        var expected =
+            """"
+            module Test exposing (..)
+
+
+            decl a b c d =
+                a
+                    []
+                    c
+                    d
+            """";
+
+        AssertModuleTextFormatsToExpected(input, expected);
+    }
+
+    [Fact]
     public void Roundtrip_type_annotation_arrow_on_own_line()
     {
         /*
