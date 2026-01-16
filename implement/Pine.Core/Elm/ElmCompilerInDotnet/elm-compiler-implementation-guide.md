@@ -133,6 +133,23 @@ In Elm, a `type alias` declaration of a record type also implies the creation of
 
 The order of arguments is the same as the order in which the fields appear in the type alias declaration code. This means that multiple record type alias declarations can produce the same type, but different constructors.
 
+## Composition of Module Values
+
+The compiler interface offers functions that return module values, or a composition comprising multiple named modules, such as `CompileInteractiveEnvironment`
+
+Each module value in turn encodes a list of named values. The declarations included here fall into two categories:
+
+1. Declarations the caller selected as entry points to be compiled.
+2. Additional entries to support inspection and debugging use cases.
+
+Tooling for inspection and parsing uses these additional names when transforming from Pine program code into a human-readable representation. Some of these names correspond directly to declarations in the source program code. Other names are derived from source declaration names by adding a suffix to uniquely distinguish specialized variants of functions from the source code. That suffix consists of a plus sign, followed by a hexadecimal representation of a hash code. That hash code is derived from a description of all the specializations applied to the source function to arrive at the named variant.
+
+Examples for specializations that can result in varied forms of a function:
+
++ Fixing a function parameter to a concrete value.
++ Constraining the type of a parameter from an open record to a closed record.
++ Constraining a parameter from a type class like `number` to a concrete type like `Int`.
+
 ## Future Exploration
 
 ### Future Exploration - Monomorphizing Extensible Records
