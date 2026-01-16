@@ -1796,7 +1796,7 @@ public class Avh4Format
             for (var groupIndex = 0; groupIndex < itemGroups.Count; groupIndex++)
             {
                 var group = itemGroups[groupIndex];
-                if (group.Count == 0)
+                if (group.Count is 0)
                     continue;
 
                 // For groups after the first, start on a new line with separator at alignment
@@ -1830,7 +1830,7 @@ public class Avh4Format
             }
 
             // Build the result list
-            if (allFormattedItems.Count == 0)
+            if (allFormattedItems.Count is 0)
             {
                 throw new System.InvalidOperationException("Expected at least one item in the exposing list");
             }
@@ -3491,21 +3491,25 @@ public class Avh4Format
                     if (literal.IsTripleQuoted)
                     {
                         // For triple-quoted strings, we need to track row changes from embedded newlines
+                        // and account for escaped characters that will be longer in the rendered output
                         var afterOpenQuotes = context.Advance(3); // """
                         var literalCtx = afterOpenQuotes;
 
-                        // Process the string content to track position through newlines
-                        foreach (var ch in literal.Value)
-                        {
-                            if (ch is '\n')
-                            {
-                                literalCtx = literalCtx.ResetIndent().NextRowToIndent();
-                            }
-                            else
+                        // Use the unified method to process the string content
+                        Rendering.ProcessTripleQuotedStringContent(
+                            literal.Value,
+                            onChar: _ =>
                             {
                                 literalCtx = literalCtx.Advance(1);
-                            }
-                        }
+                            },
+                            onEscapeSequence: escaped =>
+                            {
+                                literalCtx = literalCtx.Advance(escaped.Length);
+                            },
+                            onNewline: () =>
+                            {
+                                literalCtx = literalCtx.ResetIndent().NextRowToIndent();
+                            });
 
                         var afterCloseQuotes = literalCtx.Advance(3); // """
                         return FormattingResult<Expression>.Create(literal, afterCloseQuotes);

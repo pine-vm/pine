@@ -307,9 +307,19 @@ public class Rendering
         /// </summary>
         public void AppendTripleQuotedStringContent(string value)
         {
-            foreach (var ch in value)
-            {
-                if (ch is '\n')
+            ProcessTripleQuotedStringContent(
+                value,
+                onChar: ch =>
+                {
+                    Output.Append(ch);
+                    CurrentColumn++;
+                },
+                onEscapeSequence: escaped =>
+                {
+                    Output.Append(escaped);
+                    CurrentColumn += escaped.Length;
+                },
+                onNewline: () =>
                 {
                     // Use the configured linebreak style for newlines in triple-quoted strings
                     // These are literal characters inside the string, so they should be output
@@ -319,20 +329,137 @@ public class Rendering
                     // Track the newline for row/column counting
                     CurrentRow++;
                     CurrentColumn = 1;
-                    continue;
-                }
-
-                if (EscapeCharForTripleQuoted(ch) is { } escaped)
-                {
-                    Output.Append(escaped);
-                    CurrentColumn += escaped.Length;
-                    continue;
-                }
-
-                Output.Append(ch);
-                CurrentColumn++;
-            }
+                });
         }
+    }
+
+    /// <summary>
+    /// Determines whether a quote at the given index should be escaped in a triple-quoted string.
+    /// </summary>
+    /// <remarks>
+    /// A quote needs escaping in two scenarios:
+    /// 1. It is part of a sequence of 3+ consecutive quotes within the content (all quotes in such sequences must be escaped)
+    /// 2. It is part of a trailing sequence of quotes at the end of the content that would
+    ///    combine with the closing """ delimiter to form an invalid sequence
+    /// </remarks>
+    public static bool ShouldEscapeQuoteInTripleQuotedString(string value, int index)
+    {
+        // Find the start of this quote sequence
+        var sequenceStart = index;
+        while (sequenceStart > 0 && value[sequenceStart - 1] is '"')
+        {
+            sequenceStart--;
+        }
+
+        // Count total consecutive quotes in this sequence
+        var consecutiveQuotes = 0;
+        for (var j = sequenceStart; j < value.Length && value[j] is '"'; j++)
+        {
+            consecutiveQuotes++;
+        }
+
+        // Check if this sequence extends to the end of the string
+        var endsAtEndOfString = sequenceStart + consecutiveQuotes == value.Length;
+
+        // Case 1: 3+ consecutive quotes anywhere in the content
+        // ALL quotes in this sequence must be escaped
+        if (consecutiveQuotes >= 3)
+        {
+            return true;
+        }
+
+        // Case 2: Trailing quotes that would combine with the closing """
+        // If we have 1 or 2 quotes at the end, they'll combine with """ to form
+        // 4 or 5 consecutive quotes, which is invalid.
+        if (endsAtEndOfString && consecutiveQuotes >= 1)
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Processes the content of a triple-quoted string, handling all escaping logic in a unified way.
+    /// This method invokes the appropriate callback for each character or escape sequence, allowing
+    /// the caller to either render the content or calculate its length.
+    /// </summary>
+    /// <param name="value">The string content to process (without the surrounding triple quotes).</param>
+    /// <param name="onChar">Callback invoked for regular (unescaped) characters.</param>
+    /// <param name="onEscapeSequence">Callback invoked for escape sequences (e.g., "\\t", "\\\"").</param>
+    /// <param name="onNewline">Callback invoked for newline characters.</param>
+    public static void ProcessTripleQuotedStringContent(
+        string value,
+        Action<char> onChar,
+        Action<string> onEscapeSequence,
+        Action onNewline)
+    {
+        for (var i = 0; i < value.Length; i++)
+        {
+            var ch = value[i];
+
+            if (ch is '\n')
+            {
+                onNewline();
+                continue;
+            }
+
+            if (EscapeCharForTripleQuoted(ch) is { } escaped)
+            {
+                onEscapeSequence(escaped);
+                continue;
+            }
+
+            // Check if this quote character needs to be escaped to avoid breaking
+            // the triple-quote delimiter.
+            if (ch is '"' && ShouldEscapeQuoteInTripleQuotedString(value, i))
+            {
+                onEscapeSequence("\\\"");
+                continue;
+            }
+
+            onChar(ch);
+        }
+    }
+
+    /// <summary>
+    /// Calculates the rendered length of a triple-quoted string's content (excluding the surrounding quotes).
+    /// This accounts for escaped characters that expand to multiple output characters.
+    /// </summary>
+    /// <param name="value">The string content to measure (without the surrounding triple quotes).</param>
+    /// <returns>
+    /// A tuple containing:
+    /// - TotalLength: The total character count of the rendered content
+    /// - NewlineCount: The number of newline characters in the content
+    /// - LastLineLength: The length of the content after the last newline (or total if no newlines)
+    /// </returns>
+    public static (int TotalLength, int NewlineCount, int LastLineLength) GetTripleQuotedStringContentLength(string value)
+    {
+        var totalLength = 0;
+        var newlineCount = 0;
+        var lastLineLength = 0;
+
+        ProcessTripleQuotedStringContent(
+            value,
+            onChar: _ =>
+            {
+                totalLength++;
+                lastLineLength++;
+            },
+            onEscapeSequence: escaped =>
+            {
+                totalLength += escaped.Length;
+                lastLineLength += escaped.Length;
+            },
+            onNewline: () =>
+            {
+                // Newline itself counts as 1 character in the output
+                totalLength++;
+                newlineCount++;
+                lastLineLength = 0;
+            });
+
+        return (totalLength, newlineCount, lastLineLength);
     }
 
     /// <summary>

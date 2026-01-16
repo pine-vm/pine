@@ -2066,6 +2066,26 @@ public class FormatCompleteTests
     }
 
     [Fact]
+    public void Preserves_escaping_in_multiline_string_literal_to_avoid_breaking_delimiter()
+    {
+        var input =
+            """""
+            module Test exposing (..)
+
+
+            decl id =
+                """<pre id=\"""" ++ id ++ """"></pre>
+
+            <script> \"\"\"  ""
+            try {
+            """
+
+            """"";
+
+        AssertModuleTextFormatsToItself(input);
+    }
+
+    [Fact]
     public void Roundtrip_case_block_in_tuple_in_list()
     {
         var input =
