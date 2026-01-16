@@ -309,13 +309,13 @@ public static class TypeInference
 
             InferredType.TupleType tupleType =>
                 new InferredType.TupleType(
-                    tupleType.ElementTypes.Select(et => ApplyTypeSubstitutions(et, substitutions)).ToList()),
+                    [.. tupleType.ElementTypes.Select(et => ApplyTypeSubstitutions(et, substitutions))]),
 
             InferredType.ChoiceType choiceType =>
                 new InferredType.ChoiceType(
                     choiceType.ModuleName,
                     choiceType.TypeName,
-                    choiceType.TypeArguments.Select(ta => ApplyTypeSubstitutions(ta, substitutions)).ToList()),
+                    [.. choiceType.TypeArguments.Select(ta => ApplyTypeSubstitutions(ta, substitutions))]),
 
             InferredType.RecordType recordType =>
                 new InferredType.RecordType(
@@ -431,7 +431,7 @@ public static class TypeInference
                 .Select(arg => TypeAnnotationToInferredType(arg.Value))
                 .ToList();
 
-            return new InferredType.ChoiceType(moduleName.ToList(), name, typeArguments);
+            return new InferredType.ChoiceType([.. moduleName], name, typeArguments);
         }
 
         // Handle tuple type annotations

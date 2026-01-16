@@ -1742,13 +1742,13 @@ public class Avh4Format
                     else
                     {
                         // Doc comment exists but has no @docs directives - one item per line
-                        itemGroups = nonEmptyList.Nodes.Select(item => new[] { item } as IReadOnlyList<Stil4mElmSyntax7.Node<TopLevelExpose>>).ToList();
+                        itemGroups = [.. nonEmptyList.Nodes.Select(item => new[] { item } as IReadOnlyList<Stil4mElmSyntax7.Node<TopLevelExpose>>)];
                     }
                 }
                 else
                 {
                     // No module documentation - put each item in its own group (current behavior)
-                    itemGroups = nonEmptyList.Nodes.Select(item => new[] { item } as IReadOnlyList<Stil4mElmSyntax7.Node<TopLevelExpose>>).ToList();
+                    itemGroups = [.. nonEmptyList.Nodes.Select(item => new[] { item } as IReadOnlyList<Stil4mElmSyntax7.Node<TopLevelExpose>>)];
                 }
 
                 // Format items grouped by @docs
