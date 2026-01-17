@@ -30,6 +30,25 @@ public static class StaticExpressionDisplay
         string FunctionName,
         StaticFunctionInterface FunctionInterface);
 
+    public record FunctionApplicationRenderingNew<IdentifierT>(
+       string FunctionName,
+       Func<StaticExpression<IdentifierT>, IReadOnlyList<StaticExpression<IdentifierT>>> FunctionInterface);
+
+    public static Func<StaticExpression<IdentifierT>, IReadOnlyList<StaticExpression<IdentifierT>>> BuildRenderer<IdentifierT>(
+        StaticFunctionInterface functionInterface)
+    {
+        IReadOnlyList<StaticExpression<IdentifierT>> FromArgumentExpr(
+            StaticExpression<IdentifierT> fnAppArguments)
+        {
+            return
+                [.. functionInterface.ParamsPaths
+                .Select(paramPath => StaticExpressionExtension.BuildReducedPathToExpression(paramPath, fnAppArguments))
+                ];
+        }
+
+        return FromArgumentExpr;
+    }
+
     /// <summary>
     /// Render an expression to a multi-line string with the given indentation string.
     /// Line endings are always <c>LF</c> to ensure consistent rendering across platforms.
@@ -56,12 +75,68 @@ public static class StaticExpressionDisplay
     {
         var result = new System.Text.StringBuilder();
 
+        string? ReplaceExprWithIdentifier(StaticExpression<TFunctionName> expr)
+        {
+            if (StaticExpressionExtension.TryParseAsPathToExpression(expr, StaticExpression<TFunctionName>.EnvironmentInstance) is { } path)
+            {
+                return environmentPathReferenceRenderer(path);
+            }
+
+            return null;
+        }
+
+        FunctionApplicationRenderingNew<TFunctionName> FunctionRenderer(TFunctionName functionName)
+        {
+            var rendering = functionApplicationRenderer(functionName);
+
+            return new FunctionApplicationRenderingNew<TFunctionName>(
+                FunctionName: rendering.FunctionName,
+                FunctionInterface: BuildRenderer<TFunctionName>(rendering.FunctionInterface));
+        }
+
+        return
+            RenderToString(
+                expression,
+                valueRenderer,
+                FunctionRenderer,
+                ReplaceExprWithIdentifier,
+                indentString,
+                indentLevel,
+                kernelApplicationPrefix);
+    }
+
+    /// <summary>
+    /// Render an expression to a multi-line string with the given indentation string.
+    /// Line endings are always <c>LF</c> to ensure consistent rendering across platforms.
+    /// </summary>
+    /// <param name="expression">Expression to render.</param>
+    /// <param name="valueRenderer">Function to render values (receives a <see cref="PineValue"/> and returns the textual form plus a flag indicating if parentheses are needed when embedded).</param>
+    /// <param name="functionApplicationRenderer">Function to render function application.</param>
+    /// <param name="replaceExprWithIdentifier">Function to render environment path references.</param>
+    /// <param name="indentString">String used for one indentation step (e.g., two spaces).</param>
+    /// <param name="indentLevel">Initial indentation level to apply to the root expression.</param>
+    /// <param name="kernelApplicationPrefix">
+    /// Prefix to use when rendering kernel applications (e.g., <c>"Pine_kernel"</c> or <c>"Pine_builtin"</c>).
+    /// Defaults to <c>"Pine_kernel"</c>.
+    /// </param>
+    /// <returns>Formatted string representation using only <c>\n</c> as line terminators.</returns>
+    public static string RenderToString<TFunctionName>(
+        this StaticExpression<TFunctionName> expression,
+        Func<PineValue, (string exprText, bool needsParens)> valueRenderer,
+        Func<TFunctionName, FunctionApplicationRenderingNew<TFunctionName>> functionApplicationRenderer,
+        Func<StaticExpression<TFunctionName>, string?> replaceExprWithIdentifier,
+        string indentString,
+        int indentLevel = 0,
+        string kernelApplicationPrefix = "Pine_kernel")
+    {
+        var result = new System.Text.StringBuilder();
+
         foreach (var (indent, text) in
             RenderToLines(
                 expression,
                 valueRenderer: valueRenderer,
                 functionApplicationRenderer,
-                environmentPathReferenceRenderer,
+                replaceExprWithIdentifier,
                 indentLevel,
                 containerDelimits: true,
                 kernelApplicationPrefix: kernelApplicationPrefix))
@@ -75,6 +150,7 @@ public static class StaticExpressionDisplay
             result.Append(text);
             result.Append('\n');
         }
+
         return result.ToString();
     }
 
@@ -85,7 +161,7 @@ public static class StaticExpressionDisplay
     /// <param name="expression">Expression to render.</param>
     /// <param name="valueRenderer">Function to render values.</param>
     /// <param name="functionApplicationRenderer">Function to render function application.</param>
-    /// <param name="environmentPathReferenceRenderer">Function to render environment path references.</param>
+    /// <param name="replaceExprWithIdentifier">Function to render environment path references.</param>
     /// <param name="indentLevel">Indentation level for the first rendered line of the <paramref name="expression"/>.</param>
     /// <param name="containerDelimits">
     /// If <c>true</c>, the renderer assumes the container (caller) handles delimiters for grouped constructs.
@@ -99,21 +175,16 @@ public static class StaticExpressionDisplay
     public static IEnumerable<(int indent, string text)> RenderToLines<TFunctionName>(
         StaticExpression<TFunctionName> expression,
         Func<PineValue, (string exprText, bool needsParens)> valueRenderer,
-        Func<TFunctionName, FunctionApplicationRendering> functionApplicationRenderer,
-        Func<IReadOnlyList<int>, string?> environmentPathReferenceRenderer,
+        Func<TFunctionName, FunctionApplicationRenderingNew<TFunctionName>> functionApplicationRenderer,
+        Func<StaticExpression<TFunctionName>, string?> replaceExprWithIdentifier,
         int indentLevel,
         bool containerDelimits,
         string kernelApplicationPrefix = "Pine_kernel")
     {
-        if (StaticExpressionExtension.TryParseAsPathToExpression(expression, StaticExpression<TFunctionName>.EnvironmentInstance) is { } path)
+        if (replaceExprWithIdentifier(expression) is { } overrideIdent)
         {
-            var pathText = environmentPathReferenceRenderer(path);
-
-            if (pathText is not null)
-            {
-                yield return (indentLevel, pathText);
-                yield break;
-            }
+            yield return (indentLevel, overrideIdent);
+            yield break;
         }
 
         switch (expression)
@@ -154,7 +225,7 @@ public static class StaticExpressionDisplay
                                     item,
                                     valueRenderer,
                                     functionApplicationRenderer,
-                                    environmentPathReferenceRenderer,
+                                    replaceExprWithIdentifier,
                                     indentLevel,
                                     containerDelimits: true,
                                     kernelApplicationPrefix: kernelApplicationPrefix)
@@ -207,7 +278,7 @@ public static class StaticExpressionDisplay
                         kernel.Input,
                         valueRenderer,
                         functionApplicationRenderer,
-                        environmentPathReferenceRenderer,
+                        replaceExprWithIdentifier,
                         indentLevel + 1,
                         containerDelimits: false,
                         kernelApplicationPrefix: kernelApplicationPrefix))
@@ -231,8 +302,7 @@ public static class StaticExpressionDisplay
                     var functionNameString = applicationInfo.FunctionName;
 
                     var argumentsExprs =
-                        applicationInfo.FunctionInterface.ParamsPaths
-                        .Select(paramPath => StaticExpressionExtension.BuildReducedPathToExpression(paramPath, fnApp.Arguments))
+                        applicationInfo.FunctionInterface(fnApp.Arguments)
                         .ToList();
 
                     var argumentsLines =
@@ -242,7 +312,7 @@ public static class StaticExpressionDisplay
                             arg,
                             valueRenderer,
                             functionApplicationRenderer,
-                            environmentPathReferenceRenderer,
+                            replaceExprWithIdentifier,
                             indentLevel + 1,
                             containerDelimits: false,
                             kernelApplicationPrefix: kernelApplicationPrefix))
@@ -293,7 +363,7 @@ public static class StaticExpressionDisplay
                         cond.Condition,
                         valueRenderer,
                         functionApplicationRenderer,
-                        environmentPathReferenceRenderer,
+                        replaceExprWithIdentifier,
                         indentLevel + 1,
                         containerDelimits: true,
                         kernelApplicationPrefix: kernelApplicationPrefix))
@@ -307,7 +377,7 @@ public static class StaticExpressionDisplay
                         cond.TrueBranch,
                         valueRenderer,
                         functionApplicationRenderer,
-                        environmentPathReferenceRenderer,
+                        replaceExprWithIdentifier,
                         indentLevel + 1,
                         containerDelimits: true,
                         kernelApplicationPrefix: kernelApplicationPrefix))
@@ -333,7 +403,7 @@ public static class StaticExpressionDisplay
                             nested.Condition,
                             valueRenderer,
                             functionApplicationRenderer,
-                            environmentPathReferenceRenderer,
+                            replaceExprWithIdentifier,
                             indentLevel + 1,
                             containerDelimits: true,
                             kernelApplicationPrefix: kernelApplicationPrefix))
@@ -347,7 +417,7 @@ public static class StaticExpressionDisplay
                             nested.TrueBranch,
                             valueRenderer,
                             functionApplicationRenderer,
-                            environmentPathReferenceRenderer,
+                            replaceExprWithIdentifier,
                             indentLevel + 1,
                             containerDelimits: true,
                             kernelApplicationPrefix: kernelApplicationPrefix))
@@ -366,7 +436,7 @@ public static class StaticExpressionDisplay
                         falseBranch,
                         valueRenderer,
                         functionApplicationRenderer,
-                        environmentPathReferenceRenderer,
+                        replaceExprWithIdentifier,
                         indentLevel + 1,
                         containerDelimits: true,
                         kernelApplicationPrefix: kernelApplicationPrefix))
