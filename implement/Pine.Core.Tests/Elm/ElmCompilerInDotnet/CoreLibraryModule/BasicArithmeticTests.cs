@@ -1,11 +1,12 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm;
+using Pine.Core.Elm.ElmCompilerInDotnet.CoreLibraryModule;
 using Pine.Core.Interpreter.IntermediateVM;
 using System.Collections.Generic;
 using Xunit;
 
-namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
+namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.CoreLibraryModule;
 
 public class BasicArithmeticTests
 {
@@ -14,7 +15,7 @@ public class BasicArithmeticTests
     {
         var evalResult =
             ApplyDirectBinary(
-                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_sub,
+                BasicArithmetic.Int_sub,
                 ElmValue.Integer(13),
                 ElmValue.Integer(0));
 
@@ -26,7 +27,7 @@ public class BasicArithmeticTests
     {
         var evalResult =
             ApplyDirectBinary(
-                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_sub,
+                BasicArithmetic.Int_sub,
                 ElmValue.Integer(13),
                 ElmValue.Integer(17));
 
@@ -38,7 +39,7 @@ public class BasicArithmeticTests
     {
         var resultValue =
             ApplyGeneric(
-                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Sub_FunctionValue(),
+                BasicArithmetic.Sub_FunctionValue(),
                 [
                     ElmValue.Integer(13),
                     ElmValue.Integer(17)
@@ -52,7 +53,7 @@ public class BasicArithmeticTests
     {
         var resultValue =
             ApplyGeneric(
-                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Sub_FunctionValue(),
+                BasicArithmetic.Sub_FunctionValue(),
                 [
                     ElmValue.ElmFloat.Convert(3.7),
                     ElmValue.ElmFloat.Convert(-0.3),
@@ -66,7 +67,7 @@ public class BasicArithmeticTests
     {
         var resultValue =
             ApplyGeneric(
-                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Sub_FunctionValue(),
+                BasicArithmetic.Sub_FunctionValue(),
                 [
                     ElmValue.ElmFloat.Convert(13),
                     ElmValue.ElmFloat.Convert(0.1),
@@ -80,7 +81,7 @@ public class BasicArithmeticTests
     {
         var resultValue =
             ApplyDirectUnary(
-                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Negate_FunctionValue(),
+                BasicArithmetic.Negate_FunctionValue(),
                 ElmValue.Integer(17));
 
         resultValue.Should().Be(ElmValue.Integer(-17));
@@ -91,7 +92,7 @@ public class BasicArithmeticTests
     {
         var resultValue =
             ApplyDirectUnary(
-                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Negate_FunctionValue(),
+                BasicArithmetic.Negate_FunctionValue(),
                 ElmValue.Integer(-17));
 
         resultValue.Should().Be(ElmValue.Integer(17));
@@ -102,7 +103,7 @@ public class BasicArithmeticTests
     {
         var resultValue =
             ApplyDirectUnary(
-                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Negate_FunctionValue(),
+                BasicArithmetic.Negate_FunctionValue(),
                 ElmValue.ElmFloat.Convert(17.3));
 
         resultValue.Should().Be(ElmValue.ElmFloat.Convert(-17.3));
@@ -115,7 +116,7 @@ public class BasicArithmeticTests
     {
         var evalResult =
             ApplyDirectBinary(
-                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_div,
+                BasicArithmetic.Int_div,
                 ElmValue.Integer(10),
                 ElmValue.Integer(3));
 
@@ -127,7 +128,7 @@ public class BasicArithmeticTests
     {
         var evalResult =
             ApplyDirectBinary(
-                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_div,
+                BasicArithmetic.Int_div,
                 ElmValue.Integer(-10),
                 ElmValue.Integer(3));
 
@@ -139,7 +140,7 @@ public class BasicArithmeticTests
     {
         var evalResult =
             ApplyDirectBinary(
-                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_div,
+                BasicArithmetic.Int_div,
                 ElmValue.Integer(-1_000),
                 ElmValue.Integer(3));
 
@@ -151,7 +152,7 @@ public class BasicArithmeticTests
     {
         var evalResult =
             ApplyDirectBinary(
-                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_div,
+                BasicArithmetic.Int_div,
                 ElmValue.Integer(1_000),
                 ElmValue.Integer(17));
 
@@ -163,7 +164,7 @@ public class BasicArithmeticTests
     {
         var evalResult =
             ApplyDirectBinary(
-                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_div,
+                BasicArithmetic.Int_div,
                 ElmValue.Integer(1_000_000),
                 ElmValue.Integer(257));
 
@@ -177,7 +178,7 @@ public class BasicArithmeticTests
     {
         var evalResult =
             ApplyDirectBinary(
-                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_div,
+                BasicArithmetic.Int_div,
                 ElmValue.Integer(10),
                 ElmValue.Integer(-3));
 
@@ -189,7 +190,7 @@ public class BasicArithmeticTests
     {
         var evalResult =
             ApplyDirectBinary(
-                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_div,
+                BasicArithmetic.Int_div,
                 ElmValue.Integer(10),
                 ElmValue.Integer(0));
 
@@ -203,7 +204,7 @@ public class BasicArithmeticTests
     {
         var resultValue =
             ApplyGeneric(
-                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Add_FunctionValue(),
+                BasicArithmetic.Add_FunctionValue(),
                 [
                     ElmValue.Integer(13),
                     ElmValue.Integer(17)
@@ -217,7 +218,7 @@ public class BasicArithmeticTests
     {
         var resultValue =
             ApplyGeneric(
-                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Add_FunctionValue(),
+                BasicArithmetic.Add_FunctionValue(),
                 [
                     ElmValue.Integer(-5),
                     ElmValue.Integer(3)
@@ -231,7 +232,7 @@ public class BasicArithmeticTests
     {
         var resultValue =
             ApplyGeneric(
-                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Add_FunctionValue(),
+                BasicArithmetic.Add_FunctionValue(),
                 [
                     ElmValue.ElmFloat.Convert(1.5),
                     ElmValue.ElmFloat.Convert(2.5)
@@ -247,7 +248,7 @@ public class BasicArithmeticTests
     {
         var resultValue =
             ApplyGeneric(
-                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_div_FunctionValue(),
+                BasicArithmetic.Int_div_FunctionValue(),
                 [
                     ElmValue.Integer(10),
                     ElmValue.Integer(3)
@@ -261,7 +262,7 @@ public class BasicArithmeticTests
     {
         var resultValue =
             ApplyGeneric(
-                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_div_FunctionValue(),
+                BasicArithmetic.Int_div_FunctionValue(),
                 [
                     ElmValue.Integer(-10),
                     ElmValue.Integer(3)
@@ -275,7 +276,7 @@ public class BasicArithmeticTests
     {
         var resultValue =
             ApplyGeneric(
-                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_div_FunctionValue(),
+                BasicArithmetic.Int_div_FunctionValue(),
                 [
                     ElmValue.Integer(10),
                     ElmValue.Integer(-3)
@@ -289,7 +290,7 @@ public class BasicArithmeticTests
     {
         var resultValue =
             ApplyGeneric(
-                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_div_FunctionValue(),
+                BasicArithmetic.Int_div_FunctionValue(),
                 [
                     ElmValue.Integer(10),
                     ElmValue.Integer(0)
@@ -303,7 +304,7 @@ public class BasicArithmeticTests
     {
         var resultValue =
             ApplyGeneric(
-                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_div_FunctionValue(),
+                BasicArithmetic.Int_div_FunctionValue(),
                 [
                     ElmValue.Integer(1_000),
                     ElmValue.Integer(17)
@@ -320,7 +321,7 @@ public class BasicArithmeticTests
         // modBy 3 10 == 1
         var evalResult =
             ApplyDirectBinary(
-                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_modBy,
+                BasicArithmetic.Int_modBy,
                 ElmValue.Integer(3),
                 ElmValue.Integer(10));
 
@@ -333,7 +334,7 @@ public class BasicArithmeticTests
         // modBy 3 -10 == 2  (always positive result in Elm modBy)
         var evalResult =
             ApplyDirectBinary(
-                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_modBy,
+                BasicArithmetic.Int_modBy,
                 ElmValue.Integer(3),
                 ElmValue.Integer(-10));
 
@@ -346,7 +347,7 @@ public class BasicArithmeticTests
         // modBy 4 12 == 0  (exactly divisible)
         var evalResult =
             ApplyDirectBinary(
-                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_modBy,
+                BasicArithmetic.Int_modBy,
                 ElmValue.Integer(4),
                 ElmValue.Integer(12));
 
@@ -359,7 +360,7 @@ public class BasicArithmeticTests
         // modBy 5 3 == 3  (dividend < divisor)
         var evalResult =
             ApplyDirectBinary(
-                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_modBy,
+                BasicArithmetic.Int_modBy,
                 ElmValue.Integer(5),
                 ElmValue.Integer(3));
 
@@ -372,7 +373,7 @@ public class BasicArithmeticTests
         // modBy 7 -3 == 4  (result is always non-negative when divisor is positive)
         var evalResult =
             ApplyDirectBinary(
-                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_modBy,
+                BasicArithmetic.Int_modBy,
                 ElmValue.Integer(7),
                 ElmValue.Integer(-3));
 
@@ -385,7 +386,7 @@ public class BasicArithmeticTests
         // modBy 1 100 == 0  (any number mod 1 is 0)
         var evalResult =
             ApplyDirectBinary(
-                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_modBy,
+                BasicArithmetic.Int_modBy,
                 ElmValue.Integer(1),
                 ElmValue.Integer(100));
 
@@ -398,7 +399,7 @@ public class BasicArithmeticTests
         // modBy 17 1000 == 14  (1000 = 58*17 + 14)
         var evalResult =
             ApplyDirectBinary(
-                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_modBy,
+                BasicArithmetic.Int_modBy,
                 ElmValue.Integer(17),
                 ElmValue.Integer(1000));
 
@@ -411,7 +412,7 @@ public class BasicArithmeticTests
         // modBy 10 0 == 0  (0 mod anything is 0)
         var evalResult =
             ApplyDirectBinary(
-                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_modBy,
+                BasicArithmetic.Int_modBy,
                 ElmValue.Integer(10),
                 ElmValue.Integer(0));
 
@@ -426,7 +427,7 @@ public class BasicArithmeticTests
         // remainderBy 3 10 == 1
         var evalResult =
             ApplyDirectBinary(
-                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_remainderBy,
+                BasicArithmetic.Int_remainderBy,
                 ElmValue.Integer(3),
                 ElmValue.Integer(10));
 
@@ -439,7 +440,7 @@ public class BasicArithmeticTests
         // remainderBy 3 -10 == -1  (sign follows dividend in remainder)
         var evalResult =
             ApplyDirectBinary(
-                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_remainderBy,
+                BasicArithmetic.Int_remainderBy,
                 ElmValue.Integer(3),
                 ElmValue.Integer(-10));
 
@@ -452,7 +453,7 @@ public class BasicArithmeticTests
         // remainderBy 4 12 == 0  (exactly divisible)
         var evalResult =
             ApplyDirectBinary(
-                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_remainderBy,
+                BasicArithmetic.Int_remainderBy,
                 ElmValue.Integer(4),
                 ElmValue.Integer(12));
 
@@ -465,7 +466,7 @@ public class BasicArithmeticTests
         // remainderBy 5 3 == 3  (dividend < divisor)
         var evalResult =
             ApplyDirectBinary(
-                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_remainderBy,
+                BasicArithmetic.Int_remainderBy,
                 ElmValue.Integer(5),
                 ElmValue.Integer(3));
 
@@ -478,7 +479,7 @@ public class BasicArithmeticTests
         // remainderBy 7 -3 == -3  (sign follows dividend)
         var evalResult =
             ApplyDirectBinary(
-                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_remainderBy,
+                BasicArithmetic.Int_remainderBy,
                 ElmValue.Integer(7),
                 ElmValue.Integer(-3));
 
@@ -491,7 +492,7 @@ public class BasicArithmeticTests
         // remainderBy 1 100 == 0  (any number remainder 1 is 0)
         var evalResult =
             ApplyDirectBinary(
-                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_remainderBy,
+                BasicArithmetic.Int_remainderBy,
                 ElmValue.Integer(1),
                 ElmValue.Integer(100));
 
@@ -504,7 +505,7 @@ public class BasicArithmeticTests
         // remainderBy 17 1000 == 14  (1000 = 58*17 + 14)
         var evalResult =
             ApplyDirectBinary(
-                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_remainderBy,
+                BasicArithmetic.Int_remainderBy,
                 ElmValue.Integer(17),
                 ElmValue.Integer(1000));
 
@@ -517,7 +518,7 @@ public class BasicArithmeticTests
         // remainderBy 17 -1000 == -14  (sign follows dividend)
         var evalResult =
             ApplyDirectBinary(
-                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_remainderBy,
+                BasicArithmetic.Int_remainderBy,
                 ElmValue.Integer(17),
                 ElmValue.Integer(-1000));
 
@@ -530,7 +531,7 @@ public class BasicArithmeticTests
         // remainderBy 10 0 == 0  (0 remainder anything is 0)
         var evalResult =
             ApplyDirectBinary(
-                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_remainderBy,
+                BasicArithmetic.Int_remainderBy,
                 ElmValue.Integer(10),
                 ElmValue.Integer(0));
 
@@ -544,7 +545,7 @@ public class BasicArithmeticTests
     {
         var resultValue =
             ApplyGeneric(
-                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_modBy_FunctionValue(),
+                BasicArithmetic.Int_modBy_FunctionValue(),
                 [
                     ElmValue.Integer(3),
                     ElmValue.Integer(10)
@@ -558,7 +559,7 @@ public class BasicArithmeticTests
     {
         var resultValue =
             ApplyGeneric(
-                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_modBy_FunctionValue(),
+                BasicArithmetic.Int_modBy_FunctionValue(),
                 [
                     ElmValue.Integer(3),
                     ElmValue.Integer(-10)
@@ -574,7 +575,7 @@ public class BasicArithmeticTests
     {
         var resultValue =
             ApplyGeneric(
-                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.RemainderBy_FunctionValue(),
+                BasicArithmetic.RemainderBy_FunctionValue(),
                 [
                     ElmValue.Integer(3),
                     ElmValue.Integer(10)
@@ -588,7 +589,7 @@ public class BasicArithmeticTests
     {
         var resultValue =
             ApplyGeneric(
-                Core.Elm.ElmCompilerInDotnet.BasicArithmetic.RemainderBy_FunctionValue(),
+                BasicArithmetic.RemainderBy_FunctionValue(),
                 [
                     ElmValue.Integer(3),
                     ElmValue.Integer(-10)
@@ -611,13 +612,13 @@ public class BasicArithmeticTests
             Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(17)));
 
         var composed =
-            Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Generic_Add(leftExpr, rightExpr);
+            BasicArithmetic.Generic_Add(leftExpr, rightExpr);
 
-        var result = Core.Elm.ElmCompilerInDotnet.BasicArithmetic.TryInterpret(composed);
+        var result = BasicArithmetic.Identify(composed);
 
         result.Should().NotBeNull();
 
-        result.Value.declName.Should().Be("number_add");
+        result.Value.declName.Should().Be("add");
 
         result.Value.argsExprs.Should().Equal([leftExpr, rightExpr]);
     }
@@ -632,13 +633,13 @@ public class BasicArithmeticTests
             Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(17)));
 
         var composed =
-            Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Generic_Sub(leftExpr, rightExpr);
+            BasicArithmetic.Generic_Sub(leftExpr, rightExpr);
 
-        var result = Core.Elm.ElmCompilerInDotnet.BasicArithmetic.TryInterpret(composed);
+        var result = BasicArithmetic.Identify(composed);
 
         result.Should().NotBeNull();
 
-        result.Value.declName.Should().Be("number_sub");
+        result.Value.declName.Should().Be("sub");
 
         result.Value.argsExprs.Should().Equal([leftExpr, rightExpr]);
     }
@@ -653,12 +654,12 @@ public class BasicArithmeticTests
             Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(17)));
 
         var composed =
-            Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Generic_Mul(leftExpr, rightExpr);
+            BasicArithmetic.Generic_Mul(leftExpr, rightExpr);
 
-        var result = Core.Elm.ElmCompilerInDotnet.BasicArithmetic.TryInterpret(composed);
+        var result = BasicArithmetic.Identify(composed);
 
         result.Should().NotBeNull();
-        result.Value.declName.Should().Be("number_mul");
+        result.Value.declName.Should().Be("mul");
         result.Value.argsExprs.Should().Equal([leftExpr, rightExpr]);
     }
 
@@ -672,12 +673,12 @@ public class BasicArithmeticTests
             Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(7)));
 
         var composed =
-            Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Int_div(leftExpr, rightExpr);
+            BasicArithmetic.Int_div(leftExpr, rightExpr);
 
-        var result = Core.Elm.ElmCompilerInDotnet.BasicArithmetic.TryInterpret(composed);
+        var result = BasicArithmetic.Identify(composed);
 
         result.Should().NotBeNull();
-        result.Value.declName.Should().Be("int_div");
+        result.Value.declName.Should().Be("idiv");
         result.Value.argsExprs.Should().Equal([leftExpr, rightExpr]);
     }
 
@@ -691,7 +692,7 @@ public class BasicArithmeticTests
             encoded: Expression.LiteralInstance(PineValue.EmptyList),
             environment: Expression.ListInstance([someExpr, someExpr]));
 
-        var result = Core.Elm.ElmCompilerInDotnet.BasicArithmetic.TryInterpret(parseAndEval);
+        var result = BasicArithmetic.Identify(parseAndEval);
 
         result.Should().BeNull();
     }
@@ -703,7 +704,7 @@ public class BasicArithmeticTests
         var literalExpr =
             Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(42)));
 
-        var result = Core.Elm.ElmCompilerInDotnet.BasicArithmetic.TryInterpret(literalExpr);
+        var result = BasicArithmetic.Identify(literalExpr);
 
         result.Should().BeNull();
     }
@@ -716,10 +717,10 @@ public class BasicArithmeticTests
             Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1)));
 
         var parseAndEval = new Expression.ParseAndEval(
-            encoded: Expression.LiteralInstance(Core.Elm.ElmCompilerInDotnet.BasicArithmetic.Add_FunctionValue()),
+            encoded: Expression.LiteralInstance(BasicArithmetic.Add_FunctionValue()),
             environment: Expression.ListInstance([singleArgExpr])); // Only 1 argument
 
-        var result = Core.Elm.ElmCompilerInDotnet.BasicArithmetic.TryInterpret(parseAndEval);
+        var result = BasicArithmetic.Identify(parseAndEval);
 
         result.Should().BeNull();
     }

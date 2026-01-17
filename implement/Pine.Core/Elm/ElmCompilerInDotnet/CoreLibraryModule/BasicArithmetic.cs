@@ -2,7 +2,7 @@ using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
 using System.Collections.Generic;
 
-namespace Pine.Core.Elm.ElmCompilerInDotnet;
+namespace Pine.Core.Elm.ElmCompilerInDotnet.CoreLibraryModule;
 
 /// <summary>
 /// Arithmetic functions corresponding to the `Basics` module in the Elm core libraries:
@@ -24,7 +24,7 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 /// </summary>
 public class BasicArithmetic
 {
-    public static (string declName, IReadOnlyList<Expression> argsExprs)? TryInterpret(
+    public static (string declName, IReadOnlyList<Expression> argsExprs)? Identify(
         Expression expr)
     {
         if (TryParseAsBinaryApplication(expr) is { } binaryApp)
@@ -33,22 +33,22 @@ public class BasicArithmetic
 
             if (functionValue == Add_FunctionValue())
             {
-                return ("number_add", [leftExpr, rightExpr]);
+                return ("add", [leftExpr, rightExpr]);
             }
 
             if (functionValue == Sub_FunctionValue())
             {
-                return ("number_sub", [leftExpr, rightExpr]);
+                return ("sub", [leftExpr, rightExpr]);
             }
 
             if (functionValue == Mul_FunctionValue())
             {
-                return ("number_mul", [leftExpr, rightExpr]);
+                return ("mul", [leftExpr, rightExpr]);
             }
 
             if (functionValue == Int_div_FunctionValue())
             {
-                return ("int_div", [leftExpr, rightExpr]);
+                return ("idiv", [leftExpr, rightExpr]);
             }
 
             if (functionValue == Int_modBy_FunctionValue())
