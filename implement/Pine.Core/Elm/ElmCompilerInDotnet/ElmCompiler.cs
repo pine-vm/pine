@@ -6,7 +6,6 @@ using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
-using System.Numerics;
 using System.Text;
 
 using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
@@ -298,15 +297,32 @@ public class ElmCompiler
         IReadOnlyDictionary<string, (string moduleName, string functionName, SyntaxTypes.Declaration.FunctionDeclaration declaration)> allFunctions,
         ModuleCompilationContext context)
     {
-        var dependencyLayouts = new Dictionary<string, IReadOnlyList<string>>();
+        // First pass: compute direct dependencies for each function
+        var directDependencies = new Dictionary<string, IReadOnlySet<string>>();
 
         foreach (var (qualifiedName, (moduleName, functionName, declaration)) in allFunctions)
         {
             var functionBody = declaration.Function.Declaration.Value.Expression.Value;
             var dependencies = AnalyzeFunctionDependencies(functionBody, moduleName, context);
+            directDependencies[qualifiedName] = dependencies;
+        }
 
+        // Second pass: compute transitive closure of dependencies
+        // A function needs all functions that any of its callees might need
+        var transitiveDependencies = new Dictionary<string, HashSet<string>>();
+
+        foreach (var qualifiedName in directDependencies.Keys)
+        {
+            transitiveDependencies[qualifiedName] = ComputeTransitiveDependencies(qualifiedName, directDependencies);
+        }
+
+        // Build layouts with transitive dependencies
+        var dependencyLayouts = new Dictionary<string, IReadOnlyList<string>>();
+
+        foreach (var (qualifiedName, deps) in transitiveDependencies)
+        {
             // Sort dependencies alphabetically for consistent ordering
-            var sortedDependencies = dependencies.OrderBy(d => d).ToList();
+            var sortedDependencies = deps.OrderBy(d => d).ToList();
 
             // Layout is: [self, sorted_dependencies...]
             // Self is always first for snapshot test name rendering
@@ -316,6 +332,63 @@ public class ElmCompiler
         }
 
         return dependencyLayouts;
+    }
+
+    /// <summary>
+    /// Computes the transitive closure of dependencies for a function.
+    /// This includes all functions that the function directly or indirectly calls,
+    /// excluding the function itself (which is handled separately as index 0).
+    /// </summary>
+    private static HashSet<string> ComputeTransitiveDependencies(
+        string functionName,
+        IReadOnlyDictionary<string, IReadOnlySet<string>> directDependencies)
+    {
+        var visited = new HashSet<string>();
+        var result = new HashSet<string>();
+        var stack = new Stack<string>();
+
+        // Mark self as visited to avoid including it in transitive dependencies
+        // (self is always at index 0 in the layout)
+        visited.Add(functionName);
+
+        // Start with direct dependencies of the function
+        if (directDependencies.TryGetValue(functionName, out var directDeps))
+        {
+            foreach (var dep in directDeps)
+            {
+                // Skip self-references
+                if (dep != functionName)
+                {
+                    stack.Push(dep);
+                }
+            }
+        }
+
+        while (stack.Count > 0)
+        {
+            var current = stack.Pop();
+
+            if (!visited.Add(current))
+            {
+                continue;
+            }
+
+            result.Add(current);
+
+            // Add dependencies of this function
+            if (directDependencies.TryGetValue(current, out var currentDeps))
+            {
+                foreach (var dep in currentDeps)
+                {
+                    if (!visited.Contains(dep))
+                    {
+                        stack.Push(dep);
+                    }
+                }
+            }
+        }
+
+        return result;
     }
 
     private static (PineValue moduleValue, ModuleCompilationContext updatedContext) CompileModule(
@@ -417,18 +490,30 @@ public class ElmCompiler
             context.FunctionParameterTypes,
             currentModuleName);
 
-        // Analyze dependencies to determine which functions this function calls
-        var dependencies =
-            AnalyzeFunctionDependencies(
-                functionBody,
-                currentModuleName,
-                context);
+        // Use the pre-computed dependency layout which includes transitive dependencies
+        // This is needed so that when calling another function, all of its dependencies
+        // are available in our environment
+        IReadOnlyList<string> dependencyLayout;
 
-        // Create the function dependency layout: [self, dependencies...]
-        // The current function is always at index 0
-        var dependencyLayout = new List<string> { qualifiedFunctionName };
+        if (context.TryGetDependencyLayout(qualifiedFunctionName) is { } precomputedLayout)
+        {
+            dependencyLayout = precomputedLayout;
+        }
+        else
+        {
+            // Fallback: compute direct dependencies (shouldn't happen if layouts are pre-computed)
+            var dependencies =
+                AnalyzeFunctionDependencies(
+                    functionBody,
+                    currentModuleName,
+                    context);
 
-        dependencyLayout.AddRange(dependencies);
+            // Create the function dependency layout: [self, dependencies...]
+            // The current function is always at index 0
+            var layout = new List<string> { qualifiedFunctionName };
+            layout.AddRange(dependencies);
+            dependencyLayout = layout;
+        }
 
         // Create expression compilation context using the immutable context types
         var expressionContext = new ExpressionCompilationContext(
@@ -483,7 +568,8 @@ public class ElmCompiler
         context = context.WithCompiledFunction(qualifiedFunctionName, placeholderResult, dependencyLayout);
 
         // Now compile dependencies (they can reference this function via the cache)
-        foreach (var depQualifiedName in dependencies)
+        // Skip the first element (self) in the dependency layout
+        foreach (var depQualifiedName in dependencyLayout.Skip(1))
         {
             if (context.TryGetFunctionInfo(depQualifiedName, out var depInfo))
             {
@@ -757,35 +843,6 @@ public class ElmCompiler
             ];
 
         return PineValue.List(entries);
-    }
-
-    private static PineValue EmitStringLiteral(string str)
-    {
-        /*
-        valueFromString : String -> Pine.Value
-        valueFromString string =
-            Pine.ListValue
-                [ elmStringTypeTagNameAsValue
-                , Pine.ListValue [ Pine.computeValueFromString string ]
-                ]
-         * */
-
-        return ElmValueEncoding.StringAsPineValue(str);
-    }
-
-    private static PineValue EmitIntegerLiteral(BigInteger value)
-    {
-        return IntegerEncoding.EncodeSignedInteger(value);
-    }
-
-    private static PineValue EmitCharLiteral(int value)
-    {
-        return ElmValueEncoding.ElmCharAsPineValue(value);
-    }
-
-    private static PineValue EmitBooleanLiteral(bool value)
-    {
-        return KernelFunction.ValueFromBool(value);
     }
 
     private static PineValue ValueFromContextExpansionWithName(

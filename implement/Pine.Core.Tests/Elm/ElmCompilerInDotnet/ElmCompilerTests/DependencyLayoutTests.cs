@@ -36,7 +36,8 @@ public class DependencyLayoutTests
     }
 
     /// <summary>
-    /// Tests that a self-recursive function has itself at index 0 and also in the sorted dependencies.
+    /// Tests that a self-recursive function has itself at index 0.
+    /// The function can reference itself via index 0 in its own layout.
     /// </summary>
     [Fact]
     public void Self_recursive_function_layout()
@@ -55,9 +56,9 @@ public class DependencyLayoutTests
         var layouts = ElmCompilerTestHelper.ComputeDependencyLayoutsFromModule(elmModuleText);
 
         layouts.Should().ContainKey("Test.factorial");
-        // Self-recursive function has itself at index 0 AND in sorted dependencies
-        // Layout: [self, self] since factorial calls factorial
-        layouts["Test.factorial"].Should().Equal(["Test.factorial", "Test.factorial"]);
+        // Self-recursive function has only itself at index 0
+        // Self-recursion is handled by referencing index 0
+        layouts["Test.factorial"].Should().Equal(["Test.factorial"]);
     }
 
     /// <summary>

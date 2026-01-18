@@ -159,4 +159,76 @@ public class SimpleFunctionTests
             .Trim());
     }
 
+    [Fact]
+    public void Function_invoking_second_function_invoking_third_function()
+    {
+        var elmModuleText =
+            """
+            module Test exposing (..)
+
+
+            alfa : Int -> List Int
+            alfa x =
+                [ x
+                , beta x
+                ]
+
+
+            beta : Int -> Int
+            beta y =
+                Pine_builtin.int_add
+                    [ gamma y
+                    , 41
+                    ]
+
+
+            gamma : Int -> Int
+            gamma x =
+                Pine_builtin.int_mul
+                    [ x
+                    , 13
+                    ]
+
+            """;
+
+        var parseCache = new PineVMParseCache();
+
+        var parsedEnv =
+            ElmCompilerTestHelper.CompileElmModules(
+                [elmModuleText],
+                disableInlining: true);
+
+        var wholeProgramText =
+            ElmCompilerTestHelper.ParseAndRenderStaticProgram(
+                parsedEnv,
+                includeDeclaration: qualifiedName => qualifiedName.DeclName is "alfa",
+                parseCache: parseCache);
+
+        wholeProgramText.Trim().Should().Be(
+            """"
+
+            Test.alfa param_0 =
+                [ param_0
+                , Test.beta
+                    param_0
+                ]
+
+
+            Test.beta param_0 =
+                Pine_builtin.int_add
+                    [ Test.gamma
+                        param_0
+                    , 41
+                    ]
+
+
+            Test.gamma param_0 =
+                Pine_builtin.int_mul
+                    [ param_0
+                    , 13
+                    ]
+            
+            """"
+            .Trim());
+    }
 }
