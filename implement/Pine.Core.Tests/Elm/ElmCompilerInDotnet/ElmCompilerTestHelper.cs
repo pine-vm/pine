@@ -343,4 +343,115 @@ public class ElmCompilerTestHelper
 
         return (evalResult, invocationReports);
     }
+
+    public static string ParseAndRenderStaticProgram(
+        ElmInteractiveEnvironment.ParsedInteractiveEnvironment parsedInteractiveEnvironment,
+        Func<DeclQualifiedName, bool> includeDeclaration,
+        PineVMParseCache parseCache)
+    {
+        var parserConfig =
+            BuildStaticProgramParserConfig.Default(
+                parsedInteractiveEnvironment,
+                parseCache: parseCache);
+
+        var roots = new Dictionary<DeclQualifiedName, PineValue>();
+
+        foreach (var (moduleName, moduleValue, moduleContent) in parsedInteractiveEnvironment.Modules)
+        {
+            foreach (var declaration in moduleContent.FunctionDeclarations)
+            {
+                var qualifiedName =
+                    DeclQualifiedName.FromString(moduleName + "." + declaration.Key);
+
+                if (includeDeclaration(qualifiedName))
+                {
+                    roots[qualifiedName] = declaration.Value;
+                }
+            }
+        }
+
+        var staticProgram =
+            StaticProgramParser.ParseProgram(
+                roots: roots,
+                parseConfig: parserConfig,
+                parseCache: parseCache)
+            .Extract(err => throw new Exception("Failed parsing static program: " + err));
+
+        var functionsTexts =
+            staticProgram
+            .OrderBy(func => func.Key)
+            .Select(decl =>
+                RenderStaticFunction(
+                    functionName: decl.Key.FullName,
+                    parameterReferences: decl.Value.ParametersExprs,
+                    functionBody: decl.Value.BodyExpression,
+                    parseCache))
+            .ToList();
+
+        return string.Join("\n\n", functionsTexts);
+    }
+
+    public static string RenderStaticFunction(
+        string functionName,
+        IReadOnlyList<StaticExpression<DeclQualifiedName>> parameterReferences,
+        StaticExpression<DeclQualifiedName> functionBody,
+        PineVMParseCache parseCache)
+    {
+        var paramDict =
+            parameterReferences
+            .Select((paramRef, index) => (paramRef, index))
+            .ToImmutableDictionary(
+                exprAndIndex => "param_" + exprAndIndex.index,
+                exprAndIndex => exprAndIndex.paramRef);
+
+        var headerText =
+            (functionName + " " + string.Join(" ", paramDict.Keys)).Trim() + " =";
+
+        string? ReplaceExprWithIdentifier(StaticExpression<DeclQualifiedName> expr)
+        {
+            if (paramDict.FirstOrDefault(kvp => kvp.Value.Equals(expr)).Key is { } key)
+            {
+                return key;
+            }
+
+            if (expr is StaticExpression<DeclQualifiedName>.ParameterReferenceExpr paramRefExpr)
+            {
+                var paramName = "param_" + paramRefExpr.ParameterIndex;
+                return paramName;
+            }
+
+            return null;
+        }
+
+        StaticExpressionDisplay.FunctionApplicationRenderingNew<DeclQualifiedName> FunctionApplicationRenderer(DeclQualifiedName funcName)
+        {
+            // Extract arguments from the Arguments expression (which should be a List)
+            static IReadOnlyList<StaticExpression<DeclQualifiedName>> ExtractArgs(StaticExpression<DeclQualifiedName> argsExpr)
+            {
+                if (argsExpr is StaticExpression<DeclQualifiedName>.List listExpr)
+                {
+                    return listExpr.Items;
+                }
+
+                // For non-list arguments, return a single-element list
+                return [argsExpr];
+            }
+
+            return new StaticExpressionDisplay.FunctionApplicationRenderingNew<DeclQualifiedName>(
+                FunctionName: funcName.FullName,
+                FunctionInterface: ExtractArgs);
+        }
+
+        return
+            headerText +
+            "\n" +
+            StaticExpressionDisplay.RenderToString(
+                expression: functionBody,
+                valueRenderer: val => StaticExpressionDisplay.RenderValueAsExpression(val, StaticExpressionDisplay.DefaultBlobRenderer),
+                functionApplicationRenderer: FunctionApplicationRenderer,
+                replaceExprWithIdentifier: ReplaceExprWithIdentifier,
+                indentString: "    ",
+                indentLevel: 1,
+                kernelApplicationPrefix: "Pine_builtin");
+    }
 }

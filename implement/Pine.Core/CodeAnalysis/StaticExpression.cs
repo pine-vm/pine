@@ -24,6 +24,15 @@ public abstract record StaticExpression<IdentifierT>
         new Environment();
 
     /// <summary>
+    /// Reference to a parameter by its index within a containing context.
+    /// <para>
+    /// Note: Since this expression model does not allow lambdas or local functions, there is only one containing function.
+    /// </para>
+    /// </summary>
+    public static StaticExpression<IdentifierT> ParameterReference(int parameterIndex) =>
+        new ParameterReferenceExpr(parameterIndex);
+
+    /// <summary>
     /// Create a list expression from the given items.
     /// Analog to <see cref="Expression.List"/>.
     /// A list expression contains a list of subexpressions.
@@ -376,6 +385,9 @@ public abstract record StaticExpression<IdentifierT>
         }
     }
 
+    /*
+     * TODO: Probably remove the 'Environment' variant after phasing out usages across project.
+     * */
     /// <summary>
     /// Corresponds to the <see cref="Expression.Environment"/>.
     /// </summary>
@@ -384,6 +396,22 @@ public abstract record StaticExpression<IdentifierT>
     {
         /// <summary>
         /// Always returns zero, as an <see cref="Environment"/> expression does not contain any subexpressions.
+        /// </summary>
+        public override int SubexpressionCount { get; } = 0;
+    }
+
+    /// <summary>
+    /// Reference to a parameter by its index within a containing context.
+    /// <para>
+    /// Note: Since this expression model does not allow lambdas or local functions, there is only one containing function.
+    /// </para>
+    /// </summary>
+    public sealed record ParameterReferenceExpr(
+        int ParameterIndex)
+        : StaticExpression<IdentifierT>
+    {
+        /// <summary>
+        /// Always returns zero, as a <see cref="ParameterReferenceExpr"/> expression does not contain any subexpressions.
         /// </summary>
         public override int SubexpressionCount { get; } = 0;
     }

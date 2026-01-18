@@ -32,37 +32,39 @@ public class SimpleRecursiveFunctionTests
 
         var parseCache = new PineVMParseCache();
 
-        var (parsedEnv, staticProgram) =
-            ElmCompilerTestHelper.StaticProgramFromElmModules(
+        var parsedEnv =
+            ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
-                disableInlining: true,
+                disableInlining: true);
+
+        var wholeProgramText =
+            ElmCompilerTestHelper.ParseAndRenderStaticProgram(
+                parsedEnv,
                 includeDeclaration: qualifiedName => qualifiedName.DeclName is "fibonacci",
                 parseCache: parseCache);
 
-        var wholeProgramText = StaticExpressionDisplay.RenderStaticProgram(staticProgram);
-
         wholeProgramText.Trim().Should().Be(
             """"
-            Test.fibonacci param_1_0 =
+            Test.fibonacci param_0 =
                 if
-                    Pine_kernel.int_is_sorted_asc
-                        [ param_1_0
+                    Pine_builtin.int_is_sorted_asc
+                        [ param_0
                         , 2
                         ]
                 then
-                    param_1_0
+                    param_0
 
                 else
-                    Pine_kernel.int_add
+                    Pine_builtin.int_add
                         [ Test.fibonacci
-                            (Pine_kernel.int_add
-                                [ param_1_0
+                            (Pine_builtin.int_add
+                                [ param_0
                                 , -2
                                 ]
                             )
                         , Test.fibonacci
-                            (Pine_kernel.int_add
-                                [ param_1_0
+                            (Pine_builtin.int_add
+                                [ param_0
                                 , -1
                                 ]
                             )
@@ -147,12 +149,10 @@ public class SimpleRecursiveFunctionTests
 
         var parseCache = new PineVMParseCache();
 
-        var (parsedEnv, _) =
-            ElmCompilerTestHelper.StaticProgramFromElmModules(
+        var parsedEnv =
+            ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
-                disableInlining: true,
-                includeDeclaration: qualifiedName => qualifiedName.DeclName is "isEven" or "isOdd",
-                parseCache: parseCache);
+                disableInlining: true);
 
         // Dynamic test: invoke the functions and verify results
         var testModule =

@@ -134,12 +134,10 @@ public class SimpleLetBlockTests
 
         var parseCache = new PineVMParseCache();
 
-        var (parsedEnv, staticProgram) =
-            ElmCompilerTestHelper.StaticProgramFromElmModules(
+        var parsedEnv =
+            ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
-                disableInlining: false,
-                includeDeclaration: qualifiedName => qualifiedName.FullName is "Test.decl",
-                parseCache: parseCache);
+                disableInlining: false);
 
         var testModule =
             parsedEnv.Modules.FirstOrDefault(c => c.moduleName is "Test");

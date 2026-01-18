@@ -17,8 +17,7 @@ namespace Pine.Core.CodeAnalysis;
 /// - The innermost level invokes the actual function with all collected arguments
 /// 
 /// <para>
-/// For background on function values and generic function application, see
-/// <see href="https://github.com/pine-vm/pine/blob/fa0af408c25311d1fd3b5f6ba68d12197fcd4f8b/implement/Pine.Core/Elm/ElmCompilerInDotnet/elm-compiler-implementation-guide.md"></see>
+/// For background on function values and generic function application, see 'elm-compiler-implementation-guide.md'
 /// </para>
 /// </summary>
 public static class FunctionValueBuilder

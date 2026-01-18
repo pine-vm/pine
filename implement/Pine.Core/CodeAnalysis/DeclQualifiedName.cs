@@ -11,6 +11,7 @@ namespace Pine.Core.CodeAnalysis;
 public record DeclQualifiedName(
     IReadOnlyList<string> Namespaces,
     string DeclName)
+    : System.IComparable<DeclQualifiedName>, System.IEquatable<DeclQualifiedName>
 {
     /// <summary>
     /// Gets the full name composed from <see cref="Namespaces"/> (if any) and <see cref="DeclName"/>, separated by dots.
@@ -102,5 +103,37 @@ public record DeclQualifiedName(
         new(
             Namespaces: [.. Namespaces, DeclName],
             DeclName: containedDeclName);
+
+    /// <inheritdoc/>
+    public int CompareTo(DeclQualifiedName? other)
+    {
+        if (ReferenceEquals(this, other))
+            return 0;
+
+        if (other is null)
+            return 1;
+
+        var minNamespaceCount =
+            Namespaces.Count < other.Namespaces.Count
+            ?
+            Namespaces.Count
+            :
+            other.Namespaces.Count;
+
+        for (var i = 0; i < minNamespaceCount; i++)
+        {
+            var nsComparison = string.Compare(Namespaces[i], other.Namespaces[i], System.StringComparison.Ordinal);
+
+            if (nsComparison is not 0)
+                return nsComparison;
+        }
+
+        var namespaceCountComparison = Namespaces.Count.CompareTo(other.Namespaces.Count);
+
+        if (namespaceCountComparison is not 0)
+            return namespaceCountComparison;
+
+        return string.Compare(DeclName, other.DeclName, System.StringComparison.Ordinal);
+    }
 }
 
