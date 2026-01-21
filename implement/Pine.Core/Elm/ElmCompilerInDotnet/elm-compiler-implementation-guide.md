@@ -175,6 +175,28 @@ Examples for specializations that can result in varied forms of a function:
 + Constraining the type of a parameter from an open record to a closed record.
 + Constraining a parameter from a type class like `number` to a concrete type like `Int`.
 
+## Compilation Stages
+
+### Canonicalization
+
+#### Input to Canonicalization
+
+The input to canonicalization is a tree of ‘package units’ where the root unit is the application, and the next level of units are the packages directly imported by the application. Each of these units contains a set of Elm modules.
+
+We could not input all modules in a flat set, because that could lead to name clashes when module namespaces are used by multiple different modules in the dependency tree.
+
+The module contents are modeled as the parsed Elm syntax.
+
+#### Output from Canonicalization
+
+The module contents returned from canonicalization use the same Elm module syntax model as the input. Also, despite exchanging names within the syntax nodes, canonicalization returns the same locations and ranges, so that the following compilation stages can produce error messages aligned with the source layout.
+
+The module syntax models returned by canonicalization do not contain any import statements or exposing lists, since these are no longer necessary after this stage.
+
+Where necessary to avoid name clashes between transitively imported packages, canonicalization adds prefixes to module namespaces. To optimize readability during inspection, prefixes are added only where necessary. Different versions of packages in a dependency diamond do not force prefixing, since the contents of the actually used modules can still be the same.
+
+Besides canonicalizing references in module contents, the canonicalization stage also produces errors like ‘Name Error’ and ‘Name Clash’, including the source ranges to render error messages in the right places.
+
 ## Future Exploration
 
 ### Future Exploration - Monomorphizing Extensible Records
