@@ -4,15 +4,20 @@
 
 For the encoding of Elm values as Pine values, the compiler follows the model established in the `ElmValueEncoding.cs` file. The definitions in `ElmValueEncoding.cs` cover the encoding of all Elm values except functions.
 
-## Emitting Function Applications
+## Function Applications
 
 To compile a function application from Elm syntax, we use the 'ParseAndEval' expression variant of the Pine language. This expression creates a new environment for evaluating an expression, similar to the 'eval' functions found in other languages, such as Python. Since there are no symbolic references in Pine, we transport any other functions that the called function depends on into this new environment.
-For example, a recursive function, when calling itself via 'ParseAndEval', composes the new environment so that it also contains a representation of the function itself in encoded form, to enable continuing recursion in the non-terminating branch.
+
+Function applications are grouped into full applications and partial applications. Partial applications are all usages of functions in which fewer arguments are supplied than the number of parameters. These partial applications produce function values.
+
+> Note: The approach using function values and a generic application works in any case. The reason we use a different implementation for the full application case is to emit more efficient code.
 
 ### Full Function Applications
 
 For function applications where the number of arguments equals the number of parameters of the function (non-partial application), we use the following pattern to compile Elm function applications, as a convention:
-The environment is a list with two items. The first item in this list contains all the encoded function bodies needed for further applications. This set contains all the transitivels referenced functions that have not been inlined. The second item in the list contains the arguments from the source Elm code.
+The environment is a list with two items. The first item in this list contains all the encoded function bodies needed for further applications. This set contains all the transitively referenced functions that have not been inlined. The second item in the list contains the arguments from the source Elm code.
+
+For example, a recursive function, when calling itself via 'ParseAndEval', composes the new environment so that it also contains a representation of the function itself in encoded form, to enable continuing recursion in the non-terminating branch.
 
 The following example illustrates the pattern using a concrete recursive function:
 
@@ -48,9 +53,25 @@ Because of the direct recursion, the calling function happens to be the called f
 
 Following this pattern ensures that common inspection and profiling tooling can parse and analyze the invocations. We also use these tools to derive symbols for pseudo-functions rendered as part of snapshot tests.
 
+### Composition of the Environment Functions List
+
+The following are general rules we use to compose the list of functions in the eval environment introduced above.
+
+#### What to Include in the Environment Functions List
+
++ All functions in a group of mutually recursive functions must be included.
++ Other functions might be included as well. (The alternative to retrieving it from the environment is to contain the function directly in the expression representing the function application, as a literal)
+
+#### How to Order Entries in the Environment Functions List
+
++ All functions in a group of mutually recursive functions use the same order. This makes it easier to model invocations in the recursive set, since we can forward the entire list rather than individual items.
++ Recursive functions are placed at the beginning of the list.
+
 ### Function Values And Generic Function Application
 
 The Elm programming language supports first-class functions and partial application. When a function whose declaration we know (it is not a parameter in the current context) escapes the current context, the Elm compiler emits a representation of this function as a value that can then be freely passed around to other parts of the program and applied sometime later.
+
+A function value encodes a function in a way that enables the incremental addition of further arguments. For each argument, the applying side uses a `ParseAndEval` expression.
 
 This function value contains not only an encoding of the function body, but also a list of the encoded function bodies the wrapped function depends on, including transitive dependencies.
 
@@ -94,6 +115,7 @@ The limited type inference here supports:
   + This function type does not have to come from an annotation, but could also have been inferred.
   + Includes function applications using choice type tags (e.g., `Maybe.Just`, `Result.Ok`)
   + Includes applications of functions implied by record type alias declarations.
+  + When a variable is used as an argument, its type is inferred from the function's parameter type at that position.
 + Picking up primitive types from int pattern, hex pattern, string pattern, etc.
 + Type of tuple from tuple expression. (item -> tuple)
 + Type of tuple item from tuple expression. (tuple -> item)
@@ -102,11 +124,14 @@ The limited type inference here supports:
 + Type of list item from uncons pattern.
 + Type of list from list expression.
 + Type of argument from 'named' pattern (deconstruction of choice type tag).
+  + This also works in expression contexts: when a variable is used as an argument to a choice type constructor, its type is inferred from the constructor's argument type.
 + Type of record from record expression.
 + Type of record field from record access.
 + Type of record field from record update.
 + Distinction between `String` and `List a` to emit specialized code where the `++` operator (`appendable` type class) is applied.
-+ Propagation via arithmetic operators like `+` `-` (`number` type class) to distinguish between `Int` and `Float` and emit specialized code for `Int` arithmetic.
++ Propagation via arithmetic operators like `+` `-` (`number` type class) to distinguish between `Int` and `Float` and emit specialized code for `Int` arithmetic. When one operand has a known type, the type propagates to the other operand in the expression.
++ Type inference through let expressions: Types are propagated from parameters through let bindings. When a let binding's expression has an inferred type, that type is associated with the binding name for use in subsequent expressions.
++ Type unification between branches: In if/case expressions, the types of all branches are unified to determine the most specific common type. For example, if one branch returns `Int` and another returns a `number` literal, the result type is `Int`.
 
 ## Arithmetic Operations
 
