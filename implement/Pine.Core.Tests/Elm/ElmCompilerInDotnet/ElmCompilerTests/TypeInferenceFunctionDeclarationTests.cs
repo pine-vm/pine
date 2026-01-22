@@ -39,17 +39,16 @@ public class TypeInferenceFunctionDeclarationTests
 
         var parseCache = new PineVMParseCache();
 
-        var (parsedEnv, staticProgram) =
-            ElmCompilerTestHelper.StaticProgramFromElmModules(
+        var parsedEnv =
+            ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
-                disableInlining: true,
-                includeDeclaration: qualifiedName => qualifiedName.DeclName is "beta",
-                parseCache: parseCache);
+                disableInlining: true);
 
         var wholeProgramText =
-            StaticExpressionDisplay.RenderStaticProgram(
-                staticProgram,
-                kernelApplicationPrefix: "Pine_builtin");
+            ElmCompilerTestHelper.ParseAndRenderStaticProgram(
+                parsedEnv,
+                includeDeclaration: qualifiedName => qualifiedName.DeclName is "beta",
+                parseCache: parseCache);
 
         wholeProgramText.Trim().Should().Be(
             """"
@@ -109,17 +108,16 @@ public class TypeInferenceFunctionDeclarationTests
 
         var parseCache = new PineVMParseCache();
 
-        var (parsedEnv, staticProgram) =
-            ElmCompilerTestHelper.StaticProgramFromElmModules(
+        var parsedEnv =
+            ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
-                disableInlining: true,
-                includeDeclaration: qualifiedName => qualifiedName.DeclName is "beta",
-                parseCache: parseCache);
+                disableInlining: true);
 
         var wholeProgramText =
-            StaticExpressionDisplay.RenderStaticProgram(
-                staticProgram,
-                kernelApplicationPrefix: "Pine_builtin");
+            ElmCompilerTestHelper.ParseAndRenderStaticProgram(
+                parsedEnv,
+                includeDeclaration: qualifiedName => qualifiedName.DeclName is "beta",
+                parseCache: parseCache);
 
         wholeProgramText.Trim().Should().Be(
             """"

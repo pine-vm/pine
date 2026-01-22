@@ -245,16 +245,27 @@ public class StaticProgramParser
             {
                 var parameterIndex = pathInEnv[1];
 
-                if (pathInEnv.Count is not 2)
+                if (pathInEnv.Count is 2)
                 {
-                    throw new NotImplementedException(
-                        "Unexpected path in environment length: " + pathInEnv.Count);
+                    // Simple parameter reference like env[1][0]
+                    var parameterExpr =
+                        StaticExpression<IdentifierT>.ParameterReference(parameterIndex);
+
+                    return (parameterExpr, ImmutableDictionary<IdentifierT, PineValue>.Empty);
                 }
 
-                var parameterExpr =
-                    StaticExpression<IdentifierT>.ParameterReference(parameterIndex);
+                // For tuple patterns, nested tuple patterns, or choice type deconstruction patterns
+                // like env[1][0][0] or env[1][0][1][0], build a full path expression
+                // that will be rendered as param_1_0[0] or param_1_0[1][0].
+                // Examples:
+                // - Tuple: `(x, y)` generates env[1][0][0] and env[1][0][1]
+                // - Choice: `(TagAlfa a)` generates env[1][0][1][0]
+                var pathExpr =
+                    StaticExpressionExtension.BuildPathToExpression(
+                        pathInEnv,
+                        StaticExpression<IdentifierT>.EnvironmentInstance);
 
-                return (parameterExpr, ImmutableDictionary<IdentifierT, PineValue>.Empty);
+                return (pathExpr, ImmutableDictionary<IdentifierT, PineValue>.Empty);
             }
         }
 

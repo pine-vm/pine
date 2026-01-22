@@ -31,12 +31,10 @@ public class ListPatternMatchingTests
 
         var parseCache = new PineVMParseCache();
 
-        var (parsedEnv, staticProgram) =
-            ElmCompilerTestHelper.StaticProgramFromElmModules(
+        var parsedEnv =
+            ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
-                disableInlining: false,
-                includeDeclaration: qualifiedName => qualifiedName.FullName is "Test.decl",
-                parseCache: parseCache);
+                disableInlining: false);
 
         var testModule =
             parsedEnv.Modules.FirstOrDefault(c => c.moduleName is "Test");
@@ -129,12 +127,10 @@ public class ListPatternMatchingTests
 
         var parseCache = new PineVMParseCache();
 
-        var (parsedEnv, staticProgram) =
-            ElmCompilerTestHelper.StaticProgramFromElmModules(
+        var parsedEnv =
+            ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
-                disableInlining: false,
-                includeDeclaration: qualifiedName => qualifiedName.FullName is "Test.decl",
-                parseCache: parseCache);
+                disableInlining: false);
 
         var testModule =
             parsedEnv.Modules.FirstOrDefault(c => c.moduleName is "Test");
@@ -324,12 +320,10 @@ public class ListPatternMatchingTests
 
         var parseCache = new PineVMParseCache();
 
-        var (parsedEnv, staticProgram) =
-            ElmCompilerTestHelper.StaticProgramFromElmModules(
+        var parsedEnv =
+            ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
-                disableInlining: false,
-                includeDeclaration: qualifiedName => qualifiedName.FullName is "Test.decl",
-                parseCache: parseCache);
+                disableInlining: false);
 
         var testModule =
             parsedEnv.Modules.FirstOrDefault(c => c.moduleName is "Test");
@@ -589,22 +583,24 @@ public class ListPatternMatchingTests
 
         var parseCache = new PineVMParseCache();
 
-        var (parsedEnv, staticProgram) =
-            ElmCompilerTestHelper.StaticProgramFromElmModules(
+        var parsedEnv =
+            ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
-                disableInlining: false,
+                disableInlining: false);
+
+        var wholeProgramText =
+            ElmCompilerTestHelper.ParseAndRenderStaticProgram(
+                parsedEnv,
                 includeDeclaration: qualifiedName => qualifiedName.FullName is "Test.decl",
                 parseCache: parseCache);
-
-        var wholeProgramText = StaticExpressionDisplay.RenderStaticProgram(staticProgram);
 
         wholeProgramText.Trim().Should().Be(
             """"
 
             Test.decl param_1_0 =
                 if
-                    Pine_kernel.equal
-                        [ Pine_kernel.length
+                    Pine_builtin.equal
+                        [ Pine_builtin.length
                             param_1_0
                         , 0
                         ]
@@ -612,7 +608,7 @@ public class ListPatternMatchingTests
                     -1
 
                 else if
-                    Pine_kernel.equal
+                    Pine_builtin.equal
                         [ param_1_0
                         , [ [ 0 ] ]
                         ]
@@ -620,7 +616,7 @@ public class ListPatternMatchingTests
                     100
             
                 else if
-                    Pine_kernel.equal
+                    Pine_builtin.equal
                         [ param_1_0
                         , [ [ 13, 42 ] ]
                         ]

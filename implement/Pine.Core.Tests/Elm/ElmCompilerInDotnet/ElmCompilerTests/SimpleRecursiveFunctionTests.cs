@@ -45,26 +45,26 @@ public class SimpleRecursiveFunctionTests
 
         wholeProgramText.Trim().Should().Be(
             """"
-            Test.fibonacci param_0 =
+            Test.fibonacci param_1_0 =
                 if
                     Pine_builtin.int_is_sorted_asc
-                        [ param_0
+                        [ param_1_0
                         , 2
                         ]
                 then
-                    param_0
+                    param_1_0
 
                 else
                     Pine_builtin.int_add
                         [ Test.fibonacci
                             (Pine_builtin.int_add
-                                [ param_0
+                                [ param_1_0
                                 , -2
                                 ]
                             )
                         , Test.fibonacci
                             (Pine_builtin.int_add
-                                [ param_0
+                                [ param_1_0
                                 , -1
                                 ]
                             )

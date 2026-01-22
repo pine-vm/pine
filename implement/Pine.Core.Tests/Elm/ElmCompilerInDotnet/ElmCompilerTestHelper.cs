@@ -384,8 +384,7 @@ public class ElmCompilerTestHelper
                 RenderStaticFunction(
                     functionName: decl.Key.FullName,
                     parameterReferences: decl.Value.ParametersExprs,
-                    functionBody: decl.Value.BodyExpression,
-                    parseCache))
+                    functionBody: decl.Value.BodyExpression))
             .ToList();
 
         return string.Join("\n\n", functionsTexts);
@@ -394,18 +393,23 @@ public class ElmCompilerTestHelper
     public static string RenderStaticFunction(
         string functionName,
         IReadOnlyList<StaticExpression<DeclQualifiedName>> parameterReferences,
-        StaticExpression<DeclQualifiedName> functionBody,
-        PineVMParseCache parseCache)
+        StaticExpression<DeclQualifiedName> functionBody)
     {
-        var paramDict =
-            parameterReferences
-            .Select((paramRef, index) => (paramRef, index))
-            .ToImmutableDictionary(
-                exprAndIndex => "param_" + exprAndIndex.index,
-                exprAndIndex => exprAndIndex.paramRef);
+        // Use param_1_N naming to match the old parser's output format
+        // The "1" comes from the environment structure [[closures], [arguments]] where parameters are at index 1
+        // Build ordered list of parameter names to preserve correct parameter order
+        var paramNames = new List<string>();
+        var paramDict = new Dictionary<string, StaticExpression<DeclQualifiedName>>();
+
+        for (var index = 0; index < parameterReferences.Count; index++)
+        {
+            var paramName = "param_1_" + index;
+            paramNames.Add(paramName);
+            paramDict[paramName] = parameterReferences[index];
+        }
 
         var headerText =
-            (functionName + " " + string.Join(" ", paramDict.Keys)).Trim() + " =";
+            (functionName + " " + string.Join(" ", paramNames)).Trim() + " =";
 
         string? ReplaceExprWithIdentifier(StaticExpression<DeclQualifiedName> expr)
         {
@@ -416,8 +420,38 @@ public class ElmCompilerTestHelper
 
             if (expr is StaticExpression<DeclQualifiedName>.ParameterReferenceExpr paramRefExpr)
             {
-                var paramName = "param_" + paramRefExpr.ParameterIndex;
+                // Use param_1_N naming to match the old parser's output format
+                var paramName = "param_1_" + paramRefExpr.ParameterIndex;
                 return paramName;
+            }
+
+            // Check if this is a path expression (skip/head chain) starting from environment.
+            // This handles tuple element access and choice type deconstruction
+            // like param_1_0[0] (tuple element) or param_1_0[1][0] (choice type payload).
+            if (StaticExpressionExtension.TryParseAsPathToExpression(
+                expr,
+                StaticExpression<DeclQualifiedName>.EnvironmentInstance) is { } pathInEnv)
+            {
+                // Path format is [envListIndex, paramIndex, ...nestedAccess]
+                // Environment structure is [[closures], [arguments]]
+                // So envListIndex=1 means arguments list, paramIndex is the parameter number,
+                // and nestedAccess are indices into nested structures (tuples, choice type payloads).
+                // For example: env[1][0][0] = arguments[0][0] = first element of first parameter's tuple
+                if (pathInEnv.Count >= 2 && pathInEnv[0] is 1)
+                {
+                    var paramIndex = pathInEnv[1];
+                    var paramName = "param_1_" + paramIndex;
+
+                    // If there are more elements in the path, render them as indexing
+                    if (pathInEnv.Count > 2)
+                    {
+                        var indexingSuffix = string.Concat(
+                            pathInEnv.Skip(2).Select(idx => "[" + idx + "]"));
+                        return paramName + indexingSuffix;
+                    }
+
+                    return paramName;
+                }
             }
 
             return null;

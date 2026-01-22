@@ -36,9 +36,9 @@ public class SimpleFunctionTests
         wholeProgramText.Trim().Should().Be(
             """"
 
-            Test.alfa param_0 =
+            Test.alfa param_1_0 =
                 Pine_builtin.int_add
-                    [ param_0
+                    [ param_1_0
                     , 41
                     ]
             
@@ -80,21 +80,21 @@ public class SimpleFunctionTests
         wholeProgramText.Trim().Should().Be(
             """"
 
-            Test.alfa param_0 =
+            Test.alfa param_1_0 =
                 if
                     Pine_builtin.int_is_sorted_asc
-                        [ param_0
+                        [ param_1_0
                         , 17
                         ]
                 then
                     Pine_builtin.int_add
-                        [ param_0
+                        [ param_1_0
                         , 11
                         ]
 
                 else
                     Pine_builtin.int_mul
-                        [ param_0
+                        [ param_1_0
                         , 13
                         ]
             
@@ -142,16 +142,16 @@ public class SimpleFunctionTests
         wholeProgramText.Trim().Should().Be(
             """"
 
-            Test.alfa param_0 =
-                [ param_0
+            Test.alfa param_1_0 =
+                [ param_1_0
                 , Test.beta
-                    param_0
+                    param_1_0
                 ]
 
 
-            Test.beta param_0 =
+            Test.beta param_1_0 =
                 Pine_builtin.int_add
-                    [ param_0
+                    [ param_1_0
                     , 41
                     ]
             
@@ -207,24 +207,24 @@ public class SimpleFunctionTests
         wholeProgramText.Trim().Should().Be(
             """"
 
-            Test.alfa param_0 =
-                [ param_0
+            Test.alfa param_1_0 =
+                [ param_1_0
                 , Test.beta
-                    param_0
+                    param_1_0
                 ]
 
 
-            Test.beta param_0 =
+            Test.beta param_1_0 =
                 Pine_builtin.int_add
                     [ Test.gamma
-                        param_0
+                        param_1_0
                     , 41
                     ]
 
 
-            Test.gamma param_0 =
+            Test.gamma param_1_0 =
                 Pine_builtin.int_mul
-                    [ param_0
+                    [ param_1_0
                     , 13
                     ]
             

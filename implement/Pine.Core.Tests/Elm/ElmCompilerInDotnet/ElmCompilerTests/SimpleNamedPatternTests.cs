@@ -53,12 +53,10 @@ public class SimpleNamedPatternTests
 
         var parseCache = new PineVMParseCache();
 
-        var (parsedEnv, staticProgram) =
-            ElmCompilerTestHelper.StaticProgramFromElmModules(
+        var parsedEnv =
+            ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
-                disableInlining: false,
-                includeDeclaration: qualifiedName => qualifiedName.FullName is "Test.decl",
-                parseCache: parseCache);
+                disableInlining: false);
 
         var testModule =
             parsedEnv.Modules.FirstOrDefault(c => c.moduleName is "Test");
@@ -259,21 +257,23 @@ public class SimpleNamedPatternTests
 
         var parseCache = new PineVMParseCache();
 
-        var (parsedEnv, staticProgram) =
-            ElmCompilerTestHelper.StaticProgramFromElmModules(
+        var parsedEnv =
+            ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
-                disableInlining: false,
+                disableInlining: false);
+
+        var wholeProgramText =
+            ElmCompilerTestHelper.ParseAndRenderStaticProgram(
+                parsedEnv,
                 includeDeclaration: qualifiedName => qualifiedName.FullName is "Test.decl",
                 parseCache: parseCache);
-
-        var wholeProgramText = StaticExpressionDisplay.RenderStaticProgram(staticProgram);
 
         wholeProgramText.Trim().Should().Be(
             """"
 
             Test.decl param_1_0 =
                 if
-                    Pine_kernel.equal
+                    Pine_builtin.equal
                         [ param_1_0
                         , [ Nothing, Nothing ]
                         ]
@@ -281,7 +281,7 @@ public class SimpleNamedPatternTests
                     100
 
                 else if
-                    Pine_kernel.equal
+                    Pine_builtin.equal
                         [ param_1_0
                         , [ Nothing, Just 7 ]
                         ]
@@ -289,7 +289,7 @@ public class SimpleNamedPatternTests
                     200
 
                 else if
-                    Pine_kernel.equal
+                    Pine_builtin.equal
                         [ param_1_0
                         , [ Just 17, Just 19 ]
                         ]

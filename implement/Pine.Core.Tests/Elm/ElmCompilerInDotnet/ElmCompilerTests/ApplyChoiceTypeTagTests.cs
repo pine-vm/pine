@@ -39,14 +39,16 @@ public class ApplyChoiceTypeTagTests
 
         var parseCache = new PineVMParseCache();
 
-        var (parsedEnv, staticProgram) =
-            ElmCompilerTestHelper.StaticProgramFromElmModules(
+        var parsedEnv =
+            ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
-                disableInlining: true,
+                disableInlining: true);
+
+        var wholeProgramText =
+            ElmCompilerTestHelper.ParseAndRenderStaticProgram(
+                parsedEnv,
                 includeDeclaration: qualifiedName => qualifiedName.Namespaces.SequenceEqual(["Test"]),
                 parseCache: parseCache);
-
-        var wholeProgramText = StaticExpressionDisplay.RenderStaticProgram(staticProgram);
 
         wholeProgramText.Trim().Should().Be(
             """"
