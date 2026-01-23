@@ -21,6 +21,12 @@ public abstract record CompilationError
         new UnsupportedOperatorError(operatorSymbol);
 
     /// <summary>
+    /// Expression type is not supported by the compiler.
+    /// </summary>
+    public static CompilationError UnsupportedExpression(string expressionType) =>
+        new UnsupportedExpressionError(expressionType);
+
+    /// <summary>
     /// Describe the context of an error as a string.
     /// </summary>
     public sealed record ScopedError(CompilationError InnerError, string ScopeDescription) : CompilationError
@@ -31,9 +37,9 @@ public abstract record CompilationError
     }
 
     /// <summary>
-    /// An expression type is not supported by the compiler.
+    /// Expression type is not supported by the compiler.
     /// </summary>
-    public sealed record UnsupportedExpression(string ExpressionType) : CompilationError
+    public sealed record UnsupportedExpressionError(string ExpressionType) : CompilationError
     {
         /// <inheritdoc/>
         public override string ToString() =>

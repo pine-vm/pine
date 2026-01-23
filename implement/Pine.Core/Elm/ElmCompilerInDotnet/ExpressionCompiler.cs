@@ -76,7 +76,7 @@ public class ExpressionCompiler
                 CompileRecordAccess(expr, context),
 
             _ =>
-                new CompilationError.UnsupportedExpression(expression.GetType().Name)
+            CompilationError.UnsupportedExpression(expression.GetType().Name)
         };
 
     private static Result<CompilationError, Expression> CompileInteger(
@@ -112,7 +112,11 @@ public class ExpressionCompiler
             // Check if it's a choice type tag (starts with uppercase letter)
             if (ElmValueEncoding.StringIsValidTagName(expr.Name))
             {
-                // This is a choice type constructor with no arguments
+                /*
+                 * TODO: Fix for cases where tags take arguments.
+                 * The current implementation only handles zero-argument tags here.
+                 * */
+
                 return Expression.LiteralInstance(ElmValueEncoding.TagAsPineValue(expr.Name, []));
             }
         }
@@ -134,6 +138,11 @@ public class ExpressionCompiler
         // by having an uppercase first letter
         if (ElmValueEncoding.StringIsValidTagName(expr.Name))
         {
+            /*
+             * TODO: Fix for cases where tags take arguments.
+             * The current implementation only handles zero-argument tags here.
+             * */
+
             return Expression.LiteralInstance(ElmValueEncoding.TagAsPineValue(expr.Name, []));
         }
 
@@ -149,10 +158,10 @@ public class ExpressionCompiler
             return new CompilationError.ApplicationTooFewArguments(expr.Arguments.Count);
         }
 
-        var firstArg = expr.Arguments[0].Value;
+        var functionExpr = expr.Arguments[0].Value;
 
         // Check if this is a Pine_kernel application
-        if (firstArg is SyntaxTypes.Expression.FunctionOrValue kernelFunc &&
+        if (functionExpr is SyntaxTypes.Expression.FunctionOrValue kernelFunc &&
             kernelFunc.ModuleName.Count is 1 &&
             context.ModuleCompilationContext.IsPineKernelModule(kernelFunc.ModuleName[0]))
         {
@@ -170,7 +179,7 @@ public class ExpressionCompiler
         }
 
         // Check if this is a function application or choice type tag application
-        if (firstArg is SyntaxTypes.Expression.FunctionOrValue funcRef)
+        if (functionExpr is SyntaxTypes.Expression.FunctionOrValue funcRef)
         {
             // Check if this is a record type alias constructor application
             // Record type alias constructors also have uppercase names, so check this first
@@ -192,12 +201,12 @@ public class ExpressionCompiler
                 {
                     // Partial application not supported yet - fall through to other handling
                     // For now, only handle full application
-                    return new CompilationError.UnsupportedExpression(
+                    return CompilationError.UnsupportedExpression(
                         $"Record constructor partial application not supported: {funcRef.Name} expects {fieldNamesInDeclOrder.Count} arguments but got {argumentCount}");
                 }
 
                 // Compile all arguments
-                var compiledArguments = new List<Expression>();
+                var recordCtorCompiledArgs = new List<Expression>();
                 for (var i = 1; i < expr.Arguments.Count; i++)
                 {
                     var argResult = Compile(expr.Arguments[i].Value, context);
@@ -205,12 +214,12 @@ public class ExpressionCompiler
                     {
                         return err;
                     }
-                    compiledArguments.Add(argResult.IsOkOrNull()!);
+                    recordCtorCompiledArgs.Add(argResult.IsOkOrNull()!);
                 }
 
                 // Create pairs of (fieldName, argExpression) in declaration order
                 var fieldArgPairs = fieldNamesInDeclOrder
-                    .Select((fieldName, index) => (fieldName, expr: compiledArguments[index]))
+                    .Select((fieldName, index) => (fieldName, expr: recordCtorCompiledArgs[index]))
                     .ToList();
 
                 // Sort pairs alphabetically by field name for the record representation
@@ -240,21 +249,27 @@ public class ExpressionCompiler
             {
                 var tagNameValue = Expression.LiteralInstance(StringEncoding.ValueFromString(funcRef.Name));
 
-                var compiledArguments = new List<Expression>();
+                var tagCompiledArguments = new List<Expression>();
                 for (var i = 1; i < expr.Arguments.Count; i++)
                 {
                     var argResult = Compile(expr.Arguments[i].Value, context);
+
                     if (argResult.IsErrOrNull() is { } err)
                     {
                         return err;
                     }
-                    compiledArguments.Add(argResult.IsOkOrNull()!);
+
+                    tagCompiledArguments.Add(argResult.IsOkOrNull()!);
                 }
+
+                /*
+                 * TODO: Check if arguments count matches the tag's expected argument count.
+                 * */
 
                 return Expression.ListInstance(
                 [
                     tagNameValue,
-                    Expression.ListInstance(compiledArguments)
+                    Expression.ListInstance(tagCompiledArguments)
                 ]);
             }
 
