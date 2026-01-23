@@ -14,12 +14,12 @@ public class SimpleRecursiveFunctionTests
     public void Function_Fibonacci()
     {
         var elmModuleText =
-            """
+            """"
             module Test exposing (..)
 
             fibonacci : Int -> Int
             fibonacci n =
-                if Pine_kernel.int_is_sorted_asc [ n, 2 ] then
+                if Pine_kernel.int_is_sorted_asc [ n, 1 ] then
                     n
 
                 else
@@ -28,7 +28,7 @@ public class SimpleRecursiveFunctionTests
                         , fibonacci (Pine_kernel.int_add [ n, -1 ])
                         ]
 
-            """;
+            """";
 
         var parseCache = new PineVMParseCache();
 
@@ -49,7 +49,7 @@ public class SimpleRecursiveFunctionTests
                 if
                     Pine_builtin.int_is_sorted_asc
                         [ param_1_0
-                        , 2
+                        , 1
                         ]
                 then
                     param_1_0
@@ -108,18 +108,14 @@ public class SimpleRecursiveFunctionTests
             return resultAsElmExpr.expressionString;
         }
 
-        // Test Fibonacci values based on implementation:
-        // Note: This implementation uses base case 'if n <= 2, return n'
-        // which differs from the standard Fibonacci sequence (where fib(2)=1).
-        // With this base case: fib(0)=0, fib(1)=1, fib(2)=2, fib(3)=fib(1)+fib(2)=3, etc.
         ResultAsExpressionString(0).Should().Be("0");
         ResultAsExpressionString(1).Should().Be("1");
-        ResultAsExpressionString(2).Should().Be("2");
-        ResultAsExpressionString(3).Should().Be("3");
-        ResultAsExpressionString(4).Should().Be("5");
-        ResultAsExpressionString(5).Should().Be("8");
-        ResultAsExpressionString(6).Should().Be("13");
-        ResultAsExpressionString(7).Should().Be("21");
+        ResultAsExpressionString(2).Should().Be("1");
+        ResultAsExpressionString(3).Should().Be("2");
+        ResultAsExpressionString(4).Should().Be("3");
+        ResultAsExpressionString(5).Should().Be("5");
+        ResultAsExpressionString(6).Should().Be("8");
+        ResultAsExpressionString(7).Should().Be("13");
     }
 
     [Fact]
