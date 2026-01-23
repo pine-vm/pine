@@ -126,7 +126,7 @@ public class SimpleRecursiveFunctionTests
     public void Function_Mutual_Recursion_IsEven_IsOdd()
     {
         var elmModuleText =
-            """
+            """"
             module Test exposing (..)
 
 
@@ -145,7 +145,7 @@ public class SimpleRecursiveFunctionTests
                 else
                     isEven (Pine_kernel.int_add [ y, -1 ])
 
-            """;
+            """";
 
         var parseCache = new PineVMParseCache();
 
@@ -153,6 +153,52 @@ public class SimpleRecursiveFunctionTests
             ElmCompilerTestHelper.CompileElmModules(
                 [elmModuleText],
                 disableInlining: true);
+
+        var wholeProgramText =
+            ElmCompilerTestHelper.ParseAndRenderStaticProgram(
+                parsedEnv,
+                includeDeclaration: qualifiedName => qualifiedName.DeclName is "isEven",
+                parseCache: parseCache);
+
+        wholeProgramText.Trim().Should().Be(
+            """"
+            
+            Test.isEven param_1_0 =
+                if
+                    Pine_builtin.equal
+                        [ param_1_0
+                        , 0
+                        ]
+                then
+                    True
+
+                else
+                    Test.isOdd
+                        (Pine_builtin.int_add
+                            [ param_1_0
+                            , -1
+                            ]
+                        )
+
+            
+            Test.isOdd param_1_0 =
+                if
+                    Pine_builtin.equal
+                        [ param_1_0
+                        , 0
+                        ]
+                then
+                    False
+
+                else
+                    Test.isEven
+                        (Pine_builtin.int_add
+                            [ param_1_0
+                            , -1
+                            ]
+                        )
+
+            """".Trim());
 
         // Dynamic test: invoke the functions and verify results
         var testModule =
