@@ -178,6 +178,27 @@ public class ExpressionCompiler
                 compiledInputResult.IsOkOrNull()!);
         }
 
+        // Compile all arguments
+        var compiledArguments = new List<Expression>();
+
+        for (var i = 1; i < expr.Arguments.Count; i++)
+        {
+            var argResult = Compile(expr.Arguments[i].Value, context);
+
+            if (argResult.IsErrOrNull() is { } argErr)
+            {
+                return argErr;
+            }
+
+            if (argResult.IsOkOrNull() is not { } argOk)
+            {
+                throw new NotImplementedException(
+                    "Unexpected result type when compiling application argument: " + argResult.GetType());
+            }
+
+            compiledArguments.Add(argOk);
+        }
+
         // Check if this is a function application or choice type tag application
         if (functionExpr is SyntaxTypes.Expression.FunctionOrValue funcRef)
         {
@@ -197,6 +218,7 @@ public class ExpressionCompiler
                 // We need to construct a record with fields sorted alphabetically
 
                 var argumentCount = expr.Arguments.Count - 1;  // First arg is the constructor itself
+
                 if (argumentCount != fieldNamesInDeclOrder.Count)
                 {
                     // Partial application not supported yet - fall through to other handling
@@ -205,21 +227,10 @@ public class ExpressionCompiler
                         $"Record constructor partial application not supported: {funcRef.Name} expects {fieldNamesInDeclOrder.Count} arguments but got {argumentCount}");
                 }
 
-                // Compile all arguments
-                var recordCtorCompiledArgs = new List<Expression>();
-                for (var i = 1; i < expr.Arguments.Count; i++)
-                {
-                    var argResult = Compile(expr.Arguments[i].Value, context);
-                    if (argResult.IsErrOrNull() is { } err)
-                    {
-                        return err;
-                    }
-                    recordCtorCompiledArgs.Add(argResult.IsOkOrNull()!);
-                }
-
                 // Create pairs of (fieldName, argExpression) in declaration order
-                var fieldArgPairs = fieldNamesInDeclOrder
-                    .Select((fieldName, index) => (fieldName, expr: recordCtorCompiledArgs[index]))
+                var fieldArgPairs =
+                    fieldNamesInDeclOrder
+                    .Select((fieldName, index) => (fieldName, expr: compiledArguments[index]))
                     .ToList();
 
                 // Sort pairs alphabetically by field name for the record representation
@@ -237,30 +248,18 @@ public class ExpressionCompiler
                     .ToList();
 
                 // Build the record: [ElmRecordTag, [[field1, field2, ...]]]
-                return Expression.ListInstance(
-                [
-                    Expression.LiteralInstance(ElmValue.ElmRecordTypeTagNameAsValue),
-                    Expression.ListInstance([Expression.ListInstance(recordFieldExprs)])
-                ]);
+                return
+                    Expression.ListInstance(
+                    [
+                        Expression.LiteralInstance(ElmValue.ElmRecordTypeTagNameAsValue),
+                        Expression.ListInstance([Expression.ListInstance(recordFieldExprs)])
+                    ]);
             }
 
             // Check if this is a choice type tag application
             if (ElmValueEncoding.StringIsValidTagName(funcRef.Name))
             {
                 var tagNameValue = Expression.LiteralInstance(StringEncoding.ValueFromString(funcRef.Name));
-
-                var tagCompiledArguments = new List<Expression>();
-                for (var i = 1; i < expr.Arguments.Count; i++)
-                {
-                    var argResult = Compile(expr.Arguments[i].Value, context);
-
-                    if (argResult.IsErrOrNull() is { } err)
-                    {
-                        return err;
-                    }
-
-                    tagCompiledArguments.Add(argResult.IsOkOrNull()!);
-                }
 
                 /*
                  * TODO: Check if arguments count matches the tag's expected argument count.
@@ -269,7 +268,7 @@ public class ExpressionCompiler
                 return Expression.ListInstance(
                 [
                     tagNameValue,
-                    Expression.ListInstance(tagCompiledArguments)
+                    Expression.ListInstance(compiledArguments)
                 ]);
             }
 
@@ -356,18 +355,32 @@ public class ExpressionCompiler
         SyntaxTypes.Expression.ListExpr expr,
         ExpressionCompilationContext context)
     {
-        var compiledElements = new List<Expression>();
-        foreach (var elem in expr.Elements)
+        var compiledItems = new Expression[expr.Elements.Count];
+
+        for (var i = 0; i < expr.Elements.Count; i++)
         {
-            var result = Compile(elem.Value, context);
-            if (result.IsErrOrNull() is { } err)
+            var item = expr.Elements[i];
+
+            var itemResult = Compile(item.Value, context);
+
+            if (itemResult.IsErrOrNull() is { } err)
             {
-                return err;
+                return
+                    CompilationError.Scoped(
+                        "When compiling list element [" + i + "]",
+                        err);
             }
-            compiledElements.Add(result.IsOkOrNull()!);
+
+            if (itemResult.IsOkOrNull() is not { } itemOk)
+            {
+                throw new NotImplementedException(
+                    "Unexpected result type when compiling list element [" + i + "]: " + item.Value.GetType());
+            }
+
+            compiledItems[i] = itemOk;
         }
 
-        return Expression.ListInstance(compiledElements);
+        return Expression.ListInstance(compiledItems);
     }
 
     private static Result<CompilationError, Expression> CompileTupledExpression(
@@ -375,18 +388,32 @@ public class ExpressionCompiler
         ExpressionCompilationContext context)
     {
         // A tuple in Elm is represented as a list in Pine
-        var compiledElements = new List<Expression>();
-        foreach (var elem in expr.Elements)
+        var compiledItems = new Expression[expr.Elements.Count];
+
+        for (var i = 0; i < expr.Elements.Count; i++)
         {
-            var result = Compile(elem.Value, context);
-            if (result.IsErrOrNull() is { } err)
+            var item = expr.Elements[i];
+
+            var itemResult = Compile(item.Value, context);
+
+            if (itemResult.IsErrOrNull() is { } err)
             {
-                return err;
+                return
+                    CompilationError.Scoped(
+                        "When compiling tuple element [" + i + "]",
+                        err);
             }
-            compiledElements.Add(result.IsOkOrNull()!);
+
+            if (itemResult.IsOkOrNull() is not { } itemOk)
+            {
+                throw new NotImplementedException(
+                    "Unexpected result type when compiling tuple element [" + i + "]: " + item.Value.GetType());
+            }
+
+            compiledItems[i] = itemOk;
         }
 
-        return Expression.ListInstance(compiledElements);
+        return Expression.ListInstance(compiledItems);
     }
 
     private static Result<CompilationError, Expression> CompileRecordExpr(
@@ -394,11 +421,13 @@ public class ExpressionCompiler
         ExpressionCompilationContext context)
     {
         // Sort fields by name alphabetically (as per Elm record encoding)
-        var sortedFields = expr.Fields
+        var sortedFields =
+            expr.Fields
             .OrderBy(f => f.Value.fieldName.Value, StringComparer.Ordinal)
             .ToList();
 
         var compiledFieldPairs = new List<Expression>();
+
         foreach (var field in sortedFields)
         {
             var fieldName = field.Value.fieldName.Value;

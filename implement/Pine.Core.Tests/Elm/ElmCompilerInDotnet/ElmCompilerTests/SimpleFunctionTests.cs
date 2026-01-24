@@ -10,7 +10,7 @@ public class SimpleFunctionTests
     public void Function_int_add_constant()
     {
         var elmModuleText =
-            """
+            """"
             module Test exposing (..)
 
 
@@ -18,7 +18,7 @@ public class SimpleFunctionTests
             alfa x =
                 x + 41
 
-            """;
+            """";
 
         var parseCache = new PineVMParseCache();
 
@@ -50,7 +50,7 @@ public class SimpleFunctionTests
     public void Function_branch_if_simple()
     {
         var elmModuleText =
-            """
+            """"
             module Test exposing (..)
 
 
@@ -62,7 +62,7 @@ public class SimpleFunctionTests
                 else
                     Pine_kernel.int_mul [ x, 13 ]
 
-            """;
+            """";
 
         var parseCache = new PineVMParseCache();
 
@@ -106,7 +106,7 @@ public class SimpleFunctionTests
     public void Function_invoking_other_function()
     {
         var elmModuleText =
-            """
+            """"
             module Test exposing (..)
 
 
@@ -124,7 +124,7 @@ public class SimpleFunctionTests
                     , 41
                     ]
 
-            """;
+            """";
 
         var parseCache = new PineVMParseCache();
 
@@ -163,7 +163,7 @@ public class SimpleFunctionTests
     public void Function_invoking_second_function_invoking_third_function()
     {
         var elmModuleText =
-            """
+            """"
             module Test exposing (..)
 
 
@@ -189,7 +189,7 @@ public class SimpleFunctionTests
                     , 13
                     ]
 
-            """;
+            """";
 
         var parseCache = new PineVMParseCache();
 

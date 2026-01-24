@@ -11,8 +11,8 @@ public abstract record CompilationError
     /// <summary>
     /// Describe the context of an error as a string.
     /// </summary>
-    public static CompilationError Scoped(CompilationError innerError, string scopeDescription) =>
-        new ScopedError(innerError, scopeDescription);
+    public static CompilationError Scoped(string scopeDescription, CompilationError innerError) =>
+        new ScopedError(scopeDescription, innerError);
 
     /// <summary>
     /// The specified operator is not supported by the compiler.
@@ -29,7 +29,8 @@ public abstract record CompilationError
     /// <summary>
     /// Describe the context of an error as a string.
     /// </summary>
-    public sealed record ScopedError(CompilationError InnerError, string ScopeDescription) : CompilationError
+    public sealed record ScopedError(string ScopeDescription, CompilationError InnerError)
+        : CompilationError
     {
         /// <inheritdoc/>
         public override string ToString() =>

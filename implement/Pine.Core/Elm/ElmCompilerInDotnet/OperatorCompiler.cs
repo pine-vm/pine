@@ -34,8 +34,8 @@ public class OperatorCompiler
         {
             return
                 CompilationError.Scoped(
-                    leftErr,
-                    "compiling left side of operator " + operatorApp.Operator);
+                    "compiling left side of operator " + operatorApp.Operator,
+                    leftErr);
         }
 
         var rightResult = ExpressionCompiler.Compile(operatorApp.Right.Value, context);
@@ -44,8 +44,8 @@ public class OperatorCompiler
         {
             return
                 CompilationError.Scoped(
-                    rightErr,
-                    "compiling right side of operator " + operatorApp.Operator);
+                    "compiling right side of operator " + operatorApp.Operator,
+                    rightErr);
         }
 
         if (leftResult.IsOkOrNull() is not { } leftCompiled)
