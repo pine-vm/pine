@@ -95,11 +95,11 @@ public class DependencyLayoutTests
         layouts.Should().ContainKey("Test.isEven");
         layouts.Should().ContainKey("Test.isOdd");
 
-        // isEven depends on isOdd: layout is [self, isOdd]
+        // For mutual recursion, both functions share the same layout order
+        // (alphabetically sorted as per the implementation guide)
+        // Layout is [isEven, isOdd] for both functions
         layouts["Test.isEven"].Should().Equal(["Test.isEven", "Test.isOdd"]);
-
-        // isOdd depends on isEven: layout is [self, isEven]
-        layouts["Test.isOdd"].Should().Equal(["Test.isOdd", "Test.isEven"]);
+        layouts["Test.isOdd"].Should().Equal(["Test.isEven", "Test.isOdd"]);
     }
 
     /// <summary>

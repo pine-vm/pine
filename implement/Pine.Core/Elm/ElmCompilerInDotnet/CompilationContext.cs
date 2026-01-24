@@ -9,20 +9,55 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 /// <summary>
 /// Information about a compiled function including its dependency layout.
 /// </summary>
-/// <param name="CompiledValue">The compiled Pine value for the function.</param>
+/// <param name="CompiledValue">The compiled Pine value for the function (the wrapper).</param>
+/// <param name="EncodedBody">
+/// The encoded inner expression (body) of the function.
+/// This is used when building the env functions list for dependent functions.
+/// </param>
 /// <param name="DependencyLayout">
 /// The list of qualified function names this function depends on (in order).
-/// The first element is always the function itself, followed by its direct dependencies.
+/// For functions in an SCC, this is the shared layout for all SCC members.
+/// For standalone functions, this is [self, dependencies...].
 /// This ordering is used to build the runtime environment when calling the function.
 /// </param>
 public record CompiledFunctionInfo(
     PineValue CompiledValue,
+    PineValue EncodedBody,
     IReadOnlyList<string> DependencyLayout);
+
+/// <summary>
+/// Represents a Strongly Connected Component (SCC) of functions.
+/// All functions in an SCC share the same dependency layout as per the spec:
+/// "All functions in a group of mutually recursive functions use the same order."
+/// 
+/// The complete layout is: Members ++ AdditionalDependencies
+/// 
+/// Note: Even single-function self-recursive functions form an SCC with one member.
+/// Non-recursive standalone functions also form trivial single-member SCCs for consistency.
+/// </summary>
+/// <param name="Members">
+/// The qualified names of all functions in this SCC. Must have at least one member.
+/// </param>
+/// <param name="AdditionalDependencies">
+/// Dependencies outside the SCC.
+/// </param>
+public record FunctionScc(
+    ImmutableList<string> Members,
+    ImmutableList<string> AdditionalDependencies)
+{
+    /// <summary>
+    /// Gets the complete dependency layout for this SCC.
+    /// Layout is: [members_sorted..., additional_dependencies_sorted...]
+    /// </summary>
+    public IReadOnlyList<string> GetLayout() =>
+        AdditionalDependencies.Count is 0
+            ? Members
+            : Members.AddRange(AdditionalDependencies);
+}
 
 /// <summary>
 /// Immutable context for module compilation.
 /// Uses builder pattern for state changes instead of mutable cache.
-/// This is the new immutable version of ModuleCompilationContext.
 /// </summary>
 /// <param name="AllFunctions">All available functions across all modules.</param>
 /// <param name="CompiledFunctionsCache">Cache of already compiled functions with their dependency layouts.</param>
@@ -45,21 +80,11 @@ public record ModuleCompilationContext(
     /// <summary>
     /// Creates a new context with the specified function added to the cache.
     /// </summary>
-    /// <param name="name">The qualified function name.</param>
-    /// <param name="value">The compiled Pine value.</param>
-    /// <param name="dependencyLayout">The function's dependency layout.</param>
-    /// <returns>A new context with the updated cache.</returns>
-    public ModuleCompilationContext WithCompiledFunction(string name, PineValue value, IReadOnlyList<string> dependencyLayout) =>
-        this with { CompiledFunctionsCache = CompiledFunctionsCache.SetItem(name, new CompiledFunctionInfo(value, dependencyLayout)) };
-
-    /// <summary>
-    /// Creates a new context with the specified function added to the cache (without dependency layout for backward compatibility).
-    /// </summary>
-    /// <param name="name">The qualified function name.</param>
-    /// <param name="value">The compiled Pine value.</param>
-    /// <returns>A new context with the updated cache.</returns>
-    public ModuleCompilationContext WithCompiledFunction(string name, PineValue value) =>
-        WithCompiledFunction(name, value, []);
+    public ModuleCompilationContext WithCompiledFunction(string name, PineValue value, PineValue encodedBody, IReadOnlyList<string> dependencyLayout) =>
+        this with
+        {
+            CompiledFunctionsCache = CompiledFunctionsCache.SetItem(name, new CompiledFunctionInfo(value, encodedBody, dependencyLayout))
+        };
 
     /// <summary>
     /// Creates a new context with the specified dependency layouts.

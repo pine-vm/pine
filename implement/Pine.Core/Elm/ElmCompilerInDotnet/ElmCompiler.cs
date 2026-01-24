@@ -1,6 +1,6 @@
 using Pine.Core.CodeAnalysis;
-using Pine.Core.Files;
 using Pine.Core.CommonEncodings;
+using Pine.Core.Files;
 using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
@@ -246,13 +246,27 @@ public class ElmCompiler
                 FunctionParameterTypes: functionParameterTypes,
                 RecordTypeAliasConstructors: recordTypeAliasConstructors);
 
-        // Pre-compute dependency layouts for all functions BEFORE compilation
-        var dependencyLayouts = ComputeDependencyLayouts(allFunctions, initialContext);
+        // Pre-compute dependency layouts and SCCs for all functions BEFORE compilation
+        var (dependencyLayouts, functionToScc, sccsInDependencyOrder) =
+            ComputeDependencyLayoutsAndSccs(allFunctions, initialContext);
 
-        // Create compilation context with pre-computed dependency layouts
-        var compilationContext = initialContext.WithDependencyLayouts(dependencyLayouts);
+        // Create compilation context with pre-computed layouts and SCCs
+        var compilationContext =
+            initialContext
+            .WithDependencyLayouts(dependencyLayouts);
 
-        // Second pass: Compile each module with access to all functions and dependency layouts
+        // Second pass: Compile all SCCs in dependency order
+        // This ensures all dependencies are compiled before they are needed
+        foreach (var scc in sccsInDependencyOrder)
+        {
+            // Skip if all members are already compiled
+            if (scc.Members.All(m => compilationContext.TryGetCompiledFunctionValue(m) is not null))
+                continue;
+
+            compilationContext = CompileSCC(scc, compilationContext);
+        }
+
+        // Third pass: Build module values from compiled functions
         var compiledModuleEntries = new List<PineValue>();
 
         foreach (var parsedModule in lambdaLiftedModules)
@@ -260,10 +274,7 @@ public class ElmCompiler
             var moduleNameFlattened =
                 string.Join('.', SyntaxTypes.Module.GetModuleName(parsedModule.ModuleDefinition.Value).Value);
 
-            var (moduleValue, updatedContext) =
-                CompileModule(parsedModule, moduleNameFlattened, compilationContext);
-
-            compilationContext = updatedContext;
+            var moduleValue = BuildModuleValue(parsedModule, moduleNameFlattened, compilationContext);
 
             var namedModuleEntry =
                 PineValue.List(
@@ -285,53 +296,178 @@ public class ElmCompiler
     }
 
     /// <summary>
-    /// Computes dependency layouts for all functions in a module.
-    /// This is the first pass of the two-pass compilation approach.
-    /// Each function's layout contains: [self, sorted_dependencies...]
-    /// Dependencies are sorted alphabetically for consistent ordering.
+    /// Pre-computes the dependency layouts and SCC mappings for all functions.
+    /// For mutually recursive functions (strongly connected components), all functions
+    /// share the same layout ordering as per the implementation guide.
     /// </summary>
     /// <param name="allFunctions">Dictionary of all functions keyed by qualified name.</param>
     /// <param name="context">The module compilation context.</param>
-    /// <returns>Dictionary mapping qualified function names to their dependency layouts.</returns>
-    public static IReadOnlyDictionary<string, IReadOnlyList<string>> ComputeDependencyLayouts(
-        IReadOnlyDictionary<string, (string moduleName, string functionName, SyntaxTypes.Declaration.FunctionDeclaration declaration)> allFunctions,
-        ModuleCompilationContext context)
+    /// <returns>
+    /// A tuple containing:
+    /// - Dictionary mapping qualified function names to their dependency layouts
+    /// - Dictionary mapping qualified function names to their SCC
+    /// - List of SCCs in dependency order (dependencies first)
+    /// </returns>
+    public static (IReadOnlyDictionary<string, IReadOnlyList<string>> layouts, IReadOnlyDictionary<string, FunctionScc> functionToScc, IReadOnlyList<FunctionScc> sccsInDependencyOrder)
+        ComputeDependencyLayoutsAndSccs(
+            IReadOnlyDictionary<string, (string moduleName, string functionName, SyntaxTypes.Declaration.FunctionDeclaration declaration)> allFunctions,
+            ModuleCompilationContext context)
     {
         // First pass: compute direct dependencies for each function
-        var directDependencies = new Dictionary<string, IReadOnlySet<string>>();
+        // Only include dependencies that are in allFunctions (we can't compile external functions)
+        var directDependencies =
+            allFunctions
+            .ToImmutableDictionary(
+                kvp => kvp.Key,
+                kvp =>
+                {
+                    var (moduleName, functionName, declaration) = kvp.Value;
+                    var functionBody = declaration.Function.Declaration.Value.Expression.Value;
+                    var dependencies = AnalyzeFunctionDependencies(functionBody, moduleName, context);
+                    // Filter to only include functions that are in allFunctions
+                    IReadOnlySet<string> filtered = dependencies
+                        .Where(d => allFunctions.ContainsKey(d))
+                        .ToHashSet();
+                    return filtered;
+                });
 
-        foreach (var (qualifiedName, (moduleName, functionName, declaration)) in allFunctions)
-        {
-            var functionBody = declaration.Function.Declaration.Value.Expression.Value;
-            var dependencies = AnalyzeFunctionDependencies(functionBody, moduleName, context);
-            directDependencies[qualifiedName] = dependencies;
-        }
+        // Detect strongly connected components (SCCs) - groups of mutually recursive functions
+        // Tarjan's algorithm returns SCCs in topological order (dependencies first)
+        var sccsFromTarjan = FindStronglyConnectedComponents([.. allFunctions.Keys], directDependencies);
 
-        // Second pass: compute transitive closure of dependencies
-        // A function needs all functions that any of its callees might need
-        var transitiveDependencies = new Dictionary<string, HashSet<string>>();
+        // Build FunctionScc records - SCCs are already in dependency order from Tarjan
+        var sccsInDependencyOrder = new List<FunctionScc>();
 
-        foreach (var qualifiedName in directDependencies.Keys)
-        {
-            transitiveDependencies[qualifiedName] = ComputeTransitiveDependencies(qualifiedName, directDependencies);
-        }
+        // Compute transitive dependencies for each function
+        var transitiveDependencies =
+            directDependencies
+            .ToDictionary(
+                kvp => kvp.Key,
+                kvp => ComputeTransitiveDependencies(kvp.Key, directDependencies));
 
-        // Build layouts with transitive dependencies
+        // Build SCCs and layouts
         var dependencyLayouts = new Dictionary<string, IReadOnlyList<string>>();
+        var functionToScc = new Dictionary<string, FunctionScc>();
 
-        foreach (var (qualifiedName, deps) in transitiveDependencies)
+        foreach (var scc in sccsFromTarjan)
         {
-            // Sort dependencies alphabetically for consistent ordering
-            var sortedDependencies = deps.OrderBy(d => d).ToList();
+            // Sort SCC members alphabetically for consistent ordering
+            var sortedSccMembers =
+                scc
+                .Order(StringComparer.Ordinal)
+                .ToImmutableList();
 
-            // Layout is: [self, sorted_dependencies...]
-            // Self is always first for snapshot test name rendering
-            var layout = new List<string> { qualifiedName };
-            layout.AddRange(sortedDependencies);
-            dependencyLayouts[qualifiedName] = layout;
+            // Compute the additional dependencies for this SCC
+            // These are transitive dependencies that are not SCC members
+            var allOtherDeps = new HashSet<string>();
+            foreach (var member in scc)
+            {
+                if (transitiveDependencies.TryGetValue(member, out var deps))
+                {
+                    foreach (var d in deps)
+                    {
+                        if (!scc.Contains(d))
+                        {
+                            allOtherDeps.Add(d);
+                        }
+                    }
+                }
+            }
+
+            var sortedOtherDeps =
+                allOtherDeps
+                .Order(StringComparer.Ordinal)
+                .ToImmutableList();
+
+            // Create SCC with members and additional dependencies
+            // The complete layout is: Members ++ AdditionalDependencies
+            var sccRecord = new FunctionScc(sortedSccMembers, sortedOtherDeps);
+            var sharedLayout = sccRecord.GetLayout();
+
+            foreach (var member in scc)
+            {
+                functionToScc[member] = sccRecord;
+                dependencyLayouts[member] = sharedLayout;
+            }
+
+            sccsInDependencyOrder.Add(sccRecord);
         }
 
-        return dependencyLayouts;
+        // No need to reverse - Tarjan already returns SCCs in dependency order
+
+        return (dependencyLayouts, functionToScc, sccsInDependencyOrder);
+    }
+
+    /// <summary>
+    /// Finds strongly connected components (SCCs) in the function call graph.
+    /// Uses Tarjan's algorithm.
+    /// </summary>
+    private static List<HashSet<string>> FindStronglyConnectedComponents(
+        IReadOnlyList<string> functions,
+        ImmutableDictionary<string, IReadOnlySet<string>> dependencies)
+    {
+        var index = 0;
+        var stack = new Stack<string>();
+        var indices = new Dictionary<string, int>();
+        var lowLinks = new Dictionary<string, int>();
+        var onStack = new HashSet<string>();
+        var sccs = new List<HashSet<string>>();
+
+        void StrongConnect(string v)
+        {
+            indices[v] = index;
+            lowLinks[v] = index;
+            index++;
+            stack.Push(v);
+            onStack.Add(v);
+
+            // Consider successors
+            if (dependencies.TryGetValue(v, out var deps))
+            {
+                foreach (var w in deps)
+                {
+                    // Only consider functions we know about
+                    if (!functions.Contains(w))
+                        continue;
+
+                    if (!indices.TryGetValue(w, out var value))
+                    {
+                        // Successor w has not yet been visited; recurse on it
+                        StrongConnect(w);
+                        lowLinks[v] = Math.Min(lowLinks[v], lowLinks[w]);
+                    }
+                    else if (onStack.Contains(w))
+                    {
+                        // Successor w is in stack S and hence in the current SCC
+                        lowLinks[v] = Math.Min(lowLinks[v], value);
+                    }
+                }
+            }
+
+            // If v is a root node, pop the stack and generate an SCC
+            if (lowLinks[v] == indices[v])
+            {
+                var scc = new HashSet<string>();
+                string w;
+                do
+                {
+                    w = stack.Pop();
+                    onStack.Remove(w);
+                    scc.Add(w);
+                } while (w != v);
+                sccs.Add(scc);
+            }
+        }
+
+        foreach (var v in functions)
+        {
+            if (!indices.ContainsKey(v))
+            {
+                StrongConnect(v);
+            }
+        }
+
+        return sccs;
     }
 
     /// <summary>
@@ -341,7 +477,7 @@ public class ElmCompiler
     /// </summary>
     private static HashSet<string> ComputeTransitiveDependencies(
         string functionName,
-        IReadOnlyDictionary<string, IReadOnlySet<string>> directDependencies)
+        ImmutableDictionary<string, IReadOnlySet<string>> directDependencies)
     {
         var visited = new HashSet<string>();
         var result = new HashSet<string>();
@@ -391,34 +527,43 @@ public class ElmCompiler
         return result;
     }
 
-    private static (PineValue moduleValue, ModuleCompilationContext updatedContext) CompileModule(
+    /// <summary>
+    /// Builds the module value from already-compiled functions.
+    /// All functions should have been compiled in the SCC compilation pass.
+    /// </summary>
+    private static PineValue BuildModuleValue(
         SyntaxTypes.File parsedModule,
         string currentModuleName,
         ModuleCompilationContext context)
     {
+        // Get declarations in this module (for building the final module value)
         var declarations =
             parsedModule.Declarations
             .Select(declNode => declNode.Value)
-            .OfType<SyntaxTypes.Declaration.FunctionDeclaration>();
+            .OfType<SyntaxTypes.Declaration.FunctionDeclaration>()
+            .ToList();
 
+        // Collect compiled functions for this module (in declaration order)
         var compiledFunctions = new List<(string, PineValue)>();
 
         foreach (var declaration in declarations)
         {
             var funcName = declaration.Function.Declaration.Value.Name.Value;
-            var (compiledValue, updatedContext) = CompileFunctionDeclaration(declaration, currentModuleName, context);
+
+            var qualifiedName = currentModuleName + "." + funcName;
+
+            var compiledValue =
+                context.TryGetCompiledFunctionValue(qualifiedName)
+                ?? throw new InvalidOperationException($"Function {qualifiedName} was not compiled.");
+
             compiledFunctions.Add((funcName, compiledValue));
-            context = updatedContext;
         }
 
         var compiledFunctionDeclaration =
             new ElmModuleInCompilation(
                 FunctionDeclarations: compiledFunctions);
 
-        var moduleValue =
-            EmitModuleValue(compiledFunctionDeclaration);
-
-        return (moduleValue, context);
+        return EmitModuleValue(compiledFunctionDeclaration);
     }
 
     /*
@@ -431,179 +576,141 @@ public class ElmCompiler
     private record ElmModuleInCompilation(
         IReadOnlyList<(string declName, PineValue)> FunctionDeclarations);
 
-    private static (PineValue value, ModuleCompilationContext updatedContext) CompileFunctionDeclaration(
-        SyntaxTypes.Declaration.FunctionDeclaration functionDeclaration,
-        string currentModuleName,
+    /// <summary>
+    /// Compiles all functions in a strongly connected component (SCC) together.
+    /// This ensures that all mutually recursive functions share the same envFunctionsList
+    /// with correct references to each other.
+    /// 
+    /// Since SCCs are compiled in dependency order, all dependencies of the current SCC
+    /// are already compiled and can be retrieved from the context.
+    /// </summary>
+    private static ModuleCompilationContext CompileSCC(
+        FunctionScc scc,
         ModuleCompilationContext context)
     {
-        var functionName =
-            functionDeclaration.Function.Declaration.Value.Name.Value;
+        var sharedLayout = scc.GetLayout();
+        var sccMembers = scc.Members;
 
-        var qualifiedFunctionName =
-            currentModuleName + "." + functionName;
+        // Pre-compute index lookup for efficient access
+        var layoutIndexMap = new Dictionary<string, int>();
 
-        // Check if we've already compiled this function (to avoid infinite recursion)
-        if (context.TryGetCompiledFunctionValue(qualifiedFunctionName) is { } cachedValue)
+        for (var i = 0; i < sharedLayout.Count; i++)
         {
-            return (cachedValue, context);
+            layoutIndexMap[sharedLayout[i]] = i;
         }
 
-        var arguments = functionDeclaration.Function.Declaration.Value.Arguments;
-
-        var functionBody =
-            functionDeclaration.Function.Declaration.Value.Expression.Value;
-
-        // Build parameter name mapping: parameter names to their indices
-        var parameterNames = new Dictionary<string, int>();
-
-        // Build local bindings for pattern-matched parameters
-        var localBindings = new Dictionary<string, Expression>();
-
-        for (var i = 0; i < arguments.Count; i++)
-        {
-            var argPattern = arguments[i].Value;
-
-            if (argPattern is SyntaxTypes.Pattern.VarPattern varPattern)
-            {
-                parameterNames[varPattern.Name] = i;
-            }
-            else
-            {
-                // For non-VarPattern arguments (including TuplePattern), extract bindings from the pattern
-                // The scrutinee is the parameter at index i
-                var paramExpr = BuiltinHelpers.BuildPathToParameter(i);
-                // Analyze the pattern and merge bindings (ignoring the condition)
-                var analysis = PatternCompiler.AnalyzePattern(argPattern, paramExpr);
-                foreach (var kvp in analysis.Bindings)
-                {
-                    localBindings[kvp.Key] = kvp.Value;
-                }
-            }
-        }
-
-        var parameterCount = arguments.Count;
-
-        // Extract parameter types from the function signature if available, and from NamedPatterns using constructor types
-        var parameterTypes = ExtractParameterTypes(
-            functionDeclaration.Function,
-            context.ConstructorArgumentTypes,
-            context.FunctionParameterTypes,
-            currentModuleName);
-
-        // Use the pre-computed dependency layout which includes transitive dependencies
-        // This is needed so that when calling another function, all of its dependencies
-        // are available in our environment
-        IReadOnlyList<string> dependencyLayout;
-
-        if (context.TryGetDependencyLayout(qualifiedFunctionName) is { } precomputedLayout)
-        {
-            dependencyLayout = precomputedLayout;
-        }
-        else
-        {
-            // Fallback: compute direct dependencies (shouldn't happen if layouts are pre-computed)
-            var dependencies =
-                AnalyzeFunctionDependencies(
-                    functionBody,
-                    currentModuleName,
-                    context);
-
-            // Create the function dependency layout: [self, dependencies...]
-            // The current function is always at index 0
-            var layout = new List<string> { qualifiedFunctionName };
-            layout.AddRange(dependencies);
-            dependencyLayout = layout;
-        }
-
-        // Create expression compilation context using the immutable context types
-        var expressionContext = new ExpressionCompilationContext(
-            ParameterNames: parameterNames,
-            ParameterTypes: parameterTypes,
-            CurrentModuleName: currentModuleName,
-            CurrentFunctionName: functionName,
-            LocalBindings: localBindings.Count > 0 ? localBindings : null,
-            LocalBindingTypes: null,
-            DependencyLayout: dependencyLayout,
-            ModuleCompilationContext: context,
-            FunctionReturnTypes: context.FunctionReturnTypes);
-
-        // Compile the function body with knowledge of the dependency layout
-        var compiledBodyExpression =
-            CompileExpression(
-                functionBody,
-                expressionContext);
-
-        // Create a parse cache to be reused for reduction and dependency parsing
         var parseCache = new PineVMParseCache();
 
-        // Apply reduction to simplify expressions like head([a, b]) → a
-        compiledBodyExpression =
-            ReducePineExpression.ReduceExpressionBottomUp(
-                compiledBodyExpression,
-                parseCache);
+        // Phase 1: Compile all function bodies in the SCC (without building wrappers yet)
+        var compiledBodies = new Dictionary<string, (Expression body, int paramCount)>();
 
-        // For zero-parameter functions, check if it's a simple literal value
-        if (compiledBodyExpression is Expression.Literal literalExpr)
+        foreach (var memberName in sccMembers)
         {
-            var result = EmitPlainValueDeclaration(literalExpr.Value);
-            return (result, context.WithCompiledFunction(qualifiedFunctionName, result, dependencyLayout));
-        }
+            if (!context.TryGetFunctionInfo(memberName, out var funcInfo))
+                continue;
 
-        // For functions with parameters, build env functions list
-        var encodedFunction =
-            ExpressionEncoding.EncodeExpressionAsValue(compiledBodyExpression);
+            var declaration = funcInfo.declaration;
+            var moduleName = funcInfo.moduleName;
+            var functionBody = declaration.Function.Declaration.Value.Expression.Value;
+            var arguments = declaration.Function.Declaration.Value.Arguments;
+            var paramCount = arguments.Count;
 
-        // Build the EnvFunctions list with encoded dependencies
-        var envFunctionsList = new List<PineValue> { encodedFunction };
+            // Build parameter mappings
+            var parameterNames = new Dictionary<string, int>();
+            var localBindings = new Dictionary<string, Expression>();
 
-        // Create a placeholder result using FunctionValueBuilder for self-reference during recursive compilation.
-        // This placeholder is necessary because:
-        // 1. Recursive functions may reference themselves through the context cache
-        // 2. Mutually recursive functions need a placeholder to break the circular dependency
-        // The placeholder allows dependencies to be compiled and can reference this function if needed.
-        var placeholderResult =
-            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
-                compiledBodyExpression,
-                parameterCount,
-                envFunctionsList);
-
-        context = context.WithCompiledFunction(qualifiedFunctionName, placeholderResult, dependencyLayout);
-
-        // Now compile dependencies (they can reference this function via the cache)
-        // Skip the first element (self) in the dependency layout
-        foreach (var depQualifiedName in dependencyLayout.Skip(1))
-        {
-            if (context.TryGetFunctionInfo(depQualifiedName, out var depInfo))
+            for (var i = 0; i < arguments.Count; i++)
             {
-                // Compile the dependency function
-                var (depCompiled, updatedContext) = CompileFunctionDeclaration(depInfo.declaration, depInfo.moduleName, context);
-                context = updatedContext;
+                var argPattern = arguments[i].Value;
 
-                // Parse the FunctionRecord to extract the InnerFunction expression
-                var parsedFuncResult = FunctionRecord.ParseFunctionRecordTagged(depCompiled, parseCache);
-
-                if (parsedFuncResult.IsOkOrNull() is { } parsedFunc)
+                if (argPattern is SyntaxTypes.Pattern.VarPattern varPattern)
                 {
-                    // Encode the InnerFunction expression
-                    var encodedDepExpr = ExpressionEncoding.EncodeExpressionAsValue(parsedFunc.InnerFunction);
-                    envFunctionsList.Add(encodedDepExpr);
+                    parameterNames[varPattern.Name] = i;
                 }
                 else
                 {
-                    // If parsing fails, just use the compiled value (may cause issues)
-                    envFunctionsList.Add(depCompiled);
+                    var paramExpr = BuiltinHelpers.BuildPathToParameter(i);
+                    var analysis = PatternCompiler.AnalyzePattern(argPattern, paramExpr);
+
+                    foreach (var kvp in analysis.Bindings)
+                    {
+                        localBindings[kvp.Key] = kvp.Value;
+                    }
                 }
             }
+
+            // Extract parameter types
+            var parameterTypes = ExtractParameterTypes(
+                declaration.Function,
+                context.ConstructorArgumentTypes,
+                context.FunctionParameterTypes,
+                moduleName);
+
+            // Create expression context
+            var expressionContext = new ExpressionCompilationContext(
+                ParameterNames: parameterNames,
+                ParameterTypes: parameterTypes,
+                CurrentModuleName: moduleName,
+                CurrentFunctionName: declaration.Function.Declaration.Value.Name.Value,
+                LocalBindings: localBindings.Count > 0 ? localBindings : null,
+                LocalBindingTypes: null,
+                DependencyLayout: sharedLayout,
+                ModuleCompilationContext: context,
+                FunctionReturnTypes: context.FunctionReturnTypes);
+
+            // Compile the body
+            var compiledBody = CompileExpression(functionBody, expressionContext);
+            compiledBody = ReducePineExpression.ReduceExpressionBottomUp(compiledBody, parseCache);
+
+            compiledBodies[memberName] = (compiledBody, paramCount);
         }
 
-        // Create the final result using FunctionValueBuilder for incremental argument application
-        var finalResult =
-            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
-                compiledBodyExpression,
-                parameterCount,
-                envFunctionsList);
+        var encodedBodies =
+            compiledBodies
+            .ToDictionary(
+                kvp => kvp.Key,
+                kvp => ExpressionEncoding.EncodeExpressionAsValue(kvp.Value.body));
 
-        return (finalResult, context.WithCompiledFunction(qualifiedFunctionName, finalResult, dependencyLayout));
+        // Phase 2: Build the envFunctionsList
+        // Since SCCs are compiled in dependency order, all dependencies are already compiled.
+        var envFunctionsList =
+            sharedLayout
+            .Select((declName, depIndex) =>
+            {
+                if (encodedBodies.TryGetValue(declName, out var encodedBodyDep))
+                {
+                    return encodedBodyDep;
+                }
+
+                // Dependencies are already compiled - retrieve encoded body from cache
+                if (context.TryGetCompiledFunctionInfo(declName, out var depInfo) && depInfo is not null)
+                {
+                    return depInfo.EncodedBody;
+                }
+
+                throw new InvalidOperationException(
+                    $"Dependency {declName} not found in cache when compiling SCC {string.Join(", ", scc.Members)}. " +
+                    "SCCs should be compiled in dependency order.");
+            })
+            .ToList();
+
+        // Phase 3: Build final wrappers and cache all compiled functions
+        foreach (var memberName in sccMembers)
+        {
+            if (!compiledBodies.TryGetValue(memberName, out var bodyInfo))
+                continue;
+
+            var wrapper =
+                FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
+                    bodyInfo.body,
+                    bodyInfo.paramCount,
+                    envFunctionsList);
+
+            var encodedBody = encodedBodies[memberName];
+            context = context.WithCompiledFunction(memberName, wrapper, encodedBody, sharedLayout);
+        }
+
+        return context;
     }
 
     private static IReadOnlySet<string> AnalyzeFunctionDependencies(
