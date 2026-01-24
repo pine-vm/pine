@@ -709,6 +709,78 @@ public class ElmCompiler
                 case SyntaxTypes.Expression.Negation negation:
                     AnalyzeExpression(negation.Expression.Value);
                     break;
+
+                case SyntaxTypes.Expression.CaseExpression caseExpr:
+                    AnalyzeExpression(caseExpr.CaseBlock.Expression.Value);
+                    foreach (var caseItem in caseExpr.CaseBlock.Cases)
+                    {
+                        AnalyzeExpression(caseItem.Expression.Value);
+                    }
+                    break;
+
+                case SyntaxTypes.Expression.TupledExpression tupledExpr:
+                    foreach (var elem in tupledExpr.Elements)
+                    {
+                        AnalyzeExpression(elem.Value);
+                    }
+                    break;
+
+                case SyntaxTypes.Expression.RecordExpr recordExpr:
+                    foreach (var field in recordExpr.Fields)
+                    {
+                        AnalyzeExpression(field.Value.valueExpr.Value);
+                    }
+                    break;
+
+                case SyntaxTypes.Expression.RecordUpdateExpression recordUpdateExpr:
+                    foreach (var setter in recordUpdateExpr.Fields)
+                    {
+                        AnalyzeExpression(setter.Value.valueExpr.Value);
+                    }
+                    break;
+
+                case SyntaxTypes.Expression.FunctionOrValue funcOrValue:
+
+                    if (funcOrValue.Name.Length < 0)
+                    {
+                        break;
+                    }
+
+                    if (char.IsUpper(funcOrValue.Name[0]))
+                    {
+                        // This must be a choice type tag constructor or record constructor - cannot contribute to dependencies
+                        break;
+                    }
+
+                    {
+                        // Handle standalone function references (escaping functions)
+                        // This is when a function is used as a value, not applied
+
+                        string qualifiedName;
+
+                        if (funcOrValue.ModuleName.Count > 0)
+                        {
+                            // Skip Pine_kernel module functions
+                            if (funcOrValue.ModuleName.Count is 1 &&
+                                context.IsPineKernelModule(funcOrValue.ModuleName[0]))
+                            {
+                                break;
+                            }
+
+                            qualifiedName = string.Join(".", funcOrValue.ModuleName) + "." + funcOrValue.Name;
+                        }
+                        else
+                        {
+                            qualifiedName = currentModuleName + "." + funcOrValue.Name;
+                        }
+
+                        // Only add if it's a known function (not a local variable)
+                        if (context.TryGetFunctionInfo(qualifiedName, out _))
+                        {
+                            dependencies.Add(qualifiedName);
+                        }
+                    }
+                    break;
             }
         }
 
