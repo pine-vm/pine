@@ -57,6 +57,9 @@ public class ExpressionCompiler
             SyntaxTypes.Expression.ParenthesizedExpression expr =>
                 CompileParenthesizedExpression(expr, context),
 
+            SyntaxTypes.Expression.PrefixOperator expr =>
+                CompilePrefixOperator(expr),
+
             SyntaxTypes.Expression.Negation expr =>
                 CompileNegation(expr, context),
 
@@ -309,6 +312,15 @@ public class ExpressionCompiler
                     var funcExpr = BuiltinHelpers.BuildPathToParameter(paramIndex);
                     return CompileGenericFunctionApplication(funcExpr, compiledArguments);
                 }
+            }
+
+            // Handle Basics module functions that are implemented in BasicArithmetic
+            // Check using the structured module name list rather than string manipulation
+            if (funcRef.ModuleName.Count is 1 && funcRef.ModuleName[0] is "Basics" &&
+                CoreLibraryModule.BasicArithmetic.GetBasicsFunctionInfo(funcRef.Name) is { } basicsFuncInfo &&
+                basicsFuncInfo.FunctionType.Count - compiledArguments.Count - 1 is 0)
+            {
+                return basicsFuncInfo.CompileApplication(compiledArguments);
             }
 
             // Determine qualified function name
@@ -839,6 +851,24 @@ public class ExpressionCompiler
         SyntaxTypes.Expression.ParenthesizedExpression expr,
         ExpressionCompilationContext context) =>
         Compile(expr.Expression.Value, context);
+
+    /// <summary>
+    /// Compiles a prefix operator expression like <c>(+)</c> to a function value.
+    /// Prefix operators are operators used as functions, e.g., <c>(+) 1 2</c> instead of <c>1 + 2</c>.
+    /// </summary>
+    private static Result<CompilationError, Expression> CompilePrefixOperator(
+        SyntaxTypes.Expression.PrefixOperator expr)
+    {
+        // Delegate to BasicArithmetic for centralized operator handling
+        var prefixExpr = CoreLibraryModule.BasicArithmetic.GetPrefixOperatorExpression(expr.Operator);
+
+        if (prefixExpr is null)
+        {
+            return CompilationError.UnsupportedOperator(expr.Operator);
+        }
+
+        return prefixExpr;
+    }
 
     private static Result<CompilationError, Expression> CompileNegation(
         SyntaxTypes.Expression.Negation expr,

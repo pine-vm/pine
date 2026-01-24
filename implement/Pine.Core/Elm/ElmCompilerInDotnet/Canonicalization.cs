@@ -617,6 +617,10 @@ public class Canonicalization
             ["LT"] = ["Basics"],
             ["EQ"] = ["Basics"],
             ["GT"] = ["Basics"],
+
+            // Basics module functions (auto-imported)
+            ["modBy"] = ["Basics"],
+            ["remainderBy"] = ["Basics"],
         });
 
         var result = importMap;

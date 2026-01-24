@@ -24,6 +24,27 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet.CoreLibraryModule;
 /// </summary>
 public class BasicArithmetic
 {
+    /// <summary>
+    /// Identifies a complete binary function application expression.
+    /// This method recognizes expressions like <c>Basics.add(x, 41)</c> in their compiled form.
+    /// </summary>
+    /// <param name="expr">The expression to analyze.</param>
+    /// <returns>
+    /// A tuple containing the function name and argument expressions if recognized,
+    /// or null if the expression is not a recognized arithmetic operation.
+    /// </returns>
+    /// <remarks>
+    /// This method expects a complete application structure:
+    /// <code>
+    /// ParseAndEval(
+    ///     encoded: ParseAndEval(
+    ///         encoded: Literal(functionValue),
+    ///         environment: leftArg),
+    ///     environment: rightArg)
+    /// </code>
+    /// For identifying just the function value itself (without application),
+    /// use <see cref="IdentifyFunctionValue"/> instead.
+    /// </remarks>
     public static (string declName, IReadOnlyList<Expression> argsExprs)? Identify(
         Expression expr)
     {
@@ -31,38 +52,176 @@ public class BasicArithmetic
         {
             var (functionValue, leftExpr, rightExpr) = binaryApp;
 
-            if (functionValue == Add_FunctionValue())
+            // Delegate to IdentifyFunctionValue to avoid duplicate comparison logic
+            if (IdentifyFunctionValue(functionValue) is { } declName)
             {
-                return ("add", [leftExpr, rightExpr]);
-            }
-
-            if (functionValue == Sub_FunctionValue())
-            {
-                return ("sub", [leftExpr, rightExpr]);
-            }
-
-            if (functionValue == Mul_FunctionValue())
-            {
-                return ("mul", [leftExpr, rightExpr]);
-            }
-
-            if (functionValue == Int_div_FunctionValue())
-            {
-                return ("idiv", [leftExpr, rightExpr]);
-            }
-
-            if (functionValue == Int_modBy_FunctionValue())
-            {
-                return ("modBy", [leftExpr, rightExpr]);
-            }
-
-            if (functionValue == RemainderBy_FunctionValue())
-            {
-                return ("remainderBy", [leftExpr, rightExpr]);
+                return (declName, [leftExpr, rightExpr]);
             }
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Identifies a function value as one of the known Basics arithmetic function values.
+    /// This is the primary identification method used during parsing to recognize
+    /// function references in compiled expressions.
+    /// </summary>
+    /// <param name="functionValue">The Pine value to identify.</param>
+    /// <returns>The name of the Basics function if recognized, null otherwise.</returns>
+    /// <remarks>
+    /// This method is used by the static program parser when it encounters a function
+    /// reference and needs to identify which Basics function it represents.
+    /// For identifying complete function applications (function + arguments),
+    /// use <see cref="Identify"/> instead.
+    /// </remarks>
+    public static string? IdentifyFunctionValue(PineValue functionValue)
+    {
+        if (functionValue == Add_FunctionValue())
+        {
+            return "add";
+        }
+
+        if (functionValue == Sub_FunctionValue())
+        {
+            return "sub";
+        }
+
+        if (functionValue == Mul_FunctionValue())
+        {
+            return "mul";
+        }
+
+        if (functionValue == Int_div_FunctionValue())
+        {
+            return "idiv";
+        }
+
+        if (functionValue == Int_modBy_FunctionValue())
+        {
+            return "modBy";
+        }
+
+        if (functionValue == RemainderBy_FunctionValue())
+        {
+            return "remainderBy";
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Gets function information for a Basics module function by name.
+    /// This provides type information for type inference and a compilation function for code generation.
+    /// </summary>
+    /// <param name="functionName">The name of the Basics function (e.g., "add", "modBy").</param>
+    /// <returns>
+    /// A <see cref="CoreFunctionInfo"/> containing type and compilation information,
+    /// or null if the function name is not recognized.
+    /// </returns>
+    public static CoreFunctionInfo? GetBasicsFunctionInfo(string functionName)
+    {
+        return functionName switch
+        {
+            // (+) : number -> number -> number
+            "add" => new CoreFunctionInfo(
+                [TypeInference.InferredType.Number(), TypeInference.InferredType.Number(), TypeInference.InferredType.Number()],
+                args => Generic_Add(args[0], args[1])),
+
+            // (-) : number -> number -> number
+            "sub" => new CoreFunctionInfo(
+                [TypeInference.InferredType.Number(), TypeInference.InferredType.Number(), TypeInference.InferredType.Number()],
+                args => Generic_Sub(args[0], args[1])),
+
+            // (*) : number -> number -> number
+            "mul" => new CoreFunctionInfo(
+                [TypeInference.InferredType.Number(), TypeInference.InferredType.Number(), TypeInference.InferredType.Number()],
+                args => Generic_Mul(args[0], args[1])),
+
+            // (//) : Int -> Int -> Int
+            "idiv" => new CoreFunctionInfo(
+                [TypeInference.InferredType.Int(), TypeInference.InferredType.Int(), TypeInference.InferredType.Int()],
+                args => Int_div(args[0], args[1])),
+
+            // modBy : Int -> Int -> Int
+            "modBy" => new CoreFunctionInfo(
+                [TypeInference.InferredType.Int(), TypeInference.InferredType.Int(), TypeInference.InferredType.Int()],
+                args => Int_modBy(args[0], args[1])),
+
+            // remainderBy : Int -> Int -> Int
+            "remainderBy" => new CoreFunctionInfo(
+                [TypeInference.InferredType.Int(), TypeInference.InferredType.Int(), TypeInference.InferredType.Int()],
+                args => Int_remainderBy(args[0], args[1])),
+
+            _ => null
+        };
+    }
+
+    /// <summary>
+    /// Maps an infix operator symbol to the corresponding Basics function name.
+    /// </summary>
+    /// <param name="operatorSymbol">The operator symbol (e.g., "+", "-", "*", "//").</param>
+    /// <returns>The Basics function name, or null if not a recognized operator.</returns>
+    public static string? OperatorToFunctionName(string operatorSymbol)
+    {
+        return operatorSymbol switch
+        {
+            "+" => "add",
+            "-" => "sub",
+            "*" => "mul",
+            "//" => "idiv",
+            _ => null
+        };
+    }
+
+    /// <summary>
+    /// Gets the encoded function value for a Basics function by name.
+    /// This is used when emitting function values as literals for prefix operator syntax.
+    /// </summary>
+    /// <param name="functionName">The name of the Basics function (e.g., "add", "mul").</param>
+    /// <returns>The encoded function value, or null if not recognized.</returns>
+    public static PineValue? GetFunctionValue(string functionName)
+    {
+        return functionName switch
+        {
+            "add" =>
+            Add_FunctionValue(),
+
+            "sub" =>
+            Sub_FunctionValue(),
+
+            "mul" =>
+            Mul_FunctionValue(),
+
+            "idiv" =>
+            Int_div_FunctionValue(),
+
+            "modBy" =>
+            Int_modBy_FunctionValue(),
+
+            "remainderBy" =>
+            RemainderBy_FunctionValue(),
+
+            _ =>
+            null
+        };
+    }
+
+    /// <summary>
+    /// Gets a compiled expression for a prefix operator (e.g., "(+)", "(-)").
+    /// This returns the function value as a literal expression, ready for application.
+    /// </summary>
+    /// <param name="operatorSymbol">The operator symbol (e.g., "+", "-", "*", "//").</param>
+    /// <returns>The function value as an Expression, or null if not a recognized operator.</returns>
+    public static Expression? GetPrefixOperatorExpression(string operatorSymbol)
+    {
+        if (OperatorToFunctionName(operatorSymbol) is not { } functionName)
+            return null;
+
+        if (GetFunctionValue(functionName) is not { } functionValue)
+            return null;
+
+        return Expression.LiteralInstance(functionValue);
     }
 
     /// <summary>

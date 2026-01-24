@@ -19,6 +19,15 @@ public static class CoreModules
             IEnumerable<IdentifierT> stack,
             PineValue pineValue)
         {
+            // First try to identify as a known function value (e.g., Basics.add, Basics.sub)
+            if (BasicArithmetic.IdentifyFunctionValue(pineValue) is { } functionName)
+            {
+                var identifier = fromCoreModuleBasics(functionName);
+
+                return new StaticProgramParser.IdentifyResponse<IdentifierT>(identifier, ContinueParse: false);
+            }
+
+            // Also try parsing as expression for backwards compatibility with application patterns
             if (parseCache.ParseExpression(pineValue).IsOkOrNull() is { } expr)
             {
                 if (BasicArithmetic.Identify(expr) is { } basicsName)
@@ -52,6 +61,7 @@ public static class CoreModules
             {
                 return overriden;
             }
+
             return previousConfig.IdentifyInstanceOptional(stack, pineValue);
         }
 

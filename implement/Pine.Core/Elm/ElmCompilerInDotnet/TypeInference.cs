@@ -708,52 +708,113 @@ public static class TypeInference
 
         // Function application - infer from the function's return type
         if (expression is SyntaxTypes.Expression.Application application &&
-            application.Arguments.Count >= 1 &&
-            application.Arguments[0].Value is SyntaxTypes.Expression.FunctionOrValue funcRef &&
-            functionReturnTypes is not null)
+            application.Arguments.Count >= 1)
         {
-            // Build the qualified function name
-            string qualifiedName;
-            if (funcRef.ModuleName.Count > 0)
+            // Check if the first argument is a FunctionOrValue
+            if (application.Arguments[0].Value is SyntaxTypes.Expression.FunctionOrValue funcRef)
             {
-                qualifiedName = string.Join(".", funcRef.ModuleName) + "." + funcRef.Name;
-            }
-            else if (currentModuleName is not null)
-            {
-                qualifiedName = currentModuleName + "." + funcRef.Name;
-            }
-            else
-            {
-                qualifiedName = funcRef.Name;
-            }
-
-            // Look up the function type
-            // After canonicalization, all references should be fully qualified
-            if (functionReturnTypes.TryGetValue(qualifiedName, out var funcType))
-            {
-                // Build a substitution map from type variables to concrete types
-                var substitution = new Dictionary<string, InferredType>();
-
-                // Compute the return type by "applying" arguments to the function type
-                // For a function type A -> B -> C with 2 arguments, the return type is C
-                // Also infer type variable substitutions from argument types
-                var appliedArgCount = application.Arguments.Count - 1; // Exclude the function itself
-                var resultType = funcType;
-
-                for (var i = 0; i < appliedArgCount && resultType is InferredType.FunctionType ft; i++)
+                // Check if this is a qualified Basics module function with known return type
+                // Only use core library type info for qualified references (e.g., Basics.modBy)
+                // Unqualified references could be shadowed by local parameters, so canonicalization
+                // must resolve them first
+                if (funcRef.ModuleName.Count is 1 && funcRef.ModuleName[0] is "Basics")
                 {
-                    // Infer the actual argument type
-                    var argExpr = application.Arguments[i + 1].Value; // +1 to skip the function itself
-                    var actualArgType = InferExpressionType(argExpr, parameterNames, parameterTypes, localBindingTypes, currentModuleName, functionReturnTypes);
+                    if (CoreLibraryModule.BasicArithmetic.GetBasicsFunctionInfo(funcRef.Name) is { } basicsFuncInfo &&
+                        basicsFuncInfo.FunctionType.Count > 0)
+                    {
+                        // FunctionType contains [arg1Type, arg2Type, ..., returnType]
+                        // We need to compute the result type after applying the given arguments
+                        var appliedArgCount = application.Arguments.Count - 1; // Exclude the function itself
+                        var functionTypes = basicsFuncInfo.FunctionType;
+                        var totalArgCount = functionTypes.Count - 1; // Last element is return type
 
-                    // Collect type variable substitutions from matching expected vs actual arg types
-                    CollectTypeVariableSubstitutions(ft.ArgumentType, actualArgType, substitution);
-
-                    resultType = ft.ReturnType;
+                        if (appliedArgCount >= totalArgCount)
+                        {
+                            // Full application - return the final return type
+                            return functionTypes[^1];
+                        }
+                        else
+                        {
+                            // Partial application - build a function type from remaining arguments
+                            // For modBy 7: functionTypes = [Int, Int, Int], appliedArgCount = 1
+                            // We need to return Int -> Int (functionTypes[1] -> functionTypes[2])
+                            var remainingTypes = functionTypes.Skip(appliedArgCount).ToList();
+                            return BuildFunctionTypeFromList(remainingTypes);
+                        }
+                    }
                 }
 
-                // Apply substitutions to the result type
-                return ApplyTypeSubstitutions(resultType, substitution);
+                // Build the qualified function name
+                string qualifiedName;
+                if (funcRef.ModuleName.Count > 0)
+                {
+                    qualifiedName = string.Join(".", funcRef.ModuleName) + "." + funcRef.Name;
+                }
+                else if (currentModuleName is not null)
+                {
+                    qualifiedName = currentModuleName + "." + funcRef.Name;
+                }
+                else
+                {
+                    qualifiedName = funcRef.Name;
+                }
+
+                // Look up the function type
+                // After canonicalization, all references should be fully qualified
+                if (functionReturnTypes is not null && functionReturnTypes.TryGetValue(qualifiedName, out var funcType))
+                {
+                    // Build a substitution map from type variables to concrete types
+                    var substitution = new Dictionary<string, InferredType>();
+
+                    // Compute the return type by "applying" arguments to the function type
+                    // For a function type A -> B -> C with 2 arguments, the return type is C
+                    // Also infer type variable substitutions from argument types
+                    var appliedArgCount = application.Arguments.Count - 1; // Exclude the function itself
+                    var resultType = funcType;
+
+                    for (var i = 0; i < appliedArgCount && resultType is InferredType.FunctionType ft; i++)
+                    {
+                        // Infer the actual argument type
+                        var argExpr = application.Arguments[i + 1].Value; // +1 to skip the function itself
+                        var actualArgType = InferExpressionType(argExpr, parameterNames, parameterTypes, localBindingTypes, currentModuleName, functionReturnTypes);
+
+                        // Collect type variable substitutions from matching expected vs actual arg types
+                        CollectTypeVariableSubstitutions(ft.ArgumentType, actualArgType, substitution);
+
+                        resultType = ft.ReturnType;
+                    }
+
+                    // Apply substitutions to the result type
+                    return ApplyTypeSubstitutions(resultType, substitution);
+                }
+            }
+            // Check if the first argument is a PrefixOperator (e.g., (+), (-), (*), (//))
+            else if (application.Arguments[0].Value is SyntaxTypes.Expression.PrefixOperator prefixOp)
+            {
+                // Map the operator to a function name and get its type info
+                if (CoreLibraryModule.BasicArithmetic.OperatorToFunctionName(prefixOp.Operator) is { } funcName)
+                {
+                    if (CoreLibraryModule.BasicArithmetic.GetBasicsFunctionInfo(funcName) is { } basicsFuncInfo &&
+                        basicsFuncInfo.FunctionType.Count > 0)
+                    {
+                        // FunctionType contains [arg1Type, arg2Type, ..., returnType]
+                        var appliedArgCount = application.Arguments.Count - 1; // Exclude the operator itself
+                        var functionTypes = basicsFuncInfo.FunctionType;
+                        var totalArgCount = functionTypes.Count - 1;
+
+                        if (appliedArgCount >= totalArgCount)
+                        {
+                            // Full application - return the final return type
+                            return functionTypes[^1];
+                        }
+                        else
+                        {
+                            // Partial application - build a function type from remaining arguments
+                            var remainingTypes = functionTypes.Skip(appliedArgCount).ToList();
+                            return BuildFunctionTypeFromList(remainingTypes);
+                        }
+                    }
+                }
             }
         }
 
@@ -1180,8 +1241,27 @@ public static class TypeInference
                         ? string.Join(".", funcRef.ModuleName) + "." + funcRef.Name
                         : currentModuleName + "." + funcRef.Name;
 
-                    // Check if we have parameter types for this function
-                    if (functionParameterTypes.TryGetValue(qualifiedFuncName, out var paramTypes))
+                    // First, check if this is a Basics module function with known types
+                    IReadOnlyList<InferredType>? paramTypes = null;
+
+                    if (funcRef.ModuleName.Count is 1 && funcRef.ModuleName[0] is "Basics")
+                    {
+                        if (CoreLibraryModule.BasicArithmetic.GetBasicsFunctionInfo(funcRef.Name) is { } basicsFuncInfo)
+                        {
+                            // The FunctionType contains [arg1Type, arg2Type, ..., returnType]
+                            // We need just the parameter types (excluding return type)
+                            paramTypes =
+                                [.. basicsFuncInfo.FunctionType.Take(basicsFuncInfo.FunctionType.Count - 1)];
+                        }
+                    }
+
+                    // If not a known Basics function, check the user-defined function parameter types
+                    if (paramTypes is null)
+                    {
+                        functionParameterTypes.TryGetValue(qualifiedFuncName, out paramTypes);
+                    }
+
+                    if (paramTypes is not null)
                     {
                         // Match arguments to function parameter types
                         // Arguments start at index 1 (index 0 is the function itself)
@@ -1196,6 +1276,39 @@ public static class TypeInference
                             if (paramType is not InferredType.UnknownType)
                             {
                                 constraints = ExtractTypeConstraintsFromExpression(argExpr, paramType, constraints);
+                            }
+                        }
+                    }
+                }
+                // Also handle PrefixOperator applications (e.g., (//) a b)
+                else if (application.Arguments.Count >= 2 &&
+                    application.Arguments[0].Value is SyntaxTypes.Expression.PrefixOperator prefixOp)
+                {
+                    // Map the operator to a function name and get its type info
+                    if (CoreLibraryModule.BasicArithmetic.OperatorToFunctionName(prefixOp.Operator) is { } funcName)
+                    {
+                        if (CoreLibraryModule.BasicArithmetic.GetBasicsFunctionInfo(funcName) is { } basicsFuncInfo)
+                        {
+                            // The FunctionType contains [arg1Type, arg2Type, ..., returnType]
+                            // We need just the parameter types (excluding return type)
+                            var paramTypes =
+                                basicsFuncInfo.FunctionType
+                                .Take(basicsFuncInfo.FunctionType.Count - 1)
+                                .ToList();
+
+                            // Match arguments to function parameter types
+                            // Arguments start at index 1 (index 0 is the operator itself)
+                            for (var i = 1; i < application.Arguments.Count && i - 1 < paramTypes.Count; i++)
+                            {
+                                var argIndex = i - 1;
+                                var argExpr = application.Arguments[i].Value;
+                                var paramType = paramTypes[argIndex];
+
+                                // Extract type constraints from the argument expression
+                                if (paramType is not InferredType.UnknownType)
+                                {
+                                    constraints = ExtractTypeConstraintsFromExpression(argExpr, paramType, constraints);
+                                }
                             }
                         }
                     }
@@ -1740,6 +1853,34 @@ public static class TypeInference
             }
 
             result = new InferredType.FunctionType(paramType, result);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Builds a function type from a list of types where the last element is the return type.
+    /// For example, [Int, Int, Int] becomes Int -> Int -> Int (which is Int -> (Int -> Int)).
+    /// </summary>
+    /// <param name="types">The types in the function signature where the last element is the return type.</param>
+    /// <returns>The function type, or the single type if the list has only one element.</returns>
+    private static InferredType BuildFunctionTypeFromList(IReadOnlyList<InferredType> types)
+    {
+        if (types.Count is 0)
+        {
+            return s_unknownType;
+        }
+
+        if (types.Count is 1)
+        {
+            return types[0];
+        }
+
+        // Build from right to left: t1 -> (t2 -> (... -> tN))
+        var result = types[^1];
+        for (var i = types.Count - 2; i >= 0; i--)
+        {
+            result = new InferredType.FunctionType(types[i], result);
         }
 
         return result;

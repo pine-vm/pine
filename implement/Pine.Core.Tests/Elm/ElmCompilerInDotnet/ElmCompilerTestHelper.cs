@@ -1,5 +1,6 @@
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.ElmCompilerInDotnet;
+using Pine.Core.Elm.ElmSyntax.Stil4mConcretized;
 using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Core.Tests.Elm.ElmCompilerTests;
 using System;
@@ -8,6 +9,8 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
+
+using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
@@ -492,5 +495,73 @@ public class ElmCompilerTestHelper
                 indentString: "    ",
                 indentLevel: 1,
                 kernelApplicationPrefix: "Pine_builtin");
+    }
+
+    /// <summary>
+    /// Gets the inferred type for a specific top-level declaration in a module.
+    /// </summary>
+    public static TypeInference.InferredType GetInferredTypeForDeclaration(
+        string moduleText,
+        string declarationName)
+    {
+        var parseResult = Core.Elm.ElmSyntax.ElmSyntaxParser.ParseModuleText(moduleText);
+
+        if (parseResult.IsErrOrNull() is { } err)
+        {
+            throw new Exception($"Failed to parse module: {err}");
+        }
+
+        if (parseResult.IsOkOrNull() is not { } parsedFile)
+        {
+            throw new NotImplementedException("Unexpected parse result type");
+        }
+
+        var moduleName = Module.GetModuleName(parsedFile.ModuleDefinition.Value).Value;
+        var moduleNameStr = string.Join(".", moduleName);
+
+        // Convert the concretized file to abstract syntax for type inference
+        var abstractFile = SyntaxTypes.FromStil4mConcretized.Convert(parsedFile);
+
+        // Build a map of function signatures from the file using TypeInference
+        var functionSignatures = TypeInference.BuildFunctionSignaturesMap(abstractFile, moduleNameStr);
+
+        // Find the declaration
+        foreach (var declaration in parsedFile.Declarations)
+        {
+            if (declaration.Value is Declaration.FunctionDeclaration funcDecl)
+            {
+                var funcName = funcDecl.Function.Declaration.Value.Name.Value;
+
+                if (funcName != declarationName)
+                {
+                    continue;
+                }
+
+                // Convert expression and arguments to abstract syntax
+                var abstractExpression = SyntaxTypes.FromStil4mConcretized.ConvertExpressionNode(
+                    funcDecl.Function.Declaration.Value.Expression);
+
+                var abstractArguments = funcDecl.Function.Declaration.Value.Arguments
+                    .Select(arg => new SyntaxTypes.Node<SyntaxTypes.Pattern>(
+                        arg.Range,
+                        SyntaxTypes.FromStil4mConcretized.Convert(arg.Value)))
+                    .ToList();
+
+                // Use TypeInference to infer the function type
+                var (returnType, parameterTypes) = TypeInference.InferFunctionDeclarationType(
+                    abstractExpression.Value,
+                    abstractArguments,
+                    moduleNameStr,
+                    functionSignatures);
+
+                // Build the full function type using TypeInference
+                return TypeInference.BuildFunctionType(
+                    abstractArguments,
+                    parameterTypes,
+                    returnType);
+            }
+        }
+
+        throw new Exception($"Declaration '{declarationName}' not found in module");
     }
 }
