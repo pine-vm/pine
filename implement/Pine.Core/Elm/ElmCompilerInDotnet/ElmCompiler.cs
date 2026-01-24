@@ -549,21 +549,23 @@ public class ElmCompiler
             return (result, context.WithCompiledFunction(qualifiedFunctionName, result, dependencyLayout));
         }
 
-        // For functions with parameters, create a FunctionRecord
+        // For functions with parameters, build env functions list
         var encodedFunction =
             ExpressionEncoding.EncodeExpressionAsValue(compiledBodyExpression);
 
         // Build the EnvFunctions list with encoded dependencies
         var envFunctionsList = new List<PineValue> { encodedFunction };
 
-        // Add placeholder for self-reference first
+        // Create a placeholder result using FunctionValueBuilder for self-reference during recursive compilation.
+        // This placeholder is necessary because:
+        // 1. Recursive functions may reference themselves through the context cache
+        // 2. Mutually recursive functions need a placeholder to break the circular dependency
+        // The placeholder allows dependencies to be compiled and can reference this function if needed.
         var placeholderResult =
-            FunctionRecord.EncodeFunctionRecordInValueTagged(
-                new FunctionRecord(
-                    InnerFunction: compiledBodyExpression,
-                    ParameterCount: parameterCount,
-                    EnvFunctions: envFunctionsList.ToArray(),
-                    ArgumentsAlreadyCollected: ReadOnlyMemory<PineValue>.Empty));
+            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
+                compiledBodyExpression,
+                parameterCount,
+                envFunctionsList);
 
         context = context.WithCompiledFunction(qualifiedFunctionName, placeholderResult, dependencyLayout);
 
@@ -594,14 +596,12 @@ public class ElmCompiler
             }
         }
 
-        // Create the final result with all dependencies
+        // Create the final result using FunctionValueBuilder for incremental argument application
         var finalResult =
-            FunctionRecord.EncodeFunctionRecordInValueTagged(
-                new FunctionRecord(
-                    InnerFunction: compiledBodyExpression,
-                    ParameterCount: parameterCount,
-                    EnvFunctions: envFunctionsList.ToArray(),
-                    ArgumentsAlreadyCollected: ReadOnlyMemory<PineValue>.Empty));
+            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
+                compiledBodyExpression,
+                parameterCount,
+                envFunctionsList);
 
         return (finalResult, context.WithCompiledFunction(qualifiedFunctionName, finalResult, dependencyLayout));
     }
@@ -803,13 +803,10 @@ public class ElmCompiler
     private static PineValue EmitPlainValueDeclaration(PineValue value)
     {
         return
-            FunctionRecord.EncodeFunctionRecordInValueTagged(
-                new FunctionRecord(
-                    InnerFunction: Expression.LiteralInstance(value),
-                    ParameterCount: 0,
-                    EnvFunctions: ReadOnlyMemory<PineValue>.Empty,
-                    ArgumentsAlreadyCollected: ReadOnlyMemory<PineValue>.Empty
-                ));
+            FunctionValueBuilder.EmitFunctionValueWithEnvFunctions(
+                Expression.LiteralInstance(value),
+                parameterCount: 0,
+                envFunctions: []);
     }
 
     private static PineValue EmitModuleValue(
