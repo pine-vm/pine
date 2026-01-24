@@ -64,7 +64,7 @@ The following are general rules we use to compose the list of functions in the e
 
 #### How to Order Entries in the Environment Functions List
 
-+ All functions in a group of mutually recursive functions use the same order. This makes it easier to model invocations in the recursive set, since we can forward the entire list rather than individual items.
++ All functions in a group of mutually recursive functions ([strongly connected component](https://en.wikipedia.org/wiki/Strongly_connected_component)) use the same order. This makes it easier to model invocations in the recursive set, since we can forward the entire list rather than individual items.
 + Recursive functions are placed at the beginning of the list.
 
 ### Function Values And Generic Function Application

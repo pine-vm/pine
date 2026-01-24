@@ -255,13 +255,15 @@ public class ElmCompilerTestHelper
             throw new Exception("Unexpected canonicalization result type");
         }
 
-        var canonicalizedModules = canonicalizedModulesDict
+        var canonicalizedModules =
+            canonicalizedModulesDict
             .Select(kvp => kvp.Value.IsOkOrNull())
             .Where(m => m is not null)
             .Select(m => m!)
             .ToList();
 
-        var lambdaLiftedModules = canonicalizedModules
+        var lambdaLiftedModules =
+            canonicalizedModules
             .Select(LambdaLifting.LiftLambdas)
             .ToList();
 
@@ -297,7 +299,10 @@ public class ElmCompilerTestHelper
                 PineKernelModuleNames: s_pineKernelModuleNames);
 
         // Compute and return dependency layouts
-        return ElmCompiler.ComputeDependencyLayouts(allFunctions, initialContext);
+        var (layouts, _, _) =
+            ElmCompiler.ComputeDependencyLayoutsAndSccs(allFunctions, initialContext);
+
+        return layouts;
     }
 
     /// <summary>
