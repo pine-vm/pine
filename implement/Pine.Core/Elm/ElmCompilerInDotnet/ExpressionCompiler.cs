@@ -146,6 +146,26 @@ public class ExpressionCompiler
             return Expression.LiteralInstance(ElmValueEncoding.TagAsPineValue(expr.Name, []));
         }
 
+        // Check if this is a reference to a top-level function (function value without application)
+        // This happens when a function is returned as a value, like in:
+        //   case x of
+        //     1 -> functionA
+        //     _ -> functionB
+        {
+            var qualifiedFunctionName =
+                expr.ModuleName.Count > 0
+                ?
+                string.Join(".", expr.ModuleName) + "." + expr.Name
+                :
+                context.CurrentModuleName + "." + expr.Name;
+
+            if (context.GetFunctionIndexInLayout(qualifiedFunctionName) is { } functionIndex)
+            {
+                // This is a reference to a top-level function - emit a function value
+                return CompileFunctionReference(qualifiedFunctionName, functionIndex, context);
+            }
+        }
+
         return new CompilationError.UnresolvedReference(expr.Name, context.CurrentModuleName);
     }
 
@@ -272,6 +292,25 @@ public class ExpressionCompiler
                 ]);
             }
 
+            // Check if the function is a parameter or local binding (higher-order function application)
+            // This handles cases like: `applyTwoArgs func a b = func a b`
+            // where `func` is a parameter that holds a function value
+            if (funcRef.ModuleName.Count is 0)
+            {
+                if (context.TryGetLocalBinding(funcRef.Name, out var bindingExpr) && bindingExpr is not null)
+                {
+                    // Apply arguments to the function value from local binding using generic application
+                    return CompileGenericFunctionApplication(bindingExpr, compiledArguments);
+                }
+
+                if (context.TryGetParameterIndex(funcRef.Name, out var paramIndex))
+                {
+                    // Apply arguments to the function value from parameter using generic application
+                    var funcExpr = BuiltinHelpers.BuildPathToParameter(paramIndex);
+                    return CompileGenericFunctionApplication(funcExpr, compiledArguments);
+                }
+            }
+
             // Determine qualified function name
             var qualifiedFunctionName =
                 funcRef.ModuleName.Count > 0
@@ -285,70 +324,107 @@ public class ExpressionCompiler
                 return new CompilationError.FunctionNotInDependencyLayout(qualifiedFunctionName);
             }
 
-            var argumentResult = Compile(expr.Arguments[1].Value, context);
-            if (argumentResult.IsErrOrNull() is { } argErr)
+            // Get function info to determine parameter count
+            if (!context.ModuleCompilationContext.TryGetFunctionInfo(qualifiedFunctionName, out var funcInfo))
             {
-                return argErr;
+                // Function exists in dependency layout but info is not available
+                // This shouldn't happen if the function is properly registered
+                return new CompilationError.UnresolvedReference(funcRef.Name, context.CurrentModuleName);
             }
 
-            var functionRef = ExpressionBuilder.BuildExpressionForPathInExpression(
-                [0, functionIndex],
-                Expression.EnvironmentInstance);
+            var paramCount = funcInfo.declaration.Function.Declaration.Value.Arguments.Count;
+            var argCount = compiledArguments.Count;
 
-            // Build the environment for the called function
-            // We need to construct an environment that matches what the called function expects
-            Expression callEnvFunctions;
-
-            // Check if we have pre-computed dependency layout for the called function
-            if (context.ModuleCompilationContext.TryGetDependencyLayout(qualifiedFunctionName) is { } calledFuncLayout &&
-                calledFuncLayout.Count > 0)
+            if (argCount >= paramCount && paramCount > 0)
             {
-                // Build environment by mapping the called function's dependency layout
-                // to indices in the current function's environment
-                var envFunctionExpressions = new List<Expression>();
+                // Full or over-application: use optimized [[envFuncs], [arg0, arg1, ...]] structure
+                // for the first paramCount arguments
+                var functionRef = ExpressionBuilder.BuildExpressionForPathInExpression(
+                    [0, functionIndex],
+                    Expression.EnvironmentInstance);
 
-                foreach (var depName in calledFuncLayout)
+                // Build the environment for the called function
+                Expression callEnvFunctions;
+
+                // Check if we have pre-computed dependency layout for the called function
+                if (context.ModuleCompilationContext.TryGetDependencyLayout(qualifiedFunctionName) is { } calledFuncLayout &&
+                    calledFuncLayout.Count > 0)
                 {
-                    if (context.GetFunctionIndexInLayout(depName) is { } depIndex)
-                    {
-                        // Get this dependency from the current environment
-                        var depRef =
-                            ExpressionBuilder.BuildExpressionForPathInExpression(
-                                [0, depIndex],
-                                Expression.EnvironmentInstance);
+                    var envFunctionExpressions = new List<Expression>();
 
-                        envFunctionExpressions.Add(depRef);
-                    }
-                    else
+                    foreach (var depName in calledFuncLayout)
                     {
-                        // Dependency not found in current layout - this shouldn't happen
-                        // if dependencies are properly analyzed
-                        return new CompilationError.FunctionNotInDependencyLayout(depName);
+                        if (context.GetFunctionIndexInLayout(depName) is { } depIndex)
+                        {
+                            var depRef =
+                                ExpressionBuilder.BuildExpressionForPathInExpression(
+                                    [0, depIndex],
+                                    Expression.EnvironmentInstance);
+
+                            envFunctionExpressions.Add(depRef);
+                        }
+                        else
+                        {
+                            return new CompilationError.FunctionNotInDependencyLayout(depName);
+                        }
                     }
+
+                    callEnvFunctions = Expression.ListInstance(envFunctionExpressions);
+                }
+                else
+                {
+                    callEnvFunctions =
+                        ExpressionBuilder.BuildExpressionForPathInExpression(
+                            [0],
+                            Expression.EnvironmentInstance);
                 }
 
-                callEnvFunctions = Expression.ListInstance(envFunctionExpressions);
-            }
-            else
-            {
-                // No dependency info available, fall back to passing current env functions
-                callEnvFunctions = ExpressionBuilder.BuildExpressionForPathInExpression(
-                    [0],
-                    Expression.EnvironmentInstance);
-            }
+                // Use only the first paramCount arguments for the optimized full application
+                var fullApplicationArgs = compiledArguments.Take(paramCount).ToList();
 
-            var callEnvironment = Expression.ListInstance(
-            [
-                callEnvFunctions,
-                Expression.ListInstance([argumentResult.IsOkOrNull()!])
-            ]);
+                var callEnvironment =
+                    Expression.ListInstance(
+                        [
+                        callEnvFunctions,
+                        Expression.ListInstance(fullApplicationArgs)
+                        ]);
 
-            return new Expression.ParseAndEval(
-                encoded: functionRef,
-                environment: callEnvironment);
+                Expression fullApplicationResult =
+                    new Expression.ParseAndEval(
+                        encoded: functionRef,
+                        environment: callEnvironment);
+
+                // If there are remaining arguments (over-application), apply them generically
+                if (argCount > paramCount)
+                {
+                    var remainingArgs = compiledArguments.Skip(paramCount).ToList();
+                    return CompileGenericFunctionApplication(fullApplicationResult, remainingArgs);
+                }
+
+                return fullApplicationResult;
+            }
         }
 
-        return new CompilationError.UnsupportedApplicationType();
+        {
+            var compileFunctionExprResult = Compile(functionExpr, context);
+
+            if (compileFunctionExprResult.IsErrOrNull() is { } funcErr)
+            {
+                return
+                    CompilationError.Scoped(
+                        "When compiling function part of application",
+                        funcErr);
+            }
+
+            if (compileFunctionExprResult.IsOkOrNull() is not { } funcOk)
+            {
+                throw new NotImplementedException(
+                    "Unexpected result type when compiling function part of application: " + compileFunctionExprResult.GetType());
+            }
+
+            // Apply provided arguments using generic application
+            return CompileGenericFunctionApplication(funcOk, compiledArguments);
+        }
     }
 
     private static Result<CompilationError, Expression> CompileListExpr(
@@ -602,7 +678,7 @@ public class ExpressionCompiler
             Expression fieldPairExpr;
 
             // Get the original field at index i
-            if (i == 0)
+            if (i is 0)
             {
                 fieldPairExpr = BuiltinHelpers.ApplyBuiltinHead(fieldsListExpr);
             }
@@ -708,7 +784,7 @@ public class ExpressionCompiler
 
         // Get field at index N
         Expression fieldPairExpr;
-        if (fieldIndex == 0)
+        if (fieldIndex is 0)
         {
             fieldPairExpr = BuiltinHelpers.ApplyBuiltinHead(fieldsListExpr);
         }
@@ -732,7 +808,7 @@ public class ExpressionCompiler
     {
         // Check if the expression is a simple variable reference
         if (expression is SyntaxTypes.Expression.FunctionOrValue funcOrValue &&
-            funcOrValue.ModuleName.Count == 0)
+            funcOrValue.ModuleName.Count is 0)
         {
             var varName = funcOrValue.Name;
 
@@ -1162,6 +1238,94 @@ public class ExpressionCompiler
         }
 
         return (result, null);
+    }
+
+    /// <summary>
+    /// Compiles a reference to a top-level function as a function value.
+    /// This is used when a function is used as a value (not applied), such as:
+    /// - Returning a function from a case expression branch
+    /// - Passing a function as an argument
+    /// - Storing a function in a data structure
+    /// </summary>
+    private static Result<CompilationError, Expression> CompileFunctionReference(
+        string qualifiedFunctionName,
+        int functionIndex,
+        ExpressionCompilationContext context)
+    {
+        // Get the function's info to determine parameter count
+        if (!context.ModuleCompilationContext.TryGetFunctionInfo(qualifiedFunctionName, out var funcInfo))
+        {
+            return new CompilationError.UnresolvedReference(qualifiedFunctionName, context.CurrentModuleName);
+        }
+
+        var paramCount = funcInfo.declaration.Function.Declaration.Value.Arguments.Count;
+
+        // Get the encoded body from the environment
+        // In the environment structure [[envFunctions], [args]], the encoded bodies are at [0][i]
+        var encodedBodyExpr =
+            ExpressionBuilder.BuildExpressionForPathInExpression(
+                [0, functionIndex],
+                Expression.EnvironmentInstance);
+
+        // Build the env functions list expressions based on the function's dependency layout
+        var envFunctionsExprs = new List<Expression>();
+
+        if (context.ModuleCompilationContext.TryGetDependencyLayout(qualifiedFunctionName) is { } funcLayout)
+        {
+            foreach (var depName in funcLayout)
+            {
+                if (context.GetFunctionIndexInLayout(depName) is { } depIndex)
+                {
+                    // Get this dependency from the current environment
+                    var depRef =
+                        ExpressionBuilder.BuildExpressionForPathInExpression(
+                            [0, depIndex],
+                            Expression.EnvironmentInstance);
+
+                    envFunctionsExprs.Add(depRef);
+                }
+                else
+                {
+                    return new CompilationError.FunctionNotInDependencyLayout(depName);
+                }
+            }
+        }
+
+        // Emit the function value expression using FunctionValueBuilder
+        return FunctionValueBuilder.EmitFunctionExpressionFromEncodedBody(
+            encodedBodyExpr,
+            paramCount,
+            envFunctionsExprs);
+    }
+
+    /// <summary>
+    /// Compiles a generic function application where the function is a value
+    /// (e.g., from a parameter or local binding).
+    /// Uses ParseAndEval to apply each argument one at a time to the function value.
+    /// Per the spec: "For function applications where the function is a value of unknown origin,
+    /// the compiler emits an expression that adds the given arguments using a form that allows
+    /// for generic partial application."
+    /// </summary>
+    private static Expression CompileGenericFunctionApplication(
+        Expression functionExpr,
+        IReadOnlyList<Expression> arguments)
+    {
+        // Apply arguments one at a time using ParseAndEval
+        // Each application evaluates the function value (which is an encoded expression)
+        // with the argument as the environment
+        var result = functionExpr;
+
+        foreach (var argument in arguments)
+        {
+            // ParseAndEval where:
+            // - encoded = the function value (which is an encoded expression)
+            // - environment = the argument value
+            result = new Expression.ParseAndEval(
+                encoded: result,
+                environment: argument);
+        }
+
+        return result;
     }
 
     internal static PineValue EmitStringLiteral(string str) =>
