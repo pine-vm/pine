@@ -20,7 +20,7 @@ public static class CoreModules
             PineValue pineValue)
         {
             // First try to identify as a known function value (e.g., Basics.add, Basics.sub)
-            if (BasicArithmetic.IdentifyFunctionValue(pineValue) is { } functionName)
+            if (CoreBasics.IdentifyFunctionValue(pineValue) is { } functionName)
             {
                 var identifier = fromCoreModuleBasics(functionName);
 
@@ -30,7 +30,7 @@ public static class CoreModules
             // Also try parsing as expression for backwards compatibility with application patterns
             if (parseCache.ParseExpression(pineValue).IsOkOrNull() is { } expr)
             {
-                if (BasicArithmetic.Identify(expr) is { } basicsName)
+                if (CoreBasics.Identify(expr) is { } basicsName)
                 {
                     var identifier = fromCoreModuleBasics(basicsName.declName);
 

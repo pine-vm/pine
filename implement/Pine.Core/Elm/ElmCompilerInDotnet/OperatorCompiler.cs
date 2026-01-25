@@ -71,22 +71,62 @@ public class OperatorCompiler
 
         if (operatorApp.Operator is "//")
         {
-            return BasicArithmetic.Int_div(leftCompiled, rightCompiled);
+            return CoreBasics.Int_div(leftCompiled, rightCompiled);
         }
 
         if (operatorApp.Operator is "+")
         {
-            return BasicArithmetic.Generic_Add(leftCompiled, rightCompiled);
+            return CoreBasics.Generic_Add(leftCompiled, rightCompiled);
         }
 
         if (operatorApp.Operator is "-")
         {
-            return BasicArithmetic.Generic_Sub(leftCompiled, rightCompiled);
+            return CoreBasics.Generic_Sub(leftCompiled, rightCompiled);
         }
 
         if (operatorApp.Operator is "*")
         {
-            return BasicArithmetic.Generic_Mul(leftCompiled, rightCompiled);
+            return CoreBasics.Generic_Mul(leftCompiled, rightCompiled);
+        }
+
+        if (operatorApp.Operator is "==")
+        {
+            return CoreBasics.Generic_Eq(leftCompiled, rightCompiled);
+        }
+
+        if (operatorApp.Operator is "/=")
+        {
+            return CoreBasics.Generic_Neq(leftCompiled, rightCompiled);
+        }
+
+        if (operatorApp.Operator is "<")
+        {
+            return CoreBasics.Generic_Lt(leftCompiled, rightCompiled);
+        }
+
+        if (operatorApp.Operator is ">")
+        {
+            return CoreBasics.Generic_Gt(leftCompiled, rightCompiled);
+        }
+
+        if (operatorApp.Operator is "<=")
+        {
+            return CoreBasics.Generic_Le(leftCompiled, rightCompiled);
+        }
+
+        if (operatorApp.Operator is ">=")
+        {
+            return CoreBasics.Generic_Ge(leftCompiled, rightCompiled);
+        }
+
+        if (operatorApp.Operator is "&&")
+        {
+            return CoreBasics.Generic_And(leftCompiled, rightCompiled);
+        }
+
+        if (operatorApp.Operator is "||")
+        {
+            return CoreBasics.Generic_Or(leftCompiled, rightCompiled);
         }
 
         if (operatorApp.Operator is "/")
@@ -109,13 +149,13 @@ public class OperatorCompiler
             BuiltinHelpers.ApplyBuiltinIntAdd([leftCompiled, rightCompiled]),
 
             "-" =>
-            BasicArithmetic.Int_sub(leftCompiled, rightCompiled),
+            CoreBasics.Int_sub(leftCompiled, rightCompiled),
 
             "*" =>
             BuiltinHelpers.ApplyBuiltinIntMul([leftCompiled, rightCompiled]),
 
             "//" =>
-            BasicArithmetic.Int_div(leftCompiled, rightCompiled),
+            CoreBasics.Int_div(leftCompiled, rightCompiled),
 
             _ =>
             CompilationError.UnsupportedOperator(operatorApp.Operator)

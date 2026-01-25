@@ -618,9 +618,56 @@ public class Canonicalization
             ["EQ"] = ["Basics"],
             ["GT"] = ["Basics"],
 
-            // Basics module functions (auto-imported)
+            // Basics module functions (auto-imported per Elm specification)
+            // Comparison: max, min, compare
+            ["compare"] = ["Basics"],
+            ["max"] = ["Basics"],
+            ["min"] = ["Basics"],
+
+            // Boolean operations: not, xor
+            ["not"] = ["Basics"],
+            ["xor"] = ["Basics"],
+
+            // Math functions: modBy, remainderBy, negate, abs, clamp, sqrt, logBase, e, pi
             ["modBy"] = ["Basics"],
             ["remainderBy"] = ["Basics"],
+            ["negate"] = ["Basics"],
+            ["abs"] = ["Basics"],
+            ["clamp"] = ["Basics"],
+            ["sqrt"] = ["Basics"],
+            ["logBase"] = ["Basics"],
+            ["e"] = ["Basics"],
+            ["pi"] = ["Basics"],
+
+            // Trigonometry: cos, sin, tan, acos, asin, atan, atan2, degrees, radians, turns
+            ["cos"] = ["Basics"],
+            ["sin"] = ["Basics"],
+            ["tan"] = ["Basics"],
+            ["acos"] = ["Basics"],
+            ["asin"] = ["Basics"],
+            ["atan"] = ["Basics"],
+            ["atan2"] = ["Basics"],
+            ["degrees"] = ["Basics"],
+            ["radians"] = ["Basics"],
+            ["turns"] = ["Basics"],
+
+            // Conversion: toFloat, round, floor, ceiling, truncate, toPolar, fromPolar
+            ["toFloat"] = ["Basics"],
+            ["round"] = ["Basics"],
+            ["floor"] = ["Basics"],
+            ["ceiling"] = ["Basics"],
+            ["truncate"] = ["Basics"],
+            ["toPolar"] = ["Basics"],
+            ["fromPolar"] = ["Basics"],
+
+            // Float checks: isNaN, isInfinite
+            ["isNaN"] = ["Basics"],
+            ["isInfinite"] = ["Basics"],
+
+            // Utility: identity, always, never
+            ["identity"] = ["Basics"],
+            ["always"] = ["Basics"],
+            ["never"] = ["Basics"],
         });
 
         var result = importMap;

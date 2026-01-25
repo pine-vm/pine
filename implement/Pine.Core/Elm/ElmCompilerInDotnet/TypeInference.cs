@@ -454,7 +454,7 @@ public static class TypeInference
             var fields =
                 recordType.RecordDefinition.Fields
                 .Select(f => (f.Value.FieldName.Value, TypeAnnotationToInferredType(f.Value.FieldType.Value)))
-                .OrderBy(f => f.Value, System.StringComparer.Ordinal)
+                .OrderBy(f => f.Value, StringComparer.Ordinal)
                 .ToList();
 
             return new InferredType.RecordType(fields);
@@ -719,7 +719,7 @@ public static class TypeInference
                 // must resolve them first
                 if (funcRef.ModuleName.Count is 1 && funcRef.ModuleName[0] is "Basics")
                 {
-                    if (CoreLibraryModule.BasicArithmetic.GetBasicsFunctionInfo(funcRef.Name) is { } basicsFuncInfo &&
+                    if (CoreLibraryModule.CoreBasics.GetBasicsFunctionInfo(funcRef.Name) is { } basicsFuncInfo &&
                         basicsFuncInfo.FunctionType.Count > 0)
                     {
                         // FunctionType contains [arg1Type, arg2Type, ..., returnType]
@@ -792,9 +792,9 @@ public static class TypeInference
             else if (application.Arguments[0].Value is SyntaxTypes.Expression.PrefixOperator prefixOp)
             {
                 // Map the operator to a function name and get its type info
-                if (CoreLibraryModule.BasicArithmetic.OperatorToFunctionName(prefixOp.Operator) is { } funcName)
+                if (CoreLibraryModule.CoreBasics.OperatorToFunctionName(prefixOp.Operator) is { } funcName)
                 {
-                    if (CoreLibraryModule.BasicArithmetic.GetBasicsFunctionInfo(funcName) is { } basicsFuncInfo &&
+                    if (CoreLibraryModule.CoreBasics.GetBasicsFunctionInfo(funcName) is { } basicsFuncInfo &&
                         basicsFuncInfo.FunctionType.Count > 0)
                     {
                         // FunctionType contains [arg1Type, arg2Type, ..., returnType]
@@ -829,7 +829,7 @@ public static class TypeInference
                 fields.Add((fieldName, fieldType));
             }
             // Sort fields alphabetically by field name
-            fields.Sort((a, b) => string.Compare(a.FieldName, b.FieldName, System.StringComparison.Ordinal));
+            fields.Sort((a, b) => string.Compare(a.FieldName, b.FieldName, StringComparison.Ordinal));
             return new InferredType.RecordType(fields);
         }
 
@@ -1246,7 +1246,7 @@ public static class TypeInference
 
                     if (funcRef.ModuleName.Count is 1 && funcRef.ModuleName[0] is "Basics")
                     {
-                        if (CoreLibraryModule.BasicArithmetic.GetBasicsFunctionInfo(funcRef.Name) is { } basicsFuncInfo)
+                        if (CoreLibraryModule.CoreBasics.GetBasicsFunctionInfo(funcRef.Name) is { } basicsFuncInfo)
                         {
                             // The FunctionType contains [arg1Type, arg2Type, ..., returnType]
                             // We need just the parameter types (excluding return type)
@@ -1285,9 +1285,9 @@ public static class TypeInference
                     application.Arguments[0].Value is SyntaxTypes.Expression.PrefixOperator prefixOp)
                 {
                     // Map the operator to a function name and get its type info
-                    if (CoreLibraryModule.BasicArithmetic.OperatorToFunctionName(prefixOp.Operator) is { } funcName)
+                    if (CoreLibraryModule.CoreBasics.OperatorToFunctionName(prefixOp.Operator) is { } funcName)
                     {
-                        if (CoreLibraryModule.BasicArithmetic.GetBasicsFunctionInfo(funcName) is { } basicsFuncInfo)
+                        if (CoreLibraryModule.CoreBasics.GetBasicsFunctionInfo(funcName) is { } basicsFuncInfo)
                         {
                             // The FunctionType contains [arg1Type, arg2Type, ..., returnType]
                             // We need just the parameter types (excluding return type)

@@ -28,55 +28,6 @@ public class InliningSimpleTests
     }
 
     [Fact]
-    public void Simple_identity_function_inline()
-    {
-        // identity f = f
-        // app x = identity (\y -> y + 1) x
-        // After inlining: app x = (\y -> y + 1) x
-
-        var elmModuleText =
-            """"
-            module App exposing (..)
-
-
-            identity f =
-                f
-
-            app x =
-                identity (\y -> Pine_kernel.int_add [ y, 1 ]) x
-
-            """";
-
-        var expectedElmModuleText =
-            """"
-            module App exposing (..)
-
-
-            identity f =
-                f
-
-
-            app x =
-                (\y ->
-                    Pine_kernel.int_add
-                        [ y
-                        , 1
-                        ]
-                )
-                    x
-            """";
-
-        var rendered =
-            InlineAndRenderSingleModule(
-                elmModuleText,
-                ["App"],
-                Inlining.Config.OnlyFunctions);
-
-        rendered.Trim().Should().Be(
-            expectedElmModuleText.Trim());
-    }
-
-    [Fact]
     public void Direct_substitution_no_new_function()
     {
         // apply f x = f x

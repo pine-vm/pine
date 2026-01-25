@@ -75,4 +75,35 @@ public static class BuiltinHelpers
         Expression.KernelApplicationInstance(
             nameof(KernelFunction.int_mul),
             Expression.ListInstance(operands));
+
+    /// <summary>
+    /// Apply the builtin 'skip' function with a dynamic count expression.
+    /// Equivalent to: Pine_kernel.skip [ countExpr, expr ]
+    /// </summary>
+    public static Expression ApplyBuiltinSkip(Expression countExpr, Expression expr) =>
+        Expression.KernelApplicationInstance(
+            nameof(KernelFunction.skip),
+            Expression.ListInstance([countExpr, expr]));
+
+    /// <summary>
+    /// Apply the builtin 'take' function with a constant count.
+    /// Equivalent to: Pine_kernel.take [ count, expr ]
+    /// </summary>
+    public static Expression ApplyBuiltinTake(int count, Expression expr) =>
+        Expression.KernelApplicationInstance(
+            nameof(KernelFunction.take),
+            Expression.ListInstance(
+            [
+                Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(count)),
+                expr
+            ]));
+
+    /// <summary>
+    /// Apply the builtin 'concat' function.
+    /// Equivalent to: Pine_kernel.concat items
+    /// </summary>
+    public static Expression ApplyBuiltinConcat(IReadOnlyList<Expression> items) =>
+        Expression.KernelApplicationInstance(
+            nameof(KernelFunction.concat),
+            Expression.ListInstance(items));
 }

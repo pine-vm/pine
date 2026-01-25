@@ -1,6 +1,8 @@
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.ElmCompilerInDotnet;
+using Pine.Core.Elm.ElmSyntax;
 using Pine.Core.Elm.ElmSyntax.Stil4mConcretized;
+using Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Core.Tests.Elm.ElmCompilerTests;
 using System;
@@ -10,7 +12,8 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using AbstractSyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using ConcreteSyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mConcretized;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
@@ -227,7 +230,7 @@ public class ElmCompilerTestHelper
         foreach (var moduleFile in elmModuleFiles)
         {
             var moduleText = Encoding.UTF8.GetString(moduleFile.fileContent.Span);
-            var parseResult = Core.Elm.ElmSyntax.ElmSyntaxParser.ParseModuleText(moduleText);
+            var parseResult = ElmSyntaxParser.ParseModuleText(moduleText);
 
             if (parseResult.IsErrOrNull() is { } err)
             {
@@ -240,7 +243,7 @@ public class ElmCompilerTestHelper
             }
 
             var parseModuleAst =
-                Core.Elm.ElmSyntax.Stil4mElmSyntax7.FromStil4mConcretized.Convert(parseModuleOk);
+                FromStil4mConcretized.Convert(parseModuleOk);
 
             parsedModulesBeforeCanonicalize.Add(parseModuleAst);
         }
@@ -277,7 +280,7 @@ public class ElmCompilerTestHelper
         foreach (var elmModuleSyntax in lambdaLiftedModules)
         {
             var moduleName =
-                Core.Elm.ElmSyntax.Stil4mElmSyntax7.Module.GetModuleName(elmModuleSyntax.ModuleDefinition.Value).Value;
+                AbstractSyntaxTypes.Module.GetModuleName(elmModuleSyntax.ModuleDefinition.Value).Value;
 
             var moduleNameFlattened = string.Join(".", moduleName);
 
@@ -504,7 +507,7 @@ public class ElmCompilerTestHelper
         string moduleText,
         string declarationName)
     {
-        var parseResult = Core.Elm.ElmSyntax.ElmSyntaxParser.ParseModuleText(moduleText);
+        var parseResult = ElmSyntaxParser.ParseModuleText(moduleText);
 
         if (parseResult.IsErrOrNull() is { } err)
         {
@@ -516,11 +519,11 @@ public class ElmCompilerTestHelper
             throw new NotImplementedException("Unexpected parse result type");
         }
 
-        var moduleName = Module.GetModuleName(parsedFile.ModuleDefinition.Value).Value;
+        var moduleName = ConcreteSyntaxTypes.Module.GetModuleName(parsedFile.ModuleDefinition.Value).Value;
         var moduleNameStr = string.Join(".", moduleName);
 
         // Convert the concretized file to abstract syntax for type inference
-        var abstractFile = SyntaxTypes.FromStil4mConcretized.Convert(parsedFile);
+        var abstractFile = FromStil4mConcretized.Convert(parsedFile);
 
         // Build a map of function signatures from the file using TypeInference
         var functionSignatures = TypeInference.BuildFunctionSignaturesMap(abstractFile, moduleNameStr);
@@ -528,7 +531,7 @@ public class ElmCompilerTestHelper
         // Find the declaration
         foreach (var declaration in parsedFile.Declarations)
         {
-            if (declaration.Value is Declaration.FunctionDeclaration funcDecl)
+            if (declaration.Value is ConcreteSyntaxTypes.Declaration.FunctionDeclaration funcDecl)
             {
                 var funcName = funcDecl.Function.Declaration.Value.Name.Value;
 
@@ -538,13 +541,13 @@ public class ElmCompilerTestHelper
                 }
 
                 // Convert expression and arguments to abstract syntax
-                var abstractExpression = SyntaxTypes.FromStil4mConcretized.ConvertExpressionNode(
+                var abstractExpression = FromStil4mConcretized.ConvertExpressionNode(
                     funcDecl.Function.Declaration.Value.Expression);
 
                 var abstractArguments = funcDecl.Function.Declaration.Value.Arguments
-                    .Select(arg => new SyntaxTypes.Node<SyntaxTypes.Pattern>(
+                    .Select(arg => new AbstractSyntaxTypes.Node<AbstractSyntaxTypes.Pattern>(
                         arg.Range,
-                        SyntaxTypes.FromStil4mConcretized.Convert(arg.Value)))
+                        FromStil4mConcretized.Convert(arg.Value)))
                     .ToList();
 
                 // Use TypeInference to infer the function type
@@ -563,5 +566,53 @@ public class ElmCompilerTestHelper
         }
 
         throw new Exception($"Declaration '{declarationName}' not found in module");
+    }
+
+    // Helper to extract a canonicalized module by name from the result dictionary
+    public static AbstractSyntaxTypes.File GetCanonicalizedModule(
+        Result<string, IReadOnlyDictionary<IReadOnlyList<string>, Result<string, AbstractSyntaxTypes.File>>> canonicalizeResult,
+        string[] moduleName)
+    {
+        var modulesDict =
+            canonicalizeResult
+            .Extract(err => throw new System.Exception("Failed canonicalization: " + err));
+
+        var moduleResult =
+            modulesDict
+            .FirstOrDefault(kvp => kvp.Key.SequenceEqual(moduleName))
+            .Value;
+
+        return
+            moduleResult is null
+            ?
+            throw new System.Exception($"Module {string.Join(".", moduleName)} not found in canonicalization result")
+            :
+            moduleResult
+            .Extract(err => throw new System.Exception($"Module {string.Join(".", moduleName)} has errors: " + err));
+    }
+
+    public static AbstractSyntaxTypes.File CanonicalizeAndGetSingleModule(
+        IReadOnlyList<string> elmModulesTexts,
+        IReadOnlyList<string> moduleName)
+    {
+        var parsedModules =
+            elmModulesTexts
+            .Select(text =>
+                ElmSyntaxParser.ParseModuleText(text)
+                .Extract(err => throw new System.Exception("Failed parsing: " + err)))
+            .Select(FromStil4mConcretized.Convert)
+            .ToList();
+
+        var canonicalizeResult =
+            Canonicalization.Canonicalize(parsedModules);
+
+        var beforeFormat =
+            GetCanonicalizedModule(canonicalizeResult, [.. moduleName]);
+
+        var formatted =
+            Avh4Format.Format(
+                ToStil4mConcretized.ToConcretized(beforeFormat));
+
+        return FromStil4mConcretized.Convert(formatted);
     }
 }

@@ -3,7 +3,6 @@ using Pine.Core.Elm;
 using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.ElmSyntax;
 using Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
-using System.Collections.Generic;
 using System.Linq;
 using Xunit;
 
@@ -13,54 +12,6 @@ namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
 public class CanonicalizationTests
 {
-    // Helper to extract a canonicalized module by name from the result dictionary
-    private static File GetCanonicalizedModule(
-        Result<string, IReadOnlyDictionary<IReadOnlyList<string>, Result<string, File>>> canonicalizeResult,
-        string[] moduleName)
-    {
-        var modulesDict =
-            canonicalizeResult
-            .Extract(err => throw new System.Exception("Failed canonicalization: " + err));
-
-        var moduleResult =
-            modulesDict
-            .FirstOrDefault(kvp => kvp.Key.SequenceEqual(moduleName))
-            .Value;
-
-        return
-            moduleResult is null
-            ?
-            throw new System.Exception($"Module {string.Join(".", moduleName)} not found in canonicalization result")
-            :
-            moduleResult
-            .Extract(err => throw new System.Exception($"Module {string.Join(".", moduleName)} has errors: " + err));
-    }
-
-    private static File CanonicalizeAndGetSingleModule(
-        IReadOnlyList<string> elmModulesTexts,
-        IReadOnlyList<string> moduleName)
-    {
-        var parsedModules =
-            elmModulesTexts
-            .Select(text =>
-                ElmSyntaxParser.ParseModuleText(text)
-                .Extract(err => throw new System.Exception("Failed parsing: " + err)))
-            .Select(FromStil4mConcretized.Convert)
-            .ToList();
-
-        var canonicalizeResult =
-            Canonicalization.Canonicalize(parsedModules);
-
-        var beforeFormat =
-            GetCanonicalizedModule(canonicalizeResult, [.. moduleName]);
-
-        var formatted =
-            Core.Elm.ElmSyntax.Stil4mConcretized.Avh4Format.Format(
-                ToStil4mConcretized.ToConcretized(beforeFormat));
-
-        return FromStil4mConcretized.Convert(formatted);
-    }
-
     private static File ParseModuleText(string moduleTex)
     {
         var concreteSyntax =
@@ -93,7 +44,8 @@ public class CanonicalizationTests
         var canonicalizeResult =
             Canonicalization.Canonicalize([parsedModule]);
 
-        var canonicalizedModule = GetCanonicalizedModule(canonicalizeResult, ["Test"]);
+        var canonicalizedModule =
+            ElmCompilerTestHelper.GetCanonicalizedModule(canonicalizeResult, ["Test"]);
 
         var asElmValue = EncodeAsElmValue.EncodeFile(canonicalizedModule);
 
@@ -134,7 +86,8 @@ public class CanonicalizationTests
         var canonicalizeResult =
             Canonicalization.Canonicalize([parsedModule1, parsedModule2]);
 
-        var mainModule = GetCanonicalizedModule(canonicalizeResult, ["MainModule"]);
+        var mainModule =
+            ElmCompilerTestHelper.GetCanonicalizedModule(canonicalizeResult, ["MainModule"]);
 
         // Find the function declaration for 'main'
         var mainFuncDecl = mainModule.Declarations
@@ -188,7 +141,8 @@ public class CanonicalizationTests
         var canonicalizeResult =
             Canonicalization.Canonicalize([parsedModule]);
 
-        var canonicalizedModule = GetCanonicalizedModule(canonicalizeResult, ["Test"]);
+        var canonicalizedModule =
+            ElmCompilerTestHelper.GetCanonicalizedModule(canonicalizeResult, ["Test"]);
 
         // Find the function declaration for 'useType'
         var useTypeFunc =
@@ -238,7 +192,8 @@ public class CanonicalizationTests
         var canonicalizeResult =
             Canonicalization.Canonicalize([parsedModule]);
 
-        var canonicalizedModule = GetCanonicalizedModule(canonicalizeResult, ["Test"]);
+        var canonicalizedModule =
+            ElmCompilerTestHelper.GetCanonicalizedModule(canonicalizeResult, ["Test"]);
 
         // Find the function declaration for 'getName'
         var getNameFunc =
@@ -301,7 +256,8 @@ public class CanonicalizationTests
         var canonicalizeResult =
             Canonicalization.Canonicalize([parsedModule1, parsedModule2]);
 
-        var mainModule = GetCanonicalizedModule(canonicalizeResult, ["Main"]);
+        var mainModule =
+            ElmCompilerTestHelper.GetCanonicalizedModule(canonicalizeResult, ["Main"]);
 
         // Find the function declaration for 'isActive'
         var isActiveFunc =
@@ -364,7 +320,8 @@ public class CanonicalizationTests
         var canonicalizeResult =
             Canonicalization.Canonicalize([parsedModule1, parsedModule2]);
 
-        var mainModule = GetCanonicalizedModule(canonicalizeResult, ["Main"]);
+        var mainModule =
+            ElmCompilerTestHelper.GetCanonicalizedModule(canonicalizeResult, ["Main"]);
 
         // Find the function declaration for 'getUserName'
         var getUserNameFunc =
@@ -537,7 +494,8 @@ public class CanonicalizationTests
         var canonicalizeResult =
             Canonicalization.Canonicalize([parsedModule1, parsedModule2]);
 
-        var mainModule = GetCanonicalizedModule(canonicalizeResult, ["Main"]);
+        var mainModule =
+            ElmCompilerTestHelper.GetCanonicalizedModule(canonicalizeResult, ["Main"]);
 
         // Find the value declaration
         var valueDecl = mainModule.Declarations
@@ -594,7 +552,8 @@ public class CanonicalizationTests
             canonicalizeResult
             .Extract(err => throw new System.Exception("Failed canonicalization: " + err));
 
-        var mainModule = GetCanonicalizedModule(canonicalizeResult, ["Main"]);
+        var mainModule =
+            ElmCompilerTestHelper.GetCanonicalizedModule(canonicalizeResult, ["Main"]);
 
         // Find the compute declaration
         var computeDecl = mainModule.Declarations
@@ -649,7 +608,8 @@ public class CanonicalizationTests
         var canonicalizeResult =
             Canonicalization.Canonicalize([parsedModule]);
 
-        var canonicalizedModule = GetCanonicalizedModule(canonicalizeResult, ["Test"]);
+        var canonicalizedModule =
+            ElmCompilerTestHelper.GetCanonicalizedModule(canonicalizeResult, ["Test"]);
 
         // Find the unwrap function
         var unwrapFunc = canonicalizedModule.Declarations
@@ -710,7 +670,8 @@ public class CanonicalizationTests
         var canonicalizeResult =
             Canonicalization.Canonicalize([parsedModule]);
 
-        var canonicalizedModule = GetCanonicalizedModule(canonicalizeResult, ["Test"]);
+        var canonicalizedModule =
+            ElmCompilerTestHelper.GetCanonicalizedModule(canonicalizeResult, ["Test"]);
 
         // Find the process function
         var processFunc = canonicalizedModule.Declarations
@@ -766,7 +727,8 @@ public class CanonicalizationTests
         var canonicalizeResult =
             Canonicalization.Canonicalize([parsedModule]);
 
-        var canonicalizedModule = GetCanonicalizedModule(canonicalizeResult, ["Test"]);
+        var canonicalizedModule =
+            ElmCompilerTestHelper.GetCanonicalizedModule(canonicalizeResult, ["Test"]);
 
         // Find the compute function
         var computeFunc = canonicalizedModule.Declarations
@@ -834,7 +796,8 @@ public class CanonicalizationTests
         var canonicalizeResult =
             Canonicalization.Canonicalize([parsedModule]);
 
-        var canonicalizedModule = GetCanonicalizedModule(canonicalizeResult, ["Test"]);
+        var canonicalizedModule =
+            ElmCompilerTestHelper.GetCanonicalizedModule(canonicalizeResult, ["Test"]);
 
         // Check Int
         var intFunc =
@@ -1023,7 +986,8 @@ public class CanonicalizationTests
             .Extract(err => throw new System.Exception("Unexpected global error: " + err));
 
         // All modules should succeed - no clash because Module2 doesn't expose helper
-        var mainModule = GetCanonicalizedModule(canonicalizeResult, ["Main"]);
+        var mainModule =
+            ElmCompilerTestHelper.GetCanonicalizedModule(canonicalizeResult, ["Main"]);
 
         // Find the main function
         var mainFunc = mainModule.Declarations
@@ -1081,7 +1045,7 @@ public class CanonicalizationTests
             """";
 
         var appModuleCanonicalized =
-            CanonicalizeAndGetSingleModule(
+            ElmCompilerTestHelper.CanonicalizeAndGetSingleModule(
                 elmModulesTexts:
                 [nodeModuleText, appModuleText],
                 moduleName: ["App"]);
@@ -1133,7 +1097,7 @@ public class CanonicalizationTests
             """";
 
         var appModuleCanonicalized =
-            CanonicalizeAndGetSingleModule(
+            ElmCompilerTestHelper.CanonicalizeAndGetSingleModule(
                 elmModulesTexts:
                 [nodeModuleText, appModuleText],
                 moduleName: ["App"]);
@@ -1199,7 +1163,7 @@ public class CanonicalizationTests
             """";
 
         var appModuleCanonicalized =
-            CanonicalizeAndGetSingleModule(
+            ElmCompilerTestHelper.CanonicalizeAndGetSingleModule(
                 elmModulesTexts:
                 [alfaModuleText, betaModuleText, appModuleText],
                 moduleName: ["App"]);

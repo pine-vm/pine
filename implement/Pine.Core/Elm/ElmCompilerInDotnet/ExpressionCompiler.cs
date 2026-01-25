@@ -216,6 +216,24 @@ public class ExpressionCompiler
             compiledArguments[i - 1] = argOk;
         }
 
+        // Check if this is a prefix operator application with 2 arguments (e.g., (&&) x y)
+        // For and/or/xor, emit conditionals directly instead of function application
+        if (functionExpr is SyntaxTypes.Expression.PrefixOperator prefixOp && compiledArguments.Length is 2)
+        {
+            var left = compiledArguments[0];
+            var right = compiledArguments[1];
+
+            if (prefixOp.Operator is "&&")
+            {
+                return CoreLibraryModule.CoreBasics.Generic_And(left, right);
+            }
+
+            if (prefixOp.Operator is "||")
+            {
+                return CoreLibraryModule.CoreBasics.Generic_Or(left, right);
+            }
+        }
+
         // Check if this is a function application or choice type tag application
         if (functionExpr is SyntaxTypes.Expression.FunctionOrValue funcRef)
         {
@@ -320,7 +338,7 @@ public class ExpressionCompiler
             // Handle Basics module functions that are implemented in BasicArithmetic
             // Check using the structured module name list rather than string manipulation
             if (funcRef.ModuleName.Count is 1 && funcRef.ModuleName[0] is "Basics" &&
-                CoreLibraryModule.BasicArithmetic.GetBasicsFunctionInfo(funcRef.Name) is { } basicsFuncInfo &&
+                CoreLibraryModule.CoreBasics.GetBasicsFunctionInfo(funcRef.Name) is { } basicsFuncInfo &&
                 basicsFuncInfo.FunctionType.Count - compiledArguments.Length - 1 is 0)
             {
                 return basicsFuncInfo.CompileApplication(compiledArguments);
@@ -863,7 +881,7 @@ public class ExpressionCompiler
         SyntaxTypes.Expression.PrefixOperator expr)
     {
         // Delegate to BasicArithmetic for centralized operator handling
-        var prefixExpr = CoreLibraryModule.BasicArithmetic.GetPrefixOperatorExpression(expr.Operator);
+        var prefixExpr = CoreLibraryModule.CoreBasics.GetPrefixOperatorExpression(expr.Operator);
 
         if (prefixExpr is null)
         {
