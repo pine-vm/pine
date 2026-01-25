@@ -173,8 +173,8 @@ public class ElmCompiler
             }
         }
 
-        // Build constructor argument types dictionary for type inference from NamedPatterns
-        var constructorArgumentTypes = new Dictionary<string, IReadOnlyList<TypeInference.InferredType>>();
+        // Build choice type tag argument types dictionary for type inference from NamedPatterns
+        var choiceTagArgumentTypes = new Dictionary<string, IReadOnlyList<TypeInference.InferredType>>();
         foreach (var elmModuleSyntax in lambdaLiftedModules)
         {
             var typeDeclarations =
@@ -196,7 +196,7 @@ public class ElmCompiler
                         argTypes.Add(argType);
                     }
 
-                    constructorArgumentTypes[ctorName] = argTypes;
+                    choiceTagArgumentTypes[ctorName] = argTypes;
                 }
             }
         }
@@ -242,7 +242,7 @@ public class ElmCompiler
                 CompiledFunctionsCache: [],
                 PineKernelModuleNames: s_pineKernelModuleNamesDefault,
                 FunctionReturnTypes: functionReturnTypes,
-                ConstructorArgumentTypes: constructorArgumentTypes,
+                ChoiceTagArgumentTypes: choiceTagArgumentTypes,
                 FunctionParameterTypes: functionParameterTypes,
                 RecordTypeAliasConstructors: recordTypeAliasConstructors);
 
@@ -642,7 +642,7 @@ public class ElmCompiler
             // Extract parameter types
             var parameterTypes = ExtractParameterTypes(
                 declaration.Function,
-                context.ConstructorArgumentTypes,
+                context.ChoiceTagArgumentTypes,
                 context.FunctionParameterTypes,
                 moduleName);
 

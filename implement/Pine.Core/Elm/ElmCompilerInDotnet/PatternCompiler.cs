@@ -96,7 +96,7 @@ public class PatternCompiler
                 pattern,
                 scrutineeType,
                 [],
-                context.ModuleCompilationContext.ConstructorArgumentTypes);
+                context.ModuleCompilationContext.ChoiceTagArgumentTypes);
 
             // Create case context with both bindings and binding types
             var caseContext = context;

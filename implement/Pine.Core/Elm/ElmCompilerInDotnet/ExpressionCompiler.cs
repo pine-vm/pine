@@ -111,17 +111,6 @@ public class ExpressionCompiler
             {
                 return BuiltinHelpers.BuildPathToParameter(paramIndex);
             }
-
-            // Check if it's a choice type tag (starts with uppercase letter)
-            if (ElmValueEncoding.StringIsValidTagName(expr.Name))
-            {
-                /*
-                 * TODO: Fix for cases where tags take arguments.
-                 * The current implementation only handles zero-argument tags here.
-                 * */
-
-                return Expression.LiteralInstance(ElmValueEncoding.TagAsPineValue(expr.Name, []));
-            }
         }
 
         if (expr.ModuleName.Count is 1 && expr.ModuleName[0] is "Basics")
@@ -141,12 +130,17 @@ public class ExpressionCompiler
         // by having an uppercase first letter
         if (ElmValueEncoding.StringIsValidTagName(expr.Name))
         {
-            /*
-             * TODO: Fix for cases where tags take arguments.
-             * The current implementation only handles zero-argument tags here.
-             * */
+            var expectedArgCount = context.ModuleCompilationContext.TryGetChoiceTypeConstructorArgumentCount(expr.Name);
 
-            return Expression.LiteralInstance(ElmValueEncoding.TagAsPineValue(expr.Name, []));
+            if (expectedArgCount is null || expectedArgCount.Value is 0)
+            {
+                // Zero-argument tag: emit as a literal value
+                return Expression.LiteralInstance(ElmValueEncoding.TagAsPineValue(expr.Name, []));
+            }
+
+            // Tag with arguments used as a function value (no application yet)
+            // Build a function value that accepts all arguments
+            return EmitChoiceTypeTagFunctionValue(expr.Name, expectedArgCount.Value);
         }
 
         // Check if this is a reference to a top-level function (function value without application)
@@ -202,7 +196,7 @@ public class ExpressionCompiler
         }
 
         // Compile all arguments
-        var compiledArguments = new List<Expression>();
+        var compiledArguments = new Expression[expr.Arguments.Count - 1];
 
         for (var i = 1; i < expr.Arguments.Count; i++)
         {
@@ -219,7 +213,7 @@ public class ExpressionCompiler
                     "Unexpected result type when compiling application argument: " + argResult.GetType());
             }
 
-            compiledArguments.Add(argOk);
+            compiledArguments[i - 1] = argOk;
         }
 
         // Check if this is a function application or choice type tag application
@@ -283,16 +277,25 @@ public class ExpressionCompiler
             if (ElmValueEncoding.StringIsValidTagName(funcRef.Name))
             {
                 var tagNameValue = Expression.LiteralInstance(StringEncoding.ValueFromString(funcRef.Name));
+                var expectedArgCount = context.ModuleCompilationContext.TryGetChoiceTypeConstructorArgumentCount(funcRef.Name);
 
-                /*
-                 * TODO: Check if arguments count matches the tag's expected argument count.
-                 * */
+                // If we know the expected argument count and have all arguments, build the value directly
+                if (expectedArgCount is null || compiledArguments.Length >= expectedArgCount.Value)
+                {
+                    // Full application: build the choice type value directly
+                    return Expression.ListInstance(
+                    [
+                        tagNameValue,
+                        Expression.ListInstance(compiledArguments)
+                    ]);
+                }
 
-                return Expression.ListInstance(
-                [
-                    tagNameValue,
-                    Expression.ListInstance(compiledArguments)
-                ]);
+                // Partial application: we have fewer arguments than expected
+                // Build an expression that evaluates to a function value
+                return EmitChoiceTypeTagPartialApplicationExpression(
+                    funcRef.Name,
+                    expectedArgCount.Value,
+                    compiledArguments);
             }
 
             // Check if the function is a parameter or local binding (higher-order function application)
@@ -318,7 +321,7 @@ public class ExpressionCompiler
             // Check using the structured module name list rather than string manipulation
             if (funcRef.ModuleName.Count is 1 && funcRef.ModuleName[0] is "Basics" &&
                 CoreLibraryModule.BasicArithmetic.GetBasicsFunctionInfo(funcRef.Name) is { } basicsFuncInfo &&
-                basicsFuncInfo.FunctionType.Count - compiledArguments.Count - 1 is 0)
+                basicsFuncInfo.FunctionType.Count - compiledArguments.Length - 1 is 0)
             {
                 return basicsFuncInfo.CompileApplication(compiledArguments);
             }
@@ -345,7 +348,7 @@ public class ExpressionCompiler
             }
 
             var paramCount = funcInfo.declaration.Function.Declaration.Value.Arguments.Count;
-            var argCount = compiledArguments.Count;
+            var argCount = compiledArguments.Length;
 
             if (argCount >= paramCount && paramCount > 0)
             {
@@ -1326,6 +1329,120 @@ public class ExpressionCompiler
             encodedBodyExpr,
             paramCount,
             envFunctionsExprs);
+    }
+
+    /// <summary>
+    /// Emits an expression that, when evaluated, produces a function value for a partially applied 
+    /// choice type tag. The captured arguments are evaluated at runtime and stored in the function value's closure.
+    /// </summary>
+    /// <param name="tagName">The name of the choice type tag.</param>
+    /// <param name="totalArgCount">The total number of arguments the tag expects.</param>
+    /// <param name="capturedArgExpressions">Expressions for arguments already provided (to be evaluated at runtime).</param>
+    /// <returns>An expression that evaluates to a function value.</returns>
+    private static Expression EmitChoiceTypeTagPartialApplicationExpression(
+        string tagName,
+        int totalArgCount,
+        IReadOnlyList<Expression> capturedArgExpressions)
+    {
+        var remainingArgCount = totalArgCount - capturedArgExpressions.Count;
+
+        if (remainingArgCount <= 0)
+        {
+            // All arguments are already captured - just build the value directly
+            var tagNameValue = Expression.LiteralInstance(StringEncoding.ValueFromString(tagName));
+            return Expression.ListInstance(
+            [
+                tagNameValue,
+                Expression.ListInstance(capturedArgExpressions)
+            ]);
+        }
+
+        // Build the inner expression that constructs the choice type value.
+        // The inner expression expects:
+        // - For functions WITH captured args: environment = [[capturedArgs...], [remainingArgs...]]
+        // - Captured args at env[0], remaining args at env[1]
+        //
+        // We use FunctionValueBuilder with the captured args stored in the "env functions" slot.
+
+        var tagNameLiteral = Expression.LiteralInstance(StringEncoding.ValueFromString(tagName));
+
+        // Build the inner expression that constructs [TagName, [capturedArg0, capturedArg1, ..., remainingArg0, remainingArg1, ...]]
+        // At invocation time, environment is [[capturedArgs], [remainingArgs]]
+        var allArgExpressions = new List<Expression>();
+
+        // Build expression to get captured args from env[0]
+        for (var i = 0; i < capturedArgExpressions.Count; i++)
+        {
+            allArgExpressions.Add(
+                ExpressionBuilder.BuildExpressionForPathInExpression(
+                    [0, i],
+                    Expression.EnvironmentInstance));
+        }
+
+        // Build expressions to get remaining args from env[1]
+        for (var i = 0; i < remainingArgCount; i++)
+        {
+            allArgExpressions.Add(
+                ExpressionBuilder.BuildExpressionForPathInExpression(
+                    [1, i],
+                    Expression.EnvironmentInstance));
+        }
+
+        // Build the choice type value expression
+        var choiceTypeValueExpr = Expression.ListInstance(
+        [
+            tagNameLiteral,
+            Expression.ListInstance(allArgExpressions)
+        ]);
+
+        // Use EmitFunctionExpressionFromEncodedBody to build a function value with the captured args
+        // stored in the "env functions" slot. This allows the captured args to be evaluated at
+        // the point where the partial application expression is evaluated, not when it's compiled.
+        return FunctionValueBuilder.EmitFunctionExpression(
+            choiceTypeValueExpr,
+            remainingArgCount,
+            capturedArgExpressions);
+    }
+
+    /// <summary>
+    /// Emits a function value for a choice type tag that accepts arguments, with no captured arguments.
+    /// This is used when the tag is used as a function value without any application.
+    /// When fully applied, the function constructs the choice type value [TagName, [arg0, arg1, ...]].
+    /// </summary>
+    /// <param name="tagName">The name of the choice type tag.</param>
+    /// <param name="argCount">The number of arguments the tag expects.</param>
+    /// <returns>An expression that evaluates to a function value.</returns>
+    private static Expression EmitChoiceTypeTagFunctionValue(
+        string tagName,
+        int argCount)
+    {
+        // Build the inner expression that constructs the choice type value
+        // The inner expression expects environment as [arg0, arg1, ..., argN]
+        var argExpressions = new Expression[argCount];
+
+        for (var i = 0; i < argCount; i++)
+        {
+            argExpressions[i] =
+                ExpressionBuilder.BuildExpressionForPathInExpression(
+                    [i],
+                    Expression.EnvironmentInstance);
+        }
+
+        var tagNameExpr = Expression.LiteralInstance(StringEncoding.ValueFromString(tagName));
+
+        // Build the choice type value expression for when all arguments are collected
+        var choiceTypeValueExpr = Expression.ListInstance(
+        [
+            tagNameExpr,
+            Expression.ListInstance(argExpressions)
+        ]);
+
+        // Build the function value that wraps this expression
+        var functionValue = FunctionValueBuilder.EmitFunctionValueWithoutEnvFunctions(
+            choiceTypeValueExpr,
+            argCount);
+
+        return Expression.LiteralInstance(functionValue);
     }
 
     /// <summary>

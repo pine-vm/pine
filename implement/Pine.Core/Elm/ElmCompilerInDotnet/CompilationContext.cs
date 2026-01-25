@@ -64,8 +64,8 @@ public record FunctionScc(
 /// <param name="PineKernelModuleNames">Names of Pine kernel modules.</param>
 /// <param name="FunctionDependencyLayouts">Pre-computed dependency layouts for all functions (populated before compilation).</param>
 /// <param name="FunctionReturnTypes">Map of qualified function names to their return types.</param>
-/// <param name="ConstructorArgumentTypes">Map of constructor names to their argument types (for type inference from NamedPatterns).</param>
 /// <param name="FunctionParameterTypes">Map of qualified function names to their parameter types (for type inference from function applications).</param>
+/// <param name="ChoiceTagArgumentTypes">Map of choice type tag names to their argument types (for type inference from NamedPatterns).</param>
 /// <param name="RecordTypeAliasConstructors">Map of qualified record type alias names to their field names in declaration order (for record constructors).</param>
 public record ModuleCompilationContext(
     IReadOnlyDictionary<string, (string moduleName, string functionName, SyntaxTypes.Declaration.FunctionDeclaration declaration)> AllFunctions,
@@ -73,8 +73,8 @@ public record ModuleCompilationContext(
     FrozenSet<string> PineKernelModuleNames,
     IReadOnlyDictionary<string, IReadOnlyList<string>>? FunctionDependencyLayouts = null,
     IReadOnlyDictionary<string, TypeInference.InferredType>? FunctionReturnTypes = null,
-    IReadOnlyDictionary<string, IReadOnlyList<TypeInference.InferredType>>? ConstructorArgumentTypes = null,
     IReadOnlyDictionary<string, IReadOnlyList<TypeInference.InferredType>>? FunctionParameterTypes = null,
+    IReadOnlyDictionary<string, IReadOnlyList<TypeInference.InferredType>>? ChoiceTagArgumentTypes = null,
     IReadOnlyDictionary<string, IReadOnlyList<string>>? RecordTypeAliasConstructors = null)
 {
     /// <summary>
@@ -176,6 +176,22 @@ public record ModuleCompilationContext(
         if (RecordTypeAliasConstructors?.TryGetValue(qualifiedName, out var names) ?? false)
         {
             return names;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Gets the number of arguments expected by a choice type constructor.
+    /// Returns null if the constructor is not found.
+    /// </summary>
+    /// <param name="constructorName">The unqualified name of the choice type constructor.</param>
+    /// <returns>The number of arguments, or null if not found.</returns>
+    public int? TryGetChoiceTypeConstructorArgumentCount(string constructorName)
+    {
+        if (ChoiceTagArgumentTypes?.TryGetValue(constructorName, out var argTypes) ?? false)
+        {
+            return argTypes.Count;
         }
 
         return null;
