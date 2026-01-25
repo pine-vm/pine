@@ -26,7 +26,7 @@ public class InteractiveSessionPine : IInteractiveSession
 
     private System.Threading.Tasks.Task<Result<string, PineValue>> _buildPineEvalContextTask;
 
-    private readonly Result<string, ElmCompiler> _buildCompilerResult;
+    private readonly Result<string, ElmCompilerInElm> _buildCompilerResult;
 
     private readonly IPineVM _pineVM;
 
@@ -128,7 +128,7 @@ public class InteractiveSessionPine : IInteractiveSession
         _pineVM = pineVMAndCache.pineVM;
 
         _buildCompilerResult =
-            ElmCompiler.GetElmCompilerAsync(compilerSourceFiles).Result;
+            ElmCompilerInElm.GetElmCompilerAsync(compilerSourceFiles).Result;
 
         _buildPineEvalContextTask =
             System.Threading.Tasks.Task.Run(() =>
@@ -201,7 +201,7 @@ public class InteractiveSessionPine : IInteractiveSession
         bool? overrideSkipLowering,
         IReadOnlyList<IReadOnlyList<string>>? entryPointsFilePaths,
         bool skipFilteringForSourceDirs,
-        ElmCompiler elmCompiler) =>
+        ElmCompilerInElm elmCompiler) =>
         CompileInteractiveEnvironment(
             appCodeTree,
             overrideSkipLowering: overrideSkipLowering,
@@ -216,12 +216,12 @@ public class InteractiveSessionPine : IInteractiveSession
         bool? overrideSkipLowering,
         IReadOnlyList<IReadOnlyList<string>>? entryPointsFilePaths,
         bool skipFilteringForSourceDirs,
-        ElmCompiler elmCompiler,
+        ElmCompilerInElm elmCompiler,
         IPineVM pineVM)
     {
         var skipLowering =
             overrideSkipLowering ??
-            !ElmCompiler.CheckIfAppUsesLowering(appCodeTree?.AppFiles ?? FileTree.EmptyTree);
+            !ElmCompilerInElm.CheckIfAppUsesLowering(appCodeTree?.AppFiles ?? FileTree.EmptyTree);
 
         var appSourceFiles =
             appCodeTree ?? AppCompilationUnits.WithoutPackages(FileTree.EmptyTree);
@@ -235,7 +235,7 @@ public class InteractiveSessionPine : IInteractiveSession
         var compiledNewEnvInCompiler = initialStateElmValueInCompiler;
 
         var defaultKernelModulesTree =
-            ElmCompiler.ElmCoreAndKernelModuleFilesDefault.Value;
+            ElmCompilerInElm.ElmCoreAndKernelModuleFilesDefault.Value;
 
         var appCodeModules =
             appSourceFiles.AppFiles
@@ -443,7 +443,7 @@ public class InteractiveSessionPine : IInteractiveSession
         PineValue initialStateElmValueInCompiler,
         FileTree packageFiles,
         ElmJsonStructure elmJson,
-        ElmCompiler elmCompiler,
+        ElmCompilerInElm elmCompiler,
         IPineVM pineVM)
     {
         IReadOnlyDictionary<string, IReadOnlyList<string>> fileNameFromModuleName =
@@ -497,7 +497,7 @@ public class InteractiveSessionPine : IInteractiveSession
         PineValue initialStateElmValueInCompiler,
         FileTree sourceFiles,
         IReadOnlySet<IReadOnlyList<string>>? entryPointsFilePaths,
-        ElmCompiler elmCompiler,
+        ElmCompilerInElm elmCompiler,
         IPineVM pineVM)
     {
         var compiledNewEnvInCompiler = initialStateElmValueInCompiler;
@@ -578,7 +578,7 @@ public class InteractiveSessionPine : IInteractiveSession
         FileTree appCodeTree) =>
         MergeDefaultElmCoreAndKernelModules(
             appCodeTree,
-            ElmCompiler.ElmCoreAndKernelModuleFilesDefault.Value);
+            ElmCompilerInElm.ElmCoreAndKernelModuleFilesDefault.Value);
 
     public static FileTree MergeDefaultElmCoreAndKernelModules(
         FileTree appCodeTree,
@@ -708,7 +708,7 @@ public class InteractiveSessionPine : IInteractiveSession
 
     static Result<string, KeyValuePair<IReadOnlyList<string>, PineValue>> CachedTryParseModuleText(
         string moduleText,
-        ElmCompiler elmCompiler,
+        ElmCompilerInElm elmCompiler,
         IPineVM pineVM) =>
         TryParseModuleTextCache
         .GetOrAdd(
@@ -718,7 +718,7 @@ public class InteractiveSessionPine : IInteractiveSession
 
     static Result<string, KeyValuePair<IReadOnlyList<string>, PineValue>> TryParseModuleText(
         string moduleText,
-        ElmCompiler elmCompiler,
+        ElmCompilerInElm elmCompiler,
         IPineVM pineVM)
     {
         var parseNameResult =
@@ -782,7 +782,7 @@ public class InteractiveSessionPine : IInteractiveSession
         PineValue prevEnvValue,
         string moduleText,
         PineValue parsedModuleValue,
-        ElmCompiler elmCompiler,
+        ElmCompilerInElm elmCompiler,
         IPineVM pineVM)
     {
         var applyFunctionResult =
@@ -866,7 +866,7 @@ public class InteractiveSessionPine : IInteractiveSession
     }
 
     public static Result<string, PineValue> ParseInteractiveSubmission(
-        ElmCompiler elmCompiler,
+        ElmCompilerInElm elmCompiler,
         IPineVM pineVM,
         string submission,
         Action<string>? addInspectionLogEntry)

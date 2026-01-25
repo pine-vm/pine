@@ -1,6 +1,5 @@
 using AwesomeAssertions;
 using Pine.Core.Files;
-using Pine.Elm;
 using System;
 using System.Collections.Immutable;
 using System.IO;
@@ -17,7 +16,7 @@ public class ElmInteractiveTests
     private static string PathToKernelScenariosDirectory => @"./../../../../test-and-train/elm-interactive-scenarios-kernel";
 
     public static FileTree CompileElmProgramCodeFiles =>
-        ElmCompiler.CompilerSourceContainerFilesDefault.Value;
+        Core.Elm.ElmInElm.BundledFiles.CompilerSourceContainerFilesDefault.Value;
 
 
     [Fact(Timeout = 1000 * 60 * 50)]

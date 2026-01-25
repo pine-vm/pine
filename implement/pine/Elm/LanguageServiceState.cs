@@ -11,7 +11,7 @@ using System.Linq;
 namespace Pine.Elm;
 
 public class LanguageServiceState(
-    ElmCompiler.LanguageServiceInterfaceStruct languageServiceInterface,
+    ElmCompilerInElm.LanguageServiceInterfaceStruct languageServiceInterface,
     PineValue initState,
     IPineVM pineVM)
 {
@@ -21,10 +21,10 @@ public class LanguageServiceState(
         IPineVM pineVM)
     {
         var compilerSourceFiles =
-            ElmCompiler.CompilerSourceFilesDefault.Value;
+            ElmCompilerInElm.CompilerSourceFilesDefault.Value;
 
         var combinedSourceFiles =
-            ElmCompiler.ElmCompilerFileTreeFromBundledFileTree(compilerSourceFiles);
+            ElmCompilerInElm.ElmCompilerFileTreeFromBundledFileTree(compilerSourceFiles);
 
         var elmCompilerFromBundleValue =
             BundledElmEnvironments.BundledElmEnvironmentFromFileTree(combinedSourceFiles);
@@ -35,7 +35,7 @@ public class LanguageServiceState(
         }
 
         var parseElmCompilerResult =
-            ElmCompiler.ElmCompilerFromEnvValue(elmCompilerFromBundleValue);
+            ElmCompilerInElm.ElmCompilerFromEnvValue(elmCompilerFromBundleValue);
 
         {
             if (parseElmCompilerResult.IsErrOrNull() is { } err)

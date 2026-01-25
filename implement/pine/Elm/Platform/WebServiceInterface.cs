@@ -2258,7 +2258,7 @@ type alias LoadDependencyStruct =
             throw new Exception("Failed to load Elm compiler from bundle.");
 
         var elmCompiler =
-            ElmCompiler.ElmCompilerFromEnvValue(elmCompilerFromBundle)
+            ElmCompilerInElm.ElmCompilerFromEnvValue(elmCompilerFromBundle)
             .Extract(err => throw new Exception("Failed to load Elm compiler: " + err));
 
         return

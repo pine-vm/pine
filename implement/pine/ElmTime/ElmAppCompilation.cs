@@ -97,7 +97,7 @@ namespace ElmTime
                 throw new Exception("Failed to load Elm compiler from bundle.");
 
             var elmCompiler =
-                ElmCompiler.ElmCompilerFromEnvValue(elmCompilerFromBundle)
+                ElmCompilerInElm.ElmCompilerFromEnvValue(elmCompilerFromBundle)
                 .Extract(err => throw new Exception(err));
 
             var sourceFilesHash =
@@ -165,7 +165,7 @@ namespace ElmTime
             IReadOnlyList<string> workingDirectoryRelative,
             IReadOnlyList<string> compilationRootFilePath,
             IReadOnlyList<string> interfaceToHostRootModuleName,
-            ElmCompiler elmCompiler,
+            ElmCompilerInElm elmCompiler,
             PineVMParseCache parseCache,
             Pine.Core.PineVM.IPineVM pineVM,
             ElmCompilerCache elmCompilerCache) =>
@@ -186,7 +186,7 @@ namespace ElmTime
             IReadOnlyList<string> compilationRootFilePath,
             IReadOnlyList<string> interfaceToHostRootModuleName,
             IImmutableStack<StackFrame> stack,
-            ElmCompiler elmCompiler,
+            ElmCompilerInElm elmCompiler,
             PineVMParseCache parseCache,
             Pine.Core.PineVM.IPineVM pineVM,
             ElmCompilerCache elmCompilerCache)
@@ -413,7 +413,7 @@ namespace ElmTime
             IReadOnlyList<string> compilationRootFilePath,
             IReadOnlyList<string> interfaceToHostRootModuleName,
             IReadOnlyList<(CompilerSerialInterface.DependencyKey key, ReadOnlyMemory<byte> value)> dependencies,
-            ElmCompiler elmCompiler,
+            ElmCompilerInElm elmCompiler,
             PineVMParseCache parseCache,
             Pine.Core.PineVM.IPineVM pineVM,
             ElmCompilerCache elmCompilerCache)
@@ -1343,7 +1343,7 @@ namespace ElmTime
             new(LoadCompilerElmProgramCodeFilesForElmBackend);
 
         public static Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>> LoadCompilerElmProgramCodeFilesForElmBackend() =>
-            ElmCompiler.LoadElmCompilerSourceCodeFiles();
+            Pine.Core.Elm.ElmInElm.BundledFiles.LoadElmCompilerSourceCodeFiles();
 
         public static string CompileCompilationErrorsDisplayText(IReadOnlyList<LocatedCompilationError>? compilationErrors)
         {

@@ -1,6 +1,5 @@
 using Pine.Core;
 using Pine.Core.CommonEncodings;
-using Pine.Core.DotNet;
 using Pine.Core.Elm;
 using Pine.Core.Files;
 using System;
@@ -17,18 +16,13 @@ using FunctionRecord = Pine.Core.CodeAnalysis.FunctionRecord;
 
 namespace Pine.Elm;
 
-public class ElmCompiler
+public class ElmCompilerInElm
 {
-    private static readonly ConcurrentDictionary<FileTree, Task<Result<string, ElmCompiler>>> buildCompilerFromSource = new();
-
-    static public readonly Lazy<FileTree> CompilerSourceContainerFilesDefault =
-        new(() => FileTree.FromSetOfFilesWithStringPath(
-            LoadElmCompilerSourceCodeFiles()
-            .Extract(error => throw new NotImplementedException(nameof(LoadElmCompilerSourceCodeFiles) + ": " + error))));
+    private static readonly ConcurrentDictionary<FileTree, Task<Result<string, ElmCompilerInElm>>> s_buildCompilerFromSource = new();
 
     static public readonly Lazy<FileTree> ElmCoreAndKernelModuleFilesDefault =
         new(() =>
-        CompilerSourceContainerFilesDefault.Value.GetNodeAtPath(["elm-kernel-modules"])
+        Core.Elm.ElmInElm.BundledFiles.CompilerSourceContainerFilesDefault.Value.GetNodeAtPath(["elm-kernel-modules"])
         ?? throw new Exception("Did not find node elm-kernel-modules"));
 
     static public readonly Lazy<IReadOnlyDictionary<IReadOnlyList<string>, string>> ElmCoreAndKernelModulesByName =
@@ -48,12 +42,7 @@ public class ElmCompiler
             EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>()));
 
     static public readonly Lazy<FileTree> CompilerSourceFilesDefault =
-        new(() => ElmCompilerFileTreeFromBundledFileTree(CompilerSourceContainerFilesDefault.Value));
-
-    public static Result<string, IImmutableDictionary<IReadOnlyList<string>, ReadOnlyMemory<byte>>> LoadElmCompilerSourceCodeFiles() =>
-        DotNetAssembly.LoadDirectoryFilesFromManifestEmbeddedFileProviderAsDictionary(
-            directoryPath: ["Elm", "elm-compiler"],
-            assembly: typeof(ElmCompiler).Assembly);
+        new(() => ElmCompilerFileTreeFromBundledFileTree(Core.Elm.ElmInElm.BundledFiles.CompilerSourceContainerFilesDefault.Value));
 
     public static IReadOnlyList<string> CompilerPackageSources =>
     [
@@ -106,7 +95,7 @@ public class ElmCompiler
 
     private static readonly Core.CodeAnalysis.PineVMParseCache s_parseCache = new();
 
-    private ElmCompiler(
+    private ElmCompilerInElm(
         PineValue compilerEnvironment,
         FunctionRecord compileParsedInteractiveSubmission,
         FunctionRecord expandElmInteractiveEnvironmentWithModules,
@@ -122,10 +111,10 @@ public class ElmCompiler
         LanguageServiceInterface = languageServiceInterface;
     }
 
-    public static Task<Result<string, ElmCompiler>> GetElmCompilerAsync(
+    public static Task<Result<string, ElmCompilerInElm>> GetElmCompilerAsync(
         FileTree compilerSourceFiles)
     {
-        return buildCompilerFromSource.GetOrAdd(
+        return s_buildCompilerFromSource.GetOrAdd(
             compilerSourceFiles,
             valueFactory:
             compilerSourceFiles => Task.Run(() => BuildCompilerFromSourceFiles(compilerSourceFiles)));
@@ -136,9 +125,9 @@ public class ElmCompiler
     /// Typical applications for compiling the Elm compiler from source are verifying bootstrapping or
     /// experimenting with modifications to the emit stage.
     /// </summary>
-    public static Result<string, ElmCompiler> BuildCompilerFromSourceFiles(
+    public static Result<string, ElmCompilerInElm> BuildCompilerFromSourceFiles(
         FileTree compilerSourceFiles,
-        ElmCompiler? overrideElmCompiler = null)
+        ElmCompilerInElm? overrideElmCompiler = null)
     {
         var compilerWithPackagesTree =
             ElmCompilerFileTreeFromBundledFileTree(compilerSourceFiles);
@@ -231,7 +220,7 @@ public class ElmCompiler
         FileTree appCodeTree,
         IReadOnlyList<IReadOnlyList<string>> rootFilePaths,
         bool skipLowering,
-        ElmCompiler? overrideElmCompiler = null)
+        ElmCompilerInElm? overrideElmCompiler = null)
     {
         if (rootFilePaths.Count is 0 &&
             overrideElmCompiler is null &&
@@ -273,7 +262,7 @@ public class ElmCompiler
         IReadOnlyList<IReadOnlyList<string>> rootFilePaths,
         bool skipLowering,
         bool skipFilteringForSourceDirs,
-        ElmCompiler? overrideElmCompiler = null)
+        ElmCompilerInElm? overrideElmCompiler = null)
     {
         Result<string, PineValue> ContinueWithBundledCompiler()
         {
@@ -382,7 +371,7 @@ public class ElmCompiler
                 elmCompiler: defaultCompiler);
     }
 
-    public static Result<string, ElmCompiler> ElmCompilerFromEnvValue(PineValue compiledEnv)
+    public static Result<string, ElmCompilerInElm> ElmCompilerFromEnvValue(PineValue compiledEnv)
     {
         var parseCompileSubmissionResult =
             ElmInteractiveEnvironment.ParseFunctionFromElmModule(
@@ -501,7 +490,7 @@ public class ElmCompiler
             }
         }
 
-        return new ElmCompiler(
+        return new ElmCompilerInElm(
             compiledEnv,
             compileParsedInteractiveSubmission:
             compileParsedInteractiveSubmission.functionRecord,
@@ -604,7 +593,7 @@ public class ElmCompiler
                 Core.Elm.ElmSyntax.ElmModule.ParseModuleName(file.moduleText)
                 .Extract(err => throw new Exception("Failed parsing module name: " + err));
 
-            if (elmModuleName.First() is "CompilationInterface")
+            if (elmModuleName[0] is "CompilationInterface")
             {
                 return true;
             }
@@ -613,7 +602,7 @@ public class ElmCompiler
         return false;
     }
 
-    public static Result<string, ElmCompiler> LoadCompilerFromBundleFile(string filePath)
+    public static Result<string, ElmCompilerInElm> LoadCompilerFromBundleFile(string filePath)
     {
         using var sourceFile =
             new System.IO.FileStream(

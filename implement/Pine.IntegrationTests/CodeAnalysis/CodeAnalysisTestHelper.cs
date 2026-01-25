@@ -75,7 +75,7 @@ public class CodeAnalysisTestHelper
             .ToList();
 
         var compiledEnv =
-            ElmCompiler.CompileInteractiveEnvironment(
+            ElmCompilerInElm.CompileInteractiveEnvironment(
                 appCodeTree,
                 rootFilePaths: rootFilePaths,
                 skipLowering: true,

@@ -154,7 +154,7 @@ public record CommandLineAppConfig(
     {
         using var interactiveSession =
             new ElmTime.ElmInteractive.InteractiveSessionPine(
-                ElmCompiler.CompilerSourceContainerFilesDefault.Value,
+                Core.Elm.ElmInElm.BundledFiles.CompilerSourceContainerFilesDefault.Value,
                 appCodeTree: sourceFiles,
                 // TODO: Migrate lowering implementation for portability.
                 overrideSkipLowering: true,

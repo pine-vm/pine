@@ -1102,14 +1102,14 @@ public class Program
                     ", ",
                     rootFilePaths.Select(path => string.Join("/", path))));
 
-            ElmCompiler? overrideElmCompiler = null;
+            ElmCompilerInElm? overrideElmCompiler = null;
 
             if (overrideCompiler is { } overrideCompilerPath)
             {
                 Console.WriteLine("Using Elm compiler from " + overrideCompilerPath);
 
                 overrideElmCompiler =
-                ElmCompiler.LoadCompilerFromBundleFile(overrideCompilerPath)
+                ElmCompilerInElm.LoadCompilerFromBundleFile(overrideCompilerPath)
                 .Extract(err => throw new Exception("Failed to load Elm compiler from " + overrideCompilerPath + ": " + err));
 
                 var elmCompilerHash =
@@ -1125,7 +1125,7 @@ public class Program
             .Select(sourceTree =>
             {
                 var compiledEnv =
-                ElmCompiler.LoadOrCompileInteractiveEnvironment(
+                ElmCompilerInElm.LoadOrCompileInteractiveEnvironment(
                     sourceTree,
                     rootFilePaths: rootFilePaths,
                     skipLowering: skipLowering,
@@ -2060,7 +2060,7 @@ public class Program
                 throw new Exception("Failed to load Elm compiler from bundle.");
 
             var elmCompiler =
-                ElmCompiler.ElmCompilerFromEnvValue(elmCompilerFromBundle)
+                ElmCompilerInElm.ElmCompilerFromEnvValue(elmCompilerFromBundle)
                 .Extract(err => throw new Exception(err));
 
             var pineVMCache = new InvocationCache();
@@ -2533,7 +2533,7 @@ public class Program
     private static (Option<string?> elmCompilerOption, Func<IConsole, FileTree> loadElmCompilerFromOption)
         CreateElmCompilerOption()
     {
-        var defaultCompiler = ElmCompiler.CompilerSourceFilesDefault.Value;
+        var defaultCompiler = ElmCompilerInElm.CompilerSourceFilesDefault.Value;
 
         var elmCompilerOption = new Option<string?>("--elm-compiler");
 
@@ -3003,7 +3003,7 @@ public class Program
     private static (Option<string?> elmCompilerOption, Func<ParseResult, IConsole, FileTree> loadElmCompilerFromOption)
         CreateElmCompilerOption(Command cmd)
     {
-        var defaultCompiler = ElmCompiler.CompilerSourceFilesDefault.Value;
+        var defaultCompiler = ElmCompilerInElm.CompilerSourceFilesDefault.Value;
 
         var elmCompilerOption = new Option<string?>("--elm-compiler")
         {
@@ -3024,7 +3024,7 @@ public class Program
                     .tree;
             }
 
-            return ElmCompiler.CompilerSourceFilesDefault.Value;
+            return ElmCompilerInElm.CompilerSourceFilesDefault.Value;
         }
 
         return (elmCompilerOption, parseElmCompilerFromOption);

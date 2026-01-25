@@ -23,7 +23,7 @@ namespace Pine.IntegrationTests;
 public class CompileElmCompilerTests
 {
     static IReadOnlyList<string> CompilerPackageSources =>
-        ElmCompiler.CompilerPackageSources;
+        ElmCompilerInElm.CompilerPackageSources;
 
     private static readonly ElmCompilerCache elmCompilerCache = new();
 
@@ -33,7 +33,7 @@ public class CompileElmCompilerTests
     {
         using var pgoShare = new DynamicPGOShare();
 
-        var compilerProgram = ElmCompiler.CompilerSourceFilesDefault.Value;
+        var compilerProgram = ElmCompilerInElm.CompilerSourceFilesDefault.Value;
 
         using var interactiveSession =
             new InteractiveSessionPine(
@@ -132,10 +132,10 @@ public class CompileElmCompilerTests
             """;
 
         var compilerProgram =
-            ElmCompiler.CompilerSourceContainerFilesDefault.Value;
+            Core.Elm.ElmInElm.BundledFiles.CompilerSourceContainerFilesDefault.Value;
 
         var elmCompiler =
-            (await ElmCompiler.GetElmCompilerAsync(compilerProgram))
+            (await ElmCompilerInElm.GetElmCompilerAsync(compilerProgram))
             .Extract(err => throw new Exception(err));
 
         var pineVMCache = new InvocationCache();
@@ -266,7 +266,7 @@ public class CompileElmCompilerTests
     {
         using var pgoShare = new DynamicPGOShare();
 
-        var compilerProgram = ElmCompiler.CompilerSourceFilesDefault.Value;
+        var compilerProgram = ElmCompilerInElm.CompilerSourceFilesDefault.Value;
 
         using var interactiveSession =
             new InteractiveSessionPine(
@@ -330,7 +330,7 @@ public class CompileElmCompilerTests
             limitSampleCountPerSubmissionDefault: 100);
         */
 
-        var compilerProgram = ElmCompiler.CompilerSourceContainerFilesDefault.Value;
+        var compilerProgram = Core.Elm.ElmInElm.BundledFiles.CompilerSourceContainerFilesDefault.Value;
 
         var compilerPackageSourcesTrees =
             CompilerPackageSources
@@ -350,7 +350,7 @@ public class CompileElmCompilerTests
             .ToImmutableArray();
 
         var elmCoreLibraryModulesTexts =
-            ElmCompiler.ElmCoreAndKernelModulesByName.Value
+            ElmCompilerInElm.ElmCoreAndKernelModulesByName.Value
             .Select(kv => kv.Value);
 
         var elmModulesTexts = elmCoreLibraryModulesTexts;
@@ -455,7 +455,7 @@ public class CompileElmCompilerTests
             throw new Exception("Failed to load Elm compiler from bundle.");
 
         var bundledElmCompiler =
-            ElmCompiler.ElmCompilerFromEnvValue(elmCompilerFromBundle)
+            ElmCompilerInElm.ElmCompilerFromEnvValue(elmCompilerFromBundle)
             .Extract(err => throw new Exception(err));
 
         Result<string, KeyValuePair<IReadOnlyList<string>, (string moduleText, PineValue parsed)>> TryParseModuleText(

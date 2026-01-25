@@ -108,10 +108,10 @@ public class Program
             destinationDirectory: DestinationDirectory);
     }
 
-    public static ElmCompiler LoadPreviousCompiler()
+    public static ElmCompilerInElm LoadPreviousCompiler()
     {
         return
-            ElmCompiler.LoadCompilerFromBundleFile(PreviousCompilerFilePath)
+            ElmCompilerInElm.LoadCompilerFromBundleFile(PreviousCompilerFilePath)
             .Extract(err => throw new Exception(err));
     }
 
@@ -125,7 +125,7 @@ public class Program
     public static (Pine.Core.Files.FileTree sourceFiles, PineValue compiled) BuildElmCompiler()
     {
         var elmCompilerSource =
-            ElmCompiler.CompilerSourceFilesDefault.Value;
+            ElmCompilerInElm.CompilerSourceFilesDefault.Value;
 
         var clock = System.Diagnostics.Stopwatch.StartNew();
 
@@ -151,11 +151,11 @@ public class Program
         clock.Restart();
 
         var elmCompilerFirst =
-            ElmCompiler.ElmCompilerFromEnvValue(elmCompilerFirstValue)
+            ElmCompilerInElm.ElmCompilerFromEnvValue(elmCompilerFirstValue)
             .Extract(err => throw new Exception(err));
 
         var elmCompilerSecond =
-            ElmCompiler.BuildCompilerFromSourceFiles(
+            ElmCompilerInElm.BuildCompilerFromSourceFiles(
                 elmCompilerSource,
                 overrideElmCompiler: elmCompilerFirst)
             .Extract(err => throw new Exception(err));
@@ -184,7 +184,7 @@ public class Program
             var previousCompiler = LoadPreviousCompiler();
 
             var elmCompilerFirst =
-                ElmCompiler.BuildCompilerFromSourceFiles(
+                ElmCompilerInElm.BuildCompilerFromSourceFiles(
                     elmCompilerSource,
                     overrideElmCompiler: previousCompiler)
                 .Extract(err => throw new Exception(err));
@@ -214,7 +214,7 @@ public class Program
                         "compile-interactive-env"
                         ,"--env-source=" + elmCompilerSourceZipArchivePath
                         ,"--output-compact-build=compact-build.json"
-                        , ..ElmCompiler.DefaultCompilerTreeRootModuleFilePaths
+                        , ..ElmCompilerInElm.DefaultCompilerTreeRootModuleFilePaths
                         .Select(rootFilePath => "--root-file-path=" + string.Join('/', rootFilePath))
                         ,"--skip-lowering"
                         ]);

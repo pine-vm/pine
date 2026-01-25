@@ -2173,7 +2173,7 @@ public class ParseElmModuleTextToPineValueTests
         return s_bundledElmCompiler.Value.ParseElmModuleText(elmModuleText, pineVM);
     }
 
-    private static readonly Lazy<ElmCompiler> s_bundledElmCompiler =
+    private static readonly Lazy<ElmCompilerInElm> s_bundledElmCompiler =
         new(() =>
         {
             var elmCompilerFromBundle =
@@ -2183,7 +2183,7 @@ public class ParseElmModuleTextToPineValueTests
                 because: "Elm compiler environment not found in bundled environments");
 
             return
-            ElmCompiler.ElmCompilerFromEnvValue(elmCompilerFromBundle)
+            ElmCompilerInElm.ElmCompilerFromEnvValue(elmCompilerFromBundle)
             .Extract(err => throw new Exception(err));
         });
 }

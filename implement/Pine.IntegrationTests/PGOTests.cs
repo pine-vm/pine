@@ -48,7 +48,7 @@ public class PGOTests
 
         using var interactiveSession =
             new InteractiveSessionPine(
-                ElmCompiler.CompilerSourceFilesDefault.Value,
+                ElmCompilerInElm.CompilerSourceFilesDefault.Value,
                 appCodeTree: appCodeTree,
                 overrideSkipLowering: true,
                 entryPointsFilePaths: null,
@@ -434,7 +434,7 @@ public class PGOTests
 
         using var interactiveSession =
             new InteractiveSessionPine(
-                ElmCompiler.CompilerSourceFilesDefault.Value,
+                ElmCompilerInElm.CompilerSourceFilesDefault.Value,
                 appCodeTree: appCodeTree,
                 overrideSkipLowering: true,
                 entryPointsFilePaths: null,
@@ -1059,7 +1059,7 @@ public class PGOTests
 
         using var interactiveSession =
             new InteractiveSessionPine(
-                ElmCompiler.CompilerSourceFilesDefault.Value,
+                ElmCompilerInElm.CompilerSourceFilesDefault.Value,
                 appCodeTree: appCodeTree,
                 overrideSkipLowering: true,
                 entryPointsFilePaths: null,
@@ -1482,7 +1482,7 @@ public class PGOTests
 
         using var interactiveSession =
             new InteractiveSessionPine(
-                ElmCompiler.CompilerSourceFilesDefault.Value,
+                ElmCompilerInElm.CompilerSourceFilesDefault.Value,
                 appCodeTree: appCodeTree,
                 overrideSkipLowering: true,
                 entryPointsFilePaths: null,
@@ -1849,7 +1849,7 @@ public class PGOTests
     public static FileTree AppCodeTreeForElmModules(
     IReadOnlyList<string> elmModuleTexts)
     {
-        var compilerProgram = ElmCompiler.CompilerSourceFilesDefault.Value;
+        var compilerProgram = ElmCompilerInElm.CompilerSourceFilesDefault.Value;
 
         var elmJson =
         """

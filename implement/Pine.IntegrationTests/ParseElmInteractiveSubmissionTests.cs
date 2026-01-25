@@ -90,7 +90,7 @@ public class ParseElmInteractiveSubmissionTests
         elmCompilerFromBundle.Should().NotBeNull("Elm compiler environment not found in bundled environments");
 
         var elmCompiler =
-            ElmCompiler.ElmCompilerFromEnvValue(elmCompilerFromBundle)
+            ElmCompilerInElm.ElmCompilerFromEnvValue(elmCompilerFromBundle)
             .Extract(err => throw new Exception(err));
 
         var pineVMCache = new InvocationCache();

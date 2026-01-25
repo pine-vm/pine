@@ -582,7 +582,7 @@ public class CompilePineToDotNetTests
                         FileTree.File(Encoding.UTF8.GetBytes(testCase.InputModuleText)));
 
                 var compiledEnv =
-                    ElmCompiler.CompileInteractiveEnvironment(
+                    ElmCompilerInElm.CompileInteractiveEnvironment(
                         appCodeTree,
                         rootFilePaths: [["src", "Common.elm"]],
                         skipLowering: true,
