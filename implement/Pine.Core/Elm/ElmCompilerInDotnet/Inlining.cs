@@ -2,10 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using Pine.Core.Elm.ElmSyntax.SyntaxModel;
 
 using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
 
 using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+
+// Alias to avoid ambiguity with System.Range
+using Range = Pine.Core.Elm.ElmSyntax.SyntaxModel.Range;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
@@ -19,12 +23,12 @@ public class Inlining
     /// Per design notes: "we use the value 0 for all locations (row, column) and ranges for newly created syntax nodes."
     /// These will be used in future cross-module inlining when creating new syntax nodes.
     /// </summary>
-    private static readonly SyntaxTypes.Location s_zeroLocation = new(Row: 0, Column: 0);
+    private static readonly Location s_zeroLocation = new(Row: 0, Column: 0);
 
     /// <summary>
     /// Zero range used for generated syntax nodes. See <see cref="s_zeroLocation"/> for details.
     /// </summary>
-    private static readonly SyntaxTypes.Range s_zeroRange = new(Start: s_zeroLocation, End: s_zeroLocation);
+    private static readonly Range s_zeroRange = new(Start: s_zeroLocation, End: s_zeroLocation);
 
     /// <summary>
     /// Singleton comparer for module name tuples to avoid repeated allocations.
@@ -250,8 +254,8 @@ public class Inlining
         return module with { Declarations = inlinedDeclarations };
     }
 
-    private static SyntaxTypes.Node<SyntaxTypes.Declaration> InlineDeclaration(
-        SyntaxTypes.Node<SyntaxTypes.Declaration> declNode,
+    private static Node<SyntaxTypes.Declaration> InlineDeclaration(
+        Node<SyntaxTypes.Declaration> declNode,
         InliningContext context)
     {
         if (declNode.Value is not SyntaxTypes.Declaration.FunctionDeclaration funcDecl)
@@ -262,7 +266,7 @@ public class Inlining
         var inlinedFunction = InlineFunctionStruct(funcDecl.Function, context);
         var inlinedDeclaration = new SyntaxTypes.Declaration.FunctionDeclaration(inlinedFunction);
 
-        return new SyntaxTypes.Node<SyntaxTypes.Declaration>(declNode.Range, inlinedDeclaration);
+        return new Node<SyntaxTypes.Declaration>(declNode.Range, inlinedDeclaration);
     }
 
     private static SyntaxTypes.FunctionStruct InlineFunctionStruct(
@@ -279,14 +283,14 @@ public class Inlining
 
         return func with
         {
-            Declaration = new SyntaxTypes.Node<SyntaxTypes.FunctionImplementation>(
+            Declaration = new Node<SyntaxTypes.FunctionImplementation>(
                 func.Declaration.Range,
                 inlinedImpl)
         };
     }
 
-    private static SyntaxTypes.Node<SyntaxTypes.Expression> InlineExpression(
-        SyntaxTypes.Node<SyntaxTypes.Expression> exprNode,
+    private static Node<SyntaxTypes.Expression> InlineExpression(
+        Node<SyntaxTypes.Expression> exprNode,
         InliningContext context)
     {
         var expr = exprNode.Value;
@@ -366,7 +370,7 @@ public class Inlining
             _ => expr
         };
 
-        return new SyntaxTypes.Node<SyntaxTypes.Expression>(exprNode.Range, inlinedExpr);
+        return new Node<SyntaxTypes.Expression>(exprNode.Range, inlinedExpr);
     }
 
     private static SyntaxTypes.Expression InlineApplication(
@@ -426,8 +430,8 @@ public class Inlining
     }
 
     private static bool ShouldInline(
-        IReadOnlyList<SyntaxTypes.Node<SyntaxTypes.Pattern>> funcParams,
-        IReadOnlyList<SyntaxTypes.Node<SyntaxTypes.Expression>> appArgs,
+        IReadOnlyList<Node<SyntaxTypes.Pattern>> funcParams,
+        IReadOnlyList<Node<SyntaxTypes.Expression>> appArgs,
         InliningContext context)
     {
         if (context.Config is not Config.InlineOnlyFunctions)
@@ -491,7 +495,7 @@ public class Inlining
 
     private static SyntaxTypes.Expression InlineFunctionCall(
         SyntaxTypes.FunctionImplementation funcImpl,
-        IReadOnlyList<SyntaxTypes.Node<SyntaxTypes.Expression>> args,
+        IReadOnlyList<Node<SyntaxTypes.Expression>> args,
         InliningContext context)
     {
         var funcParams = funcImpl.Arguments;
@@ -501,8 +505,8 @@ public class Inlining
         var inlinedArgs = args.Select(a => InlineExpression(a, context)).ToList();
 
         // Check if any parameter uses constructor pattern matching - if so, we need let bindings
-        var letDeclarations = new List<SyntaxTypes.Node<SyntaxTypes.Expression.LetDeclaration>>();
-        var substitutions = new Dictionary<string, SyntaxTypes.Node<SyntaxTypes.Expression>>();
+        var letDeclarations = new List<Node<SyntaxTypes.Expression.LetDeclaration>>();
+        var substitutions = new Dictionary<string, Node<SyntaxTypes.Expression>>();
 
         var count = Math.Min(funcParams.Count, inlinedArgs.Count);
 
@@ -522,7 +526,7 @@ public class Inlining
                 var letDestr = new SyntaxTypes.Expression.LetDeclaration.LetDestructuring(
                     Pattern: param,
                     Expression: arg);
-                letDeclarations.Add(new SyntaxTypes.Node<SyntaxTypes.Expression.LetDeclaration>(s_zeroRange, letDestr));
+                letDeclarations.Add(new Node<SyntaxTypes.Expression.LetDeclaration>(s_zeroRange, letDestr));
             }
             // Note: Other complex patterns (like tuples, records) would need additional handling
             // For now, we only support VarPattern and NamedPattern (constructor patterns)
@@ -558,7 +562,7 @@ public class Inlining
                 args.Skip(funcParams.Count).Select(a => InlineExpression(a, context))
                 .ToList();
 
-            var allArgs = new List<SyntaxTypes.Node<SyntaxTypes.Expression>>
+            var allArgs = new List<Node<SyntaxTypes.Expression>>
             {
                 new(s_zeroRange, resultExpr)
             };
@@ -575,15 +579,15 @@ public class Inlining
             return new SyntaxTypes.Expression.LambdaExpression(
                 new SyntaxTypes.LambdaStruct(
                     Arguments: remainingParams,
-                    Expression: new SyntaxTypes.Node<SyntaxTypes.Expression>(s_zeroRange, resultExpr)));
+                    Expression: new Node<SyntaxTypes.Expression>(s_zeroRange, resultExpr)));
         }
 
         return resultExpr;
     }
 
-    private static SyntaxTypes.Node<SyntaxTypes.Expression> SubstituteInExpression(
-        SyntaxTypes.Node<SyntaxTypes.Expression> exprNode,
-        IReadOnlyDictionary<string, SyntaxTypes.Node<SyntaxTypes.Expression>> substitutions)
+    private static Node<SyntaxTypes.Expression> SubstituteInExpression(
+        Node<SyntaxTypes.Expression> exprNode,
+        IReadOnlyDictionary<string, Node<SyntaxTypes.Expression>> substitutions)
     {
         var expr = exprNode.Value;
 
@@ -657,12 +661,12 @@ public class Inlining
             _ => expr
         };
 
-        return new SyntaxTypes.Node<SyntaxTypes.Expression>(exprNode.Range, substitutedExpr);
+        return new Node<SyntaxTypes.Expression>(exprNode.Range, substitutedExpr);
     }
 
     private static SyntaxTypes.CaseBlock SubstituteInCaseBlock(
         SyntaxTypes.CaseBlock caseBlock,
-        IReadOnlyDictionary<string, SyntaxTypes.Node<SyntaxTypes.Expression>> substitutions)
+        IReadOnlyDictionary<string, Node<SyntaxTypes.Expression>> substitutions)
     {
         return new SyntaxTypes.CaseBlock(
             Expression: SubstituteInExpression(caseBlock.Expression, substitutions),
@@ -671,7 +675,7 @@ public class Inlining
 
     private static SyntaxTypes.Case SubstituteInCase(
         SyntaxTypes.Case caseItem,
-        IReadOnlyDictionary<string, SyntaxTypes.Node<SyntaxTypes.Expression>> substitutions)
+        IReadOnlyDictionary<string, Node<SyntaxTypes.Expression>> substitutions)
     {
         // Remove substitutions shadowed by the pattern
         var shadowedNames = CollectPatternNames(caseItem.Pattern.Value);
@@ -686,7 +690,7 @@ public class Inlining
 
     private static SyntaxTypes.Expression.LetBlock SubstituteInLetBlock(
         SyntaxTypes.Expression.LetBlock letBlock,
-        IReadOnlyDictionary<string, SyntaxTypes.Node<SyntaxTypes.Expression>> substitutions)
+        IReadOnlyDictionary<string, Node<SyntaxTypes.Expression>> substitutions)
     {
         // Collect names introduced by let declarations
         var letNames = new HashSet<string>();
@@ -715,9 +719,9 @@ public class Inlining
             Expression: SubstituteInExpression(letBlock.Expression, filteredSubstitutions));
     }
 
-    private static SyntaxTypes.Node<SyntaxTypes.Expression.LetDeclaration> SubstituteInLetDeclaration(
-        SyntaxTypes.Node<SyntaxTypes.Expression.LetDeclaration> declNode,
-        IReadOnlyDictionary<string, SyntaxTypes.Node<SyntaxTypes.Expression>> substitutions)
+    private static Node<SyntaxTypes.Expression.LetDeclaration> SubstituteInLetDeclaration(
+        Node<SyntaxTypes.Expression.LetDeclaration> declNode,
+        IReadOnlyDictionary<string, Node<SyntaxTypes.Expression>> substitutions)
     {
         var decl = declNode.Value;
 
@@ -736,12 +740,12 @@ public class Inlining
                 _ => decl
             };
 
-        return new SyntaxTypes.Node<SyntaxTypes.Expression.LetDeclaration>(declNode.Range, substitutedDecl);
+        return new Node<SyntaxTypes.Expression.LetDeclaration>(declNode.Range, substitutedDecl);
     }
 
     private static SyntaxTypes.FunctionStruct SubstituteInFunctionStruct(
         SyntaxTypes.FunctionStruct func,
-        IReadOnlyDictionary<string, SyntaxTypes.Node<SyntaxTypes.Expression>> substitutions)
+        IReadOnlyDictionary<string, Node<SyntaxTypes.Expression>> substitutions)
     {
         var impl = func.Declaration.Value;
 
@@ -767,7 +771,7 @@ public class Inlining
 
         return func with
         {
-            Declaration = new SyntaxTypes.Node<SyntaxTypes.FunctionImplementation>(
+            Declaration = new Node<SyntaxTypes.FunctionImplementation>(
                 func.Declaration.Range,
                 substitutedImpl)
         };
@@ -775,7 +779,7 @@ public class Inlining
 
     private static SyntaxTypes.LambdaStruct SubstituteInLambdaStruct(
         SyntaxTypes.LambdaStruct lambda,
-        IReadOnlyDictionary<string, SyntaxTypes.Node<SyntaxTypes.Expression>> substitutions)
+        IReadOnlyDictionary<string, Node<SyntaxTypes.Expression>> substitutions)
     {
         // Remove substitutions shadowed by lambda parameters
         var paramNames = new HashSet<string>();
@@ -797,12 +801,12 @@ public class Inlining
             Expression: SubstituteInExpression(lambda.Expression, filteredSubstitutions));
     }
 
-    private static SyntaxTypes.Node<(SyntaxTypes.Node<string>, SyntaxTypes.Node<SyntaxTypes.Expression>)> SubstituteInRecordField(
-        SyntaxTypes.Node<(SyntaxTypes.Node<string> fieldName, SyntaxTypes.Node<SyntaxTypes.Expression> valueExpr)> fieldNode,
-        IReadOnlyDictionary<string, SyntaxTypes.Node<SyntaxTypes.Expression>> substitutions)
+    private static Node<(Node<string>, Node<SyntaxTypes.Expression>)> SubstituteInRecordField(
+        Node<(Node<string> fieldName, Node<SyntaxTypes.Expression> valueExpr)> fieldNode,
+        IReadOnlyDictionary<string, Node<SyntaxTypes.Expression>> substitutions)
     {
         var (fieldName, valueExpr) = fieldNode.Value;
-        return new SyntaxTypes.Node<(SyntaxTypes.Node<string>, SyntaxTypes.Node<SyntaxTypes.Expression>)>(
+        return new Node<(Node<string>, Node<SyntaxTypes.Expression>)>(
             fieldNode.Range,
             (fieldName, SubstituteInExpression(valueExpr, substitutions)));
     }
@@ -897,8 +901,8 @@ public class Inlining
             Expression: InlineExpression(letBlock.Expression, context));
     }
 
-    private static SyntaxTypes.Node<SyntaxTypes.Expression.LetDeclaration> InlineLetDeclaration(
-        SyntaxTypes.Node<SyntaxTypes.Expression.LetDeclaration> declNode,
+    private static Node<SyntaxTypes.Expression.LetDeclaration> InlineLetDeclaration(
+        Node<SyntaxTypes.Expression.LetDeclaration> declNode,
         InliningContext context)
     {
         var decl = declNode.Value;
@@ -917,7 +921,7 @@ public class Inlining
             _ => decl
         };
 
-        return new SyntaxTypes.Node<SyntaxTypes.Expression.LetDeclaration>(declNode.Range, inlinedDecl);
+        return new Node<SyntaxTypes.Expression.LetDeclaration>(declNode.Range, inlinedDecl);
     }
 
     private static SyntaxTypes.LambdaStruct InlineLambdaStruct(
@@ -929,13 +933,13 @@ public class Inlining
             Expression: InlineExpression(lambda.Expression, context));
     }
 
-    private static SyntaxTypes.Node<(SyntaxTypes.Node<string>, SyntaxTypes.Node<SyntaxTypes.Expression>)> InlineRecordField(
-        SyntaxTypes.Node<(SyntaxTypes.Node<string> fieldName, SyntaxTypes.Node<SyntaxTypes.Expression> valueExpr)> fieldNode,
+    private static Node<(Node<string>, Node<SyntaxTypes.Expression>)> InlineRecordField(
+        Node<(Node<string> fieldName, Node<SyntaxTypes.Expression> valueExpr)> fieldNode,
         InliningContext context)
     {
         var (fieldName, valueExpr) = fieldNode.Value;
 
-        return new SyntaxTypes.Node<(SyntaxTypes.Node<string>, SyntaxTypes.Node<SyntaxTypes.Expression>)>(
+        return new Node<(Node<string>, Node<SyntaxTypes.Expression>)>(
             fieldNode.Range,
             (fieldName, InlineExpression(valueExpr, context)));
     }

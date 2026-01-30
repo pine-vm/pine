@@ -1,21 +1,24 @@
 using Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-using InfixDirection = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7.InfixDirection;
-using Location = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7.Location;
-using Range = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7.Range;
-
 using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
 
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mConcretized;
+using SyntaxTypes = Pine.Core.Elm.ElmSyntax.SyntaxModel;
+
+// Alias to avoid ambiguity with System.Range
+using Range = Pine.Core.Elm.ElmSyntax.SyntaxModel.Range;
 
 namespace Pine.Core.Elm.ElmSyntax;
 
 /// <summary>
-/// Utilities for parsing Elm module source text into syntax trees.
+/// Parsing Elm module source text into syntax trees.
+/// <para>
+/// To learn about the design goals, see 'guide\elm-syntax-model-and-parser.md'
+/// </para>
 /// </summary>
 public class ElmSyntaxParser
 {
@@ -41,7 +44,7 @@ public class ElmSyntaxParser
                 "Unexpected parse result type: " + parseResult.GetType().Name);
         }
 
-        var asAst = FromStil4mConcretized.Convert(parseOk);
+        var asAst = FromFullSyntaxModel.Convert(parseOk);
 
         return EncodeAsElmValue.EncodeFile(asAst);
     }
@@ -49,7 +52,7 @@ public class ElmSyntaxParser
     /// <summary>
     /// Parses Elm module text into the classic syntax tree representation.
     /// The parser always preserves parentheses/tuples in the syntax tree.
-    /// Use <see cref="FromStil4mConcretized.Convert(SyntaxTypes.Expression)"/> to get the
+    /// Use <see cref="FromFullSyntaxModel.Convert(SyntaxTypes.Expression)"/> to get the
     /// abstract syntax model that matches the original stil4m/elm-syntax behavior
     /// (with single-element tuples unwrapped).
     /// </summary>
@@ -1105,7 +1108,7 @@ public class ElmSyntaxParser
                 }
 
                 var declarations = new List<Node<SyntaxTypes.Declaration>>();
-                var incompleteDeclarations = new List<Node<SyntaxTypes.IncompleteDeclaration>>();
+                var incompleteDeclarations = new List<Node<IncompleteDeclaration>>();
 
                 ConsumeAllTrivia();
 
@@ -1227,9 +1230,9 @@ public class ElmSyntaxParser
                             var range = new Range(firstToken.Start, endLocation);
 
                             // Add as Node<IncompleteDeclaration> with proper range and error info
-                            incompleteDeclarations.Add(new Node<SyntaxTypes.IncompleteDeclaration>(
+                            incompleteDeclarations.Add(new Node<IncompleteDeclaration>(
                                 range,
-                                new SyntaxTypes.IncompleteDeclaration(
+                                new IncompleteDeclaration(
                                     incompleteText,
                                     errorLocation,
                                     errorMessage)));
@@ -1352,7 +1355,7 @@ public class ElmSyntaxParser
                             recordExprNode.Value.GetType().Name);
                     }
 
-                    foreach (var recordField in FromStil4mConcretized.ToList(recordExpr.Fields))
+                    foreach (var recordField in FromFullSyntaxModel.ToList(recordExpr.Fields))
                     {
                         if (recordField.FieldName.Value is "command")
                         {
@@ -1672,7 +1675,7 @@ public class ElmSyntaxParser
 
                 var closeParen = Consume(TokenType.CloseParen);
 
-                SyntaxTypes.SeparatedSyntaxList<Node<SyntaxTypes.TopLevelExpose>> nodesList =
+                SeparatedSyntaxList<Node<SyntaxTypes.TopLevelExpose>> nodesList =
                     firstNode is null
                     ? new SyntaxTypes.SeparatedSyntaxList<Node<SyntaxTypes.TopLevelExpose>>.Empty()
                     : new SyntaxTypes.SeparatedSyntaxList<Node<SyntaxTypes.TopLevelExpose>>.NonEmpty(
@@ -2368,7 +2371,7 @@ public class ElmSyntaxParser
                         new Node<SyntaxTypes.TypeAnnotation>(
                             range,
                             new SyntaxTypes.TypeAnnotation.Tupled(
-                                TypeAnnotations: new SyntaxTypes.SeparatedSyntaxList<Node<SyntaxTypes.TypeAnnotation>>.NonEmpty(
+                                TypeAnnotations: new SeparatedSyntaxList<Node<SyntaxTypes.TypeAnnotation>>.NonEmpty(
                                     First: firstTypeAnnotation,
                                     Rest: restItems)));
                 }
@@ -2382,7 +2385,7 @@ public class ElmSyntaxParser
                         new Node<SyntaxTypes.TypeAnnotation>(
                             range,
                             new SyntaxTypes.TypeAnnotation.Tupled(
-                                TypeAnnotations: new SyntaxTypes.SeparatedSyntaxList<Node<SyntaxTypes.TypeAnnotation>>.NonEmpty(
+                                TypeAnnotations: new SeparatedSyntaxList<Node<SyntaxTypes.TypeAnnotation>>.NonEmpty(
                                     First: firstTypeAnnotation,
                                     Rest: [])));
                 }
@@ -2551,7 +2554,7 @@ public class ElmSyntaxParser
                         openToken.Start,
                         closingToken.End);
 
-                SyntaxTypes.SeparatedSyntaxList<Node<SyntaxTypes.RecordField>> fieldsList =
+                SeparatedSyntaxList<Node<SyntaxTypes.RecordField>> fieldsList =
                     firstField is null
                     ? new SyntaxTypes.SeparatedSyntaxList<Node<SyntaxTypes.RecordField>>.Empty()
                     : new SyntaxTypes.SeparatedSyntaxList<Node<SyntaxTypes.RecordField>>.NonEmpty(
@@ -3130,7 +3133,7 @@ public class ElmSyntaxParser
                 var listRange =
                     MakeRange(listOpenToken.Start, listCloseToken.End);
 
-                SyntaxTypes.SeparatedSyntaxList<Node<SyntaxTypes.Expression>> elements =
+                SeparatedSyntaxList<Node<SyntaxTypes.Expression>> elements =
                     firstElement is null
                     ? new SyntaxTypes.SeparatedSyntaxList<Node<SyntaxTypes.Expression>>.Empty()
                     : new SyntaxTypes.SeparatedSyntaxList<Node<SyntaxTypes.Expression>>.NonEmpty(
@@ -3229,7 +3232,7 @@ public class ElmSyntaxParser
 
                     var tupledExpr =
                         new SyntaxTypes.Expression.TupledExpression(
-                            Elements: new SyntaxTypes.SeparatedSyntaxList<Node<SyntaxTypes.Expression>>.NonEmpty(
+                            Elements: new SeparatedSyntaxList<Node<SyntaxTypes.Expression>>.NonEmpty(
                                 First: firstItemExpr,
                                 Rest: furtherItems));
 
@@ -3721,7 +3724,7 @@ public class ElmSyntaxParser
 
                     var tupledPattern =
                         new SyntaxTypes.Pattern.TuplePattern(
-                            Elements: new SyntaxTypes.SeparatedSyntaxList<Node<SyntaxTypes.Pattern>>.NonEmpty(
+                            Elements: new SeparatedSyntaxList<Node<SyntaxTypes.Pattern>>.NonEmpty(
                                 firstPattern,
                                 furtherPatternsWithCommas));
 
@@ -3835,7 +3838,7 @@ public class ElmSyntaxParser
                 var listRange =
                     MakeRange(listOpenToken.Start, listCloseToken.End);
 
-                SyntaxTypes.SeparatedSyntaxList<Node<SyntaxTypes.Pattern>> elementsList =
+                SeparatedSyntaxList<Node<SyntaxTypes.Pattern>> elementsList =
                     firstItem is null
                         ? new SyntaxTypes.SeparatedSyntaxList<Node<SyntaxTypes.Pattern>>.Empty()
                         : new SyntaxTypes.SeparatedSyntaxList<Node<SyntaxTypes.Pattern>>.NonEmpty(
@@ -3887,7 +3890,7 @@ public class ElmSyntaxParser
                 var recordRange =
                     MakeRange(recordOpenToken.Start, recordCloseToken.End);
 
-                SyntaxTypes.SeparatedSyntaxList<Node<string>> fieldsList =
+                SeparatedSyntaxList<Node<string>> fieldsList =
                     firstField is null
                         ? new SyntaxTypes.SeparatedSyntaxList<Node<string>>.Empty()
                         : new SyntaxTypes.SeparatedSyntaxList<Node<string>>.NonEmpty(
@@ -3978,12 +3981,12 @@ public class ElmSyntaxParser
 
                     var firstFieldRangeEnd = valueExpr.Range.End;
 
-                    var recordFirstField = new SyntaxTypes.RecordExprField(
+                    var recordFirstField = new RecordExprField(
                         new Node<string>(nameToken.Range, nameToken.Lexeme),
                         equalsToken.Start,
                         valueExpr);
 
-                    var recordRestFields = new List<(Location SeparatorLocation, SyntaxTypes.RecordExprField Node)>();
+                    var recordRestFields = new List<(Location SeparatorLocation, RecordExprField Node)>();
 
                     // Parse remaining fields
                     while (Peek.Type is TokenType.Comma)
@@ -4000,7 +4003,7 @@ public class ElmSyntaxParser
                         var nextValueExpr = ParseExpression(indentMin);
                         ConsumeAllTrivia();
 
-                        var nextField = new SyntaxTypes.RecordExprField(
+                        var nextField = new RecordExprField(
                             new Node<string>(nextFieldName.Range, nextFieldName.Lexeme),
                             nextEqualsToken.Start,
                             nextValueExpr);
@@ -4014,7 +4017,7 @@ public class ElmSyntaxParser
                     return new Node<SyntaxTypes.Expression>(
                         range,
                         new SyntaxTypes.Expression.RecordExpr(
-                            Fields: new SyntaxTypes.SeparatedSyntaxList<SyntaxTypes.RecordExprField>.NonEmpty(
+                            Fields: new SeparatedSyntaxList<RecordExprField>.NonEmpty(
                                 First: recordFirstField,
                                 Rest: recordRestFields)));
                 }
@@ -4027,13 +4030,13 @@ public class ElmSyntaxParser
                     return new Node<SyntaxTypes.Expression>(
                         range,
                         new SyntaxTypes.Expression.RecordExpr(
-                            Fields: new SyntaxTypes.SeparatedSyntaxList<SyntaxTypes.RecordExprField>.Empty()));
+                            Fields: new SeparatedSyntaxList<RecordExprField>.Empty()));
                 }
             }
 
             // Either empty record or record update expression - parse fields
-            SyntaxTypes.RecordExprField? firstField = null;
-            var restFieldsUpdate = new List<(Location SeparatorLocation, SyntaxTypes.RecordExprField Node)>();
+            RecordExprField? firstField = null;
+            var restFieldsUpdate = new List<(Location SeparatorLocation, RecordExprField Node)>();
 
             if (Peek.Type is not TokenType.CloseBrace)
             {
@@ -4047,7 +4050,7 @@ public class ElmSyntaxParser
                 var valueExpr = ParseExpression(indentMin);
                 ConsumeAllTrivia();
 
-                firstField = new SyntaxTypes.RecordExprField(
+                firstField = new RecordExprField(
                     new Node<string>(fieldName.Range, fieldName.Lexeme),
                     equalsToken.Start,
                     valueExpr);
@@ -4067,7 +4070,7 @@ public class ElmSyntaxParser
                     var nextValueExpr = ParseExpression(indentMin);
                     ConsumeAllTrivia();
 
-                    var nextField = new SyntaxTypes.RecordExprField(
+                    var nextField = new RecordExprField(
                         new Node<string>(nextFieldName.Range, nextFieldName.Lexeme),
                         nextEqualsToken.Start,
                         nextValueExpr);
@@ -4079,7 +4082,7 @@ public class ElmSyntaxParser
             var closeBraceUpdate = Consume(TokenType.CloseBrace);
             var rangeUpdate = MakeRange(start.Start, closeBraceUpdate.End);
 
-            SyntaxTypes.SeparatedSyntaxList<SyntaxTypes.RecordExprField> fieldsList =
+            SeparatedSyntaxList<RecordExprField> fieldsList =
                 firstField is null
                 ? new SyntaxTypes.SeparatedSyntaxList<SyntaxTypes.RecordExprField>.Empty()
                 : new SyntaxTypes.SeparatedSyntaxList<SyntaxTypes.RecordExprField>.NonEmpty(

@@ -72,13 +72,13 @@ public class ElmCompiler
             }
 
             var moduleName =
-                ElmSyntax.Stil4mConcretized.Module.GetModuleName(parseModuleOk.ModuleDefinition.Value).Value;
+                ElmSyntax.SyntaxModel.Module.GetModuleName(parseModuleOk.ModuleDefinition.Value).Value;
 
             var moduleNameFlattened =
                 string.Join(".", moduleName);
 
             var parseModuleAst =
-                SyntaxTypes.FromStil4mConcretized.Convert(parseModuleOk);
+                SyntaxTypes.FromFullSyntaxModel.Convert(parseModuleOk);
 
             parsedModulesBeforeCanonicalize.Add(parseModuleAst);
         }

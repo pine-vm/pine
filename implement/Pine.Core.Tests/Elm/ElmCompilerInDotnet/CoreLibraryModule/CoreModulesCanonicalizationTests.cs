@@ -1,4 +1,5 @@
 using AwesomeAssertions;
+using Pine.Core.Elm.ElmSyntax;
 using Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 using Xunit;
 
@@ -54,8 +55,8 @@ public class CoreModulesCanonicalizationTests
             ElmCompilerTestHelper.CanonicalizeAndGetSingleModule([elmModuleText], ["Test"]);
 
         var renderedAppModule =
-            Core.Elm.ElmSyntax.Stil4mConcretized.Avh4Format.FormatToString(
-                ToStil4mConcretized.ToConcretized(canonicalizedModule));
+            Avh4Format.FormatToString(
+                ToFullSyntaxModel.Convert(canonicalizedModule));
 
         renderedAppModule.Trim().Should().Be(
             """"
@@ -130,8 +131,8 @@ public class CoreModulesCanonicalizationTests
             ElmCompilerTestHelper.CanonicalizeAndGetSingleModule([elmModuleText], ["Test"]);
 
         var renderedAppModule =
-            Core.Elm.ElmSyntax.Stil4mConcretized.Avh4Format.FormatToString(
-                ToStil4mConcretized.ToConcretized(canonicalizedModule));
+            Avh4Format.FormatToString(
+                ToFullSyntaxModel.Convert(canonicalizedModule));
 
         renderedAppModule.Trim().Should().Be(
             """"
@@ -224,8 +225,8 @@ public class CoreModulesCanonicalizationTests
             ElmCompilerTestHelper.CanonicalizeAndGetSingleModule([elmModuleText], ["Test"]);
 
         var renderedAppModule =
-            Core.Elm.ElmSyntax.Stil4mConcretized.Avh4Format.FormatToString(
-                ToStil4mConcretized.ToConcretized(canonicalizedModule));
+            Avh4Format.FormatToString(
+                ToFullSyntaxModel.Convert(canonicalizedModule));
 
         renderedAppModule.Trim().Should().Be(
             """"

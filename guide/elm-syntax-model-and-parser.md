@@ -18,10 +18,20 @@ To ensure application developers have a good experience, we have additional requ
 
 + If multiple declarations in a file contain syntax errors, we want to report all of them, not just one.
 
-+ Features like formatting or analyzing code should not stop working just because there is a syntax error in a module.
++ Features such as code formatting or code analysis should not stop working just because a module contains a syntax error.
 
 To make this work, the parser does not stop when it finds a syntax error. Instead, it notes where the error is and which part of the code is affected, then continues through the rest of the module. With this partially finished syntax model, the formatting tool can still format the module's parts without errors, while preserving incomplete code sections, as it does with comments.
 
+
+## Origin and Evolution
+
+Initially, we used parsed Elm syntax only for compilation. We used the parser and syntax model from [`stil4m/elm-syntax`](https://github.com/stil4m/elm-syntax/tree/58671250026416cdae72100bb0c67da17dec92ee/src/Elm/Syntax) version 7 for a long time, and it has provided all the information we needed for the Elm compiler. In 2025, we began rendering generated Elm syntax for snapshot tests and formatting Elm module files.
+
+Starting from `stil4m/elm-syntax` v7, syntax model and parser evolved to meet the needs of the applications detailed above:
+
++ <https://github.com/pine-vm/pine/blob/06c2abb959d818589f1f2579a1c2a3af7b003842/explore/2025-12-12-elm-formatter-and-syntax-model-design-challenge.md>
++ <https://github.com/pine-vm/pine/blob/06c2abb959d818589f1f2579a1c2a3af7b003842/guide/stil4m-concretized-syntax-model.md>
++ <https://discourse.elm-lang.org/t/elm-syntax-the-rough-edges/10507>
 
 
 tags:area-tooling-authors

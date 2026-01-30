@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
@@ -1783,7 +1784,7 @@ public static class TypeInference
     /// <returns>A tuple containing the return type and inferred parameter types.</returns>
     public static (InferredType returnType, ImmutableDictionary<string, InferredType> parameterTypes) InferFunctionDeclarationType(
         SyntaxTypes.Expression expression,
-        IReadOnlyList<SyntaxTypes.Node<SyntaxTypes.Pattern>> arguments,
+        IReadOnlyList<Node<SyntaxTypes.Pattern>> arguments,
         string moduleName,
         IReadOnlyDictionary<string, InferredType> functionSignatures)
     {
@@ -1825,7 +1826,7 @@ public static class TypeInference
     /// <param name="returnType">The return type of the function.</param>
     /// <returns>The complete function type.</returns>
     public static InferredType BuildFunctionType(
-        IReadOnlyList<SyntaxTypes.Node<SyntaxTypes.Pattern>> arguments,
+        IReadOnlyList<Node<SyntaxTypes.Pattern>> arguments,
         ImmutableDictionary<string, InferredType> parameterTypes,
         InferredType returnType)
     {

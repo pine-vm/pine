@@ -1,6 +1,6 @@
 using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.ElmSyntax;
-using Pine.Core.Elm.ElmSyntax.Stil4mConcretized;
+using Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -8,7 +8,7 @@ using System.Linq;
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.Inlining;
 
 using Inlining = Core.Elm.ElmCompilerInDotnet.Inlining;
-using SyntaxV7 = Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using Stil4mElmSyntax7 = Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 
 public class InliningTestHelper
 {
@@ -19,10 +19,10 @@ public class InliningTestHelper
         .SetItem(QualifiedNameRef.FromFullName("String.String"), QualifiedNameRef.FromFullName("String"))
         .SetItem(QualifiedNameRef.FromFullName("Char.Char"), QualifiedNameRef.FromFullName("Char"));
 
-    public static string RenderModuleForSnapshotTests(SyntaxV7.File module)
+    public static string RenderModuleForSnapshotTests(Stil4mElmSyntax7.File module)
     {
         var mapped =
-            NameMapper.MapNames(SyntaxV7.ToStil4mConcretized.ToConcretized(module), s_renderingNameMap);
+            NameMapper.MapNames(Stil4mElmSyntax7.ToFullSyntaxModel.Convert(module), s_renderingNameMap);
 
         var formatted =
             SnapshotTestFormat.Format(mapped);
@@ -33,7 +33,7 @@ public class InliningTestHelper
         return rendered;
     }
 
-    public static SyntaxV7.File CanonicalizeAndInlineAndGetSingleModule(
+    public static Stil4mElmSyntax7.File CanonicalizeAndInlineAndGetSingleModule(
         IReadOnlyList<string> elmModulesTexts,
         IReadOnlyList<string> moduleName,
         Inlining.Config config)
@@ -43,7 +43,7 @@ public class InliningTestHelper
             .Select(text =>
                 ElmSyntaxParser.ParseModuleText(text)
                 .Extract(err => throw new System.Exception("Failed parsing: " + err)))
-            .Select(SyntaxV7.FromStil4mConcretized.Convert)
+            .Select(Stil4mElmSyntax7.FromFullSyntaxModel.Convert)
             .ToList();
 
         var canonicalizeResult =

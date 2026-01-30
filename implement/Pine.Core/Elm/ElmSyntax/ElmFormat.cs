@@ -1,5 +1,3 @@
-using Pine.Core.Elm.ElmSyntax.Stil4mConcretized;
-
 namespace Pine.Core.Elm.ElmSyntax;
 
 /// <summary>

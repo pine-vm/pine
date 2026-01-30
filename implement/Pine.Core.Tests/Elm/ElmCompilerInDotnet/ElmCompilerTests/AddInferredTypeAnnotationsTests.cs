@@ -1,6 +1,6 @@
 using AwesomeAssertions;
 using Pine.Core.Elm.ElmCompilerInDotnet;
-using Pine.Core.Elm.ElmSyntax.Stil4mConcretized;
+using Pine.Core.Elm.ElmSyntax;
 using Pine.Core.Tests.Elm.ElmCompilerTests;
 using System;
 using System.Collections.Generic;

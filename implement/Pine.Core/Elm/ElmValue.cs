@@ -623,7 +623,7 @@ public abstract record ElmValue
     }
 
     /// <summary>
-    /// The Elm compiler included with Pine models the 'Float' type as a rational number,
+    /// The 'Float' type from Elm is stored as a rational number,
     /// expressed as the quotient or fraction ⁠of two integers, a numerator and a denominator.
     /// <see href="https://en.wikipedia.org/wiki/Rational_number" />
     /// </summary>
@@ -953,7 +953,7 @@ public abstract record ElmValue
     /// <summary>
     /// Determines if the items in an Elm list look like they could form a tuple.
     /// <para />
-    /// Since tuples from Elm are lowered to plain lists by the Elm compiler, we use heuristics to guess if a Pine list
+    /// Since tuples from Elm are stored as plain lists, we use heuristics to guess if a Pine list
     /// represents an Elm tuple.
     /// </summary>
     /// <param name="list">The list of <see cref="ElmValue"/> items.</param>
