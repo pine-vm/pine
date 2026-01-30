@@ -1,4 +1,5 @@
 using Pine.Core.Elm.ElmSyntax;
+using Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using Pine.Core.Files;
 using System;
 using System.Collections.Generic;
@@ -6,10 +7,10 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 
-using ConcretizedTypes = Pine.Core.Elm.ElmSyntax.Stil4mConcretized;
-using Location = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7.Location;
-using Range = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7.Range;
 using AbstractSyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+
+// Alias to avoid ambiguity with System.Range
+using Range = Pine.Core.Elm.ElmSyntax.SyntaxModel.Range;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
@@ -26,7 +27,7 @@ public class AddInferredTypeAnnotations
     /// <summary>
     /// Creates a new syntax node with the specified value at the zero range.
     /// </summary>
-    private static AbstractSyntaxTypes.Node<T> MakeNode<T>(T value) =>
+    private static Node<T> MakeNode<T>(T value) =>
         new(s_rangeZero, value);
 
     /// <summary>
@@ -39,7 +40,7 @@ public class AddInferredTypeAnnotations
     /// A result containing either an error message or a function that takes a module name
     /// and returns the annotated file for that module.
     /// </returns>
-    public static Result<string, Func<IReadOnlyList<string>, Result<string, ConcretizedTypes.File>>> InferAndAddTypeAnnotationsForAllDeclarationsByModuleName(
+    public static Result<string, Func<IReadOnlyList<string>, Result<string, File>>> InferAndAddTypeAnnotationsForAllDeclarationsByModuleName(
         FileTree appCodeTree)
     {
         static bool IncludeDeclaration(IReadOnlyList<string> declarationPath)
@@ -60,7 +61,7 @@ public class AddInferredTypeAnnotations
                 "Unexpected result type from InferAndAddTypeAnnotations: " + appResult.GetType().FullName);
         }
 
-        Result<string, ConcretizedTypes.File> AddAnnotations(IReadOnlyList<string> moduleName)
+        Result<string, File> AddAnnotations(IReadOnlyList<string> moduleName)
         {
             var fileResult = fileForModuleName(moduleName);
 
@@ -78,7 +79,7 @@ public class AddInferredTypeAnnotations
             return genericFile(IncludeDeclaration);
         }
 
-        return Result<string, Func<IReadOnlyList<string>, Result<string, ConcretizedTypes.File>>>.ok(AddAnnotations);
+        return Result<string, Func<IReadOnlyList<string>, Result<string, File>>>.ok(AddAnnotations);
     }
 
     /// <summary>
@@ -86,7 +87,7 @@ public class AddInferredTypeAnnotations
     /// Returns a function that takes a module name and returns a function to get
     /// the annotated file with a filter for which declarations to include.
     /// </summary>
-    public static Result<string, Func<IReadOnlyList<string>, Result<string, Func<Func<IReadOnlyList<string>, bool>, ConcretizedTypes.File>>>> InferAndAddTypeAnnotationsByModuleName(
+    public static Result<string, Func<IReadOnlyList<string>, Result<string, Func<Func<IReadOnlyList<string>, bool>, File>>>> InferAndAddTypeAnnotationsByModuleName(
         FileTree appCodeTree)
     {
         // Parse all module files
@@ -96,7 +97,7 @@ public class AddInferredTypeAnnotations
             .ToImmutableArray();
 
         // Dictionary to store parsed files by module name
-        var parsedFilesByModuleName = new Dictionary<string, ConcretizedTypes.File>(StringComparer.Ordinal);
+        var parsedFilesByModuleName = new Dictionary<string, File>(StringComparer.Ordinal);
         var abstractFilesList = new List<AbstractSyntaxTypes.File>();
 
         foreach (var moduleFile in elmModuleFiles)
@@ -116,13 +117,13 @@ public class AddInferredTypeAnnotations
                     "Unexpected result type from ParseModuleText: " + parseResult.GetType().FullName);
             }
 
-            var moduleName = ConcretizedTypes.Module.GetModuleName(parsedFile.ModuleDefinition.Value).Value;
+            var moduleName = Module.GetModuleName(parsedFile.ModuleDefinition.Value).Value;
             var moduleNameStr = string.Join(".", moduleName);
 
             parsedFilesByModuleName[moduleNameStr] = parsedFile;
 
             // Convert to abstract syntax for canonicalization
-            var abstractFile = AbstractSyntaxTypes.FromStil4mConcretized.Convert(parsedFile);
+            var abstractFile = AbstractSyntaxTypes.FromFullSyntaxModel.Convert(parsedFile);
             abstractFilesList.Add(abstractFile);
         }
 
@@ -157,53 +158,53 @@ public class AddInferredTypeAnnotations
             allSignatures = allSignatures.SetItems(moduleSignatures);
         }
 
-        Result<string, Func<Func<IReadOnlyList<string>, bool>, ConcretizedTypes.File>> TypeAnnotationsForModuleName(
+        Result<string, Func<Func<IReadOnlyList<string>, bool>, File>> TypeAnnotationsForModuleName(
             IReadOnlyList<string> moduleName)
         {
             var moduleNameStr = string.Join(".", moduleName);
 
             if (!parsedFilesByModuleName.TryGetValue(moduleNameStr, out var parsedFile))
             {
-                return Result<string, Func<Func<IReadOnlyList<string>, bool>, ConcretizedTypes.File>>.err(
+                return Result<string, Func<Func<IReadOnlyList<string>, bool>, File>>.err(
                     $"Module not found: {moduleNameStr}");
             }
 
             if (!canonicalizedFilesByModuleName.TryGetValue(moduleNameStr, out var canonicalizedFile))
             {
-                return Result<string, Func<Func<IReadOnlyList<string>, bool>, ConcretizedTypes.File>>.err(
+                return Result<string, Func<Func<IReadOnlyList<string>, bool>, File>>.err(
                     $"Canonicalized module not found: {moduleNameStr}");
             }
 
-            ConcretizedTypes.File GetAnnotatedFile(Func<IReadOnlyList<string>, bool> includeDeclaration)
+            File GetAnnotatedFile(Func<IReadOnlyList<string>, bool> includeDeclaration)
             {
                 // Infer type annotations using canonicalized file and combined signatures from all modules
                 var typeAnnotations = InferTypeAnnotationsForFile(canonicalizedFile, moduleNameStr, includeDeclaration, allSignatures);
 
                 // Apply type annotations to the original (non-canonicalized) file for output
-                return ConcretizedTypes.SetTypeAnnotation.SetTypeAnnotations(
+                return SetTypeAnnotation.SetTypeAnnotations(
                     parsedFile,
                     typeAnnotations,
                     declarationWithoutEntry: null,
                     entryWithoutDeclaration: null);
             }
 
-            return Result<string, Func<Func<IReadOnlyList<string>, bool>, ConcretizedTypes.File>>.ok(GetAnnotatedFile);
+            return Result<string, Func<Func<IReadOnlyList<string>, bool>, File>>.ok(GetAnnotatedFile);
         }
 
-        return Result<string, Func<IReadOnlyList<string>, Result<string, Func<Func<IReadOnlyList<string>, bool>, ConcretizedTypes.File>>>>.ok(
+        return Result<string, Func<IReadOnlyList<string>, Result<string, Func<Func<IReadOnlyList<string>, bool>, File>>>>.ok(
             TypeAnnotationsForModuleName);
     }
 
     /// <summary>
     /// Infers type annotations for all declarations in a file, including local declarations in let-blocks.
     /// </summary>
-    private static ImmutableDictionary<IReadOnlyList<string>, ConcretizedTypes.TypeAnnotation> InferTypeAnnotationsForFile(
+    private static ImmutableDictionary<IReadOnlyList<string>, TypeAnnotation> InferTypeAnnotationsForFile(
         AbstractSyntaxTypes.File file,
         string moduleName,
         Func<IReadOnlyList<string>, bool> includeDeclaration,
         ImmutableDictionary<string, TypeInference.InferredType> allModuleSignatures)
     {
-        var annotations = ImmutableDictionary<IReadOnlyList<string>, ConcretizedTypes.TypeAnnotation>.Empty
+        var annotations = ImmutableDictionary<IReadOnlyList<string>, TypeAnnotation>.Empty
             .WithComparers(EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
 
         // Use the combined signatures from all modules
@@ -282,14 +283,14 @@ public class AddInferredTypeAnnotations
     /// Recursively collects type annotations for declarations within an expression (e.g., let-blocks).
     /// Uses TypeInference for actual type inference and only converts InferredType to TypeAnnotation.
     /// </summary>
-    private static ImmutableDictionary<IReadOnlyList<string>, ConcretizedTypes.TypeAnnotation> CollectTypeAnnotationsInExpression(
+    private static ImmutableDictionary<IReadOnlyList<string>, TypeAnnotation> CollectTypeAnnotationsInExpression(
         AbstractSyntaxTypes.Expression expression,
         IReadOnlyList<string> currentPath,
-        IReadOnlyList<AbstractSyntaxTypes.Node<AbstractSyntaxTypes.Pattern>> parentArguments,
+        IReadOnlyList<Node<AbstractSyntaxTypes.Pattern>> parentArguments,
         string moduleName,
         IReadOnlyDictionary<string, TypeInference.InferredType> functionSignatures,
         Func<IReadOnlyList<string>, bool> includeDeclaration,
-        ImmutableDictionary<IReadOnlyList<string>, ConcretizedTypes.TypeAnnotation> annotations)
+        ImmutableDictionary<IReadOnlyList<string>, TypeAnnotation> annotations)
     {
         switch (expression)
         {
@@ -430,42 +431,42 @@ public class AddInferredTypeAnnotations
     /// <summary>
     /// Converts an InferredType to a TypeAnnotation.
     /// </summary>
-    private static ConcretizedTypes.TypeAnnotation? InferredTypeToTypeAnnotation(TypeInference.InferredType inferredType)
+    private static TypeAnnotation? InferredTypeToTypeAnnotation(TypeInference.InferredType inferredType)
     {
         return inferredType switch
         {
             TypeInference.InferredType.IntType =>
-                new ConcretizedTypes.TypeAnnotation.Typed(
+                new TypeAnnotation.Typed(
                     MakeNode<(IReadOnlyList<string> ModuleName, string Name)>(([], "Int")),
                     []),
 
             TypeInference.InferredType.FloatType =>
-                new ConcretizedTypes.TypeAnnotation.Typed(
+                new TypeAnnotation.Typed(
                     MakeNode<(IReadOnlyList<string> ModuleName, string Name)>(([], "Float")),
                     []),
 
             TypeInference.InferredType.StringType =>
-                new ConcretizedTypes.TypeAnnotation.Typed(
+                new TypeAnnotation.Typed(
                     MakeNode<(IReadOnlyList<string> ModuleName, string Name)>(([], "String")),
                     []),
 
             TypeInference.InferredType.CharType =>
-                new ConcretizedTypes.TypeAnnotation.Typed(
+                new TypeAnnotation.Typed(
                     MakeNode<(IReadOnlyList<string> ModuleName, string Name)>(([], "Char")),
                     []),
 
             TypeInference.InferredType.BoolType =>
-                new ConcretizedTypes.TypeAnnotation.Typed(
+                new TypeAnnotation.Typed(
                     MakeNode<(IReadOnlyList<string> ModuleName, string Name)>(([], "Bool")),
                     []),
 
             TypeInference.InferredType.NumberType =>
                 // "number" is the polymorphic numeric type in Elm
-                new ConcretizedTypes.TypeAnnotation.GenericType("number"),
+                new TypeAnnotation.GenericType("number"),
 
             TypeInference.InferredType.TypeVariable typeVar =>
                 // Type variable like 'a', 'b', etc.
-                new ConcretizedTypes.TypeAnnotation.GenericType(typeVar.Name),
+                new TypeAnnotation.GenericType(typeVar.Name),
 
             TypeInference.InferredType.TupleType tupleType =>
                 CreateTupleTypeAnnotation(tupleType.ElementTypes),
@@ -489,9 +490,9 @@ public class AddInferredTypeAnnotations
     /// <summary>
     /// Creates a tuple type annotation from element types.
     /// </summary>
-    private static ConcretizedTypes.TypeAnnotation? CreateTupleTypeAnnotation(IReadOnlyList<TypeInference.InferredType> elementTypes)
+    private static TypeAnnotation? CreateTupleTypeAnnotation(IReadOnlyList<TypeInference.InferredType> elementTypes)
     {
-        var typeAnnotations = new List<AbstractSyntaxTypes.Node<ConcretizedTypes.TypeAnnotation>>();
+        var typeAnnotations = new List<Node<TypeAnnotation>>();
 
         foreach (var elemType in elementTypes)
         {
@@ -505,7 +506,7 @@ public class AddInferredTypeAnnotations
 
         if (typeAnnotations.Count is 0)
         {
-            return new ConcretizedTypes.TypeAnnotation.Unit();
+            return new TypeAnnotation.Unit();
         }
 
         var first = typeAnnotations[0];
@@ -515,25 +516,25 @@ public class AddInferredTypeAnnotations
             .Select(ta => (s_locationZero, ta))
             .ToList();
 
-        return new ConcretizedTypes.TypeAnnotation.Tupled(
-            new ConcretizedTypes.SeparatedSyntaxList<AbstractSyntaxTypes.Node<ConcretizedTypes.TypeAnnotation>>.NonEmpty(first, rest));
+        return new TypeAnnotation.Tupled(
+            new SeparatedSyntaxList<Node<TypeAnnotation>>.NonEmpty(first, rest));
     }
 
     /// <summary>
     /// Creates a record type annotation from fields (name and type pairs).
     /// </summary>
-    private static ConcretizedTypes.TypeAnnotation? CreateRecordTypeAnnotation(
+    private static TypeAnnotation? CreateRecordTypeAnnotation(
         IReadOnlyList<(string FieldName, TypeInference.InferredType FieldType)> fields)
     {
         if (fields.Count is 0)
         {
             // Empty record
-            return new ConcretizedTypes.TypeAnnotation.Record(
-                new ConcretizedTypes.RecordDefinition(
-                    new ConcretizedTypes.SeparatedSyntaxList<AbstractSyntaxTypes.Node<ConcretizedTypes.RecordField>>.Empty()));
+            return new TypeAnnotation.Record(
+                new RecordDefinition(
+                    new SeparatedSyntaxList<Node<RecordField>>.Empty()));
         }
 
-        var recordFields = new List<AbstractSyntaxTypes.Node<ConcretizedTypes.RecordField>>();
+        var recordFields = new List<Node<RecordField>>();
 
         foreach (var (fieldName, fieldType) in fields)
         {
@@ -543,7 +544,7 @@ public class AddInferredTypeAnnotations
                 return null;
             }
 
-            var recordField = new ConcretizedTypes.RecordField(
+            var recordField = new RecordField(
                 MakeNode(fieldName),
                 s_locationZero,
                 MakeNode(fieldTypeAnnotation));
@@ -558,15 +559,15 @@ public class AddInferredTypeAnnotations
             .Select(rf => (s_locationZero, rf))
             .ToList();
 
-        return new ConcretizedTypes.TypeAnnotation.Record(
-            new ConcretizedTypes.RecordDefinition(
-                new ConcretizedTypes.SeparatedSyntaxList<AbstractSyntaxTypes.Node<ConcretizedTypes.RecordField>>.NonEmpty(first, rest)));
+        return new TypeAnnotation.Record(
+            new RecordDefinition(
+                new SeparatedSyntaxList<Node<RecordField>>.NonEmpty(first, rest)));
     }
 
     /// <summary>
     /// Creates a function type annotation from argument and return types.
     /// </summary>
-    private static ConcretizedTypes.TypeAnnotation? CreateFunctionTypeAnnotation(
+    private static TypeAnnotation? CreateFunctionTypeAnnotation(
         TypeInference.InferredType argumentType,
         TypeInference.InferredType returnType)
     {
@@ -578,7 +579,7 @@ public class AddInferredTypeAnnotations
             return null;
         }
 
-        return new ConcretizedTypes.TypeAnnotation.FunctionTypeAnnotation(
+        return new TypeAnnotation.FunctionTypeAnnotation(
             MakeNode(argAnnotation),
             s_locationZero,
             MakeNode(retAnnotation));
@@ -587,7 +588,7 @@ public class AddInferredTypeAnnotations
     /// <summary>
     /// Creates a List type annotation from an element type.
     /// </summary>
-    private static ConcretizedTypes.TypeAnnotation? CreateListTypeAnnotation(TypeInference.InferredType elementType)
+    private static TypeAnnotation? CreateListTypeAnnotation(TypeInference.InferredType elementType)
     {
         var elementAnnotation = InferredTypeToTypeAnnotation(elementType);
         if (elementAnnotation is null)
@@ -595,7 +596,7 @@ public class AddInferredTypeAnnotations
             return null;
         }
 
-        return new ConcretizedTypes.TypeAnnotation.Typed(
+        return new TypeAnnotation.Typed(
             MakeNode<(IReadOnlyList<string> ModuleName, string Name)>(([], "List")),
             [MakeNode(elementAnnotation)]);
     }
@@ -603,12 +604,12 @@ public class AddInferredTypeAnnotations
     /// <summary>
     /// Creates a custom type annotation from module name, type name, and type arguments.
     /// </summary>
-    private static ConcretizedTypes.TypeAnnotation? CreateCustomTypeAnnotation(
+    private static TypeAnnotation? CreateCustomTypeAnnotation(
         IReadOnlyList<string> moduleName,
         string typeName,
         IReadOnlyList<TypeInference.InferredType> typeArguments)
     {
-        var typeArgNodes = new List<AbstractSyntaxTypes.Node<ConcretizedTypes.TypeAnnotation>>();
+        var typeArgNodes = new List<Node<TypeAnnotation>>();
         foreach (var arg in typeArguments)
         {
             var argAnnotation = InferredTypeToTypeAnnotation(arg);
@@ -619,7 +620,7 @@ public class AddInferredTypeAnnotations
             typeArgNodes.Add(MakeNode(argAnnotation));
         }
 
-        return new ConcretizedTypes.TypeAnnotation.Typed(
+        return new TypeAnnotation.Typed(
             MakeNode<(IReadOnlyList<string> ModuleName, string Name)>((moduleName, typeName)),
             typeArgNodes);
     }

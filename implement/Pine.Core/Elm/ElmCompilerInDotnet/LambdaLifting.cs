@@ -2,8 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using Pine.Core.Elm.ElmSyntax.SyntaxModel;
 
 using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+
+// Alias to avoid ambiguity with System.Range
+using Range = Pine.Core.Elm.ElmSyntax.SyntaxModel.Range;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
@@ -28,7 +32,7 @@ public static class LambdaLifting
     /// <returns>The transformed module with lifted lambdas as top-level functions.</returns>
     public static SyntaxTypes.File LiftLambdas(SyntaxTypes.File module)
     {
-        var newDeclarations = new List<SyntaxTypes.Node<SyntaxTypes.Declaration>>();
+        var newDeclarations = new List<Node<SyntaxTypes.Declaration>>();
 
         foreach (var declaration in module.Declarations)
         {
@@ -105,21 +109,21 @@ public static class LambdaLifting
     /// <summary>
     /// Transforms an expression, lifting any lambdas found within it.
     /// </summary>
-    private static (SyntaxTypes.Node<SyntaxTypes.Expression>, IReadOnlyList<SyntaxTypes.Node<SyntaxTypes.Declaration>>) TransformExpression(
-        SyntaxTypes.Node<SyntaxTypes.Expression> exprNode,
+    private static (Node<SyntaxTypes.Expression>, IReadOnlyList<Node<SyntaxTypes.Declaration>>) TransformExpression(
+        Node<SyntaxTypes.Expression> exprNode,
         LiftingContext context)
     {
-        var liftedFunctions = new List<SyntaxTypes.Node<SyntaxTypes.Declaration>>();
+        var liftedFunctions = new List<Node<SyntaxTypes.Declaration>>();
 
         var (transformedExpr, newContext) = TransformExpressionInner(exprNode, context, liftedFunctions);
 
         return (transformedExpr, liftedFunctions);
     }
 
-    private static (SyntaxTypes.Node<SyntaxTypes.Expression>, LiftingContext) TransformExpressionInner(
-        SyntaxTypes.Node<SyntaxTypes.Expression> exprNode,
+    private static (Node<SyntaxTypes.Expression>, LiftingContext) TransformExpressionInner(
+        Node<SyntaxTypes.Expression> exprNode,
         LiftingContext context,
-        List<SyntaxTypes.Node<SyntaxTypes.Declaration>> liftedFunctions)
+        List<Node<SyntaxTypes.Declaration>> liftedFunctions)
     {
         var expr = exprNode.Value;
 
@@ -182,11 +186,11 @@ public static class LambdaLifting
         }
     }
 
-    private static (SyntaxTypes.Node<SyntaxTypes.Expression>, LiftingContext) LiftLambda(
-        SyntaxTypes.Node<SyntaxTypes.Expression> exprNode,
+    private static (Node<SyntaxTypes.Expression>, LiftingContext) LiftLambda(
+        Node<SyntaxTypes.Expression> exprNode,
         SyntaxTypes.Expression.LambdaExpression lambdaExpr,
         LiftingContext context,
-        List<SyntaxTypes.Node<SyntaxTypes.Declaration>> liftedFunctions)
+        List<Node<SyntaxTypes.Declaration>> liftedFunctions)
     {
         var lambda = lambdaExpr.Lambda;
 
@@ -227,14 +231,14 @@ public static class LambdaLifting
         return (replacementExpr, finalContext with { LambdaCounter = finalContext.LambdaCounter });
     }
 
-    private static (SyntaxTypes.Node<SyntaxTypes.Expression>, LiftingContext) TransformLetExpression(
-        SyntaxTypes.Node<SyntaxTypes.Expression> exprNode,
+    private static (Node<SyntaxTypes.Expression>, LiftingContext) TransformLetExpression(
+        Node<SyntaxTypes.Expression> exprNode,
         SyntaxTypes.Expression.LetExpression letExpr,
         LiftingContext context,
-        List<SyntaxTypes.Node<SyntaxTypes.Declaration>> liftedFunctions)
+        List<Node<SyntaxTypes.Declaration>> liftedFunctions)
     {
         var letBlock = letExpr.Value;
-        var newDeclarations = new List<SyntaxTypes.Node<SyntaxTypes.Expression.LetDeclaration>>();
+        var newDeclarations = new List<Node<SyntaxTypes.Expression.LetDeclaration>>();
         var currentContext = context;
 
         // First pass: collect all names bound by let declarations
@@ -364,12 +368,12 @@ public static class LambdaLifting
         return (exprNode with { Value = newLetExpr }, finalContext);
     }
 
-    private static (SyntaxTypes.Node<SyntaxTypes.Expression.LetDeclaration>, LiftingContext) LiftNamedLambda(
-        SyntaxTypes.Node<SyntaxTypes.Expression.LetDeclaration> declNode,
+    private static (Node<SyntaxTypes.Expression.LetDeclaration>, LiftingContext) LiftNamedLambda(
+        Node<SyntaxTypes.Expression.LetDeclaration> declNode,
         SyntaxTypes.Expression.LetDeclaration.LetFunction letFunc,
         SyntaxTypes.Expression.LambdaExpression lambdaExpr,
         LiftingContext context,
-        List<SyntaxTypes.Node<SyntaxTypes.Declaration>> liftedFunctions,
+        List<Node<SyntaxTypes.Declaration>> liftedFunctions,
         IReadOnlyDictionary<string, string> localFunctionLiftedNames)
     {
         var lambda = lambdaExpr.Lambda;
@@ -421,18 +425,18 @@ public static class LambdaLifting
         var newFunc = new SyntaxTypes.FunctionStruct(
             letFunc.Function.Documentation,
             null,
-            new SyntaxTypes.Node<SyntaxTypes.FunctionImplementation>(declNode.Range, newFuncImpl));
+            new Node<SyntaxTypes.FunctionImplementation>(declNode.Range, newFuncImpl));
 
         var newLetFunc = new SyntaxTypes.Expression.LetDeclaration.LetFunction(newFunc);
 
         return (declNode with { Value = newLetFunc }, context);
     }
 
-    private static (SyntaxTypes.Node<SyntaxTypes.Expression.LetDeclaration>, LiftingContext) LiftLocalFunction(
-        SyntaxTypes.Node<SyntaxTypes.Expression.LetDeclaration> declNode,
+    private static (Node<SyntaxTypes.Expression.LetDeclaration>, LiftingContext) LiftLocalFunction(
+        Node<SyntaxTypes.Expression.LetDeclaration> declNode,
         SyntaxTypes.Expression.LetDeclaration.LetFunction letFunc,
         LiftingContext context,
-        List<SyntaxTypes.Node<SyntaxTypes.Declaration>> liftedFunctions,
+        List<Node<SyntaxTypes.Declaration>> liftedFunctions,
         IReadOnlyDictionary<string, string> localFunctionLiftedNames)
     {
         var bindingName = letFunc.Function.Declaration.Value.Name.Value;
@@ -484,15 +488,15 @@ public static class LambdaLifting
         var newFunc = new SyntaxTypes.FunctionStruct(
             letFunc.Function.Documentation,
             null,
-            new SyntaxTypes.Node<SyntaxTypes.FunctionImplementation>(declNode.Range, newFuncImpl));
+            new Node<SyntaxTypes.FunctionImplementation>(declNode.Range, newFuncImpl));
 
         var newLetFunc = new SyntaxTypes.Expression.LetDeclaration.LetFunction(newFunc);
 
         return (declNode with { Value = newLetFunc }, context);
     }
 
-    private static SyntaxTypes.Node<SyntaxTypes.Expression> SubstituteVariableReferences(
-        SyntaxTypes.Node<SyntaxTypes.Expression> exprNode,
+    private static Node<SyntaxTypes.Expression> SubstituteVariableReferences(
+        Node<SyntaxTypes.Expression> exprNode,
         IReadOnlyDictionary<string, string> substitutions)
     {
         var expr = exprNode.Value;
@@ -630,8 +634,8 @@ public static class LambdaLifting
         }
     }
 
-    private static SyntaxTypes.Node<SyntaxTypes.Expression.LetDeclaration> SubstituteInLetDeclaration(
-        SyntaxTypes.Node<SyntaxTypes.Expression.LetDeclaration> declNode,
+    private static Node<SyntaxTypes.Expression.LetDeclaration> SubstituteInLetDeclaration(
+        Node<SyntaxTypes.Expression.LetDeclaration> declNode,
         IReadOnlyDictionary<string, string> substitutions)
     {
         switch (declNode.Value)
@@ -651,34 +655,34 @@ public static class LambdaLifting
         }
     }
 
-    private static SyntaxTypes.Node<SyntaxTypes.Declaration> CreateLiftedFunction(
+    private static Node<SyntaxTypes.Declaration> CreateLiftedFunction(
         string functionName,
         IReadOnlyList<string> capturedVariables,
-        IReadOnlyList<SyntaxTypes.Node<SyntaxTypes.Pattern>> lambdaParams,
-        SyntaxTypes.Node<SyntaxTypes.Expression> body,
-        SyntaxTypes.Range range)
+        IReadOnlyList<Node<SyntaxTypes.Pattern>> lambdaParams,
+        Node<SyntaxTypes.Expression> body,
+        Range range)
     {
-        var allParams = new List<SyntaxTypes.Node<SyntaxTypes.Pattern>>();
+        var allParams = new List<Node<SyntaxTypes.Pattern>>();
 
         // Add captured variables as first parameter(s)
         if (capturedVariables.Count is 1)
         {
             // Single capture: plain parameter
             var capturePattern = new SyntaxTypes.Pattern.VarPattern(capturedVariables[0]);
-            allParams.Add(new SyntaxTypes.Node<SyntaxTypes.Pattern>(range, capturePattern));
+            allParams.Add(new Node<SyntaxTypes.Pattern>(range, capturePattern));
         }
         else if (capturedVariables.Count > 1)
         {
             // Multiple captures: tuple pattern
             var tupleElements =
                 capturedVariables
-                .Select(v => new SyntaxTypes.Node<SyntaxTypes.Pattern>(
+                .Select(v => new Node<SyntaxTypes.Pattern>(
                     range,
                     new SyntaxTypes.Pattern.VarPattern(v)))
                 .ToList();
 
             var tuplePattern = new SyntaxTypes.Pattern.TuplePattern(tupleElements);
-            allParams.Add(new SyntaxTypes.Node<SyntaxTypes.Pattern>(range, tuplePattern));
+            allParams.Add(new Node<SyntaxTypes.Pattern>(range, tuplePattern));
         }
         // Zero captures: no extra parameter
 
@@ -686,7 +690,7 @@ public static class LambdaLifting
         allParams.AddRange(lambdaParams);
 
         var funcImpl = new SyntaxTypes.FunctionImplementation(
-            new SyntaxTypes.Node<string>(range, functionName),
+            new Node<string>(range, functionName),
             allParams,
             body);
 
@@ -694,21 +698,21 @@ public static class LambdaLifting
             new SyntaxTypes.FunctionStruct(
                 null,
                 null,
-                new SyntaxTypes.Node<SyntaxTypes.FunctionImplementation>(range, funcImpl));
+                new Node<SyntaxTypes.FunctionImplementation>(range, funcImpl));
 
         var funcDecl = new SyntaxTypes.Declaration.FunctionDeclaration(funcStruct);
 
-        return new SyntaxTypes.Node<SyntaxTypes.Declaration>(range, funcDecl);
+        return new Node<SyntaxTypes.Declaration>(range, funcDecl);
     }
 
-    private static SyntaxTypes.Node<SyntaxTypes.Expression> CreateLiftedFunctionCall(
+    private static Node<SyntaxTypes.Expression> CreateLiftedFunctionCall(
         string functionName,
         IReadOnlyList<string> capturedVariables,
-        SyntaxTypes.Range range)
+        Range range)
     {
         // Reference to the lifted function
         var funcRef = new SyntaxTypes.Expression.FunctionOrValue([], functionName);
-        var funcRefNode = new SyntaxTypes.Node<SyntaxTypes.Expression>(range, funcRef);
+        var funcRefNode = new Node<SyntaxTypes.Expression>(range, funcRef);
 
         if (capturedVariables.Count is 0)
         {
@@ -719,30 +723,30 @@ public static class LambdaLifting
         {
             // Single capture: function application with single argument
             var argRef = new SyntaxTypes.Expression.FunctionOrValue([], capturedVariables[0]);
-            var argNode = new SyntaxTypes.Node<SyntaxTypes.Expression>(range, argRef);
+            var argNode = new Node<SyntaxTypes.Expression>(range, argRef);
 
             var app = new SyntaxTypes.Expression.Application([funcRefNode, argNode]);
-            return new SyntaxTypes.Node<SyntaxTypes.Expression>(range, app);
+            return new Node<SyntaxTypes.Expression>(range, app);
         }
         else
         {
             // Multiple captures: function application with tuple argument
             var tupleElements = capturedVariables
-                .Select(v => new SyntaxTypes.Node<SyntaxTypes.Expression>(
+                .Select(v => new Node<SyntaxTypes.Expression>(
                     range,
                     new SyntaxTypes.Expression.FunctionOrValue([], v)))
                 .ToList();
 
             var tupleExpr = new SyntaxTypes.Expression.TupledExpression(tupleElements);
-            var tupleNode = new SyntaxTypes.Node<SyntaxTypes.Expression>(range, tupleExpr);
+            var tupleNode = new Node<SyntaxTypes.Expression>(range, tupleExpr);
 
             var app = new SyntaxTypes.Expression.Application([funcRefNode, tupleNode]);
-            return new SyntaxTypes.Node<SyntaxTypes.Expression>(range, app);
+            return new Node<SyntaxTypes.Expression>(range, app);
         }
     }
 
     private static ImmutableHashSet<string> FindFreeVariables(
-        SyntaxTypes.Node<SyntaxTypes.Expression> exprNode,
+        Node<SyntaxTypes.Expression> exprNode,
         ImmutableHashSet<string> boundVariables)
     {
         var expr = exprNode.Value;
@@ -872,7 +876,7 @@ public static class LambdaLifting
         }
     }
 
-    private static ImmutableList<string> CollectPatternNames(IReadOnlyList<SyntaxTypes.Node<SyntaxTypes.Pattern>> patterns)
+    private static ImmutableList<string> CollectPatternNames(IReadOnlyList<Node<SyntaxTypes.Pattern>> patterns)
     {
         return patterns.Aggregate(
             ImmutableList<string>.Empty,
@@ -934,13 +938,13 @@ public static class LambdaLifting
 
     // Transform methods for other expression types
 
-    private static (SyntaxTypes.Node<SyntaxTypes.Expression>, LiftingContext) TransformApplication(
-        SyntaxTypes.Node<SyntaxTypes.Expression> exprNode,
+    private static (Node<SyntaxTypes.Expression>, LiftingContext) TransformApplication(
+        Node<SyntaxTypes.Expression> exprNode,
         SyntaxTypes.Expression.Application appExpr,
         LiftingContext context,
-        List<SyntaxTypes.Node<SyntaxTypes.Declaration>> liftedFunctions)
+        List<Node<SyntaxTypes.Declaration>> liftedFunctions)
     {
-        var transformedArgs = new List<SyntaxTypes.Node<SyntaxTypes.Expression>>();
+        var transformedArgs = new List<Node<SyntaxTypes.Expression>>();
         var currentContext = context;
 
         foreach (var arg in appExpr.Arguments)
@@ -954,11 +958,11 @@ public static class LambdaLifting
         return (exprNode with { Value = newApp }, currentContext);
     }
 
-    private static (SyntaxTypes.Node<SyntaxTypes.Expression>, LiftingContext) TransformOperatorApplication(
-        SyntaxTypes.Node<SyntaxTypes.Expression> exprNode,
+    private static (Node<SyntaxTypes.Expression>, LiftingContext) TransformOperatorApplication(
+        Node<SyntaxTypes.Expression> exprNode,
         SyntaxTypes.Expression.OperatorApplication opApp,
         LiftingContext context,
-        List<SyntaxTypes.Node<SyntaxTypes.Declaration>> liftedFunctions)
+        List<Node<SyntaxTypes.Declaration>> liftedFunctions)
     {
         var (transformedLeft, ctx1) =
             TransformExpressionInner(opApp.Left, context, liftedFunctions);
@@ -971,11 +975,11 @@ public static class LambdaLifting
         return (exprNode with { Value = newOpApp }, ctx2);
     }
 
-    private static (SyntaxTypes.Node<SyntaxTypes.Expression>, LiftingContext) TransformIfBlock(
-        SyntaxTypes.Node<SyntaxTypes.Expression> exprNode,
+    private static (Node<SyntaxTypes.Expression>, LiftingContext) TransformIfBlock(
+        Node<SyntaxTypes.Expression> exprNode,
         SyntaxTypes.Expression.IfBlock ifBlock,
         LiftingContext context,
-        List<SyntaxTypes.Node<SyntaxTypes.Declaration>> liftedFunctions)
+        List<Node<SyntaxTypes.Declaration>> liftedFunctions)
     {
         var (transformedCond, ctx1) =
             TransformExpressionInner(ifBlock.Condition, context, liftedFunctions);
@@ -991,11 +995,11 @@ public static class LambdaLifting
         return (exprNode with { Value = newIfBlock }, ctx3);
     }
 
-    private static (SyntaxTypes.Node<SyntaxTypes.Expression>, LiftingContext) TransformCaseExpression(
-        SyntaxTypes.Node<SyntaxTypes.Expression> exprNode,
+    private static (Node<SyntaxTypes.Expression>, LiftingContext) TransformCaseExpression(
+        Node<SyntaxTypes.Expression> exprNode,
         SyntaxTypes.Expression.CaseExpression caseExpr,
         LiftingContext context,
-        List<SyntaxTypes.Node<SyntaxTypes.Declaration>> liftedFunctions)
+        List<Node<SyntaxTypes.Declaration>> liftedFunctions)
     {
         var (transformedScrutinee, ctx1) =
             TransformExpressionInner(caseExpr.CaseBlock.Expression, context, liftedFunctions);
@@ -1021,13 +1025,13 @@ public static class LambdaLifting
         return (exprNode with { Value = newCaseExpr }, currentContext);
     }
 
-    private static (SyntaxTypes.Node<SyntaxTypes.Expression>, LiftingContext) TransformTupledExpression(
-        SyntaxTypes.Node<SyntaxTypes.Expression> exprNode,
+    private static (Node<SyntaxTypes.Expression>, LiftingContext) TransformTupledExpression(
+        Node<SyntaxTypes.Expression> exprNode,
         SyntaxTypes.Expression.TupledExpression tupled,
         LiftingContext context,
-        List<SyntaxTypes.Node<SyntaxTypes.Declaration>> liftedFunctions)
+        List<Node<SyntaxTypes.Declaration>> liftedFunctions)
     {
-        var transformedElements = new List<SyntaxTypes.Node<SyntaxTypes.Expression>>();
+        var transformedElements = new List<Node<SyntaxTypes.Expression>>();
         var currentContext = context;
 
         foreach (var elem in tupled.Elements)
@@ -1043,13 +1047,13 @@ public static class LambdaLifting
         return (exprNode with { Value = newTupled }, currentContext);
     }
 
-    private static (SyntaxTypes.Node<SyntaxTypes.Expression>, LiftingContext) TransformListExpression(
-        SyntaxTypes.Node<SyntaxTypes.Expression> exprNode,
+    private static (Node<SyntaxTypes.Expression>, LiftingContext) TransformListExpression(
+        Node<SyntaxTypes.Expression> exprNode,
         SyntaxTypes.Expression.ListExpr listExpr,
         LiftingContext context,
-        List<SyntaxTypes.Node<SyntaxTypes.Declaration>> liftedFunctions)
+        List<Node<SyntaxTypes.Declaration>> liftedFunctions)
     {
-        var transformedElements = new List<SyntaxTypes.Node<SyntaxTypes.Expression>>();
+        var transformedElements = new List<Node<SyntaxTypes.Expression>>();
         var currentContext = context;
 
         foreach (var elem in listExpr.Elements)
@@ -1065,11 +1069,11 @@ public static class LambdaLifting
         return (exprNode with { Value = newListExpr }, currentContext);
     }
 
-    private static (SyntaxTypes.Node<SyntaxTypes.Expression>, LiftingContext) TransformParenthesizedExpression(
-        SyntaxTypes.Node<SyntaxTypes.Expression> exprNode,
+    private static (Node<SyntaxTypes.Expression>, LiftingContext) TransformParenthesizedExpression(
+        Node<SyntaxTypes.Expression> exprNode,
         SyntaxTypes.Expression.ParenthesizedExpression parenExpr,
         LiftingContext context,
-        List<SyntaxTypes.Node<SyntaxTypes.Declaration>> liftedFunctions)
+        List<Node<SyntaxTypes.Declaration>> liftedFunctions)
     {
         var (transformedInner, newContext) =
             TransformExpressionInner(parenExpr.Expression, context, liftedFunctions);
@@ -1078,14 +1082,14 @@ public static class LambdaLifting
         return (exprNode with { Value = newParenExpr }, newContext);
     }
 
-    private static (SyntaxTypes.Node<SyntaxTypes.Expression>, LiftingContext) TransformRecordExpression(
-        SyntaxTypes.Node<SyntaxTypes.Expression> exprNode,
+    private static (Node<SyntaxTypes.Expression>, LiftingContext) TransformRecordExpression(
+        Node<SyntaxTypes.Expression> exprNode,
         SyntaxTypes.Expression.RecordExpr recordExpr,
         LiftingContext context,
-        List<SyntaxTypes.Node<SyntaxTypes.Declaration>> liftedFunctions)
+        List<Node<SyntaxTypes.Declaration>> liftedFunctions)
     {
         var transformedFields =
-            new List<SyntaxTypes.Node<(SyntaxTypes.Node<string> fieldName, SyntaxTypes.Node<SyntaxTypes.Expression> valueExpr)>>();
+            new List<Node<(Node<string> fieldName, Node<SyntaxTypes.Expression> valueExpr)>>();
 
         var currentContext = context;
 
@@ -1100,24 +1104,24 @@ public static class LambdaLifting
         return (exprNode with { Value = newRecordExpr }, currentContext);
     }
 
-    private static (SyntaxTypes.Node<SyntaxTypes.Expression>, LiftingContext) TransformRecordAccess(
-        SyntaxTypes.Node<SyntaxTypes.Expression> exprNode,
+    private static (Node<SyntaxTypes.Expression>, LiftingContext) TransformRecordAccess(
+        Node<SyntaxTypes.Expression> exprNode,
         SyntaxTypes.Expression.RecordAccess recordAccess,
         LiftingContext context,
-        List<SyntaxTypes.Node<SyntaxTypes.Declaration>> liftedFunctions)
+        List<Node<SyntaxTypes.Declaration>> liftedFunctions)
     {
         var (transformedRecord, newContext) = TransformExpressionInner(recordAccess.Record, context, liftedFunctions);
         var newRecordAccess = new SyntaxTypes.Expression.RecordAccess(transformedRecord, recordAccess.FieldName);
         return (exprNode with { Value = newRecordAccess }, newContext);
     }
 
-    private static (SyntaxTypes.Node<SyntaxTypes.Expression>, LiftingContext) TransformRecordUpdateExpression(
-        SyntaxTypes.Node<SyntaxTypes.Expression> exprNode,
+    private static (Node<SyntaxTypes.Expression>, LiftingContext) TransformRecordUpdateExpression(
+        Node<SyntaxTypes.Expression> exprNode,
         SyntaxTypes.Expression.RecordUpdateExpression recordUpdate,
         LiftingContext context,
-        List<SyntaxTypes.Node<SyntaxTypes.Declaration>> liftedFunctions)
+        List<Node<SyntaxTypes.Declaration>> liftedFunctions)
     {
-        var transformedFields = new List<SyntaxTypes.Node<(SyntaxTypes.Node<string> fieldName, SyntaxTypes.Node<SyntaxTypes.Expression> valueExpr)>>();
+        var transformedFields = new List<Node<(Node<string> fieldName, Node<SyntaxTypes.Expression> valueExpr)>>();
         var currentContext = context;
 
         foreach (var field in recordUpdate.Fields)
@@ -1131,11 +1135,11 @@ public static class LambdaLifting
         return (exprNode with { Value = newRecordUpdate }, currentContext);
     }
 
-    private static (SyntaxTypes.Node<SyntaxTypes.Expression>, LiftingContext) TransformNegation(
-        SyntaxTypes.Node<SyntaxTypes.Expression> exprNode,
+    private static (Node<SyntaxTypes.Expression>, LiftingContext) TransformNegation(
+        Node<SyntaxTypes.Expression> exprNode,
         SyntaxTypes.Expression.Negation negation,
         LiftingContext context,
-        List<SyntaxTypes.Node<SyntaxTypes.Declaration>> liftedFunctions)
+        List<Node<SyntaxTypes.Declaration>> liftedFunctions)
     {
         var (transformedExpr, newContext) = TransformExpressionInner(negation.Expression, context, liftedFunctions);
         var newNegation = new SyntaxTypes.Expression.Negation(transformedExpr);

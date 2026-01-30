@@ -1,9 +1,7 @@
 using AwesomeAssertions;
 using Pine.Core.Elm.ElmSyntax;
-using Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using Xunit;
-
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mConcretized;
 
 namespace Pine.Core.Tests.Elm.ElmSyntax;
 
@@ -15,7 +13,7 @@ public class ElmSyntaxParserTests
         // Test that record field ranges end exactly where the field type ends,
         // not including any trailing whitespace or comments
         var input =
-            """
+            """"
             module Test exposing (..)
 
 
@@ -23,19 +21,21 @@ public class ElmSyntaxParserTests
                 { a : Int
                 , b : String
                 }
-            """;
+            """";
 
-        var parseResult = ElmSyntaxParser.ParseModuleText(input);
-        parseResult.IsOk().Should().BeTrue();
+        var parsedFile =
+            ElmSyntaxParser.ParseModuleText(input)
+            .Extract(err => throw new System.Exception(err));
 
-        var file = parseResult.WithDefault(null!);
-        var aliasDecl = file.Declarations[0].Value as SyntaxTypes.Declaration.AliasDeclaration;
+        var aliasDecl =
+            parsedFile.Declarations[0].Value as Declaration.AliasDeclaration;
+
         aliasDecl.Should().NotBeNull();
 
-        var recordType = aliasDecl!.TypeAlias.TypeAnnotation.Value as SyntaxTypes.TypeAnnotation.Record;
+        var recordType = aliasDecl!.TypeAlias.TypeAnnotation.Value as TypeAnnotation.Record;
         recordType.Should().NotBeNull();
 
-        var fields = recordType!.RecordDefinition.Fields as SyntaxTypes.SeparatedSyntaxList<Node<SyntaxTypes.RecordField>>.NonEmpty;
+        var fields = recordType!.RecordDefinition.Fields as SeparatedSyntaxList<Node<RecordField>>.NonEmpty;
         fields.Should().NotBeNull();
 
         // First field: a : Int
@@ -56,7 +56,7 @@ public class ElmSyntaxParserTests
     {
         // Test that record field ranges end at the field type, not at the trailing comment
         var input =
-            """
+            """"
             module Test exposing (..)
 
 
@@ -64,19 +64,21 @@ public class ElmSyntaxParserTests
                 { a : Int -- trailing comment
                 , b : String
                 }
-            """;
+            """";
 
-        var parseResult = ElmSyntaxParser.ParseModuleText(input);
-        parseResult.IsOk().Should().BeTrue();
+        var parsedFile =
+            ElmSyntaxParser.ParseModuleText(input)
+            .Extract(err => throw new System.Exception(err));
 
-        var file = parseResult.WithDefault(null!);
-        var aliasDecl = file.Declarations[0].Value as SyntaxTypes.Declaration.AliasDeclaration;
+        var aliasDecl =
+            parsedFile.Declarations[0].Value as Declaration.AliasDeclaration;
+
         aliasDecl.Should().NotBeNull();
 
-        var recordType = aliasDecl!.TypeAlias.TypeAnnotation.Value as SyntaxTypes.TypeAnnotation.Record;
+        var recordType = aliasDecl!.TypeAlias.TypeAnnotation.Value as TypeAnnotation.Record;
         recordType.Should().NotBeNull();
 
-        var fields = recordType!.RecordDefinition.Fields as SyntaxTypes.SeparatedSyntaxList<Node<SyntaxTypes.RecordField>>.NonEmpty;
+        var fields = recordType!.RecordDefinition.Fields as SeparatedSyntaxList<Node<RecordField>>.NonEmpty;
         fields.Should().NotBeNull();
 
         // First field: a : Int -- trailing comment
@@ -97,7 +99,7 @@ public class ElmSyntaxParserTests
     {
         // Test with comments between fields
         var input =
-            """
+            """"
             module Test exposing (..)
 
 
@@ -107,15 +109,17 @@ public class ElmSyntaxParserTests
                 -- comment between fields
                 , b : String -- trailing
                 }
-            """;
+            """";
 
-        var parseResult = ElmSyntaxParser.ParseModuleText(input);
-        parseResult.IsOk().Should().BeTrue();
+        var parsedFile =
+            ElmSyntaxParser.ParseModuleText(input)
+            .Extract(err => throw new System.Exception(err));
 
-        var file = parseResult.WithDefault(null!);
-        var aliasDecl = file.Declarations[0].Value as SyntaxTypes.Declaration.AliasDeclaration;
-        var recordType = aliasDecl!.TypeAlias.TypeAnnotation.Value as SyntaxTypes.TypeAnnotation.Record;
-        var fields = recordType!.RecordDefinition.Fields as SyntaxTypes.SeparatedSyntaxList<Node<SyntaxTypes.RecordField>>.NonEmpty;
+        var aliasDecl =
+            parsedFile.Declarations[0].Value as Declaration.AliasDeclaration;
+
+        var recordType = aliasDecl!.TypeAlias.TypeAnnotation.Value as TypeAnnotation.Record;
+        var fields = recordType!.RecordDefinition.Fields as SeparatedSyntaxList<Node<RecordField>>.NonEmpty;
 
         // First field: a : Int
         var firstField = fields!.First;

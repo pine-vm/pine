@@ -1,7 +1,7 @@
 using Pine.Core.CodeAnalysis;
 using Pine.Core.Elm.ElmCompilerInDotnet;
 using Pine.Core.Elm.ElmSyntax;
-using Pine.Core.Elm.ElmSyntax.Stil4mConcretized;
+using Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 using Pine.Core.Interpreter.IntermediateVM;
 using Pine.Core.Tests.Elm.ElmCompilerTests;
@@ -13,7 +13,7 @@ using System.Linq;
 using System.Text;
 
 using AbstractSyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
-using ConcreteSyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mConcretized;
+using ConcreteSyntaxTypes = Pine.Core.Elm.ElmSyntax.SyntaxModel;
 
 namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet;
 
@@ -225,7 +225,7 @@ public class ElmCompilerTestHelper
             .ToImmutableArray();
 
         var parsedModulesBeforeCanonicalize =
-            new List<Core.Elm.ElmSyntax.Stil4mElmSyntax7.File>();
+            new List<AbstractSyntaxTypes.File>();
 
         foreach (var moduleFile in elmModuleFiles)
         {
@@ -243,7 +243,7 @@ public class ElmCompilerTestHelper
             }
 
             var parseModuleAst =
-                FromStil4mConcretized.Convert(parseModuleOk);
+                FromFullSyntaxModel.Convert(parseModuleOk);
 
             parsedModulesBeforeCanonicalize.Add(parseModuleAst);
         }
@@ -275,7 +275,7 @@ public class ElmCompilerTestHelper
 
         // Collect all functions
         var allFunctions =
-            new Dictionary<string, (string moduleName, string functionName, Core.Elm.ElmSyntax.Stil4mElmSyntax7.Declaration.FunctionDeclaration declaration)>();
+            new Dictionary<string, (string moduleName, string functionName, AbstractSyntaxTypes.Declaration.FunctionDeclaration declaration)>();
 
         foreach (var elmModuleSyntax in lambdaLiftedModules)
         {
@@ -287,7 +287,7 @@ public class ElmCompilerTestHelper
             var declarations =
                 elmModuleSyntax.Declarations
                 .Select(declNode => declNode.Value)
-                .OfType<Core.Elm.ElmSyntax.Stil4mElmSyntax7.Declaration.FunctionDeclaration>();
+                .OfType<AbstractSyntaxTypes.Declaration.FunctionDeclaration>();
 
             foreach (var declaration in declarations)
             {
@@ -522,8 +522,8 @@ public class ElmCompilerTestHelper
         var moduleName = ConcreteSyntaxTypes.Module.GetModuleName(parsedFile.ModuleDefinition.Value).Value;
         var moduleNameStr = string.Join(".", moduleName);
 
-        // Convert the concretized file to abstract syntax for type inference
-        var abstractFile = FromStil4mConcretized.Convert(parsedFile);
+        // Convert the full file to abstract syntax for type inference
+        var abstractFile = FromFullSyntaxModel.Convert(parsedFile);
 
         // Build a map of function signatures from the file using TypeInference
         var functionSignatures = TypeInference.BuildFunctionSignaturesMap(abstractFile, moduleNameStr);
@@ -541,13 +541,13 @@ public class ElmCompilerTestHelper
                 }
 
                 // Convert expression and arguments to abstract syntax
-                var abstractExpression = FromStil4mConcretized.ConvertExpressionNode(
+                var abstractExpression = FromFullSyntaxModel.ConvertExpressionNode(
                     funcDecl.Function.Declaration.Value.Expression);
 
                 var abstractArguments = funcDecl.Function.Declaration.Value.Arguments
-                    .Select(arg => new AbstractSyntaxTypes.Node<AbstractSyntaxTypes.Pattern>(
+                    .Select(arg => new Node<AbstractSyntaxTypes.Pattern>(
                         arg.Range,
-                        FromStil4mConcretized.Convert(arg.Value)))
+                        FromFullSyntaxModel.Convert(arg.Value)))
                     .ToList();
 
                 // Use TypeInference to infer the function type
@@ -575,7 +575,7 @@ public class ElmCompilerTestHelper
     {
         var modulesDict =
             canonicalizeResult
-            .Extract(err => throw new System.Exception("Failed canonicalization: " + err));
+            .Extract(err => throw new Exception("Failed canonicalization: " + err));
 
         var moduleResult =
             modulesDict
@@ -585,10 +585,10 @@ public class ElmCompilerTestHelper
         return
             moduleResult is null
             ?
-            throw new System.Exception($"Module {string.Join(".", moduleName)} not found in canonicalization result")
+            throw new Exception($"Module {string.Join(".", moduleName)} not found in canonicalization result")
             :
             moduleResult
-            .Extract(err => throw new System.Exception($"Module {string.Join(".", moduleName)} has errors: " + err));
+            .Extract(err => throw new Exception($"Module {string.Join(".", moduleName)} has errors: " + err));
     }
 
     public static AbstractSyntaxTypes.File CanonicalizeAndGetSingleModule(
@@ -599,8 +599,8 @@ public class ElmCompilerTestHelper
             elmModulesTexts
             .Select(text =>
                 ElmSyntaxParser.ParseModuleText(text)
-                .Extract(err => throw new System.Exception("Failed parsing: " + err)))
-            .Select(FromStil4mConcretized.Convert)
+                .Extract(err => throw new Exception("Failed parsing: " + err)))
+            .Select(FromFullSyntaxModel.Convert)
             .ToList();
 
         var canonicalizeResult =
@@ -611,8 +611,8 @@ public class ElmCompilerTestHelper
 
         var formatted =
             Avh4Format.Format(
-                ToStil4mConcretized.ToConcretized(beforeFormat));
+                ToFullSyntaxModel.Convert(beforeFormat));
 
-        return FromStil4mConcretized.Convert(formatted);
+        return FromFullSyntaxModel.Convert(formatted);
     }
 }

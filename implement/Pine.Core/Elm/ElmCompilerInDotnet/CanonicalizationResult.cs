@@ -1,7 +1,8 @@
 using System;
 using System.Collections.Generic;
 
-using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+// Alias to avoid ambiguity with System.Range
+using Range = Pine.Core.Elm.ElmSyntax.SyntaxModel.Range;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
@@ -11,7 +12,7 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 /// <param name="Range">The source location where the error occurred.</param>
 /// <param name="ReferencedName">The name that was referenced but could not be resolved.</param>
 public record CanonicalizationError(
-    SyntaxTypes.Range Range,
+    Range Range,
     string ReferencedName);
 
 /// <summary>

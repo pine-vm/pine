@@ -29,7 +29,7 @@ public class LambdaLiftingTests
             ElmSyntaxParser.ParseModuleText(moduleText)
             .Extract(err => throw new Exception("Failed parsing: " + err));
 
-        return FromStil4mConcretized.Convert(concreteSyntax);
+        return FromFullSyntaxModel.Convert(concreteSyntax);
     }
 
     private static string LiftAndFormat(string inputModuleText)
@@ -39,8 +39,8 @@ public class LambdaLiftingTests
         var liftedModule = LambdaLifting.LiftLambdas(parsedModule);
 
         // Use FormatToString directly which formats and renders in one step
-        return Core.Elm.ElmSyntax.Stil4mConcretized.Avh4Format.FormatToString(
-            ToStil4mConcretized.ToConcretized(liftedModule));
+        return Avh4Format.FormatToString(
+            ToFullSyntaxModel.Convert(liftedModule));
     }
 
     /// <summary>

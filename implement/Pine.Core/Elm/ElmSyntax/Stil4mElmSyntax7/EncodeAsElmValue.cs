@@ -1,9 +1,13 @@
 using System;
 using System.Linq;
+using Pine.Core.Elm.ElmSyntax.SyntaxModel;
 
 namespace Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 
 using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
+
+// Aliases to avoid ambiguity with System.Range
+using Range = SyntaxModel.Range;
 
 public class EncodeAsElmValue
 {
@@ -584,7 +588,7 @@ public class EncodeAsElmValue
             Expression.Floatable value =>
                 ElmValue.TagInstance(
                     "Floatable",
-                    [Stil4mConcretized.FloatLiteralConversion.ToElmFloat(value.LiteralText)]),
+                    [FloatLiteralConversion.ToElmFloat(value.LiteralText)]),
 
             // | Negation (Node Expression)
             Expression.Negation negation =>

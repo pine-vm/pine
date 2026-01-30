@@ -1,67 +1,129 @@
 using System.Collections.Generic;
-using Pine.Core.Elm.ElmSyntax.SyntaxModel;
-
-/*
- * Types for modelling parsed concrete syntax, based on
- * https://github.com/stil4m/elm-syntax/tree/58671250026416cdae72100bb0c67da17dec92ee/src/Elm/Syntax
- * */
+using System.Linq;
 
 using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
 
-namespace Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+namespace Pine.Core.Elm.ElmSyntax.SyntaxModel;
 
 /// <summary>
-/// Root of an Elm source file: module definition, imports, top declarations and comments.
+/// A list of syntax nodes separated by delimiters, such as commas in a parameter list.
+/// This model stores the locations of delimiter tokens alongside the nodes they separate.
+/// It does not store the actual delimiter tokens, therefore only fit for contexts where the delimiter type is known and fixed.
 /// </summary>
-public record File(
-    Node<Module> ModuleDefinition,
-    IReadOnlyList<Node<Import>> Imports,
-    IReadOnlyList<Node<Declaration>> Declarations,
-    IReadOnlyList<Node<string>> Comments)
+public abstract record SeparatedSyntaxList<TNode>
 {
-    /// <inheritdoc/>
-    public virtual bool Equals(File? other)
+    /// <summary>
+    /// The case of an empty list.
+    /// </summary>
+    public sealed record Empty
+        : SeparatedSyntaxList<TNode>;
+
+    /// <summary>
+    /// Represents a separated syntax list that is guaranteed to contain at least one node.
+    /// </summary>
+    public sealed record NonEmpty(
+        TNode First,
+        IReadOnlyList<(Location SeparatorLocation, TNode Node)> Rest)
+        : SeparatedSyntaxList<TNode>
     {
-        if (ReferenceEquals(this, other))
-            return true;
+        /// <inheritdoc/>
+        public bool Equals(NonEmpty? other)
+        {
+            if (ReferenceEquals(this, other))
+                return true;
 
-        if (other is null)
-            return false;
+            if (other is null)
+                return false;
 
-        return
-            ModuleDefinition.Equals(other.ModuleDefinition) &&
-            System.Linq.Enumerable.SequenceEqual(Imports, other.Imports) &&
-            System.Linq.Enumerable.SequenceEqual(Declarations, other.Declarations) &&
-            System.Linq.Enumerable.SequenceEqual(Comments, other.Comments);
+            return
+                EqualityComparer<TNode>.Default.Equals(First, other.First) &&
+                Enumerable.SequenceEqual(Rest, other.Rest);
+        }
+
+        /// <inheritdoc/>
+        public override int GetHashCode()
+        {
+            var hashCode = new System.HashCode();
+
+            hashCode.Add(First);
+
+            foreach (var item in Rest)
+                hashCode.Add(item);
+
+            return hashCode.ToHashCode();
+        }
     }
 
-    /// <inheritdoc/>
-    public override int GetHashCode()
+    /// <summary>
+    /// Gets the count of elements in the list.
+    /// </summary>
+    public int Count => this switch
     {
-        var hashCode = new System.HashCode();
+        Empty =>
+        0,
 
-        hashCode.Add(ModuleDefinition);
+        NonEmpty nonEmpty =>
+        1 + nonEmpty.Rest.Count,
 
-        foreach (var item in Imports)
-            hashCode.Add(item);
+        _ =>
+        throw new System.NotImplementedException(
+            "Unexpected type: " + GetType().FullName)
+    };
 
-        foreach (var item in Declarations)
-            hashCode.Add(item);
+    /// <summary>
+    /// Gets all nodes in the list as an enumerable.
+    /// </summary>
+    public IEnumerable<TNode> Nodes =>
+        this switch
+        {
+            Empty =>
+            [],
 
-        foreach (var item in Comments)
-            hashCode.Add(item);
+            NonEmpty nonEmpty =>
+            new[] { nonEmpty.First }.Concat(nonEmpty.Rest.Select(r => r.Node)),
 
-        return hashCode.ToHashCode();
-    }
+            _ =>
+            throw new System.NotImplementedException(
+                "Unexpected type: " + GetType().FullName)
+        };
+
+    /// <summary>
+    /// Gets the element at the specified index.
+    /// </summary>
+    public TNode this[int index] => this switch
+    {
+        NonEmpty nonEmpty when index is 0 =>
+        nonEmpty.First,
+
+        NonEmpty nonEmpty when index > 0 && index <= nonEmpty.Rest.Count =>
+        nonEmpty.Rest[index - 1].Node,
+
+        _ =>
+        throw new System.ArgumentOutOfRangeException(nameof(index))
+    };
 }
+
+/// <summary>
+/// Represents an incomplete declaration that could not be fully parsed.
+/// Contains the original text of the declaration for preservation during roundtrip,
+/// along with error information to help diagnose the parsing failure.
+/// </summary>
+/// <param name="OriginalText">The original text of the incomplete declaration.</param>
+/// <param name="ErrorLocation">The location where the parsing error occurred.</param>
+/// <param name="ErrorMessage">The error message describing why parsing failed.</param>
+public record IncompleteDeclaration(
+    string OriginalText,
+    Location ErrorLocation,
+    string ErrorMessage);
 
 /// <summary>
 /// Elm import statement containing target module name, optional alias and exposing list.
 /// </summary>
 public record Import(
+    Location ImportTokenLocation,
     Node<ModuleName> ModuleName,
-    Node<ModuleName>? ModuleAlias,
-    Node<Exposing>? ExposingList);
+    (Location AsTokenLocation, Node<ModuleName> Alias)? ModuleAlias,
+    (Location ExposingTokenLocation, Node<Exposing> ExposingList)? ExposingList);
 
 /// <summary>
 /// Elm module kinds: normal, port or effect (with possible commands/subscriptions).
@@ -70,16 +132,21 @@ public abstract record Module
 {
     /// <summary>Standard module.</summary>
     public sealed record NormalModule(
+        Location ModuleTokenLocation,
         DefaultModuleData ModuleData)
         : Module;
 
     /// <summary>Port module exposing native interop.</summary>
     public sealed record PortModule(
+        Location PortTokenLocation,
+        Location ModuleTokenLocation,
         DefaultModuleData ModuleData)
         : Module;
 
     /// <summary>Effect module with commands and subscriptions.</summary>
     public sealed record EffectModule(
+        Location EffectTokenLocation,
+        Location ModuleTokenLocation,
         EffectModuleData ModuleData)
         : Module;
 
@@ -109,6 +176,7 @@ public abstract record Module
 /// </summary>
 public record DefaultModuleData(
     Node<ModuleName> ModuleName,
+    Location ExposingTokenLocation,
     Node<Exposing> ExposingList);
 
 /// <summary>
@@ -116,6 +184,7 @@ public record DefaultModuleData(
 /// </summary>
 public record EffectModuleData(
     Node<ModuleName> ModuleName,
+    Location ExposingTokenLocation,
     Node<Exposing> ExposingList,
     Node<string>? Command,
     Node<string>? Subscription);
@@ -132,32 +201,10 @@ public abstract record Exposing
 
     /// <summary>Explicit list of exposed top-level items.</summary>
     public sealed record Explicit(
-        IReadOnlyList<Node<TopLevelExpose>> Nodes)
-        : Exposing
-    {
-        /// <inheritdoc/>
-        public bool Equals(Explicit? other)
-        {
-            if (ReferenceEquals(this, other))
-                return true;
-
-            if (other is null)
-                return false;
-
-            return System.Linq.Enumerable.SequenceEqual(Nodes, other.Nodes);
-        }
-
-        /// <inheritdoc/>
-        public override int GetHashCode()
-        {
-            var hashCode = new System.HashCode();
-
-            foreach (var item in Nodes)
-                hashCode.Add(item);
-
-            return hashCode.ToHashCode();
-        }
-    }
+        Location OpenParenLocation,
+        SeparatedSyntaxList<Node<TopLevelExpose>> Nodes,
+        Location CloseParenLocation)
+        : Exposing;
 }
 
 /// <summary>
@@ -215,6 +262,7 @@ public abstract record Declaration
 
     /// <summary>Port declaration with signature.</summary>
     public sealed record PortDeclaration(
+        Location PortTokenLocation,
         Signature Signature)
         : Declaration;
 
@@ -228,9 +276,11 @@ public abstract record Declaration
 /// Infix operator properties: direction, precedence, operator symbol and implementing function.
 /// </summary>
 public record Infix(
+    Location InfixTokenLocation,
     Node<InfixDirection> Direction,
     Node<int> Precedence,
     Node<string> Operator,
+    Location EqualsTokenLocation,
     Node<string> FunctionName);
 
 /// <summary>
@@ -238,8 +288,11 @@ public record Infix(
 /// </summary>
 public record TypeAlias(
     Node<string>? Documentation,
+    Location TypeTokenLocation,
+    Location AliasTokenLocation,
     Node<string> Name,
     IReadOnlyList<Node<string>> Generics,
+    Location EqualsTokenLocation,
     Node<TypeAnnotation> TypeAnnotation)
 {
     /// <inheritdoc/>
@@ -253,8 +306,11 @@ public record TypeAlias(
 
         return
             EqualityComparer<Node<string>?>.Default.Equals(Documentation, other.Documentation) &&
+            TypeTokenLocation.Equals(other.TypeTokenLocation) &&
+            AliasTokenLocation.Equals(other.AliasTokenLocation) &&
             Name.Equals(other.Name) &&
-            System.Linq.Enumerable.SequenceEqual(Generics, other.Generics) &&
+            Enumerable.SequenceEqual(Generics, other.Generics) &&
+            EqualsTokenLocation.Equals(other.EqualsTokenLocation) &&
             TypeAnnotation.Equals(other.TypeAnnotation);
     }
 
@@ -264,11 +320,14 @@ public record TypeAlias(
         var hashCode = new System.HashCode();
 
         hashCode.Add(Documentation);
+        hashCode.Add(TypeTokenLocation);
+        hashCode.Add(AliasTokenLocation);
         hashCode.Add(Name);
 
         foreach (var item in Generics)
             hashCode.Add(item);
 
+        hashCode.Add(EqualsTokenLocation);
         hashCode.Add(TypeAnnotation);
 
         return hashCode.ToHashCode();
@@ -280,9 +339,11 @@ public record TypeAlias(
 /// </summary>
 public record TypeStruct(
     Node<string>? Documentation,
+    Location TypeTokenLocation,
     Node<string> Name,
     IReadOnlyList<Node<string>> Generics,
-    IReadOnlyList<Node<ValueConstructor>> Constructors)
+    Location EqualsTokenLocation,
+    IReadOnlyList<(Location? PipeTokenLocation, Node<ValueConstructor> Constructor)> Constructors)
 {
     /// <inheritdoc/>
     public virtual bool Equals(TypeStruct? other)
@@ -295,9 +356,11 @@ public record TypeStruct(
 
         return
             EqualityComparer<Node<string>?>.Default.Equals(Documentation, other.Documentation) &&
+            TypeTokenLocation.Equals(other.TypeTokenLocation) &&
             Name.Equals(other.Name) &&
-            System.Linq.Enumerable.SequenceEqual(Generics, other.Generics) &&
-            System.Linq.Enumerable.SequenceEqual(Constructors, other.Constructors);
+            Enumerable.SequenceEqual(Generics, other.Generics) &&
+            EqualsTokenLocation.Equals(other.EqualsTokenLocation) &&
+            Enumerable.SequenceEqual(Constructors, other.Constructors);
     }
 
     /// <inheritdoc/>
@@ -306,10 +369,13 @@ public record TypeStruct(
         var hashCode = new System.HashCode();
 
         hashCode.Add(Documentation);
+        hashCode.Add(TypeTokenLocation);
         hashCode.Add(Name);
 
         foreach (var item in Generics)
             hashCode.Add(item);
+
+        hashCode.Add(EqualsTokenLocation);
 
         foreach (var item in Constructors)
             hashCode.Add(item);
@@ -336,7 +402,7 @@ public record ValueConstructor(
 
         return
             Name.Equals(other.Name) &&
-            System.Linq.Enumerable.SequenceEqual(Arguments, other.Arguments);
+            Enumerable.SequenceEqual(Arguments, other.Arguments);
     }
 
     /// <inheritdoc/>
@@ -380,7 +446,7 @@ public abstract record TypeAnnotation
 
             return
                 TypeName.Equals(other.TypeName) &&
-                System.Linq.Enumerable.SequenceEqual(TypeArguments, other.TypeArguments);
+                Enumerable.SequenceEqual(TypeArguments, other.TypeArguments);
         }
 
         /// <inheritdoc/>
@@ -402,48 +468,41 @@ public abstract record TypeAnnotation
         : TypeAnnotation;
 
     /// <summary>Tuple type annotation.</summary>
+    /// <remarks>
+    /// The open and close parenthesis locations can be derived from the containing node's range:
+    /// - OpenParenLocation = ContainingNode.Range.Start
+    /// - CloseParenLocation = ContainingNode.Range.End with Column - 1
+    /// </remarks>
     public sealed record Tupled(
-        IReadOnlyList<Node<TypeAnnotation>> TypeAnnotations)
-        : TypeAnnotation
-    {
-        /// <inheritdoc/>
-        public bool Equals(Tupled? other)
-        {
-            if (ReferenceEquals(this, other))
-                return true;
-
-            if (other is null)
-                return false;
-
-            return System.Linq.Enumerable.SequenceEqual(TypeAnnotations, other.TypeAnnotations);
-        }
-
-        /// <inheritdoc/>
-        public override int GetHashCode()
-        {
-            var hashCode = new System.HashCode();
-
-            foreach (var item in TypeAnnotations)
-                hashCode.Add(item);
-
-            return hashCode.ToHashCode();
-        }
-    }
+        SeparatedSyntaxList<Node<TypeAnnotation>> TypeAnnotations)
+        : TypeAnnotation;
 
     /// <summary>Record type annotation.</summary>
+    /// <remarks>
+    /// The open and close brace locations can be derived from the containing node's range:
+    /// - OpenBraceLocation = ContainingNode.Range.Start
+    /// - CloseBraceLocation = ContainingNode.Range.End with Column - 1
+    /// </remarks>
     public sealed record Record(
         RecordDefinition RecordDefinition)
         : TypeAnnotation;
 
     /// <summary>Record type annotation that extends a generic record.</summary>
+    /// <remarks>
+    /// The open and close brace locations can be derived from the containing node's range:
+    /// - OpenBraceLocation = ContainingNode.Range.Start
+    /// - CloseBraceLocation = ContainingNode.Range.End with Column - 1
+    /// </remarks>
     public sealed record GenericRecord(
         Node<string> GenericName,
+        Location PipeLocation,
         Node<RecordDefinition> RecordDefinition)
         : TypeAnnotation;
 
     /// <summary>Function type annotation mapping argument to return.</summary>
     public sealed record FunctionTypeAnnotation(
         Node<TypeAnnotation> ArgumentType,
+        Location ArrowLocation,
         Node<TypeAnnotation> ReturnType)
         : TypeAnnotation;
 }
@@ -452,37 +511,14 @@ public abstract record TypeAnnotation
 /// Record type definition listing fields.
 /// </summary>
 public record RecordDefinition(
-    IReadOnlyList<Node<RecordField>> Fields)
-{
-    /// <inheritdoc/>
-    public virtual bool Equals(RecordDefinition? other)
-    {
-        if (ReferenceEquals(this, other))
-            return true;
-
-        if (other is null)
-            return false;
-
-        return System.Linq.Enumerable.SequenceEqual(Fields, other.Fields);
-    }
-
-    /// <inheritdoc/>
-    public override int GetHashCode()
-    {
-        var hashCode = new System.HashCode();
-
-        foreach (var item in Fields)
-            hashCode.Add(item);
-
-        return hashCode.ToHashCode();
-    }
-}
+    SeparatedSyntaxList<Node<RecordField>> Fields);
 
 /// <summary>
 /// Single record field definition pairing name with type annotation.
 /// </summary>
 public record RecordField(
     Node<string> FieldName,
+    Location ColonLocation,
     Node<TypeAnnotation> FieldType);
 
 /// <summary>
@@ -499,6 +535,7 @@ public record FunctionStruct(
 public record FunctionImplementation(
     Node<string> Name,
     IReadOnlyList<Node<Pattern>> Arguments,
+    Location EqualsTokenLocation,
     Node<Expression> Expression)
 {
     /// <inheritdoc/>
@@ -512,7 +549,8 @@ public record FunctionImplementation(
 
         return
             Name.Equals(other.Name) &&
-            System.Linq.Enumerable.SequenceEqual(Arguments, other.Arguments) &&
+            Enumerable.SequenceEqual(Arguments, other.Arguments) &&
+            EqualsTokenLocation.Equals(other.EqualsTokenLocation) &&
             Expression.Equals(other.Expression);
     }
 
@@ -526,6 +564,7 @@ public record FunctionImplementation(
         foreach (var item in Arguments)
             hashCode.Add(item);
 
+        hashCode.Add(EqualsTokenLocation);
         hashCode.Add(Expression);
 
         return hashCode.ToHashCode();
@@ -537,6 +576,7 @@ public record FunctionImplementation(
 /// </summary>
 public record Signature(
     Node<string> Name,
+    Location ColonLocation,
     Node<TypeAnnotation> TypeAnnotation);
 
 /// <summary>
@@ -584,96 +624,25 @@ public abstract record Pattern
 
     /// <summary>Pattern matching a tuple.</summary>
     public sealed record TuplePattern(
-        IReadOnlyList<Node<Pattern>> Elements)
-        : Pattern
-    {
-        /// <inheritdoc/>
-        public bool Equals(TuplePattern? other)
-        {
-            if (ReferenceEquals(this, other))
-                return true;
-
-            if (other is null)
-                return false;
-
-            return System.Linq.Enumerable.SequenceEqual(Elements, other.Elements);
-        }
-
-        /// <inheritdoc/>
-        public override int GetHashCode()
-        {
-            var hashCode = new System.HashCode();
-
-            foreach (var item in Elements)
-                hashCode.Add(item);
-
-            return hashCode.ToHashCode();
-        }
-    }
+        SeparatedSyntaxList<Node<Pattern>> Elements)
+        : Pattern;
 
     /// <summary>Pattern matching a record with specified fields.</summary>
     public sealed record RecordPattern(
-        IReadOnlyList<Node<string>> Fields)
-        : Pattern
-    {
-        /// <inheritdoc/>
-        public bool Equals(RecordPattern? other)
-        {
-            if (ReferenceEquals(this, other))
-                return true;
-
-            if (other is null)
-                return false;
-
-            return System.Linq.Enumerable.SequenceEqual(Fields, other.Fields);
-        }
-
-        /// <inheritdoc/>
-        public override int GetHashCode()
-        {
-            var hashCode = new System.HashCode();
-
-            foreach (var item in Fields)
-                hashCode.Add(item);
-
-            return hashCode.ToHashCode();
-        }
-    }
+        SeparatedSyntaxList<Node<string>> Fields)
+        : Pattern;
 
     /// <summary>List cons pattern separating head and tail.</summary>
     public sealed record UnConsPattern(
         Node<Pattern> Head,
+        Location ConsOperatorLocation,
         Node<Pattern> Tail)
         : Pattern;
 
     /// <summary>Pattern matching a list of elements.</summary>
     public sealed record ListPattern(
-        IReadOnlyList<Node<Pattern>> Elements)
-        : Pattern
-    {
-        /// <inheritdoc/>
-        public bool Equals(ListPattern? other)
-        {
-            if (other is null)
-                return false;
-
-            if (ReferenceEquals(this, other))
-                return true;
-
-            return System.Linq.Enumerable.SequenceEqual(Elements, other.Elements);
-        }
-
-        /// <inheritdoc/>
-        public override int GetHashCode()
-        {
-            var hashCode = new System.HashCode();
-
-            foreach (var item in Elements)
-                hashCode.Add(item);
-
-            return hashCode.ToHashCode();
-        }
-    }
+        SeparatedSyntaxList<Node<Pattern>> Elements)
+        : Pattern;
 
     /// <summary>Pattern matching a named constructor with arguments.</summary>
     public sealed record NamedPattern(
@@ -692,7 +661,7 @@ public abstract record Pattern
 
             return
                 EqualityComparer<QualifiedNameRef>.Default.Equals(Name, other.Name) &&
-                System.Linq.Enumerable.SequenceEqual(Arguments, other.Arguments);
+                Enumerable.SequenceEqual(Arguments, other.Arguments);
         }
 
         /// <inheritdoc/>
@@ -712,6 +681,7 @@ public abstract record Pattern
     /// <summary>Pattern that aliases a match to a name.</summary>
     public sealed record AsPattern(
         Node<Pattern> Pattern,
+        Location AsTokenLocation,
         Node<string> Name)
         : Pattern;
 
@@ -738,7 +708,7 @@ public record QualifiedNameRef(
         if (Name != other.Name)
             return false;
 
-        if (!System.Linq.Enumerable.SequenceEqual(ModuleName, other.ModuleName))
+        if (!Enumerable.SequenceEqual(ModuleName, other.ModuleName))
             return false;
 
         return true;
@@ -786,6 +756,7 @@ public record QualifiedNameRef(
 
 /// <summary>
 /// Elm expressions: literals, applications, control flow, data structures, lambda, let, case, etc.
+/// A more concrete form of <see cref="Stil4mElmSyntax7.Expression"/>.
 /// </summary>
 public abstract record Expression
 {
@@ -800,6 +771,12 @@ public abstract record Expression
          * Note: Property 'IsTripleQuoted' does not exist in V7 of upstream, planned to be added in V8:
          * https://github.com/stil4m/elm-syntax/issues/57
          * https://github.com/stil4m/elm-syntax/commit/25403ee0b4e2f78265f37fd27b0682fe6f89ea71
+         * */
+
+        /*
+         * TODO: Consider adding a dedicated variant 'TripleQuotedLiteral' or 'MultilineLiteral' for
+         * the multiline string literals, and modelling the content as list of lines to better support
+         * roundtripping original content.
          * */
         bool IsTripleQuoted = false)
         : Expression;
@@ -822,7 +799,7 @@ public abstract record Expression
     /// <summary>Floating-point literal expression.</summary>
     /// <remarks>
     /// The original literal string is preserved to enable exact roundtripping of source code.
-    /// Use <see cref="Stil4mConcretized.FloatLiteralConversion.ToElmFloat(string)"/> to convert to the numeric representation.
+    /// Use <see cref="FloatLiteralConversion.ToElmFloat(string)"/> to convert to the numeric representation.
     /// </remarks>
     public sealed record Floatable(
         string LiteralText)
@@ -835,32 +812,8 @@ public abstract record Expression
 
     /// <summary>List literal expression.</summary>
     public sealed record ListExpr(
-        IReadOnlyList<Node<Expression>> Elements)
-        : Expression
-    {
-        /// <inheritdoc/>
-        public bool Equals(ListExpr? other)
-        {
-            if (ReferenceEquals(this, other))
-                return true;
-
-            if (other is null)
-                return false;
-
-            return System.Linq.Enumerable.SequenceEqual(Elements, other.Elements);
-        }
-
-        /// <inheritdoc/>
-        public override int GetHashCode()
-        {
-            var hashCode = new System.HashCode();
-
-            foreach (var item in Elements)
-                hashCode.Add(item);
-
-            return hashCode.ToHashCode();
-        }
-    }
+        SeparatedSyntaxList<Node<Expression>> Elements)
+        : Expression;
 
     /// <summary>Reference to a function or value.</summary>
     public sealed record FunctionOrValue(
@@ -872,7 +825,7 @@ public abstract record Expression
         public bool Equals(FunctionOrValue? other) =>
             other is not null &&
             Name == other.Name &&
-            System.Linq.Enumerable.SequenceEqual(ModuleName, other.ModuleName);
+            Enumerable.SequenceEqual(ModuleName, other.ModuleName);
 
         /// <inheritdoc/>
         public override int GetHashCode()
@@ -900,7 +853,7 @@ public abstract record Expression
             if (parts.Length is 0)
                 throw new System.ArgumentException("Full name cannot be empty", nameof(fullName));
 
-            var value = parts[0];
+            var value = parts[^1];
 
             var moduleName =
                 parts.Length > 1
@@ -915,8 +868,11 @@ public abstract record Expression
 
     /// <summary>Conditional expression with then/else branches.</summary>
     public sealed record IfBlock(
+        Location IfTokenLocation,
         Node<Expression> Condition,
+        Location ThenTokenLocation,
         Node<Expression> ThenBlock,
+        Location ElseTokenLocation,
         Node<Expression> ElseBlock)
         : Expression;
 
@@ -944,7 +900,7 @@ public abstract record Expression
             if (other is null)
                 return false;
 
-            return System.Linq.Enumerable.SequenceEqual(Arguments, other.Arguments);
+            return Enumerable.SequenceEqual(Arguments, other.Arguments);
         }
 
         /// <inheritdoc/>
@@ -961,7 +917,7 @@ public abstract record Expression
 
     /// <summary>Operator application with explicit direction.</summary>
     public sealed record OperatorApplication(
-        string Operator,
+        Node<string> Operator,
         InfixDirection Direction,
         Node<Expression> Left,
         Node<Expression> Right)
@@ -969,32 +925,8 @@ public abstract record Expression
 
     /// <summary>Tuple literal expression.</summary>
     public sealed record TupledExpression(
-        IReadOnlyList<Node<Expression>> Elements)
-        : Expression
-    {
-        /// <inheritdoc/>
-        public bool Equals(TupledExpression? other)
-        {
-            if (ReferenceEquals(this, other))
-                return true;
-
-            if (other is null)
-                return false;
-
-            return System.Linq.Enumerable.SequenceEqual(Elements, other.Elements);
-        }
-
-        /// <inheritdoc/>
-        public override int GetHashCode()
-        {
-            var hashCode = new System.HashCode();
-
-            foreach (var item in Elements)
-                hashCode.Add(item);
-
-            return hashCode.ToHashCode();
-        }
-    }
+        SeparatedSyntaxList<Node<Expression>> Elements)
+        : Expression;
 
     /// <summary>Lambda expression.</summary>
     public sealed record LambdaExpression(
@@ -1015,7 +947,9 @@ public abstract record Expression
     /// Let block containing declarations and final expression.
     /// </summary>
     public sealed record LetBlock(
+        Location LetTokenLocation,
         IReadOnlyList<Node<LetDeclaration>> Declarations,
+        Location InTokenLocation,
         Node<Expression> Expression)
     {
         /// <inheritdoc/>
@@ -1028,7 +962,9 @@ public abstract record Expression
                 return false;
 
             return
-                System.Linq.Enumerable.SequenceEqual(Declarations, other.Declarations) &&
+                LetTokenLocation.Equals(other.LetTokenLocation) &&
+                Enumerable.SequenceEqual(Declarations, other.Declarations) &&
+                InTokenLocation.Equals(other.InTokenLocation) &&
                 Expression.Equals(other.Expression);
         }
 
@@ -1037,9 +973,12 @@ public abstract record Expression
         {
             var hashCode = new System.HashCode();
 
+            hashCode.Add(LetTokenLocation);
+
             foreach (var item in Declarations)
                 hashCode.Add(item);
 
+            hashCode.Add(InTokenLocation);
             hashCode.Add(Expression);
 
             return hashCode.ToHashCode();
@@ -1059,38 +998,15 @@ public abstract record Expression
         /// <summary>Local binding via pattern destructuring.</summary>
         public sealed record LetDestructuring(
             Node<Pattern> Pattern,
+            Location EqualsTokenLocation,
             Node<Expression> Expression)
             : LetDeclaration;
     }
 
     /// <summary>Record literal expression.</summary>
     public sealed record RecordExpr(
-        IReadOnlyList<Node<(Node<string> fieldName, Node<Expression> valueExpr)>> Fields)
-        : Expression
-    {
-        /// <inheritdoc/>
-        public bool Equals(RecordExpr? other)
-        {
-            if (ReferenceEquals(this, other))
-                return true;
-
-            if (other is null)
-                return false;
-
-            return System.Linq.Enumerable.SequenceEqual(Fields, other.Fields);
-        }
-
-        /// <inheritdoc/>
-        public override int GetHashCode()
-        {
-            var hashCode = new System.HashCode();
-
-            foreach (var item in Fields)
-                hashCode.Add(item);
-
-            return hashCode.ToHashCode();
-        }
-    }
+        SeparatedSyntaxList<RecordExprField> Fields)
+        : Expression;
 
     /// <summary>Expression accessing a record field.</summary>
     public sealed record RecordAccess(
@@ -1106,36 +1022,9 @@ public abstract record Expression
     /// <summary>Expression updating a record value.</summary>
     public sealed record RecordUpdateExpression(
         Node<string> RecordName,
-        IReadOnlyList<Node<(Node<string> fieldName, Node<Expression> valueExpr)>> Fields)
-        : Expression
-    {
-        /// <inheritdoc/>
-        public bool Equals(RecordUpdateExpression? other)
-        {
-            if (ReferenceEquals(this, other))
-                return true;
-
-            if (other is null)
-                return false;
-
-            return
-                RecordName.Equals(other.RecordName) &&
-                System.Linq.Enumerable.SequenceEqual(Fields, other.Fields);
-        }
-
-        /// <inheritdoc/>
-        public override int GetHashCode()
-        {
-            var hashCode = new System.HashCode();
-
-            hashCode.Add(RecordName);
-
-            foreach (var item in Fields)
-                hashCode.Add(item);
-
-            return hashCode.ToHashCode();
-        }
-    }
+        Location PipeLocation,
+        SeparatedSyntaxList<RecordExprField> Fields)
+        : Expression;
 
     /// <summary>GLSL shader expression [glsl| ... |].</summary>
     public sealed record GLSLExpression(
@@ -1144,10 +1033,22 @@ public abstract record Expression
 }
 
 /// <summary>
+/// A record expression field with field name, equals sign location, and value expression.
+/// Used in RecordExpr and RecordUpdateExpression.
+/// </summary>
+public record RecordExprField(
+    Node<string> FieldName,
+    Location EqualsLocation,
+    Node<Expression> ValueExpr);
+
+
+/// <summary>
 /// Lambda expression capturing argument patterns and body.
 /// </summary>
 public record LambdaStruct(
+    Location BackslashLocation,
     IReadOnlyList<Node<Pattern>> Arguments,
+    Location ArrowLocation,
     Node<Expression> Expression)
 {
     /// <inheritdoc/>
@@ -1160,7 +1061,9 @@ public record LambdaStruct(
             return false;
 
         return
-            System.Linq.Enumerable.SequenceEqual(Arguments, other.Arguments) &&
+            BackslashLocation.Equals(other.BackslashLocation) &&
+            Enumerable.SequenceEqual(Arguments, other.Arguments) &&
+            ArrowLocation.Equals(other.ArrowLocation) &&
             Expression.Equals(other.Expression);
     }
 
@@ -1169,9 +1072,12 @@ public record LambdaStruct(
     {
         var hashCode = new System.HashCode();
 
+        hashCode.Add(BackslashLocation);
+
         foreach (var item in Arguments)
             hashCode.Add(item);
 
+        hashCode.Add(ArrowLocation);
         hashCode.Add(Expression);
 
         return hashCode.ToHashCode();
@@ -1182,7 +1088,9 @@ public record LambdaStruct(
 /// Case expression block containing scrutinee and branches.
 /// </summary>
 public record CaseBlock(
+    Location CaseTokenLocation,
     Node<Expression> Expression,
+    Location OfTokenLocation,
     IReadOnlyList<Case> Cases)
 {
     /// <inheritdoc/>
@@ -1195,8 +1103,10 @@ public record CaseBlock(
             return false;
 
         return
+            CaseTokenLocation.Equals(other.CaseTokenLocation) &&
             Expression.Equals(other.Expression) &&
-            System.Linq.Enumerable.SequenceEqual(Cases, other.Cases);
+            OfTokenLocation.Equals(other.OfTokenLocation) &&
+            Enumerable.SequenceEqual(Cases, other.Cases);
     }
 
     /// <inheritdoc/>
@@ -1204,7 +1114,9 @@ public record CaseBlock(
     {
         var hashCode = new System.HashCode();
 
+        hashCode.Add(CaseTokenLocation);
         hashCode.Add(Expression);
+        hashCode.Add(OfTokenLocation);
 
         foreach (var item in Cases)
             hashCode.Add(item);
@@ -1218,4 +1130,5 @@ public record CaseBlock(
 /// </summary>
 public record Case(
     Node<Pattern> Pattern,
+    Location ArrowLocation,
     Node<Expression> Expression);
