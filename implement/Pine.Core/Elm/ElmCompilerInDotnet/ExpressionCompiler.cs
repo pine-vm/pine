@@ -27,8 +27,14 @@ public class ExpressionCompiler
         ExpressionCompilationContext context) =>
         expression switch
         {
+            SyntaxTypes.Expression.UnitExpr =>
+                Expression.LiteralInstance(PineValue.EmptyList),
+
             SyntaxTypes.Expression.Integer expr =>
                 CompileInteger(expr),
+
+            SyntaxTypes.Expression.Hex expr =>
+                CompileHex(expr),
 
             SyntaxTypes.Expression.Literal expr =>
                 CompileLiteral(expr),
@@ -84,6 +90,10 @@ public class ExpressionCompiler
 
     private static Result<CompilationError, Expression> CompileInteger(
         SyntaxTypes.Expression.Integer expr) =>
+        Expression.LiteralInstance(EmitIntegerLiteral(expr.Value));
+
+    private static Result<CompilationError, Expression> CompileHex(
+        SyntaxTypes.Expression.Hex expr) =>
         Expression.LiteralInstance(EmitIntegerLiteral(expr.Value));
 
     private static Result<CompilationError, Expression> CompileLiteral(
