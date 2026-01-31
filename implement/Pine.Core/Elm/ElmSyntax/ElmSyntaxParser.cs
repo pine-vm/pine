@@ -1631,6 +1631,12 @@ public class ElmSyntaxParser
 
             ConsumeAllTrivia();
 
+            if (IsAtEnd())
+            {
+                throw ExceptionForCurrentLocation(
+                    "Unexpected end of file in exposing list");
+            }
+
             if (Peek.Type is TokenType.DotDot)
             {
                 var dotDotToken = Consume(TokenType.DotDot);
@@ -1651,13 +1657,19 @@ public class ElmSyntaxParser
                 Node<SyntaxTypes.TopLevelExpose>? firstNode = null;
                 var restNodes = new List<(Location SeparatorLocation, Node<SyntaxTypes.TopLevelExpose> Node)>();
 
-                while (Peek.Type is not TokenType.CloseParen)
+                while (!IsAtEnd() && Peek.Type is not TokenType.CloseParen)
                 {
                     if (firstNode is not null)
                     {
                         var commaToken = Consume(TokenType.Comma);
 
                         ConsumeAllTrivia();
+
+                        if (IsAtEnd())
+                        {
+                            throw ExceptionForCurrentLocation(
+                                "Unexpected end of file in exposing list");
+                        }
 
                         var topLevelExposeNode = ParseTopLevelExpose();
 
@@ -1671,6 +1683,12 @@ public class ElmSyntaxParser
 
                         ConsumeAllTrivia();
                     }
+                }
+
+                if (IsAtEnd())
+                {
+                    throw ExceptionForCurrentLocation(
+                        "Unexpected end of file: expected ')' to close exposing list");
                 }
 
                 var closeParen = Consume(TokenType.CloseParen);
