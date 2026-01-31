@@ -80,7 +80,10 @@ public class InliningCrossModuleTests
                                         afterFirstIsOkay
                                         (Pine_kernel.int_add [ sOffset, 4 ])
                                         sRow
-                                        (sColInt + 1)
+                                        (Basics.add
+                                            sColInt
+                                            1
+                                        )
                                         sSrcBytes
                                         sIndent
 
@@ -201,7 +204,10 @@ public class InliningCrossModuleTests
                                             [ sOffset, 4 ]
                                         )
                                         sRow
-                                        (sColInt + 1)
+                                        (Basics.add
+                                            sColInt
+                                            1
+                                        )
                                         sSrcBytes
                                         sIndent
 

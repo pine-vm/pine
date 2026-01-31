@@ -39,13 +39,15 @@ public class Canonicalization
     /// <param name="AliasMap">Map of module aliases to their actual module names.</param>
     /// <param name="ModuleLevelDeclarations">Top-level declarations in the current module (functions, types, constructors).</param>
     /// <param name="LocalDeclarations">Local variable bindings from patterns, function parameters, let expressions, etc.</param>
+    /// <param name="OperatorToFunction">Map of infix operators to their underlying function (module name and function name).</param>
     private record CanonicalizationContext(
         ModuleName CurrentModuleName,
         ImmutableDictionary<string, ImmutableList<ModuleName>> TypeImportMap,
         ImmutableDictionary<string, ImmutableList<ModuleName>> ValueImportMap,
         ImmutableDictionary<string, ModuleName> AliasMap,
         ImmutableHashSet<string> ModuleLevelDeclarations,
-        ImmutableHashSet<string> LocalDeclarations)
+        ImmutableHashSet<string> LocalDeclarations,
+        IImmutableDictionary<string, (ModuleName ModuleName, string FunctionName)> OperatorToFunction)
     {
         /// <summary>
         /// Creates a new context with additional local declarations added.
@@ -91,10 +93,18 @@ public class Canonicalization
                 }
             }
 
+            // Build operator to function mapping from the implicit import config
+            var operatorToFunction =
+                implicitImportConfig.OperatorToFunction
+                .ToImmutableDictionary(
+                    kvp => kvp.Key,
+                    kvp => ((IReadOnlyList<string>)[.. kvp.Value.ModuleName], kvp.Value.FunctionName));
+
             return this with
             {
                 TypeImportMap = mergedTypeImportMap,
-                ValueImportMap = mergedValueImportMap
+                ValueImportMap = mergedValueImportMap,
+                OperatorToFunction = operatorToFunction
             };
         }
     }
@@ -272,7 +282,8 @@ public class Canonicalization
                     ValueImportMap: valueImportMap,
                     AliasMap: aliasMap,
                     ModuleLevelDeclarations: moduleLevelDeclarations,
-                    LocalDeclarations: [])
+                    LocalDeclarations: [],
+                    OperatorToFunction: ImmutableDictionary<string, (ModuleName ModuleName, string FunctionName)>.Empty)
                 .WithDefaults(implicitImportConfig);
 
             // Canonicalize declarations and collect errors
@@ -655,7 +666,8 @@ public class Canonicalization
             SyntaxTypes.TopLevelExpose.TypeExpose typeExpose =>
                 GetTypeExposeNamesByNamespace(typeExpose, moduleName, moduleExportsMap),
 
-            _ => throw new NotImplementedException(
+            _ =>
+            throw new NotImplementedException(
                 $"Unhandled TopLevelExpose type in GetExposedNamesByNamespace: {expose.GetType().Name}")
         };
     }
@@ -1204,10 +1216,7 @@ public class Canonicalization
                         .MapValue(args => (SyntaxTypes.Expression)new SyntaxTypes.Expression.Application([.. args])),
 
                 SyntaxTypes.Expression.OperatorApplication opApp =>
-                    CanonicalizationResultExtensions.Map2(
-                        CanonicalizeExpressionNode(opApp.Left, context),
-                        CanonicalizeExpressionNode(opApp.Right, context),
-                        (left, right) => (SyntaxTypes.Expression)new SyntaxTypes.Expression.OperatorApplication(opApp.Operator, opApp.Direction, left, right)),
+                    CanonicalizeOperatorApplication(opApp, context, exprNode.Range),
 
                 SyntaxTypes.Expression.TupledExpression tupled =>
                     CanonicalizationResultExtensions.ConcatMap(
@@ -1250,6 +1259,44 @@ public class Canonicalization
             };
 
         return canonicalizedExpr.MapValue(expr => new Node<SyntaxTypes.Expression>(exprNode.Range, expr));
+    }
+
+    /// <summary>
+    /// Canonicalizes an operator application by converting it to a function application.
+    /// For example, "a + b" becomes "Basics.add a b".
+    /// </summary>
+    private static CanonicalizationResult<SyntaxTypes.Expression> CanonicalizeOperatorApplication(
+        SyntaxTypes.Expression.OperatorApplication opApp,
+        CanonicalizationContext context,
+        Range range)
+    {
+        // Canonicalize left and right operands
+        var leftResult = CanonicalizeExpressionNode(opApp.Left, context);
+        var rightResult = CanonicalizeExpressionNode(opApp.Right, context);
+
+        // Look up the operator in the operator-to-function mapping
+        if (context.OperatorToFunction.TryGetValue(opApp.Operator, out var funcMapping))
+        {
+            // Convert operator application to function application: func left right
+            var funcOrValue = new SyntaxTypes.Expression.FunctionOrValue(
+                ModuleName: funcMapping.ModuleName,
+                Name: funcMapping.FunctionName);
+
+            var funcNode = new Node<SyntaxTypes.Expression>(range, funcOrValue);
+
+            return CanonicalizationResultExtensions.Map2(
+                leftResult,
+                rightResult,
+                (left, right) => (SyntaxTypes.Expression)new SyntaxTypes.Expression.Application([funcNode, left, right]));
+        }
+
+        // Operator not found in mapping - this is an error for unknown operators
+        // For now, preserve the operator application but report an error if needed
+        // This handles custom operators that might be defined in user modules
+        return CanonicalizationResultExtensions.Map2(
+            leftResult,
+            rightResult,
+            (left, right) => (SyntaxTypes.Expression)new SyntaxTypes.Expression.OperatorApplication(opApp.Operator, opApp.Direction, left, right));
     }
 
     private static CanonicalizationResult<SyntaxTypes.Expression.FunctionOrValue> CanonicalizeFunctionOrValue(

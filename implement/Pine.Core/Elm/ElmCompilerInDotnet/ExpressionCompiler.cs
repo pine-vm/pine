@@ -351,6 +351,32 @@ public class ExpressionCompiler
                 CoreLibraryModule.CoreBasics.GetBasicsFunctionInfo(funcRef.Name) is { } basicsFuncInfo &&
                 basicsFuncInfo.FunctionType.Count - compiledArguments.Length - 1 is 0)
             {
+                // For polymorphic numeric functions (add, sub, mul), use type inference to decide
+                // whether to use the integer-specific implementation
+                if (funcRef.Name is "add" or "sub" or "mul")
+                {
+                    // Use type inference to determine the expression type
+                    var expressionType =
+                        TypeInference.InferExpressionType(
+                            expr,
+                            context.ParameterNames,
+                            context.ParameterTypes,
+                            context.LocalBindingTypes,
+                            context.CurrentModuleName,
+                            context.FunctionReturnTypes);
+
+                    if (expressionType is TypeInference.InferredType.IntType)
+                    {
+                        // Use integer-specific implementation
+                        if (funcRef.Name is "add")
+                            return BuiltinHelpers.ApplyBuiltinIntAdd(compiledArguments);
+                        if (funcRef.Name is "sub")
+                            return CoreLibraryModule.CoreBasics.Int_sub(compiledArguments[0], compiledArguments[1]);
+                        if (funcRef.Name is "mul")
+                            return BuiltinHelpers.ApplyBuiltinIntMul(compiledArguments);
+                    }
+                }
+
                 return basicsFuncInfo.CompileApplication(compiledArguments);
             }
 

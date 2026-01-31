@@ -327,6 +327,87 @@ public static class TypeInference
     }
 
     /// <summary>
+    /// Specializes a numeric function result type based on actual argument types.
+    /// When a function has `NumberType` as its return type (polymorphic), we examine
+    /// the actual argument types to determine if we can specialize to `Int` or `Float`.
+    /// This is used after canonicalization when operator applications become function applications.
+    /// </summary>
+    private static InferredType SpecializeNumericFunctionResultType(
+        IReadOnlyList<InferredType> functionTypeList,
+        IReadOnlyList<InferredType> actualArgTypes,
+        int appliedArgCount,
+        int totalArgCount)
+    {
+        var resultType = functionTypeList[^1];
+
+        // Only specialize if the result type is polymorphic numeric (NumberType)
+        if (resultType is not InferredType.NumberType)
+        {
+            if (appliedArgCount >= totalArgCount)
+            {
+                return resultType;
+            }
+            else
+            {
+                // Partial application - build a function type from remaining types
+                var remainingTypes = functionTypeList.Skip(appliedArgCount).ToList();
+                return BuildFunctionTypeFromList(remainingTypes);
+            }
+        }
+
+        // Check if any of the actual arguments is a concrete Int or Float type
+        foreach (var argType in actualArgTypes)
+        {
+            if (argType is InferredType.IntType)
+            {
+                return BuildSpecializedResultType(functionTypeList, appliedArgCount, totalArgCount, s_intType);
+            }
+
+            if (argType is InferredType.FloatType)
+            {
+                return BuildSpecializedResultType(functionTypeList, appliedArgCount, totalArgCount, s_floatType);
+            }
+        }
+
+        // No concrete type found - return the polymorphic result
+        if (appliedArgCount >= totalArgCount)
+        {
+            return resultType;
+        }
+        else
+        {
+            var remainingTypes = functionTypeList.Skip(appliedArgCount).ToList();
+            return BuildFunctionTypeFromList(remainingTypes);
+        }
+    }
+
+    /// <summary>
+    /// Builds the specialized result type for a numeric function application.
+    /// For full application, returns the specialized type directly.
+    /// For partial application, builds a function type with NumberType replaced by the specialized type.
+    /// </summary>
+    private static InferredType BuildSpecializedResultType(
+        IReadOnlyList<InferredType> functionTypeList,
+        int appliedArgCount,
+        int totalArgCount,
+        InferredType specializedType)
+    {
+        if (appliedArgCount >= totalArgCount)
+        {
+            return specializedType;
+        }
+
+        // Partial application - build a function type with specialized types
+        var remainingTypes = new List<InferredType>();
+        for (var i = appliedArgCount; i < functionTypeList.Count; i++)
+        {
+            // Replace NumberType with the specialized type in remaining types
+            remainingTypes.Add(functionTypeList[i] is InferredType.NumberType ? specializedType : functionTypeList[i]);
+        }
+        return BuildFunctionTypeFromList(remainingTypes);
+    }
+
+    /// <summary>
     /// Describes type constraints for an infix operator.
     /// </summary>
     private record OperatorTypeConstraints(
@@ -641,21 +722,22 @@ public static class TypeInference
             return s_boolType;
         }
 
-        // Parameter reference - look up the type from annotations
-        if (expression is SyntaxTypes.Expression.FunctionOrValue paramRef &&
-            paramRef.ModuleName.Count is 0 &&
-            parameterTypes.TryGetValue(paramRef.Name, out var paramType))
-        {
-            return paramType;
-        }
-
         // Local binding reference - look up the type from local binding types
+        // Check local bindings FIRST because they may shadow parameters or have more precise types
         if (expression is SyntaxTypes.Expression.FunctionOrValue localRef &&
             localRef.ModuleName.Count is 0 &&
             localBindingTypes is not null &&
             localBindingTypes.TryGetValue(localRef.Name, out var localType))
         {
             return localType;
+        }
+
+        // Parameter reference - look up the type from annotations
+        if (expression is SyntaxTypes.Expression.FunctionOrValue paramRef &&
+            paramRef.ModuleName.Count is 0 &&
+            parameterTypes.TryGetValue(paramRef.Name, out var paramType))
+        {
+            return paramType;
         }
 
         // Function or constructor reference - look up type from function signatures
@@ -729,19 +811,19 @@ public static class TypeInference
                         var functionTypes = basicsFuncInfo.FunctionType;
                         var totalArgCount = functionTypes.Count - 1; // Last element is return type
 
-                        if (appliedArgCount >= totalArgCount)
+                        // Infer actual argument types to specialize polymorphic (NumberType) results
+                        var actualArgTypes = new List<InferredType>();
+                        for (var i = 0; i < appliedArgCount && i < totalArgCount; i++)
                         {
-                            // Full application - return the final return type
-                            return functionTypes[^1];
+                            var argExpr = application.Arguments[i + 1].Value; // +1 to skip the function itself
+                            actualArgTypes.Add(InferExpressionType(argExpr, parameterNames, parameterTypes, localBindingTypes, currentModuleName, functionReturnTypes));
                         }
-                        else
-                        {
-                            // Partial application - build a function type from remaining arguments
-                            // For modBy 7: functionTypes = [Int, Int, Int], appliedArgCount = 1
-                            // We need to return Int -> Int (functionTypes[1] -> functionTypes[2])
-                            var remainingTypes = functionTypes.Skip(appliedArgCount).ToList();
-                            return BuildFunctionTypeFromList(remainingTypes);
-                        }
+
+                        return SpecializeNumericFunctionResultType(
+                            functionTypes,
+                            actualArgTypes,
+                            appliedArgCount,
+                            totalArgCount);
                     }
                 }
 
@@ -803,17 +885,19 @@ public static class TypeInference
                         var functionTypes = basicsFuncInfo.FunctionType;
                         var totalArgCount = functionTypes.Count - 1;
 
-                        if (appliedArgCount >= totalArgCount)
+                        // Infer actual argument types to specialize polymorphic (NumberType) results
+                        var actualArgTypes = new List<InferredType>();
+                        for (var i = 0; i < appliedArgCount && i < totalArgCount; i++)
                         {
-                            // Full application - return the final return type
-                            return functionTypes[^1];
+                            var argExpr = application.Arguments[i + 1].Value; // +1 to skip the operator itself
+                            actualArgTypes.Add(InferExpressionType(argExpr, parameterNames, parameterTypes, localBindingTypes, currentModuleName, functionReturnTypes));
                         }
-                        else
-                        {
-                            // Partial application - build a function type from remaining arguments
-                            var remainingTypes = functionTypes.Skip(appliedArgCount).ToList();
-                            return BuildFunctionTypeFromList(remainingTypes);
-                        }
+
+                        return SpecializeNumericFunctionResultType(
+                            functionTypes,
+                            actualArgTypes,
+                            appliedArgCount,
+                            totalArgCount);
                     }
                 }
             }
@@ -1426,6 +1510,25 @@ public static class TypeInference
                     {
                         constraints = ExtractTypeConstraintsFromExpression(opApp.Left.Value, targetType, constraints);
                         constraints = ExtractTypeConstraintsFromExpression(opApp.Right.Value, targetType, constraints);
+                    }
+                }
+                return constraints;
+
+            case SyntaxTypes.Expression.Application application:
+                // Handle canonicalized operators (Basics.add, Basics.sub, Basics.mul)
+                // After canonicalization, `x + 7` becomes `Basics.add x 7`
+                if (application.Arguments.Count >= 3 &&
+                    application.Arguments[0].Value is SyntaxTypes.Expression.FunctionOrValue funcRef &&
+                    funcRef.ModuleName.Count is 1 && funcRef.ModuleName[0] is "Basics" &&
+                    targetType is InferredType.IntType or InferredType.FloatType)
+                {
+                    // For arithmetic Basics functions, propagate type constraints to arguments
+                    if (funcRef.Name is "add" or "sub" or "mul")
+                    {
+                        for (var i = 1; i < application.Arguments.Count; i++)
+                        {
+                            constraints = ExtractTypeConstraintsFromExpression(application.Arguments[i].Value, targetType, constraints);
+                        }
                     }
                 }
                 return constraints;

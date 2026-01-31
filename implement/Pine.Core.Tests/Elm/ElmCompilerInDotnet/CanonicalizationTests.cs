@@ -52,8 +52,10 @@ public class CanonicalizationTests
         var asElmExpression =
             ElmValue.RenderAsElmExpression(asElmValue);
 
+        // After canonicalization, operator applications are converted to function applications:
+        // `x * 3` becomes `Basics.mul x 3` and `x + 1` becomes `Basics.add x 1`
         asElmExpression.expressionString.Should().Be(
-            """{ comments = [], declarations = [ Node { end = { column = 17, row = 5 }, start = { column = 1, row = 4 } } (FunctionDeclaration { declaration = Node { end = { column = 17, row = 5 }, start = { column = 1, row = 4 } } { arguments = [ Node { end = { column = 7, row = 4 }, start = { column = 6, row = 4 } } (VarPattern "x") ], expression = Node { end = { column = 17, row = 5 }, start = { column = 5, row = 5 } } (Application [ Node { end = { column = 9, row = 5 }, start = { column = 5, row = 5 } } (FunctionOrValue [ "Test" ] "beta"), Node { end = { column = 17, row = 5 }, start = { column = 10, row = 5 } } (ParenthesizedExpression (Node { end = { column = 16, row = 5 }, start = { column = 11, row = 5 } } (OperatorApplication "*" Left (Node { end = { column = 12, row = 5 }, start = { column = 11, row = 5 } } (FunctionOrValue [] "x")) (Node { end = { column = 16, row = 5 }, start = { column = 15, row = 5 } } (Integer 3))))) ]), name = Node { end = { column = 5, row = 4 }, start = { column = 1, row = 4 } } "alfa" }, documentation = Nothing, signature = Nothing }), Node { end = { column = 10, row = 9 }, start = { column = 1, row = 8 } } (FunctionDeclaration { declaration = Node { end = { column = 10, row = 9 }, start = { column = 1, row = 8 } } { arguments = [ Node { end = { column = 7, row = 8 }, start = { column = 6, row = 8 } } (VarPattern "x") ], expression = Node { end = { column = 10, row = 9 }, start = { column = 5, row = 9 } } (OperatorApplication "+" Left (Node { end = { column = 6, row = 9 }, start = { column = 5, row = 9 } } (FunctionOrValue [] "x")) (Node { end = { column = 10, row = 9 }, start = { column = 9, row = 9 } } (Integer 1))), name = Node { end = { column = 5, row = 8 }, start = { column = 1, row = 8 } } "beta" }, documentation = Nothing, signature = Nothing }) ], imports = [], moduleDefinition = Node { end = { column = 26, row = 1 }, start = { column = 1, row = 1 } } (NormalModule { exposingList = Node { end = { column = 26, row = 1 }, start = { column = 13, row = 1 } } (All { end = { column = 25, row = 1 }, start = { column = 23, row = 1 } }), moduleName = Node { end = { column = 12, row = 1 }, start = { column = 8, row = 1 } } [ "Test" ] }) }""");
+            """{ comments = [], declarations = [ Node { end = { column = 17, row = 5 }, start = { column = 1, row = 4 } } (FunctionDeclaration { declaration = Node { end = { column = 17, row = 5 }, start = { column = 1, row = 4 } } { arguments = [ Node { end = { column = 7, row = 4 }, start = { column = 6, row = 4 } } (VarPattern "x") ], expression = Node { end = { column = 17, row = 5 }, start = { column = 5, row = 5 } } (Application [ Node { end = { column = 9, row = 5 }, start = { column = 5, row = 5 } } (FunctionOrValue [ "Test" ] "beta"), Node { end = { column = 17, row = 5 }, start = { column = 10, row = 5 } } (ParenthesizedExpression (Node { end = { column = 16, row = 5 }, start = { column = 11, row = 5 } } (Application [ Node { end = { column = 16, row = 5 }, start = { column = 11, row = 5 } } (FunctionOrValue [ "Basics" ] "mul"), Node { end = { column = 12, row = 5 }, start = { column = 11, row = 5 } } (FunctionOrValue [] "x"), Node { end = { column = 16, row = 5 }, start = { column = 15, row = 5 } } (Integer 3) ]))) ]), name = Node { end = { column = 5, row = 4 }, start = { column = 1, row = 4 } } "alfa" }, documentation = Nothing, signature = Nothing }), Node { end = { column = 10, row = 9 }, start = { column = 1, row = 8 } } (FunctionDeclaration { declaration = Node { end = { column = 10, row = 9 }, start = { column = 1, row = 8 } } { arguments = [ Node { end = { column = 7, row = 8 }, start = { column = 6, row = 8 } } (VarPattern "x") ], expression = Node { end = { column = 10, row = 9 }, start = { column = 5, row = 9 } } (Application [ Node { end = { column = 10, row = 9 }, start = { column = 5, row = 9 } } (FunctionOrValue [ "Basics" ] "add"), Node { end = { column = 6, row = 9 }, start = { column = 5, row = 9 } } (FunctionOrValue [] "x"), Node { end = { column = 10, row = 9 }, start = { column = 9, row = 9 } } (Integer 1) ]), name = Node { end = { column = 5, row = 8 }, start = { column = 1, row = 8 } } "beta" }, documentation = Nothing, signature = Nothing }) ], imports = [], moduleDefinition = Node { end = { column = 26, row = 1 }, start = { column = 1, row = 1 } } (NormalModule { exposingList = Node { end = { column = 26, row = 1 }, start = { column = 13, row = 1 } } (All { end = { column = 25, row = 1 }, start = { column = 23, row = 1 } }), moduleName = Node { end = { column = 12, row = 1 }, start = { column = 8, row = 1 } } [ "Test" ] }) }""");
     }
 
     [Fact]
@@ -561,13 +563,19 @@ public class CanonicalizationTests
             .OfType<Declaration.FunctionDeclaration>()
             .Single(f => f.Function.Declaration.Value.Name.Value is "compute");
 
-        // Get the expression (double x + triple x)
+        // Get the expression: after canonicalization, `double x + triple x` becomes `Basics.add (double x) (triple x)`
         var expr = computeDecl.Function.Declaration.Value.Expression.Value;
-        expr.Should().BeOfType<SyntaxTypes.Expression.OperatorApplication>();
-        var opApp = (SyntaxTypes.Expression.OperatorApplication)expr;
+        expr.Should().BeOfType<SyntaxTypes.Expression.Application>();
+        var addApp = (SyntaxTypes.Expression.Application)expr;
 
-        // Left side should be application of double
-        var leftApp = opApp.Left.Value;
+        // First argument should be Basics.add
+        var addFunc = (SyntaxTypes.Expression.FunctionOrValue)addApp.Arguments[0].Value;
+        addFunc.Should().Be(new SyntaxTypes.Expression.FunctionOrValue(
+            ModuleName: ["Basics"],
+            Name: "add"));
+
+        // Second argument should be application of double (left operand)
+        var leftApp = addApp.Arguments[1].Value;
         leftApp.Should().BeOfType<SyntaxTypes.Expression.Application>();
         var doubleApp = (SyntaxTypes.Expression.Application)leftApp;
         var doubleFuncOrValue = (SyntaxTypes.Expression.FunctionOrValue)doubleApp.Arguments[0].Value;

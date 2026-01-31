@@ -11,7 +11,8 @@ using ModuleName = ImmutableArray<string>;
 public record ImplicitImportConfig(
     ImmutableHashSet<ModuleName> ModuleImports,
     IImmutableDictionary<string, ModuleName> TypeImports,
-    IImmutableDictionary<string, ModuleName> ValueImports)
+    IImmutableDictionary<string, ModuleName> ValueImports,
+    IImmutableDictionary<string, (ModuleName ModuleName, string FunctionName)> OperatorToFunction)
 {
     /// <summary>
     /// Elm 0.19 defaults.
@@ -53,6 +54,8 @@ public record ImplicitImportConfig(
             .Add("Nothing", ["Maybe"])
             .Add("Just", ["Maybe"])
             .Add("Result", ["Result"])
+            .Add("Ok", ["Result"])
+            .Add("Err", ["Result"])
             .Add("Program", ["Platform"])
             .Add("Task", ["Task"])
             .Add("Cmd", ["Platform", "Cmd"])
@@ -63,14 +66,6 @@ public record ImplicitImportConfig(
             .Add("compare", ["Basics"])
             .Add("not", ["Basics"])
             .Add("xor", ["Basics"])
-            .Add("==", ["Basics"])
-            .Add("/=", ["Basics"])
-            .Add("<", ["Basics"])
-            .Add("<=", ["Basics"])
-            .Add(">", ["Basics"])
-            .Add(">=", ["Basics"])
-            .Add("&&", ["Basics"])
-            .Add("||", ["Basics"])
             .Add("max", ["Basics"])
             .Add("min", ["Basics"])
             .Add("modBy", ["Basics"])
@@ -103,12 +98,34 @@ public record ImplicitImportConfig(
             .Add("isInfinite", ["Basics"])
             .Add("identity", ["Basics"])
             .Add("always", ["Basics"])
-            .Add("never", ["Basics"])
-            .Add("|>", ["Basics"])
-            .Add("<|", ["Basics"])
-            .Add("<<", ["Basics"])
-            .Add(">>", ["Basics"]);
+            .Add("never", ["Basics"]);
 
-        return new ImplicitImportConfig(modules, typeImports, valueImports);
+        // Mapping from infix operators to their underlying function names and modules
+        // Based on infix declarations in Basics.elm and List.elm
+        var operatorToFunction =
+            ImmutableDictionary<string, (ModuleName ModuleName, string FunctionName)>.Empty
+            // Basics operators
+            .Add("+", (["Basics"], "add"))
+            .Add("-", (["Basics"], "sub"))
+            .Add("*", (["Basics"], "mul"))
+            .Add("//", (["Basics"], "idiv"))
+            .Add("^", (["Basics"], "pow"))
+            .Add("++", (["Basics"], "append"))
+            .Add("==", (["Basics"], "eq"))
+            .Add("/=", (["Basics"], "neq"))
+            .Add("<", (["Basics"], "lt"))
+            .Add(">", (["Basics"], "gt"))
+            .Add("<=", (["Basics"], "le"))
+            .Add(">=", (["Basics"], "ge"))
+            .Add("&&", (["Basics"], "and"))
+            .Add("||", (["Basics"], "or"))
+            .Add("|>", (["Basics"], "apR"))
+            .Add("<|", (["Basics"], "apL"))
+            .Add("<<", (["Basics"], "composeL"))
+            .Add(">>", (["Basics"], "composeR"))
+            // List operators
+            .Add("::", (["List"], "cons"));
+
+        return new ImplicitImportConfig(modules, typeImports, valueImports, operatorToFunction);
     }
 }
