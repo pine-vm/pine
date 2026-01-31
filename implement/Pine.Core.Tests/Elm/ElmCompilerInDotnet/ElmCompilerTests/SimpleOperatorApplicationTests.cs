@@ -13,7 +13,7 @@ public class SimpleOperatorApplicationTests
     public void Int_mul_parens_int_add()
     {
         var elmModuleText =
-            """
+            """"
             module Test exposing (..)
 
 
@@ -21,7 +21,7 @@ public class SimpleOperatorApplicationTests
             alfa x y =
                 x * (y + 3)
 
-            """;
+            """";
 
         var parseCache = new PineVMParseCache();
 
@@ -56,7 +56,7 @@ public class SimpleOperatorApplicationTests
     public void Int_mul_parens_int_sub()
     {
         var elmModuleText =
-            """
+            """"
             module Test exposing (..)
 
 
@@ -64,7 +64,7 @@ public class SimpleOperatorApplicationTests
             alfa x y =
                 x * (11 - y)
 
-            """;
+            """";
 
         var parseCache = new PineVMParseCache();
 

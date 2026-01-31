@@ -14,14 +14,14 @@ public class SimpleRecordPatternTests
     public void Record_pattern_destructuring_three_fields()
     {
         var elmModuleText =
-            """
+            """"
             module Test exposing (..)
 
 
             decl { alfa, gamma, beta } =
                 [ alfa, beta, gamma ]
 
-            """;
+            """";
 
         var parseCache = new PineVMParseCache();
 
@@ -109,14 +109,14 @@ public class SimpleRecordPatternTests
     public void Record_pattern_with_two_fields()
     {
         var elmModuleText =
-            """
+            """"
             module Test exposing (..)
 
 
             decl { x, y } =
                 Pine_builtin.int_add [ x, y ]
 
-            """;
+            """";
 
         var parseCache = new PineVMParseCache();
 
@@ -198,14 +198,14 @@ public class SimpleRecordPatternTests
     public void Record_pattern_single_field()
     {
         var elmModuleText =
-            """
+            """"
             module Test exposing (..)
 
 
             decl { value } =
                 Pine_builtin.int_mul [ value, 2 ]
 
-            """;
+            """";
 
         var parseCache = new PineVMParseCache();
 
@@ -278,7 +278,7 @@ public class SimpleRecordPatternTests
     public void Record_pattern_in_let_binding()
     {
         var elmModuleText =
-            """
+            """"
             module Test exposing (..)
 
 
@@ -289,7 +289,7 @@ public class SimpleRecordPatternTests
                 in
                 Pine_builtin.int_mul [ a, b ]
 
-            """;
+            """";
 
         var parseCache = new PineVMParseCache();
 

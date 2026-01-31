@@ -169,6 +169,21 @@ public class PatternCompiler
                 PatternAnalysis.WithCondition(new PatternCondition.ValueEquals(
                     Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(intPattern.Value)))),
 
+            SyntaxTypes.Pattern.HexPattern hexPattern =>
+                PatternAnalysis.WithCondition(new PatternCondition.ValueEquals(
+                    Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(hexPattern.Value)))),
+
+            SyntaxTypes.Pattern.CharPattern charPattern =>
+                PatternAnalysis.WithCondition(new PatternCondition.ValueEquals(
+                    Expression.LiteralInstance(ElmValueEncoding.ElmCharAsPineValue(charPattern.Value)))),
+
+            SyntaxTypes.Pattern.StringPattern stringPattern =>
+                PatternAnalysis.WithCondition(new PatternCondition.ValueEquals(
+                    Expression.LiteralInstance(ElmValueEncoding.StringAsPineValue(stringPattern.Value)))),
+
+            SyntaxTypes.Pattern.AsPattern asPattern =>
+                AnalyzeAsPattern(asPattern, scrutinee),
+
             SyntaxTypes.Pattern.ListPattern listPattern =>
                 AnalyzeListPattern(listPattern, scrutinee),
 
@@ -396,6 +411,19 @@ public class PatternCompiler
         return new PatternAnalysis(bindings, new PatternCondition.Always());
     }
 
+    private static PatternAnalysis AnalyzeAsPattern(
+        SyntaxTypes.Pattern.AsPattern asPattern,
+        Expression scrutinee)
+    {
+        // First, analyze the inner pattern
+        var innerAnalysis = AnalyzePatternRecursive(asPattern.Pattern.Value, scrutinee);
+
+        // Add the "as" binding - this binds the entire scrutinee to the alias name
+        var bindings = innerAnalysis.Bindings.Add(asPattern.Name.Value, scrutinee);
+
+        return new PatternAnalysis(bindings, innerAnalysis.Condition);
+    }
+
     /// <summary>
     /// Compiles a condition tree into an Expression that evaluates to a boolean.
     /// </summary>
@@ -514,6 +542,15 @@ public class PatternCompiler
             SyntaxTypes.Pattern.IntPattern intPattern =>
                 IntegerEncoding.EncodeSignedInteger(intPattern.Value),
 
+            SyntaxTypes.Pattern.HexPattern hexPattern =>
+                IntegerEncoding.EncodeSignedInteger(hexPattern.Value),
+
+            SyntaxTypes.Pattern.CharPattern charPattern =>
+                ElmValueEncoding.ElmCharAsPineValue(charPattern.Value),
+
+            SyntaxTypes.Pattern.StringPattern stringPattern =>
+                ElmValueEncoding.StringAsPineValue(stringPattern.Value),
+
             SyntaxTypes.Pattern.ParenthesizedPattern p =>
                 AsConstantPattern(p.Pattern.Value),
 
@@ -537,6 +574,9 @@ public class PatternCompiler
 
             SyntaxTypes.Pattern.RecordPattern =>
                 null, // Record pattern always binds variables
+
+            SyntaxTypes.Pattern.AsPattern =>
+                null, // As pattern always binds a variable
 
             _ =>
             throw new NotImplementedException(
@@ -627,6 +667,25 @@ public class PatternCompiler
             case SyntaxTypes.Pattern.UnConsPattern unConsPattern:
                 CollectPatternNames(unConsPattern.Head.Value, names);
                 CollectPatternNames(unConsPattern.Tail.Value, names);
+                break;
+
+            case SyntaxTypes.Pattern.AsPattern asPattern:
+                names.Add(asPattern.Name.Value);
+                CollectPatternNames(asPattern.Pattern.Value, names);
+                break;
+
+            case SyntaxTypes.Pattern.NamedPattern namedPattern:
+                foreach (var arg in namedPattern.Arguments)
+                {
+                    CollectPatternNames(arg.Value, names);
+                }
+                break;
+
+            case SyntaxTypes.Pattern.RecordPattern recordPattern:
+                foreach (var field in recordPattern.Fields)
+                {
+                    names.Add(field.Value);
+                }
                 break;
         }
     }

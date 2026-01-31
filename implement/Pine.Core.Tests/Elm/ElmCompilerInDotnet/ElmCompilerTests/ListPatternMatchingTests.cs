@@ -14,7 +14,7 @@ public class ListPatternMatchingTests
     public void Case_of_list_empty_or_not()
     {
         var elmModuleText =
-            """
+            """"
             module Test exposing (..)
 
 
@@ -27,7 +27,7 @@ public class ListPatternMatchingTests
                     _ ->
                         "not empty"
 
-            """;
+            """";
 
         var parseCache = new PineVMParseCache();
 
@@ -96,7 +96,7 @@ public class ListPatternMatchingTests
     public void Case_of_list_matching_const_integer_patterns()
     {
         var elmModuleText =
-            """
+            """"
             module Test exposing (..)
 
 
@@ -123,7 +123,7 @@ public class ListPatternMatchingTests
 
                     _ ->
                         500
-            """;
+            """";
 
         var parseCache = new PineVMParseCache();
 
@@ -250,7 +250,7 @@ public class ListPatternMatchingTests
     public void Case_of_list_matching_nested_integer_list_patterns()
     {
         var elmModuleText =
-            """
+            """"
             module Test exposing (..)
 
 
@@ -316,7 +316,7 @@ public class ListPatternMatchingTests
 
                     _ ->
                         -999
-            """;
+            """";
 
         var parseCache = new PineVMParseCache();
 
@@ -561,7 +561,7 @@ public class ListPatternMatchingTests
     public void List_pattern_with_const_items_optimized()
     {
         var elmModuleText =
-            """
+            """"
             module Test exposing (..)
 
 
@@ -579,7 +579,7 @@ public class ListPatternMatchingTests
 
                     _ ->
                         -999
-            """;
+            """";
 
         var parseCache = new PineVMParseCache();
 
