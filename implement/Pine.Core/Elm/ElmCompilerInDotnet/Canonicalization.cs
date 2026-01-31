@@ -56,13 +56,47 @@ public class Canonicalization
         public CanonicalizationContext WithLocalDeclarations(ImmutableHashSet<string> additionalDeclarations) =>
             this with { LocalDeclarations = LocalDeclarations.Union(additionalDeclarations) };
 
-        /// <summary>
-        /// Creates a new context with a single additional local declaration added.
-        /// </summary>
-        /// <param name="name">Name to add to the local declarations set.</param>
-        /// <returns>A new context with the added local declaration.</returns>
-        public CanonicalizationContext WithLocalDeclaration(string name) =>
-            this with { LocalDeclarations = LocalDeclarations.Add(name) };
+        public CanonicalizationContext WithDefaults(ImplicitImportConfig implicitImportConfig)
+        {
+            // Merge implicit type imports into the type import map
+            // Skip names that are already declared locally in this module
+            var mergedTypeImportMap = TypeImportMap;
+            foreach (var (typeName, moduleName) in implicitImportConfig.TypeImports)
+            {
+                if (!mergedTypeImportMap.ContainsKey(typeName) && !ModuleLevelDeclarations.Contains(typeName))
+                {
+                    mergedTypeImportMap = mergedTypeImportMap.Add(typeName, [moduleName]);
+                }
+            }
+
+            // Merge implicit value imports into the value import map
+            // Skip names that are already declared locally in this module
+            var mergedValueImportMap = ValueImportMap;
+            foreach (var (valueName, moduleName) in implicitImportConfig.ValueImports)
+            {
+                if (!mergedValueImportMap.ContainsKey(valueName) && !ModuleLevelDeclarations.Contains(valueName))
+                {
+                    mergedValueImportMap = mergedValueImportMap.Add(valueName, [moduleName]);
+                }
+            }
+
+            // Also add type imports to value import map, since in Elm, type constructors
+            // (like True, False, Just, Nothing, LT, EQ, GT) can be used as values in expressions.
+            // Skip names that are already declared locally in this module
+            foreach (var (typeName, moduleName) in implicitImportConfig.TypeImports)
+            {
+                if (!mergedValueImportMap.ContainsKey(typeName) && !ModuleLevelDeclarations.Contains(typeName))
+                {
+                    mergedValueImportMap = mergedValueImportMap.Add(typeName, [moduleName]);
+                }
+            }
+
+            return this with
+            {
+                TypeImportMap = mergedTypeImportMap,
+                ValueImportMap = mergedValueImportMap
+            };
+        }
     }
 
     /// <summary>
@@ -142,13 +176,41 @@ public class Canonicalization
     /// partial canonicalization (resolving cross-module references) is still valuable even if
     /// some local references cannot be resolved.
     /// </summary>
-    /// <param name="modules">The modules to canonicalize.</param>
+    /// <param name="modules">
+    /// The modules to canonicalize.
+    /// </param>
     /// <returns>
     /// On success, returns a dictionary mapping module names to tuples of (canonicalized file, errors).
     /// On failure (e.g., duplicate module names), returns an error message.
     /// </returns>
     public static Result<string, IReadOnlyDictionary<ModuleName, (SyntaxTypes.File File, IReadOnlyList<CanonicalizationError> Errors)>> CanonicalizeAllowingErrors(
         IReadOnlyList<SyntaxTypes.File> modules)
+    {
+        return CanonicalizeAllowingErrors(
+            modules,
+            ImplicitImportConfig.Default);
+    }
+
+    /// <summary>
+    /// Canonicalizes a list of Elm modules, resolving all references to their fully qualified forms.
+    /// Unlike <see cref="Canonicalize"/>, this method always returns the canonicalized files even when
+    /// there are errors (such as undefined references). This is useful for type inference where
+    /// partial canonicalization (resolving cross-module references) is still valuable even if
+    /// some local references cannot be resolved.
+    /// </summary>
+    /// <param name="modules">
+    /// The modules to canonicalize.
+    /// </param>
+    /// <param name="implicitImportConfig">
+    /// Configuration for implicit imports to be added to each module.
+    /// </param>
+    /// <returns>
+    /// On success, returns a dictionary mapping module names to tuples of (canonicalized file, errors).
+    /// On failure (e.g., duplicate module names), returns an error message.
+    /// </returns>
+    public static Result<string, IReadOnlyDictionary<ModuleName, (SyntaxTypes.File File, IReadOnlyList<CanonicalizationError> Errors)>> CanonicalizeAllowingErrors(
+        IReadOnlyList<SyntaxTypes.File> modules,
+        ImplicitImportConfig implicitImportConfig)
     {
         // Check for duplicate module names
         var moduleNameGroups =
@@ -184,7 +246,8 @@ public class Canonicalization
                 SyntaxTypes.Module.GetModuleName(module.ModuleDefinition.Value).Value;
 
             // Build import maps and alias map for this module
-            var (typeImportMap, valueImportMap, aliasMap) = BuildImportMaps(module.Imports, moduleExportsMap);
+            var (typeImportMap, valueImportMap, aliasMap) =
+                BuildImportMaps(module.Imports, moduleExportsMap);
 
             // Build set of module-level declarations (top-level names declared in this module)
             var moduleLevelDeclarations = BuildLocalDeclarations(module);
@@ -192,20 +255,25 @@ public class Canonicalization
             // Check for clashing imports in both namespaces and convert to CanonicalizationError
             var typeClashErrors = DetectImportClashes(typeImportMap, "Type");
             var valueClashErrors = DetectImportClashes(valueImportMap, "Value");
-            var clashErrors = typeClashErrors.Concat(valueClashErrors)
+
+            var clashErrors =
+                typeClashErrors
+                .Concat(valueClashErrors)
                 .Select(errMsg => new CanonicalizationError(
                     new Range(new Location(0, 0), new Location(0, 0)),
                     errMsg))
                 .ToList();
 
             // Create canonicalization context for this module
-            var context = new CanonicalizationContext(
-                CurrentModuleName: currentModuleName,
-                TypeImportMap: typeImportMap,
-                ValueImportMap: valueImportMap,
-                AliasMap: aliasMap,
-                ModuleLevelDeclarations: moduleLevelDeclarations,
-                LocalDeclarations: []);
+            var context =
+                new CanonicalizationContext(
+                    CurrentModuleName: currentModuleName,
+                    TypeImportMap: typeImportMap,
+                    ValueImportMap: valueImportMap,
+                    AliasMap: aliasMap,
+                    ModuleLevelDeclarations: moduleLevelDeclarations,
+                    LocalDeclarations: [])
+                .WithDefaults(implicitImportConfig);
 
             // Canonicalize declarations and collect errors
             var canonicalizedDeclarationsWithErrors =
@@ -558,133 +626,7 @@ public class Canonicalization
             }
         }
 
-        // Add core type mappings to type import map
-        var typeImportMapWithCoreTypes = AddCoreTypeMappings(typeImportMap.ToImmutable());
-
-        // Add core value mappings to value import map
-        var valueImportMapWithCoreValues = AddCoreValueMappings(valueImportMap.ToImmutable());
-
-        return (typeImportMapWithCoreTypes, valueImportMapWithCoreValues, aliasMap.ToImmutable());
-    }
-
-    private static ImmutableDictionary<string, ImmutableList<ModuleName>> AddCoreTypeMappings(
-        ImmutableDictionary<string, ImmutableList<ModuleName>> importMap)
-    {
-        var coreTypes = ImmutableDictionary.CreateRange(new Dictionary<string, ModuleName>
-        {
-            // Basics module types
-            ["Int"] = ["Basics"],
-            ["Float"] = ["Basics"],
-            ["Bool"] = ["Basics"],
-            ["Never"] = ["Basics"],
-            ["Order"] = ["Basics"],
-
-            // String module
-            ["Char"] = ["Char"],
-            ["String"] = ["String"],
-
-            // Standard library types
-            ["List"] = ["List"],
-            ["Maybe"] = ["Maybe"],
-            ["Result"] = ["Result"],
-
-            // Platform types
-            ["Program"] = ["Platform"],
-            ["Task"] = ["Task"],
-            ["Cmd"] = ["Platform", "Cmd"],
-            ["Sub"] = ["Platform", "Sub"]
-        });
-
-        var result = importMap;
-
-        foreach (var (typeName, moduleName) in coreTypes)
-        {
-            if (!result.ContainsKey(typeName))
-            {
-                result = result.Add(typeName, [moduleName]);
-            }
-        }
-
-        return result;
-    }
-
-    private static ImmutableDictionary<string, ImmutableList<ModuleName>> AddCoreValueMappings(
-        ImmutableDictionary<string, ImmutableList<ModuleName>> importMap)
-    {
-        var coreValues = ImmutableDictionary.CreateRange(new Dictionary<string, ModuleName>
-        {
-            // Basics module value constructors
-            ["True"] = ["Basics"],
-            ["False"] = ["Basics"],
-
-            // Order constructors
-            ["LT"] = ["Basics"],
-            ["EQ"] = ["Basics"],
-            ["GT"] = ["Basics"],
-
-            // Basics module functions (auto-imported per Elm specification)
-            // Comparison: max, min, compare
-            ["compare"] = ["Basics"],
-            ["max"] = ["Basics"],
-            ["min"] = ["Basics"],
-
-            // Boolean operations: not, xor
-            ["not"] = ["Basics"],
-            ["xor"] = ["Basics"],
-
-            // Math functions: modBy, remainderBy, negate, abs, clamp, sqrt, logBase, e, pi
-            ["modBy"] = ["Basics"],
-            ["remainderBy"] = ["Basics"],
-            ["negate"] = ["Basics"],
-            ["abs"] = ["Basics"],
-            ["clamp"] = ["Basics"],
-            ["sqrt"] = ["Basics"],
-            ["logBase"] = ["Basics"],
-            ["e"] = ["Basics"],
-            ["pi"] = ["Basics"],
-
-            // Trigonometry: cos, sin, tan, acos, asin, atan, atan2, degrees, radians, turns
-            ["cos"] = ["Basics"],
-            ["sin"] = ["Basics"],
-            ["tan"] = ["Basics"],
-            ["acos"] = ["Basics"],
-            ["asin"] = ["Basics"],
-            ["atan"] = ["Basics"],
-            ["atan2"] = ["Basics"],
-            ["degrees"] = ["Basics"],
-            ["radians"] = ["Basics"],
-            ["turns"] = ["Basics"],
-
-            // Conversion: toFloat, round, floor, ceiling, truncate, toPolar, fromPolar
-            ["toFloat"] = ["Basics"],
-            ["round"] = ["Basics"],
-            ["floor"] = ["Basics"],
-            ["ceiling"] = ["Basics"],
-            ["truncate"] = ["Basics"],
-            ["toPolar"] = ["Basics"],
-            ["fromPolar"] = ["Basics"],
-
-            // Float checks: isNaN, isInfinite
-            ["isNaN"] = ["Basics"],
-            ["isInfinite"] = ["Basics"],
-
-            // Utility: identity, always, never
-            ["identity"] = ["Basics"],
-            ["always"] = ["Basics"],
-            ["never"] = ["Basics"],
-        });
-
-        var result = importMap;
-
-        foreach (var (valueName, moduleName) in coreValues)
-        {
-            if (!result.ContainsKey(valueName))
-            {
-                result = result.Add(valueName, [moduleName]);
-            }
-        }
-
-        return result;
+        return (typeImportMap.ToImmutable(), valueImportMap.ToImmutable(), aliasMap.ToImmutable());
     }
 
     /// <summary>
