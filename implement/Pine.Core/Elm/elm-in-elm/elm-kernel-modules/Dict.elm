@@ -46,8 +46,8 @@ Insert, remove, and query operations all take _O(log n)_ time.
 -}
 
 import Basics
-import List exposing (..)
-import Maybe exposing (..)
+import List
+import Maybe
 
 
 
@@ -119,7 +119,7 @@ get targetKey dict =
                 right
 
 
-getAfterCompare : Order -> comparable -> Dict comparable v -> Dict comparable v -> Maybe v
+getAfterCompare : Order -> comparable -> v -> Dict comparable v -> Dict comparable v -> Maybe v
 getAfterCompare order targetKey value left right =
     case order of
         LT ->
