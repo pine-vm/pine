@@ -74,6 +74,38 @@ public class ElmSyntaxParser
         return parser.ParseFile();
     }
 
+    /// <summary>
+    /// Contains the module name and import information extracted from a module header.
+    /// This is used for building module dependency graphs before full parsing.
+    /// </summary>
+    /// <param name="ModuleName">The name of the module.</param>
+    /// <param name="ImportedModuleNames">Names of modules imported by this module.</param>
+    public record ModuleHeaderInfo(
+        ModuleName ModuleName,
+        IReadOnlyList<ModuleName> ImportedModuleNames);
+
+    /// <summary>
+    /// Extracts module name and import information from Elm module text with error recovery.
+    /// This method can extract header information even from incomplete or malformed modules,
+    /// as long as the module header and import statements are parseable.
+    /// Used for building module dependency graphs before full parsing.
+    /// </summary>
+    /// <param name="elmModuleText">Source code of the Elm module.</param>
+    /// <returns>
+    /// Result containing either the module header info or an error if the module header itself cannot be parsed.
+    /// </returns>
+    public static Result<string, ModuleHeaderInfo> ParseModuleHeader(
+        string elmModuleText)
+    {
+        var tokenizer = new Tokenizer(elmModuleText);
+
+        var tokens = tokenizer.Tokenize().ToArray();
+
+        var parser = new Parser(tokens);
+
+        return parser.ParseModuleHeaderWithRecovery();
+    }
+
     private record InfixOperatorInfo(
         int Precedence,
         InfixDirection Direction)
@@ -1288,6 +1320,57 @@ public class ElmSyntaxParser
                     declarations,
                     Comments: commentsGlobalList,
                     IncompleteDeclarations: incompleteDeclarations);
+            }
+            catch (Exception ex)
+            {
+                return ex.Message;
+            }
+        }
+
+        /// <summary>
+        /// Parses module header (module definition and imports) with error recovery for imports.
+        /// If an import fails to parse, it records the successfully parsed imports up to that point
+        /// and returns successfully. This allows building dependency graphs even for incomplete modules.
+        /// </summary>
+        public Result<string, ModuleHeaderInfo> ParseModuleHeaderWithRecovery()
+        {
+            try
+            {
+                ConsumeAllTrivia();
+
+                // Parse the module header
+                var moduleDefinition = ParseModule();
+
+                var moduleName = SyntaxTypes.Module.GetModuleName(moduleDefinition.Value).Value;
+
+                ConsumeAllTrivia();
+
+                // Parse imports with error recovery
+                var importedModuleNames = new List<ModuleName>();
+
+                while (NextTokenMatches(t => t.Type is TokenType.Identifier && t.Lexeme is "import"))
+                {
+                    try
+                    {
+                        var import = ParseImport();
+                        importedModuleNames.Add(import.Value.ModuleName.Value);
+                        ConsumeAllTrivia();
+                    }
+                    catch (ParserException)
+                    {
+                        // Import parsing failed - stop parsing imports but don't fail
+                        // This allows modules with incomplete imports to still provide their name
+                        // and any successfully parsed imports
+                        break;
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        // Can happen when tokens are exhausted during parsing
+                        break;
+                    }
+                }
+
+                return new ModuleHeaderInfo(moduleName, importedModuleNames);
             }
             catch (Exception ex)
             {

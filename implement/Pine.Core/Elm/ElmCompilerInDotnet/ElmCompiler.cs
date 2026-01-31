@@ -36,33 +36,46 @@ public class ElmCompiler
         IReadOnlyList<IReadOnlyList<string>> rootFilePaths,
         bool disableInlining)
     {
-        /*
-         * WIP TODO:
-         * Implement filtering, ordering.
-         */
-
         var elmModuleFiles =
             appCodeTree.EnumerateFilesTransitive()
             .Where(file => file.path.Last().EndsWith(".elm", StringComparison.OrdinalIgnoreCase))
             .ToImmutableArray();
 
-        // First pass: Parse all modules and collect function declarations
-        var parsedModulesBeforeCanonicalize =
-            new List<SyntaxTypes.File>();
+        // Step 1: Try to parse all modules, tracking successes and failures
+        var successfullyParsedModules = new Dictionary<string, SyntaxTypes.File>();
+        var parseFailures = new HashSet<string>();
 
         foreach (var moduleFile in elmModuleFiles)
         {
             var moduleText =
                 Encoding.UTF8.GetString(moduleFile.fileContent.Span);
 
+            // First try to get the module name from the header
+            var headerResult =
+                ElmSyntax.ElmSyntaxParser.ParseModuleHeader(moduleText);
+
+            if (headerResult.IsErrOrNull() is { } headerErr)
+            {
+                // Can't even parse the header - skip this file entirely
+                continue;
+            }
+
+            if (headerResult.IsOkOrNull() is not { } header)
+            {
+                throw new NotImplementedException(
+                    "Unexpected header result type: " + headerResult.GetType().Name);
+            }
+
+            var moduleNameFlattened = string.Join(".", header.ModuleName);
+
+            // Now try full parsing
             var parseResult =
                 ElmSyntax.ElmSyntaxParser.ParseModuleText(moduleText);
 
+            if (parseResult.IsErrOrNull() is { } parseErr)
             {
-                if (parseResult.IsErrOrNull() is { } err)
-                {
-                    return err;
-                }
+                parseFailures.Add(moduleNameFlattened);
+                continue;
             }
 
             if (parseResult.IsOkOrNull() is not { } parseModuleOk)
@@ -71,17 +84,56 @@ public class ElmCompiler
                     "Unexpected parse result type: " + parseResult.GetType().Name);
             }
 
-            var moduleName =
-                ElmSyntax.SyntaxModel.Module.GetModuleName(parseModuleOk.ModuleDefinition.Value).Value;
-
-            var moduleNameFlattened =
-                string.Join(".", moduleName);
-
             var parseModuleAst =
                 SyntaxTypes.FromFullSyntaxModel.Convert(parseModuleOk);
 
-            parsedModulesBeforeCanonicalize.Add(parseModuleAst);
+            successfullyParsedModules[moduleNameFlattened] = parseModuleAst;
         }
+
+        // Step 2: Filter to modules that have all their dependencies satisfied
+        // A module is "valid" if all its imports resolve to either:
+        // - Another valid module in the project
+        // - An external module (platform/package) - these are not in our module list
+        // Modules that import failed modules or other invalid modules are excluded
+        var validModules = new Dictionary<string, SyntaxTypes.File>(successfullyParsedModules);
+        bool changed;
+        do
+        {
+            changed = false;
+            var modulesToRemove = new List<string>();
+
+            foreach (var (moduleName, parsedModule) in validModules)
+            {
+                foreach (var import in parsedModule.Imports)
+                {
+                    var importedModuleNameFlattened = string.Join(".", import.Value.ModuleName.Value);
+
+                    // Check if this import refers to a failed module
+                    if (parseFailures.Contains(importedModuleNameFlattened))
+                    {
+                        modulesToRemove.Add(moduleName);
+                        break;
+                    }
+
+                    // Check if this import refers to a module that was parsed but is no longer valid
+                    if (successfullyParsedModules.ContainsKey(importedModuleNameFlattened) &&
+                        !validModules.ContainsKey(importedModuleNameFlattened))
+                    {
+                        modulesToRemove.Add(moduleName);
+                        break;
+                    }
+                }
+            }
+
+            foreach (var moduleName in modulesToRemove)
+            {
+                validModules.Remove(moduleName);
+                changed = true;
+            }
+        } while (changed);
+
+        // Step 3: Proceed with valid modules only
+        var parsedModulesBeforeCanonicalize = validModules.Values.ToList();
 
         var canonicalizationResult =
             Canonicalization.Canonicalize(parsedModulesBeforeCanonicalize);
