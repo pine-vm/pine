@@ -965,6 +965,7 @@ public class CanonicalizationTests
 
             other x =
                 x - 1
+
             """";
 
         var module3Text =
@@ -979,6 +980,7 @@ public class CanonicalizationTests
             -- Module2 has a helper function but doesn't expose it
             main =
                 helper 5
+
             """";
 
         var parsedModule1 = ParseModuleText(module1Text);
@@ -1025,6 +1027,7 @@ public class CanonicalizationTests
 
             type Node a
                 = Node Range a
+
             """";
 
         var appModuleText =
@@ -1078,6 +1081,7 @@ public class CanonicalizationTests
 
             type Node a
                 = Node Range a
+
             """";
 
         var appModuleText =
@@ -1182,5 +1186,443 @@ public class CanonicalizationTests
 
         renderedAppModule.Trim().Should().Be(
             expectedAppModuleText.Trim());
+    }
+
+    [Fact]
+    public void Imports_exposing_all_overlapping_names_not_referenced_do_not_cause_name_clash()
+    {
+        // Both Alfa and Beta modules expose multiple declarations with some overlapping names.
+        // The main module "Test" imports from both with exposing (..) but does not reference
+        // any of the overlapping names - this should NOT cause an error.
+
+        var alfaModuleText =
+            """"
+            module Alfa exposing (..)
+
+
+            uniqueAlfa x =
+                x + 1
+
+
+            shared x =
+                x * 2
+
+
+            anotherShared =
+                "alfa"
+
+            """";
+
+        var betaModuleText =
+            """"
+            module Beta exposing (..)
+
+
+            uniqueBeta x =
+                x - 1
+
+
+            shared x =
+                x * 3
+
+
+            anotherShared =
+                "beta"
+
+            """";
+
+        var testModuleText =
+            """"
+            module Test exposing (..)
+
+            import Alfa exposing (..)
+            import Beta exposing (..)
+
+
+            result =
+                [ uniqueAlfa 5, uniqueBeta 3 ]
+
+            """";
+
+        var mainModuleCanonicalized =
+            ElmCompilerTestHelper.CanonicalizeAndGetSingleModule(
+                elmModulesTexts:
+                [alfaModuleText, betaModuleText, testModuleText],
+                moduleName: ["Test"]);
+
+        var renderedMainModule =
+            Avh4Format.FormatToString(
+                ToFullSyntaxModel.Convert(mainModuleCanonicalized));
+
+        renderedMainModule.Trim().Should().Be(
+            """"
+            module Test exposing (..)
+
+
+            result =
+                [ Alfa.uniqueAlfa 5, Beta.uniqueBeta 3 ]
+
+            """".Trim());
+    }
+
+    [Fact]
+    public void Imports_exposing_all_overlapping_names_when_referenced_cause_name_clash()
+    {
+        // Both Alfa and Beta modules expose multiple declarations with some overlapping names.
+        // The main module "Test" imports from both with exposing (..) and tries to reference
+        // one of the overlapping names - this SHOULD cause an error.
+
+        var alfaModuleText =
+            """"
+            module Alfa exposing (..)
+
+
+            uniqueAlfa x =
+                x + 1
+
+
+            shared x =
+                x * 2
+
+
+            anotherShared =
+                "alfa"
+
+            """";
+
+        var betaModuleText =
+            """"
+            module Beta exposing (..)
+
+
+            uniqueBeta x =
+                x - 1
+
+
+            shared x =
+                x * 3
+
+
+            anotherShared =
+                "beta"
+
+            """";
+
+        var testModuleText =
+            """"
+            module Test exposing (..)
+
+            import Alfa exposing (..)
+            import Beta exposing (..)
+
+
+            -- Reference an overlapping name - this should cause an error
+            result =
+                shared 5
+
+            """";
+
+        var parsedAlfaModule = ParseModuleText(alfaModuleText);
+        var parsedBetaModule = ParseModuleText(betaModuleText);
+        var parsedTestModule = ParseModuleText(testModuleText);
+
+        var canonicalizeResult =
+            Canonicalization.Canonicalize([parsedAlfaModule, parsedBetaModule, parsedTestModule]);
+
+        var modulesDict =
+            canonicalizeResult
+            .Extract(err => throw new System.Exception("Unexpected global error: " + err));
+
+        // Test module should have an error due to the clash when referencing 'shared'
+        var testModuleResult = modulesDict[["Test"]];
+
+        var errorMessage =
+            testModuleResult.Unpack(
+                fromErr: err => err,
+                fromOk: _ => throw new System.Exception("Expected Test module to have an error due to clashing imports"));
+
+        // Error message should contain the reference name and both module names
+        errorMessage.Should().Contain("shared");
+        errorMessage.Should().Contain("Alfa");
+        errorMessage.Should().Contain("Beta");
+    }
+
+    [Fact]
+    public void Module_level_declaration_shadows_name_from_import_exposing_all()
+    {
+        // A module-level declaration is allowed to shadow a name brought in by an import exposing all.
+        // The local declaration takes precedence over the imported one.
+
+        var helperModuleText =
+            """"
+            module Helper exposing (..)
+
+
+            compute x =
+                x * 10
+
+            """";
+
+        var mainModuleText =
+            """"
+            module Main exposing (..)
+
+            import Helper exposing (..)
+
+
+            -- This local declaration shadows the imported 'compute' from Helper
+            compute x =
+                x + 1
+
+
+            result =
+                compute 5
+
+            """";
+
+        var expectedMainModuleText =
+            """"
+            module Main exposing (..)
+
+
+            compute x =
+                Basics.add x 1
+
+
+            result =
+                Main.compute 5
+
+            """";
+
+        var mainModuleCanonicalized =
+            ElmCompilerTestHelper.CanonicalizeAndGetSingleModule(
+                elmModulesTexts:
+                [helperModuleText, mainModuleText],
+                moduleName: ["Main"]);
+
+        var renderedMainModule =
+            Avh4Format.FormatToString(
+                ToFullSyntaxModel.Convert(mainModuleCanonicalized));
+
+        renderedMainModule.Trim().Should().Be(
+            expectedMainModuleText.Trim());
+    }
+
+    [Fact]
+    public void Parameter_name_shadows_name_from_import_exposing_all()
+    {
+        // A parameter name or let declaration can shadow an imported name.
+        // - In parts where the imported name is NOT shadowed, it resolves to the imported name and appears qualified.
+        // - In parts where the imported name IS shadowed by a parameter or let declaration, 
+        //   it is NOT resolved to the imported name and appears with the local name.
+        // - No errors are produced.
+
+        var helperModuleText =
+            """"
+            module Helper exposing (..)
+
+
+            value =
+                100
+            """";
+
+        var mainModuleText =
+            """"
+            module Main exposing (..)
+
+            import Helper exposing (..)
+
+
+            -- In this function, 'value' refers to the imported Helper.value
+            usesImportedValue =
+                value + 1
+
+
+            -- In this function, parameter 'value' shadows the imported name
+            usesParameterValue value =
+                value + 2
+
+
+            -- In this function, let binding 'value' shadows the imported name in the let expression
+            usesLetValue =
+                let
+                    value =
+                        50
+                in
+                value + 3
+            """";
+
+        var expectedMainModuleText =
+            """"
+            module Main exposing (..)
+
+
+            usesImportedValue =
+                Basics.add Helper.value 1
+
+
+            usesParameterValue value =
+                Basics.add value 2
+
+
+            usesLetValue =
+                let
+                    value =
+                        50
+                in
+                Basics.add value 3
+            """";
+
+        var mainModuleCanonicalized =
+            ElmCompilerTestHelper.CanonicalizeAndGetSingleModule(
+                elmModulesTexts:
+                [helperModuleText, mainModuleText],
+                moduleName: ["Main"]);
+
+        var renderedMainModule =
+            Avh4Format.FormatToString(
+                ToFullSyntaxModel.Convert(mainModuleCanonicalized));
+
+        renderedMainModule.Trim().Should().Be(
+            expectedMainModuleText.Trim());
+    }
+
+    [Fact]
+    public void Case_pattern_shadowing_function_parameter_produces_error()
+    {
+        var testModuleText =
+            """"
+            module Test exposing (..)
+
+
+            viewName name =
+                case name of
+                    Nothing ->
+                        "anonymous"
+
+                    Just name ->
+                        name
+            """";
+
+        var parsedTestModule = ParseModuleText(testModuleText);
+
+        var canonicalizeResult =
+            Canonicalization.CanonicalizeWithErrors([parsedTestModule]);
+
+        var resultWithErrors =
+            canonicalizeResult
+            .Extract(err => throw new System.Exception("Unexpected global error: " + err));
+
+        // Test module should have an error due to shadowing 'name' in the case pattern
+        var testModuleResult = resultWithErrors.Modules[["Test"]];
+
+        // Should have errors
+        testModuleResult.Errors.Should().NotBeEmpty();
+
+        // At least one error should mention 'name' and 'shadow' (or similar)
+        var errorMessages = testModuleResult.Errors.Select(e => e.ReferencedName).ToList();
+        errorMessages.Should().Contain(e => e.Contains("name"));
+    }
+
+    [Fact]
+    public void Multiple_shadowing_errors_in_single_declaration_all_reported()
+    {
+        // When multiple shadowing errors occur in a single top-level declaration,
+        // canonicalization should return ALL of them, not just the first one.
+        // This is important for language servers and editors to display all errors.
+
+        var testModuleText =
+            """"
+            module Test exposing (..)
+
+
+            process x y z =
+                case ( x, y, z ) of
+                    ( Just x, Just y, Just z ) ->
+                        x + y + z
+
+                    _ ->
+                        0
+            """";
+
+        var parsedTestModule = ParseModuleText(testModuleText);
+
+        var canonicalizeResult =
+            Canonicalization.CanonicalizeWithErrors([parsedTestModule]);
+
+        var resultWithErrors =
+            canonicalizeResult
+            .Extract(err => throw new System.Exception("Unexpected global error: " + err));
+
+        var testModuleResult = resultWithErrors.Modules[["Test"]];
+
+        // Should have at least 3 errors - one for each shadowed parameter (x, y, z)
+        testModuleResult.Errors.Should().HaveCountGreaterThanOrEqualTo(3);
+
+        // Verify each shadowed variable is mentioned in an error
+        var errorMessages = testModuleResult.Errors.Select(e => e.ReferencedName).ToList();
+        errorMessages.Should().Contain(e => e.Contains("x"));
+        errorMessages.Should().Contain(e => e.Contains("y"));
+        errorMessages.Should().Contain(e => e.Contains("z"));
+    }
+
+    [Fact]
+    public void Local_declarations_shadowing_module_level_declarations_produce_errors()
+    {
+        // Local declarations (parameters, let bindings, pattern bindings) are not allowed
+        // to shadow module-level declarations. This test verifies that errors are produced
+        // for each type of local shadowing.
+
+        var testModuleText =
+            """"
+            module Test exposing (..)
+
+
+            -- A module-level declaration
+            helper =
+                42
+
+
+            -- Parameter 'helper' shadows the module-level 'helper'
+            usesParameterShadow helper =
+                helper + 1
+
+
+            -- Let binding 'helper' shadows the module-level 'helper'
+            usesLetShadow =
+                let
+                    helper =
+                        100
+                in
+                helper + 2
+
+
+            -- Pattern binding 'helper' shadows the module-level 'helper'
+            usesPatternShadow x =
+                case x of
+                    Just helper ->
+                        helper
+
+                    Nothing ->
+                        0
+            """";
+
+        var parsedTestModule = ParseModuleText(testModuleText);
+
+        var canonicalizeResult =
+            Canonicalization.CanonicalizeWithErrors([parsedTestModule]);
+
+        var resultWithErrors =
+            canonicalizeResult
+            .Extract(err => throw new System.Exception("Unexpected global error: " + err));
+
+        var testModuleResult = resultWithErrors.Modules[["Test"]];
+
+        // Should have at least 3 errors - one for each shadowing case
+        testModuleResult.Errors.Should().HaveCountGreaterThanOrEqualTo(3);
+
+        // All errors should mention 'helper'
+        var errorMessages = testModuleResult.Errors.Select(e => e.ReferencedName).ToList();
+        errorMessages.Should().OnlyContain(e => e.Contains("helper"));
     }
 }

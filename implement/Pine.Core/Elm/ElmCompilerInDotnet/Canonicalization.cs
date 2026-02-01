@@ -180,6 +180,41 @@ public class Canonicalization
     }
 
     /// <summary>
+    /// Canonicalizes a list of Elm modules, returning the results with structured error information.
+    /// This method provides a cleaner API that returns a list of errors per module instead of a single error string.
+    /// </summary>
+    /// <param name="modules">The modules to canonicalize.</param>
+    /// <returns>
+    /// On success, returns a <see cref="CanonicalizationResultWithErrors"/> containing the canonicalized modules and their errors.
+    /// On failure (e.g., duplicate module names), returns an error message.
+    /// </returns>
+    public static Result<string, CanonicalizationResultWithErrors> CanonicalizeWithErrors(
+        IReadOnlyList<SyntaxTypes.File> modules)
+    {
+        var allowingErrorsResult = CanonicalizeAllowingErrors(modules);
+
+        if (allowingErrorsResult.IsErrOrNull() is { } err)
+        {
+            return Result<string, CanonicalizationResultWithErrors>.err(err);
+        }
+
+        var allowingErrorsModules =
+            allowingErrorsResult.IsOkOrNull() ??
+            throw new NotImplementedException(
+                "Unexpected result type from CanonicalizeAllowingErrors");
+
+        var resultDictionary = new Dictionary<ModuleName, ModuleCanonicalizationResult>(
+            EnumerableExtensions.EqualityComparer<ModuleName>());
+
+        foreach (var (moduleName, (file, errors)) in allowingErrorsModules)
+        {
+            resultDictionary[moduleName] = new ModuleCanonicalizationResult(file, errors);
+        }
+
+        return new CanonicalizationResultWithErrors(resultDictionary);
+    }
+
+    /// <summary>
     /// Canonicalizes a list of Elm modules, resolving all references to their fully qualified forms.
     /// Unlike <see cref="Canonicalize"/>, this method always returns the canonicalized files even when
     /// there are errors (such as undefined references). This is useful for type inference where
@@ -262,18 +297,6 @@ public class Canonicalization
             // Build set of module-level declarations (top-level names declared in this module)
             var moduleLevelDeclarations = BuildLocalDeclarations(module);
 
-            // Check for clashing imports in both namespaces and convert to CanonicalizationError
-            var typeClashErrors = DetectImportClashes(typeImportMap, "Type");
-            var valueClashErrors = DetectImportClashes(valueImportMap, "Value");
-
-            var clashErrors =
-                typeClashErrors
-                .Concat(valueClashErrors)
-                .Select(errMsg => new CanonicalizationError(
-                    new Range(new Location(0, 0), new Location(0, 0)),
-                    errMsg))
-                .ToList();
-
             // Create canonicalization context for this module
             var context =
                 new CanonicalizationContext(
@@ -292,10 +315,11 @@ public class Canonicalization
                 .Select(decl => CanonicalizeDeclaration(decl, context))
                 .ToList();
 
-            // Aggregate all errors from declarations plus any clash errors
+            // Aggregate all errors from declarations
+            // Note: Import clash errors are now detected lazily when names are actually referenced
             var allErrors =
-                clashErrors
-                .Concat(canonicalizedDeclarationsWithErrors.SelectMany(result => result.Errors))
+                canonicalizedDeclarationsWithErrors
+                .SelectMany(result => result.Errors)
                 .ToList();
 
             // Extract canonicalized declarations
@@ -693,27 +717,6 @@ public class Canonicalization
         return (typeNames, valueNames);
     }
 
-    private static ModuleName DetectImportClashes(
-        ImmutableDictionary<string, ImmutableList<ModuleName>> importMap,
-        string namespaceDescription)
-    {
-        var errors = new List<string>();
-
-        foreach (var (name, sources) in importMap)
-        {
-            if (sources.Count > 1)
-            {
-                var moduleNames =
-                    sources.Select(m => string.Join(".", m));
-
-                errors.Add(
-                    $"{namespaceDescription} name '{name}' is exposed by multiple imports: {string.Join(", ", moduleNames)}");
-            }
-        }
-
-        return errors;
-    }
-
     private static CanonicalizationResult<Node<SyntaxTypes.Declaration>> CanonicalizeDeclaration(
         Node<SyntaxTypes.Declaration> declNode,
         CanonicalizationContext context)
@@ -830,12 +833,20 @@ public class Canonicalization
         SyntaxTypes.FunctionImplementation impl,
         CanonicalizationContext context)
     {
-        // Collect parameter variables
+        // Collect parameter variables while checking for shadowing against module-level declarations
         var parameterVariables = ImmutableHashSet<string>.Empty;
+        var shadowErrors = new List<CanonicalizationError>();
 
         foreach (var arg in impl.Arguments)
         {
-            parameterVariables = CollectPatternVariables(arg.Value, parameterVariables);
+            // Check if any parameter shadows a module-level declaration
+            var (collectedVars, errors) = CollectPatternVariablesWithShadowCheck(
+                arg.Value,
+                arg.Range,
+                context.ModuleLevelDeclarations, // Check against module-level declarations
+                parameterVariables);
+            parameterVariables = parameterVariables.Union(collectedVars);
+            shadowErrors.AddRange(errors);
         }
 
         // Create new context with parameter variables added to local declarations
@@ -863,7 +874,7 @@ public class Canonicalization
                 Expression: exprResult.Value);
 
         var allErrors =
-            argumentErrors.Concat(exprResult.Errors).ToList();
+            shadowErrors.Concat(argumentErrors).Concat(exprResult.Errors).ToList();
 
         return new CanonicalizationResult<SyntaxTypes.FunctionImplementation>(functionImplementation, allErrors);
     }
@@ -962,6 +973,136 @@ public class Canonicalization
             default:
                 throw new NotImplementedException(
                     $"Unhandled pattern type in CollectPatternVariables: {pattern.GetType().Name}");
+        }
+    }
+
+    /// <summary>
+    /// Collects variables from a pattern while detecting shadowing errors.
+    /// Elm disallows variable shadowing in the same scope to prevent bugs.
+    /// See: https://github.com/elm/compiler/blob/cce7a8bbd8fe690fc83fa795f8d7e02505d1f25f/hints/shadowing.md
+    /// </summary>
+    /// <param name="pattern">The pattern to collect variables from.</param>
+    /// <param name="patternRange">The source range of the pattern for error reporting.</param>
+    /// <param name="existingVariables">Variables already in scope that would be shadowed.</param>
+    /// <param name="collectedVariables">Variables collected so far in this pattern.</param>
+    /// <returns>A tuple of (collected variables, shadowing errors).</returns>
+    private static (ImmutableHashSet<string> Variables, IReadOnlyList<CanonicalizationError> Errors)
+        CollectPatternVariablesWithShadowCheck(
+            SyntaxTypes.Pattern pattern,
+            Range patternRange,
+            ImmutableHashSet<string> existingVariables,
+            ImmutableHashSet<string> collectedVariables)
+    {
+        var errors = new List<CanonicalizationError>();
+
+        switch (pattern)
+        {
+            case SyntaxTypes.Pattern.AllPattern:
+            case SyntaxTypes.Pattern.UnitPattern:
+            case SyntaxTypes.Pattern.CharPattern:
+            case SyntaxTypes.Pattern.StringPattern:
+            case SyntaxTypes.Pattern.IntPattern:
+            case SyntaxTypes.Pattern.HexPattern:
+            case SyntaxTypes.Pattern.FloatPattern:
+                return (collectedVariables, errors);
+
+            case SyntaxTypes.Pattern.VarPattern varPattern:
+                {
+                    if (existingVariables.Contains(varPattern.Name))
+                    {
+                        errors.Add(new CanonicalizationError(
+                            patternRange,
+                            $"This `{varPattern.Name}` pattern is shadowing an existing `{varPattern.Name}` variable. Rename one of them to avoid the ambiguity."));
+                    }
+                    return (collectedVariables.Add(varPattern.Name), errors);
+                }
+
+            case SyntaxTypes.Pattern.TuplePattern tuple:
+                {
+                    var result = collectedVariables;
+                    foreach (var elem in tuple.Elements)
+                    {
+                        var (newVars, newErrors) = CollectPatternVariablesWithShadowCheck(
+                            elem.Value, elem.Range, existingVariables.Union(result), result);
+                        result = newVars;
+                        errors.AddRange(newErrors);
+                    }
+                    return (result, errors);
+                }
+
+            case SyntaxTypes.Pattern.RecordPattern recordPattern:
+                {
+                    foreach (var field in recordPattern.Fields)
+                    {
+                        if (existingVariables.Contains(field.Value))
+                        {
+                            errors.Add(new CanonicalizationError(
+                                field.Range,
+                                $"This `{field.Value}` pattern is shadowing an existing `{field.Value}` variable. Rename one of them to avoid the ambiguity."));
+                        }
+                    }
+                    return (collectedVariables.Union(recordPattern.Fields.Select(f => f.Value)), errors);
+                }
+
+            case SyntaxTypes.Pattern.UnConsPattern unCons:
+                {
+                    var (headVars, headErrors) = CollectPatternVariablesWithShadowCheck(
+                        unCons.Head.Value, unCons.Head.Range, existingVariables, collectedVariables);
+                    var (tailVars, tailErrors) = CollectPatternVariablesWithShadowCheck(
+                        unCons.Tail.Value, unCons.Tail.Range, existingVariables.Union(headVars), headVars);
+                    errors.AddRange(headErrors);
+                    errors.AddRange(tailErrors);
+                    return (tailVars, errors);
+                }
+
+            case SyntaxTypes.Pattern.ListPattern list:
+                {
+                    var result = collectedVariables;
+                    foreach (var elem in list.Elements)
+                    {
+                        var (newVars, newErrors) = CollectPatternVariablesWithShadowCheck(
+                            elem.Value, elem.Range, existingVariables.Union(result), result);
+                        result = newVars;
+                        errors.AddRange(newErrors);
+                    }
+                    return (result, errors);
+                }
+
+            case SyntaxTypes.Pattern.NamedPattern named:
+                {
+                    var result = collectedVariables;
+                    foreach (var arg in named.Arguments)
+                    {
+                        var (newVars, newErrors) = CollectPatternVariablesWithShadowCheck(
+                            arg.Value, arg.Range, existingVariables.Union(result), result);
+                        result = newVars;
+                        errors.AddRange(newErrors);
+                    }
+                    return (result, errors);
+                }
+
+            case SyntaxTypes.Pattern.AsPattern asPattern:
+                {
+                    var (patternVars, patternErrors) = CollectPatternVariablesWithShadowCheck(
+                        asPattern.Pattern.Value, asPattern.Pattern.Range, existingVariables, collectedVariables);
+                    errors.AddRange(patternErrors);
+
+                    if (existingVariables.Contains(asPattern.Name.Value))
+                    {
+                        errors.Add(new CanonicalizationError(
+                            asPattern.Name.Range,
+                            $"This `{asPattern.Name.Value}` pattern is shadowing an existing `{asPattern.Name.Value}` variable. Rename one of them to avoid the ambiguity."));
+                    }
+                    return (patternVars.Add(asPattern.Name.Value), errors);
+                }
+
+            case SyntaxTypes.Pattern.ParenthesizedPattern parenPattern:
+                return CollectPatternVariablesWithShadowCheck(
+                    parenPattern.Pattern.Value, parenPattern.Pattern.Range, existingVariables, collectedVariables);
+
+            default:
+                throw new NotImplementedException(
+                    $"Unhandled pattern type in CollectPatternVariablesWithShadowCheck: {pattern.GetType().Name}");
         }
     }
 
@@ -1337,16 +1478,26 @@ public class Canonicalization
             return new CanonicalizationResult<ModuleName>([], []);
         }
 
-        // Check if this name is imported
-        if (importMap.TryGetValue(name, out var importedFrom) && importedFrom.Count > 0)
-        {
-            return new CanonicalizationResult<ModuleName>(importedFrom[0], []);
-        }
-
-        // Check if it's declared in the current module
+        // Check if it's declared in the current module - module-level declarations shadow imported names
         if (localDeclarations.Contains(name))
         {
             return new CanonicalizationResult<ModuleName>(currentModuleName, []);
+        }
+
+        // Check if this name is imported
+        if (importMap.TryGetValue(name, out var importedFrom) && importedFrom.Count > 0)
+        {
+            // Check for import clashes - only report error when the name is actually referenced
+            if (importedFrom.Count > 1)
+            {
+                var moduleNames = importedFrom.Select(m => string.Join(".", m));
+                var errorMessage = $"Name '{name}' is exposed by multiple imports: {string.Join(", ", moduleNames)}";
+                return new CanonicalizationResult<ModuleName>(
+                    importedFrom[0],
+                    [new CanonicalizationError(range, errorMessage)]);
+            }
+
+            return new CanonicalizationResult<ModuleName>(importedFrom[0], []);
         }
 
         // Name not found - report an error
@@ -1462,10 +1613,17 @@ public class Canonicalization
         SyntaxTypes.Case caseItem,
         CanonicalizationContext context)
     {
-        // Extend local variables with pattern bindings
-        var extendedLocalDeclarations =
-            CollectPatternVariables(caseItem.Pattern.Value, context.LocalDeclarations);
+        // Collect pattern variables while checking for shadowing against both
+        // module-level declarations and local declarations
+        var existingScope = context.ModuleLevelDeclarations.Union(context.LocalDeclarations);
 
+        var (collectedVars, shadowErrors) = CollectPatternVariablesWithShadowCheck(
+            caseItem.Pattern.Value,
+            caseItem.Pattern.Range,
+            existingScope,
+            ImmutableHashSet<string>.Empty);
+
+        var extendedLocalDeclarations = context.LocalDeclarations.Union(collectedVars);
         var contextWithPatternVars = context.WithLocalDeclarations(extendedLocalDeclarations);
 
         var patternResult =
@@ -1482,7 +1640,7 @@ public class Canonicalization
             Pattern: patternResult.Value,
             Expression: exprResult.Value);
 
-        var allErrors = patternResult.Errors.Concat(exprResult.Errors).ToList();
+        var allErrors = shadowErrors.Concat(patternResult.Errors).Concat(exprResult.Errors).ToList();
         return new CanonicalizationResult<SyntaxTypes.Case>(canonicalizedCase, allErrors);
     }
 
@@ -1490,17 +1648,41 @@ public class Canonicalization
         SyntaxTypes.Expression.LetBlock letBlock,
         CanonicalizationContext context)
     {
-        // Extend local variables with let bindings
+        // Collect let bindings while checking for shadowing against module-level and outer local declarations
         var extendedLocalDeclarations = context.LocalDeclarations;
+        var shadowErrors = new List<CanonicalizationError>();
+
+        // The existing scope includes module-level declarations and outer local declarations
+        var existingScope = context.ModuleLevelDeclarations.Union(context.LocalDeclarations);
+
         foreach (var decl in letBlock.Declarations)
         {
             if (decl.Value is SyntaxTypes.Expression.LetDeclaration.LetFunction letFunc)
             {
-                extendedLocalDeclarations = extendedLocalDeclarations.Add(letFunc.Function.Declaration.Value.Name.Value);
+                var funcName = letFunc.Function.Declaration.Value.Name.Value;
+                var funcNameRange = letFunc.Function.Declaration.Value.Name.Range;
+
+                // Check if let function name shadows existing declarations
+                if (existingScope.Contains(funcName))
+                {
+                    shadowErrors.Add(new CanonicalizationError(
+                        funcNameRange,
+                        $"This `{funcName}` declaration is shadowing an existing `{funcName}` declaration. Rename one of them to avoid the ambiguity."));
+                }
+
+                extendedLocalDeclarations = extendedLocalDeclarations.Add(funcName);
+                existingScope = existingScope.Add(funcName);
             }
             else if (decl.Value is SyntaxTypes.Expression.LetDeclaration.LetDestructuring letDestr)
             {
-                extendedLocalDeclarations = CollectPatternVariables(letDestr.Pattern.Value, extendedLocalDeclarations);
+                var (collectedVars, errors) = CollectPatternVariablesWithShadowCheck(
+                    letDestr.Pattern.Value,
+                    letDestr.Pattern.Range,
+                    existingScope,
+                    ImmutableHashSet<string>.Empty);
+                shadowErrors.AddRange(errors);
+                extendedLocalDeclarations = extendedLocalDeclarations.Union(collectedVars);
+                existingScope = existingScope.Union(collectedVars);
             }
         }
 
@@ -1516,12 +1698,16 @@ public class Canonicalization
                 letBlock.Expression,
                 contextWithLetBindings);
 
-        return CanonicalizationResultExtensions.Map2(
+        var canonicalizedLetBlock = CanonicalizationResultExtensions.Map2(
             declsResult,
             exprResult,
             (canonicalizedDecls, canonicalizedExpr) => new SyntaxTypes.Expression.LetBlock(
                 Declarations: [.. canonicalizedDecls],
                 Expression: canonicalizedExpr));
+
+        // Combine shadow errors with any errors from canonicalization
+        var allErrors = shadowErrors.Concat(canonicalizedLetBlock.Errors).ToList();
+        return new CanonicalizationResult<SyntaxTypes.Expression.LetBlock>(canonicalizedLetBlock.Value, allErrors);
     }
 
     private static CanonicalizationResult<Node<SyntaxTypes.Expression.LetDeclaration>> CanonicalizeLetDeclarationNode(

@@ -1,5 +1,7 @@
 # Elm Compiler Implementation Guide
 
+For semantics of the Elm programming language, consult the file 'elm-programming-language-semantics.md'
+
 ## Encoding of Elm Values as Pine Values
 
 For the encoding of Elm values as Pine values, the compiler follows the model established in the `ElmValueEncoding.cs` file. The definitions in `ElmValueEncoding.cs` cover the encoding of all Elm values except functions.

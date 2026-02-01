@@ -4,6 +4,9 @@ using System.Collections.Generic;
 // Alias to avoid ambiguity with System.Range
 using Range = Pine.Core.Elm.ElmSyntax.SyntaxModel.Range;
 
+using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
+
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
 
 /// <summary>
@@ -14,6 +17,22 @@ namespace Pine.Core.Elm.ElmCompilerInDotnet;
 public record CanonicalizationError(
     Range Range,
     string ReferencedName);
+
+/// <summary>
+/// The result of canonicalizing a single module, containing the canonicalized file and any errors.
+/// </summary>
+/// <param name="File">The canonicalized module file.</param>
+/// <param name="Errors">List of errors encountered during canonicalization of this module.</param>
+public record ModuleCanonicalizationResult(
+    SyntaxTypes.File File,
+    IReadOnlyList<CanonicalizationError> Errors);
+
+/// <summary>
+/// The result of canonicalizing multiple modules.
+/// </summary>
+/// <param name="Modules">Dictionary mapping module names to their canonicalization results.</param>
+public record CanonicalizationResultWithErrors(
+    IReadOnlyDictionary<ModuleName, ModuleCanonicalizationResult> Modules);
 
 /// <summary>
 /// Wraps a canonicalization result value along with any errors encountered during canonicalization.
