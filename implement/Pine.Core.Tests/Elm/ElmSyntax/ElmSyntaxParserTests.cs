@@ -3,10 +3,45 @@ using Pine.Core.Elm.ElmSyntax;
 using Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using Xunit;
 
+using ExpressionSyntax = Pine.Core.Elm.ElmSyntax.SyntaxModel.Expression;
+
 namespace Pine.Core.Tests.Elm.ElmSyntax;
 
 public class ElmSyntaxParserTests
 {
+    [Theory]
+    [InlineData("0xe5")]
+    [InlineData("0xABCDEF")]
+    [InlineData("0xface")]
+    [InlineData("0xCAFE")]
+    public void Hex_literals_with_e_are_parsed_as_integers(string hexLiteral)
+    {
+        // Hex literals can contain 'e' as a digit and should not be misidentified as floats
+        var input =
+            $""""
+            module Test exposing (..)
+
+
+            value =
+                {hexLiteral}
+            """";
+
+        var parsedFile =
+            ElmSyntaxParser.ParseModuleText(input)
+            .Extract(err => throw new System.Exception(err));
+
+        var funcDecl =
+            parsedFile.Declarations[0].Value as Declaration.FunctionDeclaration;
+
+        funcDecl.Should().NotBeNull();
+
+        var expr = funcDecl!.Function.Declaration.Value.Expression.Value as ExpressionSyntax.Integer;
+
+        expr.Should().NotBeNull("the expression should be parsed as an integer, not a float");
+
+        expr!.LiteralText.Should().Be(hexLiteral);
+    }
+
     [Fact]
     public void Record_field_range_ends_at_field_type_end()
     {

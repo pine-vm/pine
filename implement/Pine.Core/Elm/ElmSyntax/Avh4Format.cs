@@ -434,7 +434,6 @@ public class Avh4Format
         expr is ExpressionSyntax.Literal
             or ExpressionSyntax.CharLiteral
             or ExpressionSyntax.Integer
-            or ExpressionSyntax.Hex
             or ExpressionSyntax.Floatable
             or ExpressionSyntax.FunctionOrValue
             or ExpressionSyntax.UnitExpr
@@ -3631,11 +3630,7 @@ public class Avh4Format
                     return FormattingResult<ExpressionSyntax>.Create(charLit, context.Advance(Rendering.RenderCharLiteral(charLit.Value).Length));
 
                 case ExpressionSyntax.Integer intLit:
-                    return FormattingResult<ExpressionSyntax>.Create(intLit, context.Advance(intLit.Value.ToString().Length));
-
-                case ExpressionSyntax.Hex hexLit:
-                    // Use the same hex rendering logic as the Renderer
-                    return FormattingResult<ExpressionSyntax>.Create(hexLit, context.Advance(Rendering.RenderHexPattern(hexLit.Value).Length));
+                    return FormattingResult<ExpressionSyntax>.Create(intLit, context.Advance(intLit.LiteralText.Length));
 
                 case ExpressionSyntax.Floatable floatLit:
                     return FormattingResult<ExpressionSyntax>.Create(floatLit, context.Advance(floatLit.LiteralText.Length));

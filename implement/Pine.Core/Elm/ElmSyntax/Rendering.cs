@@ -1043,11 +1043,7 @@ public class Rendering
                 break;
 
             case ExpressionSyntax.Integer integer:
-                context.Append(integer.Value.ToString());
-                break;
-
-            case ExpressionSyntax.Hex hex:
-                context.Append(RenderHexPattern(hex.Value));
+                context.Append(integer.LiteralText);
                 break;
 
             case ExpressionSyntax.Floatable floatable:

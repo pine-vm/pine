@@ -1,11 +1,10 @@
 using AwesomeAssertions;
+using Pine.Core.Elm.ElmSyntax;
+using Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using System.Collections.Generic;
 using Xunit;
-using Pine.Core.Elm.ElmSyntax.SyntaxModel;
-
-using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
-
 using FullTypes = Pine.Core.Elm.ElmSyntax.SyntaxModel;
+using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
 
 namespace Pine.Core.Tests.Elm.ElmSyntax.Stil4mElmSyntax7;
 
@@ -177,13 +176,25 @@ public class FromFullSyntaxModelTests
     [Fact]
     public void Expression_Integer_converts_correctly()
     {
-        var fullExpr = new FullTypes.Expression.Integer(42);
+        var fullExpr = new FullTypes.Expression.Integer("42");
 
         var result = Core.Elm.ElmSyntax.Stil4mElmSyntax7.FromFullSyntaxModel.Convert(fullExpr);
 
         result.Should().BeOfType<Core.Elm.ElmSyntax.Stil4mElmSyntax7.Expression.Integer>();
 
         ((Core.Elm.ElmSyntax.Stil4mElmSyntax7.Expression.Integer)result).Value.Should().Be(42);
+    }
+
+    [Fact]
+    public void Expression_Integer_hex_converts_correctly()
+    {
+        var fullExpr = new FullTypes.Expression.Integer("0x49");
+
+        var result = Core.Elm.ElmSyntax.Stil4mElmSyntax7.FromFullSyntaxModel.Convert(fullExpr);
+
+        result.Should().BeOfType<Core.Elm.ElmSyntax.Stil4mElmSyntax7.Expression.Hex>();
+
+        ((Core.Elm.ElmSyntax.Stil4mElmSyntax7.Expression.Hex)result).Value.Should().Be(73);
     }
 
     [Fact]
@@ -209,11 +220,11 @@ public class FromFullSyntaxModelTests
 
         var fullExpr = new FullTypes.Expression.IfBlock(
             ifLoc,
-            new Node<FullTypes.Expression>(range, new FullTypes.Expression.Integer(1)),
+            new Node<FullTypes.Expression>(range, new FullTypes.Expression.Integer("1")),
             thenLoc,
-            new Node<FullTypes.Expression>(range, new FullTypes.Expression.Integer(2)),
+            new Node<FullTypes.Expression>(range, new FullTypes.Expression.Integer("2")),
             elseLoc,
-            new Node<FullTypes.Expression>(range, new FullTypes.Expression.Integer(3))
+            new Node<FullTypes.Expression>(range, new FullTypes.Expression.Integer("3"))
         );
 
         var result = Core.Elm.ElmSyntax.Stil4mElmSyntax7.FromFullSyntaxModel.Convert(fullExpr);
@@ -231,9 +242,9 @@ public class FromFullSyntaxModelTests
 
         var fullExpr = new FullTypes.Expression.ListExpr(
             CreateSeparatedList(
-                new Node<FullTypes.Expression>(range, new FullTypes.Expression.Integer(1)),
+                new Node<FullTypes.Expression>(range, new FullTypes.Expression.Integer("1")),
                 commaLoc,
-                new Node<FullTypes.Expression>(range, new FullTypes.Expression.Integer(2))
+                new Node<FullTypes.Expression>(range, new FullTypes.Expression.Integer("2"))
             )
         );
 
@@ -243,6 +254,7 @@ public class FromFullSyntaxModelTests
         var listExpr = (Core.Elm.ElmSyntax.Stil4mElmSyntax7.Expression.ListExpr)result;
         listExpr.Elements.Should().HaveCount(2);
     }
+
 
     [Fact]
     public void Expression_FunctionOrValue_converts_correctly()
@@ -329,7 +341,7 @@ public class FromFullSyntaxModelTests
             backslashLoc,
             [new Node<Pattern>(range, new Pattern.VarPattern("x"))],
             arrowLoc,
-            new Node<FullTypes.Expression>(range, new FullTypes.Expression.Integer(42))
+            new Node<FullTypes.Expression>(range, new FullTypes.Expression.Integer("42"))
         );
 
         var result = Core.Elm.ElmSyntax.Stil4mElmSyntax7.FromFullSyntaxModel.Convert(fullLambda);
@@ -348,13 +360,13 @@ public class FromFullSyntaxModelTests
 
         var fullCaseBlock = new CaseBlock(
             caseLoc,
-            new Node<FullTypes.Expression>(range, new FullTypes.Expression.Integer(1)),
+            new Node<FullTypes.Expression>(range, new FullTypes.Expression.Integer("1")),
             ofLoc,
             [
                 new Case(
                     new Node<Pattern>(range, new Pattern.VarPattern("x")),
                     arrowLoc,
-                    new Node<FullTypes.Expression>(range, new FullTypes.Expression.Integer(42))
+                    new Node<FullTypes.Expression>(range, new FullTypes.Expression.Integer("42"))
                 )
             ]
         );
@@ -404,5 +416,47 @@ public class FromFullSyntaxModelTests
 
         result.ModuleName.Should().BeEquivalentTo(moduleName);
         result.Name.Should().Be("Just");
+    }
+
+    [Fact]
+    public void Roundtrip_various_literals()
+    {
+        var elmModuleText =
+            """"
+            module Test exposing (..)
+
+
+            decl =
+                [ 71, 0x49 ]
+
+            """";
+
+        AssertPreservationDespiteConversionFromFullSyntaxModel(elmModuleText);
+    }
+
+    private static void AssertPreservationDespiteConversionFromFullSyntaxModel(string moduleText)
+    {
+        var parsedFile =
+            ElmSyntaxParser.ParseModuleText(moduleText)
+            .Extract(err => throw new System.Exception(err));
+
+        AssertPreservationDespiteConversionFromFullSyntaxModel(parsedFile);
+    }
+
+    private static void AssertPreservationDespiteConversionFromFullSyntaxModel(File file)
+    {
+        // Use Avh4Format.FormatToString for both to ensure consistent formatting.
+        // ToFullSyntaxModel sets default locations, so formatting is needed before rendering.
+        var originalRendered = Core.Elm.ElmSyntax.Avh4Format.FormatToString(file);
+
+        var converted =
+            Core.Elm.ElmSyntax.Stil4mElmSyntax7.FromFullSyntaxModel.Convert(file);
+
+        var convertedBack =
+            Core.Elm.ElmSyntax.Stil4mElmSyntax7.ToFullSyntaxModel.Convert(converted);
+
+        var convertedRendered = Core.Elm.ElmSyntax.Avh4Format.FormatToString(convertedBack);
+
+        convertedRendered.Trim().Should().Be(originalRendered.Trim());
     }
 }

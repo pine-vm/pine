@@ -439,10 +439,10 @@ public static class ToFullSyntaxModel
                 new FullTypes.Expression.CharLiteral(charLiteral.Value),
 
             Expression.Integer integer =>
-                new FullTypes.Expression.Integer(integer.Value),
+                new FullTypes.Expression.Integer(integer.Value.ToString()),
 
             Expression.Hex hex =>
-                new FullTypes.Expression.Hex(hex.Value),
+                new FullTypes.Expression.Integer(FormatHexLiteral(hex.Value)),
 
             Expression.Floatable floatable =>
                 new FullTypes.Expression.Floatable(floatable.LiteralText),
@@ -718,5 +718,18 @@ public static class ToFullSyntaxModel
             .ToList();
 
         return new SeparatedSyntaxList<RecordExprField>.NonEmpty(first, rest);
+    }
+
+    /// <summary>
+    /// Formats a hex integer value as a literal string (e.g., "0x49" or "-0x1A").
+    /// Uses the same formatting as <see cref="Rendering.RenderHexPattern"/>.
+    /// </summary>
+    private static string FormatHexLiteral(long value)
+    {
+        if (value < 0)
+        {
+            return "-" + Rendering.RenderHexPattern(-value);
+        }
+        return Rendering.RenderHexPattern(value);
     }
 }

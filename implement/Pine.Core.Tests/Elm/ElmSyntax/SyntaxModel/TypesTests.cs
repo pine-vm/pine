@@ -282,8 +282,8 @@ public class TypesTests
     [Fact]
     public void Expression_Integer_value_equality()
     {
-        var expr1 = new SyntaxTypes.Expression.Integer(42);
-        var expr2 = new SyntaxTypes.Expression.Integer(42);
+        var expr1 = new SyntaxTypes.Expression.Integer("42");
+        var expr2 = new SyntaxTypes.Expression.Integer("42");
 
         expr1.Should().Be(expr2);
         expr1.GetHashCode().Should().Be(expr2.GetHashCode());
@@ -307,9 +307,9 @@ public class TypesTests
         var thenLoc = new Location(1, 10);
         var elseLoc = new Location(1, 20);
 
-        var condition = new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer(1));
-        var thenExpr = new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer(2));
-        var elseExpr = new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer(3));
+        var condition = new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer("1"));
+        var thenExpr = new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer("2"));
+        var elseExpr = new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer("3"));
 
         var expr1 = new SyntaxTypes.Expression.IfBlock(ifLoc, condition, thenLoc, thenExpr, elseLoc, elseExpr);
         var expr2 = new SyntaxTypes.Expression.IfBlock(ifLoc, condition, thenLoc, thenExpr, elseLoc, elseExpr);
@@ -326,16 +326,16 @@ public class TypesTests
 
         var expr1 = new SyntaxTypes.Expression.ListExpr(
             CreateSeparatedList(
-                new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer(1)),
+                new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer("1")),
                 commaLoc,
-                new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer(2))
+                new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer("2"))
             )
         );
         var expr2 = new SyntaxTypes.Expression.ListExpr(
             CreateSeparatedList(
-                new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer(1)),
+                new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer("1")),
                 commaLoc,
-                new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer(2))
+                new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer("2"))
             )
         );
 
@@ -351,16 +351,16 @@ public class TypesTests
 
         var expr1 = new SyntaxTypes.Expression.TupledExpression(
             CreateSeparatedList(
-                new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer(1)),
+                new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer("1")),
                 commaLoc,
-                new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer(2))
+                new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer("2"))
             )
         );
         var expr2 = new SyntaxTypes.Expression.TupledExpression(
             CreateSeparatedList(
-                new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer(1)),
+                new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer("1")),
                 commaLoc,
-                new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer(2))
+                new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer("2"))
             )
         );
 
@@ -484,13 +484,13 @@ public class TypesTests
             backslashLoc,
             [new Node<Pattern>(range, new Pattern.VarPattern("x"))],
             arrowLoc,
-            new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer(42))
+            new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer("42"))
         );
         var lambda2 = new LambdaStruct(
             backslashLoc,
             [new Node<Pattern>(range, new Pattern.VarPattern("x"))],
             arrowLoc,
-            new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer(42))
+            new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer("42"))
         );
 
         lambda1.Should().Be(lambda2);
@@ -508,18 +508,18 @@ public class TypesTests
         var caseItem = new Case(
             new Node<Pattern>(range, new Pattern.VarPattern("x")),
             arrowLoc,
-            new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer(42))
+            new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer("42"))
         );
 
         var block1 = new CaseBlock(
             caseLoc,
-            new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer(1)),
+            new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer("1")),
             ofLoc,
             [caseItem]
         );
         var block2 = new CaseBlock(
             caseLoc,
-            new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer(1)),
+            new Node<SyntaxTypes.Expression>(range, new SyntaxTypes.Expression.Integer("1")),
             ofLoc,
             [caseItem]
         );

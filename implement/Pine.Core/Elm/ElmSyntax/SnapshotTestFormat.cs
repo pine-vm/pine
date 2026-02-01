@@ -210,9 +210,6 @@ public class SnapshotTestFormat
             ExpressionSyntax.Integer intLiteral =>
             intLiteral,
 
-            ExpressionSyntax.Hex hexLiteral =>
-            hexLiteral,
-
             ExpressionSyntax.UnitExpr unitExpr =>
             unitExpr,
 

@@ -1,19 +1,21 @@
+using Pine.Core.Elm.ElmSyntax.SyntaxModel;
 using System.Collections.Generic;
 using System.Linq;
-using Pine.Core.Elm.ElmSyntax.SyntaxModel;
-
 using FullTypes = Pine.Core.Elm.ElmSyntax.SyntaxModel;
 
 namespace Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 
 /// <summary>
-/// Provides conversion methods from Stil4mConcretized types to Stil4mElmSyntax7 types.
+/// Provides conversion methods from Full syntax model types to Stil4mElmSyntax7 types.
 /// These conversions strip the additional token location information present in the concretized types.
+/// <para>
+/// To learn about the syntax model, see 'guide\elm-syntax-model-and-parser.md'
+/// </para>
 /// </summary>
 public static class FromFullSyntaxModel
 {
     /// <summary>
-    /// Converts a Stil4mConcretized.File to a Stil4mElmSyntax7.File.
+    /// Converts a <see cref="File"/>
     /// </summary>
     public static File Convert(
         FullTypes.File file)
@@ -39,31 +41,31 @@ public static class FromFullSyntaxModel
     }
 
     /// <summary>
-    /// Converts a Stil4mConcretized.Module to a Stil4mElmSyntax7.Module.
+    /// Converts a <see cref="Module"/>
     /// </summary>
     public static Module Convert(
         FullTypes.Module module) =>
         module switch
         {
             FullTypes.Module.NormalModule normalModule =>
-                new Module.NormalModule(
-                    Convert(normalModule.ModuleData)),
+            new Module.NormalModule(
+                Convert(normalModule.ModuleData)),
 
             FullTypes.Module.PortModule portModule =>
-                new Module.PortModule(
-                    Convert(portModule.ModuleData)),
+            new Module.PortModule(
+                Convert(portModule.ModuleData)),
 
             FullTypes.Module.EffectModule effectModule =>
-                new Module.EffectModule(
-                    Convert(effectModule.ModuleData)),
+            new Module.EffectModule(
+                Convert(effectModule.ModuleData)),
 
             _ =>
-                throw new System.NotImplementedException(
-                    "Unexpected module type: " + module.GetType().Name),
+            throw new System.NotImplementedException(
+                "Unexpected module type: " + module.GetType().Name),
         };
 
     /// <summary>
-    /// Converts a Stil4mConcretized.DefaultModuleData to a Stil4mElmSyntax7.DefaultModuleData.
+    /// Converts a <see cref="DefaultModuleData"/>
     /// </summary>
     public static DefaultModuleData Convert(
         FullTypes.DefaultModuleData moduleData) =>
@@ -72,7 +74,7 @@ public static class FromFullSyntaxModel
             ExposingList: ConvertNode(moduleData.ExposingList, Convert));
 
     /// <summary>
-    /// Converts a Stil4mConcretized.EffectModuleData to a Stil4mElmSyntax7.EffectModuleData.
+    /// Converts a <see cref="EffectModuleData"/>
     /// </summary>
     public static EffectModuleData Convert(
         FullTypes.EffectModuleData moduleData) =>
@@ -83,51 +85,51 @@ public static class FromFullSyntaxModel
             Subscription: moduleData.Subscription);
 
     /// <summary>
-    /// Converts a Stil4mConcretized.Exposing to a Stil4mElmSyntax7.Exposing.
+    /// Converts an <see cref="Exposing"/>
     /// </summary>
     public static Exposing Convert(
         FullTypes.Exposing exposing) =>
         exposing switch
         {
             FullTypes.Exposing.All all =>
-                new Exposing.All(all.Range),
+            new Exposing.All(all.Range),
 
             FullTypes.Exposing.Explicit @explicit =>
-                new Exposing.Explicit(
-                    ConvertSeparatedNodes(@explicit.Nodes, Convert)),
+            new Exposing.Explicit(
+                ConvertSeparatedNodes(@explicit.Nodes, Convert)),
 
             _ =>
-                throw new System.NotImplementedException(
-                    "Unexpected exposing type: " + exposing.GetType().Name),
+            throw new System.NotImplementedException(
+                "Unexpected exposing type: " + exposing.GetType().Name),
         };
 
     /// <summary>
-    /// Converts a Stil4mConcretized.TopLevelExpose to a Stil4mElmSyntax7.TopLevelExpose.
+    /// Converts a <see cref="TopLevelExpose"/>
     /// </summary>
     public static TopLevelExpose Convert(
         FullTypes.TopLevelExpose expose) =>
         expose switch
         {
             FullTypes.TopLevelExpose.InfixExpose infixExpose =>
-                new TopLevelExpose.InfixExpose(infixExpose.Name),
+            new TopLevelExpose.InfixExpose(infixExpose.Name),
 
             FullTypes.TopLevelExpose.FunctionExpose functionExpose =>
-                new TopLevelExpose.FunctionExpose(functionExpose.Name),
+            new TopLevelExpose.FunctionExpose(functionExpose.Name),
 
             FullTypes.TopLevelExpose.TypeOrAliasExpose typeOrAliasExpose =>
-                new TopLevelExpose.TypeOrAliasExpose(typeOrAliasExpose.Name),
+            new TopLevelExpose.TypeOrAliasExpose(typeOrAliasExpose.Name),
 
             FullTypes.TopLevelExpose.TypeExpose typeExpose =>
-                new TopLevelExpose.TypeExpose(
-                    Convert(typeExpose.ExposedType)),
+            new TopLevelExpose.TypeExpose(
+                Convert(typeExpose.ExposedType)),
 
             _ =>
-                throw new System.NotImplementedException(
-                    "Unexpected top level expose type: " + expose.GetType().Name),
+            throw new System.NotImplementedException(
+                "Unexpected top level expose type: " + expose.GetType().Name),
         };
 
     /// <summary>
-    /// Converts a Stil4mConcretized.ExposedType to a Stil4mElmSyntax7.ExposedType.
+    /// Converts an <see cref="ExposedType"/>
     /// </summary>
     public static ExposedType Convert(
         FullTypes.ExposedType exposedType) =>
@@ -136,7 +138,7 @@ public static class FromFullSyntaxModel
             Open: exposedType.Open);
 
     /// <summary>
-    /// Converts a Stil4mConcretized.Import to a Stil4mElmSyntax7.Import.
+    /// Converts an <see cref="Import"/>
     /// </summary>
     public static Import Convert(
         FullTypes.Import import) =>
@@ -148,39 +150,39 @@ public static class FromFullSyntaxModel
                 : null);
 
     /// <summary>
-    /// Converts a Stil4mConcretized.Declaration to a Stil4mElmSyntax7.Declaration.
+    /// Converts a <see cref="Declaration"/>
     /// </summary>
     public static Declaration Convert(
         FullTypes.Declaration declaration) =>
         declaration switch
         {
             FullTypes.Declaration.FunctionDeclaration functionDeclaration =>
-                new Declaration.FunctionDeclaration(
-                    Convert(functionDeclaration.Function)),
+            new Declaration.FunctionDeclaration(
+                Convert(functionDeclaration.Function)),
 
             FullTypes.Declaration.CustomTypeDeclaration customTypeDeclaration =>
-                new Declaration.CustomTypeDeclaration(
-                    Convert(customTypeDeclaration.TypeDeclaration)),
+            new Declaration.CustomTypeDeclaration(
+                Convert(customTypeDeclaration.TypeDeclaration)),
 
             FullTypes.Declaration.AliasDeclaration aliasDeclaration =>
-                new Declaration.AliasDeclaration(
-                    Convert(aliasDeclaration.TypeAlias)),
+            new Declaration.AliasDeclaration(
+                Convert(aliasDeclaration.TypeAlias)),
 
             FullTypes.Declaration.PortDeclaration portDeclaration =>
-                new Declaration.PortDeclaration(
-                    Convert(portDeclaration.Signature)),
+            new Declaration.PortDeclaration(
+                Convert(portDeclaration.Signature)),
 
             FullTypes.Declaration.InfixDeclaration infixDeclaration =>
-                new Declaration.InfixDeclaration(
-                    Convert(infixDeclaration.Infix)),
+            new Declaration.InfixDeclaration(
+                Convert(infixDeclaration.Infix)),
 
             _ =>
-                throw new System.NotImplementedException(
-                    "Unexpected declaration type: " + declaration.GetType().Name),
+            throw new System.NotImplementedException(
+                "Unexpected declaration type: " + declaration.GetType().Name),
         };
 
     /// <summary>
-    /// Converts a Stil4mConcretized.Infix to a Stil4mElmSyntax7.Infix.
+    /// Converts an <see cref="Infix"/>
     /// </summary>
     public static Infix Convert(
         FullTypes.Infix infix) =>
@@ -191,7 +193,7 @@ public static class FromFullSyntaxModel
             FunctionName: infix.FunctionName);
 
     /// <summary>
-    /// Converts a Stil4mConcretized.TypeAlias to a Stil4mElmSyntax7.TypeAlias.
+    /// Converts a <see cref="TypeAlias"/>
     /// </summary>
     public static TypeAlias Convert(
         FullTypes.TypeAlias typeAlias) =>
@@ -202,7 +204,7 @@ public static class FromFullSyntaxModel
             TypeAnnotation: ConvertNode(typeAlias.TypeAnnotation, Convert));
 
     /// <summary>
-    /// Converts a Stil4mConcretized.TypeStruct to a Stil4mElmSyntax7.TypeStruct.
+    /// Converts a <see cref="TypeStruct"/>
     /// </summary>
     public static TypeStruct Convert(
         FullTypes.TypeStruct typeStruct) =>
@@ -213,7 +215,7 @@ public static class FromFullSyntaxModel
             Constructors: [.. typeStruct.Constructors.Select(c => ConvertNode(c.Constructor, Convert))]);
 
     /// <summary>
-    /// Converts a Stil4mConcretized.ValueConstructor to a Stil4mElmSyntax7.ValueConstructor.
+    /// Converts a <see cref="ValueConstructor"/>
     /// </summary>
     public static ValueConstructor Convert(
         FullTypes.ValueConstructor constructor) =>
@@ -222,7 +224,7 @@ public static class FromFullSyntaxModel
             Arguments: ConvertNodes(constructor.Arguments, Convert));
 
     /// <summary>
-    /// Converts a Stil4mConcretized.TypeAnnotation to a Stil4mElmSyntax7.TypeAnnotation.
+    /// Converts a <see cref="TypeAnnotation"/>
     /// Single-element tuples (parenthesized types) are unwrapped to match the
     /// original stil4m/elm-syntax behavior that doesn't emit parenthesized nodes for type arguments.
     /// </summary>
@@ -259,12 +261,13 @@ public static class FromFullSyntaxModel
                     ConvertTypeAnnotationNode(functionType.ReturnType)),
 
             _ =>
-                throw new System.NotImplementedException(
-                    "Unexpected type annotation type: " + typeAnnotation.GetType().Name),
+            throw new System.NotImplementedException(
+                "Unexpected type annotation type: " + typeAnnotation.GetType().Name),
         };
 
     /// <summary>
-    /// Converts a Tupled type annotation. Single-element tuples are unwrapped
+    /// Converts a <see cref="TypeAnnotation.Tupled"/>
+    /// Single-element tuples are unwrapped
     /// to match the original stil4m/elm-syntax behavior.
     /// </summary>
     private static TypeAnnotation ConvertTupledTypeAnnotation(
@@ -299,7 +302,7 @@ public static class FromFullSyntaxModel
         [.. nodes.Select(ConvertTypeAnnotationNode)];
 
     /// <summary>
-    /// Converts a Stil4mConcretized.RecordDefinition to a Stil4mElmSyntax7.RecordDefinition.
+    /// Converts a RecordDefinition
     /// </summary>
     public static RecordDefinition Convert(
         FullTypes.RecordDefinition recordDefinition) =>
@@ -307,7 +310,7 @@ public static class FromFullSyntaxModel
             Fields: ConvertSeparatedNodes(recordDefinition.Fields, Convert));
 
     /// <summary>
-    /// Converts a Stil4mConcretized.RecordField to a Stil4mElmSyntax7.RecordField.
+    /// Converts a <see cref="RecordField"/>
     /// </summary>
     public static RecordField Convert(
         FullTypes.RecordField recordField) =>
@@ -316,7 +319,7 @@ public static class FromFullSyntaxModel
             FieldType: ConvertNode(recordField.FieldType, Convert));
 
     /// <summary>
-    /// Converts a Stil4mConcretized.FunctionStruct to a Stil4mElmSyntax7.FunctionStruct.
+    /// Converts a <see cref="FunctionStruct"/>
     /// </summary>
     public static FunctionStruct Convert(
         FullTypes.FunctionStruct functionStruct) =>
@@ -328,7 +331,7 @@ public static class FromFullSyntaxModel
             Declaration: ConvertNode(functionStruct.Declaration, Convert));
 
     /// <summary>
-    /// Converts a Stil4mConcretized.FunctionImplementation to a Stil4mElmSyntax7.FunctionImplementation.
+    /// Converts a <see cref="FunctionImplementation"/>
     /// </summary>
     public static FunctionImplementation Convert(
         FullTypes.FunctionImplementation functionImplementation) =>
@@ -338,7 +341,7 @@ public static class FromFullSyntaxModel
             Expression: ConvertExpressionNode(functionImplementation.Expression));
 
     /// <summary>
-    /// Converts a Stil4mConcretized.Signature to a Stil4mElmSyntax7.Signature.
+    /// Converts a <see cref="Signature"/>
     /// </summary>
     public static Signature Convert(
         FullTypes.Signature signature) =>
@@ -347,7 +350,7 @@ public static class FromFullSyntaxModel
             TypeAnnotation: ConvertNode(signature.TypeAnnotation, Convert));
 
     /// <summary>
-    /// Converts a Stil4mConcretized.Pattern to a Stil4mElmSyntax7.Pattern.
+    /// Converts a <see cref="Pattern"/>
     /// </summary>
     public static Pattern Convert(
         FullTypes.Pattern pattern) =>
@@ -408,12 +411,12 @@ public static class FromFullSyntaxModel
                     ConvertNode(parenthesizedPattern.Pattern, Convert)),
 
             _ =>
-                throw new System.NotImplementedException(
-                    "Unexpected pattern type: " + pattern.GetType().Name),
+            throw new System.NotImplementedException(
+                "Unexpected pattern type: " + pattern.GetType().Name),
         };
 
     /// <summary>
-    /// Converts a Stil4mConcretized.QualifiedNameRef to a Stil4mElmSyntax7.QualifiedNameRef.
+    /// Converts a <see cref="QualifiedNameRef"/>
     /// </summary>
     public static QualifiedNameRef Convert(
         FullTypes.QualifiedNameRef qualifiedNameRef) =>
@@ -422,7 +425,7 @@ public static class FromFullSyntaxModel
             Name: qualifiedNameRef.Name);
 
     /// <summary>
-    /// Converts a Stil4mConcretized.Expression to a Stil4mElmSyntax7.Expression.
+    /// Converts an <see cref="Expression"/>
     /// Note: For RecordExpr and RecordUpdateExpression, use ConvertExpressionNode instead
     /// as they need the containing node's range to compute the closing brace location.
     /// </summary>
@@ -431,104 +434,101 @@ public static class FromFullSyntaxModel
         expression switch
         {
             FullTypes.Expression.UnitExpr =>
-                new Expression.UnitExpr(),
+            new Expression.UnitExpr(),
 
             FullTypes.Expression.Literal literal =>
-                new Expression.Literal(literal.Value, literal.IsTripleQuoted),
+            new Expression.Literal(literal.Value, literal.IsTripleQuoted),
 
             FullTypes.Expression.CharLiteral charLiteral =>
-                new Expression.CharLiteral(charLiteral.Value),
+            new Expression.CharLiteral(charLiteral.Value),
 
             FullTypes.Expression.Integer integer =>
-                new Expression.Integer(integer.Value),
-
-            FullTypes.Expression.Hex hex =>
-                new Expression.Hex(hex.Value),
+            ConvertIntegerExpression(integer),
 
             FullTypes.Expression.Floatable floatable =>
-                new Expression.Floatable(floatable.LiteralText),
+            new Expression.Floatable(floatable.LiteralText),
 
             FullTypes.Expression.Negation negation =>
-                new Expression.Negation(
-                    ConvertExpressionNode(negation.Expression)),
+            new Expression.Negation(
+                ConvertExpressionNode(negation.Expression)),
 
             FullTypes.Expression.ListExpr listExpr =>
-                new Expression.ListExpr(
-                    ConvertExpressionNodes(listExpr.Elements)),
+            new Expression.ListExpr(
+                ConvertExpressionNodes(listExpr.Elements)),
 
             FullTypes.Expression.FunctionOrValue functionOrValue =>
-                new Expression.FunctionOrValue(
-                    functionOrValue.ModuleName,
-                    functionOrValue.Name),
+            new Expression.FunctionOrValue(
+                functionOrValue.ModuleName,
+                functionOrValue.Name),
 
             FullTypes.Expression.IfBlock ifBlock =>
-                new Expression.IfBlock(
-                    ConvertExpressionNode(ifBlock.Condition),
-                    ConvertExpressionNode(ifBlock.ThenBlock),
-                    ConvertExpressionNode(ifBlock.ElseBlock)),
+            new Expression.IfBlock(
+                ConvertExpressionNode(ifBlock.Condition),
+                ConvertExpressionNode(ifBlock.ThenBlock),
+                ConvertExpressionNode(ifBlock.ElseBlock)),
 
             FullTypes.Expression.PrefixOperator prefixOperator =>
-                new Expression.PrefixOperator(prefixOperator.Operator),
+            new Expression.PrefixOperator(prefixOperator.Operator),
 
             FullTypes.Expression.ParenthesizedExpression parenthesizedExpression =>
-                new Expression.ParenthesizedExpression(
-                    ConvertExpressionNode(parenthesizedExpression.Expression)),
+            new Expression.ParenthesizedExpression(
+                ConvertExpressionNode(parenthesizedExpression.Expression)),
 
             FullTypes.Expression.Application application =>
-                new Expression.Application(
-                    ConvertExpressionNodes(application.Arguments)),
+            new Expression.Application(
+                ConvertExpressionNodes(application.Arguments)),
 
             FullTypes.Expression.OperatorApplication operatorApplication =>
-                new Expression.OperatorApplication(
-                    operatorApplication.Operator.Value,
-                    operatorApplication.Direction,
-                    ConvertExpressionNode(operatorApplication.Left),
-                    ConvertExpressionNode(operatorApplication.Right)),
+            new Expression.OperatorApplication(
+                operatorApplication.Operator.Value,
+                operatorApplication.Direction,
+                ConvertExpressionNode(operatorApplication.Left),
+                ConvertExpressionNode(operatorApplication.Right)),
 
             FullTypes.Expression.TupledExpression tupledExpression =>
-                new Expression.TupledExpression(
-                    ConvertExpressionNodes(tupledExpression.Elements)),
+            new Expression.TupledExpression(
+                ConvertExpressionNodes(tupledExpression.Elements)),
 
             FullTypes.Expression.LambdaExpression lambdaExpression =>
-                new Expression.LambdaExpression(
-                    Convert(lambdaExpression.Lambda)),
+            new Expression.LambdaExpression(
+                Convert(lambdaExpression.Lambda)),
 
             FullTypes.Expression.CaseExpression caseExpression =>
-                new Expression.CaseExpression(
-                    Convert(caseExpression.CaseBlock)),
+            new Expression.CaseExpression(
+                Convert(caseExpression.CaseBlock)),
 
             FullTypes.Expression.LetExpression letExpression =>
-                new Expression.LetExpression(
-                    Convert(letExpression.Value)),
+            new Expression.LetExpression(
+                Convert(letExpression.Value)),
 
             // RecordExpr and RecordUpdateExpression need the containing node's range,
             // so they should be converted via ConvertExpressionNode
             FullTypes.Expression.RecordExpr =>
-                throw new System.InvalidOperationException(
-                    "RecordExpr must be converted via ConvertExpressionNode to access the containing node's range"),
+            throw new System.InvalidOperationException(
+                "RecordExpr must be converted via ConvertExpressionNode to access the containing node's range"),
 
             FullTypes.Expression.RecordAccess recordAccess =>
-                new Expression.RecordAccess(
-                    ConvertExpressionNode(recordAccess.Record),
-                    recordAccess.FieldName),
+            new Expression.RecordAccess(
+                ConvertExpressionNode(recordAccess.Record),
+                recordAccess.FieldName),
 
             FullTypes.Expression.RecordAccessFunction recordAccessFunction =>
-                new Expression.RecordAccessFunction(recordAccessFunction.FunctionName),
+            new Expression.RecordAccessFunction(recordAccessFunction.FunctionName),
 
             FullTypes.Expression.RecordUpdateExpression =>
-                throw new System.InvalidOperationException(
-                    "RecordUpdateExpression must be converted via ConvertExpressionNode to access the containing node's range"),
+            throw new System.InvalidOperationException(
+                "RecordUpdateExpression must be converted via ConvertExpressionNode to access the containing node's range"),
 
             FullTypes.Expression.GLSLExpression glslExpression =>
-                new Expression.GLSLExpression(glslExpression.ShaderCode),
+            new Expression.GLSLExpression(glslExpression.ShaderCode),
 
             _ =>
-                throw new System.NotImplementedException(
-                    "Unexpected expression type: " + expression.GetType().Name),
+            throw new System.NotImplementedException(
+                "Unexpected expression type: " + expression.GetType().Name),
         };
 
     /// <summary>
-    /// Converts a Node&lt;Expression&gt; to Node&lt;Stil4mElmSyntax7.Expression&gt;.
+    /// Converts an <see cref="Expression"/> node.
     /// This method handles RecordExpr and RecordUpdateExpression specially by using
     /// the node's range to compute the closing brace location.
     /// </summary>
@@ -539,20 +539,21 @@ public static class FromFullSyntaxModel
         // The closing brace is at Range.End with column - 1 (since Range.End is after the brace)
         var closeBraceLocation = new Location(node.Range.End.Row, node.Range.End.Column - 1);
 
-        var convertedValue = node.Value switch
-        {
-            FullTypes.Expression.RecordExpr recordExpr =>
-                new Expression.RecordExpr(
-                    ConvertRecordFields(recordExpr.Fields, closeBraceLocation, isRecordUpdateExpression: false)),
+        var convertedValue =
+            node.Value switch
+            {
+                FullTypes.Expression.RecordExpr recordExpr =>
+                    new Expression.RecordExpr(
+                        ConvertRecordFields(recordExpr.Fields, closeBraceLocation, isRecordUpdateExpression: false)),
 
-            FullTypes.Expression.RecordUpdateExpression recordUpdateExpression =>
-                new Expression.RecordUpdateExpression(
-                    recordUpdateExpression.RecordName,
-                    ConvertRecordFields(recordUpdateExpression.Fields, closeBraceLocation, isRecordUpdateExpression: true)),
+                FullTypes.Expression.RecordUpdateExpression recordUpdateExpression =>
+                    new Expression.RecordUpdateExpression(
+                        recordUpdateExpression.RecordName,
+                        ConvertRecordFields(recordUpdateExpression.Fields, closeBraceLocation, isRecordUpdateExpression: true)),
 
-            // For all other expression types, use the standard conversion
-            var expr => Convert(expr)
-        };
+                // For all other expression types, use the standard conversion
+                var expr => Convert(expr)
+            };
 
         return new Node<Expression>(node.Range, convertedValue);
     }
@@ -572,7 +573,7 @@ public static class FromFullSyntaxModel
         [.. ToList(separatedList).Select(ConvertExpressionNode)];
 
     /// <summary>
-    /// Converts a Stil4mConcretized.LambdaStruct to a Stil4mElmSyntax7.LambdaStruct.
+    /// Converts a <see cref="LambdaStruct"/>
     /// </summary>
     public static LambdaStruct Convert(
         FullTypes.LambdaStruct lambdaStruct) =>
@@ -581,7 +582,7 @@ public static class FromFullSyntaxModel
             Expression: ConvertExpressionNode(lambdaStruct.Expression));
 
     /// <summary>
-    /// Converts a Stil4mConcretized.CaseBlock to a Stil4mElmSyntax7.CaseBlock.
+    /// Converts a <see cref="CaseBlock"/>
     /// </summary>
     public static CaseBlock Convert(
         FullTypes.CaseBlock caseBlock) =>
@@ -590,7 +591,7 @@ public static class FromFullSyntaxModel
             Cases: [.. caseBlock.Cases.Select(Convert)]);
 
     /// <summary>
-    /// Converts a Stil4mConcretized.Case to a Stil4mElmSyntax7.Case.
+    /// Converts a <see cref="Case"/>
     /// </summary>
     public static Case Convert(
         FullTypes.Case @case) =>
@@ -599,7 +600,7 @@ public static class FromFullSyntaxModel
             Expression: ConvertExpressionNode(@case.Expression));
 
     /// <summary>
-    /// Converts a Stil4mConcretized.Expression.LetBlock to a Stil4mElmSyntax7.Expression.LetBlock.
+    /// Converts a <see cref="Expression.LetBlock"/>   
     /// </summary>
     public static Expression.LetBlock Convert(
         FullTypes.Expression.LetBlock letBlock) =>
@@ -608,7 +609,7 @@ public static class FromFullSyntaxModel
             Expression: ConvertExpressionNode(letBlock.Expression));
 
     /// <summary>
-    /// Converts a Stil4mConcretized.Expression.LetDeclaration to a Stil4mElmSyntax7.Expression.LetDeclaration.
+    /// Converts a <see cref="Expression.LetDeclaration"/>
     /// </summary>
     public static Expression.LetDeclaration Convert(
         FullTypes.Expression.LetDeclaration letDeclaration) =>
@@ -661,6 +662,35 @@ public static class FromFullSyntaxModel
         SeparatedSyntaxList<Node<TSource>> separatedList,
         System.Func<TSource, TResult> converter) =>
         [.. ToList(separatedList).Select(node => ConvertNode(node, converter))];
+
+    /// <summary>
+    /// Converts a full syntax model integer expression (which holds the original literal text)
+    /// to the appropriate Stil4mElmSyntax7 expression (Integer or Hex).
+    /// <para>
+    /// v8: don't split Integer and Hex: <see href="https://github.com/stil4m/elm-syntax/issues/255"/>
+    /// </para>
+    /// <para>
+    /// Store raw string for numbers in the AST: <see href="https://github.com/stil4m/elm-syntax/issues/108"/>
+    /// </para>
+    /// </summary>
+    private static Expression ConvertIntegerExpression(FullTypes.Expression.Integer integer)
+    {
+        var literalText = integer.LiteralText;
+
+        // Check for hexadecimal format: "0x..." or "-0x..."
+        if (literalText.StartsWith("0x") || literalText.StartsWith("-0x"))
+        {
+            // Parse hex value
+            var isNegative = literalText.StartsWith("-");
+            var hexPart = isNegative ? literalText[3..] : literalText[2..];
+            var value = long.Parse(hexPart, System.Globalization.NumberStyles.HexNumber);
+            return new Expression.Hex(isNegative ? -value : value);
+        }
+
+        // Decimal integer
+        var decValue = long.Parse(literalText);
+        return new Expression.Integer(decValue);
+    }
 
     private static IReadOnlyList<Node<(Node<string> fieldName, Node<Expression> valueExpr)>>
         ConvertRecordFields(

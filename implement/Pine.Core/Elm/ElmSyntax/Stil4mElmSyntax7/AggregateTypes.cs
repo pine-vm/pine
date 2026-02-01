@@ -822,7 +822,7 @@ public abstract record Expression
     /// <summary>Floating-point literal expression.</summary>
     /// <remarks>
     /// The original literal string is preserved to enable exact roundtripping of source code.
-    /// Use <see cref="Stil4mConcretized.FloatLiteralConversion.ToElmFloat(string)"/> to convert to the numeric representation.
+    /// Use <see cref="FloatLiteralConversion.ToElmFloat(string)"/> to convert to the numeric representation.
     /// </remarks>
     public sealed record Floatable(
         string LiteralText)

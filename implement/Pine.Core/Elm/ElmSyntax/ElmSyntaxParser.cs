@@ -3524,25 +3524,12 @@ public class ElmSyntaxParser
 
         private static SyntaxTypes.Expression ParseNumber(string expression)
         {
-            if (expression.StartsWith("-0x"))
+            // Check for hexadecimal format first - hex literals can contain 'e' as a digit
+            // and should not be misidentified as floats
+            if (expression.StartsWith("0x") || expression.StartsWith("-0x"))
             {
-                // Hexadecimal number
-
-                var hexNumber = expression[3..];
-
-                var abs = long.Parse(hexNumber, System.Globalization.NumberStyles.HexNumber);
-
-                return new SyntaxTypes.Expression.Hex(-abs);
-            }
-
-            if (expression.StartsWith("0x"))
-            {
-                // Hexadecimal number
-
-                var hexNumber = expression[2..];
-
-                return new SyntaxTypes.Expression.Hex(
-                    long.Parse(hexNumber, System.Globalization.NumberStyles.HexNumber));
+                // Hexadecimal integer - preserve the original literal string
+                return new SyntaxTypes.Expression.Integer(expression);
             }
 
             // Check if the number contains a decimal point or exponent notation
@@ -3552,9 +3539,8 @@ public class ElmSyntaxParser
                 return new SyntaxTypes.Expression.Floatable(expression);
             }
 
-            var dec = long.Parse(expression);
-
-            return new SyntaxTypes.Expression.Integer(dec);
+            // Decimal integer - preserve the original literal string
+            return new SyntaxTypes.Expression.Integer(expression);
         }
 
         private Node<SyntaxTypes.Case> ParseCaseBranch(int indentMin)

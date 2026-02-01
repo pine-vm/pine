@@ -786,14 +786,13 @@ public abstract record Expression
         int Value)
         : Expression;
 
-    /// <summary>Decimal integer literal expression.</summary>
+    /// <summary>Integer literal expression (decimal or hexadecimal).</summary>
+    /// <remarks>
+    /// The original literal string is preserved to enable exact roundtripping of source code.
+    /// The string may represent a decimal (e.g., "42", "-123") or hexadecimal (e.g., "0xFF", "-0x1A") literal.
+    /// </remarks>
     public sealed record Integer(
-        long Value)
-        : Expression;
-
-    /// <summary>Hexadecimal integer literal expression.</summary>
-    public sealed record Hex(
-        long Value)
+        string LiteralText)
         : Expression;
 
     /// <summary>Floating-point literal expression.</summary>
