@@ -7,6 +7,10 @@ import Maybe exposing (Maybe(..))
 import Tuple
 
 
+type alias Array a =
+    List a
+
+
 empty =
     []
 
