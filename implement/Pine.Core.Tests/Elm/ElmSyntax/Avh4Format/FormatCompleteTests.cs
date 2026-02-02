@@ -3631,6 +3631,52 @@ public class FormatCompleteTests
     }
 
     [Fact]
+    public void Formats_let_block_with_uneven_indentation()
+    {
+        var input =
+            """"
+            module Test exposing (..)
+
+            decl =
+                Just <| (let
+                    _ =
+                        Test.Coverage.track 1225564788
+                 in
+                 False
+                )
+                    || (let
+                            _ =
+                                Test.Coverage.track 440883689
+                        in
+                        True
+                       )
+            """";
+
+        var expected =
+            """"
+            module Test exposing (..)
+
+            
+            decl =
+                Just <|
+                    (let
+                        _ =
+                            Test.Coverage.track 1225564788
+                     in
+                     False
+                    )
+                        || (let
+                                _ =
+                                    Test.Coverage.track 440883689
+                            in
+                            True
+                           )
+            """";
+
+        AssertModuleTextFormatsToExpected(input, expected);
+    }
+
+    [Fact]
     public void Stable_configurations_units()
     {
         /*
