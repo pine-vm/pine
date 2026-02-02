@@ -3998,7 +3998,15 @@ public class Avh4Format
                         // Check if the right operand is on a new line in the original
                         var rightOnNewLine = opApp.Right.Range.Start.Row > opApp.Left.Range.End.Row;
 
-                        if (rightOnNewLine)
+                        // Check if right operand spans multiple rows (is multiline)
+                        var rightIsMultiline = SpansMultipleRows(opApp.Right.Range);
+
+                        // For <| operator, also treat as multiline if right operand spans multiple rows
+                        // (even if it starts on the same line as <|)
+                        var treatAsMultiline = rightOnNewLine ||
+                            (opApp.Operator.Value is "<|" && rightIsMultiline);
+
+                        if (treatAsMultiline)
                         {
                             // Special case for left pipe operator <|
                             // Unlike other operators, <| stays at the end of the preceding line
