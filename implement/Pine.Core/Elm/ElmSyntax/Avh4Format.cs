@@ -257,6 +257,24 @@ public class Avh4Format
         /// </summary>
         public FormattingContext CreateIndentedRef() =>
             SetIndentColumn().AdvanceToNextIndentLevel().SetIndentToCurrentColumn();
+        
+        /// <summary>
+        /// Creates an indented reference context based on the current column position.
+        /// Unlike CreateIndentedRef, this calculates the next indent level from the current column
+        /// rather than from IndentSpaces. Use this when the context's current column is more 
+        /// accurate than IndentSpaces (e.g., inside parentheses or nested structures).
+        /// </summary>
+        public FormattingContext CreateIndentedRefFromCurrentColumn()
+        {
+            // Calculate the next indent level column from the current position
+            var nextIndentColumn = GetNextMultipleOfFourColumn();
+            // Set indent to that column
+            return new FormattingContext(
+                currentRow: CurrentRow,
+                currentColumn: nextIndentColumn,
+                indentSpaces: nextIndentColumn - 1,
+                comments: Comments);
+        }
 
         /// <summary>
         /// Calculates the next column that is greater than current position and a multiple of 4.
@@ -4855,7 +4873,9 @@ public class Avh4Format
             FormattingContext context)
         {
             // Reference context for indented content (one indent level from base)
-            var indentedRef = context.CreateIndentedRef();
+            // Use CreateIndentedRefFromCurrentColumn because let expressions can be nested
+            // inside parentheses where the current column is more accurate than IndentSpaces
+            var indentedRef = context.CreateIndentedRefFromCurrentColumn();
 
             // "let"
             var letTokenLoc = context.CurrentLocation();
