@@ -268,7 +268,8 @@ public class Avh4Format
         {
             // Calculate the next indent level column from the current position
             var nextIndentColumn = GetNextMultipleOfFourColumn();
-            // Set indent to that column
+            // IndentSpaces is the number of leading spaces (0-based), while column is 1-based.
+            // So for a column N, the corresponding IndentSpaces is N - 1.
             return new FormattingContext(
                 currentRow: CurrentRow,
                 currentColumn: nextIndentColumn,
