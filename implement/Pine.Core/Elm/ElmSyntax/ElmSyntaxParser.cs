@@ -3024,14 +3024,19 @@ public class ElmSyntaxParser
 
                     var letDecls = new List<Node<SyntaxTypes.Expression.LetDeclaration>>();
 
+                    // Use the minimum of indentMin and the let keyword column for checking declaration indentation.
+                    // This handles the case where let is inside parentheses and on the same line,
+                    // causing declarations to be at a lower column than the let keyword itself.
+                    var letDeclIndentCheck = System.Math.Min(indentMin, firstIdentifierToken.Range.Start.Column);
+
                     while (
                         NextTokenMatches(
                             peek =>
-                            firstIdentifierToken.Range.Start.Column < peek.Start.Column &&
+                            letDeclIndentCheck < peek.Start.Column &&
                             peek.Lexeme is not "in"))
                     {
                         var letDecl =
-                            ParseLetDeclaration(indentMin: firstIdentifierToken.Range.Start.Column + 1);
+                            ParseLetDeclaration(indentMin: letDeclIndentCheck + 1);
 
                         letDecls.Add(letDecl);
 

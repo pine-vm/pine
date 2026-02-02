@@ -259,6 +259,25 @@ public class Avh4Format
             SetIndentColumn().AdvanceToNextIndentLevel().SetIndentToCurrentColumn();
 
         /// <summary>
+        /// Creates an indented reference context based on the current column position.
+        /// Unlike CreateIndentedRef, this calculates the next indent level from the current column
+        /// rather than from IndentSpaces. Use this when the context's current column is more 
+        /// accurate than IndentSpaces (e.g., inside parentheses or nested structures).
+        /// </summary>
+        public FormattingContext CreateIndentedRefFromCurrentColumn()
+        {
+            // Calculate the next indent level column from the current position
+            var nextIndentColumn = GetNextMultipleOfFourColumn();
+            // IndentSpaces is the number of leading spaces (0-based), while column is 1-based.
+            // So for a column N, the corresponding IndentSpaces is N - 1.
+            return new FormattingContext(
+                currentRow: CurrentRow,
+                currentColumn: nextIndentColumn,
+                indentSpaces: nextIndentColumn - 1,
+                comments: Comments);
+        }
+
+        /// <summary>
         /// Calculates the next column that is greater than current position and a multiple of 4.
         /// Returns columns like 5, 9, 13, ... (since columns are 1-based).
         /// </summary>
@@ -3998,7 +4017,15 @@ public class Avh4Format
                         // Check if the right operand is on a new line in the original
                         var rightOnNewLine = opApp.Right.Range.Start.Row > opApp.Left.Range.End.Row;
 
-                        if (rightOnNewLine)
+                        // Check if right operand spans multiple rows (is multiline)
+                        var rightIsMultiline = SpansMultipleRows(opApp.Right.Range);
+
+                        // For <| operator, also treat as multiline if right operand spans multiple rows
+                        // (even if it starts on the same line as <|)
+                        var treatAsMultiline = rightOnNewLine ||
+                            (opApp.Operator.Value is "<|" && rightIsMultiline);
+
+                        if (treatAsMultiline)
                         {
                             // Special case for left pipe operator <|
                             // Unlike other operators, <| stays at the end of the preceding line
@@ -4847,7 +4874,9 @@ public class Avh4Format
             FormattingContext context)
         {
             // Reference context for indented content (one indent level from base)
-            var indentedRef = context.CreateIndentedRef();
+            // Use CreateIndentedRefFromCurrentColumn because let expressions can be nested
+            // inside parentheses where the current column is more accurate than IndentSpaces
+            var indentedRef = context.CreateIndentedRefFromCurrentColumn();
 
             // "let"
             var letTokenLoc = context.CurrentLocation();
