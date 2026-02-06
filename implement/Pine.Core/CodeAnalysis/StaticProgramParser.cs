@@ -7,6 +7,10 @@ namespace Pine.Core.CodeAnalysis;
 
 /// <summary>
 /// Parse a set of Pine values into a static program representation.
+/// Since Pine is an inherently dynamic language, not every Pine program can be mapped to a static program.
+/// <para>
+/// For any questions about the design or implementation, see the design notes in 'parsing-as-a-static-program.md'
+/// </para>
 /// </summary>
 public class StaticProgramParser
 {
