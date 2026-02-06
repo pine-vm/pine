@@ -907,25 +907,6 @@ public partial class CompileToCSharp
                 return null;
             },
             fromOk: ok => ok);
-
-        static InvocationExpressionSyntax wrapInvocationInWithDefault(InvocationExpressionSyntax invocationExpressionSyntax)
-        {
-            return
-                SyntaxFactory.InvocationExpression(
-                    SyntaxFactory.MemberAccessExpression(
-                        SyntaxKind.SimpleMemberAccessExpression,
-                        invocationExpressionSyntax,
-                        SyntaxFactory.IdentifierName("WithDefault")))
-                .WithArgumentList(
-                    SyntaxFactory.ArgumentList(
-                        SyntaxFactory.SingletonSeparatedList(
-                            SyntaxFactory.Argument(
-                                SyntaxFactory.MemberAccessExpression(
-                                    SyntaxKind.SimpleMemberAccessExpression,
-                                    SyntaxFactory.IdentifierName("PineValue"),
-                                    SyntaxFactory.IdentifierName("EmptyList"))))));
-        }
-
         if (staticallyKnownArgumentsList is not null)
         {
             foreach (var specializedImpl in kernelFunctionInfo.SpecializedImplementations)

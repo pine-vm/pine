@@ -497,44 +497,6 @@ public class Avh4Format
     }
 
     /// <summary>
-    /// Generic higher-order function for formatting a multiline separated list with comment handling.
-    /// This function abstracts the common pattern of formatting lists, tuples, records, etc.
-    /// with proper comment placement between items and around separators.
-    /// This version works with Node-wrapped items and extracts the Range automatically.
-    /// </summary>
-    /// <typeparam name="TItem">The inner type of items (items are Node&lt;TItem&gt;).</typeparam>
-    /// <typeparam name="TResult">The type of formatted items.</typeparam>
-    /// <param name="separatedList">The non-empty separated list to format.</param>
-    /// <param name="formatItem">Delegate to format a single item.</param>
-    /// <param name="commentQueries">Helper for querying comments from the original source.</param>
-    /// <param name="config">Configuration for alignment, separator, and close bracket.</param>
-    /// <param name="startContext">The formatting context after the opening bracket.</param>
-    /// <param name="containerRange">The original source range of the container.</param>
-    /// <param name="commentStyle">The comment placement style to use.</param>
-    /// <returns>A tuple of the formatted separated list and the final context.</returns>
-    private static (SeparatedSyntaxList<TResult>.NonEmpty FormattedList, FormattingContext FinalContext)
-        FormatMultilineSeparatedList<TItem, TResult>(
-            SeparatedSyntaxList<Node<TItem>>.NonEmpty separatedList,
-            System.Func<Node<TItem>, FormattingContext, FormattingResult<TResult>> formatItem,
-            CommentQueryHelper commentQueries,
-            SeparatedListConfig config,
-            FormattingContext startContext,
-            Range containerRange,
-            SeparatedListCommentStyle commentStyle)
-    {
-        // Delegate to the general version with Range extraction from Node
-        return FormatMultilineSeparatedListGeneral(
-            separatedList: separatedList,
-            formatItem: formatItem,
-            getItemRange: item => item.Range,
-            commentQueries: commentQueries,
-            config: config,
-            startContext: startContext,
-            containerRange: containerRange,
-            commentStyle: commentStyle);
-    }
-
-    /// <summary>
     /// General version of multiline separated list formatter that works with any item type.
     /// Uses a delegate to extract the Range from items for comment placement.
     /// </summary>
