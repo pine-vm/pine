@@ -1316,8 +1316,7 @@ public class Precompiled
         var charCodeLowByte = charBlob.Bytes.Span[^1];
 
         var isLower =
-            0x61 <= charCodeLowByte &&
-            charCodeLowByte <= 0x7A;
+            charCodeLowByte is >= 0x61 and <= 0x7A;
 
         return
             isLower
@@ -1350,8 +1349,7 @@ public class Precompiled
         var charCodeLowByte = charBlob.Bytes.Span[^1];
 
         var isUpper =
-            0x41 <= charCodeLowByte &&
-            charCodeLowByte <= 0x5A;
+            charCodeLowByte is >= 0x41 and <= 0x5A;
 
         return
             isUpper
@@ -4728,7 +4726,7 @@ public class Precompiled
                 }
             }
 
-            if (nextChar is 0x0a || nextChar is 0x0d)
+            if (nextChar is 0x0a or 0x0d)
             {
                 var currentLineLength =
                     offsetInt - currentLineStartInt;
@@ -5058,7 +5056,7 @@ public class Precompiled
 
             var nextChar = BinaryPrimitives.ReadInt32BigEndian(strBytesBlob.Bytes.Span[offsetInt..]);
 
-            if (nextChar is 32 || nextChar is 9 || nextChar is 10 || nextChar is 13)
+            if (nextChar is 32 or 9 or 10 or 13)
             {
                 offsetInt += 4;
                 continue;
@@ -5316,7 +5314,7 @@ public class Precompiled
             var byteValue = charValue.Span[3];
 
             return
-                byteValue != '"' && byteValue != '\\';
+                byteValue is not (byte)'"' and not (byte)'\\';
         }
 
         return
@@ -5479,7 +5477,7 @@ public class Precompiled
             var byteValue = charValue.Span[3];
 
             return
-                byteValue != '"' && byteValue != '\\';
+                byteValue is not (byte)'"' and not (byte)'\\';
         }
 
         return

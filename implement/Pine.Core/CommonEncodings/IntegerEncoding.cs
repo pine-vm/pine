@@ -245,7 +245,7 @@ public static class IntegerEncoding
 
         var signByte = blobValue[0];
 
-        if (signByte is not 4 && signByte is not 2)
+        if (signByte is not 4 and not 2)
             return "Unexpected value for sign byte of integer: " + signByte;
 
         if (rejectLeadingZero && 2 < blobValue.Length && blobValue[1] is 0)

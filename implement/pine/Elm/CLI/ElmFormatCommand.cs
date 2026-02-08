@@ -263,7 +263,7 @@ public class ElmFormatCommand
                     ?.Trim()
                     .ToLowerInvariant();
 
-                if (response is not "y" && response is not "yes")
+                if (response is not "y" and not "yes")
                 {
                     Console.WriteLine("Formatting cancelled.");
                     return 0;

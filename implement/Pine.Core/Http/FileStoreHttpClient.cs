@@ -149,7 +149,7 @@ public class FileStoreHttpClient(HttpClient httpClient) : IFileStore
             var response = await _httpClient.DeleteAsync(url);
 
             // Consider both 204 (deleted) and 404 (not found) as success
-            if (response.StatusCode != HttpStatusCode.NoContent && response.StatusCode != HttpStatusCode.NotFound)
+            if (response.StatusCode is not HttpStatusCode.NoContent and not HttpStatusCode.NotFound)
             {
                 response.EnsureSuccessStatusCode();
             }

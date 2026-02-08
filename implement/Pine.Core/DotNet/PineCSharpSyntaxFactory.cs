@@ -27,7 +27,7 @@ public static class PineCSharpSyntaxFactory
     {
         var text = CommandLineInterface.FormatIntegerForDisplay(integer);
 
-        if (integer >= int.MinValue && integer <= int.MaxValue)
+        if (integer is >= int.MinValue and <= int.MaxValue)
         {
             // Produce an int-typed literal to enable implicit constant conversions (e.g., to byte and int).
             return SyntaxFactory.Literal(text, (int)integer);
