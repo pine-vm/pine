@@ -117,7 +117,7 @@ public class ElmLanguageServerTests
              * therefore, only accept the file if it has the name "pine" or "pine.exe"
              * */
 
-            if (fileName is "pine" || fileName is "pine.exe")
+            if (fileName is "pine" or "pine.exe")
                 return Path.Combine(pineDirectoryPath, string.Join('/', fileSubPath));
         }
 

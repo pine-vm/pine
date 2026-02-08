@@ -478,8 +478,7 @@ public class LanguageServer(
                 continue;
             }
 
-            if (change.Type is not FileChangeType.Created &&
-                change.Type is not FileChangeType.Changed)
+            if (change.Type is not FileChangeType.Created and not FileChangeType.Changed)
             {
                 Log("Ignoring file change: " + change.Type + ": " + change.Uri);
                 continue;

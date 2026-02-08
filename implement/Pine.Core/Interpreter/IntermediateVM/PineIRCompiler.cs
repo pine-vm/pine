@@ -1784,7 +1784,7 @@ public class PineIRCompiler
 
         if (input is Expression.List listExpr)
         {
-            if (listExpr.Items.Count is 0 || listExpr.Items.Count is 1)
+            if (listExpr.Items.Count is 0 or 1)
             {
                 return
                     prior
@@ -2435,7 +2435,7 @@ public class PineIRCompiler
 
     public static bool ExpressionLargeEnoughForCSE(Expression expression)
     {
-        if (expression is Expression.Literal || expression is Expression.Environment)
+        if (expression is Expression.Literal or Expression.Environment)
             return false;
 
         if (expression is Expression.KernelApplication)

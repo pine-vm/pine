@@ -186,7 +186,7 @@ public class ElmInteractive
 
             if (pineValue is PineValue.BlobValue blobValue)
             {
-                if (1 < blobValue.Bytes.Length && blobValue.Bytes.Length < 3)
+                if (blobValue.Bytes.Length is > 1 and < 3)
                 {
                     if (IntegerEncoding.ParseSignedIntegerStrict(blobValue.Bytes.Span) is Result<string, System.Numerics.BigInteger>.Ok asInt)
                     {

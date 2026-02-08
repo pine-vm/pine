@@ -200,7 +200,7 @@ public static class LambdaLifting
         // Find free variables in the lambda body (variables used but not bound by lambda params)
         var freeVariables =
             FindFreeVariables(lambda.Expression, [.. lambdaParamNames])
-            .Where(v => context.BoundVariables.Contains(v))
+            .Where(context.BoundVariables.Contains)
             .OrderBy(v => v)
             .ToList();
 

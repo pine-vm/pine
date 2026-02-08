@@ -324,12 +324,13 @@ public class InteractiveSessionPine : IInteractiveSession
         {
             var packageName = package.elmJson.Name;
 
-            if (packageName is "elm/core" ||
-                packageName is "elm/json" ||
-                packageName is "elm/bytes" ||
-                packageName is "elm/parser" ||
-                packageName is "elm/url" ||
-                packageName is "elm/time")
+            if (packageName is
+                "elm/core" or
+                "elm/json" or
+                "elm/bytes" or
+                "elm/parser" or
+                "elm/url" or
+                "elm/time")
             {
                 continue;
             }

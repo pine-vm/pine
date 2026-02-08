@@ -760,7 +760,7 @@ public record StaticProgramCSharp(
         if (c is '\\')
             return "backslash";
 
-        if ('0' <= c && c <= '9')
+        if (c is >= '0' and <= '9')
         {
             return "digit_" + c;
         }

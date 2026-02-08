@@ -656,7 +656,7 @@ type alias LoadDependencyStruct =
             new ElmValue.ElmRecord(
                 [
                 ("name", ElmValue.StringInstance(header.Name)),
-                ("values", new ElmValue.ElmList([.. header.Values.Select(value => ElmValue.StringInstance(value))]))
+                ("values", new ElmValue.ElmList([.. header.Values.Select(ElmValue.StringInstance)]))
                 ]);
 
         return asElmValue;
