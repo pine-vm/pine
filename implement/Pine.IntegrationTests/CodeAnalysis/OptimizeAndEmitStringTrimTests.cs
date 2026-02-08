@@ -59,7 +59,6 @@ public class OptimizeAndEmitStringTrimTests
                             ]);
                 }
             }
-
             """".Trim());
 
         moduleGlobalAnonymousText.Trim().Should().Be(
@@ -78,7 +77,8 @@ public class OptimizeAndEmitStringTrimTests
                             return CommonReusedValues.Blob_Int_0;
                         }
 
-                        if (Global_Anonymous.zzz_anon_d97a2014_dda26649(KernelFunctionFused.SkipAndTake(
+                        if (Global_Anonymous.zzz_anon_d97a2014_dda26649(
+                            KernelFunctionFused.SkipAndTake(
                                 takeCount: 4,
                                 skipCountValue: KernelFunctionSpecialized.int_add(-4, local_param_1_0),
                                 argument: local_param_1_1)) == PineKernelValues.TrueValue)
@@ -110,7 +110,7 @@ public class OptimizeAndEmitStringTrimTests
                                 skipCountValue: local_param_1_0,
                                 argument: local_param_1_1);
 
-                        if (KernelFunctionSpecialized.length_as_int(local_000) is 0)
+                        if (KernelFunctionSpecialized.length_as_int(local_000) == 0)
                         {
                             return local_param_1_0;
                         }
@@ -161,7 +161,6 @@ public class OptimizeAndEmitStringTrimTests
                     return PineKernelValues.FalseValue;
                 }
             }
-
             """"
             .Trim());
     }

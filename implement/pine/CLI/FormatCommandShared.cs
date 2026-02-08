@@ -15,15 +15,19 @@ public abstract record FormatFileResult
 {
     private FormatFileResult() { }
 
+
     /// <summary>File had an error and could not be processed.</summary>
     public sealed record Error(string ErrorText) : FormatFileResult;
+
 
     /// <summary>File was already properly formatted (no changes needed).</summary>
     public sealed record Stable : FormatFileResult;
 
+
     /// <summary>File needs formatting (content differs from formatted version).</summary>
     public sealed record Changed(string FormattedText) : FormatFileResult;
 }
+
 
 /// <summary>
 /// Shared logic for format commands (e.g., elm-format, csharp-format).
@@ -34,6 +38,7 @@ public static class FormatCommandShared
     /// Minimum number of files before showing detailed overview with grouping.
     /// </summary>
     public const int MinFilesForDetailedOverview = 5;
+
 
     /// <summary>
     /// Executes a format command for the given file extension and formatter.
@@ -113,33 +118,35 @@ public static class FormatCommandShared
         var needsFormatting = new ConcurrentBag<(string path, string formattedContent)>();
         var parseErrors = new ConcurrentBag<(string path, string error)>();
 
-        Parallel.ForEach(files, (filePath) =>
-        {
-            try
+        Parallel.ForEach(
+            files,
+            (filePath) =>
             {
-                var originalContent = File.ReadAllText(filePath);
-                var result = formatFile(originalContent);
-
-                switch (result)
+                try
                 {
-                    case FormatFileResult.Error errorResult:
-                        parseErrors.Add((filePath, errorResult.ErrorText));
-                        break;
+                    var originalContent = File.ReadAllText(filePath);
+                    var result = formatFile(originalContent);
 
-                    case FormatFileResult.Stable:
-                        alreadyFormatted.Add(filePath);
-                        break;
+                    switch (result)
+                    {
+                        case FormatFileResult.Error errorResult:
+                            parseErrors.Add((filePath, errorResult.ErrorText));
+                            break;
 
-                    case FormatFileResult.Changed changedResult:
-                        needsFormatting.Add((filePath, changedResult.FormattedText));
-                        break;
+                        case FormatFileResult.Stable:
+                            alreadyFormatted.Add(filePath);
+                            break;
+
+                        case FormatFileResult.Changed changedResult:
+                            needsFormatting.Add((filePath, changedResult.FormattedText));
+                            break;
+                    }
                 }
-            }
-            catch (Exception ex)
-            {
-                parseErrors.Add((filePath, ex.Message));
-            }
-        });
+                catch (Exception ex)
+                {
+                    parseErrors.Add((filePath, ex.Message));
+                }
+            });
 
         var sortedAlreadyFormatted =
             alreadyFormatted

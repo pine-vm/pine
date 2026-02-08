@@ -18,7 +18,9 @@ Background:
 
 The formatting section covers rules that do not require analysis beyond a single file and can be applied automatically.
 
-Low-level syntactic aspects are not covered here, as they are already modeled in mainstream tooling such as EditorConfig and `dotnet format`.
+The basis for formatting is `dotnet format`, which in turn applies rules we have specified in the `.editorconfig` files in the repository.
+
+Since `dotnet format` is quite lenient, we add additional rules to achieve a more consistent style.
 
 ### Consistent Layout of List Items
 
@@ -26,6 +28,8 @@ Items in lists such as argument lists, parameter lists, collection expressions, 
 If the last item is not on the same line as the first, the items must be placed so that each starts on a new line.
 
 For multiline collection expressions, the closing bracket must be placed on a new line after the last item. For argument lists and parameter lists, the closing parentheses must be placed on the same line as the last item.
+
+For argument lists in the multiline form, the first argument must be separated from the opening parens with a line break.
 
 For example, the following code:
 
@@ -40,6 +44,10 @@ var beta =
 var gamma =
     func(1, 2,
     3);
+
+decl =
+    alfa(beta(
+        gamma(delta(a, b))));
 ```
 
 Must be formatted to:
@@ -60,6 +68,11 @@ var gamma =
         1,
         2,
         3);
+
+decl =
+    alfa(
+        beta(
+            gamma(delta(a, b))));
 ```
 
 ### Initializer on New Line
@@ -97,6 +110,7 @@ When a line exceeds a length of 120 columns, line breaks must be inserted at the
 + Before an expression body.
 + Before the dot in a member access expression.
 + Before the expression part of a switch expression arm.
++ In a conditional expression (splitting it to multiple lines as described in the conditional expression rule below).
 
 Also, list forms such as argument lists, parameter lists, or object initializer lists must be switched to a multiline layout if the containing line exceeds the length threshold.
 

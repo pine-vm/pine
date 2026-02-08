@@ -199,14 +199,14 @@ public class OptimizeAndEmitDictInsertTests
                             return CommonReusedValues.List_af0e3cad;
                         }
 
-                        if (!(local_param_1_0.GetLength() is 0))
+                        if (!(local_param_1_0.GetLength() == 0))
                         {
                             if (local_param_1_1.IsEmptyList())
                             {
                                 return CommonReusedValues.List_50724673;
                             }
 
-                            if (!(local_param_1_1.GetLength() is 0))
+                            if (!(local_param_1_1.GetLength() == 0))
                             {
                                 PineValue local_004 = Basics.compare(local_param_1_0.GetHead(), local_param_1_1.GetHead());
 
@@ -257,7 +257,7 @@ public class OptimizeAndEmitDictInsertTests
 
                         PineValue local_004 = KernelFunction.ValueFromBool(local_002 == CommonReusedValues.Blob_Int_0);
 
-                        if (KernelFunctionSpecialized.length_as_int(local_000) is 0)
+                        if (KernelFunctionSpecialized.length_as_int(local_000) == 0)
                         {
                             if (local_004 == PineKernelValues.TrueValue)
                             {

@@ -92,7 +92,7 @@ public class OptimizeAndEmitStringToListTests
                                 skipCountValue: local_param_1_0,
                                 argument: local_param_1_2);
 
-                        if (KernelFunctionSpecialized.length_as_int(local_000) is 0)
+                        if (KernelFunctionSpecialized.length_as_int(local_000) == 0)
                         {
                             return local_param_1_1.Evaluate();
                         }
@@ -107,7 +107,6 @@ public class OptimizeAndEmitStringToListTests
                     }
                 }
             }
-
             """".Trim());
 
         moduleGlobalAnonymousText.Trim().Should().Be(
@@ -115,7 +114,6 @@ public class OptimizeAndEmitStringToListTests
             public static class Global_Anonymous
             {
             }
-
             """"
             .Trim());
 

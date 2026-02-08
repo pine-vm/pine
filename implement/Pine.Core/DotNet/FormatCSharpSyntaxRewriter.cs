@@ -106,9 +106,18 @@ public class FormatCSharpSyntaxRewriter(
             originalNode.Arguments.First().GetLocation().GetLineSpan().StartLinePosition.Line !=
             originalNode.Arguments.Last().GetLocation().GetLineSpan().StartLinePosition.Line;
 
+        // When an argument is an invocation or a lambda with a block body that itself spans
+        // multiple lines, the outer argument list should also go multi-line.
+        var anyArgContainsMultipleLines =
+            firstArgOnSameLineAsOpenParen &&
+            originalNode.Arguments.Any(arg =>
+                (arg.Expression is InvocationExpressionSyntax ||
+                 arg.Expression is LambdaExpressionSyntax { Block: not null }) &&
+                SpansMultipleLines(arg));
+
         var formatOnMultipleLines =
             originalNode.Arguments.Count > 0 &&
-            (!firstArgOnSameLineAsOpenParen || argsOnDifferentLines);
+            (!firstArgOnSameLineAsOpenParen || argsOnDifferentLines || anyArgContainsMultipleLines);
 
         if (!formatOnMultipleLines)
         {
@@ -162,11 +171,12 @@ public class FormatCSharpSyntaxRewriter(
             // Skip the MaximumLineLength check when the single argument itself spans multiple
             // lines (e.g., a lambda body), since the line-end estimation doesn't apply to
             // multi-line content that starts on the same line as the open paren.
-            // Exclude CollectionExpressionSyntax: when a collection exceeds the line length
-            // and was reformatted to multi-line, the argument list should also go multi-line.
+            // Exclude CollectionExpressionSyntax and InvocationExpressionSyntax: when a
+            // collection or invocation exceeds the line length and was reformatted to multi-line,
+            // the argument list should also go multi-line.
             var singleArgSpansMultipleLines =
                 node.Arguments.Count is 1 && firstArgOnSameLineAsOpenParen &&
-                node.Arguments[0].Expression is not CollectionExpressionSyntax &&
+                node.Arguments[0].Expression is not CollectionExpressionSyntax and not InvocationExpressionSyntax &&
                 SpansMultipleLines(node.Arguments.First());
 
             if (lineEndColumn <= MaximumLineLength || singleArgSpansMultipleLines)
@@ -338,8 +348,20 @@ public class FormatCSharpSyntaxRewriter(
     {
         var node = (ConditionalExpressionSyntax)base.VisitConditionalExpression(originalNode)!;
 
-        // Per spec: only reformat when the original conditional already spans multiple lines.
-        if (!SpansMultipleLines(originalNode))
+        // Per spec: reformat when the original conditional already spans multiple lines,
+        // or when the line would exceed MaximumLineLength.
+        var formatMultiLine = SpansMultipleLines(originalNode);
+
+        if (!formatMultiLine)
+        {
+            var indentLevel = ComputeIndentationLevel(originalNode);
+            var lineWidth = indentLevel * indentCharsPerLevel + originalNode.Span.Length;
+
+            if (lineWidth > MaximumLineLength)
+                formatMultiLine = true;
+        }
+
+        if (!formatMultiLine)
             return node;
 
         var indentationTrivia = ComputeIndentationTriviaForNode(originalNode);
@@ -508,6 +530,11 @@ public class FormatCSharpSyntaxRewriter(
     public override SyntaxNode? VisitBlock(BlockSyntax originalNode)
     {
         var node = (BlockSyntax)base.VisitBlock(originalNode)!;
+
+        if (originalNode.Statements.Count is 0 && !SpansMultipleLines(originalNode))
+        {
+            return node;
+        }
 
         var blockIndentationLevel = ComputeIndentationLevel(originalNode);
 
@@ -1150,7 +1177,8 @@ public class FormatCSharpSyntaxRewriter(
                 return
                     node
                     .WithExpression(node.Expression.WithTrailingTrivia(strippedTrailing))
-                    .WithOperatorToken(node.OperatorToken.WithLeadingTrivia(
+                    .WithOperatorToken(
+                        node.OperatorToken.WithLeadingTrivia(
                             new SyntaxTriviaList(SyntaxFactory.LineFeed, indentationTrivia)));
             }
 
@@ -1177,7 +1205,8 @@ public class FormatCSharpSyntaxRewriter(
 
         return
             node
-            .WithOperatorToken(node.OperatorToken.WithLeadingTrivia(
+            .WithOperatorToken(
+                node.OperatorToken.WithLeadingTrivia(
                     new SyntaxTriviaList(SyntaxFactory.LineFeed, breakIndentTrivia)));
     }
 
@@ -1579,7 +1608,7 @@ public class FormatCSharpSyntaxRewriter(
             .WithExpression(
                 node.Expression
                 .WithLeadingTrivia(expressionLeading)
-                .WithTrailingTrivia(isLastArm ? SyntaxTriviaList.Create(SyntaxFactory.LineFeed) : []));
+                .WithTrailingTrivia());
     }
 
 
@@ -1649,6 +1678,24 @@ public class FormatCSharpSyntaxRewriter(
                             separatorBefore.WithTrailingTrivia(preservedTrivia));
                 });
 
+        // Handle trailing separator (after last arm) if present:
+        // normalize its trivia to just a LineFeed before the close brace.
+        var hasTrailingSeparator = armsList.SeparatorCount == armsList.Count && armsList.Count > 0;
+
+        if (hasTrailingSeparator)
+        {
+            var trailingSep = armsList.GetSeparator(armsList.Count - 1);
+            armsList = armsList.ReplaceSeparator(
+                trailingSep,
+                trailingSep.WithTrailingTrivia(SyntaxFactory.LineFeed));
+        }
+
+        // If no trailing separator, prefix close brace with LineFeed so there's
+        // a newline between the last arm and the close brace.
+        var closeBraceLeading = hasTrailingSeparator
+            ? new SyntaxTriviaList(braceIndentTrivia)
+            : new SyntaxTriviaList(SyntaxFactory.LineFeed, braceIndentTrivia);
+
         return
             node
             .WithGoverningExpression(
@@ -1662,7 +1709,7 @@ public class FormatCSharpSyntaxRewriter(
             .WithArms(armsList)
             .WithCloseBraceToken(
                 node.CloseBraceToken
-                .WithLeadingTrivia(braceIndentTrivia));
+                .WithLeadingTrivia(closeBraceLeading));
     }
 
 
@@ -1978,7 +2025,7 @@ public class FormatCSharpSyntaxRewriter(
         {
             shouldIncrement = false;
             insideChainArguments = false;
-            chainSkipApplied = true;  // Mark that we've already applied a chain skip
+            chainSkipApplied = true; // Mark that we've already applied a chain skip
         }
 
         // Detect when we walk through an InvocationExpression that's a chain (MemberAccess

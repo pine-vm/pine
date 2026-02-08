@@ -113,10 +113,26 @@ public class OptimizeAndEmitValueFromStringTests
                                 Basics.idiv(local_000, CommonReusedValues.Blob_Int_16777216)),
                             Basics.modBy(
                                 CommonReusedValues.Blob_Int_256,
-                                local_002 == PineKernelValues.TrueValue ? (KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(4, local_001) ? KernelFunctionFused.SkipLast(skipCount: 2, value: local_000) : CommonReusedValues.Blob_Int_0) : PineValue.EmptyList),
+                                local_002 == PineKernelValues.TrueValue
+                                ?
+                                (KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(4, local_001)
+                                ?
+                                KernelFunctionFused.SkipLast(skipCount: 2, value: local_000)
+                                :
+                                CommonReusedValues.Blob_Int_0)
+                                :
+                                PineValue.EmptyList),
                             Basics.modBy(
                                 CommonReusedValues.Blob_Int_256,
-                                local_002 == PineKernelValues.TrueValue ? (KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(3, local_001) ? KernelFunctionFused.SkipLast(skipCount: 1, value: local_000) : CommonReusedValues.Blob_Int_0) : PineValue.EmptyList),
+                                local_002 == PineKernelValues.TrueValue
+                                ?
+                                (KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(3, local_001)
+                                ?
+                                KernelFunctionFused.SkipLast(skipCount: 1, value: local_000)
+                                :
+                                CommonReusedValues.Blob_Int_0)
+                                :
+                                PineValue.EmptyList),
                             Basics.modBy(CommonReusedValues.Blob_Int_256, local_000)
                             ]);
                 }
@@ -135,7 +151,7 @@ public class OptimizeAndEmitValueFromStringTests
                             return local_param_1_0.EvaluateReverse();
                         }
 
-                        if (!(local_param_1_1.GetLength() is 0))
+                        if (!(local_param_1_1.GetLength() == 0))
                         {
                             {
                                 local_param_1_0 =
@@ -162,7 +178,8 @@ public class OptimizeAndEmitValueFromStringTests
                             CommonReusedValues.Blob_Str_BlobValue,
                             PineValue.List(
                                 [
-                                KernelFunction.concat(Test.blobBytesFromChars(
+                                KernelFunction.concat(
+                                    Test.blobBytesFromChars(
                                         PineValue.EmptyList,
                                         Global_Anonymous.zzz_anon_2badf312_841a88e3(
                                             CommonReusedValues.Blob_Int_0,
@@ -192,7 +209,7 @@ public class OptimizeAndEmitValueFromStringTests
                                 skipCountValue: local_param_1_0,
                                 argument: local_param_1_2);
 
-                        if (KernelFunctionSpecialized.length_as_int(local_000) is 0)
+                        if (KernelFunctionSpecialized.length_as_int(local_000) == 0)
                         {
                             return local_param_1_1.Evaluate();
                         }

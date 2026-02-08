@@ -1694,7 +1694,7 @@ public class CSharpFormatTests
                         InitialForegroundColor,
                     IConsole.TextColor.Green => System.ConsoleColor.Green,
                     IConsole.TextColor.Red => System.ConsoleColor.Red,
-                    _ => throw new System.NotImplementedException()
+                    _ => throw new System.NotImplementedException(),
                };
             """";
 
@@ -1710,7 +1710,7 @@ public class CSharpFormatTests
                     IConsole.TextColor.Red => System.ConsoleColor.Red,
 
                     _ =>
-                    throw new System.NotImplementedException()
+                    throw new System.NotImplementedException(),
                 };
             """";
 
@@ -2137,6 +2137,57 @@ public class CSharpFormatTests
         AssertFormattedSyntax(inputSyntaxText, expectedSyntaxText, scriptMode: true);
     }
 
+
+    [Fact]
+    public void Formats_conditional_expression_when_line_exceeds_maximum_length()
+    {
+        var inputSyntaxText =
+            """"
+            var alfa = someConditionCheckingExpression.IsTrue ? firstAlternativeValueExpressionResult : secondAlternativeValueExpressionResult;
+            """";
+
+        var expectedSyntaxText =
+            """"
+            var alfa =
+                someConditionCheckingExpression.IsTrue
+                ?
+                firstAlternativeValueExpressionResult
+                :
+                secondAlternativeValueExpressionResult;
+            """";
+
+        AssertFormattedSyntax(inputSyntaxText, expectedSyntaxText, scriptMode: true);
+    }
+
+
+    [Fact]
+    public void Formats_lambda_block_in_invocation()
+    {
+        var inputSyntaxText =
+            """"
+            var filteredDecls =
+                declarations.Where(d =>
+                {
+                    var variable = d.Declaration.Variables.FirstOrDefault();
+                    return variable is not null && mutatedUsed.Contains(variable.Identifier.ValueText);
+                }).ToImmutableArray();
+            """";
+
+        var expectedSyntaxText =
+            """"
+            var filteredDecls =
+                declarations.Where(
+                    d =>
+                    {
+                        var variable = d.Declaration.Variables.FirstOrDefault();
+                        return variable is not null && mutatedUsed.Contains(variable.Identifier.ValueText);
+                    }).ToImmutableArray();
+            """";
+
+        AssertFormattedSyntax(inputSyntaxText, expectedSyntaxText, scriptMode: true);
+    }
+
+
     [Fact]
     public void Stable_conditional_expression_inside_lambda_argument()
     {
@@ -2455,6 +2506,43 @@ public class CSharpFormatTests
                         parseErrors.Add((filePath, ex.Message));
                     }
                 });
+            """";
+
+        AssertFormattedSyntax(inputSyntaxText, expectedSyntaxText, scriptMode: true);
+    }
+
+
+    [Fact]
+    public void Preserves_record_constructor_empty_single_line()
+    {
+        var inputSyntaxText =
+            """"
+            public abstract record FormatFileResult
+            {
+                private FormatFileResult() { }
+            }
+            """";
+
+        AssertFormattedSyntax(inputSyntaxText, inputSyntaxText, scriptMode: true);
+    }
+
+
+    [Fact]
+    public void Switches_argument_list_containing_multi_line_argument_to_multi_line()
+    {
+        var inputSyntaxText =
+            """"
+            decl =
+                alfa(beta(
+                    gamma(delta(a, b))));
+            """";
+
+        var expectedSyntaxText =
+            """"
+            decl =
+                alfa(
+                    beta(
+                        gamma(delta(a, b))));
             """";
 
         AssertFormattedSyntax(inputSyntaxText, expectedSyntaxText, scriptMode: true);
