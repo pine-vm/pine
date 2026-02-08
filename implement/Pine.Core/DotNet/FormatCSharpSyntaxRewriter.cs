@@ -607,39 +607,6 @@ public class FormatCSharpSyntaxRewriter(
 
 
     /// <summary>
-    /// Determines if a statement is a single-line declaration statement.
-    /// A declaration is considered "single-line" when it fits on one line after formatting -
-    /// i.e., its initializer (if any) does not cause line breaks.
-    /// </summary>
-    private static bool IsSingleLineDeclarationStatement(StatementSyntax statement)
-    {
-        if (statement is not LocalDeclarationStatementSyntax localDecl)
-            return false;
-
-        // Check if any variable has an initializer that causes line breaks
-        foreach (var variable in localDecl.Declaration.Variables)
-        {
-            if (variable.Initializer?.Value is { } initValue && ExpressionCausesLineBreak(initValue))
-                return false;
-        }
-
-        return true;
-    }
-
-
-    /// <summary>
-    /// Determines if a statement is a multi-line block statement (for, while, if, etc.)
-    /// that always spans multiple lines in formatted output.
-    /// </summary>
-    private static bool IsMultiLineBlockStatement(StatementSyntax statement) =>
-        statement is ForStatementSyntax or ForEachStatementSyntax
-        or WhileStatementSyntax or DoStatementSyntax
-        or IfStatementSyntax or TryStatementSyntax
-        or UsingStatementSyntax or LockStatementSyntax
-        or SwitchStatementSyntax;
-
-
-    /// <summary>
     /// Checks if the original statement had a blank line after it by examining the
     /// trivia between the end of this statement and the start of the next statement.
     /// A blank line means two consecutive end-of-line trivia with only whitespace between them.
@@ -1455,81 +1422,7 @@ public class FormatCSharpSyntaxRewriter(
     {
         var node = (BinaryExpressionSyntax)base.VisitBinaryExpression(originalNode)!;
 
-        // Rule: Replace == and != with is/is not when comparing with null, integer, or string literals.
-        if (node.IsKind(SyntaxKind.EqualsExpression) || node.IsKind(SyntaxKind.NotEqualsExpression))
-        {
-            var isEquals = node.IsKind(SyntaxKind.EqualsExpression);
-
-            // Check if right side is a literal (null, integer, or string)
-            if (IsPatternMatchableLiteral(node.Right))
-            {
-                return CreateIsPatternExpression(node.Left, node.Right, isEquals, node);
-            }
-
-            // Check if left side is a literal (swap for canonical form: expr is literal)
-            if (IsPatternMatchableLiteral(node.Left))
-            {
-                return CreateIsPatternExpression(node.Right, node.Left, isEquals, node);
-            }
-        }
-
         return node;
-    }
-
-
-    /// <summary>
-    /// Determines if an expression is a literal suitable for pattern matching (null, integer, or string).
-    /// </summary>
-    private static bool IsPatternMatchableLiteral(ExpressionSyntax expression)
-    {
-        return
-            expression is LiteralExpressionSyntax literal &&
-            (literal.IsKind(SyntaxKind.NullLiteralExpression) ||
-             literal.IsKind(SyntaxKind.NumericLiteralExpression) ||
-             literal.IsKind(SyntaxKind.StringLiteralExpression));
-    }
-
-
-    /// <summary>
-    /// Creates an 'is' or 'is not' pattern expression from a binary comparison.
-    /// </summary>
-    private static SyntaxNode CreateIsPatternExpression(
-        ExpressionSyntax checkedExpression,
-        ExpressionSyntax literalExpression,
-        bool isEquals,
-        BinaryExpressionSyntax originalNode)
-    {
-        var pattern =
-            SyntaxFactory.ConstantPattern(
-                literalExpression.WithLeadingTrivia().WithTrailingTrivia());
-
-        if (isEquals)
-        {
-            // expr == literal → expr is literal
-            return
-                SyntaxFactory.IsPatternExpression(
-                    checkedExpression.WithTrailingTrivia(s_singleSpace),
-                    SyntaxFactory.Token(SyntaxKind.IsKeyword)
-                    .WithTrailingTrivia(s_singleSpace),
-                    pattern)
-                .WithLeadingTrivia(originalNode.GetLeadingTrivia())
-                .WithTrailingTrivia(originalNode.GetTrailingTrivia());
-        }
-        else
-        {
-            // expr != literal → expr is not literal
-            return
-                SyntaxFactory.IsPatternExpression(
-                    checkedExpression.WithTrailingTrivia(s_singleSpace),
-                    SyntaxFactory.Token(SyntaxKind.IsKeyword)
-                    .WithTrailingTrivia(s_singleSpace),
-                    SyntaxFactory.UnaryPattern(
-                        SyntaxFactory.Token(SyntaxKind.NotKeyword)
-                        .WithTrailingTrivia(s_singleSpace),
-                        pattern))
-                .WithLeadingTrivia(originalNode.GetLeadingTrivia())
-                .WithTrailingTrivia(originalNode.GetTrailingTrivia());
-        }
     }
 
 

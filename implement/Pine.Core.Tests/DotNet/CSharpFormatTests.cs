@@ -818,8 +818,6 @@ public class CSharpFormatTests
                 dict[CommonReusedValues.List_6a38b355] = Dispatch_6a38b355;
 
                 dict[simple_key] = method_call(param1, param2);
-
-                dict[simple_key] = method_call(param1, param3 == 123);
             }
             """";
 
@@ -833,8 +831,6 @@ public class CSharpFormatTests
                 dict[CommonReusedValues.List_6a38b355] = Dispatch_6a38b355;
 
                 dict[simple_key] = method_call(param1, param2);
-
-                dict[simple_key] = method_call(param1, param3 is 123);
             }
             """";
 
@@ -980,167 +976,6 @@ public class CSharpFormatTests
             """";
 
         AssertFormattedSyntax(inputSyntaxText, inputSyntaxText, scriptMode: true);
-    }
-
-
-    [Fact]
-    public void Replaces_equals_equals_null_with_is_null()
-    {
-        var inputSyntaxText =
-            """"
-            if (x == null)
-            {
-                DoSomething();
-            }
-            """";
-
-        var expectedFormattedText =
-            """"
-            if (x is null)
-            {
-                DoSomething();
-            }
-            """";
-
-        AssertFormattedSyntax(inputSyntaxText, expectedFormattedText, scriptMode: true);
-    }
-
-
-    [Fact]
-    public void Replaces_not_equals_null_with_is_not_null()
-    {
-        var inputSyntaxText =
-            """"
-            if (x != null)
-            {
-                DoSomething();
-            }
-            """";
-
-        var expectedFormattedText =
-            """"
-            if (x is not null)
-            {
-                DoSomething();
-            }
-            """";
-
-        AssertFormattedSyntax(inputSyntaxText, expectedFormattedText, scriptMode: true);
-    }
-
-
-    [Fact]
-    public void Replaces_equals_equals_integer_literal_with_is()
-    {
-        var inputSyntaxText =
-            """"
-            if (count == 0)
-            {
-                DoSomething();
-            }
-            """";
-
-        var expectedFormattedText =
-            """"
-            if (count is 0)
-            {
-                DoSomething();
-            }
-            """";
-
-        AssertFormattedSyntax(inputSyntaxText, expectedFormattedText, scriptMode: true);
-    }
-
-
-    [Fact]
-    public void Replaces_not_equals_integer_literal_with_is_not()
-    {
-        var inputSyntaxText =
-            """"
-            if (count != 0)
-            {
-                DoSomething();
-            }
-            """";
-
-        var expectedFormattedText =
-            """"
-            if (count is not 0)
-            {
-                DoSomething();
-            }
-            """";
-
-        AssertFormattedSyntax(inputSyntaxText, expectedFormattedText, scriptMode: true);
-    }
-
-
-    [Fact]
-    public void Replaces_equals_equals_string_literal_with_is()
-    {
-        var inputSyntaxText =
-            """"
-            if (name == "hello")
-            {
-                DoSomething();
-            }
-            """";
-
-        var expectedFormattedText =
-            """"
-            if (name is "hello")
-            {
-                DoSomething();
-            }
-            """";
-
-        AssertFormattedSyntax(inputSyntaxText, expectedFormattedText, scriptMode: true);
-    }
-
-
-    [Fact]
-    public void Replaces_not_equals_string_literal_with_is_not()
-    {
-        var inputSyntaxText =
-            """"
-            if (name != "hello")
-            {
-                DoSomething();
-            }
-            """";
-
-        var expectedFormattedText =
-            """"
-            if (name is not "hello")
-            {
-                DoSomething();
-            }
-            """";
-
-        AssertFormattedSyntax(inputSyntaxText, expectedFormattedText, scriptMode: true);
-    }
-
-
-    [Fact]
-    public void Does_not_replace_comparison_between_two_variables()
-    {
-        var inputSyntaxText =
-            """"
-            if (x == y)
-            {
-                DoSomething();
-            }
-            """";
-
-        var expectedFormattedText =
-            """"
-            if (x == y)
-            {
-                DoSomething();
-            }
-            """";
-
-        AssertFormattedSyntax(inputSyntaxText, expectedFormattedText, scriptMode: true);
     }
 
 
