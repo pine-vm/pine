@@ -11,7 +11,7 @@ public class OptimizeAndEmitStringToListTests
     public void Parse_and_emit_optimized_String_toList()
     {
         var elmModuleText =
-            """
+            """"
             module Test exposing (..)
 
             
@@ -45,7 +45,7 @@ public class OptimizeAndEmitStringToListTests
                         (Pine_kernel.concat [ list, [ nextChar ] ])
                         blob
             
-            """;
+            """";
 
         var parseCache = new PineVMParseCache();
 
@@ -78,44 +78,29 @@ public class OptimizeAndEmitStringToListTests
             """"
             public static class Test
             {
-                public static PineValue toListRecursive(
-                    PineValue param_1_0,
-                    PineValue param_1_1,
-                    PineValue param_1_2)
+                public static PineValue toListRecursive(PineValue param_1_0, PineValue param_1_1, PineValue param_1_2)
                 {
-                    PineValue local_param_1_0 =
-                        param_1_0;
-
-                    ImmutableConcatBuilder local_param_1_1 =
-                        ImmutableConcatBuilder.Create(
-                            [param_1_1]);
-
-                    PineValue local_param_1_2 =
-                        param_1_2;
+                    PineValue local_param_1_0 = param_1_0;
+                    ImmutableConcatBuilder local_param_1_1 = ImmutableConcatBuilder.Create([param_1_1]);
+                    PineValue local_param_1_2 = param_1_2;
 
                     while (true)
                     {
                         PineValue local_000 =
-                            KernelFunctionFused.SkipAndTake(takeCount: 4, skipCountValue: local_param_1_0, argument: local_param_1_2);
+                            KernelFunctionFused.SkipAndTake(
+                                takeCount: 4,
+                                skipCountValue: local_param_1_0,
+                                argument: local_param_1_2);
 
-                        if (KernelFunctionSpecialized.length_as_int(local_000) == 0)
+                        if (KernelFunctionSpecialized.length_as_int(local_000) is 0)
                         {
                             return local_param_1_1.Evaluate();
                         }
 
                         {
-                            PineValue local_param_1_0_temp =
-                                KernelFunctionSpecialized.int_add(4, local_param_1_0);
-
-                            local_param_1_1 =
-                                local_param_1_1.AppendItems(
-                                    [
-                                        PineValue.List(
-                                            [local_000])
-                                    ]);
-
-                            local_param_1_0 =
-                                local_param_1_0_temp;
+                            PineValue local_param_1_0_temp = KernelFunctionSpecialized.int_add(4, local_param_1_0);
+                            local_param_1_1 = local_param_1_1.AppendItems([PineValue.List([local_000])]);
+                            local_param_1_0 = local_param_1_0_temp;
                         }
 
                         continue;

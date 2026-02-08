@@ -43,26 +43,19 @@ public class OptimizeAndEmitStringTrimTests
             {
                 public static PineValue trim(PineValue param_1_0)
                 {
-                    PineValue local_000 =
-                        PineValueExtension.ValueFromPathOrEmptyList(
-                            param_1_0,
-                            [1, 0]);
+                    PineValue local_000 = PineValueExtension.ValueFromPathOrEmptyList(param_1_0, [1, 0]);
 
                     return
                         PineValue.List(
                             [
-                                CommonReusedValues.Blob_Str_String,
-                                PineValue.List(
-                                    [
-                                        KernelFunctionFused.TakeAndSkip(
-                                            skipCountValue:
-                                            Global_Anonymous.zzz_anon_7b433b8b_d4fe90b2(CommonReusedValues.Blob_Int_0, local_000),
-                                            takeCountValue:
-                                            Global_Anonymous.zzz_anon_627f403e_dca18c16(
-                                                KernelFunction.length(local_000),
-                                                local_000),
-                                            argument: local_000)
-                                    ])
+                            CommonReusedValues.Blob_Str_String,
+                            PineValue.List(
+                                [
+                                KernelFunctionFused.TakeAndSkip(
+                                    skipCountValue: Global_Anonymous.zzz_anon_7b433b8b_d4fe90b2(CommonReusedValues.Blob_Int_0, local_000),
+                                    takeCountValue: Global_Anonymous.zzz_anon_627f403e_dca18c16(KernelFunction.length(local_000), local_000),
+                                    argument: local_000)
+                                ])
                             ]);
                 }
             }
@@ -73,15 +66,10 @@ public class OptimizeAndEmitStringTrimTests
             """"
             public static class Global_Anonymous
             {
-                public static PineValue zzz_anon_627f403e_dca18c16(
-                    PineValue param_1_0,
-                    PineValue param_1_1)
+                public static PineValue zzz_anon_627f403e_dca18c16(PineValue param_1_0, PineValue param_1_1)
                 {
-                    PineValue local_param_1_0 =
-                        param_1_0;
-
-                    PineValue local_param_1_1 =
-                        param_1_1;
+                    PineValue local_param_1_0 = param_1_0;
+                    PineValue local_param_1_1 = param_1_1;
 
                     while (true)
                     {
@@ -90,19 +78,14 @@ public class OptimizeAndEmitStringTrimTests
                             return CommonReusedValues.Blob_Int_0;
                         }
 
-                        if (Global_Anonymous.zzz_anon_d97a2014_dda26649(
-                            KernelFunctionFused.SkipAndTake(
+                        if (Global_Anonymous.zzz_anon_d97a2014_dda26649(KernelFunctionFused.SkipAndTake(
                                 takeCount: 4,
-                                skipCountValue:
-                                KernelFunctionSpecialized.int_add(-4, local_param_1_0),
+                                skipCountValue: KernelFunctionSpecialized.int_add(-4, local_param_1_0),
                                 argument: local_param_1_1)) == PineKernelValues.TrueValue)
                         {
                             {
-                                PineValue local_param_1_0_temp =
-                                    KernelFunctionSpecialized.int_add(-4, local_param_1_0);
-
-                                local_param_1_0 =
-                                    local_param_1_0_temp;
+                                PineValue local_param_1_0_temp = KernelFunctionSpecialized.int_add(-4, local_param_1_0);
+                                local_param_1_0 = local_param_1_0_temp;
                             }
 
                             continue;
@@ -113,22 +96,21 @@ public class OptimizeAndEmitStringTrimTests
                 }
 
 
-                public static PineValue zzz_anon_7b433b8b_d4fe90b2(
-                    PineValue param_1_0,
-                    PineValue param_1_1)
-                {
-                    PineValue local_param_1_0 =
-                        param_1_0;
 
-                    PineValue local_param_1_1 =
-                        param_1_1;
+                public static PineValue zzz_anon_7b433b8b_d4fe90b2(PineValue param_1_0, PineValue param_1_1)
+                {
+                    PineValue local_param_1_0 = param_1_0;
+                    PineValue local_param_1_1 = param_1_1;
 
                     while (true)
                     {
                         PineValue local_000 =
-                            KernelFunctionFused.SkipAndTake(takeCount: 4, skipCountValue: local_param_1_0, argument: local_param_1_1);
+                            KernelFunctionFused.SkipAndTake(
+                                takeCount: 4,
+                                skipCountValue: local_param_1_0,
+                                argument: local_param_1_1);
 
-                        if (KernelFunctionSpecialized.length_as_int(local_000) == 0)
+                        if (KernelFunctionSpecialized.length_as_int(local_000) is 0)
                         {
                             return local_param_1_0;
                         }
@@ -136,11 +118,8 @@ public class OptimizeAndEmitStringTrimTests
                         if (Global_Anonymous.zzz_anon_d97a2014_dda26649(local_000) == PineKernelValues.TrueValue)
                         {
                             {
-                                PineValue local_param_1_0_temp =
-                                    KernelFunctionSpecialized.int_add(4, local_param_1_0);
-
-                                local_param_1_0 =
-                                    local_param_1_0_temp;
+                                PineValue local_param_1_0_temp = KernelFunctionSpecialized.int_add(4, local_param_1_0);
+                                local_param_1_0 = local_param_1_0_temp;
                             }
 
                             continue;
@@ -149,6 +128,7 @@ public class OptimizeAndEmitStringTrimTests
                         return local_param_1_0;
                     }
                 }
+
 
 
                 public static PineValue zzz_anon_d97a2014_dda26649(PineValue param_1_0)

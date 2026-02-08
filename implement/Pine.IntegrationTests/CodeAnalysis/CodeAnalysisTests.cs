@@ -16,7 +16,7 @@ public class CodeAnalysisTests
     public void Parse_Fibonacci()
     {
         var elmModuleText =
-            """
+            """"
             module Test exposing (..)
 
             fibonacci : Int -> Int
@@ -30,7 +30,7 @@ public class CodeAnalysisTests
                         , fibonacci (Pine_kernel.int_add [ n, -1 ])
                         ]
 
-            """;
+            """";
 
         var parseCache = new PineVMParseCache();
 
@@ -80,7 +80,7 @@ public class CodeAnalysisTests
     public void Parse_Factorial()
     {
         var elmModuleText =
-            """
+            """"
             module Test exposing (..)
 
             factorial : Int -> Int
@@ -94,7 +94,7 @@ public class CodeAnalysisTests
                         , n
                         ]
 
-            """;
+            """";
 
         var parseCache = new PineVMParseCache();
 
@@ -143,7 +143,7 @@ public class CodeAnalysisTests
          * */
 
         var elmModuleText =
-            """
+            """"
             module Test exposing (..)
 
             dictToShuffledList : Dict k v -> List ( k, v )
@@ -154,7 +154,7 @@ public class CodeAnalysisTests
 
                     RBNode_elm_builtin _ key value left right ->
                         Pine_kernel.concat [ dictToShuffledList left, dictToShuffledList right, [ ( key, value ) ] ]
-            """;
+            """";
 
         var parseCache = new PineVMParseCache();
 
@@ -214,7 +214,7 @@ public class CodeAnalysisTests
          * */
 
         var elmModuleText =
-            """
+            """"
             module Test exposing (..)
 
             
@@ -241,7 +241,7 @@ public class CodeAnalysisTests
 
                         _ ->
                             ( 0, -1 )
-            """;
+            """";
 
         var parseCache = new PineVMParseCache();
 
@@ -754,7 +754,7 @@ public class CodeAnalysisTests
          * */
 
         var elmModuleText =
-            """
+            """"
             module Test exposing (..)
 
             idiv : Int -> Int -> Int
@@ -837,7 +837,7 @@ public class CodeAnalysisTests
 
                 else
                     quotient
-            """;
+            """";
 
         var parseCache = new PineVMParseCache();
 
@@ -1731,7 +1731,7 @@ public class CodeAnalysisTests
     public void Parse_Test_hexStringToInt()
     {
         var elmModuleText =
-            """
+            """"
             module Test exposing (..)
 
 
@@ -1834,7 +1834,7 @@ public class CodeAnalysisTests
                     -- 'F'
                     _ ->
                         15
-            """;
+            """";
 
         var parseCache = new PineVMParseCache();
 
@@ -2075,7 +2075,7 @@ public class CodeAnalysisTests
     public void Parse_Test_apply_function_from_other_module()
     {
         var elmModuleTestListText =
-            """
+            """"
             module TestList exposing (..)
 
 
@@ -2092,10 +2092,10 @@ public class CodeAnalysisTests
                 else
                     repeatHelp (Pine_kernel.concat [ [ value ], result ]) (n - 1) value
 
-            """;
+            """";
 
         var elmModuleTestText =
-            """
+            """"
             module Test exposing (..)
 
             import TestList
@@ -2107,7 +2107,7 @@ public class CodeAnalysisTests
                     (Pine_kernel.int_mul [ n, 7 ])
                     item
 
-            """;
+            """";
 
         var parseCache = new PineVMParseCache();
 

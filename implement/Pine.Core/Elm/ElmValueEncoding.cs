@@ -104,7 +104,7 @@ public static class ElmValueEncoding
 
         var firstByte = blobValue.Bytes.Span[0];
 
-        if (firstByte is 2 || firstByte is 4)
+        if (firstByte is 2 or 4)
         {
             var asBigIntResult =
                 IntegerEncoding.ParseSignedIntegerRelaxed(blobValue);

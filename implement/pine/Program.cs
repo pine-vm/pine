@@ -30,6 +30,7 @@ using System.Linq;
 using System.Text;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
+
 using static ElmTime.Platform.WebService.Configuration;
 
 namespace ElmTime;
@@ -38,12 +39,15 @@ public class Program
 {
     public static string AppVersionId => "0.4.28";
 
+
     private static int AdminInterfaceDefaultPort => 4000;
+
 
     private static int Main(string[] args)
     {
         return MainLessDispose(args, dynamicPGOShare: null);
     }
+
 
     private static int MainLessDispose(
         string[] args,
@@ -55,10 +59,13 @@ public class Program
         var rootCommand = new RootCommand("Pine: Elm DevTools and runtime\nTo get help or report an issue, see https://github.com/pine-vm/pine/discussions");
 
         // Custom -v version option that shows "pine X.X.X" format
-        var versionOption = new Option<bool>("-v")
-        {
-            Description = "Show version information"
-        };
+        var versionOption =
+            new Option<bool>("-v")
+            {
+                Description =
+                "Show version information"
+            };
+
         rootCommand.Add(versionOption);
 
         // Install command
@@ -80,6 +87,7 @@ public class Program
         rootCommand.Add(CreateElmTestRsCommand());
         rootCommand.Add(CreateMakeCommand());
         rootCommand.Add(ElmFormatCommand.CreateElmFormatCommand());
+        rootCommand.Add(Pine.CSharp.CLI.CSharpFormatCommand.CreateCSharpFormatCommand());
         rootCommand.Add(CreateDescribeCommand());
         rootCommand.Add(CreateRunCacheServerCommand());
         rootCommand.Add(CreateRunFileServerCommand());
@@ -109,11 +117,13 @@ public class Program
         return parseResult.Invoke();
     }
 
+
     private static Command CreateInstallCommand()
     {
         var (commandName, checkInstallation) = CheckIfExecutableIsRegisteredOnPath();
 
-        var command = new Command("install", "Install the '" + commandName + "' command for the current user account.");
+        var command =
+            new Command("install", "Install the '" + commandName + "' command for the current user account.");
 
         command.SetAction((parseResult) =>
         {
@@ -122,6 +132,7 @@ public class Program
 
         return command;
     }
+
 
     private static Command CreateUserSecretsCommand()
     {
@@ -157,14 +168,17 @@ public class Program
         return command;
     }
 
+
     private static Command CreateHelpCommand(RootCommand rootCommand)
     {
         var command = new Command("help", "Explain available commands and how to use the command-line interface.");
 
-        var allOption = new Option<bool>("--all", ["-a"])
-        {
-            Description = "Show all commands including hidden ones"
-        };
+        var allOption =
+            new Option<bool>("--all", ["-a"])
+            {
+                Description =
+                "Show all commands including hidden ones"
+            };
 
         command.Add(allOption);
 
@@ -187,6 +201,7 @@ public class Program
         return command;
     }
 
+
     private static void ShowCustomHelp(RootCommand rootCommand)
     {
         var checkedInstallation = CheckIfExecutableIsRegisteredOnPath().checkInstallation();
@@ -194,25 +209,27 @@ public class Program
 
         // Optional short descriptions for overview display
         // When null, uses the command's full Description property
-        var shortDescriptions = new Dictionary<string, string?>
-        {
-            ["install"] = "Install the command for the current user account.",
-            ["interactive"] = null,
-            ["compile"] = "Compile app source code.",
-            ["elm-test-rs"] = "Compile and run tests.",
-            ["make"] = "Compile Elm code.",
-            ["elm-format"] = "Format Elm module files.",
-            ["describe"] = "Describe a composition.",
-            ["run"] = null,
-            ["run-server"] = "Run a server with a web-based admin interface.",
-            ["deploy"] = "Deploy an app to an Elm backend process.",
-            ["copy-app-state"] = "Copy the state of an Elm backend app.",
-            ["copy-process"] = "Copy all files needed to restore a process.",
-            ["list-functions"] = "List the functions exposed by an Elm app.",
-            ["apply-function"] = "Apply an Elm function on a database.",
-            ["truncate-process-history"] = "Remove parts of the process history.",
-            ["run-file-server"] = null,
-        };
+        var shortDescriptions =
+            new Dictionary<string, string?>
+            {
+                ["install"] = "Install the command for the current user account.",
+                ["interactive"] = null,
+                ["compile"] = "Compile app source code.",
+                ["elm-test-rs"] = "Compile and run tests.",
+                ["make"] = "Compile Elm code.",
+                ["elm-format"] = "Format Elm module files.",
+                ["csharp"] = "C# development tools.",
+                ["describe"] = "Describe a composition.",
+                ["run"] = null,
+                ["run-server"] = "Run a server with a web-based admin interface.",
+                ["deploy"] = "Deploy an app to an Elm backend process.",
+                ["copy-app-state"] = "Copy the state of an Elm backend app.",
+                ["copy-process"] = "Copy all files needed to restore a process.",
+                ["list-functions"] = "List the functions exposed by an Elm app.",
+                ["apply-function"] = "Apply an Elm function on a database.",
+                ["truncate-process-history"] = "Remove parts of the process history.",
+                ["run-file-server"] = null,
+            };
 
         var commandsByName = rootCommand.Subcommands.ToDictionary(c => c.Name, c => c);
 
@@ -222,24 +239,30 @@ public class Program
                 return "";
 
             // Use short description if provided, otherwise fall back to full description
-            return shortDescriptions.TryGetValue(commandName, out var shortDesc) && shortDesc != null
-                ? shortDesc
-                : command.Description ?? "";
+            return
+                shortDescriptions.TryGetValue(commandName, out var shortDesc) && shortDesc is not null
+                ?
+                shortDesc
+                :
+                command.Description ?? "";
         }
 
         var setupGroupCommandNames = new List<string>();
+
         if (!checkedInstallation.executableIsRegisteredOnPath)
         {
             setupGroupCommandNames.Add("install");
         }
 
-        var developCommandNames = new List<string>
+        var developCommandNames =
+            new List<string>
         {
             "interactive",
             "compile",
             "elm-test-rs",
             "make",
             "elm-format",
+            "csharp",
             "describe",
         };
 
@@ -263,6 +286,7 @@ public class Program
         if (setupGroupCommandNames.Count is not 0)
         {
             Console.WriteLine("\nSet up your development environment:");
+
             foreach (var name in setupGroupCommandNames)
             {
                 Console.WriteLine($"   {name,-30} {GetDisplayDescription(name)}");
@@ -270,12 +294,14 @@ public class Program
         }
 
         Console.WriteLine("\nDevelop and learn:");
+
         foreach (var name in developCommandNames)
         {
             Console.WriteLine($"   {name,-30} {GetDisplayDescription(name)}");
         }
 
         Console.WriteLine("\nRun apps, operate servers and maintain live systems:");
+
         foreach (var name in operateCommandNames)
         {
             Console.WriteLine($"   {name,-30} {GetDisplayDescription(name)}");
@@ -284,6 +310,7 @@ public class Program
         Console.WriteLine($"\n'{elmFsCommandName} help -a' lists available subcommands.");
         Console.WriteLine($"See '{elmFsCommandName} help <command>' to read about a specific subcommand.");
     }
+
 
     private static void ShowAllCommands(RootCommand rootCommand)
     {
@@ -297,12 +324,14 @@ public class Program
         }
 
         Console.WriteLine("\nOptions:");
+
         foreach (var option in rootCommand.Options)
         {
             var aliases = string.Join(", ", option.Aliases);
             Console.WriteLine($"  {aliases,-25} {option.Description}");
         }
     }
+
 
     private static Command CreateSelfTestCommand()
     {
@@ -316,9 +345,13 @@ public class Program
         return command;
     }
 
+
     private static Command CreateRunServerCommand()
     {
-        var command = new Command("run-server", "Run a server with a web-based admin interface. The HTTP API supports deployments, migrations, and other operations to manage your app.");
+        var command =
+            new Command(
+                "run-server",
+                "Run a server with a web-based admin interface. The HTTP API supports deployments, migrations, and other operations to manage your app.");
 
         var adminUrlsDefault = "http://*:" + AdminInterfaceDefaultPort;
 
@@ -328,17 +361,21 @@ public class Program
 
         var deletePreviousProcessOption = new Option<bool>("--delete-previous-process");
 
-        var adminUrlsOption = new Option<string?>("--admin-urls")
-        {
-            Description = "Defaults to '" + adminUrlsDefault + "'."
-        };
+        var adminUrlsOption =
+            new Option<string?>("--admin-urls")
+            {
+                Description =
+                "Defaults to '" + adminUrlsDefault + "'."
+            };
 
         var adminPasswordOption = new Option<string?>("--admin-password");
 
-        var publicAppUrlsOption = new Option<string?>("--public-urls")
-        {
-            Description = "Defaults to '" + string.Join(",", PublicWebHostUrlsDefault) + "'."
-        };
+        var publicAppUrlsOption =
+            new Option<string?>("--public-urls")
+            {
+                Description =
+                "Defaults to '" + string.Join(",", PublicWebHostUrlsDefault) + "'."
+            };
 
         var copyProcessOption = new Option<string?>("--copy-process");
 
@@ -385,7 +422,8 @@ public class Program
 
             webHost.StartAsync().Wait();
 
-            Console.WriteLine("Completed starting the web server with the admin interface at '" + adminInterfaceUrls + "'.");
+            Console.WriteLine(
+                "Completed starting the web server with the admin interface at '" + adminInterfaceUrls + "'.");
 
             webHost.WaitForShutdownAsync().Wait();
 
@@ -394,6 +432,7 @@ public class Program
 
         return command;
     }
+
 
     private static Command CreateRunCommand()
     {

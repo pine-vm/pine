@@ -16,7 +16,7 @@ public class ParserFastTests
     public void ParserFast_benchmark_allPattern()
     {
         var ropeElmModuleText =
-            """
+            """"
             module Rope exposing (..)
 
             type alias Rope a =
@@ -32,10 +32,10 @@ public class ParserFastTests
             empty =
                 Nothing
 
-            """;
+            """";
 
         var rangeElmModuleText =
-            """
+            """"
             module Range exposing (..)
             
             type alias Location =
@@ -51,10 +51,10 @@ public class ParserFastTests
                 , end : Location
                 }
             
-            """;
+            """";
 
         var nodeElmModuleText =
-            """
+            """"
             module Node exposing (..)
 
             import Range exposing (Range)
@@ -63,10 +63,10 @@ public class ParserFastTests
             type Node a
                 = Node Range a
 
-            """;
+            """";
 
         var parserFastElmModuleText =
-            """
+            """"
             module ParserFastTest exposing (..)
 
 
@@ -285,10 +285,10 @@ public class ParserFastTests
                     Bad _ x ->
                         Bad True x
             
-            """;
+            """";
 
         var tokensElmModuleText =
-            """
+            """"
             module TokensTest exposing (..)
 
             import ParserFastTest
@@ -304,11 +304,11 @@ public class ParserFastTests
                 ParserFastTest.symbol ")" ()
 
 
-            """;
+            """";
 
 
         var patternElmModuleText =
-            """
+            """"
             module PatternTest exposing (..)
 
             import Node exposing (Node)
@@ -359,7 +359,7 @@ public class ParserFastTests
                     )
 
             
-            """;
+            """";
 
         var parseCache = new PineVMParseCache();
 
