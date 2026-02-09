@@ -118,12 +118,12 @@ In automated formatting, these line breaks must be inserted starting from the ou
 
 ### Spacing between Statements
 
-If a statement spans multiple lines, it must be separated from previous and following statements by an empty line.
-If a statement spans multiple lines, it must be separated from following comments by an empty line.
+If a statement spans multiple lines, it must be separated from previous and following statements by at least one empty line.
+If a statement spans multiple lines, it must be separated from following comments by at least one empty line.
 
 ### Spacing between Declarations
 
-Type declarations, method declarations and member declarations must be separated by two empty lines.
+Type declarations, method declarations and member declarations must be separated by at least two empty lines.
 
 ### Conditional Expression
 
@@ -149,14 +149,14 @@ count < 13
 
 ### Switch Expression
 
-+ If a switch expression arm spans multiple lines, it must be separated from other arms by an empty line.
++ If a switch expression arm spans multiple lines, it must be separated from other arms by at least one empty line.
 + If a switch expression arm spans multiple lines, the expression must start on a new line after the pattern and arrow.
-+ If the pattern syntax of a switch expression arm is `DiscardPattern`, it must always be separated from other arms by an empty line.
++ If the pattern syntax of a switch expression arm is `DiscardPattern`, it must always be separated from other arms by at least one empty line.
 + If a switch expression arm contains a `throw` expression, the expression must be placed on a new line after the pattern and arrow.
 
 ### Switch Statement
 
-Every section of a switch statement must be separated from other sections by an empty line.
+Every section of a switch statement must be separated from other sections by at least one empty line.
 
 ### Return Statement
 
