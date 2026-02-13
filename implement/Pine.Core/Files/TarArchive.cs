@@ -22,7 +22,7 @@ public static class TarArchive
     public static FileTree TreeWithStringPathFromTarArchive(ReadOnlyMemory<byte> tarArchive)
     {
         using var archiveReader =
-            SharpCompress.Archives.Tar.TarArchive.Open(new MemoryStream(tarArchive.ToArray()));
+            SharpCompress.Archives.Tar.TarArchive.OpenArchive(new MemoryStream(tarArchive.ToArray()));
 
         return TreeWithStringPathFromTarArchiveEntries(archiveReader.Entries);
     }
@@ -35,7 +35,7 @@ public static class TarArchive
     /// <param name="entries">A collection of TAR archive entries to include in the tree. Only file entries are processed; directory entries
     /// are ignored.</param>
     public static FileTree TreeWithStringPathFromTarArchiveEntries(
-        IEnumerable<SharpCompress.Archives.Tar.TarArchiveEntry> entries)
+        IEnumerable<SharpCompress.Archives.IArchiveEntry> entries)
     {
         var treeEntries =
             entries
