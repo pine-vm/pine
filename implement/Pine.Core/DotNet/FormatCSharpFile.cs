@@ -1,0 +1,1760 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+
+namespace Pine.Core.DotNet;
+
+/// <summary>
+/// New C# formatter using a multi-pass convergence loop architecture.
+/// Each pass formats the syntax tree, converts to text, re-parses, and compares
+/// with the previous text. The loop stops when text is identical between passes
+/// (convergence) or after a maximum number of iterations.
+/// <para>
+/// All methods are static and pure — no mutable instance state.
+/// </para>
+/// <para>
+/// For the formatting specifications, see 'csharp-coding-guidelines.md'
+/// </para>
+/// </summary>
+public static class FormatCSharpFile
+{
+    private const int MaxPasses = 10;
+    private const int IndentSize = 4;
+    private const int MaximumLineLength = 120;
+
+    /// <summary>Cached line-feed trivia token.</summary>
+    private static readonly SyntaxTrivia s_lineFeed = SyntaxFactory.LineFeed;
+
+    /// <summary>Cached single-space trivia token.</summary>
+    private static readonly SyntaxTrivia s_space = SyntaxFactory.Space;
+
+    // ──────────────────────────────────────────────────────────
+    // Public entry point
+    // ──────────────────────────────────────────────────────────
+
+    /// <summary>Formats a syntax tree using multi-pass convergence until stable.</summary>
+    public static SyntaxTree FormatSyntaxTree(SyntaxTree syntaxTree)
+    {
+        var previousText = syntaxTree.GetRoot().ToFullString();
+
+        for (var pass = 0; pass < MaxPasses; pass++)
+        {
+            var formatted = FormatSinglePass(syntaxTree);
+            var formattedText = formatted.GetRoot().ToFullString();
+
+            if (formattedText == previousText)
+                return formatted;
+
+            previousText = formattedText;
+            syntaxTree = formatted;
+        }
+
+        return syntaxTree;
+    }
+
+    /// <summary>Runs one formatting pass over the entire syntax tree.</summary>
+    private static SyntaxTree FormatSinglePass(SyntaxTree syntaxTree)
+    {
+        var root = syntaxTree.GetRoot();
+        var formattedRoot = FormatNode(root, 0);
+        return syntaxTree.WithRootAndOptions(formattedRoot, syntaxTree.Options);
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // Helpers
+    // ──────────────────────────────────────────────────────────
+
+    /// <summary>Creates whitespace trivia for the given indentation level.</summary>
+    private static SyntaxTrivia Indent(int level) =>
+        level <= 0 ? SyntaxFactory.Whitespace("") : SyntaxFactory.Whitespace(new string(' ', level * IndentSize));
+
+    /// <summary>Returns true if the trivia is an end-of-line token.</summary>
+    private static bool IsLineBreak(SyntaxTrivia t) =>
+        t.IsKind(SyntaxKind.EndOfLineTrivia);
+
+    /// <summary>Returns true if the trivia is a whitespace token.</summary>
+    private static bool IsWhitespace(SyntaxTrivia t) =>
+        t.IsKind(SyntaxKind.WhitespaceTrivia);
+
+    /// <summary>
+    /// Checks if the node's own text (excluding leading trivia, but including trailing)
+    /// spans multiple lines. This avoids counting preceding comments as part of the node.
+    /// </summary>
+    private static bool SpansMultipleLines(SyntaxNode node)
+    {
+        var loc = node.GetLocation();
+        if (loc != Location.None)
+        {
+            var span = loc.GetLineSpan();
+            return span.EndLinePosition.Line > span.StartLinePosition.Line;
+        }
+        // Fallback for nodes not part of a SyntaxTree (e.g. modified via .With...())
+        var text = node.ToFullString();
+        var nl = text.IndexOf('\n');
+        return nl >= 0 && nl < text.Length - 1;
+    }
+
+    /// <summary>Checks if the given text spans multiple lines.</summary>
+    private static bool SpansMultipleLines(string text)
+    {
+        var nl = text.IndexOf('\n');
+        return nl >= 0 && nl < text.Length - 1;
+    }
+
+    /// <summary>Returns the column length of the line where the node starts, or 0 if not available.</summary>
+    private static int LineEndColumn(SyntaxNode node)
+    {
+        var loc = node.GetLocation();
+        if (loc == Location.None)
+            return 0;
+
+        var lineSpan = loc.GetLineSpan();
+        var src = node.SyntaxTree.GetText();
+        return src.Lines[lineSpan.StartLinePosition.Line].ToString().TrimEnd().Length;
+    }
+
+    /// <summary>Returns the start line number of the given token.</summary>
+    private static int LineOf(SyntaxToken t) =>
+        t.GetLocation().GetLineSpan().StartLinePosition.Line;
+
+    /// <summary>Returns the start line number of the given node.</summary>
+    private static int LineOf(SyntaxNode n) =>
+        n.GetLocation().GetLineSpan().StartLinePosition.Line;
+
+    /// <summary>Returns the end line number of the given node.</summary>
+    private static int EndLineOf(SyntaxNode n) =>
+        n.GetLocation().GetLineSpan().EndLinePosition.Line;
+
+    /// <summary>
+    /// True when the original node has a single-line block body like <c>{ }</c> or <c>{ return; }</c>.
+    /// </summary>
+    private static bool IsSingleLineBlock(BlockSyntax block)
+    {
+        var openLine = LineOf(block.OpenBraceToken);
+        var closeLine = LineOf(block.CloseBraceToken);
+        return openLine == closeLine;
+    }
+
+    /// <summary>
+    /// Count consecutive EndOfLineTrivia in a trivia list.
+    /// </summary>
+    private static int CountLineBreaks(SyntaxTriviaList trivia) =>
+        trivia.Count(t => IsLineBreak(t));
+
+    /// <summary>
+    /// Rebuild leading trivia: preserve all comments/structured trivia, 
+    /// replace whitespace with correct indent, ensure correct number of leading line breaks.
+    /// </summary>
+    private static SyntaxTriviaList RebuildLeading(SyntaxTriviaList orig, int indent)
+    {
+        var r = new List<SyntaxTrivia>();
+        var atLineStart = true;
+
+        foreach (var t in orig)
+        {
+            if (IsLineBreak(t))
+            {
+                r.Add(s_lineFeed);
+                atLineStart = true;
+            }
+            else if (IsWhitespace(t))
+            {
+                // skip — we re-add indent as needed
+            }
+            else if (t.HasStructure)
+            {
+                // Structured trivia (doc comments, preprocessor directives)
+                // They contain their own internal newlines.
+                // We need indent before them.
+                if (atLineStart)
+                    r.Add(Indent(indent));
+                r.Add(t);
+                // Structured trivia like doc comments end with a newline internally,
+                // so the next token starts at beginning of line
+                atLineStart = true;
+            }
+            else
+            {
+                // non-whitespace: single-line comment, etc.
+                if (atLineStart)
+                    r.Add(Indent(indent));
+                r.Add(t);
+                atLineStart = false;
+            }
+        }
+
+        // Final indent for the token itself
+        if (atLineStart)
+            r.Add(Indent(indent));
+
+        return [.. r];
+    }
+
+    /// <summary>
+    /// Build leading trivia with at least <paramref name="minBreaks"/> line breaks,
+    /// preserving any comments from the original trivia.
+    /// </summary>
+    private static SyntaxTriviaList EnsureLeadingBreaks(SyntaxTriviaList orig, int minBreaks, int indent)
+    {
+        // Collect all non-whitespace trivia (comments, preprocessor, etc.)
+        var preserved = new List<SyntaxTrivia>();
+        foreach (var t in orig)
+        {
+            if (!IsLineBreak(t) && !IsWhitespace(t))
+                preserved.Add(t);
+        }
+
+        var r = new List<SyntaxTrivia>();
+        for (var i = 0; i < minBreaks; i++)
+            r.Add(s_lineFeed);
+
+        foreach (var t in preserved)
+        {
+            r.Add(Indent(indent));
+            r.Add(t);
+            // Doc comments include their own trailing newline; others need one
+            if (!t.HasStructure)
+                r.Add(s_lineFeed);
+        }
+
+        r.Add(Indent(indent));
+        return [.. r];
+    }
+
+    /// <summary>Removes all whitespace and line-break trivia from a trivia list.</summary>
+    private static SyntaxTriviaList StripWhitespace(SyntaxTriviaList trivia)
+    {
+        var r = new List<SyntaxTrivia>();
+        foreach (var t in trivia)
+        {
+            if (!IsWhitespace(t) && !IsLineBreak(t))
+                r.Add(t);
+        }
+        return [.. r];
+    }
+
+
+    // ──────────────────────────────────────────────────────────
+    // Main dispatch
+    // ──────────────────────────────────────────────────────────
+
+    /// <summary>Dispatches a syntax node to the appropriate formatting method.</summary>
+    private static SyntaxNode FormatNode(SyntaxNode node, int indent)
+    {
+        return node switch
+        {
+            CompilationUnitSyntax n => FormatCompilationUnit(n, indent),
+
+            // Declarations
+            FileScopedNamespaceDeclarationSyntax n => FormatFileScopedNamespace(n, indent),
+            NamespaceDeclarationSyntax n => FormatNamespaceDeclaration(n, indent),
+            ClassDeclarationSyntax n => FormatTypeDeclaration(n, indent),
+            StructDeclarationSyntax n => FormatTypeDeclaration(n, indent),
+            RecordDeclarationSyntax n => FormatTypeDeclaration(n, indent),
+            InterfaceDeclarationSyntax n => FormatTypeDeclaration(n, indent),
+            EnumDeclarationSyntax n => FormatEnumDeclaration(n, indent),
+            DelegateDeclarationSyntax => node,
+            MethodDeclarationSyntax n => FormatMethodDeclaration(n, indent),
+            ConstructorDeclarationSyntax n => FormatConstructorDeclaration(n, indent),
+            DestructorDeclarationSyntax => node,
+            OperatorDeclarationSyntax => node,
+            ConversionOperatorDeclarationSyntax => node,
+            PropertyDeclarationSyntax n => FormatPropertyDeclaration(n, indent),
+            IndexerDeclarationSyntax => node,
+            EventDeclarationSyntax => node,
+            EventFieldDeclarationSyntax => node,
+            FieldDeclarationSyntax n => FormatFieldDeclaration(n, indent),
+            LocalFunctionStatementSyntax n => FormatLocalFunctionStatement(n, indent),
+
+            // Statements
+            BlockSyntax n => FormatBlock(n, indent),
+            LocalDeclarationStatementSyntax n => FormatLocalDeclarationStatement(n, indent),
+            ExpressionStatementSyntax n => FormatExpressionStatement(n, indent),
+            ReturnStatementSyntax n => FormatReturnStatement(n, indent),
+            IfStatementSyntax n => FormatIfStatement(n, indent),
+            ElseClauseSyntax n => FormatElseClause(n, indent),
+            WhileStatementSyntax n => FormatWhileStatement(n, indent),
+            ForStatementSyntax n => FormatForStatement(n, indent),
+            ForEachStatementSyntax n => FormatForEachStatement(n, indent),
+            DoStatementSyntax n => FormatDoStatement(n, indent),
+            SwitchStatementSyntax n => FormatSwitchStatement(n, indent),
+            TryStatementSyntax n => FormatTryStatement(n, indent),
+            ThrowStatementSyntax n => FormatThrowStatement(n, indent),
+            UsingStatementSyntax n => FormatUsingStatement(n, indent),
+            LockStatementSyntax n => FormatLockStatement(n, indent),
+            BreakStatementSyntax => node,
+            ContinueStatementSyntax => node,
+            YieldStatementSyntax => node,
+            EmptyStatementSyntax => node,
+            LabeledStatementSyntax => node,
+            GotoStatementSyntax => node,
+            CheckedStatementSyntax => node,
+            UnsafeStatementSyntax => node,
+            FixedStatementSyntax => node,
+            GlobalStatementSyntax n => FormatGlobalStatement(n, indent),
+
+            // Expressions
+            InvocationExpressionSyntax n => FormatInvocationExpression(n, indent),
+            ObjectCreationExpressionSyntax n => FormatObjectCreationExpression(n, indent),
+            ImplicitObjectCreationExpressionSyntax n => FormatImplicitObjectCreationExpression(n, indent),
+            MemberAccessExpressionSyntax n => FormatMemberAccessExpression(n, indent),
+            ConditionalExpressionSyntax n => FormatConditionalExpression(n, indent),
+            SwitchExpressionSyntax n => FormatSwitchExpression(n, indent),
+            CollectionExpressionSyntax n => FormatCollectionExpression(n, indent),
+            InitializerExpressionSyntax n => FormatInitializerExpression(n, indent),
+            AssignmentExpressionSyntax n => FormatAssignmentExpression(n, indent),
+            ParenthesizedLambdaExpressionSyntax n => FormatParenthesizedLambdaExpression(n, indent),
+            SimpleLambdaExpressionSyntax n => FormatSimpleLambdaExpression(n, indent),
+            BinaryExpressionSyntax n => FormatBinaryExpression(n, indent),
+
+            ThrowExpressionSyntax => node,
+            ParenthesizedExpressionSyntax n => n.WithExpression((ExpressionSyntax)FormatNode(n.Expression, indent)),
+            ConditionalAccessExpressionSyntax n => n.WithExpression((ExpressionSyntax)FormatNode(n.Expression, indent)),
+            CastExpressionSyntax n => n.WithExpression((ExpressionSyntax)FormatNode(n.Expression, indent)),
+            AwaitExpressionSyntax n => n.WithExpression((ExpressionSyntax)FormatNode(n.Expression, indent)),
+
+            // Argument/Parameter lists
+            ArgumentListSyntax n => FormatArgumentList(n, indent),
+            BracketedArgumentListSyntax => node,
+            ParameterListSyntax n => FormatParameterList(n, indent),
+            BracketedParameterListSyntax => node,
+            TypeParameterListSyntax => node,
+
+            // Arrow expression and equals value
+            ArrowExpressionClauseSyntax n => FormatArrowExpressionClause(n, indent),
+            EqualsValueClauseSyntax n => FormatEqualsValueClause(n, indent),
+
+            // Switch parts
+            SwitchExpressionArmSyntax n => FormatSwitchExpressionArm(n, indent),
+            SwitchSectionSyntax n => FormatSwitchSection(n, indent),
+
+            // Catch/finally
+            CatchClauseSyntax n => FormatCatchClause(n, indent),
+            FinallyClauseSyntax n => FormatFinallyClause(n, indent),
+
+            // Using directives
+            UsingDirectiveSyntax => node,
+
+            // Leaf types — return as-is
+            PredefinedTypeSyntax or IdentifierNameSyntax or GenericNameSyntax or
+            QualifiedNameSyntax or AliasQualifiedNameSyntax or NullableTypeSyntax or
+            ArrayTypeSyntax or TupleTypeSyntax or PointerTypeSyntax or RefTypeSyntax or
+            OmittedTypeArgumentSyntax or FunctionPointerTypeSyntax or ScopedTypeSyntax or
+            LiteralExpressionSyntax or ThisExpressionSyntax or BaseExpressionSyntax or
+            DefaultExpressionSyntax or TypeOfExpressionSyntax or SizeOfExpressionSyntax or
+            InterpolatedStringExpressionSyntax or ElementAccessExpressionSyntax or
+            ImplicitArrayCreationExpressionSyntax or ArrayCreationExpressionSyntax or
+            StackAllocArrayCreationExpressionSyntax or ImplicitStackAllocArrayCreationExpressionSyntax or
+            AnonymousObjectCreationExpressionSyntax or AnonymousMethodExpressionSyntax or
+            TupleExpressionSyntax or RefExpressionSyntax or DeclarationExpressionSyntax or
+            IsPatternExpressionSyntax or CheckedExpressionSyntax or MakeRefExpressionSyntax or
+            RefTypeExpressionSyntax or RefValueExpressionSyntax or PostfixUnaryExpressionSyntax or
+            PrefixUnaryExpressionSyntax or RangeExpressionSyntax or WithExpressionSyntax or
+            QueryExpressionSyntax or OmittedArraySizeExpressionSyntax or
+            BaseObjectCreationExpressionSyntax or
+            ConstantPatternSyntax or DeclarationPatternSyntax or DiscardPatternSyntax or
+            RecursivePatternSyntax or VarPatternSyntax or TypePatternSyntax or
+            RelationalPatternSyntax or BinaryPatternSyntax or UnaryPatternSyntax or
+            ParenthesizedPatternSyntax or ListPatternSyntax or SlicePatternSyntax or
+            WhenClauseSyntax or CatchDeclarationSyntax or CatchFilterClauseSyntax or
+            ArgumentSyntax or ParameterSyntax or TypeParameterSyntax or TypeArgumentListSyntax or
+            AttributeListSyntax or AttributeArgumentListSyntax or BaseListSyntax or
+            SimpleBaseTypeSyntax or PrimaryConstructorBaseTypeSyntax or
+            TypeParameterConstraintClauseSyntax or
+            CaseSwitchLabelSyntax or CasePatternSwitchLabelSyntax or DefaultSwitchLabelSyntax or
+            VariableDeclarationSyntax or VariableDeclaratorSyntax or
+            AccessorListSyntax or AccessorDeclarationSyntax or
+            ExpressionElementSyntax or SpreadElementSyntax or
+            InterpolationSyntax or IncompleteMemberSyntax or ExternAliasDirectiveSyntax or
+            ConstructorInitializerSyntax or ImplicitElementAccessSyntax
+                => node,
+
+            // Require an explicit branch for each variant
+            _ =>
+            throw new NotImplementedException(
+                $"Formatting not implemented for node type: {node.GetType().Name}")
+        };
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // Compilation Unit
+    // ──────────────────────────────────────────────────────────
+
+    /// <summary>Formats a compilation unit, including usings and top-level members.</summary>
+    public static CompilationUnitSyntax FormatCompilationUnit(CompilationUnitSyntax node, int indent)
+    {
+        var usings = FormatUsingDirectives(node.Usings);
+        var members = FormatMemberList(node.Members, indent);
+
+        // Ensure blank line between usings and first member
+        // The last using has empty trailing trivia, so we need 2 linebreaks:
+        // one for the newline after the using, and one for the blank line.
+        if (usings.Count > 0 && members.Count > 0)
+        {
+            var first = members[0];
+            var leading = first.GetLeadingTrivia();
+            if (CountLineBreaks(leading) < 2)
+                members = members.Replace(first, first.WithLeadingTrivia(
+                    EnsureLeadingBreaks(leading, 2, indent)));
+        }
+
+        // Ensure file ends with exactly one newline
+        if (members.Count > 0)
+        {
+            var last = members.Last();
+            members = members.Replace(last, last.WithTrailingTrivia(s_lineFeed));
+        }
+        else if (usings.Count > 0)
+        {
+            var last = usings.Last();
+            usings = usings.Replace(last, last.WithTrailingTrivia(s_lineFeed));
+        }
+
+        return node.WithUsings(usings).WithMembers(members);
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // Using Directives
+    // ──────────────────────────────────────────────────────────
+
+    /// <summary>Sorts and groups using directives by kind (regular, alias, static).</summary>
+    private static SyntaxList<UsingDirectiveSyntax> FormatUsingDirectives(SyntaxList<UsingDirectiveSyntax> usings)
+    {
+        if (usings.Count is 0)
+            return usings;
+
+        var regular = new List<UsingDirectiveSyntax>();
+        var statics = new List<UsingDirectiveSyntax>();
+        var aliases = new List<UsingDirectiveSyntax>();
+
+        foreach (var u in usings)
+        {
+            if (u.Alias is not null) aliases.Add(u);
+            else if (u.StaticKeyword != default) statics.Add(u);
+            else regular.Add(u);
+        }
+
+        regular = [.. regular.OrderBy(u => u.Name?.ToString() ?? "", StringComparer.OrdinalIgnoreCase)];
+        statics = [.. statics.OrderBy(u => u.Name?.ToString() ?? "", StringComparer.OrdinalIgnoreCase)];
+
+        var result = new List<UsingDirectiveSyntax>();
+
+        void AddGroup(List<UsingDirectiveSyntax> group)
+        {
+            if (group.Count is 0) return;
+            for (var i = 0; i < group.Count; i++)
+            {
+                var u = group[i];
+                if (result.Count is 0 && i is 0)
+                    u = u.WithLeadingTrivia(usings[0].GetLeadingTrivia());
+                else if (i is 0)
+                    u = u.WithLeadingTrivia(s_lineFeed, s_lineFeed);
+                else
+                    u = u.WithLeadingTrivia(s_lineFeed);
+                u = u.WithTrailingTrivia();
+                result.Add(u);
+            }
+        }
+
+        AddGroup(regular);
+        AddGroup(aliases);
+        AddGroup(statics);
+
+        return SyntaxFactory.List(result);
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // Member list formatting
+    // ──────────────────────────────────────────────────────────
+
+    /// <summary>Formats a list of member declarations with correct spacing and indentation.</summary>
+    private static SyntaxList<MemberDeclarationSyntax> FormatMemberList(
+        SyntaxList<MemberDeclarationSyntax> members, int indent)
+    {
+        if (members.Count is 0) return members;
+        var result = new List<MemberDeclarationSyntax>();
+
+        for (var i = 0; i < members.Count; i++)
+        {
+            var orig = members[i];
+            var fmt = (MemberDeclarationSyntax)FormatNode(orig, indent);
+
+            if (i > 0)
+            {
+                var prev = members[i - 1];
+                var needsTwoBlank = NeedsTwoBlankLines(prev, orig);
+                var needsOneBlank = needsTwoBlank || NeedsOneBlankLine(prev, orig);
+                // The previous member already has a trailing \n.
+                // So for N blank lines we need N more \n in the leading trivia.
+                var minLeadingBreaks = needsTwoBlank ? 2 : needsOneBlank ? 1 : 0;
+
+                var leading = fmt.GetLeadingTrivia();
+                // Count existing leading line breaks (not including prev member's trailing)
+                var existingBreaks = CountLineBreaks(leading);
+                if (existingBreaks < minLeadingBreaks)
+                    fmt = fmt.WithLeadingTrivia(EnsureLeadingBreaks(leading, minLeadingBreaks, indent));
+                else
+                    fmt = fmt.WithLeadingTrivia(RebuildLeading(leading, indent));
+            }
+            else
+            {
+                fmt = fmt.WithLeadingTrivia(RebuildLeading(fmt.GetLeadingTrivia(), indent));
+            }
+
+            fmt = fmt.WithTrailingTrivia(s_lineFeed);
+            result.Add(fmt);
+        }
+        return SyntaxFactory.List(result);
+    }
+
+    /// <summary>Determines if one blank line is needed between two adjacent members.</summary>
+    private static bool NeedsOneBlankLine(MemberDeclarationSyntax prev, MemberDeclarationSyntax current)
+    {
+        if (current is BaseTypeDeclarationSyntax or MethodDeclarationSyntax or
+            ConstructorDeclarationSyntax or PropertyDeclarationSyntax or
+            EventDeclarationSyntax or IndexerDeclarationSyntax or
+            OperatorDeclarationSyntax or ConversionOperatorDeclarationSyntax or
+            DelegateDeclarationSyntax or EnumDeclarationSyntax or DestructorDeclarationSyntax)
+            return true;
+        if (prev is BaseTypeDeclarationSyntax or MethodDeclarationSyntax or
+            ConstructorDeclarationSyntax or PropertyDeclarationSyntax or
+            EventDeclarationSyntax or IndexerDeclarationSyntax or
+            OperatorDeclarationSyntax or ConversionOperatorDeclarationSyntax or
+            DelegateDeclarationSyntax or EnumDeclarationSyntax or DestructorDeclarationSyntax)
+            return true;
+        // Global statements: check if either spans multiple lines
+        if (prev is GlobalStatementSyntax && SpansMultipleLines(prev))
+            return true;
+        if (current is GlobalStatementSyntax && SpansMultipleLines(current))
+            return true;
+        return false;
+    }
+
+    /// <summary>Determines if two blank lines are needed between two adjacent members.</summary>
+    private static bool NeedsTwoBlankLines(MemberDeclarationSyntax prev, MemberDeclarationSyntax current)
+    {
+        if (current is BaseTypeDeclarationSyntax && prev is not GlobalStatementSyntax and not FieldDeclarationSyntax)
+            return true;
+        if (prev is BaseTypeDeclarationSyntax)
+            return true;
+        if ((current is MethodDeclarationSyntax or ConstructorDeclarationSyntax or DestructorDeclarationSyntax) &&
+            (prev is MethodDeclarationSyntax or ConstructorDeclarationSyntax or DestructorDeclarationSyntax))
+            return true;
+        // Methods/properties/etc after fields or other non-field declarations
+        if (prev is not FieldDeclarationSyntax and not GlobalStatementSyntax &&
+            current is not FieldDeclarationSyntax and not GlobalStatementSyntax)
+            return true;
+        // Field followed by method/property/type/etc needs two blank lines
+        if (prev is FieldDeclarationSyntax &&
+            current is MethodDeclarationSyntax or ConstructorDeclarationSyntax or PropertyDeclarationSyntax or BaseTypeDeclarationSyntax)
+            return true;
+        return false;
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // Namespace
+    // ──────────────────────────────────────────────────────────
+
+    /// <summary>Formats a file-scoped namespace declaration and its members.</summary>
+    private static FileScopedNamespaceDeclarationSyntax FormatFileScopedNamespace(FileScopedNamespaceDeclarationSyntax node, int indent)
+    {
+        var members = FormatMemberList(node.Members, indent);
+        var usings = FormatUsingDirectives(node.Usings);
+
+        // Ensure blank line between namespace semicolon and first member
+        // The semicolon has trailing \n, so we need 1 more \n for blank line
+        if (members.Count > 0)
+        {
+            var first = members[0];
+            var leading = first.GetLeadingTrivia();
+            if (CountLineBreaks(leading) < 1)
+                members = members.Replace(first, first.WithLeadingTrivia(
+                    EnsureLeadingBreaks(leading, 1, indent)));
+        }
+
+        return node.WithUsings(usings).WithMembers(members);
+    }
+
+    /// <summary>Formats a braced namespace declaration and its members.</summary>
+    private static NamespaceDeclarationSyntax FormatNamespaceDeclaration(NamespaceDeclarationSyntax node, int indent)
+    {
+        var members = FormatMemberList(node.Members, indent + 1);
+        var usings = FormatUsingDirectives(node.Usings);
+        var open = FormatOpenBrace(node.OpenBraceToken, indent);
+        var close = node.CloseBraceToken
+            .WithLeadingTrivia(Indent(indent)).WithTrailingTrivia();
+        return node.WithUsings(usings).WithMembers(members)
+            .WithOpenBraceToken(open).WithCloseBraceToken(close);
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // Type Declaration
+    // ──────────────────────────────────────────────────────────
+
+    /// <summary>Formats a class, struct, record, or interface declaration.</summary>
+    private static TypeDeclarationSyntax FormatTypeDeclaration(TypeDeclarationSyntax node, int indent)
+    {
+        var members = FormatMemberList(node.Members, indent + 1);
+        var open = FormatOpenBrace(node.OpenBraceToken, indent);
+        var close = node.CloseBraceToken.WithLeadingTrivia(Indent(indent)).WithTrailingTrivia();
+        return node.WithMembers(members).WithOpenBraceToken(open).WithCloseBraceToken(close);
+    }
+
+    /// <summary>Formats an enum declaration with correct brace placement.</summary>
+    private static EnumDeclarationSyntax FormatEnumDeclaration(EnumDeclarationSyntax node, int indent)
+    {
+        var open = FormatOpenBrace(node.OpenBraceToken, indent);
+        var close = node.CloseBraceToken.WithLeadingTrivia(Indent(indent)).WithTrailingTrivia();
+        return node.WithOpenBraceToken(open).WithCloseBraceToken(close);
+    }
+
+    /// <summary>Formats an opening brace token with correct leading newline and indent.</summary>
+    private static SyntaxToken FormatOpenBrace(SyntaxToken brace, int indent)
+    {
+        var prev = brace.GetPreviousToken();
+        var prevHasNewline = prev.TrailingTrivia.Any(t => IsLineBreak(t));
+        return prevHasNewline
+            ? brace.WithLeadingTrivia(Indent(indent)).WithTrailingTrivia(s_lineFeed)
+            : brace.WithLeadingTrivia(s_lineFeed, Indent(indent)).WithTrailingTrivia(s_lineFeed);
+    }
+
+    /// <summary>
+    /// Ensures the block's open brace has a leading newline.
+    /// FormatOpenBrace relies on GetPreviousToken() which sees the original tree,
+    /// but control-flow formatters (if/while/for/foreach) later strip the close-paren
+    /// trailing trivia. This helper patches the brace's leading trivia when needed.
+    /// </summary>
+    private static BlockSyntax EnsureBraceNewline(BlockSyntax block, int indent)
+    {
+        var brace = block.OpenBraceToken;
+        if (brace.LeadingTrivia.Any(t => IsLineBreak(t)))
+            return block;
+        return block.WithOpenBraceToken(
+            brace.WithLeadingTrivia(s_lineFeed, Indent(indent)).WithTrailingTrivia(s_lineFeed));
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // Method/Constructor/Property/Field
+    // ──────────────────────────────────────────────────────────
+
+    /// <summary>Formats a method declaration, including body, expression body, and parameters.</summary>
+    private static MethodDeclarationSyntax FormatMethodDeclaration(MethodDeclarationSyntax node, int indent)
+    {
+        var r = node;
+        if (r.Body is not null)
+            r = r.WithBody(FormatBlock(r.Body, indent));
+        if (r.ExpressionBody is not null)
+            r = r.WithExpressionBody(FormatArrowExpressionClause(r.ExpressionBody, indent));
+        r = r.WithParameterList((ParameterListSyntax)FormatParameterList(r.ParameterList, indent));
+        return r;
+    }
+
+    /// <summary>Formats a constructor declaration, including body and parameters.</summary>
+    private static ConstructorDeclarationSyntax FormatConstructorDeclaration(ConstructorDeclarationSyntax node, int indent)
+    {
+        var r = node;
+        if (r.Body is not null)
+            r = r.WithBody(FormatBlock(r.Body, indent));
+        r = r.WithParameterList((ParameterListSyntax)FormatParameterList(r.ParameterList, indent));
+        return r;
+    }
+
+    /// <summary>Formats a property declaration, including expression body and initializer.</summary>
+    private static PropertyDeclarationSyntax FormatPropertyDeclaration(PropertyDeclarationSyntax node, int indent)
+    {
+        var r = node;
+        if (r.ExpressionBody is not null)
+            r = r.WithExpressionBody(FormatArrowExpressionClause(r.ExpressionBody, indent));
+        if (r.Initializer is not null)
+            r = r.WithInitializer(FormatEqualsValueClause(r.Initializer, indent));
+        return r;
+    }
+
+    /// <summary>Formats a field declaration, including its initializer if present.</summary>
+    private static FieldDeclarationSyntax FormatFieldDeclaration(FieldDeclarationSyntax node, int indent)
+    {
+        if (node.Declaration.Variables.Count > 0 && node.Declaration.Variables[0].Initializer is { } init)
+        {
+            var fmtInit = FormatEqualsValueClause(init, indent);
+            var newVar = node.Declaration.Variables[0].WithInitializer(fmtInit);
+            return node.WithDeclaration(node.Declaration.WithVariables(
+                node.Declaration.Variables.Replace(node.Declaration.Variables[0], newVar)));
+        }
+        return node;
+    }
+
+    /// <summary>Formats a local function statement, including body and parameters.</summary>
+    private static LocalFunctionStatementSyntax FormatLocalFunctionStatement(LocalFunctionStatementSyntax node, int indent)
+    {
+        var r = node;
+        if (r.Body is not null)
+            r = r.WithBody(FormatBlock(r.Body, indent));
+        if (r.ExpressionBody is not null)
+            r = r.WithExpressionBody(FormatArrowExpressionClause(r.ExpressionBody, indent));
+        r = r.WithParameterList((ParameterListSyntax)FormatParameterList(r.ParameterList, indent));
+        return r;
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // Block and statement list
+    // ──────────────────────────────────────────────────────────
+
+    /// <summary>Formats a block with correct brace placement and statement indentation.</summary>
+    private static BlockSyntax FormatBlock(BlockSyntax node, int indent)
+    {
+        // Preserve completely empty single-line blocks like { } 
+        if (IsSingleLineBlock(node) && node.Statements.Count == 0)
+        {
+            return node;
+        }
+
+        var stmts = FormatStatementList(node.Statements, indent + 1);
+        var open = FormatOpenBrace(node.OpenBraceToken, indent);
+        // Preserve comments in close brace leading trivia at block content indent level
+        var closeLeading = RebuildLeading(node.CloseBraceToken.LeadingTrivia, indent + 1);
+        // If the last trivia item is whitespace (indent), replace with block-level indent
+        var closeList = closeLeading.ToList();
+        if (closeList.Count > 0 && IsWhitespace(closeList[^1]))
+        {
+            closeList[^1] = Indent(indent);
+        }
+        var close = node.CloseBraceToken.WithLeadingTrivia(new SyntaxTriviaList(closeList)).WithTrailingTrivia();
+        return node.WithOpenBraceToken(open).WithCloseBraceToken(close).WithStatements(stmts);
+    }
+
+    /// <summary>Formats a list of statements with correct indentation and blank-line separation.</summary>
+    private static SyntaxList<StatementSyntax> FormatStatementList(SyntaxList<StatementSyntax> stmts, int indent)
+    {
+        if (stmts.Count is 0) return stmts;
+        var result = new List<StatementSyntax>();
+
+        for (var i = 0; i < stmts.Count; i++)
+        {
+            var orig = stmts[i];
+            var fmt = (StatementSyntax)FormatNode(orig, indent);
+
+            // Preserve trailing comments
+            var trailingComments = StripWhitespace(fmt.GetTrailingTrivia());
+            var trailingList = new List<SyntaxTrivia>();
+            foreach (var c in trailingComments)
+            {
+                trailingList.Add(s_space);
+                trailingList.Add(c);
+            }
+            trailingList.Add(s_lineFeed);
+            fmt = fmt.WithTrailingTrivia(new SyntaxTriviaList(trailingList));
+
+            // Handle leading trivia: rebuild with correct indent and blank line
+            if (i > 0)
+            {
+                var needsBlank = NeedBlankBetweenStatements(stmts[i - 1], orig)
+                    // Also check formatted versions: formatting may break a single-line
+                    // statement to multi-line (e.g. due to line-length), which requires
+                    // blank line separation even though the original was single-line.
+                    // Use Trim() to exclude leading/trailing trivia newlines.
+                    || SpansMultipleLines(result[i - 1].ToFullString().Trim())
+                    || SpansMultipleLines(fmt.ToFullString().Trim());
+                if (needsBlank)
+                {
+                    // Add blank line in leading trivia (prev stmt already has trailing \n)
+                    var leading = fmt.GetLeadingTrivia();
+                    var existingBreaks = CountLineBreaks(leading);
+                    if (existingBreaks < 1)
+                        fmt = fmt.WithLeadingTrivia(EnsureLeadingBreaks(leading, 1, indent));
+                    else
+                        fmt = fmt.WithLeadingTrivia(RebuildLeading(leading, indent));
+                }
+                else
+                {
+                    fmt = fmt.WithLeadingTrivia(RebuildLeading(fmt.GetLeadingTrivia(), indent));
+                }
+            }
+            else
+            {
+                fmt = fmt.WithLeadingTrivia(RebuildLeading(fmt.GetLeadingTrivia(), indent));
+            }
+
+            result.Add(fmt);
+        }
+        return SyntaxFactory.List(result);
+    }
+
+    /// <summary>Determines if a blank line is needed between two adjacent statements.</summary>
+    private static bool NeedBlankBetweenStatements(StatementSyntax current, StatementSyntax next)
+    {
+        // Multi-line statements need blank line separation
+        if (SpansMultipleLines(current) || SpansMultipleLines(next))
+            return true;
+        // Preserve existing blank lines
+        var nextBreaks = CountLineBreaks(next.GetLeadingTrivia());
+        if (nextBreaks >= 2)
+            return true;
+        return false;
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // Control flow
+    // ──────────────────────────────────────────────────────────
+
+    /// <summary>Formats an if statement, including condition, body, and else clause.</summary>
+    private static IfStatementSyntax FormatIfStatement(IfStatementSyntax node, int indent)
+    {
+        var cond = (ExpressionSyntax)FormatNode(node.Condition, indent);
+        StatementSyntax body;
+        if (node.Statement is BlockSyntax block)
+            body = EnsureBraceNewline(FormatBlock(block, indent), indent);
+        else
+        {
+            body = (StatementSyntax)FormatNode(node.Statement, indent + 1);
+            body = body.WithLeadingTrivia(s_lineFeed, Indent(indent + 1));
+        }
+
+        var r = node
+            .WithIfKeyword(node.IfKeyword.WithTrailingTrivia(s_space))
+            .WithCondition(cond)
+            .WithOpenParenToken(node.OpenParenToken.WithLeadingTrivia().WithTrailingTrivia())
+            .WithCloseParenToken(node.CloseParenToken.WithLeadingTrivia().WithTrailingTrivia())
+            .WithStatement(body);
+
+        if (node.Else is not null)
+            r = r.WithElse(FormatElseClause(node.Else, indent));
+        return r;
+    }
+
+    /// <summary>Formats an else clause, including else-if chains.</summary>
+    private static ElseClauseSyntax FormatElseClause(ElseClauseSyntax node, int indent)
+    {
+        StatementSyntax body;
+        if (node.Statement is IfStatementSyntax elseIf)
+        {
+            body = FormatIfStatement(elseIf, indent);
+            body = body.WithLeadingTrivia(s_space);
+        }
+        else if (node.Statement is BlockSyntax block)
+            body = EnsureBraceNewline(FormatBlock(block, indent), indent);
+        else
+        {
+            body = (StatementSyntax)FormatNode(node.Statement, indent + 1);
+            body = body.WithLeadingTrivia(s_lineFeed, Indent(indent + 1));
+        }
+
+        var kw = node.ElseKeyword.WithLeadingTrivia(s_lineFeed, Indent(indent)).WithTrailingTrivia();
+        return node.WithElseKeyword(kw).WithStatement(body);
+    }
+
+    /// <summary>Formats a while statement with correct keyword and brace placement.</summary>
+    private static WhileStatementSyntax FormatWhileStatement(WhileStatementSyntax node, int indent)
+    {
+        var body = node.Statement is BlockSyntax block
+            ? (StatementSyntax)EnsureBraceNewline(FormatBlock(block, indent), indent)
+            : ((StatementSyntax)FormatNode(node.Statement, indent + 1)).WithLeadingTrivia(s_lineFeed, Indent(indent + 1));
+        return node
+            .WithWhileKeyword(node.WhileKeyword.WithTrailingTrivia(s_space))
+            .WithOpenParenToken(node.OpenParenToken.WithLeadingTrivia().WithTrailingTrivia())
+            .WithCloseParenToken(node.CloseParenToken.WithLeadingTrivia().WithTrailingTrivia())
+            .WithStatement(body);
+    }
+
+    /// <summary>Formats a for statement with correct keyword and brace placement.</summary>
+    private static ForStatementSyntax FormatForStatement(ForStatementSyntax node, int indent)
+    {
+        var body = node.Statement is BlockSyntax block
+            ? (StatementSyntax)EnsureBraceNewline(FormatBlock(block, indent), indent)
+            : ((StatementSyntax)FormatNode(node.Statement, indent + 1)).WithLeadingTrivia(s_lineFeed, Indent(indent + 1));
+        return node
+            .WithForKeyword(node.ForKeyword.WithTrailingTrivia(s_space))
+            .WithOpenParenToken(node.OpenParenToken.WithLeadingTrivia().WithTrailingTrivia())
+            .WithCloseParenToken(node.CloseParenToken.WithLeadingTrivia().WithTrailingTrivia())
+            .WithStatement(body);
+    }
+
+    /// <summary>Formats a foreach statement with correct keyword and brace placement.</summary>
+    private static ForEachStatementSyntax FormatForEachStatement(ForEachStatementSyntax node, int indent)
+    {
+        var body = node.Statement is BlockSyntax block
+            ? (StatementSyntax)EnsureBraceNewline(FormatBlock(block, indent), indent)
+            : ((StatementSyntax)FormatNode(node.Statement, indent + 1)).WithLeadingTrivia(s_lineFeed, Indent(indent + 1));
+        return node
+            .WithForEachKeyword(node.ForEachKeyword.WithTrailingTrivia(s_space))
+            .WithOpenParenToken(node.OpenParenToken.WithLeadingTrivia().WithTrailingTrivia())
+            .WithCloseParenToken(node.CloseParenToken.WithLeadingTrivia().WithTrailingTrivia())
+            .WithStatement(body);
+    }
+
+    /// <summary>Formats a do-while statement with correct keyword placement.</summary>
+    private static DoStatementSyntax FormatDoStatement(DoStatementSyntax node, int indent)
+    {
+        var body = node.Statement is BlockSyntax block
+            ? FormatBlock(block, indent)
+            : (StatementSyntax)FormatNode(node.Statement, indent + 1);
+        return node
+            .WithDoKeyword(node.DoKeyword.WithTrailingTrivia())
+            .WithStatement(body)
+            .WithWhileKeyword(node.WhileKeyword.WithLeadingTrivia(s_lineFeed, Indent(indent)).WithTrailingTrivia(s_space));
+    }
+
+    /// <summary>Formats a using statement with correct keyword and body placement.</summary>
+    private static UsingStatementSyntax FormatUsingStatement(UsingStatementSyntax node, int indent)
+    {
+        var body = node.Statement is BlockSyntax block
+            ? FormatBlock(block, indent)
+            : ((StatementSyntax)FormatNode(node.Statement, indent + 1)).WithLeadingTrivia(s_lineFeed, Indent(indent + 1));
+        return node.WithUsingKeyword(node.UsingKeyword.WithTrailingTrivia(s_space)).WithStatement(body);
+    }
+
+    /// <summary>Formats a lock statement with correct keyword and body placement.</summary>
+    private static LockStatementSyntax FormatLockStatement(LockStatementSyntax node, int indent)
+    {
+        var body = node.Statement is BlockSyntax block
+            ? FormatBlock(block, indent)
+            : (StatementSyntax)FormatNode(node.Statement, indent + 1);
+        return node.WithLockKeyword(node.LockKeyword.WithTrailingTrivia(s_space)).WithStatement(body);
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // Switch statement
+    // ──────────────────────────────────────────────────────────
+
+    /// <summary>Formats a switch statement with sections, braces, and indentation.</summary>
+    private static SwitchStatementSyntax FormatSwitchStatement(SwitchStatementSyntax node, int indent)
+    {
+        var secIndent = indent + 1;
+        var sections = new List<SwitchSectionSyntax>();
+        for (var i = 0; i < node.Sections.Count; i++)
+        {
+            var sec = FormatSwitchSection(node.Sections[i], secIndent);
+            if (i > 0)
+            {
+                var leading = sec.GetLeadingTrivia();
+                // Prev section's last stmt has trailing \n, so 1 more = blank line
+                if (CountLineBreaks(leading) < 1)
+                    sec = sec.WithLeadingTrivia(EnsureLeadingBreaks(leading, 1, secIndent));
+                else
+                    sec = sec.WithLeadingTrivia(RebuildLeading(leading, secIndent));
+            }
+            else
+                sec = sec.WithLeadingTrivia(RebuildLeading(sec.GetLeadingTrivia(), secIndent));
+            sections.Add(sec);
+        }
+
+        var open = node.OpenBraceToken.WithLeadingTrivia(s_lineFeed, Indent(indent)).WithTrailingTrivia(s_lineFeed);
+        var close = node.CloseBraceToken.WithLeadingTrivia(Indent(indent)).WithTrailingTrivia();
+        return node
+            .WithSwitchKeyword(node.SwitchKeyword.WithTrailingTrivia(s_space))
+            .WithOpenParenToken(node.OpenParenToken.WithLeadingTrivia().WithTrailingTrivia())
+            .WithCloseParenToken(node.CloseParenToken.WithLeadingTrivia().WithTrailingTrivia())
+            .WithOpenBraceToken(open).WithCloseBraceToken(close)
+            .WithSections(SyntaxFactory.List(sections));
+    }
+
+    /// <summary>Formats a switch section with its labels and statements.</summary>
+    private static SwitchSectionSyntax FormatSwitchSection(SwitchSectionSyntax node, int indent)
+    {
+        var stmtIndent = indent + 1;
+        var labels = new List<SwitchLabelSyntax>();
+        foreach (var label in node.Labels)
+        {
+            if (label is CasePatternSwitchLabelSyntax cp)
+                labels.Add(cp.WithKeyword(cp.Keyword.WithTrailingTrivia(s_space))
+                    .WithColonToken(cp.ColonToken.WithLeadingTrivia().WithTrailingTrivia()));
+            else if (label is CaseSwitchLabelSyntax cs)
+                labels.Add(cs.WithKeyword(cs.Keyword.WithTrailingTrivia(s_space))
+                    .WithColonToken(cs.ColonToken.WithLeadingTrivia().WithTrailingTrivia()));
+            else if (label is DefaultSwitchLabelSyntax ds)
+                labels.Add(ds.WithKeyword(ds.Keyword.WithTrailingTrivia())
+                    .WithColonToken(ds.ColonToken.WithLeadingTrivia().WithTrailingTrivia()));
+            else
+                labels.Add(label);
+        }
+        var stmts = FormatStatementList(node.Statements, stmtIndent);
+        // Ensure first statement has a line break (label colon has no trailing \n)
+        if (stmts.Count > 0)
+        {
+            var first = stmts[0];
+            var leading = first.GetLeadingTrivia();
+            if (!leading.Any(t => IsLineBreak(t)))
+            {
+                var newLeading = new SyntaxTriviaList(s_lineFeed).AddRange(leading);
+                stmts = stmts.Replace(first, first.WithLeadingTrivia(newLeading));
+            }
+        }
+        return node.WithLabels(SyntaxFactory.List(labels)).WithStatements(stmts);
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // Try/Catch/Finally
+    // ──────────────────────────────────────────────────────────
+
+    /// <summary>Formats a try statement, including catch and finally clauses.</summary>
+    private static TryStatementSyntax FormatTryStatement(TryStatementSyntax node, int indent)
+    {
+        var block = FormatBlock(node.Block, indent);
+        var catches = node.Catches.Select(c => FormatCatchClause(c, indent)).ToList();
+        var r = node.WithBlock(block).WithCatches(SyntaxFactory.List(catches));
+        if (node.Finally is not null)
+            r = r.WithFinally(FormatFinallyClause(node.Finally, indent));
+        return r;
+    }
+
+    /// <summary>Formats a catch clause with keyword placement and block formatting.</summary>
+    private static CatchClauseSyntax FormatCatchClause(CatchClauseSyntax node, int indent)
+    {
+        var block = FormatBlock(node.Block, indent);
+        var kw = node.CatchKeyword.WithLeadingTrivia(s_lineFeed, Indent(indent)).WithTrailingTrivia();
+        var r = node.WithCatchKeyword(kw).WithBlock(block);
+        if (node.Declaration is not null)
+            r = r.WithDeclaration(node.Declaration.WithOpenParenToken(
+                node.Declaration.OpenParenToken.WithLeadingTrivia(s_space)));
+        return r;
+    }
+
+    /// <summary>Formats a finally clause with keyword placement and block formatting.</summary>
+    private static FinallyClauseSyntax FormatFinallyClause(FinallyClauseSyntax node, int indent)
+    {
+        var block = FormatBlock(node.Block, indent);
+        var kw = node.FinallyKeyword.WithLeadingTrivia(s_lineFeed, Indent(indent)).WithTrailingTrivia();
+        return node.WithFinallyKeyword(kw).WithBlock(block);
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // Statement formatting
+    // ──────────────────────────────────────────────────────────
+
+    /// <summary>Formats a local variable declaration statement with its initializer.</summary>
+    private static LocalDeclarationStatementSyntax FormatLocalDeclarationStatement(LocalDeclarationStatementSyntax node, int indent)
+    {
+        if (node.Declaration.Variables.Count > 0 && node.Declaration.Variables[0].Initializer is { } init)
+        {
+            var fmtInit = FormatEqualsValueClause(init, indent);
+            var newVar = node.Declaration.Variables[0].WithInitializer(fmtInit);
+            return node.WithDeclaration(node.Declaration.WithVariables(
+                node.Declaration.Variables.Replace(node.Declaration.Variables[0], newVar)));
+        }
+        return node;
+    }
+
+    /// <summary>Formats an expression statement by formatting its inner expression.</summary>
+    private static ExpressionStatementSyntax FormatExpressionStatement(ExpressionStatementSyntax node, int indent)
+    {
+        return node.WithExpression((ExpressionSyntax)FormatNode(node.Expression, indent));
+    }
+
+    /// <summary>Formats a return statement, handling multi-line expression placement.</summary>
+    private static ReturnStatementSyntax FormatReturnStatement(ReturnStatementSyntax node, int indent)
+    {
+        if (node.Expression is null)
+            return node;
+
+        var fmtExpr = (ExpressionSyntax)FormatNode(node.Expression, indent + 1);
+        // Strip leading whitespace from expression
+        fmtExpr = fmtExpr.WithLeadingTrivia(StripWhitespace(fmtExpr.GetLeadingTrivia()));
+        var exprText = fmtExpr.ToFullString().Trim();
+
+        // Check if expression should be on new line:
+        // 1) Expression text spans multiple lines
+        // 2) Original had a line break between return keyword and expression
+        var originalOnNewLine = LineOf(node.Expression) > LineOf(node.ReturnKeyword);
+        var isMultiLine = SpansMultipleLines(exprText);
+
+        if (isMultiLine || originalOnNewLine)
+        {
+            fmtExpr = fmtExpr.WithLeadingTrivia(s_lineFeed, Indent(indent + 1));
+            return node.WithReturnKeyword(node.ReturnKeyword.WithTrailingTrivia()).WithExpression(fmtExpr);
+        }
+
+        return node.WithReturnKeyword(node.ReturnKeyword.WithTrailingTrivia(s_space))
+            .WithExpression(fmtExpr.WithLeadingTrivia());
+    }
+
+    /// <summary>Formats a throw statement with correct keyword spacing.</summary>
+    private static ThrowStatementSyntax FormatThrowStatement(ThrowStatementSyntax node, int indent)
+    {
+        if (node.Expression is null) return node;
+        var fmtExpr = (ExpressionSyntax)FormatNode(node.Expression, indent);
+        return node.WithThrowKeyword(node.ThrowKeyword.WithTrailingTrivia(s_space)).WithExpression(fmtExpr);
+    }
+
+    /// <summary>Formats a global (top-level) statement by formatting its inner statement.</summary>
+    private static GlobalStatementSyntax FormatGlobalStatement(GlobalStatementSyntax node, int indent)
+    {
+        return node.WithStatement((StatementSyntax)FormatNode(node.Statement, indent));
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // Argument Lists
+    // ──────────────────────────────────────────────────────────
+
+    /// <summary>Formats an argument list, choosing single-line or multi-line layout.</summary>
+    private static ArgumentListSyntax FormatArgumentList(ArgumentListSyntax node, int indent)
+    {
+        if (node.Arguments.Count is 0) return node;
+
+        if (ShouldArgListBeMultiLine(node))
+            return FormatArgListMultiLine(node, indent);
+        return FormatArgListSingleLine(node);
+    }
+
+    /// <summary>Determines if an argument list should use multi-line layout.</summary>
+    private static bool ShouldArgListBeMultiLine(ArgumentListSyntax node)
+    {
+        if (node.Arguments.Count is 0) return false;
+
+        // Line length check — only break if the arg list itself is wide enough
+        // to be the cause of the overshoot. Short arg lists should let the parent
+        // context (equals clause, return statement, etc.) handle the breaking.
+        var lineLen = LineEndColumn(node);
+        if (lineLen > MaximumLineLength)
+        {
+            if (node.Arguments.Count is 1)
+            {
+                // For single-arg lists, only break if the arg contains complex content
+                var argExpr = node.Arguments[0].Expression;
+                if (argExpr is CollectionExpressionSyntax or InitializerExpressionSyntax or
+                    InvocationExpressionSyntax or ObjectCreationExpressionSyntax)
+                    return true;
+            }
+            else
+            {
+                // Estimate single-line arg width
+                var singleLineWidth = 2; // parens
+                for (var i = 0; i < node.Arguments.Count; i++)
+                {
+                    if (i > 0) singleLineWidth += 2; // ", "
+                    singleLineWidth += node.Arguments[i].ToString().Trim().Length;
+                }
+                // Only break if args themselves are wide enough to justify breaking.
+                // Using 2/3 of MaximumLineLength as threshold leaves ~40 chars for the
+                // method name + indent, preventing cascading breaks where the parent
+                // context (equals clause, return statement, etc.) should break instead.
+                if (singleLineWidth > MaximumLineLength * 2 / 3)
+                    return true;
+            }
+        }
+
+        var openLine = LineOf(node.OpenParenToken);
+        var closeLine = LineOf(node.CloseParenToken);
+        if (openLine != closeLine)
+        {
+            // Lambda with block body — always multi-line
+            foreach (var arg in node.Arguments)
+            {
+                if (arg.Expression is ParenthesizedLambdaExpressionSyntax { Block: not null })
+                    return true;
+                if (arg.Expression is SimpleLambdaExpressionSyntax { Block: not null })
+                    return true;
+            }
+
+            // First arg on different line
+            if (LineOf(node.Arguments[0]) != openLine)
+                return true;
+            // Any arg on different line than first
+            for (var i = 1; i < node.Arguments.Count; i++)
+                if (LineOf(node.Arguments[i]) != LineOf(node.Arguments[0]))
+                    return true;
+            // Any arg multi-line
+            foreach (var arg in node.Arguments)
+                if (SpansMultipleLines(arg))
+                    return true;
+        }
+        return false;
+    }
+
+    /// <summary>Formats an argument list on a single line with normalized spacing.</summary>
+    private static ArgumentListSyntax FormatArgListSingleLine(ArgumentListSyntax node)
+    {
+        var args = new List<SyntaxNode>();
+        for (var i = 0; i < node.Arguments.Count; i++)
+        {
+            var a = node.Arguments[i];
+            a = i is 0 ? a.WithLeadingTrivia() : a.WithLeadingTrivia(s_space);
+            a = a.WithTrailingTrivia(StripWhitespace(a.GetTrailingTrivia()));
+            args.Add(a);
+        }
+        var seps = Enumerable.Range(0, node.Arguments.Count - 1)
+            .Select(_ => SyntaxFactory.Token(SyntaxKind.CommaToken).WithLeadingTrivia().WithTrailingTrivia()).ToList();
+        return node
+            .WithOpenParenToken(node.OpenParenToken.WithLeadingTrivia().WithTrailingTrivia())
+            .WithCloseParenToken(node.CloseParenToken.WithLeadingTrivia())
+            .WithArguments(SyntaxFactory.SeparatedList(args.Cast<ArgumentSyntax>(), seps));
+    }
+
+    /// <summary>Formats an argument list across multiple lines, one argument per line.</summary>
+    private static ArgumentListSyntax FormatArgListMultiLine(ArgumentListSyntax node, int indent)
+    {
+        var argIndent = indent + 1;
+        var args = new List<SyntaxNode>();
+        for (var i = 0; i < node.Arguments.Count; i++)
+        {
+            var a = node.Arguments[i];
+            var fmtExpr = (ExpressionSyntax)FormatNode(a.Expression, argIndent);
+            a = a.WithExpression(fmtExpr);
+            a = a.WithLeadingTrivia(s_lineFeed, Indent(argIndent));
+            a = a.WithTrailingTrivia(StripWhitespace(a.GetTrailingTrivia()));
+
+            // For named arguments, if the first line would exceed max length,
+            // break after the colon (outer-first principle within the argument).
+            if (a is ArgumentSyntax argSyntax && argSyntax.NameColon is { } nameColon)
+            {
+                var argText = a.ToFullString().Trim();
+                var firstLine = argText.Split('\n')[0];
+                var lineLen = argIndent * IndentSize + firstLine.TrimEnd().Length;
+                if (lineLen > MaximumLineLength)
+                {
+                    var nc = nameColon.WithTrailingTrivia();
+                    var expr = argSyntax.Expression.WithLeadingTrivia(s_lineFeed, Indent(argIndent));
+                    a = argSyntax.WithNameColon(nc).WithExpression(expr);
+                    a = a.WithLeadingTrivia(s_lineFeed, Indent(argIndent));
+                }
+            }
+
+            args.Add(a);
+        }
+        var seps = Enumerable.Range(0, node.Arguments.Count - 1)
+            .Select(_ => SyntaxFactory.Token(SyntaxKind.CommaToken).WithLeadingTrivia().WithTrailingTrivia()).ToList();
+        return node
+            .WithOpenParenToken(node.OpenParenToken.WithLeadingTrivia().WithTrailingTrivia())
+            .WithCloseParenToken(node.CloseParenToken.WithLeadingTrivia().WithTrailingTrivia())
+            .WithArguments(SyntaxFactory.SeparatedList(args.Cast<ArgumentSyntax>(), seps));
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // Parameter Lists
+    // ──────────────────────────────────────────────────────────
+
+    /// <summary>Formats a parameter list, choosing single-line or multi-line layout.</summary>
+    private static ParameterListSyntax FormatParameterList(ParameterListSyntax node, int indent)
+    {
+        if (node.Parameters.Count is 0) return node;
+        if (ShouldParamListBeMultiLine(node))
+            return FormatParamListMultiLine(node, indent);
+        return FormatParamListSingleLine(node);
+    }
+
+    /// <summary>Determines if a parameter list should use multi-line layout.</summary>
+    private static bool ShouldParamListBeMultiLine(ParameterListSyntax node)
+    {
+        if (node.Parameters.Count is 0) return false;
+        var openLine = LineOf(node.OpenParenToken);
+        var closeLine = LineOf(node.CloseParenToken);
+        if (openLine != closeLine)
+        {
+            if (LineOf(node.Parameters[0]) != openLine) return true;
+            for (var i = 1; i < node.Parameters.Count; i++)
+                if (LineOf(node.Parameters[i]) != LineOf(node.Parameters[0])) return true;
+        }
+        return false;
+    }
+
+    /// <summary>Formats a parameter list on a single line with normalized spacing.</summary>
+    private static ParameterListSyntax FormatParamListSingleLine(ParameterListSyntax node)
+    {
+        var ps = new List<SyntaxNode>();
+        for (var i = 0; i < node.Parameters.Count; i++)
+        {
+            var p = node.Parameters[i];
+            p = i is 0 ? p.WithLeadingTrivia() : p.WithLeadingTrivia(s_space);
+            if (p.Type is not null) p = p.WithType(p.Type.WithTrailingTrivia(s_space));
+            p = p.WithTrailingTrivia();
+            ps.Add(p);
+        }
+        var seps = Enumerable.Range(0, node.Parameters.Count - 1)
+            .Select(_ => SyntaxFactory.Token(SyntaxKind.CommaToken).WithLeadingTrivia().WithTrailingTrivia()).ToList();
+        return node
+            .WithOpenParenToken(node.OpenParenToken.WithTrailingTrivia())
+            .WithCloseParenToken(node.CloseParenToken.WithLeadingTrivia())
+            .WithParameters(SyntaxFactory.SeparatedList(ps.Cast<ParameterSyntax>(), seps));
+    }
+
+    /// <summary>Formats a parameter list across multiple lines, one parameter per line.</summary>
+    private static ParameterListSyntax FormatParamListMultiLine(ParameterListSyntax node, int indent)
+    {
+        var pIndent = indent + 1;
+        var ps = new List<SyntaxNode>();
+        for (var i = 0; i < node.Parameters.Count; i++)
+        {
+            var p = node.Parameters[i];
+            p = p.WithLeadingTrivia(s_lineFeed, Indent(pIndent));
+            if (p.Type is not null) p = p.WithType(p.Type.WithTrailingTrivia(s_space));
+            p = p.WithTrailingTrivia();
+            ps.Add(p);
+        }
+        var seps = Enumerable.Range(0, node.Parameters.Count - 1)
+            .Select(_ => SyntaxFactory.Token(SyntaxKind.CommaToken).WithLeadingTrivia().WithTrailingTrivia()).ToList();
+        return node
+            .WithOpenParenToken(node.OpenParenToken.WithTrailingTrivia())
+            .WithCloseParenToken(node.CloseParenToken.WithLeadingTrivia())
+            .WithParameters(SyntaxFactory.SeparatedList(ps.Cast<ParameterSyntax>(), seps));
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // Collection Expression
+    // ──────────────────────────────────────────────────────────
+
+    /// <summary>Formats a collection expression, choosing single-line or multi-line layout.</summary>
+    private static CollectionExpressionSyntax FormatCollectionExpression(CollectionExpressionSyntax node, int indent)
+    {
+        if (node.Elements.Count is 0) return node;
+
+        // Check line length — if single line exceeds max, switch to multi-line
+        var shouldBeMultiLine = LineEndColumn(node) > MaximumLineLength;
+
+        if (!shouldBeMultiLine)
+        {
+            var openLine = LineOf(node.OpenBracketToken);
+            var closeLine = LineOf(node.CloseBracketToken);
+            if (openLine != closeLine)
+            {
+                if (LineOf(node.Elements[0]) != openLine) shouldBeMultiLine = true;
+                for (var i = 1; i < node.Elements.Count && !shouldBeMultiLine; i++)
+                    if (LineOf(node.Elements[i]) != LineOf(node.Elements[0])) shouldBeMultiLine = true;
+                foreach (var e in node.Elements)
+                    if (SpansMultipleLines(e)) shouldBeMultiLine = true;
+            }
+        }
+
+        if (shouldBeMultiLine) return FormatCollectionMultiLine(node, indent);
+        return FormatCollectionSingleLine(node);
+    }
+
+    /// <summary>Formats a collection expression on a single line.</summary>
+    private static CollectionExpressionSyntax FormatCollectionSingleLine(CollectionExpressionSyntax node)
+    {
+        var elems = new List<SyntaxNode>();
+        for (var i = 0; i < node.Elements.Count; i++)
+        {
+            var e = node.Elements[i];
+            e = i is 0 ? e.WithLeadingTrivia() : e.WithLeadingTrivia(s_space);
+            e = e.WithTrailingTrivia();
+            elems.Add(e);
+        }
+        var seps = Enumerable.Range(0, node.Elements.Count - 1)
+            .Select(_ => SyntaxFactory.Token(SyntaxKind.CommaToken).WithLeadingTrivia().WithTrailingTrivia()).ToList();
+        return node
+            .WithOpenBracketToken(node.OpenBracketToken.WithTrailingTrivia())
+            .WithCloseBracketToken(node.CloseBracketToken.WithLeadingTrivia())
+            .WithElements(SyntaxFactory.SeparatedList(elems.Cast<CollectionElementSyntax>(), seps));
+    }
+
+    /// <summary>Formats a collection expression across multiple lines, one element per line.</summary>
+    private static CollectionExpressionSyntax FormatCollectionMultiLine(CollectionExpressionSyntax node, int indent)
+    {
+        var elems = new List<SyntaxNode>();
+        for (var i = 0; i < node.Elements.Count; i++)
+        {
+            var e = node.Elements[i];
+            if (e is ExpressionElementSyntax ee)
+                e = ee.WithExpression((ExpressionSyntax)FormatNode(ee.Expression, indent));
+            e = e.WithLeadingTrivia(s_lineFeed, Indent(indent));
+            e = e.WithTrailingTrivia();
+            elems.Add(e);
+        }
+        var origSeps = node.Elements.GetSeparators().ToList();
+        var seps = Enumerable.Range(0, node.Elements.Count - 1)
+            .Select(_ => SyntaxFactory.Token(SyntaxKind.CommaToken).WithLeadingTrivia().WithTrailingTrivia()).ToList();
+        if (origSeps.Count >= node.Elements.Count)
+            seps.Add(SyntaxFactory.Token(SyntaxKind.CommaToken).WithLeadingTrivia().WithTrailingTrivia());
+        var close = node.CloseBracketToken.WithLeadingTrivia(s_lineFeed, Indent(indent));
+        return node
+            .WithOpenBracketToken(node.OpenBracketToken.WithTrailingTrivia())
+            .WithCloseBracketToken(close)
+            .WithElements(SyntaxFactory.SeparatedList(elems.Cast<CollectionElementSyntax>(), seps));
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // Initializer Expression
+    // ──────────────────────────────────────────────────────────
+
+    /// <summary>Formats an initializer expression with multi-line layout when needed.</summary>
+    private static InitializerExpressionSyntax FormatInitializerExpression(InitializerExpressionSyntax node, int indent)
+    {
+        if (!SpansMultipleLines(node)) return node;
+        var ci = indent + 1;
+        var exprs = new List<SyntaxNode>();
+        for (var i = 0; i < node.Expressions.Count; i++)
+        {
+            var e = (ExpressionSyntax)FormatNode(node.Expressions[i], ci);
+            e = e.WithLeadingTrivia(s_lineFeed, Indent(ci));
+            e = e.WithTrailingTrivia();
+            exprs.Add(e);
+        }
+        var origSeps = node.Expressions.GetSeparators().ToList();
+        var seps = Enumerable.Range(0, node.Expressions.Count - 1)
+            .Select(_ => SyntaxFactory.Token(SyntaxKind.CommaToken).WithLeadingTrivia().WithTrailingTrivia()).ToList();
+        if (origSeps.Count >= node.Expressions.Count)
+            seps.Add(SyntaxFactory.Token(SyntaxKind.CommaToken).WithLeadingTrivia().WithTrailingTrivia());
+        // Use FormatOpenBrace to avoid double newline when previous token has trailing newline,
+        // but strip the trailing linefeed since the first expression already has a leading one.
+        var openBrace = FormatOpenBrace(node.OpenBraceToken, indent).WithTrailingTrivia();
+        var close = node.CloseBraceToken.WithLeadingTrivia(s_lineFeed, Indent(indent)).WithTrailingTrivia();
+        return node.WithOpenBraceToken(openBrace).WithCloseBraceToken(close)
+            .WithExpressions(SyntaxFactory.SeparatedList(exprs.Cast<ExpressionSyntax>(), seps));
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // Expression formatting
+    // ──────────────────────────────────────────────────────────
+
+    /// <summary>Formats an arrow (=&gt;) expression clause, breaking to a new line when needed.</summary>
+    private static ArrowExpressionClauseSyntax FormatArrowExpressionClause(ArrowExpressionClauseSyntax node, int indent)
+    {
+        var fmtExpr = (ExpressionSyntax)FormatNode(node.Expression, indent + 1);
+        var arrowLine = LineOf(node.ArrowToken);
+        var exprLine = LineOf(node.Expression);
+
+        if (arrowLine != exprLine)
+        {
+            fmtExpr = fmtExpr.WithLeadingTrivia(s_lineFeed, Indent(indent + 1));
+            return node.WithArrowToken(node.ArrowToken.WithTrailingTrivia()).WithExpression(fmtExpr);
+        }
+
+        if (LineEndColumn(node) > MaximumLineLength)
+        {
+            fmtExpr = fmtExpr.WithLeadingTrivia(s_lineFeed, Indent(indent + 1));
+            return node.WithArrowToken(node.ArrowToken.WithTrailingTrivia()).WithExpression(fmtExpr);
+        }
+
+        return node.WithExpression(fmtExpr);
+    }
+
+    /// <summary>Formats an equals-value clause, breaking to a new line when needed.</summary>
+    private static EqualsValueClauseSyntax FormatEqualsValueClause(EqualsValueClauseSyntax node, int indent)
+    {
+        var originalHasBreak = LineOf(node.Value) > LineOf(node.EqualsToken);
+
+        // Check line length on the original node
+        var exceedsLine = LineEndColumn(node) > MaximumLineLength;
+
+        // Outer-first line breaking: if the line exceeds max and the value is still
+        // on the same line as '=', break at '=' first without formatting inner content.
+        // The multi-pass convergence will handle inner formatting in the next pass,
+        // where the value will be on a shorter line.
+        if (exceedsLine && !originalHasBreak)
+        {
+            var value = node.Value.WithLeadingTrivia(s_lineFeed, Indent(indent + 1));
+            return node.WithEqualsToken(node.EqualsToken.WithTrailingTrivia()).WithValue(value);
+        }
+
+        var fmtValue = (ExpressionSyntax)FormatNode(node.Value, indent + 1);
+        var valueText = fmtValue.ToFullString().Trim();
+        var isMultiLine = SpansMultipleLines(valueText);
+
+        if (isMultiLine || originalHasBreak)
+        {
+            fmtValue = fmtValue.WithLeadingTrivia(s_lineFeed, Indent(indent + 1));
+            return node.WithEqualsToken(node.EqualsToken.WithTrailingTrivia()).WithValue(fmtValue);
+        }
+
+        return node.WithEqualsToken(node.EqualsToken.WithTrailingTrivia(s_space)).WithValue(fmtValue.WithLeadingTrivia());
+    }
+
+    /// <summary>Formats a ternary conditional expression with multi-line layout when needed.</summary>
+    private static ConditionalExpressionSyntax FormatConditionalExpression(ConditionalExpressionSyntax node, int indent)
+    {
+        var isMultiLine = SpansMultipleLines(node);
+        if (!isMultiLine)
+        {
+            if (LineEndColumn(node) > MaximumLineLength) isMultiLine = true;
+        }
+        if (!isMultiLine) return node;
+
+        var ci = Indent(indent);
+        var fmtCond = (ExpressionSyntax)FormatNode(node.Condition, indent);
+        var fmtTrue = (ExpressionSyntax)FormatNode(node.WhenTrue, indent);
+        var fmtFalse = (ExpressionSyntax)FormatNode(node.WhenFalse, indent);
+
+        return node
+            .WithCondition(fmtCond.WithTrailingTrivia())
+            .WithQuestionToken(node.QuestionToken.WithLeadingTrivia(s_lineFeed, ci).WithTrailingTrivia())
+            .WithWhenTrue(fmtTrue.WithLeadingTrivia(s_lineFeed, ci).WithTrailingTrivia())
+            .WithColonToken(node.ColonToken.WithLeadingTrivia(s_lineFeed, ci).WithTrailingTrivia())
+            .WithWhenFalse(fmtFalse.WithLeadingTrivia(s_lineFeed, ci));
+    }
+
+    /// <summary>Formats a switch expression with arms on separate lines.</summary>
+    private static SwitchExpressionSyntax FormatSwitchExpression(SwitchExpressionSyntax node, int indent)
+    {
+        var armIndent = indent + 1;
+        var arms = new List<SyntaxNode>();
+        for (var i = 0; i < node.Arms.Count; i++)
+        {
+            var arm = FormatSwitchExpressionArm(node.Arms[i], armIndent);
+            var needsBlank = i > 0 &&
+                (SpansMultipleLines(node.Arms[i - 1]) || SpansMultipleLines(node.Arms[i]) ||
+                 node.Arms[i].Pattern is DiscardPatternSyntax || node.Arms[i - 1].Pattern is DiscardPatternSyntax);
+            if (needsBlank)
+                arm = arm.WithLeadingTrivia(s_lineFeed, s_lineFeed, Indent(armIndent));
+            else
+                arm = arm.WithLeadingTrivia(s_lineFeed, Indent(armIndent));
+            arms.Add(arm);
+        }
+        var seps = Enumerable.Range(0, node.Arms.Count - 1)
+            .Select(_ => SyntaxFactory.Token(SyntaxKind.CommaToken).WithLeadingTrivia().WithTrailingTrivia()).ToList();
+        // Preserve trailing comma if original had one
+        var origSeps = node.Arms.GetSeparators().ToList();
+        if (origSeps.Count >= node.Arms.Count)
+            seps.Add(SyntaxFactory.Token(SyntaxKind.CommaToken).WithLeadingTrivia().WithTrailingTrivia());
+        var open = node.OpenBraceToken.WithLeadingTrivia(s_lineFeed, Indent(indent)).WithTrailingTrivia();
+        var close = node.CloseBraceToken.WithLeadingTrivia(s_lineFeed, Indent(indent)).WithTrailingTrivia();
+        // Normalize switch keyword: exactly one space before, no trailing
+        var sw = node.SwitchKeyword.WithLeadingTrivia(s_space).WithTrailingTrivia();
+        // Normalize governing expression trailing trivia
+        var govExpr = node.GoverningExpression.WithTrailingTrivia();
+        return node.WithGoverningExpression(govExpr).WithSwitchKeyword(sw)
+            .WithOpenBraceToken(open).WithCloseBraceToken(close)
+            .WithArms(SyntaxFactory.SeparatedList(arms.Cast<SwitchExpressionArmSyntax>(), seps));
+    }
+
+    /// <summary>Formats a single switch expression arm with correct spacing and line breaks.</summary>
+    private static SwitchExpressionArmSyntax FormatSwitchExpressionArm(SwitchExpressionArmSyntax node, int indent)
+    {
+        var fmtExpr = (ExpressionSyntax)FormatNode(node.Expression, indent);
+        var putOnNewLine = node.Expression is ThrowExpressionSyntax || SpansMultipleLines(node) || node.Pattern is DiscardPatternSyntax;
+
+        // Also check line length
+        if (!putOnNewLine)
+        {
+            if (LineEndColumn(node) > MaximumLineLength) putOnNewLine = true;
+        }
+
+        // Normalize pattern trailing trivia
+        var pattern = node.Pattern.WithTrailingTrivia();
+
+        if (putOnNewLine)
+        {
+            fmtExpr = fmtExpr.WithLeadingTrivia(s_lineFeed, Indent(indent)).WithTrailingTrivia();
+            return node
+                .WithPattern(pattern)
+                .WithEqualsGreaterThanToken(node.EqualsGreaterThanToken.WithLeadingTrivia(s_space).WithTrailingTrivia())
+                .WithExpression(fmtExpr);
+        }
+        return node
+            .WithPattern(pattern)
+            .WithEqualsGreaterThanToken(node.EqualsGreaterThanToken.WithLeadingTrivia(s_space).WithTrailingTrivia(s_space))
+            .WithExpression(fmtExpr.WithLeadingTrivia().WithTrailingTrivia());
+    }
+
+    /// <summary>Formats a member access expression, breaking at dots when lines are too long.</summary>
+    private static MemberAccessExpressionSyntax FormatMemberAccessExpression(MemberAccessExpressionSyntax node, int indent)
+    {
+        var fmtExpr = (ExpressionSyntax)FormatNode(node.Expression, indent);
+        var exprEnd = EndLineOf(node.Expression);
+        var dotLine = LineOf(node.OperatorToken);
+
+        if (exprEnd != dotLine)
+        {
+            // Dot is already on a separate line — determine correct indent level.
+            // If the expression is single-line and complex, check if a single-line version
+            // would exceed the max line length. If so, the break is for line-length reasons
+            // and the dot should be at indent+1.
+            var dotIndent = indent;
+
+            if (!SpansMultipleLines(node.Expression) &&
+                node.Expression is InvocationExpressionSyntax or MemberAccessExpressionSyntax or
+                    ElementAccessExpressionSyntax or ConditionalAccessExpressionSyntax)
+            {
+                var exprLen = fmtExpr.ToFullString().TrimEnd().Length;
+                var nameLen = node.OperatorToken.Text.Length + node.Name.ToString().Length;
+                if (indent * IndentSize + exprLen + nameLen > MaximumLineLength)
+                    dotIndent = indent + 1;
+            }
+
+            return node.WithExpression(fmtExpr.WithTrailingTrivia())
+                .WithOperatorToken(node.OperatorToken.WithLeadingTrivia(s_lineFeed, Indent(dotIndent)).WithTrailingTrivia());
+        }
+
+        // Check line length — only break at dots after complex expressions (chains)
+        if (LineEndColumn(node) > MaximumLineLength)
+        {
+            // Only break if expression is complex (invocation, member access chain)
+            if (node.Expression is InvocationExpressionSyntax or MemberAccessExpressionSyntax or
+                ElementAccessExpressionSyntax or ConditionalAccessExpressionSyntax)
+            {
+                return node.WithExpression(fmtExpr)
+                    .WithOperatorToken(node.OperatorToken.WithLeadingTrivia(s_lineFeed, Indent(indent + 1)).WithTrailingTrivia());
+            }
+        }
+
+        return node.WithExpression(fmtExpr);
+    }
+
+    /// <summary>Formats an invocation expression, including its argument list.</summary>
+    private static InvocationExpressionSyntax FormatInvocationExpression(InvocationExpressionSyntax node, int indent)
+    {
+        var fmtExpr = (ExpressionSyntax)FormatNode(node.Expression, indent);
+        var fmtArgs = (ArgumentListSyntax)FormatArgumentList(node.ArgumentList, indent);
+        return node.WithExpression(fmtExpr).WithArgumentList(fmtArgs);
+    }
+
+    /// <summary>Formats an object creation expression, including arguments and initializer.</summary>
+    private static ObjectCreationExpressionSyntax FormatObjectCreationExpression(ObjectCreationExpressionSyntax node, int indent)
+    {
+        var r = node;
+        if (r.ArgumentList is not null)
+            r = r.WithArgumentList((ArgumentListSyntax)FormatArgumentList(r.ArgumentList, indent));
+        if (r.Initializer is not null)
+            r = r.WithInitializer(FormatInitializerExpression(r.Initializer, indent));
+        return r;
+    }
+
+    /// <summary>Formats an implicit object creation (<c>new()</c>) expression.</summary>
+    private static ImplicitObjectCreationExpressionSyntax FormatImplicitObjectCreationExpression(ImplicitObjectCreationExpressionSyntax node, int indent)
+    {
+        var r = node.WithArgumentList((ArgumentListSyntax)FormatArgumentList(node.ArgumentList, indent));
+        if (r.Initializer is not null)
+            r = r.WithInitializer(FormatInitializerExpression(r.Initializer, indent));
+        return r;
+    }
+
+    /// <summary>Formats an assignment expression with line-break handling for the right side.</summary>
+    private static AssignmentExpressionSyntax FormatAssignmentExpression(AssignmentExpressionSyntax node, int indent)
+    {
+        var fmtLeft = (ExpressionSyntax)FormatNode(node.Left, indent);
+        // Strip trailing trivia from left expression to avoid double spaces before =
+        fmtLeft = fmtLeft.WithTrailingTrivia();
+
+        // Inside an initializer, VS keeps the value at the same indent as the key
+        var isInsideInitializer = node.Parent is InitializerExpressionSyntax;
+        var rhsIndent = isInsideInitializer ? indent : indent + 1;
+
+        var fmtRight = (ExpressionSyntax)FormatNode(node.Right, rhsIndent);
+        var rightText = fmtRight.ToFullString().Trim();
+
+        // Check if right is multi-line or if the original had a line break
+        var opLine = LineOf(node.OperatorToken);
+        var rightLine = LineOf(node.Right);
+
+        if (SpansMultipleLines(rightText) || rightLine > opLine)
+        {
+            fmtRight = fmtRight.WithLeadingTrivia(s_lineFeed, Indent(rhsIndent));
+            return node.WithLeft(fmtLeft)
+                .WithOperatorToken(node.OperatorToken.WithLeadingTrivia(s_space).WithTrailingTrivia()).WithRight(fmtRight);
+        }
+
+        return node.WithLeft(fmtLeft)
+            .WithOperatorToken(node.OperatorToken.WithLeadingTrivia(s_space).WithTrailingTrivia(s_space))
+            .WithRight(fmtRight.WithLeadingTrivia());
+    }
+
+    /// <summary>Formats a binary expression, breaking at the operator when lines are too long.</summary>
+    private static BinaryExpressionSyntax FormatBinaryExpression(BinaryExpressionSyntax node, int indent)
+    {
+        // Outer-first line breaking: if the line exceeds max and the expression is
+        // still on one line, break at the operator first without formatting inner nodes.
+        // Multi-pass convergence will handle inner formatting in the next pass.
+        var originalIsMultiLine = SpansMultipleLines(node);
+        if (!originalIsMultiLine)
+        {
+            var exceedsLine = LineEndColumn(node) > MaximumLineLength;
+            if (exceedsLine)
+            {
+                // Determine the indent for the right operand based on where the left
+                // operand starts. This ensures the right side aligns with the visual
+                // start of the expression rather than always using indent + 1.
+                var breakIndent = indent + 1;
+                var leftLoc = node.Left.GetLocation();
+                if (leftLoc != Location.None)
+                {
+                    var leftCol = leftLoc.GetLineSpan().StartLinePosition.Character;
+                    breakIndent = leftCol / IndentSize;
+                }
+
+                var l = node.Left.WithTrailingTrivia(StripWhitespace(node.Left.GetTrailingTrivia()));
+                var r = node.Right.WithLeadingTrivia(s_lineFeed, Indent(breakIndent));
+                var op = node.OperatorToken.WithLeadingTrivia(s_space).WithTrailingTrivia();
+                return node.WithLeft(l).WithRight(r).WithOperatorToken(op);
+            }
+        }
+
+        var fl = (ExpressionSyntax)FormatNode(node.Left, indent);
+
+        // Determine the indent for the right operand of a multi-line binary expression.
+        // When the operator has already been moved to a separate line from the expression start
+        // (e.g., by a previous formatting pass), use the right operand's actual source position
+        // to avoid cascading indentation. Otherwise, use indent + 1 as the continuation indent.
+        var rightIndent = indent + 1;
+        var mlLeftLoc = originalIsMultiLine ? node.Left.GetLocation() : Location.None;
+        var mlOpLoc = originalIsMultiLine ? node.OperatorToken.GetLocation() : Location.None;
+        var mlRightLoc = originalIsMultiLine ? node.Right.GetLocation() : Location.None;
+        if (mlLeftLoc != Location.None && mlOpLoc != Location.None && mlRightLoc != Location.None)
+        {
+            var leftStartLine = mlLeftLoc.GetLineSpan().StartLinePosition.Line;
+            var opLine = mlOpLoc.GetLineSpan().StartLinePosition.Line;
+            var rightLineSpan = mlRightLoc.GetLineSpan();
+
+            if (opLine > leftStartLine)
+            {
+                // The operator is on a different line from the left operand start.
+                // The break was established in a previous pass. Use the existing
+                // right operand position to avoid changing indentation.
+                if (rightLineSpan.StartLinePosition.Line > opLine)
+                    rightIndent = rightLineSpan.StartLinePosition.Character / IndentSize;
+                else if (rightLineSpan.StartLinePosition.Line == opLine)
+                    rightIndent = indent + 1;
+            }
+            else if (rightLineSpan.StartLinePosition.Line > opLine)
+            {
+                // The operator is on the same line as the left start, but the right
+                // operand is already on a new line (e.g., in a chain of same-precedence
+                // operators where the break was at the end of the line). Preserve the
+                // right operand's existing position.
+                rightIndent = rightLineSpan.StartLinePosition.Character / IndentSize;
+            }
+        }
+
+        var fr = (ExpressionSyntax)FormatNode(node.Right, rightIndent);
+        // Normalize spacing around the operator: strip whitespace from adjacent trivia
+        // and set exactly one space before and after the operator token.
+        fl = fl.WithTrailingTrivia(StripWhitespace(fl.GetTrailingTrivia()));
+
+        if (originalIsMultiLine)
+        {
+            // Preserve the line break before the right operand and normalize indent
+            fr = fr.WithLeadingTrivia(s_lineFeed, Indent(rightIndent));
+            var op = node.OperatorToken.WithLeadingTrivia(s_space).WithTrailingTrivia();
+            return node.WithLeft(fl).WithRight(fr).WithOperatorToken(op);
+        }
+
+        fr = fr.WithLeadingTrivia(StripWhitespace(fr.GetLeadingTrivia()));
+        var fop = node.OperatorToken.WithLeadingTrivia(s_space).WithTrailingTrivia(s_space);
+        return node.WithLeft(fl).WithRight(fr).WithOperatorToken(fop);
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // Lambda expressions
+    // ──────────────────────────────────────────────────────────
+
+    /// <summary>Formats a parenthesized lambda expression, including its body.</summary>
+    private static ParenthesizedLambdaExpressionSyntax FormatParenthesizedLambdaExpression(ParenthesizedLambdaExpressionSyntax node, int indent)
+    {
+        if (node.Block is not null)
+        {
+            var fmtBlock = FormatBlock(node.Block, indent);
+            return node.WithBlock(fmtBlock);
+        }
+        if (node.ExpressionBody is not null)
+        {
+            var fmtExpr = (ExpressionSyntax)FormatNode(node.ExpressionBody, indent);
+            return node.WithExpressionBody(fmtExpr);
+        }
+        return node;
+    }
+
+    /// <summary>Formats a simple lambda expression, including its body.</summary>
+    private static SimpleLambdaExpressionSyntax FormatSimpleLambdaExpression(SimpleLambdaExpressionSyntax node, int indent)
+    {
+        if (node.Block is not null)
+        {
+            var fmtBlock = FormatBlock(node.Block, indent);
+            return node.WithBlock(fmtBlock);
+        }
+        if (node.ExpressionBody is not null)
+        {
+            var fmtExpr = (ExpressionSyntax)FormatNode(node.ExpressionBody, indent);
+            return node.WithExpressionBody(fmtExpr);
+        }
+        return node;
+    }
+}

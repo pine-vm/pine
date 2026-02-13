@@ -17,7 +17,7 @@ public class CSharpFormat
     /// </summary>
     /// <param name="inputSyntaxText">The C# source text to format.</param>
     public static string FormatCSharpScript(string inputSyntaxText) =>
-        FormatCSharpSyntaxRewriter.FormatSyntaxTree(ParseAsCSharpScript(inputSyntaxText))
+        DotNet.FormatCSharpFile.FormatSyntaxTree(ParseAsCSharpScript(inputSyntaxText))
         .GetRoot().ToFullString();
 
 
@@ -26,7 +26,7 @@ public class CSharpFormat
     /// </summary>
     /// <param name="inputSyntaxText">The C# source text to format.</param>
     public static string FormatCSharpFile(string inputSyntaxText) =>
-        FormatCSharpSyntaxRewriter.FormatSyntaxTree(ParseAsCSharpFile(inputSyntaxText))
+        DotNet.FormatCSharpFile.FormatSyntaxTree(ParseAsCSharpFile(inputSyntaxText))
         .GetRoot().ToFullString();
 
 

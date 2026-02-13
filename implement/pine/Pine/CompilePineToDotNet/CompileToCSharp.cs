@@ -49,7 +49,7 @@ public partial class CompileToCSharp
                         [.. additionalMembers ?? [], compileCSharpClassResult.ClassDeclarationSyntax]));
 
         var formattedNode =
-            FormatCSharpSyntaxRewriter.FormatSyntaxTree(compilationUnitSyntax.NormalizeWhitespace(eol: "\n"));
+            FormatCSharpFile.FormatCompilationUnit(compilationUnitSyntax.NormalizeWhitespace(eol: "\n"), indent: 0);
 
         return
             new GenerateCSharpFileResult(

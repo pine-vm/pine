@@ -87,10 +87,10 @@ public static class StaticProgramCSharpExtension
                 ])
             .WithMembers([compilationUnitMember]);
 
-        var formattedNode =
-            FormatCSharpSyntaxRewriter.FormatSyntaxTree(
-                compilationUnitSyntax.NormalizeWhitespace(eol: "\n"));
+        var normalized = compilationUnitSyntax.NormalizeWhitespace(eol: "\n");
+        var tree = CSharpSyntaxTree.ParseText(normalized.ToFullString());
+        var formattedTree = FormatCSharpFile.FormatSyntaxTree(tree);
 
-        return formattedNode;
+        return (CompilationUnitSyntax)formattedTree.GetRoot();
     }
 }

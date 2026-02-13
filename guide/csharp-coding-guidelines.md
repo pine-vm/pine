@@ -20,7 +20,9 @@ The formatting section covers rules that do not require analysis beyond a single
 
 The basis for formatting is `dotnet format`, which in turn applies rules we have specified in the `.editorconfig` files in the repository.
 
-Since `dotnet format` is quite lenient, we add additional rules to achieve a more consistent style.
+**Compatibility with `dotnet format`:** Our formatting must always be stable with respect to `dotnet format`. That means running `dotnet format` on already-formatted code must not change anything. We never want to format in a way that would be undone or altered by a subsequent `dotnet format` run. Some formatting concerns may be deferred entirely to `dotnet format` or its internal implementation (`Formatter.Format`).
+
+The only reason we have additional rules beyond `dotnet format` is that we have not yet found a way to make `dotnet format` apply these changes. In particular, `dotnet format` does not normalize indentation in most cases (due to Roslyn's `SuppressFormattingRule`, which intentionally preserves the developer's existing layout choices). Our extra rules address the gaps where `dotnet format` is too lenient.
 
 ### Consistent Layout of List Items
 
@@ -116,6 +118,25 @@ Also, list forms such as argument lists, parameter lists, or object initializer 
 
 In automated formatting, these line breaks must be inserted starting from the outermost syntax node, only as far as necessary to meet the line length limit, so that the layout of inner expressions is preserved to the degree possible.
 
+### Binary Expression Chains
+
+When a chain of binary operators (such as `||` or `&&`) exceeds the line length limit, the chain must be wrapped so that continuation lines are at the same indent level as the first operand. Since binary operators are left-associative, chains form nested left-recursive trees; when breaking, all continuation operands must remain at a consistent indent rather than cascading deeper with each break.
+
+For example, the following code:
+
+```csharp
+var putOnNewLine =
+    node.Expression is ThrowExpressionSyntax || SpansMultipleLines(node) || node.Pattern is DiscardPatternSyntax || node.Pattern is DeclarationPatternSyntax;
+```
+
+Must be formatted to:
+
+```csharp
+var putOnNewLine =
+    node.Expression is ThrowExpressionSyntax || SpansMultipleLines(node) || node.Pattern is DiscardPatternSyntax ||
+    node.Pattern is DeclarationPatternSyntax;
+```
+
 ### Spacing between Statements
 
 If a statement spans multiple lines, it must be separated from previous and following statements by at least one empty line.
@@ -123,7 +144,7 @@ If a statement spans multiple lines, it must be separated from following comment
 
 ### Spacing between Declarations
 
-Type declarations, method declarations and member declarations must be separated by at least two empty lines.
+Type declarations, method declarations and member declarations must be separated by at least one empty line.
 
 ### Conditional Expression
 
@@ -161,6 +182,27 @@ Every section of a switch statement must be separated from other sections by at 
 ### Return Statement
 
 If a return statement spans multiple lines, the expression must start on a new line after the `return` keyword;
+
+### Comments Before Content on a Line
+
+If a comment appears before other content on the same line, the comment must be moved to a separate line above that content.
+
+For example, the following code:
+
+```csharp
+/* comment */ int x = 1;
+// comment
+string y = "hello";
+```
+
+Must be formatted to:
+
+```csharp
+/* comment */
+int x = 1;
+// comment
+string y = "hello";
+```
 
 ### Indentation
 

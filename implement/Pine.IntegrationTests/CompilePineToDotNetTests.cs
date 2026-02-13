@@ -316,9 +316,7 @@ public class CompilePineToDotNetTests
             compiledExpression
             with
             {
-                Syntax =
-                FormatCSharpSyntaxRewriter.FormatSyntaxTree(compiledExpression.Syntax)
-                .NormalizeWhitespace()
+                Syntax = compiledExpression.Syntax.NormalizeWhitespace()
             };
     }
 
@@ -613,8 +611,9 @@ public class CompilePineToDotNetTests
                         [compiledModuleCommonCSharp.ClassDeclarationSyntax]));
 
                 var formattedNode =
-                    FormatCSharpSyntaxRewriter.FormatSyntaxTree(
-                        compilationUnitSyntax.NormalizeWhitespace(eol: "\n"));
+                    FormatCSharpFile.FormatCompilationUnit(
+                        compilationUnitSyntax.NormalizeWhitespace(eol: "\n"),
+                        indent: 0);
 
                 var formattedNodeText =
                     formattedNode.ToFullString()

@@ -113,7 +113,8 @@ public class OptimizeAndEmitValueFromStringTests
                                 Basics.idiv(local_000, CommonReusedValues.Blob_Int_16777216)),
                             Basics.modBy(
                                 CommonReusedValues.Blob_Int_256,
-                                local_002 == PineKernelValues.TrueValue
+                                local_002 ==
+                                                                                                                                                                                                    PineKernelValues.TrueValue
                                 ?
                                 (KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(4, local_001)
                                 ?
@@ -124,7 +125,8 @@ public class OptimizeAndEmitValueFromStringTests
                                 PineValue.EmptyList),
                             Basics.modBy(
                                 CommonReusedValues.Blob_Int_256,
-                                local_002 == PineKernelValues.TrueValue
+                                local_002 ==
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            PineKernelValues.TrueValue
                                 ?
                                 (KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(3, local_001)
                                 ?
@@ -136,7 +138,6 @@ public class OptimizeAndEmitValueFromStringTests
                             Basics.modBy(CommonReusedValues.Blob_Int_256, local_000)
                             ]);
                 }
-
 
 
                 public static PineValue blobBytesFromChars(PineValue param_1_0, PineValue param_1_1)
@@ -156,7 +157,13 @@ public class OptimizeAndEmitValueFromStringTests
                             {
                                 local_param_1_0 =
                                     local_param_1_0.PrependItems(
-                                        [PineValue.List([Test.blobBytesFromChar(local_param_1_1.GetHead())])]);
+                                        [
+                                        PineValue.List(
+                                            [
+                                            Test.blobBytesFromChar(
+                                                local_param_1_1.GetHead())
+                                            ])
+                                        ]);
 
                                 local_param_1_1 = local_param_1_1.Skip(1);
                             }
@@ -167,7 +174,6 @@ public class OptimizeAndEmitValueFromStringTests
                         throw new ParseExpressionException("TODO: Include details from encoded and env subexpressions");
                     }
                 }
-
 
 
                 public static PineValue computeValueFromString(PineValue param_1_0)
@@ -204,10 +210,7 @@ public class OptimizeAndEmitValueFromStringTests
                     while (true)
                     {
                         PineValue local_000 =
-                            KernelFunctionFused.SkipAndTake(
-                                takeCount: 4,
-                                skipCountValue: local_param_1_0,
-                                argument: local_param_1_2);
+                            KernelFunctionFused.SkipAndTake(takeCount: 4, skipCountValue: local_param_1_0, argument: local_param_1_2);
 
                         if (KernelFunctionSpecialized.length_as_int(local_000) == 0)
                         {
@@ -225,7 +228,6 @@ public class OptimizeAndEmitValueFromStringTests
                 }
 
 
-
                 public static PineValue zzz_anon_6dc95117_ab4922f9(PineValue param_1_0, PineValue param_1_1, PineValue param_1_2)
                 {
                     PineValue local_param_1_0 = param_1_0;
@@ -239,10 +241,7 @@ public class OptimizeAndEmitValueFromStringTests
                         if (KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(local_000, local_param_1_0))
                         {
                             PineValue local_001 =
-                                Global_Anonymous.zzz_anon_6dc95117_ab4922f9(
-                                    local_param_1_0,
-                                    local_000,
-                                    CommonReusedValues.Blob_Int_0);
+                                Global_Anonymous.zzz_anon_6dc95117_ab4922f9(local_param_1_0, local_000, CommonReusedValues.Blob_Int_0);
 
                             return
                                 KernelFunctionSpecialized.int_add(
@@ -259,9 +258,7 @@ public class OptimizeAndEmitValueFromStringTests
                         {
                             {
                                 PineValue local_param_1_0_temp =
-                                    KernelFunctionSpecialized.int_add(
-                                        local_param_1_0,
-                                        KernelFunctionSpecialized.int_mul(-1, local_param_1_1));
+                                    KernelFunctionSpecialized.int_add(local_param_1_0, KernelFunctionSpecialized.int_mul(-1, local_param_1_1));
 
                                 PineValue local_param_1_2_temp = KernelFunctionSpecialized.int_add(1, local_param_1_2);
                                 local_param_1_0 = local_param_1_0_temp;

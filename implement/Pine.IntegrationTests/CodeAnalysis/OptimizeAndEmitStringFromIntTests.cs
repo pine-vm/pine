@@ -51,7 +51,11 @@ public class OptimizeAndEmitStringFromIntTests
                         PineValue.List(
                             [
                             CommonReusedValues.Blob_Str_String,
-                            PineValue.List([KernelFunction.concat(Global_Anonymous.zzz_anon_0f6e756a_cd8ec059(param_1_0))])
+                            PineValue.List(
+                                [
+                                KernelFunction.concat(
+                                    Global_Anonymous.zzz_anon_0f6e756a_cd8ec059(param_1_0))
+                                ])
                             ]);
                 }
             }
@@ -71,16 +75,15 @@ public class OptimizeAndEmitStringFromIntTests
                     return
                         KernelFunctionFused.ListPrependItem(
                             itemToPrepend: CommonReusedValues.Blob_Char_hyphen,
-                            suffix: Global_Anonymous.zzz_anon_12af8dcc_24a48553(KernelFunction.negate(param_1_0)));
+                            suffix: Global_Anonymous.zzz_anon_12af8dcc_24a48553(
+                                KernelFunction.negate(param_1_0)));
                 }
-
 
 
                 public static PineValue zzz_anon_12af8dcc_24a48553(PineValue param_1_0)
                 {
                     return Global_Anonymous.zzz_anon_632693ae_d06ccc62(param_1_0, PineValue.EmptyList);
                 }
-
 
 
                 public static PineValue zzz_anon_39fa68f8_2402eeb0(PineValue param_1_0)
@@ -147,7 +150,6 @@ public class OptimizeAndEmitStringFromIntTests
                 }
 
 
-
                 public static PineValue zzz_anon_632693ae_d06ccc62(PineValue param_1_0, PineValue param_1_1)
                 {
                     PineValue local_param_1_0 = param_1_0;
@@ -173,9 +175,7 @@ public class OptimizeAndEmitStringFromIntTests
                             PineValue local_param_1_1_temp =
                                 KernelFunctionFused.ListPrependItem(
                                     itemToPrepend: Global_Anonymous.zzz_anon_39fa68f8_2402eeb0(
-                                        KernelFunctionSpecialized.int_add(
-                                            local_param_1_0,
-                                            KernelFunctionSpecialized.int_mul(-10, local_000))),
+                                        KernelFunctionSpecialized.int_add(local_param_1_0, KernelFunctionSpecialized.int_mul(-10, local_000))),
                                     suffix: local_param_1_1);
 
                             local_param_1_0 = local_param_1_0_temp;
@@ -185,7 +185,6 @@ public class OptimizeAndEmitStringFromIntTests
                         continue;
                     }
                 }
-
 
 
                 public static PineValue zzz_anon_6dc95117_ab4922f9(PineValue param_1_0, PineValue param_1_1, PineValue param_1_2)
@@ -201,10 +200,7 @@ public class OptimizeAndEmitStringFromIntTests
                         if (KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(local_000, local_param_1_0))
                         {
                             PineValue local_001 =
-                                Global_Anonymous.zzz_anon_6dc95117_ab4922f9(
-                                    local_param_1_0,
-                                    local_000,
-                                    CommonReusedValues.Blob_Int_0);
+                                Global_Anonymous.zzz_anon_6dc95117_ab4922f9(local_param_1_0, local_000, CommonReusedValues.Blob_Int_0);
 
                             return
                                 KernelFunctionSpecialized.int_add(
@@ -221,9 +217,7 @@ public class OptimizeAndEmitStringFromIntTests
                         {
                             {
                                 PineValue local_param_1_0_temp =
-                                    KernelFunctionSpecialized.int_add(
-                                        local_param_1_0,
-                                        KernelFunctionSpecialized.int_mul(-1, local_param_1_1));
+                                    KernelFunctionSpecialized.int_add(local_param_1_0, KernelFunctionSpecialized.int_mul(-1, local_param_1_1));
 
                                 PineValue local_param_1_2_temp = KernelFunctionSpecialized.int_add(1, local_param_1_2);
                                 local_param_1_0 = local_param_1_0_temp;

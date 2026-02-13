@@ -1,4 +1,6 @@
 using AwesomeAssertions;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Pine.Core.DotNet;
 using System;
 using Xunit;
@@ -311,7 +313,7 @@ public class CSharpFormatTests
 
                 _ =>
                     
-                19   }
+                19   },
             
                 _ =>
                 13
@@ -329,7 +331,7 @@ public class CSharpFormatTests
 
                     _ =>
                     19
-                }
+                },
 
                 _ =>
                 13
@@ -1803,7 +1805,7 @@ public class CSharpFormatTests
                     [
                         .. source.ValuesExpectedInCompilerBlobs
                         .Cast<PineValue>(),
-                        .. source.ValuesExpectedInCompilerLists,
+                        .. source.ValuesExpectedInCompilerLists
                     ])
             };
 
@@ -1819,7 +1821,7 @@ public class CSharpFormatTests
                         [
                         .. source.ValuesExpectedInCompilerBlobs
                         .Cast<PineValue>(),
-                        .. source.ValuesExpectedInCompilerLists,
+                        .. source.ValuesExpectedInCompilerLists
                         ])
                 };
 
@@ -1869,13 +1871,13 @@ public class CSharpFormatTests
                         SyntaxFactory.LocalDeclarationStatement(
                             SyntaxFactory.VariableDeclaration(
                                 CompileTypeSyntax.TypeSyntaxFromType(declType, declarationSyntaxContext))
-                        .WithVariables(
-                            SyntaxFactory.SingletonSeparatedList(
-                                SyntaxFactory.VariableDeclarator(
-                                    SyntaxFactory.Identifier(localName))
-                                .WithInitializer(
-                                    SyntaxFactory.EqualsValueClause(
-                                        initExpr)))));
+                            .WithVariables(
+                                SyntaxFactory.SingletonSeparatedList(
+                                    SyntaxFactory.VariableDeclarator(
+                                        SyntaxFactory.Identifier(localName))
+                                    .WithInitializer(
+                                        SyntaxFactory.EqualsValueClause(
+                                            initExpr)))));
                 }
             }
 
@@ -2046,8 +2048,7 @@ public class CSharpFormatTests
                 void M()
                 {
                     SomeObject.GetItemsFromDatabaseWithAVeryLongMethodName(connectionString)
-                        .TransformAllResultsWithAnotherVeryLongName(
-                        parameters);
+                        .TransformAllResultsWithAnotherVeryLongName(parameters);
                 }
             }
             """";
@@ -2548,6 +2549,202 @@ public class CSharpFormatTests
         AssertFormattedSyntax(inputSyntaxText, expectedSyntaxText, scriptMode: true);
     }
 
+    [Fact]
+    public void Formats_member_declarations_containing_collections()
+    {
+        var inputSyntaxText =
+            """"
+            public static class MyClass
+            {
+                public static readonly PineValue List_Single_List_Single_List_c6f65d71 =
+                    PineValue.List([List_Single_List_c6f65d71]);
+
+                public static readonly PineValue List_13572e94 = PineValue.List([Blob_Str_List, List_Single_List_Single_List_c6f65d71]);
+
+                public static readonly PineValue List_Single_List_Single_List_c6f65d71 =
+                    PineValue.List([List_Single_List_c6f65d71]);
+
+                public static readonly PineValue List_f3328233 =
+                    PineValue.List([List_976730e9, List_b43468c9, List_4af1f0ec, List_2a07a877]);
+            }
+            """";
+
+        var expectedSyntaxText =
+            """"
+            public static class MyClass
+            {
+                public static readonly PineValue List_Single_List_Single_List_c6f65d71 =
+                    PineValue.List([List_Single_List_c6f65d71]);
+
+                public static readonly PineValue List_13572e94 =
+                    PineValue.List([Blob_Str_List, List_Single_List_Single_List_c6f65d71]);
+
+                public static readonly PineValue List_Single_List_Single_List_c6f65d71 =
+                    PineValue.List([List_Single_List_c6f65d71]);
+
+                public static readonly PineValue List_f3328233 =
+                    PineValue.List([List_976730e9, List_b43468c9, List_4af1f0ec, List_2a07a877]);
+            }
+            """";
+
+        AssertFormattedSyntax(inputSyntaxText, expectedSyntaxText, scriptMode: false);
+    }
+
+    [Fact]
+    public void Formats_nested_infix_operator_and_conditionals_exceeding_line_length()
+    {
+        var inputSyntaxText =
+            """"
+            if ((local_001 == PineKernelValues.TrueValue ? false : true) == (local_003 == PineKernelValues.TrueValue ? false : true))
+            {
+                return local_008;
+            }
+            """";
+
+        var expectedSyntaxText =
+            """"
+            if ((local_001 == PineKernelValues.TrueValue ? false : true) ==
+                (local_003 == PineKernelValues.TrueValue ? false : true))
+            {
+                return local_008;
+            }
+            """";
+
+        AssertFormattedSyntax(inputSyntaxText, expectedSyntaxText, scriptMode: false);
+    }
+
+    [Fact]
+    public void Formats_named_argument_on_line_exceeding_length_limit()
+    {
+        var inputSyntaxText =
+            """"
+            return
+                KernelFunctionFused.ListPrependItem(
+                    itemToPrepend: CommonReusedValues.Blob_Char_hyphen,
+                    notItemToPrepend: Global_Anonymous.zzz_anon_12af8dcc_24a48553(KernelFunction.negate(param_1_0), someother(param_1_0)));
+            """";
+
+        var expectedSyntaxText =
+            """"
+            return
+                KernelFunctionFused.ListPrependItem(
+                    itemToPrepend: CommonReusedValues.Blob_Char_hyphen,
+                    notItemToPrepend:
+                    Global_Anonymous.zzz_anon_12af8dcc_24a48553(KernelFunction.negate(param_1_0), someother(param_1_0)));
+            """";
+
+        AssertFormattedSyntax(inputSyntaxText, expectedSyntaxText, scriptMode: false);
+    }
+
+    [Fact]
+    public void Formats_if_condition_exceeding_line_length_and_nested_condition()
+    {
+        var inputSyntaxText =
+            """"            
+            if ((local_002 == PineKernelValues.TrueValue) && (CommonReusedValues.Blob_Str_Elm_Float == PineValueExtension.ValueFromPathOrEmptyList(param_1_0, [0])))
+            {
+                PineValue local_003 = PineValueExtension.ValueFromPathOrEmptyList(param_1_0, [1]);
+                PineValue local_004 = PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [1]);
+
+                if (KernelFunctionSpecialized.int_mul(
+                    PineValueExtension.ValueFromPathOrEmptyList(local_003, [0]),
+                    PineValueExtension.ValueFromPathOrEmptyList(local_004, [1])) == KernelFunctionSpecialized.int_mul(
+                    PineValueExtension.ValueFromPathOrEmptyList(local_004, [0]),
+                    PineValueExtension.ValueFromPathOrEmptyList(local_003, [1])))
+                {
+                    return CommonReusedValues.List_ac855cb8;
+                }
+
+                if (KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(
+                    KernelFunctionSpecialized.int_mul(
+                        PineValueExtension.ValueFromPathOrEmptyList(local_003, [0]),
+                        PineValueExtension.ValueFromPathOrEmptyList(local_004, [1])),
+                    KernelFunctionSpecialized.int_mul(
+                        PineValueExtension.ValueFromPathOrEmptyList(local_004, [0]),
+                        PineValueExtension.ValueFromPathOrEmptyList(local_003, [1]))))
+                {
+                    return CommonReusedValues.List_af0e3cad;
+                }
+
+                return CommonReusedValues.List_50724673;
+            }
+            """";
+
+        var expectedSyntaxText =
+            """"
+            if ((local_002 == PineKernelValues.TrueValue) &&
+                (CommonReusedValues.Blob_Str_Elm_Float == PineValueExtension.ValueFromPathOrEmptyList(param_1_0, [0])))
+            {
+                PineValue local_003 = PineValueExtension.ValueFromPathOrEmptyList(param_1_0, [1]);
+                PineValue local_004 = PineValueExtension.ValueFromPathOrEmptyList(param_1_1, [1]);
+
+                if (KernelFunctionSpecialized.int_mul(
+                    PineValueExtension.ValueFromPathOrEmptyList(local_003, [0]),
+                    PineValueExtension.ValueFromPathOrEmptyList(local_004, [1])) ==
+                    KernelFunctionSpecialized.int_mul(
+                        PineValueExtension.ValueFromPathOrEmptyList(local_004, [0]),
+                        PineValueExtension.ValueFromPathOrEmptyList(local_003, [1])))
+                {
+                    return CommonReusedValues.List_ac855cb8;
+                }
+
+                if (KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(
+                    KernelFunctionSpecialized.int_mul(
+                        PineValueExtension.ValueFromPathOrEmptyList(local_003, [0]),
+                        PineValueExtension.ValueFromPathOrEmptyList(local_004, [1])),
+                    KernelFunctionSpecialized.int_mul(
+                        PineValueExtension.ValueFromPathOrEmptyList(local_004, [0]),
+                        PineValueExtension.ValueFromPathOrEmptyList(local_003, [1]))))
+                {
+                    return CommonReusedValues.List_af0e3cad;
+                }
+
+                return CommonReusedValues.List_50724673;
+            }
+            """";
+
+        AssertFormattedSyntax(inputSyntaxText, expectedSyntaxText, scriptMode: false);
+    }
+
+    [Fact]
+    public void Formats_boolean_operation_chain_exceeding_line_length()
+    {
+        var inputSyntaxText =
+            """"            
+            var putOnNewLine = node.Expression is ThrowExpressionSyntax || SpansMultipleLines(node) || node.Pattern is DiscardPatternSyntax || node.Pattern is DeclarationPatternSyntax;
+            """";
+
+        var expectedSyntaxText =
+            """"
+            var putOnNewLine =
+                node.Expression is ThrowExpressionSyntax || SpansMultipleLines(node) || node.Pattern is DiscardPatternSyntax ||
+                node.Pattern is DeclarationPatternSyntax;
+            """";
+
+        AssertFormattedSyntax(inputSyntaxText, expectedSyntaxText, scriptMode: false);
+    }
+
+    [Fact]
+    public void Formats_simple_while_statement()
+    {
+        var whileStatementSyntax =
+            SyntaxFactory.WhileStatement(
+                SyntaxFactory.LiteralExpression(SyntaxKind.TrueLiteralExpression),
+                SyntaxFactory.Block(
+                    SyntaxFactory.ExpressionStatement(
+                        SyntaxFactory.InvocationExpression(
+                            SyntaxFactory.IdentifierName("DoSomething")))));
+
+        var expectedSyntaxText =
+            """"
+            while (true)
+            {
+                DoSomething();
+            }
+            """";
+
+        AssertFormattedSyntax(whileStatementSyntax, expectedSyntaxText);
+    }
 
     private static void AssertFormattedSyntax(
         string inputSyntaxText,
@@ -2573,6 +2770,16 @@ public class CSharpFormatTests
 
             formattedTwice.Trim().Should().Be(expectedFormattedText.Trim());
         }
+    }
+
+    private static void AssertFormattedSyntax(
+        SyntaxNode syntaxNode,
+        string expectedFormattedText)
+    {
+        var formattedSyntaxText =
+            FormatCSharpFile.FormatSyntaxTree(SyntaxFactory.SyntaxTree(syntaxNode)).ToString();
+
+        formattedSyntaxText.Trim().Should().Be(expectedFormattedText.Trim());
     }
 
 
