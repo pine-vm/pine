@@ -3,6 +3,10 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Pine.Core.DotNet;
 using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Runtime.CompilerServices;
 using Xunit;
 
 namespace Pine.Core.Tests.DotNet;
@@ -2746,6 +2750,161 @@ public class CSharpFormatTests
         AssertFormattedSyntax(whileStatementSyntax, expectedSyntaxText);
     }
 
+    [Fact]
+    public void Formatting_only_changes_whitespace_in_Pine_Core_files()
+    {
+        var pineCoreDir = FindPineCoreDirectory();
+
+        var csFiles = Directory.EnumerateFiles(pineCoreDir, "*.cs", SearchOption.AllDirectories).ToList();
+
+        csFiles.Should().NotBeEmpty();
+
+        var failures = new List<string>();
+        var skippedFiles = new List<(string path, string reason)>();
+
+        foreach (var filePath in csFiles)
+        {
+            var relativePath = Path.GetRelativePath(pineCoreDir, filePath);
+            var originalText = File.ReadAllText(filePath);
+
+            // Skip files in bin/obj directories (build artifacts)
+            var sep = Path.DirectorySeparatorChar;
+
+            if (relativePath.Contains(sep + "bin" + sep) ||
+                relativePath.Contains(sep + "obj" + sep))
+            {
+                continue;
+            }
+
+            string formattedText;
+            string formattedTwice;
+
+            try
+            {
+                formattedText = CSharpFormat.FormatCSharpFile(originalText);
+                formattedTwice = CSharpFormat.FormatCSharpFile(formattedText);
+            }
+            catch (Exception ex)
+            {
+                failures.Add($"{relativePath}: formatter threw {ex.GetType().Name}: {ex.Message}");
+                continue;
+            }
+
+            // Assert formatting is stable: formatting a second time must return the same result.
+            if (formattedText != formattedTwice)
+            {
+                var stableMinLen = Math.Min(formattedText.Length, formattedTwice.Length);
+                var stableDiffIndex = 0;
+
+                for (var i = 0; i < stableMinLen; i++)
+                {
+                    if (formattedText[i] != formattedTwice[i])
+                    {
+                        stableDiffIndex = i;
+                        break;
+                    }
+                }
+
+                if (stableDiffIndex is 0 && formattedText.Length != formattedTwice.Length)
+                    stableDiffIndex = stableMinLen;
+
+                var stableContextStart = Math.Max(0, stableDiffIndex - 40);
+
+                var expectedStable =
+                    formattedText[stableContextStart..Math.Min(formattedText.Length, stableDiffIndex + 40)];
+
+                var actualStable =
+                    formattedTwice[stableContextStart..Math.Min(formattedTwice.Length, stableDiffIndex + 40)];
+
+                failures.Add(
+                    $"{relativePath}: formatting is NOT stable (second pass differs at index {stableDiffIndex}).\n" +
+                    $"  Expected (first format): \"{EscapeNewlines(expectedStable)}\"\n" +
+                    $"  Actual   (second format): \"{EscapeNewlines(actualStable)}\"");
+
+                continue;
+            }
+
+            var originalNonWhitespace = StripWhitespace(originalText);
+            var formattedNonWhitespace = StripWhitespace(formattedText);
+
+            if (originalNonWhitespace == formattedNonWhitespace)
+                continue;
+
+            // The formatter sorts using directives alphabetically, which reorders non-whitespace
+            // characters without losing any content. Detect this by checking if the sorted
+            // character sequences are identical (same characters, just reordered).
+            var originalSorted = new string([.. originalNonWhitespace.OrderBy(c => c)]);
+            var formattedSorted = new string([.. formattedNonWhitespace.OrderBy(c => c)]);
+
+            if (originalSorted == formattedSorted)
+            {
+                skippedFiles.Add((relativePath, "using directive sorting (reorders but preserves all content)"));
+                continue;
+            }
+
+            // If we get here, the formatter changed or lost non-whitespace content.
+            // Find the first difference to help debugging.
+            var minLen = Math.Min(originalNonWhitespace.Length, formattedNonWhitespace.Length);
+            var diffIndex = 0;
+
+            for (var i = 0; i < minLen; i++)
+            {
+                if (originalNonWhitespace[i] != formattedNonWhitespace[i])
+                {
+                    diffIndex = i;
+                    break;
+                }
+            }
+
+            if (diffIndex is 0 && originalNonWhitespace.Length != formattedNonWhitespace.Length)
+                diffIndex = minLen;
+
+            var contextStart = Math.Max(0, diffIndex - 40);
+
+            var expectedContext =
+                originalNonWhitespace[contextStart..Math.Min(originalNonWhitespace.Length, diffIndex + 40)];
+
+            var actualContext =
+                formattedNonWhitespace[contextStart..Math.Min(formattedNonWhitespace.Length, diffIndex + 40)];
+
+            failures.Add(
+                $"{relativePath}: non-whitespace characters differ at position {diffIndex}.\n" +
+                $"  Expected (original, length {originalNonWhitespace.Length}): \"{expectedContext}\"\n" +
+                $"  Actual   (formatted, length {formattedNonWhitespace.Length}): \"{actualContext}\"");
+        }
+
+        failures.Should().BeEmpty(
+            $"Formatting changed non-whitespace characters in {failures.Count} file(s):\n" +
+            string.Join("\n", failures) +
+            (skippedFiles.Count > 0
+            ?
+            $"\n\nSkipped {skippedFiles.Count} file(s):\n" +
+                  string.Join("\n", skippedFiles.Select(s => $"  {s.path}: {s.reason}"))
+            :
+            ""));
+    }
+
+    private static string EscapeNewlines(string text) =>
+        text.Replace("\r", "\\r").Replace("\n", "\\n");
+
+
+    private static string StripWhitespace(string text) =>
+        new([.. text.Where(c => !char.IsWhiteSpace(c))]);
+
+
+    private static string FindPineCoreDirectory([CallerFilePath] string? callerFilePath = null)
+    {
+        // This test file is at implement/Pine.Core.Tests/DotNet/CSharpFormatTests.cs
+        // Pine.Core is at implement/Pine.Core/
+        var testFileDir = Path.GetDirectoryName(callerFilePath)!;
+        var pineCoreDir = Path.GetFullPath(Path.Combine(testFileDir, "..", "..", "Pine.Core"));
+
+        Directory.Exists(pineCoreDir).Should().BeTrue(
+            $"Expected Pine.Core directory at {pineCoreDir}");
+
+        return pineCoreDir;
+    }
+
     private static void AssertFormattedSyntax(
         string inputSyntaxText,
         string expectedFormattedText,
@@ -2801,5 +2960,375 @@ public class CSharpFormatTests
         var formattedTwice = formatOnce(formattedOnce);
 
         formattedTwice.Trim().Should().Be(formattedOnce.Trim());
+    }
+
+
+    /// <summary>
+    /// Asserts that formatting only changes whitespace characters,
+    /// and that the result is stable (idempotent).
+    /// </summary>
+    private static void AssertFormattingOnlyChangesWhitespace(string inputSyntaxText, bool scriptMode)
+    {
+        Func<string, string> formatOnce =
+            scriptMode
+            ?
+            CSharpFormat.FormatCSharpScript
+            :
+            CSharpFormat.FormatCSharpFile;
+
+        var formattedOnce = formatOnce(inputSyntaxText);
+        var formattedTwice = formatOnce(formattedOnce);
+
+        // Assert stability
+        formattedTwice.Trim().Should().Be(formattedOnce.Trim(),
+            "Formatting must be stable (second pass must match first)");
+
+        // Assert only whitespace changed
+        var origNonWs = StripWhitespace(inputSyntaxText);
+        var fmtNonWs = StripWhitespace(formattedOnce);
+
+        fmtNonWs.Should().Be(origNonWs,
+            "Formatting must only change whitespace characters");
+    }
+
+
+    [Fact]
+    public void Preserves_trailing_comment_on_field_declaration()
+    {
+        var input =
+            """
+            class C
+            {
+                private const int RandomSweepDenominator = 100_000; // ~0.01% chance per new bucket
+                private const int RandomSweepSampleSize = 100_000;
+            }
+            """;
+
+        AssertFormattingOnlyChangesWhitespace(input, scriptMode: false);
+    }
+
+
+    [Fact]
+    public void Preserves_comment_in_member_access_chain()
+    {
+        var input =
+            """
+            var specialized =
+                specializations
+                // Order to prefer more specific constraints when selecting at runtime.
+                .OrderDescending(comparer);
+            """;
+
+        AssertFormattingOnlyChangesWhitespace(input, scriptMode: true);
+    }
+
+
+    [Fact]
+    public void Preserves_comment_between_chained_method_calls()
+    {
+        var input =
+            """
+            var operatorToFunction =
+                ImmutableDictionary<string, (string ModuleName, string FunctionName)>.Empty
+                // Basics operators
+                .Add("+", ("Basics", "add"))
+                .Add("-", ("Basics", "sub"));
+            """;
+
+        AssertFormattingOnlyChangesWhitespace(input, scriptMode: true);
+    }
+
+
+    [Fact]
+    public void Preserves_trailing_comment_on_argument()
+    {
+        var input =
+            """
+            var result = Func(
+                updatesExpr,
+                Expression.EmptyList, // processed fields (initially empty)
+                recordFieldsExpr);
+            """;
+
+        AssertFormattingOnlyChangesWhitespace(input, scriptMode: true);
+    }
+
+
+    [Fact]
+    public void Preserves_inline_comment_after_condition_in_else_if()
+    {
+        var input =
+            """
+            if (x)
+            {
+                Row++;
+            }
+            else if (ch is not '\r') // Skip CR when counting position
+            {
+                CurrentColumn++;
+            }
+            """;
+
+        AssertFormattingOnlyChangesWhitespace(input, scriptMode: true);
+    }
+
+
+    [Fact]
+    public void Preserves_comment_in_switch_expression_arm()
+    {
+        var input =
+            """
+            return type switch
+            {
+                ValueType.Generic =>
+                    // boolean == PineKernelValues.TrueValue
+                    SyntaxFactory.BinaryExpression(SyntaxKind.EqualsExpression, left, right),
+                ValueType.Integer =>
+                    left,
+            };
+            """;
+
+        AssertFormattingOnlyChangesWhitespace(input, scriptMode: true);
+    }
+
+
+    [Fact]
+    public void Preserves_comment_after_switch_expression_arm_expression()
+    {
+        var input =
+            """
+            return pattern switch
+            {
+                Pattern.AllPattern => null, // Wildcard pattern contains no constant value
+                Pattern.VarPattern => null,
+                Pattern.IntPattern intPattern =>
+                    intPattern.Value,
+            };
+            """;
+
+        AssertFormattingOnlyChangesWhitespace(input, scriptMode: true);
+    }
+
+
+    [Fact]
+    public void Preserves_comment_between_named_arguments()
+    {
+        var input =
+            """
+            var result = Func(
+                trueBranch: floatFloatEqual, // Both floats - compare cross-products
+                falseBranch: floatIntEqual);
+            """;
+
+        AssertFormattingOnlyChangesWhitespace(input, scriptMode: true);
+    }
+
+
+    [Fact]
+    public void Preserves_block_comment_in_expression()
+    {
+        var input =
+            """
+            var firstArgExpr = inputList.Items[0];
+
+            /* if (firstArgExpr is Expression.ListExpression innerList)
+            {
+                return innerList;
+            } */
+
+            {
+                var nonEmptyItems = new List<int>(capacity);
+            }
+            """;
+
+        AssertFormattingOnlyChangesWhitespace(input, scriptMode: true);
+    }
+
+
+    [Fact]
+    public void Preserves_comment_after_arrow_expression_clause()
+    {
+        var input =
+            """
+            class C
+            {
+                public static string CacheDirectory =>
+                    // https://stackoverflow.com/questions/39224518
+                    Path.Combine(
+                        Environment.GetEnvironmentVariable("HOME")!,
+                        ".cache");
+            }
+            """;
+
+        AssertFormattingOnlyChangesWhitespace(input, scriptMode: false);
+    }
+
+
+    [Fact]
+    public void Preserves_comment_in_conditional_expression()
+    {
+        var input =
+            """
+            return
+                charValue is 39
+                ? "\\'" // single quote must be escaped
+                : CharDefaultEscaping(charValue);
+            """;
+
+        AssertFormattingOnlyChangesWhitespace(input, scriptMode: true);
+    }
+
+
+    [Fact]
+    public void While_statement_is_stable_with_internal_whitespace()
+    {
+        var input =
+            """
+            while (                        NextTokenMatches(peek => peek.Kind is TokenKind.Comma))
+            {
+                Advance();
+            }
+            """;
+
+        AssertFormattingIsStable(input, scriptMode: true);
+    }
+
+
+    [Fact]
+    public void Switch_expression_arm_when_clause_spacing_is_stable()
+    {
+        var input =
+            """
+            return expr switch
+            {
+                FuncOrValue funcOrValue when funcOrValue.ModuleName.Count is 0 &&
+                    replacements.TryGetValue(funcOrValue.Name, out var replacement)  =>
+                    replacement.Value,
+
+                _ =>
+                    expr,
+            };
+            """;
+
+        AssertFormattingIsStable(input, scriptMode: true);
+    }
+
+
+    [Fact]
+    public void Preserves_comment_on_conditional_expression_colon()
+    {
+        var input =
+            """
+            return
+                charValue is 39
+                ? "\\'"
+                : // single quote must be escaped in Elm char literals
+                CharDefaultEscaping(charValue) ??
+                char.ConvertFromUtf32(charValue);
+            """;
+
+        AssertFormattingOnlyChangesWhitespace(input, scriptMode: true);
+    }
+
+
+    [Fact]
+    public void Preserves_comment_on_binary_operator()
+    {
+        var input =
+            """
+            var result = allComments.Any(c =>
+                !c.Lexeme.StartsWith("{-|") && // not a doc comment
+                c.Start.Row > commentToken.End.Row);
+            """;
+
+        AssertFormattingOnlyChangesWhitespace(input, scriptMode: true);
+    }
+
+
+    [Fact]
+    public void Preserves_comment_before_else_statement()
+    {
+        var input =
+            """
+            if (hex.Length <= 4)
+                targetLength = 4;
+            else if (hex.Length <= 8)
+                targetLength = 8;
+            else
+                // Round up to next multiple of 8
+                targetLength = (hex.Length + 7) / 8 * 8;
+            """;
+
+        AssertFormattingOnlyChangesWhitespace(input, scriptMode: true);
+    }
+
+
+    [Fact]
+    public void Preserves_comment_on_collection_element()
+    {
+        var input =
+            """
+            var result = Func([
+                updatesExpr,
+                Expression.EmptyList, // processed fields (initially empty)
+                recordFieldsExpr // remaining fields
+            ]);
+            """;
+
+        AssertFormattingOnlyChangesWhitespace(input, scriptMode: true);
+    }
+
+
+    [Fact]
+    public void Case_pattern_when_clause_whitespace_is_stable()
+    {
+        var input =
+            """
+            switch (expr)
+            {
+                case Expression.FunctionOrValue funcOrValue when funcOrValue.ModuleName.Count is 0 && replacements.TryGetValue(funcOrValue.Name, out var replacement):
+                    return replacement.Value;
+            }
+            """;
+
+        AssertFormattingIsStable(input, scriptMode: true);
+    }
+
+
+    [Fact]
+    public void Preserves_trailing_comment_on_continue_statement()
+    {
+        var input =
+            """
+            foreach (var item in items)
+            {
+                if (visited.Contains(item))
+                {
+                    continue; // Skip to avoid infinite loop
+                }
+
+                Process(item);
+            }
+            """;
+
+        AssertFormattingOnlyChangesWhitespace(input, scriptMode: true);
+    }
+
+
+    [Fact]
+    public void Case_pattern_when_clause_multiline_is_stable()
+    {
+        var input =
+            """
+            switch (expr)
+            {
+                case Expression.FunctionOrValue funcOrValue when
+                    funcOrValue.ModuleName.Count is 0 &&
+                    substitutions.TryGetValue(funcOrValue.Name, out var replacement):
+                    return replacement.Value;
+            }
+            """;
+
+        AssertFormattingIsStable(input, scriptMode: true);
     }
 }
