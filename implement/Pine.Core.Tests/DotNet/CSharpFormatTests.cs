@@ -3331,4 +3331,153 @@ public class CSharpFormatTests
 
         AssertFormattingIsStable(input, scriptMode: true);
     }
+
+
+    [Fact]
+    public void If_with_single_line_body_stays_without_braces()
+    {
+        var input =
+            """
+            if (condition)
+                DoSomething();
+            """;
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+
+    [Fact]
+    public void If_with_multiline_body_gets_braces()
+    {
+        var input =
+            """
+            if (condition)
+                CallMethod(
+                    arg1,
+                    arg2);
+            """;
+
+        var expected =
+            """
+            if (condition)
+            {
+                CallMethod(
+                    arg1,
+                    arg2);
+            }
+            """;
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+
+    [Fact]
+    public void Else_with_multiline_body_gets_braces()
+    {
+        var input =
+            """
+            if (condition)
+            {
+                A();
+            }
+            else
+                OtherMethod(
+                    arg1,
+                    arg2);
+            """;
+
+        var expected =
+            """
+            if (condition)
+            {
+                A();
+            }
+            else
+            {
+                OtherMethod(
+                    arg1,
+                    arg2);
+            }
+            """;
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+
+    [Fact]
+    public void If_and_else_with_multiline_bodies_both_get_braces()
+    {
+        var input =
+            """
+            if (condition)
+                CallMethod(
+                    arg1,
+                    arg2);
+            else
+                OtherMethod(
+                    arg1,
+                    arg2);
+            """;
+
+        var expected =
+            """
+            if (condition)
+            {
+                CallMethod(
+                    arg1,
+                    arg2);
+            }
+            else
+            {
+                OtherMethod(
+                    arg1,
+                    arg2);
+            }
+            """;
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+
+    [Fact]
+    public void If_with_multiline_body_already_in_block_stays_unchanged()
+    {
+        var input =
+            """
+            if (condition)
+            {
+                CallMethod(
+                    arg1,
+                    arg2);
+            }
+            """;
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+
+    [Fact]
+    public void If_with_multiline_return_gets_braces()
+    {
+        var input =
+            """
+            if (condition)
+                return SomeMethod(
+                    arg1,
+                    arg2);
+            """;
+
+        var expected =
+            """
+            if (condition)
+            {
+                return
+                    SomeMethod(
+                        arg1,
+                        arg2);
+            }
+            """;
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
 }

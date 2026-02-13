@@ -183,7 +183,9 @@ public static class ElmValueEncoding
                         if (tagCandidateValue == ElmValue.ElmStringTypeTagNameAsValue)
                         {
                             if (tagArgumentsList.Items.Length is not 1)
+                            {
                                 return "Failed to convert value under String tag: Expected a list of tag arguments with one element";
+                            }
 
                             var charsList = tagArgumentsList.Items.Span[0];
 
@@ -205,7 +207,9 @@ public static class ElmValueEncoding
                         if (tagCandidateValue == ElmValue.ElmRecordTypeTagNameAsValue)
                         {
                             if (tagArgumentsList.Items.Length is not 1)
+                            {
                                 return "Failed to convert value under Record tag: Expected a list of tag arguments with one element";
+                            }
 
                             var recordValue = tagArgumentsList.Items.Span[0];
 
@@ -232,7 +236,9 @@ public static class ElmValueEncoding
                         if (tagCandidateValue == ElmValue.ElmBytesTypeTagNameAsValue)
                         {
                             if (tagArgumentsList.Items.Length is not 1)
+                            {
                                 return "Failed to convert value under Bytes tag: Expected a list of tag arguments with single item";
+                            }
 
                             if (tagArgumentsList.Items.Span[0] is not PineValue.BlobValue blobValue)
                                 return "Failed to convert value under Bytes tag: Expected blob value in tag argument";
@@ -247,7 +253,9 @@ public static class ElmValueEncoding
                         if (tagCandidateValue == ElmValue.ElmFloatTypeTagNameAsValue)
                         {
                             if (tagArgumentsList.Items.Length is not 2)
+                            {
                                 return "Failed to convert value under Float tag: Expected a list of tag arguments with two elements";
+                            }
 
                             var numeratorValue = tagArgumentsList.Items.Span[0];
 
@@ -396,8 +404,10 @@ public static class ElmValueEncoding
             return "First element is not a string: " + tagNameErr;
 
         if (parseTagNameResult.IsOkOrNull() is not { } tagNameOk)
+        {
             throw new NotImplementedException(
                 "Unexpected result type: " + parseTagNameResult.GetType().FullName);
+        }
 
         var tagArgumentsValue = list.Items.Span[1];
 

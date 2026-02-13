@@ -324,10 +324,14 @@ public class DependenciesConverter : JsonConverter<ElmJsonStructure.Dependencies
         if (hasDirect || hasIndirect)
         {
             if (hasDirect)
+            {
                 direct = JsonSerializer.Deserialize<Dictionary<string, string>>(directElement.GetRawText(), options) ?? [];
+            }
 
             if (hasIndirect)
+            {
                 indirect = JsonSerializer.Deserialize<Dictionary<string, string>>(indirectElement.GetRawText(), options) ?? [];
+            }
 
             // Anything else becomes "flat"
             foreach (var property in root.EnumerateObject())

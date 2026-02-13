@@ -686,15 +686,19 @@ public static class KernelFunction
             return (BigInteger)blobBytes[0];
 
         if (blobBytes.Length is 2)
+        {
             return new BigInteger(
                 blobBytes[0] << 8 |
                 blobBytes[1]);
+        }
 
         if (blobBytes.Length is 3)
+        {
             return new BigInteger(
                 blobBytes[0] << 16 |
                 blobBytes[1] << 8 |
                 blobBytes[2]);
+        }
 
         if (blobBytes.Length is 4)
         {

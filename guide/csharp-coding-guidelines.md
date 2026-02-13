@@ -183,6 +183,41 @@ Every section of a switch statement must be separated from other sections by at 
 
 If a return statement spans multiple lines, the expression must start on a new line after the `return` keyword;
 
+### Braces for Multi-Line Statements
+
+For any statement in an `if` or `else` body that spans multiple lines, the statement must be wrapped in a block (braces `{ }`).
+Single-line statements may remain without braces.
+
+For example, the following code:
+
+```csharp
+if (condition)
+    CallMethod(
+        arg1,
+        arg2);
+else
+    OtherMethod(
+        arg1,
+        arg2);
+```
+
+Must be formatted to:
+
+```csharp
+if (condition)
+{
+    CallMethod(
+        arg1,
+        arg2);
+}
+else
+{
+    OtherMethod(
+        arg1,
+        arg2);
+}
+```
+
 ### Comments Before Content on a Line
 
 If a comment appears before other content on the same line, the comment must be moved to a separate line above that content.

@@ -902,7 +902,20 @@ public static class FormatCSharpFile
         else
         {
             body = (StatementSyntax)FormatNode(node.Statement, indent + 1);
-            body = body.WithLeadingTrivia(s_lineFeed, Indent(indent + 1));
+
+            // If the formatted body spans multiple lines, wrap it in braces.
+            // Use ToString() to check the statement text without leading trivia (comments).
+            var bodyText = body.ToString().Trim();
+            if (SpansMultipleLines(bodyText))
+            {
+                body = body.WithLeadingTrivia().WithTrailingTrivia();
+                var wrappedBlock = SyntaxFactory.Block(SyntaxFactory.SingletonList(body));
+                body = EnsureBraceNewline(FormatBlock(wrappedBlock, indent), indent);
+            }
+            else
+            {
+                body = body.WithLeadingTrivia(s_lineFeed, Indent(indent + 1));
+            }
         }
 
         var r = node
@@ -932,8 +945,21 @@ public static class FormatCSharpFile
         else
         {
             body = (StatementSyntax)FormatNode(node.Statement, indent + 1);
-            body = body.WithLeadingTrivia(
-                EnsureLeadingBreaks(node.Statement.GetLeadingTrivia(), 1, indent + 1));
+
+            // If the formatted body spans multiple lines, wrap it in braces.
+            // Use ToString() to check the statement text without leading trivia (comments).
+            var bodyText = body.ToString().Trim();
+            if (SpansMultipleLines(bodyText))
+            {
+                body = body.WithLeadingTrivia().WithTrailingTrivia();
+                var wrappedBlock = SyntaxFactory.Block(SyntaxFactory.SingletonList(body));
+                body = EnsureBraceNewline(FormatBlock(wrappedBlock, indent), indent);
+            }
+            else
+            {
+                body = body.WithLeadingTrivia(
+                    EnsureLeadingBreaks(node.Statement.GetLeadingTrivia(), 1, indent + 1));
+            }
         }
 
         var kw = node.ElseKeyword
@@ -1105,13 +1131,17 @@ public static class FormatCSharpFile
                 labels.Add(fmtCp);
             }
             else if (label is CaseSwitchLabelSyntax cs)
+            {
                 labels.Add(cs.WithKeyword(cs.Keyword.WithTrailingTrivia(s_space))
                     .WithColonToken(cs.ColonToken.WithLeadingTrivia()
                         .WithTrailingTrivia(StripWhitespace(cs.ColonToken.TrailingTrivia))));
+            }
             else if (label is DefaultSwitchLabelSyntax ds)
+            {
                 labels.Add(ds.WithKeyword(ds.Keyword.WithTrailingTrivia())
                     .WithColonToken(ds.ColonToken.WithLeadingTrivia()
                         .WithTrailingTrivia(StripWhitespace(ds.ColonToken.TrailingTrivia))));
+            }
             else
                 labels.Add(label);
         }
@@ -1153,8 +1183,10 @@ public static class FormatCSharpFile
         var kw = node.CatchKeyword.WithLeadingTrivia(s_lineFeed, Indent(indent)).WithTrailingTrivia();
         var r = node.WithCatchKeyword(kw).WithBlock(block);
         if (node.Declaration is not null)
+        {
             r = r.WithDeclaration(node.Declaration.WithOpenParenToken(
                 node.Declaration.OpenParenToken.WithLeadingTrivia(s_space)));
+        }
         return r;
     }
 
@@ -1322,7 +1354,7 @@ public static class FormatCSharpFile
             args.Add(a);
         }
         var seps = RebuildSeparators(
-            node.Arguments.GetSeparators().ToList(),
+            [.. node.Arguments.GetSeparators()],
             node.Arguments.Count - 1);
         return node
             .WithOpenParenToken(node.OpenParenToken.WithLeadingTrivia().WithTrailingTrivia())
@@ -1363,7 +1395,7 @@ public static class FormatCSharpFile
             args.Add(a);
         }
         var seps = RebuildSeparators(
-            node.Arguments.GetSeparators().ToList(),
+            [.. node.Arguments.GetSeparators()],
             node.Arguments.Count - 1);
         return node
             .WithOpenParenToken(node.OpenParenToken.WithLeadingTrivia().WithTrailingTrivia())
@@ -1482,7 +1514,7 @@ public static class FormatCSharpFile
             elems.Add(e);
         }
         var seps = RebuildSeparators(
-            node.Elements.GetSeparators().ToList(),
+            [.. node.Elements.GetSeparators()],
             node.Elements.Count - 1);
         return node
             .WithOpenBracketToken(node.OpenBracketToken.WithTrailingTrivia())
