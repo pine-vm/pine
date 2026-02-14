@@ -205,7 +205,6 @@ public class CSharpFormatTests
             {
                 public int MyField;
 
-
                 public int MyFunction()
                 {
                     return 1;
@@ -261,10 +260,8 @@ public class CSharpFormatTests
                 public int myField =
                     1;
 
-
                 public int MyProperty { get; set; } =
                     1;
-
 
                 void method_declaration()
                 {
@@ -1997,7 +1994,6 @@ public class CSharpFormatTests
                 public int Field;
             }
 
-
             class SecondClass
             {
                 public int Field;
@@ -2645,7 +2641,7 @@ public class CSharpFormatTests
     public void Formats_if_condition_exceeding_line_length_and_nested_condition()
     {
         var inputSyntaxText =
-            """"            
+            """"
             if ((local_002 == PineKernelValues.TrueValue) && (CommonReusedValues.Blob_Str_Elm_Float == PineValueExtension.ValueFromPathOrEmptyList(param_1_0, [0])))
             {
                 PineValue local_003 = PineValueExtension.ValueFromPathOrEmptyList(param_1_0, [1]);
@@ -2715,7 +2711,7 @@ public class CSharpFormatTests
     public void Formats_boolean_operation_chain_exceeding_line_length()
     {
         var inputSyntaxText =
-            """"            
+            """"
             var putOnNewLine = node.Expression is ThrowExpressionSyntax || SpansMultipleLines(node) || node.Pattern is DiscardPatternSyntax || node.Pattern is DeclarationPatternSyntax;
             """";
 
@@ -2726,7 +2722,49 @@ public class CSharpFormatTests
                 node.Pattern is DeclarationPatternSyntax;
             """";
 
-        AssertFormattedSyntax(inputSyntaxText, expectedSyntaxText, scriptMode: false);
+        AssertFormattedSyntax(inputSyntaxText, expectedSyntaxText, scriptMode: true);
+    }
+
+    [Fact]
+    public void Formats_boolean_operation_chain_containing_comment()
+    {
+        var inputSyntaxText =
+            """"
+            var needsBlank = NeedBlankBetweenStatements(stmts[i - 1], orig)
+                // Also check formatted versions: formatting may break a single-line
+                || SpansMultipleLines(result[i - 1].ToFullString().Trim())
+                || SpansMultipleLines(fmt.ToFullString().Trim());
+            """";
+
+        var expectedSyntaxText =
+            """"
+            var needsBlank =
+                NeedBlankBetweenStatements(stmts[i - 1], orig)
+                // Also check formatted versions: formatting may break a single-line
+                || SpansMultipleLines(result[i - 1].ToFullString().Trim())
+                || SpansMultipleLines(fmt.ToFullString().Trim());
+            """";
+
+        AssertFormattedSyntax(inputSyntaxText, expectedSyntaxText, scriptMode: true);
+    }
+
+    [Fact]
+    public void Propagates_line_breaks_up_in_return_method_chain()
+    {
+        var inputSyntaxText =
+            """"
+            return node.WithEqualsToken(node.EqualsToken.WithTrailingTrivia(s_space)).WithValue(
+                fmtValue.WithLeadingTrivia());
+            """";
+
+        var expectedSyntaxText =
+            """"
+            return
+                node.WithEqualsToken(node.EqualsToken.WithTrailingTrivia(s_space))
+                .WithValue(fmtValue.WithLeadingTrivia());
+            """";
+
+        AssertFormattedSyntax(inputSyntaxText, expectedSyntaxText, scriptMode: true);
     }
 
     [Fact]
@@ -3529,5 +3567,86 @@ public class CSharpFormatTests
             """;
 
         AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Switch_expression_preserves_blank_lines_between_arm_groups()
+    {
+        var input =
+            """
+            var r =
+                o switch
+                {
+                    string s => s.Length,
+
+                    int n => n,
+                    double d => (int)d,
+
+                    _ =>
+                    0
+                };
+            """;
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Switch_expression_throw_expression_indents_constructor_arg()
+    {
+        var input =
+            """
+            var r =
+                o switch
+                {
+                    int n => n,
+
+                    _ =>
+                    throw new NotImplementedException(
+                        "not implemented")
+                };
+            """;
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Methods_separated_by_single_blank_line()
+    {
+        var input =
+            """
+            class C
+            {
+                void A()
+                {
+                }
+
+                void B()
+                {
+                }
+            }
+            """;
+
+        AssertFormattedSyntax(input, input, scriptMode: false);
+    }
+
+    [Fact]
+    public void Or_pattern_continuation_lines_have_consistent_indentation()
+    {
+        var input =
+            """
+            var r =
+                o switch
+                {
+                    int or string or
+                    double or float or
+                    decimal =>
+                    1,
+
+                    _ =>
+                    0
+                };
+            """;
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
     }
 }

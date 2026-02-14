@@ -79,12 +79,10 @@ public class OptimizeAndEmitStringFromIntTests
                                 KernelFunction.negate(param_1_0)));
                 }
 
-
                 public static PineValue zzz_anon_12af8dcc_24a48553(PineValue param_1_0)
                 {
                     return Global_Anonymous.zzz_anon_632693ae_d06ccc62(param_1_0, PineValue.EmptyList);
                 }
-
 
                 public static PineValue zzz_anon_39fa68f8_2402eeb0(PineValue param_1_0)
                 {
@@ -149,7 +147,6 @@ public class OptimizeAndEmitStringFromIntTests
                     }
                 }
 
-
                 public static PineValue zzz_anon_632693ae_d06ccc62(PineValue param_1_0, PineValue param_1_1)
                 {
                     PineValue local_param_1_0 = param_1_0;
@@ -185,7 +182,6 @@ public class OptimizeAndEmitStringFromIntTests
                         continue;
                     }
                 }
-
 
                 public static PineValue zzz_anon_6dc95117_ab4922f9(PineValue param_1_0, PineValue param_1_1, PineValue param_1_2)
                 {

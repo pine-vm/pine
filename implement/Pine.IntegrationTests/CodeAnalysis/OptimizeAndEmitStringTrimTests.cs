@@ -71,14 +71,14 @@ public class OptimizeAndEmitStringTrimTests
                 {
                     PineValue local_param_1_0 = param_1_0;
                     PineValue local_param_1_1 = param_1_1;
-
+            
                     while (true)
                     {
                         if (local_param_1_0 == CommonReusedValues.Blob_Int_0)
                         {
                             return CommonReusedValues.Blob_Int_0;
                         }
-
+            
                         if (Global_Anonymous.zzz_anon_d97a2014_dda26649(
                             KernelFunctionFused.SkipAndTake(
                                 takeCount: 4,
@@ -90,72 +90,70 @@ public class OptimizeAndEmitStringTrimTests
                                 PineValue local_param_1_0_temp = KernelFunctionSpecialized.int_add(-4, local_param_1_0);
                                 local_param_1_0 = local_param_1_0_temp;
                             }
-
+            
                             continue;
                         }
-
+            
                         return local_param_1_0;
                     }
                 }
-
-
+            
                 public static PineValue zzz_anon_7b433b8b_d4fe90b2(PineValue param_1_0, PineValue param_1_1)
                 {
                     PineValue local_param_1_0 = param_1_0;
                     PineValue local_param_1_1 = param_1_1;
-
+            
                     while (true)
                     {
                         PineValue local_000 =
                             KernelFunctionFused.SkipAndTake(takeCount: 4, skipCountValue: local_param_1_0, argument: local_param_1_1);
-
+            
                         if (KernelFunctionSpecialized.length_as_int(local_000) == 0)
                         {
                             return local_param_1_0;
                         }
-
+            
                         if (Global_Anonymous.zzz_anon_d97a2014_dda26649(local_000) == PineKernelValues.TrueValue)
                         {
                             {
                                 PineValue local_param_1_0_temp = KernelFunctionSpecialized.int_add(4, local_param_1_0);
                                 local_param_1_0 = local_param_1_0_temp;
                             }
-
+            
                             continue;
                         }
-
+            
                         return local_param_1_0;
                     }
                 }
-
-
+            
                 public static PineValue zzz_anon_d97a2014_dda26649(PineValue param_1_0)
                 {
                     if (param_1_0 == CommonReusedValues.Blob_Char_space)
                     {
                         return PineKernelValues.TrueValue;
                     }
-
+            
                     if (param_1_0 == CommonReusedValues.Blob_Char_tab)
                     {
                         return PineKernelValues.TrueValue;
                     }
-
+            
                     if (param_1_0 == CommonReusedValues.Blob_Char_newline)
                     {
                         return PineKernelValues.TrueValue;
                     }
-
+            
                     if (param_1_0 == CommonReusedValues.Blob_Char_carriagereturn)
                     {
                         return PineKernelValues.TrueValue;
                     }
-
+            
                     if (param_1_0 == CommonReusedValues.Blob_Char_nobreakspace)
                     {
                         return PineKernelValues.TrueValue;
                     }
-
+            
                     return PineKernelValues.FalseValue;
                 }
             }

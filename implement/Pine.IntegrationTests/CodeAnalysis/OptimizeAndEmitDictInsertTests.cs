@@ -183,7 +183,6 @@ public class OptimizeAndEmitDictInsertTests
                     return CommonReusedValues.List_50724673;
                 }
             
-            
                 public static PineValue compareList(PineValue param_1_0, PineValue param_1_1)
                 {
                     ImmutableSliceBuilder local_param_1_0 = ImmutableSliceBuilder.Create(param_1_0);
@@ -231,7 +230,6 @@ public class OptimizeAndEmitDictInsertTests
                         throw new ParseExpressionException("TODO: Include details from encoded and env subexpressions");
                     }
                 }
-            
             
                 public static PineValue compareStrings(PineValue param_1_0, PineValue param_1_1, PineValue param_1_2)
                 {
@@ -298,7 +296,6 @@ public class OptimizeAndEmitDictInsertTests
                 {
                     return KernelFunctionSpecialized.equal(KernelFunctionSpecialized.take(0, param_1_0), PineValue.EmptyList);
                 }
-            
             
                 public static PineValue zzz_anon_e6d15ff4_dda26649(PineValue param_1_0, PineValue param_1_1, PineValue param_1_2, PineValue param_1_3, PineValue param_1_4)
                 {
@@ -443,7 +440,6 @@ public class OptimizeAndEmitDictInsertTests
                                 ])
                             ]);
                 }
-            
             
                 public static PineValue zzz_anon_ea679199_24f2a3d1(PineValue param_1_0, PineValue param_1_1, PineValue param_1_2)
                 {

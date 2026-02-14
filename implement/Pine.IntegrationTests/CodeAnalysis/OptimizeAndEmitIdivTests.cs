@@ -309,45 +309,44 @@ public class OptimizeAndEmitIdivTests
                     {
                         return CommonReusedValues.Blob_Int_0;
                     }
-
+            
                     PineValue local_001 =
                         KernelFunction.ValueFromBool(KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(0, param_1_0));
-
+            
                     PineValue local_003 =
                         KernelFunction.ValueFromBool(KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(0, param_1_1));
-
+            
                     PineValue local_004 =
                         local_001 == PineKernelValues.TrueValue ? param_1_0 : KernelFunctionSpecialized.int_mul(-1, param_1_0);
-
+            
                     PineValue local_005 =
                         local_003 == PineKernelValues.TrueValue ? param_1_1 : KernelFunctionSpecialized.int_mul(-1, param_1_1);
-
+            
                     PineValue local_008 = Test.idivHelper(local_004, local_005, CommonReusedValues.Blob_Int_0);
-
+            
                     if ((local_001 == PineKernelValues.TrueValue ? false : true) ==
                         (local_003 == PineKernelValues.TrueValue ? false : true))
                     {
                         return local_008;
                     }
-
+            
                     return KernelFunctionSpecialized.int_mul(-1, local_008);
                 }
-
-
+            
                 public static PineValue idivHelper(PineValue param_1_0, PineValue param_1_1, PineValue param_1_2)
                 {
                     PineValue local_param_1_0 = param_1_0;
                     PineValue local_param_1_1 = param_1_1;
                     PineValue local_param_1_2 = param_1_2;
-
+            
                     while (true)
                     {
                         PineValue local_000 = KernelFunctionSpecialized.int_mul(17, local_param_1_1);
-
+            
                         if (KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(local_000, local_param_1_0))
                         {
                             PineValue local_001 = Test.idivHelper(local_param_1_0, local_000, CommonReusedValues.Blob_Int_0);
-
+            
                             return
                                 KernelFunctionSpecialized.int_add(
                                     KernelFunctionSpecialized.int_mul(17, local_001),
@@ -358,21 +357,21 @@ public class OptimizeAndEmitIdivTests
                                         local_param_1_1,
                                         CommonReusedValues.Blob_Int_0));
                         }
-
+            
                         if (KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(local_param_1_1, local_param_1_0))
                         {
                             {
                                 PineValue local_param_1_0_temp =
                                     KernelFunctionSpecialized.int_add(local_param_1_0, KernelFunctionSpecialized.int_mul(-1, local_param_1_1));
-
+            
                                 PineValue local_param_1_2_temp = KernelFunctionSpecialized.int_add(1, local_param_1_2);
                                 local_param_1_0 = local_param_1_0_temp;
                                 local_param_1_2 = local_param_1_2_temp;
                             }
-
+            
                             continue;
                         }
-
+            
                         return local_param_1_2;
                     }
                 }
@@ -386,7 +385,6 @@ public class OptimizeAndEmitIdivTests
                 public static IReadOnlyDictionary<PineValue, System.Func<PineValue, PineValue>> dispatcherDictionary =
                     BuildDispatcherDictionary();
 
-
                 public static IReadOnlyDictionary<PineValue, System.Func<PineValue, PineValue>> BuildDispatcherDictionary()
                 {
                     var dict = new Dictionary<PineValue, System.Func<PineValue, PineValue>>();
@@ -394,7 +392,6 @@ public class OptimizeAndEmitIdivTests
                     dict[CommonReusedValues.List_1c954123] = Dispatch_1c954123;
                     return dict;
                 }
-
 
                 public static PineValue? Dispatch_9a1e26cb(PineValue environment)
                 {
@@ -407,7 +404,6 @@ public class OptimizeAndEmitIdivTests
 
                     return null;
                 }
-
 
                 public static PineValue? Dispatch_1c954123(PineValue environment)
                 {

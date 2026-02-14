@@ -347,7 +347,6 @@ public class OptimizeAndEmitJsonEncodeTests
                 else
                     '?'
             
-            
             """";
 
         var parseCache = new PineVMParseCache();
@@ -386,27 +385,27 @@ public class OptimizeAndEmitJsonEncodeTests
                 {
                     PineValue local_param_1_0 = param_1_0;
                     PineValue local_param_1_1 = param_1_1;
-
+            
                     while (true)
                     {
                         PineValue local_000 =
                             KernelFunctionFused.SkipAndTake(takeCount: 4, skipCountValue: local_param_1_1, argument: local_param_1_0);
-
+            
                         if (KernelFunctionSpecialized.length_as_int(local_000) == 0)
                         {
                             return local_param_1_1;
                         }
-
+            
                         if (local_000 == CommonReusedValues.Blob_Char_doublequote)
                         {
                             return local_param_1_1;
                         }
-
+            
                         if (local_000 == CommonReusedValues.Blob_Char_backslash)
                         {
                             return local_param_1_1;
                         }
-
+            
                         if (KernelFunctionSpecialized.int_is_sorted_asc(
                             32,
                             KernelFunctionFused.BlobPrependByte(byteToPrepend: 4, suffix: local_000),
@@ -417,40 +416,39 @@ public class OptimizeAndEmitJsonEncodeTests
                                 PineValue local_param_1_1_temp = KernelFunctionSpecialized.int_add(4, local_param_1_1);
                                 local_param_1_1 = local_param_1_1_temp;
                             }
-
+            
                             continue;
                         }
-
+            
                         return local_param_1_1;
                     }
                 }
-
-
+            
                 public static PineValue encodeStringUtf32ChunksFromBytes(PineValue param_1_0, PineValue param_1_1, PineValue param_1_2)
                 {
                     PineValue local_param_1_0 = param_1_0;
                     ImmutableConcatBuilder local_param_1_1 = ImmutableConcatBuilder.Create([param_1_1]);
                     PineValue local_param_1_2 = param_1_2;
-
+            
                     while (true)
                     {
                         PineValue local_000 = Test.advanceUtf32OffsetForSimpleChars(local_param_1_2, local_param_1_0);
-
+            
                         PineValue local_001 =
                             KernelFunctionSpecialized.int_add(local_000, KernelFunctionSpecialized.int_mul(-1, local_param_1_0));
-
+            
                         PineValue local_003 = KernelFunction.ValueFromBool(local_001 == CommonReusedValues.Blob_Int_0);
-
+            
                         PineValue local_004 =
                             KernelFunctionFused.SkipAndTake(takeCount: 4, skipCountValue: local_000, argument: local_param_1_2);
-
+            
                         if (KernelFunctionSpecialized.length_as_int(local_004) == 0)
                         {
                             if (local_003 == PineKernelValues.TrueValue)
                             {
                                 return local_param_1_1.Evaluate();
                             }
-
+            
                             return
                                 KernelFunctionFused.ListAppendItem(
                                     prefix: local_param_1_1.Evaluate(),
@@ -459,14 +457,14 @@ public class OptimizeAndEmitJsonEncodeTests
                                         skipCountValue: local_param_1_0,
                                         argument: local_param_1_2));
                         }
-
+            
                         PineValue local_007 = KernelFunctionSpecialized.int_add(4, local_000);
-
+            
                         if (local_004 == CommonReusedValues.Blob_f063beda)
                         {
                             {
                                 PineValue local_param_1_0_temp = local_007;
-
+            
                                 local_param_1_1 =
                                     local_param_1_1.AppendItems(
                                         [
@@ -483,18 +481,18 @@ public class OptimizeAndEmitJsonEncodeTests
                                         PineValue.EmptyList,
                                         CommonReusedValues.List_11431555
                                         ]);
-
+            
                                 local_param_1_0 = local_param_1_0_temp;
                             }
-
+            
                             continue;
                         }
-
+            
                         if (local_004 == CommonReusedValues.Blob_Char_tab)
                         {
                             {
                                 PineValue local_param_1_0_temp = local_007;
-
+            
                                 local_param_1_1 =
                                     local_param_1_1.AppendItems(
                                         [
@@ -511,18 +509,18 @@ public class OptimizeAndEmitJsonEncodeTests
                                         PineValue.EmptyList,
                                         CommonReusedValues.List_6859d43a
                                         ]);
-
+            
                                 local_param_1_0 = local_param_1_0_temp;
                             }
-
+            
                             continue;
                         }
-
+            
                         if (local_004 == CommonReusedValues.Blob_Char_newline)
                         {
                             {
                                 PineValue local_param_1_0_temp = local_007;
-
+            
                                 local_param_1_1 =
                                     local_param_1_1.AppendItems(
                                         [
@@ -539,18 +537,18 @@ public class OptimizeAndEmitJsonEncodeTests
                                         PineValue.EmptyList,
                                         CommonReusedValues.List_8cc957f8
                                         ]);
-
+            
                                 local_param_1_0 = local_param_1_0_temp;
                             }
-
+            
                             continue;
                         }
-
+            
                         if (local_004 == CommonReusedValues.Blob_Char_formfeed)
                         {
                             {
                                 PineValue local_param_1_0_temp = local_007;
-
+            
                                 local_param_1_1 =
                                     local_param_1_1.AppendItems(
                                         [
@@ -567,18 +565,18 @@ public class OptimizeAndEmitJsonEncodeTests
                                         PineValue.EmptyList,
                                         CommonReusedValues.List_21f12336
                                         ]);
-
+            
                                 local_param_1_0 = local_param_1_0_temp;
                             }
-
+            
                             continue;
                         }
-
+            
                         if (local_004 == CommonReusedValues.Blob_Char_carriagereturn)
                         {
                             {
                                 PineValue local_param_1_0_temp = local_007;
-
+            
                                 local_param_1_1 =
                                     local_param_1_1.AppendItems(
                                         [
@@ -595,18 +593,18 @@ public class OptimizeAndEmitJsonEncodeTests
                                         PineValue.EmptyList,
                                         CommonReusedValues.List_4495e748
                                         ]);
-
+            
                                 local_param_1_0 = local_param_1_0_temp;
                             }
-
+            
                             continue;
                         }
-
+            
                         if (local_004 == CommonReusedValues.Blob_Char_doublequote)
                         {
                             {
                                 PineValue local_param_1_0_temp = local_007;
-
+            
                                 local_param_1_1 =
                                     local_param_1_1.AppendItems(
                                         [
@@ -623,18 +621,18 @@ public class OptimizeAndEmitJsonEncodeTests
                                         PineValue.EmptyList,
                                         CommonReusedValues.List_0593a027
                                         ]);
-
+            
                                 local_param_1_0 = local_param_1_0_temp;
                             }
-
+            
                             continue;
                         }
-
+            
                         if (local_004 == CommonReusedValues.Blob_Char_backslash)
                         {
                             {
                                 PineValue local_param_1_0_temp = local_007;
-
+            
                                 local_param_1_1 =
                                     local_param_1_1.AppendItems(
                                         [
@@ -651,19 +649,19 @@ public class OptimizeAndEmitJsonEncodeTests
                                         PineValue.EmptyList,
                                         CommonReusedValues.List_67fa5ac0
                                         ]);
-
+            
                                 local_param_1_0 = local_param_1_0_temp;
                             }
-
+            
                             continue;
                         }
-
+            
                         PineValue local_012 =
                             KernelFunctionFused.CanonicalIntegerFromUnsigned(signIsPositive: true, unsignedValue: local_004);
-
+            
                         {
                             PineValue local_param_1_0_temp = local_007;
-
+            
                             local_param_1_1 =
                                 local_param_1_1.AppendItems(
                                     [
@@ -679,7 +677,7 @@ public class OptimizeAndEmitJsonEncodeTests
                                     :
                                     PineValue.EmptyList,
                                     KernelFunctionSpecialized.int_is_sorted_asc(0, local_012, 65_535) ==
-                                                                                                                                                                                                                                                                                        PineKernelValues.TrueValue
+                                    PineKernelValues.TrueValue
                                     ?
                                     KernelFunctionSpecialized.concat(CommonReusedValues.List_599c92a7, Test.hex4(local_012))
                                     :
@@ -700,19 +698,18 @@ public class OptimizeAndEmitJsonEncodeTests
                                                         KernelFunctionSpecialized.int_add(-65_536, local_012))))
                                             ]))
                                     ]);
-
+            
                             local_param_1_0 = local_param_1_0_temp;
                         }
-
+            
                         continue;
                     }
                 }
-
-
+            
                 public static PineValue hex4(PineValue param_1_0)
                 {
                     PineValue local_000 = KernelFunctionSpecialized.skip(1, param_1_0);
-
+            
                     return
                         PineValue.List(
                             [
@@ -732,90 +729,89 @@ public class OptimizeAndEmitJsonEncodeTests
                                 KernelFunctionSpecialized.bit_and(CommonReusedValues.Blob_2d8b523c, local_000))
                             ]);
                 }
-
-
+            
                 public static PineValue hexDigitCharFromNibble(PineValue param_1_0)
                 {
                     if (param_1_0 == CommonReusedValues.Blob_449e9b79)
                     {
                         return CommonReusedValues.Blob_Char_digit_0;
                     }
-
+            
                     if (param_1_0 == CommonReusedValues.Blob_50453b36)
                     {
                         return CommonReusedValues.Blob_Char_digit_1;
                     }
-
+            
                     if (param_1_0 == PineKernelValues.FalseValue)
                     {
                         return CommonReusedValues.Blob_Char_digit_2;
                     }
-
+            
                     if (param_1_0 == CommonReusedValues.Blob_bd557c82)
                     {
                         return CommonReusedValues.Blob_Char_digit_3;
                     }
-
+            
                     if (param_1_0 == PineKernelValues.TrueValue)
                     {
                         return CommonReusedValues.Blob_Char_digit_4;
                     }
-
+            
                     if (param_1_0 == CommonReusedValues.Blob_7732e8fd)
                     {
                         return CommonReusedValues.Blob_Char_digit_5;
                     }
-
+            
                     if (param_1_0 == CommonReusedValues.Blob_4c5dc722)
                     {
                         return CommonReusedValues.Blob_Char_digit_6;
                     }
-
+            
                     if (param_1_0 == CommonReusedValues.Blob_735edfdb)
                     {
                         return CommonReusedValues.Blob_Char_digit_7;
                     }
-
+            
                     if (param_1_0 == CommonReusedValues.Blob_8db117dc)
                     {
                         return CommonReusedValues.Blob_Char_digit_8;
                     }
-
+            
                     if (param_1_0 == CommonReusedValues.Blob_fb88d96b)
                     {
                         return CommonReusedValues.Blob_Char_digit_9;
                     }
-
+            
                     if (param_1_0 == CommonReusedValues.Blob_4c0d52d1)
                     {
                         return CommonReusedValues.Blob_Char_letter_A;
                     }
-
+            
                     if (param_1_0 == CommonReusedValues.Blob_40896845)
                     {
                         return CommonReusedValues.Blob_Char_letter_B;
                     }
-
+            
                     if (param_1_0 == CommonReusedValues.Blob_02334608)
                     {
                         return CommonReusedValues.Blob_Char_letter_C;
                     }
-
+            
                     if (param_1_0 == CommonReusedValues.Blob_015f2803)
                     {
                         return CommonReusedValues.Blob_Char_letter_D;
                     }
-
+            
                     if (param_1_0 == CommonReusedValues.Blob_63e02745)
                     {
                         return CommonReusedValues.Blob_Char_letter_E;
                     }
-
+            
                     if (param_1_0 == CommonReusedValues.Blob_2d8b523c)
                     {
                         return CommonReusedValues.Blob_Char_letter_F;
                     }
-
+            
                     return CommonReusedValues.Blob_Char_question;
                 }
             }

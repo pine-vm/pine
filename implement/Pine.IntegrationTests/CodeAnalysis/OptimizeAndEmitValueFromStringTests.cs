@@ -99,12 +99,12 @@ public class OptimizeAndEmitValueFromStringTests
                 {
                     PineValue local_000 =
                         KernelFunctionFused.CanonicalIntegerFromUnsigned(signIsPositive: true, unsignedValue: param_1_0);
-
+            
                     PineValue local_001 = IntegerEncoding.EncodeSignedInteger(KernelFunctionSpecialized.length_as_int(local_000));
-
+            
                     PineValue local_002 =
                         KernelFunction.ValueFromBool(KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(2, local_001));
-
+            
                     return
                         PineValue.List(
                             [
@@ -114,7 +114,7 @@ public class OptimizeAndEmitValueFromStringTests
                             Basics.modBy(
                                 CommonReusedValues.Blob_Int_256,
                                 local_002 ==
-                                                                                                                                                                                                    PineKernelValues.TrueValue
+                                PineKernelValues.TrueValue
                                 ?
                                 (KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(4, local_001)
                                 ?
@@ -126,7 +126,7 @@ public class OptimizeAndEmitValueFromStringTests
                             Basics.modBy(
                                 CommonReusedValues.Blob_Int_256,
                                 local_002 ==
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            PineKernelValues.TrueValue
+                                PineKernelValues.TrueValue
                                 ?
                                 (KernelFunctionSpecialized.int_is_sorted_asc_as_boolean(3, local_001)
                                 ?
@@ -138,20 +138,19 @@ public class OptimizeAndEmitValueFromStringTests
                             Basics.modBy(CommonReusedValues.Blob_Int_256, local_000)
                             ]);
                 }
-
-
+            
                 public static PineValue blobBytesFromChars(PineValue param_1_0, PineValue param_1_1)
                 {
                     ImmutableConcatBuilder local_param_1_0 = ImmutableConcatBuilder.Create([param_1_0]);
                     ImmutableSliceBuilder local_param_1_1 = ImmutableSliceBuilder.Create(param_1_1);
-
+            
                     while (true)
                     {
                         if (local_param_1_1.IsEmptyList())
                         {
                             return local_param_1_0.EvaluateReverse();
                         }
-
+            
                         if (!(local_param_1_1.GetLength() == 0))
                         {
                             {
@@ -164,18 +163,17 @@ public class OptimizeAndEmitValueFromStringTests
                                                 local_param_1_1.GetHead())
                                             ])
                                         ]);
-
+            
                                 local_param_1_1 = local_param_1_1.Skip(1);
                             }
-
+            
                             continue;
                         }
-
+            
                         throw new ParseExpressionException("TODO: Include details from encoded and env subexpressions");
                     }
                 }
-
-
+            
                 public static PineValue computeValueFromString(PineValue param_1_0)
                 {
                     return
@@ -226,7 +224,6 @@ public class OptimizeAndEmitValueFromStringTests
                         continue;
                     }
                 }
-
 
                 public static PineValue zzz_anon_6dc95117_ab4922f9(PineValue param_1_0, PineValue param_1_1, PineValue param_1_2)
                 {

@@ -348,7 +348,7 @@ public static class FormatCSharpFile
             SimpleLambdaExpressionSyntax n => FormatSimpleLambdaExpression(n, indent),
             BinaryExpressionSyntax n => FormatBinaryExpression(n, indent),
 
-            ThrowExpressionSyntax => node,
+            ThrowExpressionSyntax n => FormatThrowExpression(n, indent),
             ParenthesizedExpressionSyntax n => n.WithExpression((ExpressionSyntax)FormatNode(n.Expression, indent)),
             ConditionalAccessExpressionSyntax n => n.WithExpression((ExpressionSyntax)FormatNode(n.Expression, indent)),
             CastExpressionSyntax n => n.WithExpression((ExpressionSyntax)FormatNode(n.Expression, indent)),
@@ -368,6 +368,9 @@ public static class FormatCSharpFile
             // Switch parts
             SwitchExpressionArmSyntax n => FormatSwitchExpressionArm(n, indent),
             SwitchSectionSyntax n => FormatSwitchSection(n, indent),
+
+            // Patterns
+            BinaryPatternSyntax n => FormatBinaryPattern(n, indent),
 
             // Catch/finally
             CatchClauseSyntax n => FormatCatchClause(n, indent),
@@ -395,7 +398,7 @@ public static class FormatCSharpFile
             BaseObjectCreationExpressionSyntax or
             ConstantPatternSyntax or DeclarationPatternSyntax or DiscardPatternSyntax or
             RecursivePatternSyntax or VarPatternSyntax or TypePatternSyntax or
-            RelationalPatternSyntax or BinaryPatternSyntax or UnaryPatternSyntax or
+            RelationalPatternSyntax or UnaryPatternSyntax or
             ParenthesizedPatternSyntax or ListPatternSyntax or SlicePatternSyntax or
             WhenClauseSyntax or CatchDeclarationSyntax or CatchFilterClauseSyntax or
             ArgumentSyntax or ParameterSyntax or TypeParameterSyntax or TypeArgumentListSyntax or
@@ -549,11 +552,10 @@ public static class FormatCSharpFile
             if (i > 0)
             {
                 var prev = members[i - 1];
-                var needsTwoBlank = NeedsTwoBlankLines(prev, orig);
-                var needsOneBlank = needsTwoBlank || NeedsOneBlankLine(prev, orig);
+                var needsOneBlank = NeedsOneBlankLine(prev, orig);
                 // The previous member already has a trailing \n.
-                // So for N blank lines we need N more \n in the leading trivia.
-                var minLeadingBreaks = needsTwoBlank ? 2 : needsOneBlank ? 1 : 0;
+                // So for 1 blank line we need 1 more \n in the leading trivia.
+                var minLeadingBreaks = needsOneBlank ? 1 : 0;
 
                 var leading = fmt.GetLeadingTrivia();
                 // Count existing leading line breaks (not including prev member's trailing)
@@ -603,27 +605,6 @@ public static class FormatCSharpFile
         if (prev is GlobalStatementSyntax && SpansMultipleLines(prev))
             return true;
         if (current is GlobalStatementSyntax && SpansMultipleLines(current))
-            return true;
-        return false;
-    }
-
-    /// <summary>Determines if two blank lines are needed between two adjacent members.</summary>
-    private static bool NeedsTwoBlankLines(MemberDeclarationSyntax prev, MemberDeclarationSyntax current)
-    {
-        if (current is BaseTypeDeclarationSyntax && prev is not GlobalStatementSyntax and not FieldDeclarationSyntax)
-            return true;
-        if (prev is BaseTypeDeclarationSyntax)
-            return true;
-        if ((current is MethodDeclarationSyntax or ConstructorDeclarationSyntax or DestructorDeclarationSyntax) &&
-            (prev is MethodDeclarationSyntax or ConstructorDeclarationSyntax or DestructorDeclarationSyntax))
-            return true;
-        // Methods/properties/etc after fields or other non-field declarations
-        if (prev is not FieldDeclarationSyntax and not GlobalStatementSyntax &&
-            current is not FieldDeclarationSyntax and not GlobalStatementSyntax)
-            return true;
-        // Field followed by method/property/type/etc needs two blank lines
-        if (prev is FieldDeclarationSyntax &&
-            current is MethodDeclarationSyntax or ConstructorDeclarationSyntax or PropertyDeclarationSyntax or BaseTypeDeclarationSyntax)
             return true;
         return false;
     }
@@ -1266,6 +1247,13 @@ public static class FormatCSharpFile
         return node.WithThrowKeyword(node.ThrowKeyword.WithTrailingTrivia(s_space)).WithExpression(fmtExpr);
     }
 
+    /// <summary>Formats a throw expression with correct keyword spacing.</summary>
+    private static ThrowExpressionSyntax FormatThrowExpression(ThrowExpressionSyntax node, int indent)
+    {
+        var fmtExpr = (ExpressionSyntax)FormatNode(node.Expression, indent);
+        return node.WithThrowKeyword(node.ThrowKeyword.WithTrailingTrivia(s_space)).WithExpression(fmtExpr);
+    }
+
     /// <summary>Formats a global (top-level) statement by formatting its inner statement.</summary>
     private static GlobalStatementSyntax FormatGlobalStatement(GlobalStatementSyntax node, int indent)
     {
@@ -1336,16 +1324,17 @@ public static class FormatCSharpFile
                     return true;
             }
 
+            // Any arg multi-line
+            foreach (var arg in node.Arguments)
+                if (SpansMultipleLines(arg))
+                    return true;
+
             // First arg on different line
             if (LineOf(node.Arguments[0]) != openLine)
                 return true;
             // Any arg on different line than first
             for (var i = 1; i < node.Arguments.Count; i++)
                 if (LineOf(node.Arguments[i]) != LineOf(node.Arguments[0]))
-                    return true;
-            // Any arg multi-line
-            foreach (var arg in node.Arguments)
-                if (SpansMultipleLines(arg))
                     return true;
         }
         return false;
@@ -1675,6 +1664,7 @@ public static class FormatCSharpFile
     private static SwitchExpressionSyntax FormatSwitchExpression(SwitchExpressionSyntax node, int indent)
     {
         var armIndent = indent + 1;
+        var origSeps = node.Arms.GetSeparators().ToList();
         var arms = new List<SyntaxNode>();
         for (var i = 0; i < node.Arms.Count; i++)
         {
@@ -1682,13 +1672,21 @@ public static class FormatCSharpFile
             var needsBlank = i > 0 &&
                 (SpansMultipleLines(node.Arms[i - 1]) || SpansMultipleLines(node.Arms[i]) ||
                  node.Arms[i].Pattern is DiscardPatternSyntax || node.Arms[i - 1].Pattern is DiscardPatternSyntax);
-            if (needsBlank)
-                arm = arm.WithLeadingTrivia(EnsureLeadingBreaks(node.Arms[i].GetLeadingTrivia(), 2, armIndent));
-            else
-                arm = arm.WithLeadingTrivia(EnsureLeadingBreaks(node.Arms[i].GetLeadingTrivia(), 1, armIndent));
+            var minBreaks = needsBlank ? 2 : 1;
+            // Preserve existing blank lines from original source:
+            // A blank line between arms is represented by total line breaks >= 2
+            // across the preceding separator's trailing trivia and the arm's leading trivia.
+            if (i > 0)
+            {
+                var origBreaks = CountLineBreaks(node.Arms[i].GetLeadingTrivia());
+                if (i - 1 < origSeps.Count)
+                    origBreaks += CountLineBreaks(origSeps[i - 1].TrailingTrivia);
+                if (origBreaks >= 2 && minBreaks < 2)
+                    minBreaks = 2;
+            }
+            arm = arm.WithLeadingTrivia(EnsureLeadingBreaks(node.Arms[i].GetLeadingTrivia(), minBreaks, armIndent));
             arms.Add(arm);
         }
-        var origSeps = node.Arms.GetSeparators().ToList();
         var seps = RebuildSeparators(origSeps, node.Arms.Count - 1);
         // Preserve trailing comma if original had one
         if (origSeps.Count >= node.Arms.Count)
@@ -1704,6 +1702,30 @@ public static class FormatCSharpFile
             .WithArms(SyntaxFactory.SeparatedList(arms.Cast<SwitchExpressionArmSyntax>(), seps));
     }
 
+    /// <summary>Formats a binary pattern (e.g. <c>int or string or double</c>) with consistent indentation.</summary>
+    private static BinaryPatternSyntax FormatBinaryPattern(BinaryPatternSyntax node, int indent)
+    {
+        var fmtLeft = (PatternSyntax)FormatNode(node.Left, indent);
+        fmtLeft = fmtLeft.WithTrailingTrivia();
+        var fmtRight = (PatternSyntax)FormatNode(node.Right, indent);
+
+        var opLine = LineOf(node.OperatorToken);
+        var rightLine = LineOf(node.Right);
+
+        if (rightLine > opLine)
+        {
+            fmtRight = fmtRight.WithLeadingTrivia(
+                EnsureLeadingBreaks(node.Right.GetLeadingTrivia(), 1, indent));
+            return node.WithLeft(fmtLeft)
+                .WithOperatorToken(node.OperatorToken.WithLeadingTrivia(s_space).WithTrailingTrivia())
+                .WithRight(fmtRight);
+        }
+
+        return node.WithLeft(fmtLeft)
+            .WithOperatorToken(node.OperatorToken.WithLeadingTrivia(s_space).WithTrailingTrivia(s_space))
+            .WithRight(fmtRight.WithLeadingTrivia());
+    }
+
     /// <summary>Formats a single switch expression arm with correct spacing and line breaks.</summary>
     private static SwitchExpressionArmSyntax FormatSwitchExpressionArm(SwitchExpressionArmSyntax node, int indent)
     {
@@ -1717,9 +1739,10 @@ public static class FormatCSharpFile
         }
 
         // Normalize pattern trailing trivia: preserve space before when clause
-        var pattern = node.WhenClause is not null
-            ? node.Pattern.WithTrailingTrivia(s_space)
-            : node.Pattern.WithTrailingTrivia();
+        var pattern = (PatternSyntax)FormatNode(node.Pattern, indent);
+        pattern = node.WhenClause is not null
+            ? pattern.WithTrailingTrivia(s_space)
+            : pattern.WithTrailingTrivia();
 
         // Normalize when clause trailing trivia to avoid extra spaces before =>
         var whenClause = node.WhenClause;
@@ -1803,6 +1826,46 @@ public static class FormatCSharpFile
     {
         var fmtExpr = (ExpressionSyntax)FormatNode(node.Expression, indent);
         var fmtArgs = (ArgumentListSyntax)FormatArgumentList(node.ArgumentList, indent);
+
+        // Propagate line breaks up in method chains: if the argument list spans
+        // multiple lines but the args themselves would fit on one line, and the
+        // expression is a member access on an invocation (method chain like a.B().C()),
+        // collapse the arg list to single-line and break at the dot instead.
+        if (fmtExpr is MemberAccessExpressionSyntax memberAccess &&
+            memberAccess.Expression is InvocationExpressionSyntax &&
+            SpansMultipleLines(fmtArgs))
+        {
+            // Estimate single-line arg width
+            var singleLineArgWidth = 2; // parens
+            var allArgsSingleLine = true;
+            for (var i = 0; i < node.ArgumentList.Arguments.Count; i++)
+            {
+                var argText = node.ArgumentList.Arguments[i].ToString().Trim();
+                if (SpansMultipleLines(argText))
+                {
+                    allArgsSingleLine = false;
+                    break;
+                }
+
+                if (i > 0) singleLineArgWidth += 2; // ", "
+                singleLineArgWidth += argText.Length;
+            }
+
+            if (allArgsSingleLine && singleLineArgWidth <= MaximumLineLength * 2 / 3)
+            {
+                // Collapse arg list to single line
+                fmtArgs = FormatArgListSingleLine(node.ArgumentList);
+                // Break at the dot
+                var dotIndent = indent;
+                fmtExpr = memberAccess
+                    .WithExpression(memberAccess.Expression.WithTrailingTrivia(
+                        StripWhitespace(memberAccess.Expression.GetTrailingTrivia())))
+                    .WithOperatorToken(memberAccess.OperatorToken
+                        .WithLeadingTrivia(EnsureLeadingBreaks(memberAccess.OperatorToken.LeadingTrivia, 1, dotIndent))
+                        .WithTrailingTrivia());
+            }
+        }
+
         return node.WithExpression(fmtExpr).WithArgumentList(fmtArgs);
     }
 
@@ -1881,47 +1944,42 @@ public static class FormatCSharpFile
                 }
 
                 var l = node.Left.WithTrailingTrivia(StripWhitespace(node.Left.GetTrailingTrivia()));
-                var r = node.Right.WithLeadingTrivia(EnsureLeadingBreaks(node.Right.GetLeadingTrivia(), 1, breakIndent));
-                var op = node.OperatorToken.WithLeadingTrivia(s_space)
-                    .WithTrailingTrivia(StripWhitespace(node.OperatorToken.TrailingTrivia));
-                return node.WithLeft(l).WithRight(r).WithOperatorToken(op);
+                var opTrailingStripped = StripWhitespace(node.OperatorToken.TrailingTrivia);
+                if (opTrailingStripped.Count > 0)
+                {
+                    // Operator has trailing comment (e.g., `?? /* comment */`):
+                    // keep operator at end of left line, right on new line.
+                    var op = node.OperatorToken
+                        .WithLeadingTrivia(s_space)
+                        .WithTrailingTrivia(opTrailingStripped);
+                    var r = node.Right.WithLeadingTrivia(
+                        EnsureLeadingBreaks(node.Right.GetLeadingTrivia(), 1, breakIndent));
+                    return node.WithLeft(l).WithRight(r).WithOperatorToken(op);
+                }
+                else
+                {
+                    // Operator at end of left line, right operand on new line.
+                    var op = node.OperatorToken
+                        .WithLeadingTrivia(s_space)
+                        .WithTrailingTrivia(StripWhitespace(node.OperatorToken.TrailingTrivia));
+                    var r = node.Right.WithLeadingTrivia(
+                        EnsureLeadingBreaks(node.Right.GetLeadingTrivia(), 1, breakIndent));
+                    return node.WithLeft(l).WithRight(r).WithOperatorToken(op);
+                }
             }
         }
 
         var fl = (ExpressionSyntax)FormatNode(node.Left, indent);
 
         // Determine the indent for the right operand of a multi-line binary expression.
-        // When the operator has already been moved to a separate line from the expression start
-        // (e.g., by a previous formatting pass), use the right operand's actual source position
-        // to avoid cascading indentation. Otherwise, use indent + 1 as the continuation indent.
-        var rightIndent = indent + 1;
+        // Per the Binary Expression Chains spec, continuation lines must be at the
+        // same indent level as the first operand in the chain.
+        var rightIndent = indent;
         var mlLeftLoc = originalIsMultiLine ? node.Left.GetLocation() : Location.None;
-        var mlOpLoc = originalIsMultiLine ? node.OperatorToken.GetLocation() : Location.None;
-        var mlRightLoc = originalIsMultiLine ? node.Right.GetLocation() : Location.None;
-        if (mlLeftLoc != Location.None && mlOpLoc != Location.None && mlRightLoc != Location.None)
+        if (mlLeftLoc != Location.None)
         {
-            var leftStartLine = mlLeftLoc.GetLineSpan().StartLinePosition.Line;
-            var opLine = mlOpLoc.GetLineSpan().StartLinePosition.Line;
-            var rightLineSpan = mlRightLoc.GetLineSpan();
-
-            if (opLine > leftStartLine)
-            {
-                // The operator is on a different line from the left operand start.
-                // The break was established in a previous pass. Use the existing
-                // right operand position to avoid changing indentation.
-                if (rightLineSpan.StartLinePosition.Line > opLine)
-                    rightIndent = rightLineSpan.StartLinePosition.Character / IndentSize;
-                else if (rightLineSpan.StartLinePosition.Line == opLine)
-                    rightIndent = indent + 1;
-            }
-            else if (rightLineSpan.StartLinePosition.Line > opLine)
-            {
-                // The operator is on the same line as the left start, but the right
-                // operand is already on a new line (e.g., in a chain of same-precedence
-                // operators where the break was at the end of the line). Preserve the
-                // right operand's existing position.
-                rightIndent = rightLineSpan.StartLinePosition.Character / IndentSize;
-            }
+            var leftCol = mlLeftLoc.GetLineSpan().StartLinePosition.Character;
+            rightIndent = leftCol / IndentSize;
         }
 
         var fr = (ExpressionSyntax)FormatNode(node.Right, rightIndent);
@@ -1931,26 +1989,70 @@ public static class FormatCSharpFile
 
         if (originalIsMultiLine)
         {
-            // Preserve the line break before the right operand and normalize indent,
-            // keeping any comments from the original right operand's leading trivia.
-            fr = fr.WithLeadingTrivia(EnsureLeadingBreaks(node.Right.GetLeadingTrivia(), 1, rightIndent));
             // Preserve any comments from the operator's leading trivia (e.g. comments
             // between the left operand and the operator on separate lines).
             var opLeadingNonWhitespace = StripWhitespace(node.OperatorToken.LeadingTrivia);
-            SyntaxTriviaList opLeading;
-            if (opLeadingNonWhitespace.Count > 0)
+            var opTrailingNonWhitespace = StripWhitespace(node.OperatorToken.TrailingTrivia);
+            if (opTrailingNonWhitespace.Count > 0)
             {
-                // Comments exist before the operator — ensure they start on a new line
-                // with correct indent, then add indent for the operator itself
-                opLeading = EnsureLeadingBreaks(node.OperatorToken.LeadingTrivia, 1, rightIndent);
+                // Comments in trailing trivia (e.g., `&& // comment`): operator stays
+                // at end of left line, right operand on new line.
+                var opLeading = opLeadingNonWhitespace.Count > 0
+                    ? EnsureLeadingBreaks(node.OperatorToken.LeadingTrivia, 1, rightIndent)
+                    : new SyntaxTriviaList(s_space);
+                var op = node.OperatorToken.WithLeadingTrivia(opLeading)
+                    .WithTrailingTrivia(opTrailingNonWhitespace);
+                fr = fr.WithLeadingTrivia(EnsureLeadingBreaks(node.Right.GetLeadingTrivia(), 1, rightIndent));
+                return node.WithLeft(fl).WithRight(fr).WithOperatorToken(op);
+            }
+            else if (opLeadingNonWhitespace.Count > 0)
+            {
+                // Comments in leading trivia (e.g., `// comment\n||`): comment on own
+                // line, operator follows, right operand on same line as operator.
+                var opLeading = EnsureLeadingBreaks(node.OperatorToken.LeadingTrivia, 1, rightIndent);
+                var op = node.OperatorToken.WithLeadingTrivia(opLeading)
+                    .WithTrailingTrivia(new SyntaxTriviaList(s_space));
+                fr = fr.WithLeadingTrivia(StripWhitespace(fr.GetLeadingTrivia()));
+                return node.WithLeft(fl).WithRight(fr).WithOperatorToken(op);
             }
             else
             {
-                opLeading = new SyntaxTriviaList(s_space);
+                // Check for comments in the right operand's leading trivia
+                var rightLeadingNonWhitespace = StripWhitespace(node.Right.GetLeadingTrivia());
+                if (rightLeadingNonWhitespace.Count > 0)
+                {
+                    // Comments before right operand (e.g., `??\n/* comment */\nright`):
+                    // operator at end of left line, right with comments on new line.
+                    var op = node.OperatorToken
+                        .WithLeadingTrivia(s_space)
+                        .WithTrailingTrivia(StripWhitespace(node.OperatorToken.TrailingTrivia));
+                    fr = fr.WithLeadingTrivia(EnsureLeadingBreaks(node.Right.GetLeadingTrivia(), 1, rightIndent));
+                    return node.WithLeft(fl).WithRight(fr).WithOperatorToken(op);
+                }
+                // Check if operator is already at start of a continuation line
+                // (on a different line from the end of the left operand).
+                // If so, preserve that position.
+                var opLoc = node.OperatorToken.GetLocation();
+                var leftEndLine = EndLineOf(node.Left);
+                var opLine = opLoc != Location.None
+                    ? opLoc.GetLineSpan().StartLinePosition.Line
+                    : -1;
+                if (opLine >= 0 && opLine > leftEndLine)
+                {
+                    // Operator was at start of continuation line — preserve that.
+                    var op2 = node.OperatorToken
+                        .WithLeadingTrivia(s_lineFeed, Indent(rightIndent))
+                        .WithTrailingTrivia(new SyntaxTriviaList(s_space));
+                    fr = fr.WithLeadingTrivia(StripWhitespace(fr.GetLeadingTrivia()));
+                    return node.WithLeft(fl).WithRight(fr).WithOperatorToken(op2);
+                }
+                // Operator at end of left line, right operand on new line.
+                var op3 = node.OperatorToken
+                    .WithLeadingTrivia(s_space)
+                    .WithTrailingTrivia(StripWhitespace(node.OperatorToken.TrailingTrivia));
+                fr = fr.WithLeadingTrivia(EnsureLeadingBreaks(node.Right.GetLeadingTrivia(), 1, rightIndent));
+                return node.WithLeft(fl).WithRight(fr).WithOperatorToken(op3);
             }
-            var op = node.OperatorToken.WithLeadingTrivia(opLeading)
-                .WithTrailingTrivia(StripWhitespace(node.OperatorToken.TrailingTrivia));
-            return node.WithLeft(fl).WithRight(fr).WithOperatorToken(op);
         }
 
         fr = fr.WithLeadingTrivia(StripWhitespace(fr.GetLeadingTrivia()));
