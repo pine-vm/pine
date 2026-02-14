@@ -589,13 +589,15 @@ public static class FormatCSharpFile
             ConstructorDeclarationSyntax or PropertyDeclarationSyntax or
             EventDeclarationSyntax or IndexerDeclarationSyntax or
             OperatorDeclarationSyntax or ConversionOperatorDeclarationSyntax or
-            DelegateDeclarationSyntax or EnumDeclarationSyntax or DestructorDeclarationSyntax)
+            DelegateDeclarationSyntax or EnumDeclarationSyntax or DestructorDeclarationSyntax or
+            FieldDeclarationSyntax)
             return true;
         if (prev is BaseTypeDeclarationSyntax or MethodDeclarationSyntax or
             ConstructorDeclarationSyntax or PropertyDeclarationSyntax or
             EventDeclarationSyntax or IndexerDeclarationSyntax or
             OperatorDeclarationSyntax or ConversionOperatorDeclarationSyntax or
-            DelegateDeclarationSyntax or EnumDeclarationSyntax or DestructorDeclarationSyntax)
+            DelegateDeclarationSyntax or EnumDeclarationSyntax or DestructorDeclarationSyntax or
+            FieldDeclarationSyntax)
             return true;
         // Global statements: check if either spans multiple lines
         if (prev is GlobalStatementSyntax && SpansMultipleLines(prev))
@@ -676,7 +678,10 @@ public static class FormatCSharpFile
         if (closeList.Count > 0 && IsWhitespace(closeList[^1]))
             closeList[^1] = Indent(indent);
         var close = node.CloseBraceToken.WithLeadingTrivia(new SyntaxTriviaList(closeList)).WithTrailingTrivia();
-        return node.WithMembers(members).WithOpenBraceToken(open).WithCloseBraceToken(close);
+        return node
+            .WithKeyword(node.Keyword.WithTrailingTrivia(s_space))
+            .WithIdentifier(node.Identifier.WithLeadingTrivia())
+            .WithMembers(members).WithOpenBraceToken(open).WithCloseBraceToken(close);
     }
 
     /// <summary>Formats an enum declaration with correct brace placement.</summary>
@@ -769,14 +774,18 @@ public static class FormatCSharpFile
     /// <summary>Formats a field declaration, including its initializer if present.</summary>
     private static FieldDeclarationSyntax FormatFieldDeclaration(FieldDeclarationSyntax node, int indent)
     {
-        if (node.Declaration.Variables.Count > 0 && node.Declaration.Variables[0].Initializer is { } init)
+        var decl = node.Declaration;
+        if (decl.Variables.Count > 0 && decl.Variables[0].Initializer is { } init)
         {
             var fmtInit = FormatEqualsValueClause(init, indent);
-            var newVar = node.Declaration.Variables[0].WithInitializer(fmtInit);
-            return node.WithDeclaration(node.Declaration.WithVariables(
-                node.Declaration.Variables.Replace(node.Declaration.Variables[0], newVar)));
+            var newVar = decl.Variables[0]
+                .WithIdentifier(decl.Variables[0].Identifier.WithTrailingTrivia(s_space))
+                .WithInitializer(fmtInit);
+            decl = decl.WithVariables(decl.Variables.Replace(decl.Variables[0], newVar));
         }
-        return node;
+        // Ensure space after type
+        decl = decl.WithType(decl.Type.WithTrailingTrivia(s_space));
+        return node.WithDeclaration(decl);
     }
 
     /// <summary>Formats a local function statement, including body and parameters.</summary>

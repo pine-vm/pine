@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Pine.Core.DotNet;
 using System;
 using System.Collections.Generic;
@@ -2744,6 +2745,55 @@ public class CSharpFormatTests
             while (true)
             {
                 DoSomething();
+            }
+            """";
+
+        AssertFormattedSyntax(whileStatementSyntax, expectedSyntaxText);
+    }
+
+    [Fact]
+    public void Adds_spacing_between_class_member_declarations()
+    {
+        var whileStatementSyntax =
+            SyntaxFactory.ClassDeclaration("C")
+            .WithMembers(
+                SyntaxFactory.List<MemberDeclarationSyntax>(
+                    [
+                        SyntaxFactory.FieldDeclaration(
+                            SyntaxFactory.VariableDeclaration(
+                                SyntaxFactory.PredefinedType(
+                                    SyntaxFactory.Token(SyntaxKind.IntKeyword)))
+                            .WithVariables(
+                                SyntaxFactory.SingletonSeparatedList(
+                                    SyntaxFactory.VariableDeclarator(
+                                        SyntaxFactory.Identifier("a"))
+                                    .WithInitializer(
+                                        SyntaxFactory.EqualsValueClause(
+                                            SyntaxFactory.LiteralExpression(
+                                                SyntaxKind.NumericLiteralExpression,
+                                                SyntaxFactory.Literal(41))))))),
+                        SyntaxFactory.FieldDeclaration(
+                            SyntaxFactory.VariableDeclaration(
+                                SyntaxFactory.PredefinedType(
+                                    SyntaxFactory.Token(SyntaxKind.IntKeyword)))
+                            .WithVariables(
+                                SyntaxFactory.SingletonSeparatedList(
+                                    SyntaxFactory.VariableDeclarator(
+                                        SyntaxFactory.Identifier("b"))
+                                    .WithInitializer(
+                                        SyntaxFactory.EqualsValueClause(
+                                            SyntaxFactory.LiteralExpression(
+                                                SyntaxKind.NumericLiteralExpression,
+                                                SyntaxFactory.Literal(43)))))))
+                        ]));
+
+        var expectedSyntaxText =
+            """"
+            class C
+            {
+                int a = 41;
+
+                int b = 43;
             }
             """";
 
