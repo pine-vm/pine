@@ -99,6 +99,7 @@ public class DependencyLayoutTests
         // (alphabetically sorted as per the implementation guide)
         // Layout is [isEven, isOdd] for both functions
         layouts["Test.isEven"].Should().Equal(["Test.isEven", "Test.isOdd"]);
+
         layouts["Test.isOdd"].Should().Equal(["Test.isEven", "Test.isOdd"]);
     }
 
@@ -180,6 +181,7 @@ public class DependencyLayoutTests
         layouts.Should().ContainKey("Test.returnFalse");
         // True and False are choice type constructors (boolean), not function dependencies, only self
         layouts["Test.returnTrue"].Should().Equal(["Test.returnTrue"]);
+
         layouts["Test.returnFalse"].Should().Equal(["Test.returnFalse"]);
     }
 

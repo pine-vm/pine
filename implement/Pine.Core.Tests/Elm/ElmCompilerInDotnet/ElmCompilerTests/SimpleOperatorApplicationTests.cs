@@ -184,10 +184,10 @@ public class SimpleOperatorApplicationTests
 
         {
             var resultValue =
-             ApplyForElmArguments(
-                 ElmValue.ElmFloat.Convert(0.0),
-                 ElmValue.ElmFloat.Convert(-2.0),
-                 ElmValue.ElmFloat.Convert(0.0));
+                ApplyForElmArguments(
+                    ElmValue.ElmFloat.Convert(0.0),
+                    ElmValue.ElmFloat.Convert(-2.0),
+                    ElmValue.ElmFloat.Convert(0.0));
 
             resultValue.Should().Be(ElmValue.Integer(0));
         }

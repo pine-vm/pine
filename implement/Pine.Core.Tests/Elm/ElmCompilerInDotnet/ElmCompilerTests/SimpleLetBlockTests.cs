@@ -94,6 +94,7 @@ public class SimpleLetBlockTests
         {
             var resultExprString =
                 ResultAsExpressionString(IntegerEncoding.EncodeSignedInteger(-1));
+
             resultExprString.Should().Be("[ 40, -41 ]");
         }
     }
@@ -270,18 +271,21 @@ public class SimpleLetBlockTests
         {
             var resultExprString =
                 ResultAsExpressionString(IntegerEncoding.EncodeSignedInteger(1));
+
             resultExprString.Should().Be("[ 20, 20 ]");
         }
 
         {
             var resultExprString =
                 ResultAsExpressionString(IntegerEncoding.EncodeSignedInteger(2));
+
             resultExprString.Should().Be("[ 21, 40 ]");
         }
 
         {
             var resultExprString =
                 ResultAsExpressionString(IntegerEncoding.EncodeSignedInteger(-1));
+
             resultExprString.Should().Be("[ 18, -20 ]");
         }
     }

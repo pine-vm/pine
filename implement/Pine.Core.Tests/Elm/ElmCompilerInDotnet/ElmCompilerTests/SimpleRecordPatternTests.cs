@@ -70,12 +70,13 @@ public class SimpleRecordPatternTests
         // Fields are sorted alphabetically
         PineValue CreateRecord(int alfa, int beta, int gamma)
         {
-            return ElmValueEncoding.ElmRecordAsPineValue(
-                [
+            return
+                ElmValueEncoding.ElmRecordAsPineValue(
+                    [
                     ("alfa", IntegerEncoding.EncodeSignedInteger(alfa)),
                     ("beta", IntegerEncoding.EncodeSignedInteger(beta)),
                     ("gamma", IntegerEncoding.EncodeSignedInteger(gamma))
-                ]);
+                    ]);
         }
 
         // Test case: { alfa = 1, beta = 2, gamma = 3 } -> [1, 2, 3]
@@ -162,11 +163,12 @@ public class SimpleRecordPatternTests
 
         PineValue CreateRecord(int x, int y)
         {
-            return ElmValueEncoding.ElmRecordAsPineValue(
-                [
+            return
+                ElmValueEncoding.ElmRecordAsPineValue(
+                    [
                     ("x", IntegerEncoding.EncodeSignedInteger(x)),
                     ("y", IntegerEncoding.EncodeSignedInteger(y))
-                ]);
+                    ]);
         }
 
         // Test case: { x = 3, y = 5 } -> 8
@@ -251,10 +253,11 @@ public class SimpleRecordPatternTests
 
         PineValue CreateRecord(int value)
         {
-            return ElmValueEncoding.ElmRecordAsPineValue(
-                [
+            return
+                ElmValueEncoding.ElmRecordAsPineValue(
+                    [
                     ("value", IntegerEncoding.EncodeSignedInteger(value))
-                ]);
+                    ]);
         }
 
         // Test case: { value = 7 } -> 14
@@ -335,11 +338,12 @@ public class SimpleRecordPatternTests
 
         PineValue CreateRecord(int a, int b)
         {
-            return ElmValueEncoding.ElmRecordAsPineValue(
-                [
+            return
+                ElmValueEncoding.ElmRecordAsPineValue(
+                    [
                     ("a", IntegerEncoding.EncodeSignedInteger(a)),
                     ("b", IntegerEncoding.EncodeSignedInteger(b))
-                ]);
+                    ]);
         }
 
         // Test case: { a = 3, b = 4 } -> 12

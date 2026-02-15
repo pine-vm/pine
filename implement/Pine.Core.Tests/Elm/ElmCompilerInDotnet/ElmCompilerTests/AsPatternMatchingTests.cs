@@ -194,9 +194,9 @@ public class AsPatternMatchingTests
                 ResultAsExpressionString(
                     PineValue.List(
                         [
-                            IntegerEncoding.EncodeSignedInteger(5),
-                            IntegerEncoding.EncodeSignedInteger(1),
-                            IntegerEncoding.EncodeSignedInteger(2),
+                        IntegerEncoding.EncodeSignedInteger(5),
+                        IntegerEncoding.EncodeSignedInteger(1),
+                        IntegerEncoding.EncodeSignedInteger(2),
                         ]));
 
             threeElementListResult.Should().Be("10");
@@ -209,7 +209,7 @@ public class AsPatternMatchingTests
                 ResultAsExpressionString(
                     PineValue.List(
                         [
-                            IntegerEncoding.EncodeSignedInteger(10),
+                        IntegerEncoding.EncodeSignedInteger(10),
                         ]));
 
             singleElementListResult.Should().Be("11");
@@ -288,8 +288,8 @@ public class AsPatternMatchingTests
                 ResultAsExpressionString(
                     PineValue.List(
                         [
-                            IntegerEncoding.EncodeSignedInteger(0),
-                            IntegerEncoding.EncodeSignedInteger(5),
+                        IntegerEncoding.EncodeSignedInteger(0),
+                        IntegerEncoding.EncodeSignedInteger(5),
                         ]));
 
             zeroResult.Should().Be("0");
@@ -302,8 +302,8 @@ public class AsPatternMatchingTests
                 ResultAsExpressionString(
                     PineValue.List(
                         [
-                            IntegerEncoding.EncodeSignedInteger(3),
-                            IntegerEncoding.EncodeSignedInteger(4),
+                        IntegerEncoding.EncodeSignedInteger(3),
+                        IntegerEncoding.EncodeSignedInteger(4),
                         ]));
 
             tupleResult.Should().Be("19");

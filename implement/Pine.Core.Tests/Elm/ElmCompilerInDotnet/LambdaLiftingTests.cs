@@ -39,8 +39,9 @@ public class LambdaLiftingTests
         var liftedModule = LambdaLifting.LiftLambdas(parsedModule);
 
         // Use FormatToString directly which formats and renders in one step
-        return Avh4Format.FormatToString(
-            ToFullSyntaxModel.Convert(liftedModule));
+        return
+            Avh4Format.FormatToString(
+                ToFullSyntaxModel.Convert(liftedModule));
     }
 
     /// <summary>

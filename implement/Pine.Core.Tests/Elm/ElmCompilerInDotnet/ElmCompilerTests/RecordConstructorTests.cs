@@ -63,9 +63,12 @@ public class RecordConstructorTests
 
         ElmValue ApplyForElmArguments(ElmValue a, ElmValue b)
         {
-            var (applyRunResult, _) = invokeFunction(
-                [ElmValueEncoding.ElmValueAsPineValue(a),
-                 ElmValueEncoding.ElmValueAsPineValue(b)]);
+            var (applyRunResult, _) =
+                invokeFunction(
+                    [
+                    ElmValueEncoding.ElmValueAsPineValue(a),
+                    ElmValueEncoding.ElmValueAsPineValue(b)
+                    ]);
 
             var pineValue = applyRunResult.ReturnValue.Evaluate();
 
@@ -131,9 +134,12 @@ public class RecordConstructorTests
 
         ElmValue ApplyForElmArguments(ElmValue a, ElmValue b)
         {
-            var (applyRunResult, _) = invokeFunction(
-                [ElmValueEncoding.ElmValueAsPineValue(a),
-                 ElmValueEncoding.ElmValueAsPineValue(b)]);
+            var (applyRunResult, _) =
+                invokeFunction(
+                    [
+                    ElmValueEncoding.ElmValueAsPineValue(a),
+                    ElmValueEncoding.ElmValueAsPineValue(b)
+                    ]);
 
             var pineValue = applyRunResult.ReturnValue.Evaluate();
 
@@ -201,10 +207,13 @@ public class RecordConstructorTests
 
         ElmValue ApplyForElmArguments(ElmValue p, ElmValue q, ElmValue r)
         {
-            var (applyRunResult, _) = invokeFunction(
-                [ElmValueEncoding.ElmValueAsPineValue(p),
-                 ElmValueEncoding.ElmValueAsPineValue(q),
-                 ElmValueEncoding.ElmValueAsPineValue(r)]);
+            var (applyRunResult, _) =
+                invokeFunction(
+                    [
+                    ElmValueEncoding.ElmValueAsPineValue(p),
+                    ElmValueEncoding.ElmValueAsPineValue(q),
+                    ElmValueEncoding.ElmValueAsPineValue(r)
+                    ]);
 
             var pineValue = applyRunResult.ReturnValue.Evaluate();
 
@@ -282,12 +291,17 @@ public class RecordConstructorTests
 
             var invokeFunction = ElmCompilerTestHelper.CreateFunctionInvocationDelegate(declParsed);
 
-            var (applyRunResult, _) = invokeFunction(
-                [ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(100)),
-                 ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(200))]);
+            var (applyRunResult, _) =
+                invokeFunction(
+                    [
+                    ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(100)),
+                    ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(200))
+                    ]);
 
             var pineValue = applyRunResult.ReturnValue.Evaluate();
-            var result = ElmValueEncoding.PineValueAsElmValue(pineValue, null, null)
+
+            var result =
+                ElmValueEncoding.PineValueAsElmValue(pineValue, null, null)
                 .Extract(err => throw new Exception("Failed decoding result: " + err));
 
             // PointXY 100 200 -> { x = 100, y = 200 }
@@ -311,12 +325,17 @@ public class RecordConstructorTests
 
             var invokeFunction = ElmCompilerTestHelper.CreateFunctionInvocationDelegate(declParsed);
 
-            var (applyRunResult, _) = invokeFunction(
-                [ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(100)),
-                 ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(200))]);
+            var (applyRunResult, _) =
+                invokeFunction(
+                    [
+                    ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(100)),
+                    ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(200))
+                    ]);
 
             var pineValue = applyRunResult.ReturnValue.Evaluate();
-            var result = ElmValueEncoding.PineValueAsElmValue(pineValue, null, null)
+
+            var result =
+                ElmValueEncoding.PineValueAsElmValue(pineValue, null, null)
                 .Extract(err => throw new Exception("Failed decoding result: " + err));
 
             // PointYX 100 200 -> { x = 200, y = 100 }
@@ -374,12 +393,17 @@ public class RecordConstructorTests
 
         // Test with Int and String
         {
-            var (applyRunResult, _) = invokeFunction(
-                [ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(42)),
-                 ElmValueEncoding.ElmValueAsPineValue(ElmValue.StringInstance("hello"))]);
+            var (applyRunResult, _) =
+                invokeFunction(
+                    [
+                    ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(42)),
+                    ElmValueEncoding.ElmValueAsPineValue(ElmValue.StringInstance("hello"))
+                    ]);
 
             var pineValue = applyRunResult.ReturnValue.Evaluate();
-            var result = ElmValueEncoding.PineValueAsElmValue(pineValue, null, null)
+
+            var result =
+                ElmValueEncoding.PineValueAsElmValue(pineValue, null, null)
                 .Extract(err => throw new Exception("Failed decoding result: " + err));
 
             // Pair 42 "hello" -> { first = 42, second = "hello" }

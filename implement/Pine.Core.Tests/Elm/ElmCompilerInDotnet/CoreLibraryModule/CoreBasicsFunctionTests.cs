@@ -41,8 +41,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Sub_FunctionValue(),
                 [
-                    ElmValue.Integer(13),
-                    ElmValue.Integer(17)
+                ElmValue.Integer(13),
+                ElmValue.Integer(17)
                 ]);
 
         resultValue.Should().Be(ElmValue.Integer(-4));
@@ -55,8 +55,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Sub_FunctionValue(),
                 [
-                    ElmValue.ElmFloat.Convert(3.7),
-                    ElmValue.ElmFloat.Convert(-0.3),
+                ElmValue.ElmFloat.Convert(3.7),
+                ElmValue.ElmFloat.Convert(-0.3),
                 ]);
 
         resultValue.Should().Be(ElmValue.Integer(4));
@@ -69,8 +69,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Sub_FunctionValue(),
                 [
-                    ElmValue.ElmFloat.Convert(13),
-                    ElmValue.ElmFloat.Convert(0.1),
+                ElmValue.ElmFloat.Convert(13),
+                ElmValue.ElmFloat.Convert(0.1),
                 ]);
 
         resultValue.Should().Be(ElmValue.ElmFloat.Convert(12.9));
@@ -206,8 +206,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Add_FunctionValue(),
                 [
-                    ElmValue.Integer(13),
-                    ElmValue.Integer(17)
+                ElmValue.Integer(13),
+                ElmValue.Integer(17)
                 ]);
 
         resultValue.Should().Be(ElmValue.Integer(30));
@@ -220,8 +220,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Add_FunctionValue(),
                 [
-                    ElmValue.Integer(-5),
-                    ElmValue.Integer(3)
+                ElmValue.Integer(-5),
+                ElmValue.Integer(3)
                 ]);
 
         resultValue.Should().Be(ElmValue.Integer(-2));
@@ -234,8 +234,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Add_FunctionValue(),
                 [
-                    ElmValue.ElmFloat.Convert(1.5),
-                    ElmValue.ElmFloat.Convert(2.5)
+                ElmValue.ElmFloat.Convert(1.5),
+                ElmValue.ElmFloat.Convert(2.5)
                 ]);
 
         resultValue.Should().Be(ElmValue.Integer(4));
@@ -250,8 +250,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Int_div_FunctionValue(),
                 [
-                    ElmValue.Integer(10),
-                    ElmValue.Integer(3)
+                ElmValue.Integer(10),
+                ElmValue.Integer(3)
                 ]);
 
         resultValue.Should().Be(ElmValue.Integer(3));
@@ -264,8 +264,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Int_div_FunctionValue(),
                 [
-                    ElmValue.Integer(-10),
-                    ElmValue.Integer(3)
+                ElmValue.Integer(-10),
+                ElmValue.Integer(3)
                 ]);
 
         resultValue.Should().Be(ElmValue.Integer(-3));
@@ -278,8 +278,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Int_div_FunctionValue(),
                 [
-                    ElmValue.Integer(10),
-                    ElmValue.Integer(-3)
+                ElmValue.Integer(10),
+                ElmValue.Integer(-3)
                 ]);
 
         resultValue.Should().Be(ElmValue.Integer(-3));
@@ -292,8 +292,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Int_div_FunctionValue(),
                 [
-                    ElmValue.Integer(10),
-                    ElmValue.Integer(0)
+                ElmValue.Integer(10),
+                ElmValue.Integer(0)
                 ]);
 
         resultValue.Should().Be(ElmValue.Integer(0));
@@ -306,8 +306,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Int_div_FunctionValue(),
                 [
-                    ElmValue.Integer(1_000),
-                    ElmValue.Integer(17)
+                ElmValue.Integer(1_000),
+                ElmValue.Integer(17)
                 ]);
 
         resultValue.Should().Be(ElmValue.Integer(58));
@@ -547,8 +547,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Int_modBy_FunctionValue(),
                 [
-                    ElmValue.Integer(3),
-                    ElmValue.Integer(10)
+                ElmValue.Integer(3),
+                ElmValue.Integer(10)
                 ]);
 
         resultValue.Should().Be(ElmValue.Integer(1));
@@ -561,8 +561,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Int_modBy_FunctionValue(),
                 [
-                    ElmValue.Integer(3),
-                    ElmValue.Integer(-10)
+                ElmValue.Integer(3),
+                ElmValue.Integer(-10)
                 ]);
 
         resultValue.Should().Be(ElmValue.Integer(2));
@@ -577,8 +577,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.RemainderBy_FunctionValue(),
                 [
-                    ElmValue.Integer(3),
-                    ElmValue.Integer(10)
+                ElmValue.Integer(3),
+                ElmValue.Integer(10)
                 ]);
 
         resultValue.Should().Be(ElmValue.Integer(1));
@@ -591,8 +591,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.RemainderBy_FunctionValue(),
                 [
-                    ElmValue.Integer(3),
-                    ElmValue.Integer(-10)
+                ElmValue.Integer(3),
+                ElmValue.Integer(-10)
                 ]);
 
         resultValue.Should().Be(ElmValue.Integer(-1));
@@ -607,8 +607,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Eq_FunctionValue(),
                 [
-                    ElmValue.Integer(42),
-                    ElmValue.Integer(42)
+                ElmValue.Integer(42),
+                ElmValue.Integer(42)
                 ]);
 
         resultValue.Should().Be(ElmValue.TrueValue);
@@ -621,8 +621,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Eq_FunctionValue(),
                 [
-                    ElmValue.Integer(42),
-                    ElmValue.Integer(43)
+                ElmValue.Integer(42),
+                ElmValue.Integer(43)
                 ]);
 
         resultValue.Should().Be(ElmValue.FalseValue);
@@ -635,8 +635,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Eq_FunctionValue(),
                 [
-                    ElmValue.StringInstance("hello"),
-                    ElmValue.StringInstance("hello")
+                ElmValue.StringInstance("hello"),
+                ElmValue.StringInstance("hello")
                 ]);
 
         resultValue.Should().Be(ElmValue.TrueValue);
@@ -649,8 +649,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Eq_FunctionValue(),
                 [
-                    ElmValue.StringInstance("hello"),
-                    ElmValue.StringInstance("world")
+                ElmValue.StringInstance("hello"),
+                ElmValue.StringInstance("world")
                 ]);
 
         resultValue.Should().Be(ElmValue.FalseValue);
@@ -691,8 +691,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Eq_FunctionValue(),
                 [
-                    ElmValue.ElmFloat.Convert(3.14),
-                    ElmValue.ElmFloat.Convert(3.14)
+                ElmValue.ElmFloat.Convert(3.14),
+                ElmValue.ElmFloat.Convert(3.14)
                 ]);
 
         resultValue.Should().Be(ElmValue.TrueValue);
@@ -705,8 +705,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Eq_FunctionValue(),
                 [
-                    ElmValue.ElmFloat.Convert(3.14),
-                    ElmValue.ElmFloat.Convert(3.15)
+                ElmValue.ElmFloat.Convert(3.14),
+                ElmValue.ElmFloat.Convert(3.15)
                 ]);
 
         resultValue.Should().Be(ElmValue.FalseValue);
@@ -720,8 +720,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Eq_FunctionValue(),
                 [
-                    ElmValue.Integer(4),
-                    ElmValue.ElmFloat.Convert(4.0)
+                ElmValue.Integer(4),
+                ElmValue.ElmFloat.Convert(4.0)
                 ]);
 
         resultValue.Should().Be(ElmValue.TrueValue);
@@ -735,8 +735,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Eq_FunctionValue(),
                 [
-                    ElmValue.ElmFloat.Convert(4.0),
-                    ElmValue.Integer(4)
+                ElmValue.ElmFloat.Convert(4.0),
+                ElmValue.Integer(4)
                 ]);
 
         resultValue.Should().Be(ElmValue.TrueValue);
@@ -751,8 +751,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Neq_FunctionValue(),
                 [
-                    ElmValue.Integer(42),
-                    ElmValue.Integer(42)
+                ElmValue.Integer(42),
+                ElmValue.Integer(42)
                 ]);
 
         resultValue.Should().Be(ElmValue.FalseValue);
@@ -765,8 +765,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Neq_FunctionValue(),
                 [
-                    ElmValue.Integer(42),
-                    ElmValue.Integer(43)
+                ElmValue.Integer(42),
+                ElmValue.Integer(43)
                 ]);
 
         resultValue.Should().Be(ElmValue.TrueValue);
@@ -781,8 +781,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Compare_FunctionValue(),
                 [
-                    ElmValue.Integer(3),
-                    ElmValue.Integer(5)
+                ElmValue.Integer(3),
+                ElmValue.Integer(5)
                 ]);
 
         resultValue.Should().Be(ElmValue.TagInstance("LT", []));
@@ -795,8 +795,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Compare_FunctionValue(),
                 [
-                    ElmValue.Integer(5),
-                    ElmValue.Integer(5)
+                ElmValue.Integer(5),
+                ElmValue.Integer(5)
                 ]);
 
         resultValue.Should().Be(ElmValue.TagInstance("EQ", []));
@@ -809,8 +809,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Compare_FunctionValue(),
                 [
-                    ElmValue.Integer(7),
-                    ElmValue.Integer(5)
+                ElmValue.Integer(7),
+                ElmValue.Integer(5)
                 ]);
 
         resultValue.Should().Be(ElmValue.TagInstance("GT", []));
@@ -823,8 +823,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Compare_FunctionValue(),
                 [
-                    ElmValue.ElmFloat.Convert(1.5),
-                    ElmValue.ElmFloat.Convert(2.5)
+                ElmValue.ElmFloat.Convert(1.5),
+                ElmValue.ElmFloat.Convert(2.5)
                 ]);
 
         resultValue.Should().Be(ElmValue.TagInstance("LT", []));
@@ -837,8 +837,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Compare_FunctionValue(),
                 [
-                    ElmValue.ElmFloat.Convert(3.14),
-                    ElmValue.ElmFloat.Convert(3.14)
+                ElmValue.ElmFloat.Convert(3.14),
+                ElmValue.ElmFloat.Convert(3.14)
                 ]);
 
         resultValue.Should().Be(ElmValue.TagInstance("EQ", []));
@@ -851,8 +851,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Compare_FunctionValue(),
                 [
-                    ElmValue.ElmFloat.Convert(5.5),
-                    ElmValue.ElmFloat.Convert(2.5)
+                ElmValue.ElmFloat.Convert(5.5),
+                ElmValue.ElmFloat.Convert(2.5)
                 ]);
 
         resultValue.Should().Be(ElmValue.TagInstance("GT", []));
@@ -866,8 +866,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Compare_FunctionValue(),
                 [
-                    ElmValue.Integer(3),
-                    ElmValue.ElmFloat.Convert(3.5)
+                ElmValue.Integer(3),
+                ElmValue.ElmFloat.Convert(3.5)
                 ]);
 
         resultValue.Should().Be(ElmValue.TagInstance("LT", []));
@@ -881,8 +881,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Compare_FunctionValue(),
                 [
-                    ElmValue.ElmFloat.Convert(3.5),
-                    ElmValue.Integer(3)
+                ElmValue.ElmFloat.Convert(3.5),
+                ElmValue.Integer(3)
                 ]);
 
         resultValue.Should().Be(ElmValue.TagInstance("GT", []));
@@ -897,8 +897,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Compare_FunctionValue(),
                 [
-                    ElmValue.StringInstance("apple"),
-                    ElmValue.StringInstance("banana")
+                ElmValue.StringInstance("apple"),
+                ElmValue.StringInstance("banana")
                 ]);
 
         resultValue.Should().Be(ElmValue.TagInstance("LT", []));
@@ -911,8 +911,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Compare_FunctionValue(),
                 [
-                    ElmValue.StringInstance("hello"),
-                    ElmValue.StringInstance("hello")
+                ElmValue.StringInstance("hello"),
+                ElmValue.StringInstance("hello")
                 ]);
 
         resultValue.Should().Be(ElmValue.TagInstance("EQ", []));
@@ -925,8 +925,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Compare_FunctionValue(),
                 [
-                    ElmValue.StringInstance("zebra"),
-                    ElmValue.StringInstance("apple")
+                ElmValue.StringInstance("zebra"),
+                ElmValue.StringInstance("apple")
                 ]);
 
         resultValue.Should().Be(ElmValue.TagInstance("GT", []));
@@ -940,8 +940,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Compare_FunctionValue(),
                 [
-                    ElmValue.StringInstance("app"),
-                    ElmValue.StringInstance("apple")
+                ElmValue.StringInstance("app"),
+                ElmValue.StringInstance("apple")
                 ]);
 
         resultValue.Should().Be(ElmValue.TagInstance("LT", []));
@@ -955,8 +955,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Compare_FunctionValue(),
                 [
-                    ElmValue.StringInstance(""),
-                    ElmValue.StringInstance("a")
+                ElmValue.StringInstance(""),
+                ElmValue.StringInstance("a")
                 ]);
 
         resultValue.Should().Be(ElmValue.TagInstance("LT", []));
@@ -972,8 +972,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Compare_FunctionValue(),
                 [
-                    ElmValue.ListInstance([ElmValue.Integer(1), ElmValue.Integer(5)]),
-                    ElmValue.ListInstance([ElmValue.Integer(2), ElmValue.Integer(3)])
+                ElmValue.ListInstance([ElmValue.Integer(1), ElmValue.Integer(5)]),
+                ElmValue.ListInstance([ElmValue.Integer(2), ElmValue.Integer(3)])
                 ]);
 
         resultValue.Should().Be(ElmValue.TagInstance("LT", []));
@@ -987,8 +987,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Compare_FunctionValue(),
                 [
-                    ElmValue.ListInstance([ElmValue.Integer(1), ElmValue.Integer(2)]),
-                    ElmValue.ListInstance([ElmValue.Integer(1), ElmValue.Integer(3)])
+                ElmValue.ListInstance([ElmValue.Integer(1), ElmValue.Integer(2)]),
+                ElmValue.ListInstance([ElmValue.Integer(1), ElmValue.Integer(3)])
                 ]);
 
         resultValue.Should().Be(ElmValue.TagInstance("LT", []));
@@ -1002,8 +1002,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Compare_FunctionValue(),
                 [
-                    ElmValue.ListInstance([ElmValue.Integer(1), ElmValue.Integer(2)]),
-                    ElmValue.ListInstance([ElmValue.Integer(1), ElmValue.Integer(2)])
+                ElmValue.ListInstance([ElmValue.Integer(1), ElmValue.Integer(2)]),
+                ElmValue.ListInstance([ElmValue.Integer(1), ElmValue.Integer(2)])
                 ]);
 
         resultValue.Should().Be(ElmValue.TagInstance("EQ", []));
@@ -1017,8 +1017,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Compare_FunctionValue(),
                 [
-                    ElmValue.ListInstance([ElmValue.Integer(3), ElmValue.Integer(1)]),
-                    ElmValue.ListInstance([ElmValue.Integer(2), ElmValue.Integer(9)])
+                ElmValue.ListInstance([ElmValue.Integer(3), ElmValue.Integer(1)]),
+                ElmValue.ListInstance([ElmValue.Integer(2), ElmValue.Integer(9)])
                 ]);
 
         resultValue.Should().Be(ElmValue.TagInstance("GT", []));
@@ -1032,8 +1032,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Compare_FunctionValue(),
                 [
-                    ElmValue.ListInstance([ElmValue.Integer(1), ElmValue.Integer(2), ElmValue.Integer(3)]),
-                    ElmValue.ListInstance([ElmValue.Integer(1), ElmValue.Integer(2), ElmValue.Integer(4)])
+                ElmValue.ListInstance([ElmValue.Integer(1), ElmValue.Integer(2), ElmValue.Integer(3)]),
+                ElmValue.ListInstance([ElmValue.Integer(1), ElmValue.Integer(2), ElmValue.Integer(4)])
                 ]);
 
         resultValue.Should().Be(ElmValue.TagInstance("LT", []));
@@ -1048,8 +1048,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Lt_FunctionValue(),
                 [
-                    ElmValue.Integer(3),
-                    ElmValue.Integer(5)
+                ElmValue.Integer(3),
+                ElmValue.Integer(5)
                 ]);
 
         resultValue.Should().Be(ElmValue.TrueValue);
@@ -1062,8 +1062,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Lt_FunctionValue(),
                 [
-                    ElmValue.Integer(5),
-                    ElmValue.Integer(5)
+                ElmValue.Integer(5),
+                ElmValue.Integer(5)
                 ]);
 
         resultValue.Should().Be(ElmValue.FalseValue);
@@ -1076,8 +1076,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Lt_FunctionValue(),
                 [
-                    ElmValue.Integer(7),
-                    ElmValue.Integer(5)
+                ElmValue.Integer(7),
+                ElmValue.Integer(5)
                 ]);
 
         resultValue.Should().Be(ElmValue.FalseValue);
@@ -1096,8 +1096,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Gt_FunctionValue(),
                 [
-                    ElmValue.Integer(3),
-                    ElmValue.Integer(5)
+                ElmValue.Integer(3),
+                ElmValue.Integer(5)
                 ]);
 
         resultValue.Should().Be(ElmValue.FalseValue);
@@ -1110,8 +1110,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Gt_FunctionValue(),
                 [
-                    ElmValue.Integer(5),
-                    ElmValue.Integer(5)
+                ElmValue.Integer(5),
+                ElmValue.Integer(5)
                 ]);
 
         resultValue.Should().Be(ElmValue.FalseValue);
@@ -1124,8 +1124,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Gt_FunctionValue(),
                 [
-                    ElmValue.Integer(7),
-                    ElmValue.Integer(5)
+                ElmValue.Integer(7),
+                ElmValue.Integer(5)
                 ]);
 
         resultValue.Should().Be(ElmValue.TrueValue);
@@ -1140,8 +1140,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Le_FunctionValue(),
                 [
-                    ElmValue.Integer(3),
-                    ElmValue.Integer(5)
+                ElmValue.Integer(3),
+                ElmValue.Integer(5)
                 ]);
 
         resultValue.Should().Be(ElmValue.TrueValue);
@@ -1154,8 +1154,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Le_FunctionValue(),
                 [
-                    ElmValue.Integer(5),
-                    ElmValue.Integer(5)
+                ElmValue.Integer(5),
+                ElmValue.Integer(5)
                 ]);
 
         resultValue.Should().Be(ElmValue.TrueValue);
@@ -1168,8 +1168,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Le_FunctionValue(),
                 [
-                    ElmValue.Integer(7),
-                    ElmValue.Integer(5)
+                ElmValue.Integer(7),
+                ElmValue.Integer(5)
                 ]);
 
         resultValue.Should().Be(ElmValue.FalseValue);
@@ -1184,8 +1184,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Ge_FunctionValue(),
                 [
-                    ElmValue.Integer(3),
-                    ElmValue.Integer(5)
+                ElmValue.Integer(3),
+                ElmValue.Integer(5)
                 ]);
 
         resultValue.Should().Be(ElmValue.FalseValue);
@@ -1198,8 +1198,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Ge_FunctionValue(),
                 [
-                    ElmValue.Integer(5),
-                    ElmValue.Integer(5)
+                ElmValue.Integer(5),
+                ElmValue.Integer(5)
                 ]);
 
         resultValue.Should().Be(ElmValue.TrueValue);
@@ -1212,8 +1212,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Ge_FunctionValue(),
                 [
-                    ElmValue.Integer(7),
-                    ElmValue.Integer(5)
+                ElmValue.Integer(7),
+                ElmValue.Integer(5)
                 ]);
 
         resultValue.Should().Be(ElmValue.TrueValue);
@@ -1437,8 +1437,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Min_FunctionValue(),
                 [
-                    ElmValue.Integer(3),
-                    ElmValue.Integer(7)
+                ElmValue.Integer(3),
+                ElmValue.Integer(7)
                 ]);
 
         resultValue.Should().Be(ElmValue.Integer(3));
@@ -1451,8 +1451,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Min_FunctionValue(),
                 [
-                    ElmValue.Integer(7),
-                    ElmValue.Integer(3)
+                ElmValue.Integer(7),
+                ElmValue.Integer(3)
                 ]);
 
         resultValue.Should().Be(ElmValue.Integer(3));
@@ -1465,8 +1465,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Min_FunctionValue(),
                 [
-                    ElmValue.Integer(5),
-                    ElmValue.Integer(5)
+                ElmValue.Integer(5),
+                ElmValue.Integer(5)
                 ]);
 
         resultValue.Should().Be(ElmValue.Integer(5));
@@ -1481,8 +1481,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Max_FunctionValue(),
                 [
-                    ElmValue.Integer(7),
-                    ElmValue.Integer(3)
+                ElmValue.Integer(7),
+                ElmValue.Integer(3)
                 ]);
 
         resultValue.Should().Be(ElmValue.Integer(7));
@@ -1495,8 +1495,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Max_FunctionValue(),
                 [
-                    ElmValue.Integer(3),
-                    ElmValue.Integer(7)
+                ElmValue.Integer(3),
+                ElmValue.Integer(7)
                 ]);
 
         resultValue.Should().Be(ElmValue.Integer(7));
@@ -1509,8 +1509,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Max_FunctionValue(),
                 [
-                    ElmValue.Integer(5),
-                    ElmValue.Integer(5)
+                ElmValue.Integer(5),
+                ElmValue.Integer(5)
                 ]);
 
         resultValue.Should().Be(ElmValue.Integer(5));
@@ -1549,8 +1549,8 @@ public class CoreBasicsFunctionTests
             ApplyGeneric(
                 CoreBasics.Always_FunctionValue(),
                 [
-                    ElmValue.Integer(42),
-                    ElmValue.StringInstance("ignored")
+                ElmValue.Integer(42),
+                ElmValue.StringInstance("ignored")
                 ]);
 
         resultValue.Should().Be(ElmValue.Integer(42));
@@ -1836,9 +1836,10 @@ public class CoreBasicsFunctionTests
         // A ParseAndEval that doesn't match any arithmetic pattern
         var someExpr = Expression.LiteralInstance(PineValue.EmptyList);
 
-        var parseAndEval = new Expression.ParseAndEval(
-            encoded: Expression.LiteralInstance(PineValue.EmptyList),
-            environment: Expression.ListInstance([someExpr, someExpr]));
+        var parseAndEval =
+            new Expression.ParseAndEval(
+                encoded: Expression.LiteralInstance(PineValue.EmptyList),
+                environment: Expression.ListInstance([someExpr, someExpr]));
 
         var result = CoreBasics.Identify(parseAndEval);
 
@@ -1864,9 +1865,10 @@ public class CoreBasicsFunctionTests
         var singleArgExpr =
             Expression.LiteralInstance(ElmValueEncoding.ElmValueAsPineValue(ElmValue.Integer(1)));
 
-        var parseAndEval = new Expression.ParseAndEval(
-            encoded: Expression.LiteralInstance(CoreBasics.Add_FunctionValue()),
-            environment: Expression.ListInstance([singleArgExpr])); // Only 1 argument
+        var parseAndEval =
+            new Expression.ParseAndEval(
+                encoded: Expression.LiteralInstance(CoreBasics.Add_FunctionValue()),
+                environment: Expression.ListInstance([singleArgExpr])); // Only 1 argument
 
         var result = CoreBasics.Identify(parseAndEval);
 
@@ -1908,9 +1910,10 @@ public class CoreBasicsFunctionTests
         PineValue functionValue,
         ElmValue argument)
     {
-        return ApplyGeneric(
-            functionValue,
-            [argument]);
+        return
+            ApplyGeneric(
+                functionValue,
+                [argument]);
     }
 
     private static ElmValue ApplyGeneric(

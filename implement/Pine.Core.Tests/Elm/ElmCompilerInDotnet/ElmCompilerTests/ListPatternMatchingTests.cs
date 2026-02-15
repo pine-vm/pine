@@ -76,8 +76,8 @@ public class ListPatternMatchingTests
                 ApplyForArgument(
                     PineValue.List(
                         [
-                            IntegerEncoding.EncodeSignedInteger(1),
-                            IntegerEncoding.EncodeSignedInteger(2),
+                        IntegerEncoding.EncodeSignedInteger(1),
+                        IntegerEncoding.EncodeSignedInteger(2),
                         ]));
 
             var resultAsElmValue =
@@ -179,7 +179,7 @@ public class ListPatternMatchingTests
                 ResultAsExpressionString(
                     PineValue.List(
                         [
-                            IntegerEncoding.EncodeSignedInteger(0),
+                        IntegerEncoding.EncodeSignedInteger(0),
                         ]));
 
             singleZeroListResult.Should().Be("100");
@@ -190,9 +190,9 @@ public class ListPatternMatchingTests
                 ResultAsExpressionString(
                     PineValue.List(
                         [
-                            IntegerEncoding.EncodeSignedInteger(0),
-                            IntegerEncoding.EncodeSignedInteger(5),
-                            IntegerEncoding.EncodeSignedInteger(10),
+                        IntegerEncoding.EncodeSignedInteger(0),
+                        IntegerEncoding.EncodeSignedInteger(5),
+                        IntegerEncoding.EncodeSignedInteger(10),
                         ]));
 
             headZeroListResult.Should().Be("200");
@@ -203,8 +203,8 @@ public class ListPatternMatchingTests
                 ResultAsExpressionString(
                     PineValue.List(
                         [
-                            IntegerEncoding.EncodeSignedInteger(13),
-                            IntegerEncoding.EncodeSignedInteger(42),
+                        IntegerEncoding.EncodeSignedInteger(13),
+                        IntegerEncoding.EncodeSignedInteger(42),
                         ]));
 
             list13_42Result.Should().Be("300");
@@ -215,20 +215,20 @@ public class ListPatternMatchingTests
                 ResultAsExpressionString(
                     PineValue.List(
                         [
-                            PineValue.List(
-                                [
-                                    IntegerEncoding.EncodeSignedInteger(13),
-                                    IntegerEncoding.EncodeSignedInteger(42),
-                                ]),
-                            PineValue.List(
-                                [
-                                    IntegerEncoding.EncodeSignedInteger(1),
-                                    IntegerEncoding.EncodeSignedInteger(2),
-                                ]),
-                            PineValue.List(
-                                [
-                                    IntegerEncoding.EncodeSignedInteger(3),
-                                ]),
+                        PineValue.List(
+                            [
+                            IntegerEncoding.EncodeSignedInteger(13),
+                            IntegerEncoding.EncodeSignedInteger(42),
+                            ]),
+                        PineValue.List(
+                            [
+                            IntegerEncoding.EncodeSignedInteger(1),
+                            IntegerEncoding.EncodeSignedInteger(2),
+                            ]),
+                        PineValue.List(
+                            [
+                            IntegerEncoding.EncodeSignedInteger(3),
+                            ]),
                         ]));
 
             listOfList13_42Result.Should().Be("402");
@@ -239,9 +239,10 @@ public class ListPatternMatchingTests
                 ResultAsExpressionString(
                     PineValue.List(
                         [
-                            IntegerEncoding.EncodeSignedInteger(7),
-                            IntegerEncoding.EncodeSignedInteger(8),
+                        IntegerEncoding.EncodeSignedInteger(7),
+                        IntegerEncoding.EncodeSignedInteger(8),
                         ]));
+
             otherListResult.Should().Be("500");
         }
     }
@@ -371,11 +372,11 @@ public class ListPatternMatchingTests
                 ApplyForArgumentAsExpressionString(
                     PineValue.List(
                         [
-                            PineValue.List(
-                                [
-                                    IntegerEncoding.EncodeSignedInteger(13),
-                                    IntegerEncoding.EncodeSignedInteger(42),
-                                ]),
+                        PineValue.List(
+                            [
+                            IntegerEncoding.EncodeSignedInteger(13),
+                            IntegerEncoding.EncodeSignedInteger(42),
+                            ]),
                         ]));
 
             singleList13_42Result.Should().Be("300");
@@ -386,20 +387,20 @@ public class ListPatternMatchingTests
                 ApplyForArgumentAsExpressionString(
                     PineValue.List(
                         [
-                            PineValue.List(
-                                [
-                                    IntegerEncoding.EncodeSignedInteger(13),
-                                    IntegerEncoding.EncodeSignedInteger(42),
-                                ]),
-                            PineValue.List(
-                                [
-                                    IntegerEncoding.EncodeSignedInteger(1),
-                                    IntegerEncoding.EncodeSignedInteger(2),
-                                ]),
-                            PineValue.List(
-                                [
-                                    IntegerEncoding.EncodeSignedInteger(3),
-                                ]),
+                        PineValue.List(
+                            [
+                            IntegerEncoding.EncodeSignedInteger(13),
+                            IntegerEncoding.EncodeSignedInteger(42),
+                            ]),
+                        PineValue.List(
+                            [
+                            IntegerEncoding.EncodeSignedInteger(1),
+                            IntegerEncoding.EncodeSignedInteger(2),
+                            ]),
+                        PineValue.List(
+                            [
+                            IntegerEncoding.EncodeSignedInteger(3),
+                            ]),
                         ]));
 
             listOfList13_42Result.Should().Be("402");
@@ -410,15 +411,15 @@ public class ListPatternMatchingTests
                 ApplyForArgumentAsExpressionString(
                     PineValue.List(
                         [
-                            PineValue.List(
-                                [
-                                    IntegerEncoding.EncodeSignedInteger(13),
-                                    IntegerEncoding.EncodeSignedInteger(7),
-                                ]),
-                            PineValue.List(
-                                [
-                                    IntegerEncoding.EncodeSignedInteger(1),
-                                ]),
+                        PineValue.List(
+                            [
+                            IntegerEncoding.EncodeSignedInteger(13),
+                            IntegerEncoding.EncodeSignedInteger(7),
+                            ]),
+                        PineValue.List(
+                            [
+                            IntegerEncoding.EncodeSignedInteger(1),
+                            ]),
                         ]));
 
             // Pattern [ 13, otherInt ] :: rest matches with otherInt = 7, rest = [[1]]
@@ -431,20 +432,20 @@ public class ListPatternMatchingTests
                 ApplyForArgumentAsExpressionString(
                     PineValue.List(
                         [
-                            PineValue.List(
-                                [
-                                    IntegerEncoding.EncodeSignedInteger(13),
-                                    IntegerEncoding.EncodeSignedInteger(4),
-                                    IntegerEncoding.EncodeSignedInteger(5),
-                                ]),
-                            PineValue.List(
-                                [
-                                    IntegerEncoding.EncodeSignedInteger(1),
-                                ]),
-                            PineValue.List(
-                                [
-                                    IntegerEncoding.EncodeSignedInteger(2),
-                                ]),
+                        PineValue.List(
+                            [
+                            IntegerEncoding.EncodeSignedInteger(13),
+                            IntegerEncoding.EncodeSignedInteger(4),
+                            IntegerEncoding.EncodeSignedInteger(5),
+                            ]),
+                        PineValue.List(
+                            [
+                            IntegerEncoding.EncodeSignedInteger(1),
+                            ]),
+                        PineValue.List(
+                            [
+                            IntegerEncoding.EncodeSignedInteger(2),
+                            ]),
                         ]));
 
             listOfList_pattern1_Result.Should().Be("635");
@@ -455,10 +456,10 @@ public class ListPatternMatchingTests
                 ApplyForArgumentAsExpressionString(
                     PineValue.List(
                         [
-                            PineValue.List(
-                                [
-                                    IntegerEncoding.EncodeSignedInteger(0),
-                                ]),
+                        PineValue.List(
+                            [
+                            IntegerEncoding.EncodeSignedInteger(0),
+                            ]),
                         ]));
 
             singleListZeroResult.Should().Be("100");
@@ -469,14 +470,14 @@ public class ListPatternMatchingTests
                 ApplyForArgumentAsExpressionString(
                     PineValue.List(
                         [
-                            PineValue.List(
-                                [
-                                    IntegerEncoding.EncodeSignedInteger(0),
-                                ]),
-                            PineValue.List(
-                                [
-                                    IntegerEncoding.EncodeSignedInteger(1),
-                                ]),
+                        PineValue.List(
+                            [
+                            IntegerEncoding.EncodeSignedInteger(0),
+                            ]),
+                        PineValue.List(
+                            [
+                            IntegerEncoding.EncodeSignedInteger(1),
+                            ]),
                         ]));
 
             // Pattern [ [ 0 ] ] :: _ does NOT match [[0], [1]] because:
@@ -492,20 +493,20 @@ public class ListPatternMatchingTests
                 ApplyForArgumentAsExpressionString(
                     PineValue.List(
                         [
-                            PineValue.List(
-                                [
-                                    IntegerEncoding.EncodeSignedInteger(17),
-                                ]),
-                            PineValue.List(
-                                [
-                                    IntegerEncoding.EncodeSignedInteger(3),
-                                    IntegerEncoding.EncodeSignedInteger(4),
-                                    IntegerEncoding.EncodeSignedInteger(5),
-                                ]),
-                            PineValue.List(
-                                [
-                                    IntegerEncoding.EncodeSignedInteger(1),
-                                ]),
+                        PineValue.List(
+                            [
+                            IntegerEncoding.EncodeSignedInteger(17),
+                            ]),
+                        PineValue.List(
+                            [
+                            IntegerEncoding.EncodeSignedInteger(3),
+                            IntegerEncoding.EncodeSignedInteger(4),
+                            IntegerEncoding.EncodeSignedInteger(5),
+                            ]),
+                        PineValue.List(
+                            [
+                            IntegerEncoding.EncodeSignedInteger(1),
+                            ]),
                         ]));
 
             // 700 + (3 * 3) + (7 * 4) + (5 * 1) + 1 = 700 + 9 + 28 + 5 + 1 = 743
@@ -518,14 +519,14 @@ public class ListPatternMatchingTests
                     // First element matches, but second element is a single-item list, not matching the pattern
                     PineValue.List(
                         [
-                            PineValue.List(
-                                [
-                                    IntegerEncoding.EncodeSignedInteger(17),
-                                ]),
-                            PineValue.List(
-                                [
-                                    IntegerEncoding.EncodeSignedInteger(3),
-                                ]),
+                        PineValue.List(
+                            [
+                            IntegerEncoding.EncodeSignedInteger(17),
+                            ]),
+                        PineValue.List(
+                            [
+                            IntegerEncoding.EncodeSignedInteger(3),
+                            ]),
                         ]));
 
             notQuite700Result.Should().Be("-999");
@@ -537,20 +538,20 @@ public class ListPatternMatchingTests
                     // Second element matches, but first element does not match the pattern
                     PineValue.List(
                         [
-                            PineValue.List(
-                                [
-                                    IntegerEncoding.EncodeSignedInteger(16),
-                                ]),
-                            PineValue.List(
-                                [
-                                    IntegerEncoding.EncodeSignedInteger(3),
-                                    IntegerEncoding.EncodeSignedInteger(4),
-                                    IntegerEncoding.EncodeSignedInteger(5),
-                                ]),
-                            PineValue.List(
-                                [
-                                    IntegerEncoding.EncodeSignedInteger(1),
-                                ]),
+                        PineValue.List(
+                            [
+                            IntegerEncoding.EncodeSignedInteger(16),
+                            ]),
+                        PineValue.List(
+                            [
+                            IntegerEncoding.EncodeSignedInteger(3),
+                            IntegerEncoding.EncodeSignedInteger(4),
+                            IntegerEncoding.EncodeSignedInteger(5),
+                            ]),
+                        PineValue.List(
+                            [
+                            IntegerEncoding.EncodeSignedInteger(1),
+                            ]),
                         ]));
 
             notQuite700Result.Should().Be("-999");

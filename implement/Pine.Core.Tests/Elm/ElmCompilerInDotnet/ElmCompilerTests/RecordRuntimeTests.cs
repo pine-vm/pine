@@ -21,11 +21,12 @@ public class RecordRuntimeTests
     public void RecordAccess_simple_two_field_record_accesses_first_field()
     {
         // Create a record: { x = 41, y = 47 }
-        var record = ElmValueEncoding.ElmRecordAsPineValue(
-            [
+        var record =
+            ElmValueEncoding.ElmRecordAsPineValue(
+                [
                 ("x", IntegerEncoding.EncodeSignedInteger(41)),
                 ("y", IntegerEncoding.EncodeSignedInteger(47))
-            ]);
+                ]);
 
         var fieldName = StringEncoding.ValueFromString("x");
 
@@ -44,11 +45,12 @@ public class RecordRuntimeTests
     public void RecordAccess_simple_two_field_record_accesses_second_field()
     {
         // Create a record: { x = 41, y = 47 }
-        var record = ElmValueEncoding.ElmRecordAsPineValue(
-            [
+        var record =
+            ElmValueEncoding.ElmRecordAsPineValue(
+                [
                 ("x", IntegerEncoding.EncodeSignedInteger(41)),
                 ("y", IntegerEncoding.EncodeSignedInteger(47))
-            ]);
+                ]);
 
         var fieldName = StringEncoding.ValueFromString("y");
 
@@ -67,12 +69,13 @@ public class RecordRuntimeTests
     public void RecordAccess_three_field_record_accesses_middle_field()
     {
         // Create a record: { a = 10, b = 20, c = 30 }
-        var record = ElmValueEncoding.ElmRecordAsPineValue(
-            [
+        var record =
+            ElmValueEncoding.ElmRecordAsPineValue(
+                [
                 ("a", IntegerEncoding.EncodeSignedInteger(10)),
                 ("b", IntegerEncoding.EncodeSignedInteger(20)),
                 ("c", IntegerEncoding.EncodeSignedInteger(30))
-            ]);
+                ]);
 
         var fieldName = StringEncoding.ValueFromString("b");
 
@@ -91,11 +94,12 @@ public class RecordRuntimeTests
     public void RecordAccess_with_string_value()
     {
         // Create a record: { name = "test", value = 123 }
-        var record = ElmValueEncoding.ElmRecordAsPineValue(
-            [
+        var record =
+            ElmValueEncoding.ElmRecordAsPineValue(
+                [
                 ("name", ElmValueEncoding.ElmValueAsPineValue(ElmValue.StringInstance("test"))),
                 ("value", IntegerEncoding.EncodeSignedInteger(123))
-            ]);
+                ]);
 
         var fieldName = StringEncoding.ValueFromString("name");
 
@@ -114,17 +118,19 @@ public class RecordRuntimeTests
     public void RecordUpdate_single_field_update()
     {
         // Create a record: { x = 41, y = 47 }
-        var record = ElmValueEncoding.ElmRecordAsPineValue(
-            [
+        var record =
+            ElmValueEncoding.ElmRecordAsPineValue(
+                [
                 ("x", IntegerEncoding.EncodeSignedInteger(41)),
                 ("y", IntegerEncoding.EncodeSignedInteger(47))
-            ]);
+                ]);
 
         // Update y to 99
-        var updates = PineValue.List(
-            [
+        var updates =
+            PineValue.List(
+                [
                 PineValue.List([StringEncoding.ValueFromString("y"), IntegerEncoding.EncodeSignedInteger(99)])
-            ]);
+                ]);
 
         // Environment for record update function: [record, updates]
         var environment = PineValue.List([record, updates]);
@@ -135,8 +141,8 @@ public class RecordRuntimeTests
         result.Should().Be(
             ElmValueEncoding.ElmRecordAsPineValue(
                 [
-                    ("x", IntegerEncoding.EncodeSignedInteger(41)),
-                    ("y", IntegerEncoding.EncodeSignedInteger(99))
+                ("x", IntegerEncoding.EncodeSignedInteger(41)),
+                ("y", IntegerEncoding.EncodeSignedInteger(99))
                 ]));
     }
 
@@ -147,17 +153,19 @@ public class RecordRuntimeTests
     public void RecordUpdate_first_field_update()
     {
         // Create a record: { x = 41, y = 47 }
-        var record = ElmValueEncoding.ElmRecordAsPineValue(
-            [
+        var record =
+            ElmValueEncoding.ElmRecordAsPineValue(
+                [
                 ("x", IntegerEncoding.EncodeSignedInteger(41)),
                 ("y", IntegerEncoding.EncodeSignedInteger(47))
-            ]);
+                ]);
 
         // Update x to 100
-        var updates = PineValue.List(
-            [
+        var updates =
+            PineValue.List(
+                [
                 PineValue.List([StringEncoding.ValueFromString("x"), IntegerEncoding.EncodeSignedInteger(100)])
-            ]);
+                ]);
 
         // Environment for record update function: [record, updates]
         var environment = PineValue.List([record, updates]);
@@ -168,8 +176,8 @@ public class RecordRuntimeTests
         result.Should().Be(
             ElmValueEncoding.ElmRecordAsPineValue(
                 [
-                    ("x", IntegerEncoding.EncodeSignedInteger(100)),
-                    ("y", IntegerEncoding.EncodeSignedInteger(47))
+                ("x", IntegerEncoding.EncodeSignedInteger(100)),
+                ("y", IntegerEncoding.EncodeSignedInteger(47))
                 ]));
     }
 
@@ -180,19 +188,21 @@ public class RecordRuntimeTests
     public void RecordUpdate_multiple_fields_update()
     {
         // Create a record: { a = 1, b = 2, c = 3 }
-        var record = ElmValueEncoding.ElmRecordAsPineValue(
-            [
+        var record =
+            ElmValueEncoding.ElmRecordAsPineValue(
+                [
                 ("a", IntegerEncoding.EncodeSignedInteger(1)),
                 ("b", IntegerEncoding.EncodeSignedInteger(2)),
                 ("c", IntegerEncoding.EncodeSignedInteger(3))
-            ]);
+                ]);
 
         // Update a to 10 and c to 30 (updates must be sorted alphabetically!)
-        var updates = PineValue.List(
-            [
+        var updates =
+            PineValue.List(
+                [
                 PineValue.List([StringEncoding.ValueFromString("a"), IntegerEncoding.EncodeSignedInteger(10)]),
                 PineValue.List([StringEncoding.ValueFromString("c"), IntegerEncoding.EncodeSignedInteger(30)])
-            ]);
+                ]);
 
         // Environment for record update function: [record, updates]
         var environment = PineValue.List([record, updates]);
@@ -203,9 +213,9 @@ public class RecordRuntimeTests
         result.Should().Be(
             ElmValueEncoding.ElmRecordAsPineValue(
                 [
-                    ("a", IntegerEncoding.EncodeSignedInteger(10)),
-                    ("b", IntegerEncoding.EncodeSignedInteger(2)),
-                    ("c", IntegerEncoding.EncodeSignedInteger(30))
+                ("a", IntegerEncoding.EncodeSignedInteger(10)),
+                ("b", IntegerEncoding.EncodeSignedInteger(2)),
+                ("c", IntegerEncoding.EncodeSignedInteger(30))
                 ]));
     }
 
@@ -216,20 +226,22 @@ public class RecordRuntimeTests
     public void RecordUpdate_five_field_record_updates_middle_field()
     {
         // Create a record: { a = 1, b = 2, c = 3, d = 4, e = 5 }
-        var record = ElmValueEncoding.ElmRecordAsPineValue(
-            [
+        var record =
+            ElmValueEncoding.ElmRecordAsPineValue(
+                [
                 ("a", IntegerEncoding.EncodeSignedInteger(1)),
                 ("b", IntegerEncoding.EncodeSignedInteger(2)),
                 ("c", IntegerEncoding.EncodeSignedInteger(3)),
                 ("d", IntegerEncoding.EncodeSignedInteger(4)),
                 ("e", IntegerEncoding.EncodeSignedInteger(5))
-            ]);
+                ]);
 
         // Update c to 333
-        var updates = PineValue.List(
-            [
+        var updates =
+            PineValue.List(
+                [
                 PineValue.List([StringEncoding.ValueFromString("c"), IntegerEncoding.EncodeSignedInteger(333)])
-            ]);
+                ]);
 
         // Environment for record update function: [record, updates]
         var environment = PineValue.List([record, updates]);
@@ -240,11 +252,11 @@ public class RecordRuntimeTests
         result.Should().Be(
             ElmValueEncoding.ElmRecordAsPineValue(
                 [
-                    ("a", IntegerEncoding.EncodeSignedInteger(1)),
-                    ("b", IntegerEncoding.EncodeSignedInteger(2)),
-                    ("c", IntegerEncoding.EncodeSignedInteger(333)),
-                    ("d", IntegerEncoding.EncodeSignedInteger(4)),
-                    ("e", IntegerEncoding.EncodeSignedInteger(5))
+                ("a", IntegerEncoding.EncodeSignedInteger(1)),
+                ("b", IntegerEncoding.EncodeSignedInteger(2)),
+                ("c", IntegerEncoding.EncodeSignedInteger(333)),
+                ("d", IntegerEncoding.EncodeSignedInteger(4)),
+                ("e", IntegerEncoding.EncodeSignedInteger(5))
                 ]));
     }
 
@@ -255,14 +267,15 @@ public class RecordRuntimeTests
     public void RecordAccess_five_field_record_accesses_last_field()
     {
         // Create a record: { a = 1, b = 2, c = 3, d = 4, e = 555 }
-        var record = ElmValueEncoding.ElmRecordAsPineValue(
-            [
+        var record =
+            ElmValueEncoding.ElmRecordAsPineValue(
+                [
                 ("a", IntegerEncoding.EncodeSignedInteger(1)),
                 ("b", IntegerEncoding.EncodeSignedInteger(2)),
                 ("c", IntegerEncoding.EncodeSignedInteger(3)),
                 ("d", IntegerEncoding.EncodeSignedInteger(4)),
                 ("e", IntegerEncoding.EncodeSignedInteger(555))
-            ]);
+                ]);
 
         var fieldName = StringEncoding.ValueFromString("e");
 
@@ -281,18 +294,23 @@ public class RecordRuntimeTests
     public void RecordUpdate_with_string_value()
     {
         // Create a record: { name = "old", value = 123 }
-        var record = ElmValueEncoding.ElmRecordAsPineValue(
-            [
+        var record =
+            ElmValueEncoding.ElmRecordAsPineValue(
+                [
                 ("name", ElmValueEncoding.ElmValueAsPineValue(ElmValue.StringInstance("old"))),
                 ("value", IntegerEncoding.EncodeSignedInteger(123))
-            ]);
+                ]);
 
         // Update name to "new"
-        var updates = PineValue.List(
-            [
-                PineValue.List([StringEncoding.ValueFromString("name"),
-                    ElmValueEncoding.ElmValueAsPineValue(ElmValue.StringInstance("new"))])
-            ]);
+        var updates =
+            PineValue.List(
+                [
+                PineValue.List(
+                    [
+                    StringEncoding.ValueFromString("name"),
+                    ElmValueEncoding.ElmValueAsPineValue(ElmValue.StringInstance("new"))
+                    ])
+                ]);
 
         // Environment for record update function: [record, updates]
         var environment = PineValue.List([record, updates]);
@@ -303,8 +321,8 @@ public class RecordRuntimeTests
         result.Should().Be(
             ElmValueEncoding.ElmRecordAsPineValue(
                 [
-                    ("name", ElmValueEncoding.ElmValueAsPineValue(ElmValue.StringInstance("new"))),
-                    ("value", IntegerEncoding.EncodeSignedInteger(123))
+                ("name", ElmValueEncoding.ElmValueAsPineValue(ElmValue.StringInstance("new"))),
+                ("value", IntegerEncoding.EncodeSignedInteger(123))
                 ]));
     }
 
@@ -315,19 +333,21 @@ public class RecordRuntimeTests
     public void RecordUpdate_last_field_preserves_all_other_fields()
     {
         // Create a record: { a = 1, b = 2, c = 3, d = 4 }
-        var record = ElmValueEncoding.ElmRecordAsPineValue(
-            [
+        var record =
+            ElmValueEncoding.ElmRecordAsPineValue(
+                [
                 ("a", IntegerEncoding.EncodeSignedInteger(1)),
                 ("b", IntegerEncoding.EncodeSignedInteger(2)),
                 ("c", IntegerEncoding.EncodeSignedInteger(3)),
                 ("d", IntegerEncoding.EncodeSignedInteger(4))
-            ]);
+                ]);
 
         // Update d to 400
-        var updates = PineValue.List(
-            [
+        var updates =
+            PineValue.List(
+                [
                 PineValue.List([StringEncoding.ValueFromString("d"), IntegerEncoding.EncodeSignedInteger(400)])
-            ]);
+                ]);
 
         // Environment for record update function: [record, updates]
         var environment = PineValue.List([record, updates]);
@@ -338,10 +358,10 @@ public class RecordRuntimeTests
         result.Should().Be(
             ElmValueEncoding.ElmRecordAsPineValue(
                 [
-                    ("a", IntegerEncoding.EncodeSignedInteger(1)),
-                    ("b", IntegerEncoding.EncodeSignedInteger(2)),
-                    ("c", IntegerEncoding.EncodeSignedInteger(3)),
-                    ("d", IntegerEncoding.EncodeSignedInteger(400))
+                ("a", IntegerEncoding.EncodeSignedInteger(1)),
+                ("b", IntegerEncoding.EncodeSignedInteger(2)),
+                ("c", IntegerEncoding.EncodeSignedInteger(3)),
+                ("d", IntegerEncoding.EncodeSignedInteger(400))
                 ]));
     }
 
@@ -370,7 +390,8 @@ public class RecordRuntimeTests
     {
         var parseCache = new PineVMParseCache();
 
-        var expression = parseCache.ParseExpression(RecordRuntime.PineFunctionForRecordUpdateAsValue)
+        var expression =
+            parseCache.ParseExpression(RecordRuntime.PineFunctionForRecordUpdateAsValue)
             .Extract(err => throw new Exception("Failed to parse record update function: " + err));
 
         var evalResult = ElmCompilerTestHelper.EvaluateWithProfiling(expression, environment);
