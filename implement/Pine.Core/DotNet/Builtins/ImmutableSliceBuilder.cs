@@ -75,11 +75,12 @@ public record ImmutableSliceBuilder(
             return this;
         }
 
-        return new(
-            Original,
-            SkipCount: newSkipCount,
-            TakeCount: newTakeCount,
-            FinalValue);
+        return
+            new(
+                Original,
+                SkipCount: newSkipCount,
+                TakeCount: newTakeCount,
+                FinalValue);
     }
 
     /// <summary>
@@ -110,11 +111,12 @@ public record ImmutableSliceBuilder(
             return this;
         }
 
-        return new(
-            Original,
-            SkipCount: SkipCount,
-            TakeCount: newTakeCount,
-            FinalValue);
+        return
+            new(
+                Original,
+                SkipCount: SkipCount,
+                TakeCount: newTakeCount,
+                FinalValue);
     }
 
     /// <summary>
@@ -134,11 +136,12 @@ public record ImmutableSliceBuilder(
     {
         if (KernelFunction.SignedIntegerFromValueRelaxed(skipCountValue) is not { } skipCount)
         {
-            return new(
-                Original,
-                SkipCount,
-                TakeCount,
-                FinalValue: PineValue.EmptyList);
+            return
+                new(
+                    Original,
+                    SkipCount,
+                    TakeCount,
+                    FinalValue: PineValue.EmptyList);
         }
 
         if (skipCount < 0)
@@ -166,11 +169,12 @@ public record ImmutableSliceBuilder(
     {
         if (KernelFunction.SignedIntegerFromValueRelaxed(takeCountValue) is not { } takeCount)
         {
-            return new(
-                Original,
-                SkipCount,
-                TakeCount: 0,
-                FinalValue: PineValue.EmptyList);
+            return
+                new(
+                    Original,
+                    SkipCount,
+                    TakeCount: 0,
+                    FinalValue: PineValue.EmptyList);
         }
 
         if (takeCount < 0)
@@ -217,24 +221,26 @@ public record ImmutableSliceBuilder(
         if (count is 0)
         {
             // TakeLast(0) should return empty
-            PineValue emptyFinalValue = Original switch
-            {
-                PineValue.ListValue =>
-                PineValue.EmptyList,
+            PineValue emptyFinalValue =
+                Original switch
+                {
+                    PineValue.ListValue =>
+                    PineValue.EmptyList,
 
-                PineValue.BlobValue =>
-                PineValue.EmptyBlob,
+                    PineValue.BlobValue =>
+                    PineValue.EmptyBlob,
 
-                _ =>
-                throw new System.NotImplementedException(
-                    "Unexpected original type: " + Original.GetType().FullName)
-            };
+                    _ =>
+                    throw new System.NotImplementedException(
+                        "Unexpected original type: " + Original.GetType().FullName)
+                };
 
-            return new(
-                Original,
-                SkipCount,
-                TakeCount: 0,
-                FinalValue: emptyFinalValue);
+            return
+                new(
+                    Original,
+                    SkipCount,
+                    TakeCount: 0,
+                    FinalValue: emptyFinalValue);
         }
 
         // To take the last N elements, we need to skip (length - N) elements
@@ -260,11 +266,12 @@ public record ImmutableSliceBuilder(
     {
         if (KernelFunction.SignedIntegerFromValueRelaxed(takeCountValue) is not { } takeCount)
         {
-            return new(
-                Original,
-                SkipCount,
-                TakeCount: 0,
-                FinalValue: PineValue.EmptyList);
+            return
+                new(
+                    Original,
+                    SkipCount,
+                    TakeCount: 0,
+                    FinalValue: PineValue.EmptyList);
         }
 
         if (takeCount < 0)
@@ -314,18 +321,19 @@ public record ImmutableSliceBuilder(
             return Internal.KernelFunctionSpecialized.length_as_int(finalValue);
         }
 
-        return Original switch
-        {
-            PineValue.ListValue listValue =>
-            ComputeResultLengthFromOriginalLength(listValue.Items.Length),
+        return
+            Original switch
+            {
+                PineValue.ListValue listValue =>
+                ComputeResultLengthFromOriginalLength(listValue.Items.Length),
 
-            PineValue.BlobValue blobValue =>
-            ComputeResultLengthFromOriginalLength(blobValue.Bytes.Length),
+                PineValue.BlobValue blobValue =>
+                ComputeResultLengthFromOriginalLength(blobValue.Bytes.Length),
 
-            _ =>
-            throw new System.NotImplementedException(
-                "Unexpected original type: " + Original.GetType().FullName)
-        };
+                _ =>
+                throw new System.NotImplementedException(
+                    "Unexpected original type: " + Original.GetType().FullName)
+            };
     }
 
     /// <summary>
@@ -413,18 +421,19 @@ public record ImmutableSliceBuilder(
         // Check if index is beyond the take count (if set)
         if (TakeCount is { } takeCount && index >= takeCount)
         {
-            return Original switch
-            {
-                PineValue.ListValue =>
-                PineValue.EmptyList,
+            return
+                Original switch
+                {
+                    PineValue.ListValue =>
+                    PineValue.EmptyList,
 
-                PineValue.BlobValue =>
-                PineValue.EmptyBlob,
+                    PineValue.BlobValue =>
+                    PineValue.EmptyBlob,
 
-                _ =>
-                throw new System.NotImplementedException(
-                    "Unexpected source type: " + Original.GetType())
-            };
+                    _ =>
+                    throw new System.NotImplementedException(
+                        "Unexpected source type: " + Original.GetType())
+                };
         }
 
         if (FinalValue is { } finalValue)

@@ -75,6 +75,7 @@ public static class CompileTypeSyntax
     {
         // Get the namespace and name for comparison
         var namespacePart = type.Namespace ?? "";
+
         var typeName = type.Name;
 
         // Handle generic types by getting the generic type definition name without the arity
@@ -196,13 +197,13 @@ public static class CompileTypeSyntax
             nameInNamespace,
 
             [var firstSegment, ..] =>
-                SyntaxFactory.QualifiedName(
-                    namespaceSegments
+            SyntaxFactory.QualifiedName(
+                namespaceSegments
                     .Skip(1)
                     .Select(SyntaxFactory.IdentifierName)
                     .Aggregate(
-                        seed: (NameSyntax)SyntaxFactory.IdentifierName(firstSegment),
-                        func: SyntaxFactory.QualifiedName),
+                    seed: (NameSyntax)SyntaxFactory.IdentifierName(firstSegment),
+                    func: SyntaxFactory.QualifiedName),
                 nameInNamespace)
         };
 }

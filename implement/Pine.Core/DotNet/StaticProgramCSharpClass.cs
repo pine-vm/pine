@@ -23,7 +23,8 @@ public record StaticProgramCSharpClass(
         DeclarationSyntaxContext declarationSyntaxContext)
     {
         IReadOnlyList<MethodDeclarationSyntax> functions =
-            [.. declarations
+            [
+            .. declarations
             .OrderBy(kv => kv.Key)
             .Select(kv =>
             RenderFunctionToMethod(
@@ -32,7 +33,8 @@ public record StaticProgramCSharpClass(
                 body: kv.Value.body,
                 availableFunctions,
                 availableValueDecls,
-                declarationSyntaxContext))];
+                declarationSyntaxContext))
+            ];
 
         var classSyntax =
             SyntaxFactory.ClassDeclaration(className.DeclName)
@@ -189,15 +191,15 @@ public record StaticProgramCSharpClass(
                         // Since the current version does not return any type info along with the expression, evaluate first.
 
                         return
-                        PineCSharpSyntaxFactory.EvaluateImmutableConcatBuilderSyntax(
-                            SyntaxFactory.IdentifierName(localName));
+                            PineCSharpSyntaxFactory.EvaluateImmutableConcatBuilderSyntax(
+                                SyntaxFactory.IdentifierName(localName));
                     }
 
                     if (paramsAsSliceBuilders.Contains(path))
                     {
                         return
-                        PineCSharpSyntaxFactory.EvaluateImmutableSliceBuilderSyntax(
-                            SyntaxFactory.IdentifierName(localName));
+                            PineCSharpSyntaxFactory.EvaluateImmutableSliceBuilderSyntax(
+                                SyntaxFactory.IdentifierName(localName));
                     }
 
                     return SyntaxFactory.IdentifierName(localName);
@@ -469,8 +471,8 @@ public record StaticProgramCSharpClass(
                                         SliceOperationKind.Take =>
                                         nameof(Builtins.ImmutableSliceBuilder.Take),
 
-                                        _
-                                        => throw new System.NotImplementedException(
+                                        _ =>
+                                        throw new System.NotImplementedException(
                                             "Unknown slice operation kind: " + sliceOperation.Kind)
                                     };
 
@@ -525,8 +527,7 @@ public record StaticProgramCSharpClass(
                                         SyntaxFactory.SingletonSeparatedList(
                                             SyntaxFactory.VariableDeclarator(
                                                 SyntaxFactory.Identifier(tempLocalName))
-                                            .WithInitializer(
-                                                SyntaxFactory.EqualsValueClause(argumentExpr))))));
+                                            .WithInitializer(SyntaxFactory.EqualsValueClause(argumentExpr))))));
 
                             assignments.Add(
                                 SyntaxFactory.ExpressionStatement(
@@ -634,13 +635,13 @@ public record StaticProgramCSharpClass(
                     SyntaxFactory.LocalDeclarationStatement(
                         SyntaxFactory.VariableDeclaration(
                             CompileTypeSyntax.TypeSyntaxFromType(declType, declarationSyntaxContext))
-                    .WithVariables(
-                        SyntaxFactory.SingletonSeparatedList(
-                            SyntaxFactory.VariableDeclarator(
-                                SyntaxFactory.Identifier(localName))
-                            .WithInitializer(
-                                SyntaxFactory.EqualsValueClause(
-                                    initExpr)))));
+                        .WithVariables(
+                            SyntaxFactory.SingletonSeparatedList(
+                                SyntaxFactory.VariableDeclarator(
+                                    SyntaxFactory.Identifier(localName))
+                                .WithInitializer(
+                                    SyntaxFactory.EqualsValueClause(
+                                        initExpr)))));
             }
 
             var paramDeclarations =
@@ -781,12 +782,12 @@ public record StaticProgramCSharpClass(
                             paramPath,
                             isTailPosition,
                             ref sawConcatBuilderMutation) &&
-                            IsGoodForConcatBuilderCandidate(
-                                cond.FalseBranch,
-                                selfFunctionName,
-                                paramPath,
-                                isTailPosition,
-                                ref sawConcatBuilderMutation);
+                        IsGoodForConcatBuilderCandidate(
+                            cond.FalseBranch,
+                            selfFunctionName,
+                            paramPath,
+                            isTailPosition,
+                            ref sawConcatBuilderMutation);
                 }
 
             case StaticExpression<DeclQualifiedName>.KernelApplication kernelApp:
@@ -1028,12 +1029,15 @@ public record StaticProgramCSharpClass(
             kernelApp.Input is StaticExpression<DeclQualifiedName>.List argsList &&
             argsList.Items.Count is 2)
         {
-            var kind = kernelApp.Function switch
-            {
-                nameof(KernelFunction.skip) => SliceOperationKind.Skip,
-                nameof(KernelFunction.take) => SliceOperationKind.Take,
-                _ => (SliceOperationKind?)null,
-            };
+            var kind =
+                kernelApp.Function switch
+                {
+                    nameof(KernelFunction.skip) => SliceOperationKind.Skip,
+                    nameof(KernelFunction.take) => SliceOperationKind.Take,
+
+                    _ =>
+                    (SliceOperationKind?)null,
+                };
 
             if (kind is null)
             {
@@ -1089,7 +1093,7 @@ public record StaticProgramCSharpClass(
                 // TODO: Precise condition (will change when we lift the 2-level limit on parameters).
 
                 if (pathToEnv.Count <= 2 &&
-                   emitEnv.FunctionEnv.SelfFunctionInterface(pathToEnv) is { })
+                    emitEnv.FunctionEnv.SelfFunctionInterface(pathToEnv) is { })
                 {
                     // Don't CSE short environment references (they get replaced with parameters).
 
@@ -1130,6 +1134,7 @@ public record StaticProgramCSharpClass(
         // because they did not get their entries in CSE.
 
         var newDeclaredStatements = new List<LocalDeclarationStatementSyntax>();
+
         var newlyDeclaredLocals = ImmutableHashSet.CreateBuilder<string>();
 
         // Helper to find a unique local name that does not collide with any blocked/local names so far
@@ -1138,6 +1143,7 @@ public record StaticProgramCSharpClass(
             for (var i = 0; ; i++)
             {
                 var candidate = "local_" + i.ToString().PadLeft(3, '0');
+
                 if (!blockedDeclarations.Contains(candidate) &&
                     !newlyDeclaredLocals.Contains(candidate))
                 {
@@ -1156,18 +1162,18 @@ public record StaticProgramCSharpClass(
 
             var statement =
                 SyntaxFactory.LocalDeclarationStatement(
-                SyntaxFactory.VariableDeclaration(
-                    CompileTypeSyntax.TypeSyntaxFromType(typeof(PineValue), emitEnv.FunctionEnv.DeclarationSyntaxContext))
-                .WithVariables(
-                    SyntaxFactory.SingletonSeparatedList(
-                        SyntaxFactory.VariableDeclarator(
-                            SyntaxFactory.Identifier(localName))
-                        .WithInitializer(
-                            SyntaxFactory.EqualsValueClause(
-                                CompileToCSharpExpression(
-                                    subexpr,
-                                    emitEnv.AddAlreadyDeclared(mutatedDeclared))
-                                .AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))))));
+                    SyntaxFactory.VariableDeclaration(
+                        CompileTypeSyntax.TypeSyntaxFromType(typeof(PineValue), emitEnv.FunctionEnv.DeclarationSyntaxContext))
+                    .WithVariables(
+                        SyntaxFactory.SingletonSeparatedList(
+                            SyntaxFactory.VariableDeclarator(
+                                SyntaxFactory.Identifier(localName))
+                            .WithInitializer(
+                                SyntaxFactory.EqualsValueClause(
+                                    CompileToCSharpExpression(
+                                        subexpr,
+                                        emitEnv.AddAlreadyDeclared(mutatedDeclared))
+                                    .AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))))));
 
             newDeclaredStatements.Add(statement);
 
@@ -1224,9 +1230,9 @@ public record StaticProgramCSharpClass(
 
                 IReadOnlyList<StatementSyntax> allStatementsNoElse =
                     [
-                        .. filtered.Declarations,
-                        ifStatementNoElse,
-                        .. ExtractStatements(falseBranchCompiled.Statement)
+                    .. filtered.Declarations,
+                    ifStatementNoElse,
+                    .. ExtractStatements(falseBranchCompiled.Statement)
                     ];
 
                 return new CompiledStatement(SyntaxFactory.Block(allStatementsNoElse), unionLocals);

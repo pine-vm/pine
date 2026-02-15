@@ -27,56 +27,57 @@ public record CompiledCSharpExpression(
         Boolean = 30,
 
         Integer = 40,
-
     }
 
     public ExpressionSyntax AsGenericValue(
         DeclarationSyntaxContext declarationSyntaxContext)
     {
-        return Type switch
-        {
-            ValueType.Generic =>
-            ExpressionSyntax,
-
-            ValueType.Boolean =>
-            PineCSharpSyntaxFactory.PineValueFromBoolExpression(
+        return
+            Type switch
+            {
+                ValueType.Generic =>
                 ExpressionSyntax,
-                declarationSyntaxContext),
 
-            ValueType.Integer =>
-            PineCSharpSyntaxFactory.GenericExpressionFromIntegerExpression(
-                ExpressionSyntax,
-                declarationSyntaxContext),
+                ValueType.Boolean =>
+                PineCSharpSyntaxFactory.PineValueFromBoolExpression(
+                    ExpressionSyntax,
+                    declarationSyntaxContext),
 
-            _ =>
-            throw new System.NotImplementedException(
-                "Unhandled ValueType " + Type),
-        };
+                ValueType.Integer =>
+                PineCSharpSyntaxFactory.GenericExpressionFromIntegerExpression(
+                    ExpressionSyntax,
+                    declarationSyntaxContext),
+
+                _ =>
+                throw new System.NotImplementedException(
+                    "Unhandled ValueType " + Type),
+            };
     }
 
     public ExpressionSyntax AsBooleanValue(
         DeclarationSyntaxContext declarationSyntaxContext)
     {
-        return Type switch
-        {
-            ValueType.Generic =>
-            // boolean == PineKernelValues.TrueValue
-            SyntaxFactory.BinaryExpression(
-                SyntaxKind.EqualsExpression,
-                EnsureIsParenthesizedForComposition(ExpressionSyntax),
-                EnsureIsParenthesizedForComposition(
-                    PineCSharpSyntaxFactory.ExpressionForPineValueBooleanLiteral(true, declarationSyntaxContext))),
+        return
+            Type switch
+            {
+                ValueType.Generic =>
+                // boolean == PineKernelValues.TrueValue
+                SyntaxFactory.BinaryExpression(
+                    SyntaxKind.EqualsExpression,
+                    EnsureIsParenthesizedForComposition(ExpressionSyntax),
+                    EnsureIsParenthesizedForComposition(
+                        PineCSharpSyntaxFactory.ExpressionForPineValueBooleanLiteral(true, declarationSyntaxContext))),
 
-            ValueType.Boolean =>
-            ExpressionSyntax,
+                ValueType.Boolean =>
+                ExpressionSyntax,
 
-            ValueType.Integer =>
-            SyntaxFactory.LiteralExpression(
-                SyntaxKind.FalseLiteralExpression),
+                ValueType.Integer =>
+                SyntaxFactory.LiteralExpression(
+                    SyntaxKind.FalseLiteralExpression),
 
-            _ =>
-            throw new System.NotImplementedException("Unhandled ValueType " + Type),
-        };
+                _ =>
+                throw new System.NotImplementedException("Unhandled ValueType " + Type),
+            };
     }
 
     public static ExpressionSyntax EnsureIsParenthesizedForComposition(

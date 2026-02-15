@@ -45,12 +45,14 @@ public readonly record struct FilteredLocalsResult(
     {
         // Map local name -> dependencies (other local names) from its initializer
         var nameToDeps = new Dictionary<string, ImmutableHashSet<string>>();
+
         var nameToDecl = new Dictionary<string, LocalDeclarationStatementSyntax>();
 
         foreach (var decl in declarations)
         {
             // The code base creates declarations with a single variable per statement
             var variable = decl.Declaration.Variables.FirstOrDefault();
+
             if (variable is null)
             {
                 continue;
@@ -108,11 +110,12 @@ public readonly record struct FilteredLocalsResult(
 
         // Keep declarations in original order if they are used
         var filteredDecls =
-            declarations.Where(d =>
-            {
-                var variable = d.Declaration.Variables.FirstOrDefault();
-                return variable is not null && mutatedUsed.Contains(variable.Identifier.ValueText);
-            }).ToImmutableArray();
+            declarations.Where(
+                d =>
+                {
+                    var variable = d.Declaration.Variables.FirstOrDefault();
+                    return variable is not null && mutatedUsed.Contains(variable.Identifier.ValueText);
+                }).ToImmutableArray();
 
         return new FilteredLocalsResult(filteredDecls, [.. mutatedUsed]);
     }

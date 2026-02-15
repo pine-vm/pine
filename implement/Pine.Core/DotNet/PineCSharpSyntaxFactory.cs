@@ -37,11 +37,12 @@ public static class PineCSharpSyntaxFactory
         return SyntaxFactory.Literal(text + "L", integer);
     }
 
-    static readonly NumberFormatInfo s_integerLiteralNumberFormatInfo = new()
-    {
-        NumberGroupSeparator = "_",
-        NumberGroupSizes = [3]
-    };
+    static readonly NumberFormatInfo s_integerLiteralNumberFormatInfo =
+        new()
+        {
+            NumberGroupSeparator = "_",
+            NumberGroupSizes = [3]
+        };
 
 
     public static (ExpressionSyntax exprSyntax, ValueSyntaxKind syntaxKind) CompileToCSharpLiteralExpression(
@@ -50,7 +51,8 @@ public static class PineCSharpSyntaxFactory
         DeclarationSyntaxContext declarationSyntaxContext)
     {
         ExpressionSyntax ContinueCompile(PineValue pineValue) =>
-            overrideDefaultExpression(pineValue) is { } fromOverride ?
+            overrideDefaultExpression(pineValue) is { } fromOverride
+            ?
             fromOverride
             :
             CompileToCSharpLiteralExpression(
@@ -108,10 +110,10 @@ public static class PineCSharpSyntaxFactory
                         CompileTypeSyntax.TypeSyntaxFromType(typeof(IntegerEncoding), declarationSyntaxContext),
                         SyntaxFactory.IdentifierName(nameof(IntegerEncoding.EncodeSignedInteger))))
                 .WithArgumentList(
-                SyntaxFactory.ArgumentList(
-                    SyntaxFactory.SingletonSeparatedList(
-                        SyntaxFactory.Argument(
-                            ExpressionSyntaxForIntegerLiteral(asInt64)))));
+                    SyntaxFactory.ArgumentList(
+                        SyntaxFactory.SingletonSeparatedList(
+                            SyntaxFactory.Argument(
+                                ExpressionSyntaxForIntegerLiteral(asInt64)))));
         }
 
         if (AttemptMapToSignedInteger(pineValue) is { } asInt64)
@@ -170,8 +172,7 @@ public static class PineCSharpSyntaxFactory
                                 SyntaxFactory.CollectionExpression(
                                     SyntaxFactory.SeparatedList<CollectionElementSyntax>(
                                         itemSyntaxes
-                                        .Select(SyntaxFactory.ExpressionElement)))
-                                ))));
+                                        .Select(SyntaxFactory.ExpressionElement)))))));
         }
 
         ExpressionSyntax DefaultRepresentationOfBlob(ReadOnlyMemory<byte> blob)
@@ -195,8 +196,7 @@ public static class PineCSharpSyntaxFactory
                             SyntaxFactory.Argument(
                                 SyntaxFactory.CollectionExpression(
                                     SyntaxFactory.SeparatedList<CollectionElementSyntax>(
-                                        bytesSyntaxes.Select(SyntaxFactory.ExpressionElement))))
-                                )));
+                                        bytesSyntaxes.Select(SyntaxFactory.ExpressionElement)))))));
         }
 
         if (pineValue is PineValue.BlobValue blobValue)
@@ -352,8 +352,9 @@ public static class PineCSharpSyntaxFactory
             .WithArgumentList(
                 SyntaxFactory.ArgumentList(
                     SyntaxFactory.SingletonSeparatedList(
-                        SyntaxFactory.Argument(SyntaxFactory.CollectionExpression(
-                            [.. itemsSyntaxes.Select(SyntaxFactory.ExpressionElement)])))));
+                        SyntaxFactory.Argument(
+                            SyntaxFactory.CollectionExpression(
+                                [.. itemsSyntaxes.Select(SyntaxFactory.ExpressionElement)])))));
     }
 
     /// <summary>
@@ -372,8 +373,9 @@ public static class PineCSharpSyntaxFactory
             .WithArgumentList(
                 SyntaxFactory.ArgumentList(
                     SyntaxFactory.SingletonSeparatedList(
-                        SyntaxFactory.Argument(SyntaxFactory.CollectionExpression(
-                            [.. itemsSyntaxes.Select(SyntaxFactory.ExpressionElement)])))));
+                        SyntaxFactory.Argument(
+                            SyntaxFactory.CollectionExpression(
+                                [.. itemsSyntaxes.Select(SyntaxFactory.ExpressionElement)])))));
     }
 
     /// <summary>
@@ -392,8 +394,9 @@ public static class PineCSharpSyntaxFactory
             .WithArgumentList(
                 SyntaxFactory.ArgumentList(
                     SyntaxFactory.SingletonSeparatedList(
-                        SyntaxFactory.Argument(SyntaxFactory.CollectionExpression(
-                            [.. itemsSyntaxes.Select(SyntaxFactory.ExpressionElement)])))));
+                        SyntaxFactory.Argument(
+                            SyntaxFactory.CollectionExpression(
+                                [.. itemsSyntaxes.Select(SyntaxFactory.ExpressionElement)])))));
     }
 
     /// <summary>
@@ -412,8 +415,9 @@ public static class PineCSharpSyntaxFactory
             .WithArgumentList(
                 SyntaxFactory.ArgumentList(
                     SyntaxFactory.SingletonSeparatedList(
-                        SyntaxFactory.Argument(SyntaxFactory.CollectionExpression(
-                            [.. itemsSyntaxes.Select(SyntaxFactory.ExpressionElement)])))));
+                        SyntaxFactory.Argument(
+                            SyntaxFactory.CollectionExpression(
+                                [.. itemsSyntaxes.Select(SyntaxFactory.ExpressionElement)])))));
     }
 
     /// <summary>

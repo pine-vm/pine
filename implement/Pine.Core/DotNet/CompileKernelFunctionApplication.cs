@@ -468,8 +468,8 @@ public class CompileKernelFunctionApplication
                 PineValue suffix)
              * */
             ExpressionSyntax BlobPrependByteSyntax(
-               byte byteToPrepend,
-               StaticExpression<DeclQualifiedName> suffix)
+                byte byteToPrepend,
+                StaticExpression<DeclQualifiedName> suffix)
             {
                 var suffixExpr =
                     StaticProgramCSharpClass.CompileToCSharpExpression(

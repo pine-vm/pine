@@ -46,8 +46,7 @@ public class CompileToAssembly
             .WithFilePath(string.Join('/', file.Key));
 
         IReadOnlyList<SyntaxTree> syntaxTrees =
-            [.. csharpFiles.Select(SyntaxTreeFromFile)
-            ];
+            [.. csharpFiles.Select(SyntaxTreeFromFile)];
 
         var compilation =
             CSharpCompilation.Create("assembly-name")
@@ -55,7 +54,7 @@ public class CompileToAssembly
                 new CSharpCompilationOptions(
                     OutputKind.DynamicallyLinkedLibrary,
                     optimizationLevel: optimizationLevel)
-            .WithAssemblyIdentityComparer(DesktopAssemblyIdentityComparer.Default))
+                .WithAssemblyIdentityComparer(DesktopAssemblyIdentityComparer.Default))
             .WithReferences(s_metadataReferences.Value)
             .AddSyntaxTrees(syntaxTrees);
 
