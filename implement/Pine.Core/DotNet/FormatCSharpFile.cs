@@ -619,9 +619,15 @@ public static class FormatCSharpFile
         var members = FormatMemberList(node.Members, indent);
         var usings = FormatUsingDirectives(node.Usings);
 
-        // Ensure blank line between namespace semicolon and first member
-        // The semicolon has trailing \n, so we need 1 more \n for blank line
-        if (members.Count > 0)
+        // Ensure blank line between usings and first member (matches CompilationUnit behavior)
+        if (usings.Count > 0 && members.Count > 0)
+        {
+            var first = members[0];
+            var leading = first.GetLeadingTrivia();
+            members = members.Replace(first, first.WithLeadingTrivia(
+                EnsureLeadingBreaks(leading, 2, indent)));
+        }
+        else if (members.Count > 0)
         {
             var first = members[0];
             var leading = first.GetLeadingTrivia();
@@ -1786,16 +1792,23 @@ public static class FormatCSharpFile
             // If the expression is single-line and complex, check if a single-line version
             // would exceed the max line length. If so, the break is for line-length reasons
             // and the dot should be at indent+1.
+            // Start from the original dot column when available, floored at indent.
+            var dotLoc = node.OperatorToken.GetLocation();
             var dotIndent = indent;
+            if (dotLoc != Location.None)
+            {
+                var dotCol = dotLoc.GetLineSpan().StartLinePosition.Character;
+                dotIndent = Math.Max(indent, dotCol / IndentSize);
+            }
 
             if (!SpansMultipleLines(node.Expression) &&
                 node.Expression is InvocationExpressionSyntax or MemberAccessExpressionSyntax or
                     ElementAccessExpressionSyntax or ConditionalAccessExpressionSyntax)
             {
-                var exprLen = fmtExpr.ToFullString().TrimEnd().Length;
+                var exprLen = fmtExpr.ToFullString().Trim().Length;
                 var nameLen = node.OperatorToken.Text.Length + node.Name.ToString().Length;
-                if (indent * IndentSize + exprLen + nameLen > MaximumLineLength)
-                    dotIndent = indent + 1;
+                if (dotIndent * IndentSize + exprLen + nameLen > MaximumLineLength)
+                    dotIndent = Math.Max(dotIndent, indent + 1);
             }
 
             return node.WithExpression(fmtExpr.WithTrailingTrivia(StripWhitespace(node.Expression.GetTrailingTrivia())))
@@ -1864,6 +1877,25 @@ public static class FormatCSharpFile
                         .WithLeadingTrivia(EnsureLeadingBreaks(memberAccess.OperatorToken.LeadingTrivia, 1, dotIndent))
                         .WithTrailingTrivia());
             }
+        }
+
+        // Preserve line break before argument list's open paren when it was on a
+        // separate line from the expression (e.g., invocation of expression result:
+        // expr\n    ([args])).
+        var origExprEnd = EndLineOf(node.Expression);
+        var origOpenLine = LineOf(node.ArgumentList.OpenParenToken);
+        if (origOpenLine > origExprEnd)
+        {
+            var openIndent = indent;
+            var openLoc = node.ArgumentList.OpenParenToken.GetLocation();
+            if (openLoc != Location.None)
+            {
+                var openCol = openLoc.GetLineSpan().StartLinePosition.Character;
+                openIndent = Math.Max(indent, openCol / IndentSize);
+            }
+            fmtExpr = fmtExpr.WithTrailingTrivia(StripWhitespace(fmtExpr.GetTrailingTrivia()));
+            fmtArgs = fmtArgs.WithOpenParenToken(
+                fmtArgs.OpenParenToken.WithLeadingTrivia(s_lineFeed, Indent(openIndent)));
         }
 
         return node.WithExpression(fmtExpr).WithArgumentList(fmtArgs);
@@ -2045,6 +2077,31 @@ public static class FormatCSharpFile
                         .WithTrailingTrivia(new SyntaxTriviaList(s_space));
                     fr = fr.WithLeadingTrivia(StripWhitespace(fr.GetLeadingTrivia()));
                     return node.WithLeft(fl).WithRight(fr).WithOperatorToken(op2);
+                }
+                if (opLine >= 0 && opLine == leftEndLine)
+                {
+                    // Operator is on the same line as the left end.
+                    // Keep right on the same line only if it was originally there,
+                    // the right operand is single-line, and the line fits.
+                    var rightLine = LineOf(node.Right);
+                    if (rightLine == opLine &&
+                        !SpansMultipleLines(node.Right))
+                    {
+                        var src = node.SyntaxTree.GetText();
+                        if (opLine < src.Lines.Count)
+                        {
+                            var opLineLen = src.Lines[opLine].ToString().TrimEnd().Length;
+                            if (opLineLen <= MaximumLineLength)
+                            {
+                                var opTrailing2 = StripWhitespace(node.OperatorToken.TrailingTrivia);
+                                var op2 = node.OperatorToken
+                                    .WithLeadingTrivia(s_space)
+                                    .WithTrailingTrivia(opTrailing2.Count > 0 ? opTrailing2 : new SyntaxTriviaList(s_space));
+                                fr = fr.WithLeadingTrivia(StripWhitespace(fr.GetLeadingTrivia()));
+                                return node.WithLeft(fl).WithRight(fr).WithOperatorToken(op2);
+                            }
+                        }
+                    }
                 }
                 // Operator at end of left line, right operand on new line.
                 var op3 = node.OperatorToken

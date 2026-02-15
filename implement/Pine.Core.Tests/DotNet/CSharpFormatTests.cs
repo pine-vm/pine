@@ -2768,6 +2768,96 @@ public class CSharpFormatTests
     }
 
     [Fact]
+    public void Preserves_indent_for_method_chain_in_return_statement_in_local_method()
+    {
+        var inputSyntaxText =
+            """"
+            void M()
+            {
+                ElmValue ApplyForElmArgument(ElmValue x)
+                {
+                    var pineValue =
+                        invokeFunction([ElmValueEncoding.ElmValueAsPineValue(x)]);
+
+                    return
+                        ElmValueEncoding.PineValueAsElmValue(pineValue.evalReport.ReturnValue.Evaluate(), null, null)
+                        .Extract(err => throw new Exception("Failed decoding result as Elm value: " + err));
+                }
+            }
+            """";
+
+        AssertFormattedSyntax(inputSyntaxText, inputSyntaxText, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserves_indent_for_method_chain_in_expression_statement()
+    {
+        var inputSyntaxText =
+            """"
+            void M()
+            {
+                ElmValue ApplyForElmArgument(ElmValue x)
+                {
+                    CoreBitwise.IdentifyFunctionValue(CoreBitwise.Complement_FunctionValue())
+                        .Should().Be("complement");
+                }
+            }
+            """";
+
+        AssertFormattedSyntax(inputSyntaxText, inputSyntaxText, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserves_indent_for_argument_list_in_invocation_of_function_from_expression()
+    {
+        var inputSyntaxText =
+            """"
+            // Now apply the argument to the function value
+            var (result, _) =
+                ElmCompilerTestHelper.CreateFunctionValueInvocationDelegate(functionValue, parseCache)
+                ([IntegerEncoding.EncodeSignedInteger(42)]);
+            """";
+
+        AssertFormattedSyntax(inputSyntaxText, inputSyntaxText, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserves_empty_line_between_using_alias_statement_and_class_declaration()
+    {
+        var inputSyntaxText =
+            """"
+            using AwesomeAssertions;
+            using Xunit;
+
+            namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.Inlining;
+
+            using Inlining = Core.Elm.ElmCompilerInDotnet.Inlining;
+
+            public class InliningCrossModuleTests
+            {
+            }
+            """";
+
+        AssertFormattedSyntax(inputSyntaxText, inputSyntaxText, scriptMode: false);
+    }
+
+    [Fact]
+    public void Preserves_operator_application_chain_in_throw_statement_argument()
+    {
+        var inputSyntaxText =
+            """"
+            if (parseResult.IsErrOrNull() is { } parseErr)
+            {
+                throw new Exception(
+                    "Failed to parse function value as expression: " + parseErr +
+                    " (argument index: " + argIndex + ")");
+            }
+            """";
+
+        AssertFormattedSyntax(inputSyntaxText, inputSyntaxText, scriptMode: true);
+    }
+
+    [Fact]
     public void Formats_simple_while_statement()
     {
         var whileStatementSyntax =
