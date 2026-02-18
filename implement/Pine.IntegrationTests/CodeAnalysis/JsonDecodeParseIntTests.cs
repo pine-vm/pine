@@ -860,10 +860,7 @@ public class JsonDecodeParseIntTests
                                     PineValue.List(
                                         [
                                         CommonReusedValues.Blob_Str_Err,
-                                        PineValue.List(
-                                            [
-                                            PineValueExtension.ValueFromPathOrEmptyList(local_006, [1, 0])
-                                            ])
+                                        PineValue.List([PineValueExtension.ValueFromPathOrEmptyList(local_006, [1, 0])])
                                         ]),
                                     PineValueExtension.ValueFromPathOrEmptyList(local_005, [1])
                                     ]);
@@ -1121,14 +1118,7 @@ public class JsonDecodeParseIntTests
                         return
                             PineValue.List(
                                 [
-                                PineValue.List(
-                                    [
-                                    CommonReusedValues.Blob_Str_Ok,
-                                    PineValue.List(
-                                        [
-                                        local_param_1_0
-                                        ])
-                                    ]),
+                                PineValue.List([CommonReusedValues.Blob_Str_Ok, PineValue.List([local_param_1_0])]),
                                 local_param_1_2
                                 ]);
                     }

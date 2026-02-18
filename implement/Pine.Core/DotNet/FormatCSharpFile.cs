@@ -223,7 +223,7 @@ public static class FormatCSharpFile
         foreach (var t in preserved)
         {
             r.Add(Indent(indent));
-            r.Add(t);
+            r.Add(ReindentMultiLineComment(t, indent));
             // Doc comments include their own trailing newline; others need one
             if (!t.HasStructure)
                 r.Add(s_lineFeed);
@@ -231,6 +231,47 @@ public static class FormatCSharpFile
 
         r.Add(Indent(indent));
         return [.. r];
+    }
+
+    /// <summary>
+    /// Re-indents a multi-line block comment so that internal lines match the given indent level.
+    /// Single-line comments and non-comment trivia are returned unchanged.
+    /// </summary>
+    private static SyntaxTrivia ReindentMultiLineComment(SyntaxTrivia trivia, int indent)
+    {
+        if (!trivia.IsKind(SyntaxKind.MultiLineCommentTrivia))
+            return trivia;
+
+        var text = trivia.ToFullString();
+
+        if (!text.Contains('\n'))
+            return trivia;
+
+        var lines = text.Split('\n');
+
+        if (lines.Length <= 1)
+            return trivia;
+
+        // Determine the new indentation for continuation lines inside the comment.
+        // Use indent * IndentSize + 1 to align the * with the * in /*
+        var newIndentStr = new string(' ', indent * IndentSize + 1);
+
+        var sb = new System.Text.StringBuilder();
+        sb.Append(lines[0]);
+
+        for (var i = 1; i < lines.Length; i++)
+        {
+            sb.Append('\n');
+
+            var trimmed = lines[i].TrimStart();
+
+            if (trimmed.Length > 0)
+                sb.Append(newIndentStr).Append(trimmed);
+            else
+                sb.Append(lines[i]); // preserve empty lines as-is
+        }
+
+        return SyntaxFactory.Comment(sb.ToString());
     }
 
     /// <summary>
@@ -358,6 +399,7 @@ public static class FormatCSharpFile
                 InvocationExpressionSyntax n => FormatInvocationExpression(n, indent),
                 ObjectCreationExpressionSyntax n => FormatObjectCreationExpression(n, indent),
                 ImplicitObjectCreationExpressionSyntax n => FormatImplicitObjectCreationExpression(n, indent),
+                ImplicitArrayCreationExpressionSyntax n => FormatImplicitArrayCreationExpression(n, indent),
                 MemberAccessExpressionSyntax n => FormatMemberAccessExpression(n, indent),
                 ConditionalExpressionSyntax n => FormatConditionalExpression(n, indent),
                 SwitchExpressionSyntax n => FormatSwitchExpression(n, indent),
@@ -410,7 +452,7 @@ public static class FormatCSharpFile
                 LiteralExpressionSyntax or ThisExpressionSyntax or BaseExpressionSyntax or
                 DefaultExpressionSyntax or TypeOfExpressionSyntax or SizeOfExpressionSyntax or
                 InterpolatedStringExpressionSyntax or ElementAccessExpressionSyntax or
-                ImplicitArrayCreationExpressionSyntax or ArrayCreationExpressionSyntax or
+                ArrayCreationExpressionSyntax or
                 StackAllocArrayCreationExpressionSyntax or ImplicitStackAllocArrayCreationExpressionSyntax or
                 AnonymousObjectCreationExpressionSyntax or AnonymousMethodExpressionSyntax or
                 TupleExpressionSyntax or RefExpressionSyntax or DeclarationExpressionSyntax or
@@ -1494,11 +1536,16 @@ public static class FormatCSharpFile
             if (node.Arguments.Count is 1)
             {
                 // For single-arg lists, only break if the arg contains complex content
+                // and the arg list itself is wide enough to justify breaking.
                 var argExpr = node.Arguments[0].Expression;
 
                 if (argExpr is CollectionExpressionSyntax or InitializerExpressionSyntax or
                     InvocationExpressionSyntax or ObjectCreationExpressionSyntax)
-                    return true;
+                {
+                    var singleArgWidth = 2 + node.Arguments[0].ToString().Trim().Length; // parens + arg
+                    if (singleArgWidth > MaximumLineLength * 2 / 3)
+                        return true;
+                }
             }
             else
             {
@@ -1848,7 +1895,7 @@ public static class FormatCSharpFile
         // but strip the trailing linefeed since the first expression already has a leading one.
         var openBrace = FormatOpenBrace(node.OpenBraceToken, indent).WithTrailingTrivia();
 
-        var close = node.CloseBraceToken.WithLeadingTrivia(s_lineFeed, Indent(indent)).WithTrailingTrivia();
+        var close = node.CloseBraceToken.WithLeadingTrivia(EnsureLeadingBreaks(node.CloseBraceToken.LeadingTrivia, 1, indent)).WithTrailingTrivia();
 
         return
             node.WithOpenBraceToken(openBrace).WithCloseBraceToken(close)
@@ -2159,11 +2206,54 @@ public static class FormatCSharpFile
             if (node.Expression is InvocationExpressionSyntax or MemberAccessExpressionSyntax or
                 ElementAccessExpressionSyntax or ConditionalAccessExpressionSyntax)
             {
+                // If inner formatting already introduced line breaks, the last line of
+                // the formatted expression might now fit. Check whether a break is still
+                // needed before introducing one at this level.
+                if (SpansMultipleLines(fmtExpr))
+                {
+                    // Check if last line of formatted expression + dot + name fits
+                    var fmtText = fmtExpr.ToFullString();
+                    var lastNewline = fmtText.LastIndexOf('\n');
+                    var lastLineLen =
+                        lastNewline >= 0
+                        ?
+                        fmtText[(lastNewline + 1)..].TrimEnd().Length
+                        :
+                        fmtText.TrimEnd().Length;
+
+                    var suffixLen = node.OperatorToken.Text.Length + node.Name.ToString().Length;
+
+                    if (lastLineLen + suffixLen <= MaximumLineLength)
+                    {
+                        // Last line fits with the dot+name — no break needed at this level
+                        return node.WithExpression(fmtExpr);
+                    }
+
+                    // Still too long — break the dot at the chain's indent level
+                    return
+                        node.WithExpression(fmtExpr.WithTrailingTrivia(StripWhitespace(node.Expression.GetTrailingTrivia())))
+                        .WithOperatorToken(
+                            node.OperatorToken
+                            .WithLeadingTrivia(EnsureLeadingBreaks(node.OperatorToken.LeadingTrivia, 1, indent))
+                            .WithTrailingTrivia());
+                }
+
+                // Determine indent for the dot break based on expression type:
+                // Invocations represent complete call chains and get indent+1,
+                // simple member accesses (property chains) stay at the same indent.
+                var dotBreakIndent =
+                    node.Expression is InvocationExpressionSyntax or
+                        ElementAccessExpressionSyntax or ConditionalAccessExpressionSyntax
+                    ?
+                    indent + 1
+                    :
+                    indent;
+
                 return
                     node.WithExpression(fmtExpr)
                     .WithOperatorToken(
                         node.OperatorToken
-                        .WithLeadingTrivia(EnsureLeadingBreaks(node.OperatorToken.LeadingTrivia, 1, indent + 1))
+                        .WithLeadingTrivia(EnsureLeadingBreaks(node.OperatorToken.LeadingTrivia, 1, dotBreakIndent))
                         .WithTrailingTrivia());
             }
         }
@@ -2278,6 +2368,12 @@ public static class FormatCSharpFile
         return r;
     }
 
+    /// <summary>Formats an implicit array creation (<c>new[]</c>) expression, including its initializer.</summary>
+    private static ImplicitArrayCreationExpressionSyntax FormatImplicitArrayCreationExpression(ImplicitArrayCreationExpressionSyntax node, int indent)
+    {
+        return node.WithInitializer(FormatInitializerExpression(node.Initializer, indent));
+    }
+
     /// <summary>Formats an assignment expression with line-break handling for the right side.</summary>
     private static AssignmentExpressionSyntax FormatAssignmentExpression(AssignmentExpressionSyntax node, int indent)
     {
@@ -2298,7 +2394,7 @@ public static class FormatCSharpFile
 
         var rightLine = LineOf(node.Right);
 
-        if (SpansMultipleLines(rightText) || rightLine > opLine)
+        if (SpansMultipleLines(rightText) || rightLine > opLine || LineEndColumn(node) > MaximumLineLength)
         {
             fmtRight =
                 fmtRight.WithLeadingTrivia(
@@ -2339,7 +2435,7 @@ public static class FormatCSharpFile
                 if (leftLoc != Location.None)
                 {
                     var leftCol = leftLoc.GetLineSpan().StartLinePosition.Character;
-                    breakIndent = leftCol / IndentSize;
+                    breakIndent = Math.Min(leftCol / IndentSize, indent + 1);
                 }
 
                 var l = node.Left.WithTrailingTrivia(StripWhitespace(node.Left.GetTrailingTrivia()));
@@ -2389,7 +2485,7 @@ public static class FormatCSharpFile
         if (mlLeftLoc != Location.None)
         {
             var leftCol = mlLeftLoc.GetLineSpan().StartLinePosition.Character;
-            rightIndent = leftCol / IndentSize;
+            rightIndent = Math.Min(leftCol / IndentSize, indent + 1);
         }
 
         var fr = (ExpressionSyntax)FormatNode(node.Right, rightIndent);
@@ -2470,13 +2566,27 @@ public static class FormatCSharpFile
                 if (opLine >= 0 && opLine > leftEndLine)
                 {
                     // Operator was at start of continuation line — preserve that.
-                    var op2 =
+                    var origRightLine = LineOf(node.Right);
+
+                    if (origRightLine > opLine)
+                    {
+                        // Right operand was on a different line from the operator — preserve that.
+                        var op2 =
+                            node.OperatorToken
+                            .WithLeadingTrivia(s_lineFeed, Indent(rightIndent))
+                            .WithTrailingTrivia();
+
+                        fr = fr.WithLeadingTrivia(EnsureLeadingBreaks(node.Right.GetLeadingTrivia(), 1, rightIndent));
+                        return node.WithLeft(fl).WithRight(fr).WithOperatorToken(op2);
+                    }
+
+                    var opCont =
                         node.OperatorToken
                         .WithLeadingTrivia(s_lineFeed, Indent(rightIndent))
                         .WithTrailingTrivia(new SyntaxTriviaList(s_space));
 
                     fr = fr.WithLeadingTrivia(StripWhitespace(fr.GetLeadingTrivia()));
-                    return node.WithLeft(fl).WithRight(fr).WithOperatorToken(op2);
+                    return node.WithLeft(fl).WithRight(fr).WithOperatorToken(opCont);
                 }
 
                 if (opLine >= 0 && opLine == leftEndLine)
@@ -2547,6 +2657,16 @@ public static class FormatCSharpFile
         if (node.ExpressionBody is not null)
         {
             var fmtExpr = (ExpressionSyntax)FormatNode(node.ExpressionBody, indent);
+
+            if (LineOf(node.ArrowToken) != LineOf(node.ExpressionBody))
+            {
+                fmtExpr =
+                    fmtExpr.WithLeadingTrivia(
+                        EnsureLeadingBreaks(node.ExpressionBody.GetLeadingTrivia(), 1, indent));
+
+                return node.WithArrowToken(node.ArrowToken.WithTrailingTrivia()).WithExpressionBody(fmtExpr);
+            }
+
             return node.WithExpressionBody(fmtExpr);
         }
 
@@ -2565,6 +2685,16 @@ public static class FormatCSharpFile
         if (node.ExpressionBody is not null)
         {
             var fmtExpr = (ExpressionSyntax)FormatNode(node.ExpressionBody, indent);
+
+            if (LineOf(node.ArrowToken) != LineOf(node.ExpressionBody))
+            {
+                fmtExpr =
+                    fmtExpr.WithLeadingTrivia(
+                        EnsureLeadingBreaks(node.ExpressionBody.GetLeadingTrivia(), 1, indent));
+
+                return node.WithArrowToken(node.ArrowToken.WithTrailingTrivia()).WithExpressionBody(fmtExpr);
+            }
+
             return node.WithExpressionBody(fmtExpr);
         }
 

@@ -155,15 +155,8 @@ public class OptimizeAndEmitValueFromStringTests
                         {
                             {
                                 local_param_1_0 =
-                                    local_param_1_0.PrependItems(
-                                        [
-                                        PineValue.List(
-                                            [
-                                            Test.blobBytesFromChar(
-                                                local_param_1_1.GetHead())
-                                            ])
-                                        ]);
-            
+                                    local_param_1_0.PrependItems([PineValue.List([Test.blobBytesFromChar(local_param_1_1.GetHead())])]);
+
                                 local_param_1_1 = local_param_1_1.Skip(1);
                             }
             

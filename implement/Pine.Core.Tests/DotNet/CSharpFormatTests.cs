@@ -3739,4 +3739,181 @@ public class CSharpFormatTests
 
         AssertFormattedSyntax(input, input, scriptMode: true);
     }
+
+    [Fact]
+    public void Formats_expression_body_containing_switch_after_comment()
+    {
+        var input =
+            """"
+            public static readonly Lazy<string> ProgramExecutableFileName =
+                new(() =>
+                // Assembly.GetExecutingAssembly().Location for cases where process comes from `dotnet test`
+                Assembly.GetExecutingAssembly().Location switch
+                {
+                    { Length: > 0 } executingAssemblyLocation =>
+                    executingAssemblyLocation,
+
+                    _ =>
+                    Environment.ProcessPath ??
+                    /*
+                     * Do not rely on Environment.ProcessPath because it is often null:
+                     * https://github.com/dotnet/runtime/issues/66323
+                     * */
+                    Process.GetCurrentProcess().MainModule!.FileName
+                });
+            """";
+
+        var expectedOutput =
+            """"
+            public static readonly Lazy<string> ProgramExecutableFileName =
+                new(
+                    () =>
+                    // Assembly.GetExecutingAssembly().Location for cases where process comes from `dotnet test`
+                    Assembly.GetExecutingAssembly().Location switch
+                    {
+                        { Length: > 0 } executingAssemblyLocation =>
+                        executingAssemblyLocation,
+
+                        _ =>
+                        Environment.ProcessPath ??
+                        /*
+                         * Do not rely on Environment.ProcessPath because it is often null:
+                         * https://github.com/dotnet/runtime/issues/66323
+                         * */
+                        Process.GetCurrentProcess().MainModule!.FileName
+                    });
+            """";
+
+        AssertFormattedSyntax(input, expectedOutput, scriptMode: true);
+    }
+
+    [Fact]
+    public void Normalizes_indent_in_else_if_operator_application()
+    {
+        var input =
+            """"
+            if (a)
+            {
+            }
+            else if (this is Leaf thisLeaf &&
+                     thisLeaf.Values.Length + newItems.Length <= MaxLeafSizeForConsolidation)
+            {
+            }
+            """";
+
+        var expectedOutput =
+            """"
+            if (a)
+            {
+            }
+            else if (this is Leaf thisLeaf &&
+                thisLeaf.Values.Length + newItems.Length <= MaxLeafSizeForConsolidation)
+            {
+            }
+            """";
+
+        AssertFormattedSyntax(input, expectedOutput, scriptMode: true);
+    }
+
+    [Fact]
+    public void Normalizes_indent_in_initializer()
+    {
+        var input =
+            """"
+            var types = new[]
+            {
+                typeof(object),
+                typeof(Func<>),
+                typeof(BigInteger),
+                typeof(IImmutableList<>),
+            };
+            """";
+
+        var expectedOutput =
+            """"
+            var types =
+                new[]
+                {
+                    typeof(object),
+                    typeof(Func<>),
+                    typeof(BigInteger),
+                    typeof(IImmutableList<>),
+                };
+            """";
+
+        AssertFormattedSyntax(input, expectedOutput, scriptMode: true);
+    }
+
+    [Fact]
+    public void Formats_lambda_breaking_to_new_line()
+    {
+        var input =
+            """"
+            var hasComments = brace.LeadingTrivia.Any(t =>
+                !IsWhitespace(t) && !IsLineBreak(t));
+            """";
+
+        var expectedOutput =
+            """"
+            var hasComments =
+                brace.LeadingTrivia.Any(
+                    t =>
+                    !IsWhitespace(t) && !IsLineBreak(t));
+            """";
+
+        AssertFormattedSyntax(input, expectedOutput, scriptMode: true);
+    }
+
+    [Fact]
+    public void Breaks_nested_chain_exceeding_line_length_limit()
+    {
+        var input =
+            """"
+            var close = node.CloseBraceToken.WithLeadingTrivia(EnsureLeadingBreaks(node.CloseBraceToken.LeadingTrivia, 1, indent)).WithTrailingTrivia();
+            """";
+
+        var expectedOutput =
+            """"
+            var close =
+                node.CloseBraceToken
+                .WithLeadingTrivia(EnsureLeadingBreaks(node.CloseBraceToken.LeadingTrivia, 1, indent)).WithTrailingTrivia();
+            """";
+
+        AssertFormattedSyntax(input, expectedOutput, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserves_coalesce_expression()
+    {
+        var input =
+            """"
+            var blockSyntax =
+                (statementSyntax as BlockSyntax)
+                ??
+                SyntaxFactory.Block(statementSyntax);
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Breaks_declaration_exceeding_line_length_in_block()
+    {
+        var input =
+            """"
+            {
+                local_param_1_0 = local_param_1_0.PrependItems([PineValue.List([Test.blobBytesFromChar(local_param_1_1.GetHead())])]);
+            }
+            """";
+
+        var expected =
+            """"
+            {
+                local_param_1_0 =
+                    local_param_1_0.PrependItems([PineValue.List([Test.blobBytesFromChar(local_param_1_1.GetHead())])]);
+            }
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
 }

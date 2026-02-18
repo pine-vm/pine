@@ -53,8 +53,7 @@ public class OptimizeAndEmitStringFromIntTests
                             CommonReusedValues.Blob_Str_String,
                             PineValue.List(
                                 [
-                                KernelFunction.concat(
-                                    Global_Anonymous.zzz_anon_0f6e756a_cd8ec059(param_1_0))
+                                KernelFunction.concat(Global_Anonymous.zzz_anon_0f6e756a_cd8ec059(param_1_0))
                                 ])
                             ]);
                 }
@@ -75,8 +74,7 @@ public class OptimizeAndEmitStringFromIntTests
                     return
                         KernelFunctionFused.ListPrependItem(
                             itemToPrepend: CommonReusedValues.Blob_Char_hyphen,
-                            suffix: Global_Anonymous.zzz_anon_12af8dcc_24a48553(
-                                KernelFunction.negate(param_1_0)));
+                            suffix: Global_Anonymous.zzz_anon_12af8dcc_24a48553(KernelFunction.negate(param_1_0)));
                 }
 
                 public static PineValue zzz_anon_12af8dcc_24a48553(PineValue param_1_0)

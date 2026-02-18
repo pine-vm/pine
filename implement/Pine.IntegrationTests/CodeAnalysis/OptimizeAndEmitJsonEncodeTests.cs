@@ -725,8 +725,7 @@ public class OptimizeAndEmitJsonEncodeTests
                                 KernelFunctionSpecialized.bit_and(
                                     CommonReusedValues.Blob_2d8b523c,
                                     KernelFunctionSpecialized.bit_shift_right(4, local_000))),
-                            Test.hexDigitCharFromNibble(
-                                KernelFunctionSpecialized.bit_and(CommonReusedValues.Blob_2d8b523c, local_000))
+                            Test.hexDigitCharFromNibble(KernelFunctionSpecialized.bit_and(CommonReusedValues.Blob_2d8b523c, local_000))
                             ]);
                 }
             
@@ -815,7 +814,6 @@ public class OptimizeAndEmitJsonEncodeTests
                     return CommonReusedValues.Blob_Char_question;
                 }
             }
-
             """".Trim());
 
         moduleGlobalAnonymousText.Trim().Should().Be(
