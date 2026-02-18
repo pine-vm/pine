@@ -448,7 +448,8 @@ public record StaticProgramCSharpClass(
                                     intValue <= int.MaxValue)
                                 {
                                     // Use int overload with compile-time constant
-                                    countArgument = PineCSharpSyntaxFactory.ExpressionSyntaxForIntegerLiteral((long)intValue);
+                                    countArgument =
+                                        PineCSharpSyntaxFactory.ExpressionSyntaxForIntegerLiteral((long)intValue);
                                 }
                                 else
                                 {
@@ -1342,29 +1343,33 @@ public record StaticProgramCSharpClass(
 
         if (emitEnv.AlreadyDeclared.TryGetValue(expression, out var existingVar))
         {
-            return existingVar.ltype switch
-            {
-                LocalType.Evaluated =>
-                [CompiledCSharpExpression.Generic(
-                    SyntaxFactory.IdentifierName(existingVar.identifier))
-                ],
+            return
+                existingVar.ltype switch
+                {
+                    LocalType.Evaluated =>
+                    [
+                    CompiledCSharpExpression.Generic(
+                        SyntaxFactory.IdentifierName(existingVar.identifier))
+                    ],
 
-                LocalType.ImmutableConcatBuilder =>
-                [CompiledCSharpExpression.Generic(
-                    PineCSharpSyntaxFactory.EvaluateImmutableConcatBuilderSyntax(
-                        SyntaxFactory.IdentifierName(existingVar.identifier)))
-                ],
+                    LocalType.ImmutableConcatBuilder =>
+                    [
+                    CompiledCSharpExpression.Generic(
+                        PineCSharpSyntaxFactory.EvaluateImmutableConcatBuilderSyntax(
+                            SyntaxFactory.IdentifierName(existingVar.identifier)))
+                    ],
 
-                LocalType.ImmutableSliceBuilder =>
-                [CompiledCSharpExpression.Generic(
-                    PineCSharpSyntaxFactory.EvaluateImmutableSliceBuilderSyntax(
-                        SyntaxFactory.IdentifierName(existingVar.identifier)))
-                ],
+                    LocalType.ImmutableSliceBuilder =>
+                    [
+                    CompiledCSharpExpression.Generic(
+                        PineCSharpSyntaxFactory.EvaluateImmutableSliceBuilderSyntax(
+                            SyntaxFactory.IdentifierName(existingVar.identifier)))
+                    ],
 
-                _ =>
-                throw new System.NotImplementedException(
-                    "Internal error: Unknown local type: " + existingVar.ltype),
-            };
+                    _ =>
+                    throw new System.NotImplementedException(
+                        "Internal error: Unknown local type: " + existingVar.ltype),
+                };
         }
 
         (ExpressionSyntax, IReadOnlyList<int>)? FindNearestParameterForPathInEnv(
@@ -1485,10 +1490,11 @@ public record StaticProgramCSharpClass(
         {
             var itemExprs =
                 list.Items
-                .Select(item =>
-                CompileToCSharpExpression(
-                    item,
-                    emitEnv))
+                .Select(
+                    item =>
+                    CompileToCSharpExpression(
+                        item,
+                        emitEnv))
                 .ToImmutableArray();
 
             var collectionExprs =
@@ -1541,11 +1547,12 @@ public record StaticProgramCSharpClass(
 
             var arguments =
                 funcInterface.ParamsPaths
-                .Select(argumentPath =>
-                ExpressionsForFunctionArgument(
-                    argumentPath,
-                    funcApp.Arguments,
-                    emitEnv))
+                .Select(
+                    argumentPath =>
+                    ExpressionsForFunctionArgument(
+                        argumentPath,
+                        funcApp.Arguments,
+                        emitEnv))
                 .ToImmutableArray();
 
             var genericCSharpExpr =
@@ -1758,7 +1765,8 @@ public record StaticProgramCSharpClass(
 
         var andChainConjunctsCompiled =
             conditionAsAndChain
-            .Select(expr =>
+            .Select(
+                expr =>
                 CompileToCSharpExpression(
                     expr,
                     emitEnv))
@@ -1774,9 +1782,10 @@ public record StaticProgramCSharpClass(
             return andChainConjunctsCompiled[0].AsBooleanValue(emitEnv.FunctionEnv.DeclarationSyntaxContext);
         }
 
-        return EmitAndConditionsChain(
-            [.. conditionAsAndChain.Select(item => (item, false))],
-            emitEnv);
+        return
+            EmitAndConditionsChain(
+                [.. conditionAsAndChain.Select(item => (item, false))],
+                emitEnv);
     }
 
     public static ExpressionSyntax EmitAndConditionsChain(
@@ -1815,7 +1824,8 @@ public record StaticProgramCSharpClass(
         return
             conditions
             .Select(item => EmitItem(item.expr, item.negated))
-            .Aggregate((left, right) =>
+            .Aggregate(
+                (left, right) =>
                 SyntaxFactory.BinaryExpression(
                     SyntaxKind.LogicalAndExpression,
                     left: CompiledCSharpExpression.EnsureIsParenthesizedForComposition(left),
@@ -1947,10 +1957,10 @@ public record StaticProgramCSharpClass(
                     if (inputSequence.Type is CompiledCSharpExpression.ValueType.Boolean)
                     {
                         var booleanCSharpExpr =
-                             SyntaxFactory.PrefixUnaryExpression(
-                                 SyntaxKind.LogicalNotExpression,
-                                 CompiledCSharpExpression.EnsureIsParenthesizedForComposition(
-                                     inputSequence.ExpressionSyntax));
+                            SyntaxFactory.PrefixUnaryExpression(
+                                SyntaxKind.LogicalNotExpression,
+                                CompiledCSharpExpression.EnsureIsParenthesizedForComposition(
+                                    inputSequence.ExpressionSyntax));
 
                         yield return CompiledCSharpExpression.Boolean(booleanCSharpExpr);
 
@@ -2024,8 +2034,7 @@ public record StaticProgramCSharpClass(
             if (PineKernelFunctions.SpecializedInterfacesFromKernelFunctionName(kernelApp.Function) is { } specializedInterfaces)
             {
                 var isCommutative =
-                    kernelApp.Function
-                    switch
+                    kernelApp.Function switch
                     {
                         nameof(KernelFunction.int_add) => true,
                         nameof(KernelFunction.int_mul) => true,
@@ -2034,7 +2043,8 @@ public record StaticProgramCSharpClass(
                         nameof(KernelFunction.bit_or) => true,
                         nameof(KernelFunction.bit_xor) => true,
 
-                        _ => false,
+                        _ =>
+                        false,
                     };
 
                 var matches =
@@ -2082,10 +2092,10 @@ public record StaticProgramCSharpClass(
                         SyntaxFactory.SeparatedList(
                             [
                             SyntaxFactory.Argument(
-                            SyntaxFactory.LiteralExpression(
-                                SyntaxKind.StringLiteralExpression,
-                                SyntaxFactory.Literal(kernelApp.Function))),
-                        SyntaxFactory.Argument(inputExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
+                                SyntaxFactory.LiteralExpression(
+                                    SyntaxKind.StringLiteralExpression,
+                                    SyntaxFactory.Literal(kernelApp.Function))),
+                            SyntaxFactory.Argument(inputExpr.AsGenericValue(emitEnv.FunctionEnv.DeclarationSyntaxContext))
                             ])));
 
             yield return CompiledCSharpExpression.Generic(genericCSharpExpr);
@@ -2131,12 +2141,13 @@ public record StaticProgramCSharpClass(
     {
         var envItemsParameters =
             functionInterface.ParamsPaths
-            .Select(paramPath =>
-            SyntaxFactory.Parameter(SyntaxFactory.Identifier(RenderParamRef(paramPath)))
-            .WithType(
-                CompileTypeSyntax.TypeSyntaxFromType(
-                    typeof(PineValue),
-                    declarationSyntaxContext)));
+            .Select(
+                paramPath =>
+                SyntaxFactory.Parameter(SyntaxFactory.Identifier(RenderParamRef(paramPath)))
+                .WithType(
+                    CompileTypeSyntax.TypeSyntaxFromType(
+                        typeof(PineValue),
+                        declarationSyntaxContext)));
 
         return [.. envItemsParameters];
     }

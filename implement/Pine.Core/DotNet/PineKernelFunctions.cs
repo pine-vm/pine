@@ -115,9 +115,9 @@ public class PineKernelFunctions
                 SyntaxFactory.InvocationExpression(
                     SyntaxFactory.MemberAccessExpression(
                         SyntaxKind.SimpleMemberAccessExpression,
-                            CompileTypeSyntax.TypeSyntaxFromType(
-                                selectedMethodInfo.DeclaringType!,
-                                declarationSyntaxContext),
+                        CompileTypeSyntax.TypeSyntaxFromType(
+                            selectedMethodInfo.DeclaringType!,
+                            declarationSyntaxContext),
                         SyntaxFactory.IdentifierName(selectedMethodInfo.Name)),
                     argumentListSyntax);
         }
@@ -144,7 +144,8 @@ public class PineKernelFunctions
 
             var genericVariant =
                 genericMethodsInfos
-                .FirstOrDefault(mi =>
+                .FirstOrDefault(
+                    mi =>
                     mi.Name.Equals(functionName, StringComparison.OrdinalIgnoreCase) &&
                     mi.ReturnType == typeof(PineValue) &&
                     mi.GetParameters().Length is 1 &&
@@ -187,12 +188,12 @@ public class PineKernelFunctions
                         ReturnType: returnType,
                         CompileInvocation:
                         (argumentsExpressions, declContext) =>
-                            CompileInvocationForArgumentList(
-                                methodInfo,
-                                SyntaxFactory.ArgumentList(
-                                    SyntaxFactory.SeparatedList(
-                                        argumentsExpressions.Select(SyntaxFactory.Argument))),
-                                declContext)));
+                        CompileInvocationForArgumentList(
+                            methodInfo,
+                            SyntaxFactory.ArgumentList(
+                                SyntaxFactory.SeparatedList(
+                                    argumentsExpressions.Select(SyntaxFactory.Argument))),
+                            declContext)));
 
             }
 
@@ -203,7 +204,8 @@ public class PineKernelFunctions
 
             return
                 new KernelFunctionInfo(
-                    CompileGenericInvocation: (argExpr, declContext) => CompileGenericInvocation(genericVariant, argExpr, declContext),
+                    CompileGenericInvocation:
+                    (argExpr, declContext) => CompileGenericInvocation(genericVariant, argExpr, declContext),
                     SpecializedImplementations: specializedImplsRanked);
         }
 

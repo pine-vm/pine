@@ -29,14 +29,14 @@ public static class StaticProgramCSharpExtension
 
             return
                 [
-                    ..namespacePrefix,
-                    ..namespacesFromSyntax,
-                    classDeclarationSyntax.Identifier.Text + ".cs"
+                ..namespacePrefix,
+                ..namespacesFromSyntax,
+                classDeclarationSyntax.Identifier.Text + ".cs"
                 ];
         }
 
         IReadOnlyList<(IReadOnlyList<string> namespaces, ClassDeclarationSyntax declSyntax)> classDeclarations =
-        [
+            [
             ([],staticProgram.CommonValueClass),
             ..staticProgram.ModulesClasses.Select(mc => (mc.Key.Namespaces, mc.Value.ClassDeclarationSyntax)),
             ([], staticProgram.GlobalAnonymousClass.ClassDeclarationSyntax),
@@ -65,8 +65,9 @@ public static class StaticProgramCSharpExtension
         IReadOnlyList<string> namespacePrefix)
     {
         IReadOnlyList<string> aggregateNamepace =
-            [.. namespacePrefix
-            ,..declarationSyntaxContext.CurrentNamespace is { } currentNs ? currentNs.Split('.'):[]
+            [
+            .. namespacePrefix,
+            ..declarationSyntaxContext.CurrentNamespace is { } currentNs ? currentNs.Split('.'):[]
             ];
 
         MemberDeclarationSyntax
@@ -82,7 +83,8 @@ public static class StaticProgramCSharpExtension
         var compilationUnitSyntax =
             SyntaxFactory.CompilationUnit()
             .WithUsings(
-                [.. declarationSyntaxContext.UsingDirectives
+                [
+                .. declarationSyntaxContext.UsingDirectives
                 .OrderBy(ud => ud.ToFullString())
                 ])
             .WithMembers([compilationUnitMember]);

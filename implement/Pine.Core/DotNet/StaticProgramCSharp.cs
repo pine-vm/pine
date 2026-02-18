@@ -167,9 +167,10 @@ public record StaticProgramCSharp(
                     kvp =>
                     {
                         var bodyMapped =
-                        StaticExpression<DeclQualifiedName>.MapFunctionIdentifier(
-                            kvp.Value.body,
-                            MapFunctionNameToGlobalAnon);
+                            StaticExpression<DeclQualifiedName>.MapFunctionIdentifier(
+                                kvp.Value.body,
+                                MapFunctionNameToGlobalAnon);
+
                         return (kvp.Value.interf, bodyMapped);
                     });
 
@@ -191,12 +192,13 @@ public record StaticProgramCSharp(
                 {
                     var functionsInClass =
                         staticProgram.NamedFunctions
-                        .Where(kvp =>
-                        {
+                        .Where(
+                            kvp =>
+                            {
 
-                            return
-                            kvp.Key.Namespaces.SequenceEqual([.. cn.Namespaces, cn.DeclName]);
-                        })
+                                return
+                                    kvp.Key.Namespaces.SequenceEqual([.. cn.Namespaces, cn.DeclName]);
+                            })
                         .ToFrozenDictionary(
                             kvp => kvp.Key.DeclName,
                             kvp =>
@@ -283,14 +285,14 @@ public record StaticProgramCSharp(
                     declaration:
                     SyntaxFactory.VariableDeclaration(
                         CompileTypeSyntax.TypeSyntaxFromType(
-                            typeof(PineValue), declarationSyntaxContext),
+                            typeof(PineValue),
+                            declarationSyntaxContext),
                         SyntaxFactory.SeparatedList(
-                        [
+                            [
                             SyntaxFactory.VariableDeclarator(
                                 SyntaxFactory.Identifier(declName))
-                            .WithInitializer(
-                                SyntaxFactory.EqualsValueClause(declExpression.exprSyntax))
-                        ]))));
+                            .WithInitializer(SyntaxFactory.EqualsValueClause(declExpression.exprSyntax))
+                            ]))));
 
             mutatedDict[value] = declName;
         }
@@ -408,10 +410,11 @@ public record StaticProgramCSharp(
                                         .WithArgumentList(SyntaxFactory.ArgumentList()))))));
 
         // Build field 'dispatcherDictionary' and builder method
-        var buildMethodStatements = new List<StatementSyntax>
-        {
-            dictDeclaration
-        };
+        var buildMethodStatements =
+            new List<StatementSyntax>
+            {
+                dictDeclaration
+            };
 
         foreach (var functionGroup in groupedByOrigExpr)
         {
@@ -459,8 +462,10 @@ public record StaticProgramCSharp(
 
                     conditionExpr =
                         conditionExpr is null
-                        ? equalityExpr
-                        : SyntaxFactory.BinaryExpression(
+                        ?
+                        equalityExpr
+                        :
+                        SyntaxFactory.BinaryExpression(
                             SyntaxKind.LogicalAndExpression,
                             CompiledCSharpExpression.EnsureIsParenthesizedForComposition(conditionExpr),
                             CompiledCSharpExpression.EnsureIsParenthesizedForComposition(equalityExpr));
@@ -471,6 +476,7 @@ public record StaticProgramCSharp(
 
                 // Inside the 'if', extract parameters and call the function
                 var insideIfStatements = new List<StatementSyntax>();
+
                 var argIdentifiers = new List<string>();
 
                 for (var i = 0; i < interf.ParamsPaths.Count; i++)
@@ -494,8 +500,7 @@ public record StaticProgramCSharp(
                             SyntaxFactory.InitializerExpression(
                                 SyntaxKind.ArrayInitializerExpression,
                                 SyntaxFactory.SeparatedList(
-                                    path.Select(index => (ExpressionSyntax)PineCSharpSyntaxFactory.ExpressionSyntaxForIntegerLiteral(index))
-                                )));
+                                    path.Select(index => (ExpressionSyntax)PineCSharpSyntaxFactory.ExpressionSyntaxForIntegerLiteral(index)))));
 
                     var valueFromPathInvocation =
                         PineCSharpSyntaxFactory.BuildCSharpExpressionToGetItemFromPathOrEmptyList(
@@ -520,7 +525,8 @@ public record StaticProgramCSharp(
                     .WithArgumentList(
                         SyntaxFactory.ArgumentList(
                             SyntaxFactory.SeparatedList(
-                                argIdentifiers.Select(arg =>
+                                argIdentifiers.Select(
+                                    arg =>
                                     SyntaxFactory.Argument(
                                         SyntaxFactory.IdentifierName(arg))))));
 
@@ -535,8 +541,9 @@ public record StaticProgramCSharp(
             }
 
             // None matched
-            methodBodyStatements.Add(SyntaxFactory.ReturnStatement(
-                SyntaxFactory.LiteralExpression(SyntaxKind.NullLiteralExpression)));
+            methodBodyStatements.Add(
+                SyntaxFactory.ReturnStatement(
+                    SyntaxFactory.LiteralExpression(SyntaxKind.NullLiteralExpression)));
 
             var methodDecl =
                 SyntaxFactory.MethodDeclaration(
@@ -604,11 +611,12 @@ public record StaticProgramCSharp(
                     SyntaxFactory.Token(SyntaxKind.PublicKeyword),
                     SyntaxFactory.Token(SyntaxKind.StaticKeyword)));
 
-        var classMembers = new List<MemberDeclarationSyntax>
-        {
-            dispatcherField,
-            buildDispatcherMethod
-        };
+        var classMembers =
+            new List<MemberDeclarationSyntax>
+            {
+                dispatcherField,
+                buildDispatcherMethod
+            };
 
         classMembers.AddRange(dispatchMethodDeclarations);
 

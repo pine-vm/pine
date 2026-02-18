@@ -797,8 +797,10 @@ public static class FormatCSharpFile
         var prevHasNewline = prev.TrailingTrivia.Any(t => IsLineBreak(t));
 
         // Preserve any comments from the brace's original leading trivia
-        var hasComments = brace.LeadingTrivia.Any(t =>
-            !IsWhitespace(t) && !IsLineBreak(t));
+        var hasComments =
+            brace.LeadingTrivia.Any(
+                t =>
+                !IsWhitespace(t) && !IsLineBreak(t));
 
         if (hasComments)
         {
@@ -1895,7 +1897,9 @@ public static class FormatCSharpFile
         // but strip the trailing linefeed since the first expression already has a leading one.
         var openBrace = FormatOpenBrace(node.OpenBraceToken, indent).WithTrailingTrivia();
 
-        var close = node.CloseBraceToken.WithLeadingTrivia(EnsureLeadingBreaks(node.CloseBraceToken.LeadingTrivia, 1, indent)).WithTrailingTrivia();
+        var close =
+            node.CloseBraceToken
+            .WithLeadingTrivia(EnsureLeadingBreaks(node.CloseBraceToken.LeadingTrivia, 1, indent)).WithTrailingTrivia();
 
         return
             node.WithOpenBraceToken(openBrace).WithCloseBraceToken(close)
@@ -2213,7 +2217,9 @@ public static class FormatCSharpFile
                 {
                     // Check if last line of formatted expression + dot + name fits
                     var fmtText = fmtExpr.ToFullString();
+
                     var lastNewline = fmtText.LastIndexOf('\n');
+
                     var lastLineLen =
                         lastNewline >= 0
                         ?

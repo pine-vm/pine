@@ -99,8 +99,10 @@ public abstract record ImmutableConcatBuilder
     {
         var newItems =
             values is PineValue[] arrayValues
-                ? arrayValues
-                : [.. values];
+            ?
+            arrayValues
+            :
+            [.. values];
 
         // If there are no new items, return this builder unchanged
         if (newItems.Length is 0)
@@ -145,7 +147,7 @@ public abstract record ImmutableConcatBuilder
             }
         }
         else if (this is Leaf thisLeaf &&
-                 thisLeaf.Values.Length + newItems.Length <= MaxLeafSizeForConsolidation)
+            thisLeaf.Values.Length + newItems.Length <= MaxLeafSizeForConsolidation)
         {
             // Consolidate: merge the new items into the current leaf
             var consolidatedValues = new PineValue[thisLeaf.Values.Length + newItems.Length];
@@ -213,6 +215,7 @@ public abstract record ImmutableConcatBuilder
 
                 // Create a new node with the consolidated leaf replacing the first child
                 var newNodeItems = new ImmutableConcatBuilder[node.Items.Count];
+
                 newNodeItems[0] = consolidatedLeaf;
 
                 for (var i = 1; i < node.Items.Count; i++)
@@ -224,7 +227,7 @@ public abstract record ImmutableConcatBuilder
             }
         }
         else if (this is Leaf thisLeaf &&
-                 thisLeaf.Values.Length + newItems.Length <= MaxLeafSizeForConsolidation)
+            thisLeaf.Values.Length + newItems.Length <= MaxLeafSizeForConsolidation)
         {
             // Consolidate: merge the new items into the current leaf
             var consolidatedValues = new PineValue[newItems.Length + thisLeaf.Values.Length];

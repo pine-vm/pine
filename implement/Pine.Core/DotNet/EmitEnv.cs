@@ -8,7 +8,6 @@ namespace Pine.Core.DotNet;
 
 using LocalDeclarations = ImmutableDictionary<StaticExpression<DeclQualifiedName>, (string identifier, LocalType ltype)>;
 
-
 /// <summary>
 /// Per-function emission environment used by the C# backend when lowering static expressions.
 /// Carries available function/value declarations, the Roslyn syntax context, and hooks to

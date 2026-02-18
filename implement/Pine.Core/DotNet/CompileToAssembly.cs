@@ -192,13 +192,14 @@ public class CompileToAssembly
 
     private static IEnumerable<MetadataReference> ListMetadataReferences()
     {
-        var types = new[]
-        {
-            typeof(object),
-            typeof(Func<>),
-            typeof(BigInteger),
-            typeof(IImmutableList<>),
-        };
+        var types =
+            new[]
+            {
+                typeof(object),
+                typeof(Func<>),
+                typeof(BigInteger),
+                typeof(IImmutableList<>),
+            };
 
         var typesAssembliesLocations =
             types

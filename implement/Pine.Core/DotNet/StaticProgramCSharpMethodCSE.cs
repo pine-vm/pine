@@ -224,9 +224,10 @@ public static class StaticProgramCSharpMethodCSE
                 "CSE collection for expression type " + current.GetType() + " is not implemented.");
         }
 
-        return new ExpressionStatsForCSE<FuncId>(
-            Unconditional: [.. unconditional],
-            Conditional: [.. seenConditional],
-            SeenAtLeastTwice: [.. seenAtLeastTwice]);
+        return
+            new ExpressionStatsForCSE<FuncId>(
+                Unconditional: [.. unconditional],
+                Conditional: [.. seenConditional],
+                SeenAtLeastTwice: [.. seenAtLeastTwice]);
     }
 }

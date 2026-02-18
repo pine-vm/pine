@@ -51,12 +51,14 @@ public class DotNetAssembly
 
                         if (fileContent is null)
                         {
-                            return Result<string, FileDictionary>.err(
-                                "Failed to get content for resource: " + resourceName);
+                            return
+                                Result<string, FileDictionary>.err(
+                                    "Failed to get content for resource: " + resourceName);
                         }
 
-                        return Result<string, FileDictionary>.ok(
-                            dict.SetItem([.. filePath], fileContent.Value));
+                        return
+                            Result<string, FileDictionary>.ok(
+                                dict.SetItem([.. filePath], fileContent.Value));
                     }));
     }
 
@@ -181,19 +183,20 @@ public class DotNetAssembly
     /// <see cref="Environment.ProcessPath"/> may be empty.
     /// </summary>
     public static readonly Lazy<string> ProgramExecutableFileName =
-        new(() =>
-        // Assembly.GetExecutingAssembly().Location for cases where process comes from `dotnet test`
-        Assembly.GetExecutingAssembly().Location switch
-        {
-            { Length: > 0 } executingAssemblyLocation =>
-            executingAssemblyLocation,
+        new(
+            () =>
+            // Assembly.GetExecutingAssembly().Location for cases where process comes from `dotnet test`
+            Assembly.GetExecutingAssembly().Location switch
+            {
+                { Length: > 0 } executingAssemblyLocation =>
+                executingAssemblyLocation,
 
-            _ =>
-            Environment.ProcessPath ??
-            /*
-             * Do not rely on Environment.ProcessPath because it is often null:
-             * https://github.com/dotnet/runtime/issues/66323
-             * */
-            Process.GetCurrentProcess().MainModule!.FileName
-        });
+                _ =>
+                Environment.ProcessPath ??
+                /*
+                 * Do not rely on Environment.ProcessPath because it is often null:
+                 * https://github.com/dotnet/runtime/issues/66323
+                 * */
+                Process.GetCurrentProcess().MainModule!.FileName
+            });
 }
