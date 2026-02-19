@@ -298,6 +298,16 @@ public class CoreBasics
                 [new TypeInference.InferredType.UnknownType(), new TypeInference.InferredType.UnknownType(), new TypeInference.InferredType.UnknownType()],
                 args => Generic_Always(args[0], args[1])),
 
+            // apL : (a -> b) -> a -> b  (i.e. (<|) f x = f x)
+            "apL" => new CoreFunctionInfo(
+                [new TypeInference.InferredType.UnknownType(), new TypeInference.InferredType.UnknownType(), new TypeInference.InferredType.UnknownType()],
+                args => Generic_ApL(args[0], args[1])),
+
+            // apR : a -> (a -> b) -> b  (i.e. (|>) x f = f x)
+            "apR" => new CoreFunctionInfo(
+                [new TypeInference.InferredType.UnknownType(), new TypeInference.InferredType.UnknownType(), new TypeInference.InferredType.UnknownType()],
+                args => Generic_ApR(args[0], args[1])),
+
             _ => null
         };
     }
@@ -1028,6 +1038,32 @@ public class CoreBasics
     public static PineValue Always_FunctionValue()
     {
         return BinaryFunctionValue(Internal_Always);
+    }
+
+    /// <summary>
+    /// apL : (a -> b) -> a -> b
+    /// <para>
+    /// This is the function backing the <c>&lt;|</c> operator: <c>apL f x = f x</c>
+    /// </para>
+    /// </summary>
+    public static Expression Generic_ApL(
+        Expression f,
+        Expression x)
+    {
+        return new Expression.ParseAndEval(encoded: f, environment: x);
+    }
+
+    /// <summary>
+    /// apR : a -> (a -> b) -> b
+    /// <para>
+    /// This is the function backing the <c>|&gt;</c> operator: <c>apR x f = f x</c>
+    /// </para>
+    /// </summary>
+    public static Expression Generic_ApR(
+        Expression x,
+        Expression f)
+    {
+        return new Expression.ParseAndEval(encoded: f, environment: x);
     }
 
     private static Expression Internal_Int_div(

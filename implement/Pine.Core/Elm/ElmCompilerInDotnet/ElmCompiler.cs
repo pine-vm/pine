@@ -31,6 +31,18 @@ public class ElmCompiler
             "Pine_kernel",
             ]);
 
+    /// <summary>
+    /// Names of Elm modules that are implemented natively in the .NET assembly and must not be
+    /// compiled from Elm source files (e.g. bundled elm-kernel-modules).
+    /// The .NET assembly ships its own implementation of these modules via classes such as
+    /// <see cref="CoreLibraryModule.CoreBasics"/>, superseding the corresponding .elm source.
+    /// </summary>
+    private static readonly FrozenSet<string> s_nativelyImplementedModuleNames =
+        FrozenSet.Create(
+            [
+            "Basics",
+            ]);
+
     public static Result<string, PineValue> CompileInteractiveEnvironment(
         FileTree appCodeTree,
         IReadOnlyList<IReadOnlyList<string>> rootFilePaths,
@@ -41,9 +53,13 @@ public class ElmCompiler
             .Where(file => file.path.Last().EndsWith(".elm", StringComparison.OrdinalIgnoreCase))
             .ToImmutableArray();
 
-        // Step 1: Try to parse all modules, tracking successes and failures
+        // Step 1: Parse all modules, building a map from file path to module name.
         var successfullyParsedModules = new Dictionary<string, SyntaxTypes.File>();
         var parseFailures = new HashSet<string>();
+
+        var filePathToModuleName =
+            new Dictionary<IReadOnlyList<string>, string>(
+                EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
 
         foreach (var moduleFile in elmModuleFiles)
         {
@@ -54,7 +70,7 @@ public class ElmCompiler
             var headerResult =
                 ElmSyntax.ElmSyntaxParser.ParseModuleHeader(moduleText);
 
-            if (headerResult.IsErrOrNull() is { } headerErr)
+            if (headerResult.IsErrOrNull() is not null)
             {
                 // Can't even parse the header - skip this file entirely
                 continue;
@@ -68,11 +84,19 @@ public class ElmCompiler
 
             var moduleNameFlattened = string.Join(".", header.ModuleName);
 
+            // Record the path→name mapping before any module-level filtering.
+            filePathToModuleName[moduleFile.path] = moduleNameFlattened;
+
+            // Natively-implemented modules (e.g. "Basics") are superseded by C# code.
+            // Do not parse or compile them from Elm source.
+            if (s_nativelyImplementedModuleNames.Contains(moduleNameFlattened))
+                continue;
+
             // Now try full parsing
             var parseResult =
                 ElmSyntax.ElmSyntaxParser.ParseModuleText(moduleText);
 
-            if (parseResult.IsErrOrNull() is { } parseErr)
+            if (parseResult.IsErrOrNull() is not null)
             {
                 parseFailures.Add(moduleNameFlattened);
                 continue;
@@ -90,59 +114,77 @@ public class ElmCompiler
             successfullyParsedModules[moduleNameFlattened] = parseModuleAst;
         }
 
-        // Step 2: Filter to modules that have all their dependencies satisfied
-        // A module is "valid" if all its imports resolve to either:
-        // - Another valid module in the project
-        // - An external module (platform/package) - these are not in our module list
-        // Modules that import failed modules or other invalid modules are excluded
-        var validModules = new Dictionary<string, SyntaxTypes.File>(successfullyParsedModules);
-        bool changed;
-        do
+        // Step 2: Compute the transitive dependency closure of the root modules.
+        // Only modules reachable from roots that parsed successfully are compiled.
+        // Modules outside the dependency graph (unreachable from the selected roots)
+        // are completely ignored — their parse failures or other issues are irrelevant.
+        // If a reachable module has an import that failed to parse, that is an error:
+        // a required dependency is broken.
+        var rootModuleNames =
+            rootFilePaths
+            .Select(path =>
+                filePathToModuleName.TryGetValue(path, out var name) ? name : null)
+            .Where(name => name is not null)
+            .ToHashSet()!;
+
+        // Start the closure with roots that parsed successfully.
+        // Roots that failed to parse are silently skipped (they were never needed).
+        var modulesToCompile =
+            new HashSet<string>(rootModuleNames.Where(successfullyParsedModules.ContainsKey));
+
         {
-            changed = false;
-            var modulesToRemove = new List<string>();
+            bool changed;
 
-            foreach (var (moduleName, parsedModule) in validModules)
+            do
             {
-                foreach (var import in parsedModule.Imports)
+                changed = false;
+
+                foreach (var moduleName in modulesToCompile.ToList())
                 {
-                    var importedModuleNameFlattened = string.Join(".", import.Value.ModuleName.Value);
+                    if (!successfullyParsedModules.TryGetValue(moduleName, out var parsedModule))
+                        continue;
 
-                    // Check if this import refers to a failed module
-                    if (parseFailures.Contains(importedModuleNameFlattened))
+                    foreach (var import in parsedModule.Imports)
                     {
-                        modulesToRemove.Add(moduleName);
-                        break;
-                    }
+                        var importedName = string.Join(".", import.Value.ModuleName.Value);
 
-                    // Check if this import refers to a module that was parsed but is no longer valid
-                    if (successfullyParsedModules.ContainsKey(importedModuleNameFlattened) &&
-                        !validModules.ContainsKey(importedModuleNameFlattened))
-                    {
-                        modulesToRemove.Add(moduleName);
-                        break;
+                        if (s_nativelyImplementedModuleNames.Contains(importedName))
+                            continue; // Natively implemented in .NET; not a compilation dep.
+
+                        if (parseFailures.Contains(importedName))
+                        {
+                            // A module in the dep graph depends on a module that failed to parse.
+                            return
+                                "Module '" + importedName +
+                                "' is required by '" + moduleName +
+                                "' but failed to parse.";
+                        }
+
+                        // Unknown modules (not in our file tree) are external packages; skip.
+                        if (successfullyParsedModules.ContainsKey(importedName) &&
+                            !modulesToCompile.Contains(importedName))
+                        {
+                            modulesToCompile.Add(importedName);
+                            changed = true;
+                        }
                     }
                 }
-            }
+            } while (changed);
+        }
 
-            foreach (var moduleName in modulesToRemove)
-            {
-                validModules.Remove(moduleName);
-                changed = true;
-            }
-        } while (changed);
-
-        // Step 3: Proceed with valid modules only
-        var parsedModulesBeforeCanonicalize = validModules.Values.ToList();
+        // Step 3: Canonicalize the dependency modules and surface any errors.
+        var modulesForCanonicalization =
+            modulesToCompile
+            .Where(successfullyParsedModules.ContainsKey)
+            .Select(name => successfullyParsedModules[name])
+            .ToList();
 
         var canonicalizationResult =
-            Canonicalization.Canonicalize(parsedModulesBeforeCanonicalize);
+            Canonicalization.CanonicalizeAllowingErrors(modulesForCanonicalization);
 
+        if (canonicalizationResult.IsErrOrNull() is { } canonErr)
         {
-            if (canonicalizationResult.IsErrOrNull() is { } err)
-            {
-                return err;
-            }
+            return canonErr;
         }
 
         if (canonicalizationResult.IsOkOrNull() is not { } canonicalizedModulesDict)
@@ -151,27 +193,27 @@ public class ElmCompiler
                 "Unexpected result type: " + canonicalizationResult.GetType().Name);
         }
 
-        // Check if any module has canonicalization errors
+        // Surface canonicalization errors for any module in the dependency set.
         var moduleErrors = new List<string>();
-        foreach (var (moduleName, moduleResult) in canonicalizedModulesDict)
+
+        foreach (var (moduleName, (_, errors)) in canonicalizedModulesDict)
         {
-            if (moduleResult.IsErrOrNull() is { } moduleErr)
+            if (errors.Count > 0)
             {
                 var moduleNameStr = string.Join(".", moduleName);
-                moduleErrors.Add($"In module {moduleNameStr}:\n{moduleErr}");
+                var errMessages = string.Join("\n", errors.Select(e => e.ReferencedName));
+                moduleErrors.Add("In module " + moduleNameStr + ":\n" + errMessages);
             }
         }
 
-        if (moduleErrors.Any())
+        if (moduleErrors.Count > 0)
         {
             return string.Join("\n\n", moduleErrors);
         }
 
-        // Extract all successfully canonicalized modules
-        var canonicalizedModules = canonicalizedModulesDict
-            .Select(kvp => kvp.Value.IsOkOrNull())
-            .WhereNotNull()
-            .ToList();
+        // All dependency modules canonicalized successfully.
+        var canonicalizedModules =
+            canonicalizedModulesDict.Values.Select(v => v.File).ToList();
 
         // Lambda lifting stage: Transform closures into top-level functions
         var lambdaLiftedModules = canonicalizedModules
@@ -313,6 +355,19 @@ public class ElmCompiler
         {
             // Skip if all members are already compiled
             if (scc.Members.All(m => compilationContext.TryGetCompiledFunctionValue(m) is not null))
+                continue;
+
+            var sharedLayout = scc.GetLayout();
+            var sccMembersSet = new HashSet<string>(scc.Members);
+
+            // Skip explicitly if any layout dependency outside this SCC was not compiled.
+            // This happens when a transitive dependency was excluded from the compilation roots.
+            var allLayoutDepsCompiled =
+                sharedLayout
+                .Where(dep => !sccMembersSet.Contains(dep))
+                .All(dep => compilationContext.TryGetCompiledFunctionValue(dep) is not null);
+
+            if (!allLayoutDepsCompiled)
                 continue;
 
             compilationContext = CompileSCC(scc, compilationContext);

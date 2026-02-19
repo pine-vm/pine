@@ -1,7 +1,10 @@
 using AwesomeAssertions;
 using Pine.Core.CodeAnalysis;
 using Pine.Core.CommonEncodings;
+using Pine.Core.Elm.ElmCompilerInDotnet;
+using Pine.Core.Tests.Elm.ElmCompilerTests;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Xunit;
 
@@ -119,7 +122,10 @@ public class CompilationWithIncompleteModules
 
             """";
 
-        // Gamma imports Beta, but Root does not import Beta or Gamma
+        // Gamma imports Beta, but Root does not import Beta or Gamma.
+        // Gamma and Beta are present in the file tree but are explicitly excluded
+        // from the root file paths — so they are not in the dependency graph of Root,
+        // and their failures do not affect compilation.
 
         var gammaModuleText =
             """"
@@ -132,12 +138,26 @@ public class CompilationWithIncompleteModules
 
             """";
 
+        var appCodeTree =
+            TestCase.FileTreeFromElmModulesWithoutPackages(
+                [mainModuleText, alfaModuleText, betaModuleText, gammaModuleText]);
+
+        // Only compile Test and Alfa; Gamma and Beta are in the tree but not roots.
+        IReadOnlyList<IReadOnlyList<string>> rootFilePaths =
+            [["src", "Test.elm"], ["src", "Alfa.elm"]];
+
         var parseCache = new PineVMParseCache();
 
+        var compiledEnv =
+            ElmCompiler.CompileInteractiveEnvironment(
+                appCodeTree,
+                rootFilePaths: rootFilePaths,
+                disableInlining: false)
+            .Extract(err => throw new Exception(err));
+
         var parsedEnv =
-            ElmCompilerTestHelper.CompileElmModules(
-                [mainModuleText, alfaModuleText, betaModuleText, gammaModuleText],
-                disableInlining: false);
+            ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnv)
+            .Extract(err => throw new Exception("Failed parsing interactive environment: " + err));
 
         var testModule =
             parsedEnv.Modules.FirstOrDefault(c => c.moduleName is "Test");

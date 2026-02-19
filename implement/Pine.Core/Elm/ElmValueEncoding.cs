@@ -603,6 +603,15 @@ public static class ElmValueEncoding
                 ElmValue.ElmString elmString =>
                 StringAsPineValue(elmString.Value),
 
+                // Bool constructors are represented as Pine kernel booleans (blob [4] / blob [2]),
+                // matching what the Elm compiler emits for True/False literals and what
+                // kernel functions like int_is_sorted_asc return.
+                ElmValue.ElmTag { TagName: "True", Arguments.Count: 0 } =>
+                PineVM.PineKernelValues.TrueValue,
+
+                ElmValue.ElmTag { TagName: "False", Arguments.Count: 0 } =>
+                PineVM.PineKernelValues.FalseValue,
+
                 ElmValue.ElmTag elmTag =>
                 TagAsPineValue(
                     elmTag.TagName,
