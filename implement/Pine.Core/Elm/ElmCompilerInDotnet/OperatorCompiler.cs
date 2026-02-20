@@ -1,4 +1,5 @@
 using Pine.Core.Elm.ElmCompilerInDotnet.CoreLibraryModule;
+
 using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
 
 namespace Pine.Core.Elm.ElmCompilerInDotnet;
@@ -143,22 +144,23 @@ public class OperatorCompiler
         Expression rightCompiled)
     {
 
-        return operatorApp.Operator switch
-        {
-            "+" =>
-            BuiltinHelpers.ApplyBuiltinIntAdd([leftCompiled, rightCompiled]),
+        return
+            operatorApp.Operator switch
+            {
+                "+" =>
+                BuiltinHelpers.ApplyBuiltinIntAdd([leftCompiled, rightCompiled]),
 
-            "-" =>
-            CoreBasics.Int_sub(leftCompiled, rightCompiled),
+                "-" =>
+                CoreBasics.Int_sub(leftCompiled, rightCompiled),
 
-            "*" =>
-            BuiltinHelpers.ApplyBuiltinIntMul([leftCompiled, rightCompiled]),
+                "*" =>
+                BuiltinHelpers.ApplyBuiltinIntMul([leftCompiled, rightCompiled]),
 
-            "//" =>
-            CoreBasics.Int_div(leftCompiled, rightCompiled),
+                "//" =>
+                CoreBasics.Int_div(leftCompiled, rightCompiled),
 
-            _ =>
-            CompilationError.UnsupportedOperator(operatorApp.Operator)
-        };
+                _ =>
+                CompilationError.UnsupportedOperator(operatorApp.Operator)
+            };
     }
 }

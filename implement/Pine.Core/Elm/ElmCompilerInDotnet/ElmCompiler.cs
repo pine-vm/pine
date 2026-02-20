@@ -55,6 +55,7 @@ public class ElmCompiler
 
         // Step 1: Parse all modules, building a map from file path to module name.
         var successfullyParsedModules = new Dictionary<string, SyntaxTypes.File>();
+
         var parseFailures = new HashSet<string>();
 
         var filePathToModuleName =
@@ -169,7 +170,8 @@ public class ElmCompiler
                         }
                     }
                 }
-            } while (changed);
+            }
+            while (changed);
         }
 
         // Step 3: Canonicalize the dependency modules and surface any errors.
@@ -216,7 +218,8 @@ public class ElmCompiler
             canonicalizedModulesDict.Values.Select(v => v.File).ToList();
 
         // Lambda lifting stage: Transform closures into top-level functions
-        var lambdaLiftedModules = canonicalizedModules
+        var lambdaLiftedModules =
+            canonicalizedModules
             .Select(LambdaLifting.LiftLambdas)
             .ToList();
 
@@ -250,6 +253,7 @@ public class ElmCompiler
 
         // Build function return types dictionary for type inference
         var functionReturnTypes = new Dictionary<string, TypeInference.InferredType>();
+
         foreach (var (qualifiedName, (_, _, declaration)) in allFunctions)
         {
             var returnType = TypeInference.GetFunctionReturnType(declaration);
@@ -258,9 +262,11 @@ public class ElmCompiler
 
         // Build function parameter types dictionary for type inference from function applications
         var functionParameterTypes = new Dictionary<string, IReadOnlyList<TypeInference.InferredType>>();
+
         foreach (var (qualifiedName, (_, _, declaration)) in allFunctions)
         {
             var paramTypes = TypeInference.GetFunctionParameterTypes(declaration);
+
             if (paramTypes.Count > 0)
             {
                 functionParameterTypes[qualifiedName] = paramTypes;
@@ -269,6 +275,7 @@ public class ElmCompiler
 
         // Build choice type tag argument types dictionary for type inference from NamedPatterns
         var choiceTagArgumentTypes = new Dictionary<string, IReadOnlyList<TypeInference.InferredType>>();
+
         foreach (var elmModuleSyntax in lambdaLiftedModules)
         {
             var typeDeclarations =
@@ -284,6 +291,7 @@ public class ElmCompiler
                     var ctorName = ctor.Name.Value;
 
                     var argTypes = new List<TypeInference.InferredType>();
+
                     foreach (var argNode in ctor.Arguments)
                     {
                         var argType = TypeInference.TypeAnnotationToInferredType(argNode.Value);
@@ -299,10 +307,12 @@ public class ElmCompiler
         // A type alias for a record type creates an implicit constructor function
         // where argument order matches the field order in the type alias declaration
         var recordTypeAliasConstructors = new Dictionary<string, IReadOnlyList<string>>();
+
         foreach (var elmModuleSyntax in lambdaLiftedModules)
         {
             var moduleName =
                 SyntaxTypes.Module.GetModuleName(elmModuleSyntax.ModuleDefinition.Value).Value;
+
             var moduleNameFlattened = string.Join(".", moduleName);
 
             var aliasDeclarations =
@@ -319,7 +329,8 @@ public class ElmCompiler
                 if (typeAnnotation is SyntaxTypes.TypeAnnotation.Record recordType)
                 {
                     // Extract field names in declaration order
-                    var fieldNames = recordType.RecordDefinition.Fields
+                    var fieldNames =
+                        recordType.RecordDefinition.Fields
                         .Select(f => f.Value.FieldName.Value)
                         .ToList();
 
@@ -417,8 +428,8 @@ public class ElmCompiler
     /// </returns>
     public static (IReadOnlyDictionary<string, IReadOnlyList<string>> layouts, IReadOnlyDictionary<string, FunctionScc> functionToScc, IReadOnlyList<FunctionScc> sccsInDependencyOrder)
         ComputeDependencyLayoutsAndSccs(
-            IReadOnlyDictionary<string, (string moduleName, string functionName, SyntaxTypes.Declaration.FunctionDeclaration declaration)> allFunctions,
-            ModuleCompilationContext context)
+        IReadOnlyDictionary<string, (string moduleName, string functionName, SyntaxTypes.Declaration.FunctionDeclaration declaration)> allFunctions,
+        ModuleCompilationContext context)
     {
         // First pass: compute direct dependencies for each function
         // Only include dependencies that are in allFunctions (we can't compile external functions)
@@ -432,9 +443,11 @@ public class ElmCompiler
                     var functionBody = declaration.Function.Declaration.Value.Expression.Value;
                     var dependencies = AnalyzeFunctionDependencies(functionBody, moduleName, context);
                     // Filter to only include functions that are in allFunctions
-                    IReadOnlySet<string> filtered = dependencies
+                    IReadOnlySet<string> filtered =
+                        dependencies
                         .Where(d => allFunctions.ContainsKey(d))
                         .ToHashSet();
+
                     return filtered;
                 });
 
@@ -454,6 +467,7 @@ public class ElmCompiler
 
         // Build SCCs and layouts
         var dependencyLayouts = new Dictionary<string, IReadOnlyList<string>>();
+
         var functionToScc = new Dictionary<string, FunctionScc>();
 
         foreach (var scc in sccsFromTarjan)
@@ -467,6 +481,7 @@ public class ElmCompiler
             // Compute the additional dependencies for this SCC
             // These are transitive dependencies that are not SCC members
             var allOtherDeps = new HashSet<string>();
+
             foreach (var member in scc)
             {
                 if (transitiveDependencies.TryGetValue(member, out var deps))
@@ -489,6 +504,7 @@ public class ElmCompiler
             // Create SCC with members and additional dependencies
             // The complete layout is: Members ++ AdditionalDependencies
             var sccRecord = new FunctionScc(sortedSccMembers, sortedOtherDeps);
+
             var sharedLayout = sccRecord.GetLayout();
 
             foreach (var member in scc)
@@ -541,6 +557,7 @@ public class ElmCompiler
                     {
                         // Successor w has not yet been visited; recurse on it
                         StrongConnect(w);
+
                         lowLinks[v] = Math.Min(lowLinks[v], lowLinks[w]);
                     }
                     else if (onStack.Contains(w))
@@ -556,12 +573,15 @@ public class ElmCompiler
             {
                 var scc = new HashSet<string>();
                 string w;
+
                 do
                 {
                     w = stack.Pop();
                     onStack.Remove(w);
                     scc.Add(w);
-                } while (w != v);
+                }
+                while (w != v);
+
                 sccs.Add(scc);
             }
         }
@@ -724,6 +744,7 @@ public class ElmCompiler
 
             // Build parameter mappings
             var parameterNames = new Dictionary<string, int>();
+
             var localBindings = new Dictionary<string, Expression>();
 
             for (var i = 0; i < arguments.Count; i++)
@@ -747,26 +768,29 @@ public class ElmCompiler
             }
 
             // Extract parameter types
-            var parameterTypes = ExtractParameterTypes(
-                declaration.Function,
-                context.ChoiceTagArgumentTypes,
-                context.FunctionParameterTypes,
-                moduleName);
+            var parameterTypes =
+                ExtractParameterTypes(
+                    declaration.Function,
+                    context.ChoiceTagArgumentTypes,
+                    context.FunctionParameterTypes,
+                    moduleName);
 
             // Create expression context
-            var expressionContext = new ExpressionCompilationContext(
-                ParameterNames: parameterNames,
-                ParameterTypes: parameterTypes,
-                CurrentModuleName: moduleName,
-                CurrentFunctionName: declaration.Function.Declaration.Value.Name.Value,
-                LocalBindings: localBindings.Count > 0 ? localBindings : null,
-                LocalBindingTypes: null,
-                DependencyLayout: sharedLayout,
-                ModuleCompilationContext: context,
-                FunctionReturnTypes: context.FunctionReturnTypes);
+            var expressionContext =
+                new ExpressionCompilationContext(
+                    ParameterNames: parameterNames,
+                    ParameterTypes: parameterTypes,
+                    CurrentModuleName: moduleName,
+                    CurrentFunctionName: declaration.Function.Declaration.Value.Name.Value,
+                    LocalBindings: localBindings.Count > 0 ? localBindings : null,
+                    LocalBindingTypes: null,
+                    DependencyLayout: sharedLayout,
+                    ModuleCompilationContext: context,
+                    FunctionReturnTypes: context.FunctionReturnTypes);
 
             // Compile the body
             var compiledBody = CompileExpression(functionBody, expressionContext);
+
             compiledBody = ReducePineExpression.ReduceExpressionBottomUp(compiledBody, parseCache);
 
             compiledBodies[memberName] = (compiledBody, paramCount);
@@ -782,23 +806,24 @@ public class ElmCompiler
         // Since SCCs are compiled in dependency order, all dependencies are already compiled.
         var envFunctionsList =
             sharedLayout
-            .Select((declName, depIndex) =>
-            {
-                if (encodedBodies.TryGetValue(declName, out var encodedBodyDep))
+            .Select(
+                (declName, depIndex) =>
                 {
-                    return encodedBodyDep;
-                }
+                    if (encodedBodies.TryGetValue(declName, out var encodedBodyDep))
+                    {
+                        return encodedBodyDep;
+                    }
 
-                // Dependencies are already compiled - retrieve encoded body from cache
-                if (context.TryGetCompiledFunctionInfo(declName, out var depInfo) && depInfo is not null)
-                {
-                    return depInfo.EncodedBody;
-                }
+                    // Dependencies are already compiled - retrieve encoded body from cache
+                    if (context.TryGetCompiledFunctionInfo(declName, out var depInfo) && depInfo is not null)
+                    {
+                        return depInfo.EncodedBody;
+                    }
 
-                throw new InvalidOperationException(
-                    $"Dependency {declName} not found in cache when compiling SCC {string.Join(", ", scc.Members)}. " +
-                    "SCCs should be compiled in dependency order.");
-            })
+                    throw new InvalidOperationException(
+                        $"Dependency {declName} not found in cache when compiling SCC {string.Join(", ", scc.Members)}. " +
+                        "SCCs should be compiled in dependency order.");
+                })
             .ToList();
 
         // Phase 3: Build final wrappers and cache all compiled functions
@@ -844,6 +869,7 @@ public class ElmCompiler
                             {
                                 AnalyzeExpression(arg.Value);
                             }
+
                             break;
                         }
 
@@ -855,6 +881,7 @@ public class ElmCompiler
                             {
                                 AnalyzeExpression(arg.Value);
                             }
+
                             break;
                         }
 
@@ -906,6 +933,7 @@ public class ElmCompiler
                                 break;
                         }
                     }
+
                     AnalyzeExpression(letExpr.Value.Expression.Value);
                     break;
 
@@ -914,6 +942,7 @@ public class ElmCompiler
                     {
                         AnalyzeExpression(elem.Value);
                     }
+
                     break;
 
                 case SyntaxTypes.Expression.ParenthesizedExpression parenthesized:
@@ -926,10 +955,12 @@ public class ElmCompiler
 
                 case SyntaxTypes.Expression.CaseExpression caseExpr:
                     AnalyzeExpression(caseExpr.CaseBlock.Expression.Value);
+
                     foreach (var caseItem in caseExpr.CaseBlock.Cases)
                     {
                         AnalyzeExpression(caseItem.Expression.Value);
                     }
+
                     break;
 
                 case SyntaxTypes.Expression.TupledExpression tupledExpr:
@@ -937,6 +968,7 @@ public class ElmCompiler
                     {
                         AnalyzeExpression(elem.Value);
                     }
+
                     break;
 
                 case SyntaxTypes.Expression.RecordExpr recordExpr:
@@ -944,6 +976,7 @@ public class ElmCompiler
                     {
                         AnalyzeExpression(field.Value.valueExpr.Value);
                     }
+
                     break;
 
                 case SyntaxTypes.Expression.RecordUpdateExpression recordUpdateExpr:
@@ -951,6 +984,7 @@ public class ElmCompiler
                     {
                         AnalyzeExpression(setter.Value.valueExpr.Value);
                     }
+
                     break;
 
                 case SyntaxTypes.Expression.FunctionOrValue funcOrValue:
@@ -994,6 +1028,7 @@ public class ElmCompiler
                             dependencies.Add(qualifiedName);
                         }
                     }
+
                     break;
             }
         }
@@ -1018,17 +1053,19 @@ public class ElmCompiler
 
             // Walk through the function type annotation to extract parameter types
             var currentType = typeAnnotation;
+
             var paramIndex = 0;
 
             while (currentType is SyntaxTypes.TypeAnnotation.FunctionTypeAnnotation funcType &&
-                   paramIndex < parameters.Count)
+                paramIndex < parameters.Count)
             {
                 var paramPattern = parameters[paramIndex].Value;
                 var paramTypeAnnotation = funcType.ArgumentType.Value;
 
                 // Extract binding types from the pattern
                 // This handles both simple VarPattern and complex patterns like TuplePattern
-                parameterTypes = TypeInference.ExtractPatternBindingTypes(paramPattern, paramTypeAnnotation, parameterTypes);
+                parameterTypes =
+                    TypeInference.ExtractPatternBindingTypes(paramPattern, paramTypeAnnotation, parameterTypes);
 
                 currentType = funcType.ReturnType.Value;
                 paramIndex++;
@@ -1040,21 +1077,25 @@ public class ElmCompiler
         if (constructorArgumentTypes is not null)
         {
             var parameters = function.Declaration.Value.Arguments;
+
             foreach (var paramNode in parameters)
             {
-                parameterTypes = TypeInference.ExtractPatternBindingTypesWithConstructors(
-                    paramNode.Value,
-                    constructorArgumentTypes,
-                    parameterTypes);
+                parameterTypes =
+                    TypeInference.ExtractPatternBindingTypesWithConstructors(
+                        paramNode.Value,
+                        constructorArgumentTypes,
+                        parameterTypes);
             }
 
             // Also analyze the function body for tag applications that constrain parameter types
             // For example, in `alfa a b = let c = TagAlfa a in ...`, we infer that `a` is Int
             var functionBody = function.Declaration.Value.Expression.Value;
-            parameterTypes = TypeInference.ExtractTypeConstraintsFromTagApplications(
-                functionBody,
-                constructorArgumentTypes,
-                parameterTypes);
+
+            parameterTypes =
+                TypeInference.ExtractTypeConstraintsFromTagApplications(
+                    functionBody,
+                    constructorArgumentTypes,
+                    parameterTypes);
         }
 
         // Also analyze the function body for function applications that constrain parameter types
@@ -1062,11 +1103,13 @@ public class ElmCompiler
         if (functionParameterTypes is not null)
         {
             var functionBody = function.Declaration.Value.Expression.Value;
-            parameterTypes = TypeInference.ExtractTypeConstraintsFromFunctionApplications(
-                functionBody,
-                functionParameterTypes,
-                currentModuleName,
-                parameterTypes);
+
+            parameterTypes =
+                TypeInference.ExtractTypeConstraintsFromFunctionApplications(
+                    functionBody,
+                    functionParameterTypes,
+                    currentModuleName,
+                    parameterTypes);
         }
 
         return parameterTypes;
@@ -1120,7 +1163,8 @@ public class ElmCompiler
         IReadOnlyList<(string declName, PineValue declValue)> typeDescriptions = [];
 
         PineValue[] entries =
-            [.. compiledModule.FunctionDeclarations
+            [
+            .. compiledModule.FunctionDeclarations
             .Concat(typeDescriptions)
             .Select(tuple => ValueFromContextExpansionWithName(tuple.declName, tuple.Item2))
             ];

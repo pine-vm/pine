@@ -26,10 +26,10 @@ public static class BuiltinHelpers
         Expression.KernelApplicationInstance(
             nameof(KernelFunction.skip),
             Expression.ListInstance(
-            [
+                [
                 Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(count)),
                 expr
-            ]));
+                ]));
 
     /// <summary>
     /// Apply the builtin 'head' function.
@@ -93,10 +93,10 @@ public static class BuiltinHelpers
         Expression.KernelApplicationInstance(
             nameof(KernelFunction.take),
             Expression.ListInstance(
-            [
+                [
                 Expression.LiteralInstance(IntegerEncoding.EncodeSignedInteger(count)),
                 expr
-            ]));
+                ]));
 
     /// <summary>
     /// Apply the builtin 'concat' function.

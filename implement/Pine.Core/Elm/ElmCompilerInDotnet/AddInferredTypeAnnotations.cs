@@ -98,6 +98,7 @@ public class AddInferredTypeAnnotations
 
         // Dictionary to store parsed files by module name
         var parsedFilesByModuleName = new Dictionary<string, File>(StringComparer.Ordinal);
+
         var abstractFilesList = new List<AbstractSyntaxTypes.File>();
 
         foreach (var moduleFile in elmModuleFiles)
@@ -124,6 +125,7 @@ public class AddInferredTypeAnnotations
 
             // Convert to abstract syntax for canonicalization
             var abstractFile = AbstractSyntaxTypes.FromFullSyntaxModel.Convert(parsedFile);
+
             abstractFilesList.Add(abstractFile);
         }
 
@@ -145,6 +147,7 @@ public class AddInferredTypeAnnotations
 
         // Build combined function signatures from ALL canonicalized modules
         var allSignatures = ImmutableDictionary<string, TypeInference.InferredType>.Empty;
+
         var canonicalizedFilesByModuleName = new Dictionary<string, AbstractSyntaxTypes.File>(StringComparer.Ordinal);
 
         foreach (var (moduleName, (canonicalizedFile, _errors)) in canonicalizedModules)
@@ -152,6 +155,7 @@ public class AddInferredTypeAnnotations
             // We ignore canonicalization errors (like undefined local variables) since they
             // don't prevent us from inferring types for cross-module references
             var moduleNameStr = string.Join(".", moduleName);
+
             canonicalizedFilesByModuleName[moduleNameStr] = canonicalizedFile;
 
             var moduleSignatures = TypeInference.BuildFunctionSignaturesMap(canonicalizedFile, moduleNameStr);
@@ -165,34 +169,39 @@ public class AddInferredTypeAnnotations
 
             if (!parsedFilesByModuleName.TryGetValue(moduleNameStr, out var parsedFile))
             {
-                return Result<string, Func<Func<IReadOnlyList<string>, bool>, File>>.err(
-                    $"Module not found: {moduleNameStr}");
+                return
+                    Result<string, Func<Func<IReadOnlyList<string>, bool>, File>>.err(
+                        $"Module not found: {moduleNameStr}");
             }
 
             if (!canonicalizedFilesByModuleName.TryGetValue(moduleNameStr, out var canonicalizedFile))
             {
-                return Result<string, Func<Func<IReadOnlyList<string>, bool>, File>>.err(
-                    $"Canonicalized module not found: {moduleNameStr}");
+                return
+                    Result<string, Func<Func<IReadOnlyList<string>, bool>, File>>.err(
+                        $"Canonicalized module not found: {moduleNameStr}");
             }
 
             File GetAnnotatedFile(Func<IReadOnlyList<string>, bool> includeDeclaration)
             {
                 // Infer type annotations using canonicalized file and combined signatures from all modules
-                var typeAnnotations = InferTypeAnnotationsForFile(canonicalizedFile, moduleNameStr, includeDeclaration, allSignatures);
+                var typeAnnotations =
+                    InferTypeAnnotationsForFile(canonicalizedFile, moduleNameStr, includeDeclaration, allSignatures);
 
                 // Apply type annotations to the original (non-canonicalized) file for output
-                return SetTypeAnnotation.SetTypeAnnotations(
-                    parsedFile,
-                    typeAnnotations,
-                    declarationWithoutEntry: null,
-                    entryWithoutDeclaration: null);
+                return
+                    SetTypeAnnotation.SetTypeAnnotations(
+                        parsedFile,
+                        typeAnnotations,
+                        declarationWithoutEntry: null,
+                        entryWithoutDeclaration: null);
             }
 
             return Result<string, Func<Func<IReadOnlyList<string>, bool>, File>>.ok(GetAnnotatedFile);
         }
 
-        return Result<string, Func<IReadOnlyList<string>, Result<string, Func<Func<IReadOnlyList<string>, bool>, File>>>>.ok(
-            TypeAnnotationsForModuleName);
+        return
+            Result<string, Func<IReadOnlyList<string>, Result<string, Func<Func<IReadOnlyList<string>, bool>, File>>>>.ok(
+                TypeAnnotationsForModuleName);
     }
 
     /// <summary>
@@ -204,7 +213,8 @@ public class AddInferredTypeAnnotations
         Func<IReadOnlyList<string>, bool> includeDeclaration,
         ImmutableDictionary<string, TypeInference.InferredType> allModuleSignatures)
     {
-        var annotations = ImmutableDictionary<IReadOnlyList<string>, TypeAnnotation>.Empty
+        var annotations =
+            ImmutableDictionary<IReadOnlyList<string>, TypeAnnotation>.Empty
             .WithComparers(EnumerableExtensions.EqualityComparer<IReadOnlyList<string>>());
 
         // Use the combined signatures from all modules
@@ -224,40 +234,46 @@ public class AddInferredTypeAnnotations
 
                 // Expression and arguments are already in abstract syntax (canonicalized)
                 var abstractExpression = funcDecl.Function.Declaration.Value.Expression;
+
                 var abstractArguments = funcDecl.Function.Declaration.Value.Arguments;
 
                 // Skip if already has a type annotation
                 if (funcDecl.Function.Signature is not null)
                 {
                     // Still need to recursively traverse for let-block declarations
-                    annotations = CollectTypeAnnotationsInExpression(
-                        abstractExpression.Value,
-                        declarationPath,
-                        abstractArguments,
-                        moduleName,
-                        functionSignatures,
-                        includeDeclaration,
-                        annotations);
+                    annotations =
+                        CollectTypeAnnotationsInExpression(
+                            abstractExpression.Value,
+                            declarationPath,
+                            abstractArguments,
+                            moduleName,
+                            functionSignatures,
+                            includeDeclaration,
+                            annotations);
+
                     continue;
                 }
 
                 // Use TypeInference to infer the function type
-                var (returnType, parameterTypes) = TypeInference.InferFunctionDeclarationType(
-                    abstractExpression.Value,
-                    abstractArguments,
-                    moduleName,
-                    functionSignatures);
+                var (returnType, parameterTypes) =
+                    TypeInference.InferFunctionDeclarationType(
+                        abstractExpression.Value,
+                        abstractArguments,
+                        moduleName,
+                        functionSignatures);
 
                 if (returnType is not TypeInference.InferredType.UnknownType)
                 {
                     // Build the full function type using TypeInference
-                    var fullType = TypeInference.BuildFunctionType(
-                        abstractArguments,
-                        parameterTypes,
-                        returnType);
+                    var fullType =
+                        TypeInference.BuildFunctionType(
+                            abstractArguments,
+                            parameterTypes,
+                            returnType);
 
                     // Convert the inferred type to a type annotation
                     var typeAnnotation = InferredTypeToTypeAnnotation(fullType);
+
                     if (typeAnnotation is not null)
                     {
                         annotations = annotations.Add(declarationPath, typeAnnotation);
@@ -265,14 +281,15 @@ public class AddInferredTypeAnnotations
                 }
 
                 // Recursively traverse for let-block declarations
-                annotations = CollectTypeAnnotationsInExpression(
-                    abstractExpression.Value,
-                    declarationPath,
-                    abstractArguments,
-                    moduleName,
-                    functionSignatures,
-                    includeDeclaration,
-                    annotations);
+                annotations =
+                    CollectTypeAnnotationsInExpression(
+                        abstractExpression.Value,
+                        declarationPath,
+                        abstractArguments,
+                        moduleName,
+                        functionSignatures,
+                        includeDeclaration,
+                        annotations);
             }
         }
 
@@ -295,6 +312,7 @@ public class AddInferredTypeAnnotations
         switch (expression)
         {
             case AbstractSyntaxTypes.Expression.LetExpression letExpr:
+
                 // Process each declaration in the let-block
                 foreach (var letDecl in letExpr.Value.Declarations)
                 {
@@ -312,34 +330,39 @@ public class AddInferredTypeAnnotations
                         if (letFunc.Function.Signature is not null)
                         {
                             // Still recurse into the expression
-                            annotations = CollectTypeAnnotationsInExpression(
-                                letFunc.Function.Declaration.Value.Expression.Value,
-                                localPath,
-                                letFunc.Function.Declaration.Value.Arguments,
-                                moduleName,
-                                functionSignatures,
-                                includeDeclaration,
-                                annotations);
+                            annotations =
+                                CollectTypeAnnotationsInExpression(
+                                    letFunc.Function.Declaration.Value.Expression.Value,
+                                    localPath,
+                                    letFunc.Function.Declaration.Value.Arguments,
+                                    moduleName,
+                                    functionSignatures,
+                                    includeDeclaration,
+                                    annotations);
+
                             continue;
                         }
 
                         // Use TypeInference to infer the type of the local declaration
-                        var (returnType, parameterTypes) = TypeInference.InferFunctionDeclarationType(
-                            letFunc.Function.Declaration.Value.Expression.Value,
-                            letFunc.Function.Declaration.Value.Arguments,
-                            moduleName,
-                            functionSignatures);
+                        var (returnType, parameterTypes) =
+                            TypeInference.InferFunctionDeclarationType(
+                                letFunc.Function.Declaration.Value.Expression.Value,
+                                letFunc.Function.Declaration.Value.Arguments,
+                                moduleName,
+                                functionSignatures);
 
                         if (returnType is not TypeInference.InferredType.UnknownType)
                         {
                             // Build the full function type using TypeInference
-                            var fullType = TypeInference.BuildFunctionType(
-                                letFunc.Function.Declaration.Value.Arguments,
-                                parameterTypes,
-                                returnType);
+                            var fullType =
+                                TypeInference.BuildFunctionType(
+                                    letFunc.Function.Declaration.Value.Arguments,
+                                    parameterTypes,
+                                    returnType);
 
                             // Convert the inferred type to a type annotation
                             var typeAnnotation = InferredTypeToTypeAnnotation(fullType);
+
                             if (typeAnnotation is not null)
                             {
                                 annotations = annotations.Add(localPath, typeAnnotation);
@@ -347,81 +370,201 @@ public class AddInferredTypeAnnotations
                         }
 
                         // Recurse into the local function's expression
-                        annotations = CollectTypeAnnotationsInExpression(
-                            letFunc.Function.Declaration.Value.Expression.Value,
-                            localPath,
-                            letFunc.Function.Declaration.Value.Arguments,
-                            moduleName,
-                            functionSignatures,
-                            includeDeclaration,
-                            annotations);
+                        annotations =
+                            CollectTypeAnnotationsInExpression(
+                                letFunc.Function.Declaration.Value.Expression.Value,
+                                localPath,
+                                letFunc.Function.Declaration.Value.Arguments,
+                                moduleName,
+                                functionSignatures,
+                                includeDeclaration,
+                                annotations);
                     }
                 }
 
                 // Recurse into the let-block's body expression
-                annotations = CollectTypeAnnotationsInExpression(
-                    letExpr.Value.Expression.Value,
-                    currentPath,
-                    parentArguments,
-                    moduleName,
-                    functionSignatures,
-                    includeDeclaration,
-                    annotations);
+                annotations =
+                    CollectTypeAnnotationsInExpression(
+                        letExpr.Value.Expression.Value,
+                        currentPath,
+                        parentArguments,
+                        moduleName,
+                        functionSignatures,
+                        includeDeclaration,
+                        annotations);
+
                 break;
 
             case AbstractSyntaxTypes.Expression.IfBlock ifBlock:
-                annotations = CollectTypeAnnotationsInExpression(ifBlock.Condition.Value, currentPath, parentArguments, moduleName, functionSignatures, includeDeclaration, annotations);
-                annotations = CollectTypeAnnotationsInExpression(ifBlock.ThenBlock.Value, currentPath, parentArguments, moduleName, functionSignatures, includeDeclaration, annotations);
-                annotations = CollectTypeAnnotationsInExpression(ifBlock.ElseBlock.Value, currentPath, parentArguments, moduleName, functionSignatures, includeDeclaration, annotations);
+                annotations =
+                    CollectTypeAnnotationsInExpression(
+                        ifBlock.Condition.Value,
+                        currentPath,
+                        parentArguments,
+                        moduleName,
+                        functionSignatures,
+                        includeDeclaration,
+                        annotations);
+
+                annotations =
+                    CollectTypeAnnotationsInExpression(
+                        ifBlock.ThenBlock.Value,
+                        currentPath,
+                        parentArguments,
+                        moduleName,
+                        functionSignatures,
+                        includeDeclaration,
+                        annotations);
+
+                annotations =
+                    CollectTypeAnnotationsInExpression(
+                        ifBlock.ElseBlock.Value,
+                        currentPath,
+                        parentArguments,
+                        moduleName,
+                        functionSignatures,
+                        includeDeclaration,
+                        annotations);
+
                 break;
 
             case AbstractSyntaxTypes.Expression.CaseExpression caseExpr:
-                annotations = CollectTypeAnnotationsInExpression(caseExpr.CaseBlock.Expression.Value, currentPath, parentArguments, moduleName, functionSignatures, includeDeclaration, annotations);
+                annotations =
+                    CollectTypeAnnotationsInExpression(
+                        caseExpr.CaseBlock.Expression.Value,
+                        currentPath,
+                        parentArguments,
+                        moduleName,
+                        functionSignatures,
+                        includeDeclaration,
+                        annotations);
+
                 foreach (var caseCase in caseExpr.CaseBlock.Cases)
                 {
-                    annotations = CollectTypeAnnotationsInExpression(caseCase.Expression.Value, currentPath, parentArguments, moduleName, functionSignatures, includeDeclaration, annotations);
+                    annotations =
+                        CollectTypeAnnotationsInExpression(
+                            caseCase.Expression.Value,
+                            currentPath,
+                            parentArguments,
+                            moduleName,
+                            functionSignatures,
+                            includeDeclaration,
+                            annotations);
                 }
+
                 break;
 
             case AbstractSyntaxTypes.Expression.LambdaExpression lambda:
-                annotations = CollectTypeAnnotationsInExpression(lambda.Lambda.Expression.Value, currentPath, lambda.Lambda.Arguments, moduleName, functionSignatures, includeDeclaration, annotations);
+                annotations =
+                    CollectTypeAnnotationsInExpression(
+                        lambda.Lambda.Expression.Value,
+                        currentPath,
+                        lambda.Lambda.Arguments,
+                        moduleName,
+                        functionSignatures,
+                        includeDeclaration,
+                        annotations);
+
                 break;
 
             case AbstractSyntaxTypes.Expression.Application app:
                 foreach (var arg in app.Arguments)
                 {
-                    annotations = CollectTypeAnnotationsInExpression(arg.Value, currentPath, parentArguments, moduleName, functionSignatures, includeDeclaration, annotations);
+                    annotations =
+                        CollectTypeAnnotationsInExpression(
+                            arg.Value,
+                            currentPath,
+                            parentArguments,
+                            moduleName,
+                            functionSignatures,
+                            includeDeclaration,
+                            annotations);
                 }
+
                 break;
 
             case AbstractSyntaxTypes.Expression.OperatorApplication opApp:
-                annotations = CollectTypeAnnotationsInExpression(opApp.Left.Value, currentPath, parentArguments, moduleName, functionSignatures, includeDeclaration, annotations);
-                annotations = CollectTypeAnnotationsInExpression(opApp.Right.Value, currentPath, parentArguments, moduleName, functionSignatures, includeDeclaration, annotations);
+                annotations =
+                    CollectTypeAnnotationsInExpression(
+                        opApp.Left.Value,
+                        currentPath,
+                        parentArguments,
+                        moduleName,
+                        functionSignatures,
+                        includeDeclaration,
+                        annotations);
+
+                annotations =
+                    CollectTypeAnnotationsInExpression(
+                        opApp.Right.Value,
+                        currentPath,
+                        parentArguments,
+                        moduleName,
+                        functionSignatures,
+                        includeDeclaration,
+                        annotations);
+
                 break;
 
             case AbstractSyntaxTypes.Expression.ParenthesizedExpression paren:
-                annotations = CollectTypeAnnotationsInExpression(paren.Expression.Value, currentPath, parentArguments, moduleName, functionSignatures, includeDeclaration, annotations);
+                annotations =
+                    CollectTypeAnnotationsInExpression(
+                        paren.Expression.Value,
+                        currentPath,
+                        parentArguments,
+                        moduleName,
+                        functionSignatures,
+                        includeDeclaration,
+                        annotations);
+
                 break;
 
             case AbstractSyntaxTypes.Expression.TupledExpression tuple:
                 foreach (var elem in tuple.Elements)
                 {
-                    annotations = CollectTypeAnnotationsInExpression(elem.Value, currentPath, parentArguments, moduleName, functionSignatures, includeDeclaration, annotations);
+                    annotations =
+                        CollectTypeAnnotationsInExpression(
+                            elem.Value,
+                            currentPath,
+                            parentArguments,
+                            moduleName,
+                            functionSignatures,
+                            includeDeclaration,
+                            annotations);
                 }
+
                 break;
 
             case AbstractSyntaxTypes.Expression.ListExpr list:
                 foreach (var elem in list.Elements)
                 {
-                    annotations = CollectTypeAnnotationsInExpression(elem.Value, currentPath, parentArguments, moduleName, functionSignatures, includeDeclaration, annotations);
+                    annotations =
+                        CollectTypeAnnotationsInExpression(
+                            elem.Value,
+                            currentPath,
+                            parentArguments,
+                            moduleName,
+                            functionSignatures,
+                            includeDeclaration,
+                            annotations);
                 }
+
                 break;
 
             case AbstractSyntaxTypes.Expression.RecordExpr record:
                 foreach (var field in record.Fields)
                 {
-                    annotations = CollectTypeAnnotationsInExpression(field.Value.valueExpr.Value, currentPath, parentArguments, moduleName, functionSignatures, includeDeclaration, annotations);
+                    annotations =
+                        CollectTypeAnnotationsInExpression(
+                            field.Value.valueExpr.Value,
+                            currentPath,
+                            parentArguments,
+                            moduleName,
+                            functionSignatures,
+                            includeDeclaration,
+                            annotations);
                 }
+
                 break;
         }
 
@@ -433,58 +576,60 @@ public class AddInferredTypeAnnotations
     /// </summary>
     private static TypeAnnotation? InferredTypeToTypeAnnotation(TypeInference.InferredType inferredType)
     {
-        return inferredType switch
-        {
-            TypeInference.InferredType.IntType =>
+        return
+            inferredType switch
+            {
+                TypeInference.InferredType.IntType =>
                 new TypeAnnotation.Typed(
                     MakeNode<(IReadOnlyList<string> ModuleName, string Name)>(([], "Int")),
                     []),
 
-            TypeInference.InferredType.FloatType =>
+                TypeInference.InferredType.FloatType =>
                 new TypeAnnotation.Typed(
                     MakeNode<(IReadOnlyList<string> ModuleName, string Name)>(([], "Float")),
                     []),
 
-            TypeInference.InferredType.StringType =>
+                TypeInference.InferredType.StringType =>
                 new TypeAnnotation.Typed(
                     MakeNode<(IReadOnlyList<string> ModuleName, string Name)>(([], "String")),
                     []),
 
-            TypeInference.InferredType.CharType =>
+                TypeInference.InferredType.CharType =>
                 new TypeAnnotation.Typed(
                     MakeNode<(IReadOnlyList<string> ModuleName, string Name)>(([], "Char")),
                     []),
 
-            TypeInference.InferredType.BoolType =>
+                TypeInference.InferredType.BoolType =>
                 new TypeAnnotation.Typed(
                     MakeNode<(IReadOnlyList<string> ModuleName, string Name)>(([], "Bool")),
                     []),
 
-            TypeInference.InferredType.NumberType =>
+                TypeInference.InferredType.NumberType =>
                 // "number" is the polymorphic numeric type in Elm
                 new TypeAnnotation.GenericType("number"),
 
-            TypeInference.InferredType.TypeVariable typeVar =>
+                TypeInference.InferredType.TypeVariable typeVar =>
                 // Type variable like 'a', 'b', etc.
                 new TypeAnnotation.GenericType(typeVar.Name),
 
-            TypeInference.InferredType.TupleType tupleType =>
+                TypeInference.InferredType.TupleType tupleType =>
                 CreateTupleTypeAnnotation(tupleType.ElementTypes),
 
-            TypeInference.InferredType.RecordType recordType =>
+                TypeInference.InferredType.RecordType recordType =>
                 CreateRecordTypeAnnotation(recordType.Fields),
 
-            TypeInference.InferredType.FunctionType functionType =>
+                TypeInference.InferredType.FunctionType functionType =>
                 CreateFunctionTypeAnnotation(functionType.ArgumentType, functionType.ReturnType),
 
-            TypeInference.InferredType.ListType listType =>
+                TypeInference.InferredType.ListType listType =>
                 CreateListTypeAnnotation(listType.ElementType),
 
-            TypeInference.InferredType.ChoiceType customType =>
+                TypeInference.InferredType.ChoiceType customType =>
                 CreateCustomTypeAnnotation(customType.ModuleName, customType.TypeName, customType.TypeArguments),
 
-            _ => null
-        };
+                _ =>
+                null
+            };
     }
 
     /// <summary>
@@ -516,8 +661,9 @@ public class AddInferredTypeAnnotations
             .Select(ta => (s_locationZero, ta))
             .ToList();
 
-        return new TypeAnnotation.Tupled(
-            new SeparatedSyntaxList<Node<TypeAnnotation>>.NonEmpty(first, rest));
+        return
+            new TypeAnnotation.Tupled(
+                new SeparatedSyntaxList<Node<TypeAnnotation>>.NonEmpty(first, rest));
     }
 
     /// <summary>
@@ -529,9 +675,10 @@ public class AddInferredTypeAnnotations
         if (fields.Count is 0)
         {
             // Empty record
-            return new TypeAnnotation.Record(
-                new RecordDefinition(
-                    new SeparatedSyntaxList<Node<RecordField>>.Empty()));
+            return
+                new TypeAnnotation.Record(
+                    new RecordDefinition(
+                        new SeparatedSyntaxList<Node<RecordField>>.Empty()));
         }
 
         var recordFields = new List<Node<RecordField>>();
@@ -539,15 +686,17 @@ public class AddInferredTypeAnnotations
         foreach (var (fieldName, fieldType) in fields)
         {
             var fieldTypeAnnotation = InferredTypeToTypeAnnotation(fieldType);
+
             if (fieldTypeAnnotation is null)
             {
                 return null;
             }
 
-            var recordField = new RecordField(
-                MakeNode(fieldName),
-                s_locationZero,
-                MakeNode(fieldTypeAnnotation));
+            var recordField =
+                new RecordField(
+                    MakeNode(fieldName),
+                    s_locationZero,
+                    MakeNode(fieldTypeAnnotation));
 
             recordFields.Add(MakeNode(recordField));
         }
@@ -559,9 +708,10 @@ public class AddInferredTypeAnnotations
             .Select(rf => (s_locationZero, rf))
             .ToList();
 
-        return new TypeAnnotation.Record(
-            new RecordDefinition(
-                new SeparatedSyntaxList<Node<RecordField>>.NonEmpty(first, rest)));
+        return
+            new TypeAnnotation.Record(
+                new RecordDefinition(
+                    new SeparatedSyntaxList<Node<RecordField>>.NonEmpty(first, rest)));
     }
 
     /// <summary>
@@ -579,10 +729,11 @@ public class AddInferredTypeAnnotations
             return null;
         }
 
-        return new TypeAnnotation.FunctionTypeAnnotation(
-            MakeNode(argAnnotation),
-            s_locationZero,
-            MakeNode(retAnnotation));
+        return
+            new TypeAnnotation.FunctionTypeAnnotation(
+                MakeNode(argAnnotation),
+                s_locationZero,
+                MakeNode(retAnnotation));
     }
 
     /// <summary>
@@ -591,14 +742,16 @@ public class AddInferredTypeAnnotations
     private static TypeAnnotation? CreateListTypeAnnotation(TypeInference.InferredType elementType)
     {
         var elementAnnotation = InferredTypeToTypeAnnotation(elementType);
+
         if (elementAnnotation is null)
         {
             return null;
         }
 
-        return new TypeAnnotation.Typed(
-            MakeNode<(IReadOnlyList<string> ModuleName, string Name)>(([], "List")),
-            [MakeNode(elementAnnotation)]);
+        return
+            new TypeAnnotation.Typed(
+                MakeNode<(IReadOnlyList<string> ModuleName, string Name)>(([], "List")),
+                [MakeNode(elementAnnotation)]);
     }
 
     /// <summary>
@@ -610,18 +763,22 @@ public class AddInferredTypeAnnotations
         IReadOnlyList<TypeInference.InferredType> typeArguments)
     {
         var typeArgNodes = new List<Node<TypeAnnotation>>();
+
         foreach (var arg in typeArguments)
         {
             var argAnnotation = InferredTypeToTypeAnnotation(arg);
+
             if (argAnnotation is null)
             {
                 return null;
             }
+
             typeArgNodes.Add(MakeNode(argAnnotation));
         }
 
-        return new TypeAnnotation.Typed(
-            MakeNode<(IReadOnlyList<string> ModuleName, string Name)>((moduleName, typeName)),
-            typeArgNodes);
+        return
+            new TypeAnnotation.Typed(
+                MakeNode<(IReadOnlyList<string> ModuleName, string Name)>((moduleName, typeName)),
+                typeArgNodes);
     }
 }
