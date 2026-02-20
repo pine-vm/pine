@@ -1,0 +1,489 @@
+using AwesomeAssertions;
+using Pine.Core.CodeAnalysis;
+using Pine.Core.Elm;
+using Pine.Core.Elm.ElmCompilerInDotnet;
+using Pine.Core.Elm.ElmInElm;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Xunit;
+
+namespace Pine.Core.Tests.Elm.ElmCompilerInDotnet.CoreLibraryModule;
+
+public class CoreListFunctionTests
+{
+    private static readonly Lazy<ElmInteractiveEnvironment.ParsedInteractiveEnvironment> s_kernelEnv =
+        new(
+            () =>
+            {
+                var kernelModulesTree =
+                    BundledFiles.CompilerSourceContainerFilesDefault.Value
+                    .GetNodeAtPath(["elm-kernel-modules"])
+                    ?? throw new Exception("Did not find elm-kernel-modules");
+
+                var rootFilePaths =
+                    kernelModulesTree.EnumerateFilesTransitive()
+                    .Where(
+                        b =>
+                        b.path[^1].Equals("List.elm", StringComparison.OrdinalIgnoreCase))
+                    .Select(b => (IReadOnlyList<string>)b.path)
+                    .ToList();
+
+                var compiledEnv =
+                    ElmCompiler.CompileInteractiveEnvironment(
+                        kernelModulesTree,
+                        rootFilePaths: rootFilePaths,
+                        disableInlining: false)
+                    .Extract(err => throw new Exception("Failed compiling elm-kernel-modules: " + err));
+
+                return
+                    ElmInteractiveEnvironment.ParseInteractiveEnvironment(compiledEnv)
+                    .Extract(err => throw new Exception("Failed parsing interactive environment: " + err));
+            });
+
+    private static PineValue GetListFunction(string name) =>
+        s_kernelEnv.Value.Modules
+        .First(m => m.moduleName is "List")
+        .moduleContent.FunctionDeclarations[name];
+
+    private static ElmValue ApplyUnary(PineValue functionValue, ElmValue argument) =>
+        CoreLibraryTestHelper.ApplyDirectUnary(functionValue, argument);
+
+    private static ElmValue ApplyBinary(
+        PineValue functionValue, ElmValue arg1, ElmValue arg2) =>
+        CoreLibraryTestHelper.ApplyGeneric(functionValue, [arg1, arg2]);
+
+    private static ElmValue ApplyTernary(
+        PineValue functionValue, ElmValue arg1, ElmValue arg2, ElmValue arg3) =>
+        CoreLibraryTestHelper.ApplyGeneric(functionValue, [arg1, arg2, arg3]);
+
+    private static ElmValue I(long i) =>
+        ElmValue.Integer(i);
+
+    private static ElmValue JustOf(ElmValue inner) =>
+        ElmValue.TagInstance("Just", [inner]);
+
+    private static readonly ElmValue Nothing =
+        ElmValue.TagInstance("Nothing", []);
+
+    private static ElmValue ElmList(params ElmValue[] items) =>
+        ElmValue.ListInstance([.. items]);
+
+    private static PineValue ToPine(ElmValue value) =>
+        ElmValueEncoding.ElmValueAsPineValue(value);
+
+    private static ElmValue FromPine(PineValue value) =>
+        ElmValueEncoding.PineValueAsElmValue(value, null, null)
+        .Extract(err => throw new Exception("Failed decode as Elm value: " + err));
+
+    private static ElmValue ApplyWithPineArgs(
+        PineValue functionValue, params PineValue[] pineArgs) =>
+        FromPine(CoreLibraryTestHelper.ApplyGenericPine(functionValue, pineArgs));
+
+    private static PineValue GetNegateFunction() =>
+        Core.Elm.ElmCompilerInDotnet.CoreLibraryModule.CoreBasics.GetFunctionValue("negate")!;
+
+    private static PineValue GetAddFunction() =>
+        Core.Elm.ElmCompilerInDotnet.CoreLibraryModule.CoreBasics.GetFunctionValue("add")!;
+
+    // ========== Tests for singleton ==========
+    // singleton 1234 == [1234]
+
+    [Fact]
+    public void Singleton_1234()
+    {
+        var result = ApplyUnary(GetListFunction("singleton"), I(1234));
+        result.Should().Be(ElmList(I(1234)));
+    }
+
+    // ========== Tests for repeat ==========
+    // repeat 3 1 == [1,1,1]
+
+    [Fact]
+    public void Repeat_3_1()
+    {
+        var result = ApplyBinary(GetListFunction("repeat"), I(3), I(1));
+        result.Should().Be(ElmList(I(1), I(1), I(1)));
+    }
+
+    // ========== Tests for range ==========
+    // range 3 6 == [3,4,5,6]
+    // range 3 3 == [3]
+    // range 6 3 == []
+
+    [Fact]
+    public void Range_3_6()
+    {
+        var result = ApplyBinary(GetListFunction("range"), I(3), I(6));
+        result.Should().Be(ElmList(I(3), I(4), I(5), I(6)));
+    }
+
+    [Fact]
+    public void Range_3_3()
+    {
+        var result = ApplyBinary(GetListFunction("range"), I(3), I(3));
+        result.Should().Be(ElmList(I(3)));
+    }
+
+    [Fact]
+    public void Range_6_3()
+    {
+        var result = ApplyBinary(GetListFunction("range"), I(6), I(3));
+        result.Should().Be(ElmList());
+    }
+
+    // ========== Tests for length ==========
+    // length [1,2,3] == 3
+
+    [Fact]
+    public void Length_3()
+    {
+        var result = ApplyUnary(GetListFunction("length"), ElmList(I(1), I(2), I(3)));
+        result.Should().Be(I(3));
+    }
+
+    // ========== Tests for reverse ==========
+    // reverse [1,2,3,4] == [4,3,2,1]
+
+    [Fact]
+    public void Reverse_1234()
+    {
+        var result =
+            ApplyUnary(GetListFunction("reverse"), ElmList(I(1), I(2), I(3), I(4)));
+
+        result.Should().Be(ElmList(I(4), I(3), I(2), I(1)));
+    }
+
+    // ========== Tests for member ==========
+    // member 9 [1,2,3,4] == False
+    // member 4 [1,2,3,4] == True
+
+    [Fact]
+    public void Member_9_not_found()
+    {
+        var result =
+            ApplyBinary(GetListFunction("member"), I(9), ElmList(I(1), I(2), I(3), I(4)));
+
+        result.Should().Be(ElmValue.FalseValue);
+    }
+
+    [Fact]
+    public void Member_4_found()
+    {
+        var result =
+            ApplyBinary(GetListFunction("member"), I(4), ElmList(I(1), I(2), I(3), I(4)));
+
+        result.Should().Be(ElmValue.TrueValue);
+    }
+
+    // ========== Tests for maximum ==========
+    // maximum [1,4,2] == Just 4
+    // maximum [] == Nothing
+
+    [Fact]
+    public void Maximum_1_4_2()
+    {
+        var result = ApplyUnary(GetListFunction("maximum"), ElmList(I(1), I(4), I(2)));
+        result.Should().Be(JustOf(I(4)));
+    }
+
+    [Fact]
+    public void Maximum_empty()
+    {
+        var result = ApplyUnary(GetListFunction("maximum"), ElmList());
+        result.Should().Be(Nothing);
+    }
+
+    // ========== Tests for minimum ==========
+    // minimum [3,2,1] == Just 1
+    // minimum [] == Nothing
+
+    [Fact]
+    public void Minimum_3_2_1()
+    {
+        var result = ApplyUnary(GetListFunction("minimum"), ElmList(I(3), I(2), I(1)));
+        result.Should().Be(JustOf(I(1)));
+    }
+
+    [Fact]
+    public void Minimum_empty()
+    {
+        var result = ApplyUnary(GetListFunction("minimum"), ElmList());
+        result.Should().Be(Nothing);
+    }
+
+    // ========== Tests for sum ==========
+    // sum [1,2,3] == 6
+    // sum [1,1,1] == 3
+    // sum [] == 0
+
+    [Fact]
+    public void Sum_1_2_3()
+    {
+        var result = ApplyUnary(GetListFunction("sum"), ElmList(I(1), I(2), I(3)));
+        result.Should().Be(I(6));
+    }
+
+    [Fact]
+    public void Sum_1_1_1()
+    {
+        var result = ApplyUnary(GetListFunction("sum"), ElmList(I(1), I(1), I(1)));
+        result.Should().Be(I(3));
+    }
+
+    [Fact]
+    public void Sum_empty()
+    {
+        var result = ApplyUnary(GetListFunction("sum"), ElmList());
+        result.Should().Be(I(0));
+    }
+
+    // ========== Tests for product ==========
+    // product [2,2,2] == 8
+    // product [3,3,3] == 27
+    // product [] == 1
+
+    [Fact]
+    public void Product_2_2_2()
+    {
+        var result = ApplyUnary(GetListFunction("product"), ElmList(I(2), I(2), I(2)));
+        result.Should().Be(I(8));
+    }
+
+    [Fact]
+    public void Product_3_3_3()
+    {
+        var result = ApplyUnary(GetListFunction("product"), ElmList(I(3), I(3), I(3)));
+        result.Should().Be(I(27));
+    }
+
+    [Fact]
+    public void Product_empty()
+    {
+        var result = ApplyUnary(GetListFunction("product"), ElmList());
+        result.Should().Be(I(1));
+    }
+
+    // ========== Tests for append ==========
+    // append [1,1,2] [3,5,8] == [1,1,2,3,5,8]
+
+    [Fact]
+    public void Append_two_lists()
+    {
+        var result =
+            ApplyBinary(
+                GetListFunction("append"),
+                ElmList(I(1), I(1), I(2)),
+                ElmList(I(3), I(5), I(8)));
+
+        result.Should().Be(ElmList(I(1), I(1), I(2), I(3), I(5), I(8)));
+    }
+
+    // ========== Tests for concat ==========
+    // concat [[1,2],[3],[4,5]] == [1,2,3,4,5]
+
+    [Fact]
+    public void Concat_nested_lists()
+    {
+        var result =
+            ApplyUnary(
+                GetListFunction("concat"),
+                ElmList(
+                    ElmList(I(1), I(2)),
+                    ElmList(I(3)),
+                    ElmList(I(4), I(5))));
+
+        result.Should().Be(ElmList(I(1), I(2), I(3), I(4), I(5)));
+    }
+
+    // ========== Tests for intersperse ==========
+    // intersperse 0 [1,2,3] == [1,0,2,0,3]
+
+    [Fact]
+    public void Intersperse_0_in_1_2_3()
+    {
+        var result =
+            ApplyBinary(
+                GetListFunction("intersperse"),
+                I(0),
+                ElmList(I(1), I(2), I(3)));
+
+        result.Should().Be(ElmList(I(1), I(0), I(2), I(0), I(3)));
+    }
+
+    // ========== Tests for sort ==========
+    // sort [3,1,5] == [1,3,5]
+
+    [Fact]
+    public void Sort_3_1_5()
+    {
+        var result =
+            ApplyUnary(GetListFunction("sort"), ElmList(I(3), I(1), I(5)));
+
+        result.Should().Be(ElmList(I(1), I(3), I(5)));
+    }
+
+    // ========== Tests for isEmpty ==========
+    // isEmpty [] == True
+
+    [Fact]
+    public void IsEmpty_empty_list()
+    {
+        var result = ApplyUnary(GetListFunction("isEmpty"), ElmList());
+        result.Should().Be(ElmValue.TrueValue);
+    }
+
+    [Fact]
+    public void IsEmpty_non_empty_list()
+    {
+        var result = ApplyUnary(GetListFunction("isEmpty"), ElmList(I(1)));
+        result.Should().Be(ElmValue.FalseValue);
+    }
+
+    // ========== Tests for head ==========
+    // head [1,2,3] == Just 1
+    // head [] == Nothing
+
+    [Fact]
+    public void Head_1_2_3()
+    {
+        var result =
+            ApplyUnary(GetListFunction("head"), ElmList(I(1), I(2), I(3)));
+
+        result.Should().Be(JustOf(I(1)));
+    }
+
+    [Fact]
+    public void Head_empty()
+    {
+        var result = ApplyUnary(GetListFunction("head"), ElmList());
+        result.Should().Be(Nothing);
+    }
+
+    // ========== Tests for tail ==========
+    // tail [1,2,3] == Just [2,3]
+    // tail [] == Nothing
+
+    [Fact]
+    public void Tail_1_2_3()
+    {
+        var result =
+            ApplyUnary(GetListFunction("tail"), ElmList(I(1), I(2), I(3)));
+
+        result.Should().Be(JustOf(ElmList(I(2), I(3))));
+    }
+
+    [Fact]
+    public void Tail_empty()
+    {
+        var result = ApplyUnary(GetListFunction("tail"), ElmList());
+        result.Should().Be(Nothing);
+    }
+
+    // ========== Tests for take ==========
+    // take 2 [1,2,3,4] == [1,2]
+
+    [Fact]
+    public void Take_2()
+    {
+        var result =
+            ApplyBinary(
+                GetListFunction("take"),
+                I(2),
+                ElmList(I(1), I(2), I(3), I(4)));
+
+        result.Should().Be(ElmList(I(1), I(2)));
+    }
+
+    // ========== Tests for drop ==========
+    // drop 2 [1,2,3,4] == [3,4]
+
+    [Fact]
+    public void Drop_2()
+    {
+        var result =
+            ApplyBinary(
+                GetListFunction("drop"),
+                I(2),
+                ElmList(I(1), I(2), I(3), I(4)));
+
+        result.Should().Be(ElmList(I(3), I(4)));
+    }
+
+    // ========== Tests for map (higher-order) ==========
+    // map negate [1,2,3] == [-1,-2,-3]
+
+    [Fact]
+    public void Map_negate()
+    {
+        var result =
+            ApplyWithPineArgs(
+                GetListFunction("map"),
+                GetNegateFunction(),
+                ToPine(ElmList(I(1), I(2), I(3))));
+
+        result.Should().Be(ElmList(I(-1), I(-2), I(-3)));
+    }
+
+    // ========== Tests for foldl (higher-order) ==========
+    // foldl (+) 0 [1,2,3] == 6
+
+    [Fact]
+    public void Foldl_add_0()
+    {
+        var result =
+            ApplyWithPineArgs(
+                GetListFunction("foldl"),
+                GetAddFunction(),
+                ToPine(I(0)),
+                ToPine(ElmList(I(1), I(2), I(3))));
+
+        result.Should().Be(I(6));
+    }
+
+    // ========== Tests for foldr (higher-order) ==========
+    // foldr (+) 0 [1,2,3] == 6
+
+    [Fact]
+    public void Foldr_add_0()
+    {
+        var result =
+            ApplyWithPineArgs(
+                GetListFunction("foldr"),
+                GetAddFunction(),
+                ToPine(I(0)),
+                ToPine(ElmList(I(1), I(2), I(3))));
+
+        result.Should().Be(I(6));
+    }
+
+    // ========== Tests for sortBy (higher-order) ==========
+    // sortBy negate [1,3,2] == [3,2,1]
+
+    [Fact]
+    public void SortBy_negate()
+    {
+        var result =
+            ApplyWithPineArgs(
+                GetListFunction("sortBy"),
+                GetNegateFunction(),
+                ToPine(ElmList(I(1), I(3), I(2))));
+
+        result.Should().Be(ElmList(I(3), I(2), I(1)));
+    }
+
+    // ========== Tests for concatMap (higher-order) ==========
+    // concatMap singleton [1,2,3] == [1,2,3]
+
+    [Fact]
+    public void ConcatMap_singleton()
+    {
+        var result =
+            ApplyWithPineArgs(
+                GetListFunction("concatMap"),
+                GetListFunction("singleton"),
+                ToPine(ElmList(I(1), I(2), I(3))));
+
+        result.Should().Be(ElmList(I(1), I(2), I(3)));
+    }
+}

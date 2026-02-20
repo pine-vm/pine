@@ -607,10 +607,10 @@ public static class ElmValueEncoding
                 // matching what the Elm compiler emits for True/False literals and what
                 // kernel functions like int_is_sorted_asc return.
                 ElmValue.ElmTag { TagName: "True", Arguments.Count: 0 } =>
-                PineVM.PineKernelValues.TrueValue,
+                PineKernelValues.TrueValue,
 
                 ElmValue.ElmTag { TagName: "False", Arguments.Count: 0 } =>
-                PineVM.PineKernelValues.FalseValue,
+                PineKernelValues.FalseValue,
 
                 ElmValue.ElmTag elmTag =>
                 TagAsPineValue(

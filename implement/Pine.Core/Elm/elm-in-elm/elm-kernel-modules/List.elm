@@ -260,6 +260,11 @@ sum numbers =
     foldl (\x acc -> x + acc) 0 numbers
 
 
+product : List number -> number
+product numbers =
+    foldl (\x acc -> x * acc) 1 numbers
+
+
 append : List a -> List a -> List a
 append xs ys =
     Pine_kernel.concat [ xs, ys ]
@@ -323,6 +328,41 @@ map3 mapItems listA listB listC =
             []
 
 
+map4 : (a -> b -> c -> d -> result) -> List a -> List b -> List c -> List d -> List result
+map4 mapItems listA listB listC listD =
+    case ( listA, listB ) of
+        ( x :: xs, y :: ys ) ->
+            case ( listC, listD ) of
+                ( z :: zs, w :: ws ) ->
+                    cons (mapItems x y z w) (map4 mapItems xs ys zs ws)
+
+                _ ->
+                    []
+
+        _ ->
+            []
+
+
+map5 : (a -> b -> c -> d -> e -> result) -> List a -> List b -> List c -> List d -> List e -> List result
+map5 mapItems listA listB listC listD listE =
+    case ( listA, listB ) of
+        ( x :: xs, y :: ys ) ->
+            case ( listC, listD ) of
+                ( z :: zs, w :: ws ) ->
+                    case listE of
+                        v :: vs ->
+                            cons (mapItems x y z w v) (map5 mapItems xs ys zs ws vs)
+
+                        _ ->
+                            []
+
+                _ ->
+                    []
+
+        _ ->
+            []
+
+
 isEmpty : List a -> Bool
 isEmpty xs =
     if Pine_kernel.equal [ Pine_kernel.length xs, 0 ] then
@@ -373,6 +413,15 @@ partition pred list =
                 ( trues, cons x falses )
     in
     foldr step ( [], [] ) list
+
+
+unzip : List ( a, b ) -> ( List a, List b )
+unzip pairs =
+    let
+        step ( x, y ) ( xs, ys ) =
+            ( cons x xs, cons y ys )
+    in
+    foldr step ( [], [] ) pairs
 
 
 sort : List comparable -> List comparable

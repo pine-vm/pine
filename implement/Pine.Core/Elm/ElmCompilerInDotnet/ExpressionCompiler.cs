@@ -173,6 +173,16 @@ public class ExpressionCompiler
             }
         }
 
+        // Handle references to natively-implemented Basics functions used as values
+        // (e.g., passing `min` or `max` as an argument to a higher-order function like `foldl`)
+        if (expr.ModuleName.Count is 1 && expr.ModuleName[0] is "Basics")
+        {
+            if (CoreLibraryModule.CoreBasics.GetFunctionValue(expr.Name) is { } basicsFunctionValue)
+            {
+                return Expression.LiteralInstance(basicsFunctionValue);
+            }
+        }
+
         return new CompilationError.UnresolvedReference(expr.Name, context.CurrentModuleName);
     }
 
@@ -390,6 +400,16 @@ public class ExpressionCompiler
 
             if (context.GetFunctionIndexInLayout(qualifiedFunctionName) is not { } functionIndex)
             {
+                // Handle references to natively-implemented Basics functions
+                // that are partially applied or not in the dependency layout
+                if (funcRef.ModuleName.Count is 1 && funcRef.ModuleName[0] is "Basics" &&
+                    CoreLibraryModule.CoreBasics.GetFunctionValue(funcRef.Name) is { } basicsFuncValue)
+                {
+                    return CompileGenericFunctionApplication(
+                        Expression.LiteralInstance(basicsFuncValue),
+                        compiledArguments);
+                }
+
                 return new CompilationError.FunctionNotInDependencyLayout(qualifiedFunctionName);
             }
 

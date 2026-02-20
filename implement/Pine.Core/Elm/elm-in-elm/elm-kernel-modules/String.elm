@@ -837,6 +837,84 @@ padLeft n char ((String charsBytes) as string) =
             )
 
 
+padRight : Int -> Char -> String -> String
+padRight n char ((String charsBytes) as string) =
+    let
+        stringBytesLength : Int
+        stringBytesLength =
+            Pine_kernel.length charsBytes
+
+        stringLength : Int
+        stringLength =
+            Pine_kernel.concat
+                [ Pine_kernel.take [ 1, 0 ]
+                , Pine_kernel.bit_shift_right [ 2, Pine_kernel.skip [ 1, stringBytesLength ] ]
+                ]
+
+        paddingLength : Int
+        paddingLength =
+            Pine_kernel.int_add
+                [ n
+                , Pine_kernel.int_mul [ stringLength, -1 ]
+                ]
+    in
+    if Pine_kernel.int_is_sorted_asc [ paddingLength, 0 ] then
+        string
+
+    else
+        String
+            (Pine_kernel.concat
+                [ charsBytes
+                , Pine_kernel.concat (List.repeat paddingLength char)
+                ]
+            )
+
+
+pad : Int -> Char -> String -> String
+pad n char ((String charsBytes) as string) =
+    let
+        stringBytesLength : Int
+        stringBytesLength =
+            Pine_kernel.length charsBytes
+
+        stringLength : Int
+        stringLength =
+            Pine_kernel.concat
+                [ Pine_kernel.take [ 1, 0 ]
+                , Pine_kernel.bit_shift_right [ 2, Pine_kernel.skip [ 1, stringBytesLength ] ]
+                ]
+
+        totalPadding : Int
+        totalPadding =
+            Pine_kernel.int_add
+                [ n
+                , Pine_kernel.int_mul [ stringLength, -1 ]
+                ]
+
+        rightPadding : Int
+        rightPadding =
+            totalPadding // 2
+
+        leftPadding : Int
+        leftPadding =
+            Pine_kernel.int_add
+                [ totalPadding
+                , Pine_kernel.int_mul [ rightPadding, -1 ]
+                ]
+    in
+    if Pine_kernel.int_is_sorted_asc [ totalPadding, 0 ] then
+        string
+
+    else
+        String
+            (Pine_kernel.concat
+                [ Pine_kernel.concat (List.repeat leftPadding char)
+                , charsBytes
+                , Pine_kernel.concat (List.repeat rightPadding char)
+                ]
+            )
+
+
 lines : String -> List String
 lines (String chars) =
     linesHelper 0 [] 0 chars
