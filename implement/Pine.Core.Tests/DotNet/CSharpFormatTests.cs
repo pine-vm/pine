@@ -3916,4 +3916,187 @@ public class CSharpFormatTests
 
         AssertFormattedSyntax(input, expected, scriptMode: true);
     }
+
+    [Fact]
+    public void Invocation_argument_list_exceeding_line_length_containing_member_access_to_preserve()
+    {
+        var input =
+            """"
+            return InferExpressionType(parenExpr.Expression.Value, parameterNames, parameterTypes, localBindingTypes, currentModuleName, functionReturnTypes);
+            """";
+
+        var expected =
+            """"
+            return
+                InferExpressionType(
+                    parenExpr.Expression.Value,
+                    parameterNames,
+                    parameterTypes,
+                    localBindingTypes,
+                    currentModuleName,
+                    functionReturnTypes);
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Orders_using_directives_containing_alias_and_comments()
+    {
+        var input =
+            """"
+            using System;
+            using System.Linq;
+            using Pine.Core.Elm.ElmSyntax.SyntaxModel;
+
+            using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
+
+            using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+
+            // Alias to avoid ambiguity with System.Range
+            using Range = Pine.Core.Elm.ElmSyntax.SyntaxModel.Range;
+
+            namespace Pine.Core.Elm.ElmCompilerInDotnet;
+            """";
+
+        var expected =
+            """"
+            using Pine.Core.Elm.ElmSyntax.SyntaxModel;
+            using System;
+            using System.Linq;
+
+            using ModuleName = System.Collections.Generic.IReadOnlyList<string>;
+
+            using SyntaxTypes = Pine.Core.Elm.ElmSyntax.Stil4mElmSyntax7;
+
+            // Alias to avoid ambiguity with System.Range
+            using Range = Pine.Core.Elm.ElmSyntax.SyntaxModel.Range;
+
+            namespace Pine.Core.Elm.ElmCompilerInDotnet;
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: false);
+    }
+
+    [Fact]
+    public void Formats_switch_with_comments_at_end_of_arms()
+    {
+        var input =
+            """"
+            return pattern switch
+            {
+                SyntaxTypes.Pattern.ParenthesizedPattern p =>
+                    AsConstantPattern(p.Pattern.Value),
+
+                SyntaxTypes.Pattern.AllPattern =>
+                    null, // Wildcard pattern contains no constant value
+
+                SyntaxTypes.Pattern.VarPattern =>
+                    null, // Variable pattern is not constant
+            };
+            """";
+
+        var expected =
+            """"
+            return
+                pattern switch
+                {
+                    SyntaxTypes.Pattern.ParenthesizedPattern p =>
+                    AsConstantPattern(p.Pattern.Value),
+
+                    SyntaxTypes.Pattern.AllPattern =>
+                    null, // Wildcard pattern contains no constant value
+
+                    SyntaxTypes.Pattern.VarPattern =>
+                    null, // Variable pattern is not constant
+                };
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Formats_return_with()
+    {
+        var input =
+            """"
+            return this with
+            {
+                TypeImportMap = mergedTypeImportMap,
+                ValueImportMap = mergedValueImportMap,
+                OperatorToFunction = operatorToFunction
+            };
+            """";
+
+        var expected =
+            """"
+            return
+                this with
+                {
+                    TypeImportMap = mergedTypeImportMap,
+                    ValueImportMap = mergedValueImportMap,
+                    OperatorToFunction = operatorToFunction
+                };
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Formats_invocation_argument_list_with_comment_at_end_of_argument()
+    {
+        var input =
+            """"
+            var (collectedVars, errors) = CollectPatternVariablesWithShadowCheck(
+                arg.Value,
+                arg.Range,
+                context.ModuleLevelDeclarations, // Check against module-level declarations
+                parameterVariables);
+            """";
+
+        var expected =
+            """"
+            var (collectedVars, errors) =
+                CollectPatternVariablesWithShadowCheck(
+                    arg.Value,
+                    arg.Range,
+                    context.ModuleLevelDeclarations, // Check against module-level declarations
+                    parameterVariables);
+            """";
+
+        AssertFormattedSyntax(input, expected, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserves_spacing_between_statements_in_switch_statement_switch_section()
+    {
+        var input =
+            """"
+            switch (abc)
+            {
+                case 123:
+
+                    if (def)
+                    {
+                    }
+
+                    break;
+            }
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
+
+    [Fact]
+    public void Preserves_argument_list_single_line_on_dedicated_line()
+    {
+        var input =
+            """"
+            private static ElmValue ApplyWithPineArgs(
+                PineValue functionValue, params PineValue[] pineArgs) =>
+                FromPine(CoreLibraryTestHelper.ApplyGenericPine(functionValue, pineArgs));
+            """";
+
+        AssertFormattedSyntax(input, input, scriptMode: true);
+    }
 }
