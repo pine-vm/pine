@@ -2152,4 +2152,297 @@ public class CoreBasicsParseTests
             """"
             .Trim());
     }
+
+    // ========== Tests for ++ (append) operator ==========
+
+    [Fact]
+    public void Function_append_infix_operator()
+    {
+        var elmModuleText =
+            """"
+            module Test exposing (..)
+
+
+            alfa x y =
+                x ++ y
+
+            """";
+
+        var parseCache = new PineVMParseCache();
+
+        var parsedEnv =
+            ElmCompilerTestHelper.CompileElmModules(
+                [elmModuleText],
+                disableInlining: true);
+
+        var wholeProgramText =
+            ElmCompilerTestHelper.ParseAndRenderStaticProgram(
+                parsedEnv,
+                includeDeclaration: qualifiedName => qualifiedName.DeclName is "alfa",
+                parseCache: parseCache);
+
+        wholeProgramText.Trim().Should().Be(
+            """"
+
+            Test.alfa param_1_0 param_1_1 =
+                Basics.append
+                    param_1_0
+                    param_1_1
+            
+            """"
+            .Trim());
+
+        // Dynamic tests
+        var testModule =
+            parsedEnv.Modules.FirstOrDefault(c => c.moduleName is "Test");
+
+        var declValue =
+            testModule.moduleContent.FunctionDeclarations
+            .FirstOrDefault(decl => decl.Key is "alfa");
+
+        var declParsed =
+            FunctionRecord.ParseFunctionRecordTagged(declValue.Value, parseCache)
+            .Extract(err => throw new Exception("Failed parsing " + nameof(declValue) + ": " + err));
+
+        var invokeFunction = ElmCompilerTestHelper.CreateFunctionInvocationDelegate(declParsed);
+
+        ElmValue ApplyForElmArguments(ElmValue x, ElmValue y)
+        {
+            var pineValue =
+                invokeFunction([ElmValueEncoding.ElmValueAsPineValue(x), ElmValueEncoding.ElmValueAsPineValue(y)]);
+
+            return
+                ElmValueEncoding.PineValueAsElmValue(pineValue.evalReport.ReturnValue.Evaluate(), null, null)
+                .Extract(err => throw new Exception("Failed decoding result as Elm value: " + err));
+        }
+
+        // Test string append: "hello" ++ " world" == "hello world"
+        {
+            var resultValue =
+                ApplyForElmArguments(
+                    ElmValue.StringInstance("hello"),
+                    ElmValue.StringInstance(" world"));
+
+            resultValue.Should().Be(ElmValue.StringInstance("hello world"));
+        }
+
+        // Test list append: [1, 2] ++ [3, 4] == [1, 2, 3, 4]
+        {
+            var resultValue =
+                ApplyForElmArguments(
+                    ElmValue.ListInstance([ElmValue.Integer(1), ElmValue.Integer(2)]),
+                    ElmValue.ListInstance([ElmValue.Integer(3), ElmValue.Integer(4)]));
+
+            resultValue.Should().Be(
+                ElmValue.ListInstance(
+                    [
+                    ElmValue.Integer(1),
+                    ElmValue.Integer(2),
+                    ElmValue.Integer(3),
+                    ElmValue.Integer(4)
+                    ]));
+        }
+
+        // Test empty string append: "" ++ "" == ""
+        {
+            var resultValue =
+                ApplyForElmArguments(
+                    ElmValue.StringInstance(""),
+                    ElmValue.StringInstance(""));
+
+            resultValue.Should().Be(ElmValue.StringInstance(""));
+        }
+
+        // Test empty list append: [] ++ [] == []
+        {
+            var resultValue =
+                ApplyForElmArguments(
+                    ElmValue.ListInstance([]),
+                    ElmValue.ListInstance([]));
+
+            resultValue.Should().Be(ElmValue.ListInstance([]));
+        }
+    }
+
+    [Fact]
+    public void Function_append_prefix_operator()
+    {
+        var elmModuleText =
+            """"
+            module Test exposing (..)
+
+
+            alfa x y =
+                (++) x y
+
+            """";
+
+        var parseCache = new PineVMParseCache();
+
+        var parsedEnv =
+            ElmCompilerTestHelper.CompileElmModules(
+                [elmModuleText],
+                disableInlining: true);
+
+        var wholeProgramText =
+            ElmCompilerTestHelper.ParseAndRenderStaticProgram(
+                parsedEnv,
+                includeDeclaration: qualifiedName => qualifiedName.DeclName is "alfa",
+                parseCache: parseCache);
+
+        wholeProgramText.Trim().Should().Be(
+            """"
+
+            Test.alfa param_1_0 param_1_1 =
+                Basics.append
+                    param_1_0
+                    param_1_1
+            
+            """"
+            .Trim());
+    }
+
+    // ========== Tests for >> (composeR) operator ==========
+
+    [Fact]
+    public void Function_composeR_infix_operator()
+    {
+        var elmModuleText =
+            """"
+            module Test exposing (..)
+
+
+            double x =
+                x * 2
+
+
+            addOne x =
+                x + 1
+
+
+            doubleAndAdd =
+                double >> addOne
+
+
+            alfa x =
+                doubleAndAdd x
+
+            """";
+
+        var parseCache = new PineVMParseCache();
+
+        var parsedEnv =
+            ElmCompilerTestHelper.CompileElmModules(
+                [elmModuleText],
+                disableInlining: true);
+
+        // Dynamic tests
+        var testModule =
+            parsedEnv.Modules.FirstOrDefault(c => c.moduleName is "Test");
+
+        var declValue =
+            testModule.moduleContent.FunctionDeclarations
+            .FirstOrDefault(decl => decl.Key is "alfa");
+
+        var declParsed =
+            FunctionRecord.ParseFunctionRecordTagged(declValue.Value, parseCache)
+            .Extract(err => throw new Exception("Failed parsing " + nameof(declValue) + ": " + err));
+
+        var invokeFunction = ElmCompilerTestHelper.CreateFunctionInvocationDelegate(declParsed);
+
+        ElmValue ApplyForElmArgument(ElmValue x)
+        {
+            var pineValue =
+                invokeFunction([ElmValueEncoding.ElmValueAsPineValue(x)]);
+
+            return
+                ElmValueEncoding.PineValueAsElmValue(pineValue.evalReport.ReturnValue.Evaluate(), null, null)
+                .Extract(err => throw new Exception("Failed decoding result as Elm value: " + err));
+        }
+
+        // double >> addOne: double(5) = 10, addOne(10) = 11
+        {
+            var resultValue = ApplyForElmArgument(ElmValue.Integer(5));
+
+            resultValue.Should().Be(ElmValue.Integer(11));
+        }
+
+        // double >> addOne: double(0) = 0, addOne(0) = 1
+        {
+            var resultValue = ApplyForElmArgument(ElmValue.Integer(0));
+
+            resultValue.Should().Be(ElmValue.Integer(1));
+        }
+    }
+
+    [Fact]
+    public void Function_composeL_infix_operator()
+    {
+        var elmModuleText =
+            """"
+            module Test exposing (..)
+
+
+            double x =
+                x * 2
+
+
+            addOne x =
+                x + 1
+
+
+            addOneAndDouble =
+                double << addOne
+
+
+            alfa x =
+                addOneAndDouble x
+
+            """";
+
+        var parseCache = new PineVMParseCache();
+
+        var parsedEnv =
+            ElmCompilerTestHelper.CompileElmModules(
+                [elmModuleText],
+                disableInlining: true);
+
+        // Dynamic tests
+        var testModule =
+            parsedEnv.Modules.FirstOrDefault(c => c.moduleName is "Test");
+
+        var declValue =
+            testModule.moduleContent.FunctionDeclarations
+            .FirstOrDefault(decl => decl.Key is "alfa");
+
+        var declParsed =
+            FunctionRecord.ParseFunctionRecordTagged(declValue.Value, parseCache)
+            .Extract(err => throw new Exception("Failed parsing " + nameof(declValue) + ": " + err));
+
+        var invokeFunction = ElmCompilerTestHelper.CreateFunctionInvocationDelegate(declParsed);
+
+        ElmValue ApplyForElmArgument(ElmValue x)
+        {
+            var pineValue =
+                invokeFunction([ElmValueEncoding.ElmValueAsPineValue(x)]);
+
+            return
+                ElmValueEncoding.PineValueAsElmValue(pineValue.evalReport.ReturnValue.Evaluate(), null, null)
+                .Extract(err => throw new Exception("Failed decoding result as Elm value: " + err));
+        }
+
+        // double << addOne: addOne(5) = 6, double(6) = 12
+        {
+            var resultValue = ApplyForElmArgument(ElmValue.Integer(5));
+
+            resultValue.Should().Be(ElmValue.Integer(12));
+        }
+
+        // double << addOne: addOne(0) = 1, double(1) = 2
+        {
+            var resultValue = ApplyForElmArgument(ElmValue.Integer(0));
+
+            resultValue.Should().Be(ElmValue.Integer(2));
+        }
+    }
 }

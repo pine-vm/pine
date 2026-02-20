@@ -1,6 +1,8 @@
 module Bytes.Encode exposing (..)
 
-import Bytes
+import Bytes exposing (Bytes, Endianness)
+import Char
+import List
 
 
 type Encoder
@@ -190,8 +192,8 @@ signedInt32 int =
 
 
 bytes : Bytes.Bytes -> Encoder
-bytes bytes =
-    BytesEncoder bytes
+bytes b =
+    BytesEncoder b
 
 
 sequence : List Encoder -> Encoder

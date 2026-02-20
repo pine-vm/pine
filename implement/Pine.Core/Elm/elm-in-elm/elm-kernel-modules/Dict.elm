@@ -46,8 +46,8 @@ Insert, remove, and query operations all take _O(log n)_ time.
 -}
 
 import Basics
-import List
-import Maybe
+import List exposing ((::))
+import Maybe exposing (Maybe(..))
 
 
 

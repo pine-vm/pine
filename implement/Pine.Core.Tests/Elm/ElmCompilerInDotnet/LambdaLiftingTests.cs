@@ -75,12 +75,12 @@ public class LambdaLiftingTests
             addN n x =
                 let
                     add =
-                        addN__lifted__add n
+                        addN__lifted__add_1 n
                 in
                 add x
 
 
-            addN__lifted__add n y =
+            addN__lifted__add_1 n y =
                 y + n
             """";
 
@@ -114,12 +114,12 @@ public class LambdaLiftingTests
             addN n x =
                 let
                     add =
-                        addN__lifted__add n
+                        addN__lifted__add_1 n
                 in
                 add x
 
 
-            addN__lifted__add n y =
+            addN__lifted__add_1 n y =
                 y + n
             """";
 
@@ -268,12 +268,12 @@ public class LambdaLiftingTests
                         n * 2
 
                     filterFn =
-                        process__lifted__filterFn threshold
+                        process__lifted__filterFn_1 threshold
                 in
                 List.filter filterFn items
 
 
-            process__lifted__filterFn threshold x =
+            process__lifted__filterFn_1 threshold x =
                 x > threshold
             """";
 
@@ -447,17 +447,17 @@ public class LambdaLiftingTests
             computeFactorial n =
                 let
                     factorial =
-                        computeFactorial__lifted__factorial
+                        computeFactorial__lifted__factorial_1
                 in
                 factorial n
 
 
-            computeFactorial__lifted__factorial x =
+            computeFactorial__lifted__factorial_1 x =
                 if x <= 1 then
                     1
 
                 else
-                    x * computeFactorial__lifted__factorial (x - 1)
+                    x * computeFactorial__lifted__factorial_1 (x - 1)
             """";
 
         var result = LiftAndFormat(inputModuleText);
@@ -499,19 +499,19 @@ public class LambdaLiftingTests
             process a b =
                 let
                     double =
-                        process__lifted__double
+                        process__lifted__double_1
 
                     triple =
-                        process__lifted__triple
+                        process__lifted__triple_2
                 in
                 ( double a, triple b )
 
 
-            process__lifted__double x =
+            process__lifted__double_1 x =
                 x * 2
 
 
-            process__lifted__triple y =
+            process__lifted__triple_2 y =
                 y * 3
             """";
 
@@ -556,20 +556,20 @@ public class LambdaLiftingTests
             compute n =
                 let
                     double =
-                        compute__lifted__double
+                        compute__lifted__double_1
 
                     applyTwice =
-                        compute__lifted__applyTwice
+                        compute__lifted__applyTwice_2
                 in
                 applyTwice n
 
 
-            compute__lifted__double x =
+            compute__lifted__double_1 x =
                 x * 2
 
 
-            compute__lifted__applyTwice y =
-                compute__lifted__double (compute__lifted__double y)
+            compute__lifted__applyTwice_2 y =
+                compute__lifted__double_1 (compute__lifted__double_1 y)
             """";
 
         var result = LiftAndFormat(inputModuleText);
@@ -620,28 +620,28 @@ public class LambdaLiftingTests
             checkEven n =
                 let
                     isEven =
-                        checkEven__lifted__isEven
+                        checkEven__lifted__isEven_1
 
                     isOdd =
-                        checkEven__lifted__isOdd
+                        checkEven__lifted__isOdd_2
                 in
                 isEven n
 
 
-            checkEven__lifted__isEven x =
+            checkEven__lifted__isEven_1 x =
                 if x == 0 then
                     True
 
                 else
-                    checkEven__lifted__isOdd (x - 1)
+                    checkEven__lifted__isOdd_2 (x - 1)
 
 
-            checkEven__lifted__isOdd y =
+            checkEven__lifted__isOdd_2 y =
                 if y == 0 then
                     False
 
                 else
-                    checkEven__lifted__isEven (y - 1)
+                    checkEven__lifted__isEven_1 (y - 1)
             """";
 
         var result = LiftAndFormat(inputModuleText);

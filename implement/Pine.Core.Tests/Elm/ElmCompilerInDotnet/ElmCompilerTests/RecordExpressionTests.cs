@@ -454,11 +454,12 @@ public class RecordExpressionTests
 
         // Test with nested record in field y
         {
-            var innerRecord = new ElmValue.ElmRecord(
-                [
-                ("a", ElmValue.Integer(1)),
-                ("b", ElmValue.Integer(2))
-                ]);
+            var innerRecord =
+                new ElmValue.ElmRecord(
+                    [
+                    ("a", ElmValue.Integer(1)),
+                    ("b", ElmValue.Integer(2))
+                    ]);
 
             var resultValue =
                 ApplyForElmArguments(
@@ -514,18 +515,19 @@ public class RecordExpressionTests
         var invokeFunction = ElmCompilerTestHelper.CreateFunctionInvocationDelegate(declParsed);
 
         // Test with a 9-field record, accessing field 'h' (penultimate)
-        var testRecord = new ElmValue.ElmRecord(
-            [
-            ("a", ElmValue.Integer(1)),
-            ("b", ElmValue.Integer(2)),
-            ("c", ElmValue.Integer(3)),
-            ("d", ElmValue.Integer(4)),
-            ("e", ElmValue.Integer(5)),
-            ("f", ElmValue.Integer(6)),
-            ("g", ElmValue.Integer(7)),
-            ("h", ElmValue.Integer(888)),  // This is the penultimate field we're accessing
-            ("i", ElmValue.Integer(9))
-            ]);
+        var testRecord =
+            new ElmValue.ElmRecord(
+                [
+                ("a", ElmValue.Integer(1)),
+                ("b", ElmValue.Integer(2)),
+                ("c", ElmValue.Integer(3)),
+                ("d", ElmValue.Integer(4)),
+                ("e", ElmValue.Integer(5)),
+                ("f", ElmValue.Integer(6)),
+                ("g", ElmValue.Integer(7)),
+                ("h", ElmValue.Integer(888)), // This is the penultimate field we're accessing
+                ("i", ElmValue.Integer(9))
+                ]);
 
         var (evalReport, _) = invokeFunction([ElmValueEncoding.ElmValueAsPineValue(testRecord)]);
 
@@ -536,7 +538,8 @@ public class RecordExpressionTests
 
         // Verify invocation count is less than 6
         // If we compute the index at compile time, we don't need to iterate through fields
-        evalReport.InvocationCount.Should().BeLessThan(6,
+        evalReport.InvocationCount.Should().BeLessThan(
+            6,
             "Record access should use compile-time index computation, not runtime iteration through fields");
     }
 
@@ -581,27 +584,33 @@ public class RecordExpressionTests
         var invokeFunction = ElmCompilerTestHelper.CreateFunctionInvocationDelegate(declParsed);
 
         // Test with a 9-field record, updating field 'h' (penultimate)
-        var testRecord = new ElmValue.ElmRecord(
-            [
-            ("a", ElmValue.Integer(1)),
-            ("b", ElmValue.Integer(2)),
-            ("c", ElmValue.Integer(3)),
-            ("d", ElmValue.Integer(4)),
-            ("e", ElmValue.Integer(5)),
-            ("f", ElmValue.Integer(6)),
-            ("g", ElmValue.Integer(7)),
-            ("h", ElmValue.Integer(8)),
-            ("i", ElmValue.Integer(9))
-            ]);
+        var testRecord =
+            new ElmValue.ElmRecord(
+                [
+                ("a", ElmValue.Integer(1)),
+                ("b", ElmValue.Integer(2)),
+                ("c", ElmValue.Integer(3)),
+                ("d", ElmValue.Integer(4)),
+                ("e", ElmValue.Integer(5)),
+                ("f", ElmValue.Integer(6)),
+                ("g", ElmValue.Integer(7)),
+                ("h", ElmValue.Integer(8)),
+                ("i", ElmValue.Integer(9))
+                ]);
 
         var newValue = ElmValue.Integer(999);
 
-        var (evalReport, _) = invokeFunction(
-            [ElmValueEncoding.ElmValueAsPineValue(testRecord),
-             ElmValueEncoding.ElmValueAsPineValue(newValue)]);
+        var (evalReport, _) =
+            invokeFunction(
+                [
+                ElmValueEncoding.ElmValueAsPineValue(testRecord),
+                ElmValueEncoding.ElmValueAsPineValue(newValue)
+                ]);
 
         var resultPineValue = evalReport.ReturnValue.Evaluate();
-        var resultValue = ElmValueEncoding.PineValueAsElmValue(resultPineValue, null, null)
+
+        var resultValue =
+            ElmValueEncoding.PineValueAsElmValue(resultPineValue, null, null)
             .Extract(err => throw new Exception("Failed decoding result as Elm value: " + err));
 
         // Verify correct result - all fields same except 'h' which is updated to 999
@@ -615,13 +624,14 @@ public class RecordExpressionTests
                 ("e", ElmValue.Integer(5)),
                 ("f", ElmValue.Integer(6)),
                 ("g", ElmValue.Integer(7)),
-                ("h", ElmValue.Integer(999)),  // Updated value
+                ("h", ElmValue.Integer(999)), // Updated value
                 ("i", ElmValue.Integer(9))
                 ]));
 
         // Verify invocation count is less than 6
         // If we compute the index at compile time, we don't need to iterate through fields
-        evalReport.InvocationCount.Should().BeLessThan(6,
+        evalReport.InvocationCount.Should().BeLessThan(
+            6,
             "Record update should use compile-time index computation, not runtime iteration through fields");
     }
 }

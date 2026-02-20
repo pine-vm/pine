@@ -277,7 +277,9 @@ public static class LambdaLifting
 
                 if (isLambdaAssignment || isLocalFunctionWithParams)
                 {
-                    var liftedFunctionName = $"{context.ContainingFunctionName}__lifted__{bindingName}";
+                    var (updatedCtx, uniqueId) = currentContext.NextLambdaId();
+                    currentContext = updatedCtx;
+                    var liftedFunctionName = $"{context.ContainingFunctionName}__lifted__{bindingName}_{uniqueId}";
                     localFunctionLiftedNames[bindingName] = liftedFunctionName;
                 }
             }
@@ -389,8 +391,8 @@ public static class LambdaLifting
             .OrderBy(v => v)
             .ToList();
 
-        // Generate lifted function name using the let-binding name
-        var liftedFunctionName = $"{context.ContainingFunctionName}__lifted__{bindingName}";
+        // Use the pre-computed unique lifted function name
+        var liftedFunctionName = localFunctionLiftedNames[bindingName];
 
         // Transform the lambda body
         var lambdaBodyContext = context.WithBoundVariables(lambdaParamNames);
@@ -452,8 +454,8 @@ public static class LambdaLifting
             .OrderBy(v => v)
             .ToList();
 
-        // Generate lifted function name using the function name
-        var liftedFunctionName = $"{context.ContainingFunctionName}__lifted__{bindingName}";
+        // Use the pre-computed unique lifted function name
+        var liftedFunctionName = localFunctionLiftedNames[bindingName];
 
         // Transform the function body (first transform any nested lambdas/local functions)
         var funcBodyContext = context.WithBoundVariables(funcParamNames);

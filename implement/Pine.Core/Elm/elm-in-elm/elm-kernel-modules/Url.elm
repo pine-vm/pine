@@ -29,6 +29,12 @@ addresses like `tom@example.com`.
 
 -}
 
+import Basics exposing (Bool(..))
+import Char
+import List exposing ((::))
+import Maybe exposing (Maybe(..))
+import String
+
 
 type alias Url =
     { protocol : Protocol
@@ -241,19 +247,68 @@ encodeByte byte =
 
 encodeUtf8 : Int -> List Char
 encodeUtf8 code =
-    let
-        upperPart : Int
-        upperPart =
-            code // 64
+    if code < 0x0800 then
+        -- 2-byte UTF-8: 110xxxxx 10xxxxxx
+        let
+            byte1 : Int
+            byte1 =
+                code // 64
 
-        lowerByte : Int
-        lowerByte =
-            code - upperPart * 64
-    in
-    List.concat
-        [ encodeByte (0xC0 + upperPart)
-        , encodeByte (0x80 + lowerByte)
-        ]
+            byte2 : Int
+            byte2 =
+                code - byte1 * 64
+        in
+        List.concat
+            [ encodeByte (0xC0 + byte1)
+            , encodeByte (0x80 + byte2)
+            ]
+
+    else if code < 0x00010000 then
+        -- 3-byte UTF-8: 1110xxxx 10xxxxxx 10xxxxxx
+        let
+            byte1 : Int
+            byte1 =
+                code // 4096
+
+            byte2 : Int
+            byte2 =
+                (code // 64) - byte1 * 64
+
+            byte3 : Int
+            byte3 =
+                code - (code // 64) * 64
+        in
+        List.concat
+            [ encodeByte (0xE0 + byte1)
+            , encodeByte (0x80 + byte2)
+            , encodeByte (0x80 + byte3)
+            ]
+
+    else
+        -- 4-byte UTF-8: 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx
+        let
+            byte1 : Int
+            byte1 =
+                code // 262144
+
+            byte2 : Int
+            byte2 =
+                (code // 4096) - byte1 * 64
+
+            byte3 : Int
+            byte3 =
+                (code // 64) - (code // 4096) * 64
+
+            byte4 : Int
+            byte4 =
+                code - (code // 64) * 64
+        in
+        List.concat
+            [ encodeByte (0xF0 + byte1)
+            , encodeByte (0x80 + byte2)
+            , encodeByte (0x80 + byte3)
+            , encodeByte (0x80 + byte4)
+            ]
 
 
 {-| **Use [Url.Parser](Url-Parser) instead!** It will decode query
@@ -446,25 +501,35 @@ decodeUtf8Multi count leadValue chars =
             Nothing
 
         Just ( bytes, rest ) ->
-            let
-                -- If every continuation byte is in 0x80..0xBF, combine them:
-                allValid =
-                    List.all (\b -> 0x80 <= b && b <= 0xBF) bytes
-
-                codePoint =
-                    List.foldl
-                        (\b acc -> (acc * 64) + (b - 0x80))
-                        leadValue
-                        bytes
-            in
-            if not allValid then
-                Nothing
-
-            else
+            if allContinuationBytes bytes then
+                let
+                    codePoint =
+                        List.foldl
+                            (\b acc -> (acc * 64) + (b - 0x80))
+                            leadValue
+                            bytes
+                in
                 Just
                     ( Char.fromCode codePoint
                     , rest
                     )
+
+            else
+                Nothing
+
+
+allContinuationBytes : List Int -> Bool
+allContinuationBytes bytes =
+    case bytes of
+        [] ->
+            True
+
+        b :: rest ->
+            if 0x80 <= b && b <= 0xBF then
+                allContinuationBytes rest
+
+            else
+                False
 
 
 {-| Parse `n` UTF-8 continuation bytes from the list:

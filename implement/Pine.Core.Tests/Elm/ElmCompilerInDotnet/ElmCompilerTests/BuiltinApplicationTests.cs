@@ -74,8 +74,7 @@ public class BuiltinApplicationTests
         var resultAsElmExpr =
             ElmValue.RenderAsElmExpression(resultAsElmValue);
 
-        resultAsElmExpr.expressionString.Should().Be(
-            "54");
+        resultAsElmExpr.expressionString.Should().Be("54");
     }
 
     [Fact]

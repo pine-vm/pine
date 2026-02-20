@@ -1876,6 +1876,139 @@ public class CoreBasicsFunctionTests
 
     #endregion
 
+    // ========== Tests for append (++) ==========
+
+    #region append
+
+    [Fact]
+    public void Generic_append_string_string()
+    {
+        var resultValue =
+            ApplyGeneric(
+                CoreBasics.Append_FunctionValue(),
+                [
+                ElmValue.StringInstance("hello"),
+                ElmValue.StringInstance(" world")
+                ]);
+
+        resultValue.Should().Be(ElmValue.StringInstance("hello world"));
+    }
+
+    [Fact]
+    public void Generic_append_empty_strings()
+    {
+        var resultValue =
+            ApplyGeneric(
+                CoreBasics.Append_FunctionValue(),
+                [
+                ElmValue.StringInstance(""),
+                ElmValue.StringInstance("")
+                ]);
+
+        resultValue.Should().Be(ElmValue.StringInstance(""));
+    }
+
+    [Fact]
+    public void Generic_append_string_empty()
+    {
+        var resultValue =
+            ApplyGeneric(
+                CoreBasics.Append_FunctionValue(),
+                [
+                ElmValue.StringInstance("abc"),
+                ElmValue.StringInstance("")
+                ]);
+
+        resultValue.Should().Be(ElmValue.StringInstance("abc"));
+    }
+
+    [Fact]
+    public void Generic_append_empty_string()
+    {
+        var resultValue =
+            ApplyGeneric(
+                CoreBasics.Append_FunctionValue(),
+                [
+                ElmValue.StringInstance(""),
+                ElmValue.StringInstance("xyz")
+                ]);
+
+        resultValue.Should().Be(ElmValue.StringInstance("xyz"));
+    }
+
+    [Fact]
+    public void Generic_append_list_list()
+    {
+        var resultValue =
+            ApplyGeneric(
+                CoreBasics.Append_FunctionValue(),
+                [
+                ElmValue.ListInstance([ElmValue.Integer(1), ElmValue.Integer(2)]),
+                ElmValue.ListInstance([ElmValue.Integer(3), ElmValue.Integer(4)])
+                ]);
+
+        resultValue.Should().Be(
+            ElmValue.ListInstance(
+                [
+                ElmValue.Integer(1),
+                ElmValue.Integer(2),
+                ElmValue.Integer(3),
+                ElmValue.Integer(4)
+                ]));
+    }
+
+    [Fact]
+    public void Generic_append_empty_lists()
+    {
+        var resultValue =
+            ApplyGeneric(
+                CoreBasics.Append_FunctionValue(),
+                [
+                ElmValue.ListInstance([]),
+                ElmValue.ListInstance([])
+                ]);
+
+        resultValue.Should().Be(ElmValue.ListInstance([]));
+    }
+
+    [Fact]
+    public void Generic_append_list_empty()
+    {
+        var resultValue =
+            ApplyGeneric(
+                CoreBasics.Append_FunctionValue(),
+                [
+                ElmValue.ListInstance([ElmValue.Integer(1)]),
+                ElmValue.ListInstance([])
+                ]);
+
+        resultValue.Should().Be(ElmValue.ListInstance([ElmValue.Integer(1)]));
+    }
+
+    [Fact]
+    public void Generic_append_empty_list()
+    {
+        var resultValue =
+            ApplyGeneric(
+                CoreBasics.Append_FunctionValue(),
+                [
+                ElmValue.ListInstance([]),
+                ElmValue.ListInstance([ElmValue.Integer(2)])
+                ]);
+
+        resultValue.Should().Be(ElmValue.ListInstance([ElmValue.Integer(2)]));
+    }
+
+    [Fact]
+    public void Identify_append_function_value()
+    {
+        var result = CoreBasics.IdentifyFunctionValue(CoreBasics.Append_FunctionValue());
+
+        result.Should().Be("append");
+    }
+
+    #endregion
+
     private static readonly Core.Interpreter.IntermediateVM.PineVM s_vm =
         ElmCompilerTestHelper.PineVMForProfiling(_ => { });
 

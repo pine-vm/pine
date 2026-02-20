@@ -172,6 +172,11 @@ public class CoreBasics
             return "always";
         }
 
+        if (functionValue == Append_FunctionValue())
+        {
+            return "append";
+        }
+
         return null;
     }
 
@@ -308,6 +313,21 @@ public class CoreBasics
                 [new TypeInference.InferredType.UnknownType(), new TypeInference.InferredType.UnknownType(), new TypeInference.InferredType.UnknownType()],
                 args => Generic_ApR(args[0], args[1])),
 
+            // (++) : appendable -> appendable -> appendable
+            "append" => new CoreFunctionInfo(
+                [new TypeInference.InferredType.UnknownType(), new TypeInference.InferredType.UnknownType(), new TypeInference.InferredType.UnknownType()],
+                args => Generic_Append(args[0], args[1])),
+
+            // composeR : (a -> b) -> (b -> c) -> (a -> c)  (i.e. (>>) f g x = g (f x))
+            "composeR" => new CoreFunctionInfo(
+                [new TypeInference.InferredType.UnknownType(), new TypeInference.InferredType.UnknownType(), new TypeInference.InferredType.UnknownType()],
+                args => Generic_ComposeR(args[0], args[1])),
+
+            // composeL : (b -> c) -> (a -> b) -> (a -> c)  (i.e. (<<) g f x = g (f x))
+            "composeL" => new CoreFunctionInfo(
+                [new TypeInference.InferredType.UnknownType(), new TypeInference.InferredType.UnknownType(), new TypeInference.InferredType.UnknownType()],
+                args => Generic_ComposeL(args[0], args[1])),
+
             _ => null
         };
     }
@@ -333,6 +353,9 @@ public class CoreBasics
             ">=" => "ge",
             "&&" => "and",
             "||" => "or",
+            "++" => "append",
+            ">>" => "composeR",
+            "<<" => "composeL",
             _ => null
         };
     }
@@ -403,6 +426,9 @@ public class CoreBasics
 
             "always" =>
             Always_FunctionValue(),
+
+            "append" =>
+            Append_FunctionValue(),
 
             _ =>
             null
@@ -1064,6 +1090,117 @@ public class CoreBasics
         Expression f)
     {
         return new Expression.ParseAndEval(encoded: f, environment: x);
+    }
+
+    /// <summary>
+    /// (++) : appendable -> appendable -> appendable
+    /// <para>
+    /// <see href="https://package.elm-lang.org/packages/elm/core/latest/Basics#(++)"/>
+    /// </para>
+    /// Appends two strings or two lists.
+    /// </summary>
+    public static Expression Generic_Append(
+        Expression left,
+        Expression right)
+    {
+        return
+            BinaryApplication(
+                functionValue: Append_FunctionValue(),
+                left: left,
+                right: right);
+    }
+
+    /// <summary>
+    /// (++) : appendable -> appendable -> appendable
+    /// <para>
+    /// <see href="https://package.elm-lang.org/packages/elm/core/latest/Basics#(++)"/>
+    /// </para>
+    /// </summary>
+    public static PineValue Append_FunctionValue()
+    {
+        return BinaryFunctionValue(Internal_Generic_Append);
+    }
+
+    /// <summary>
+    /// (>>) : (a -> b) -> (b -> c) -> (a -> c)
+    /// <para>
+    /// <see href="https://package.elm-lang.org/packages/elm/core/latest/Basics#(%3E%3E)"/>
+    /// </para>
+    /// <c>composeR f g x = g (f x)</c>
+    /// </summary>
+    public static Expression Generic_ComposeR(
+        Expression f,
+        Expression g)
+    {
+        // Build a function value that captures f and g, and takes 1 argument x.
+        // Inner body environment: [[f, g], [x]]
+        // f = env[0][0], g = env[0][1], x = env[1][0]
+        var fCaptured =
+            ExpressionBuilder.BuildExpressionForPathInExpression(
+                [0, 0],
+                Expression.EnvironmentInstance);
+
+        var gCaptured =
+            ExpressionBuilder.BuildExpressionForPathInExpression(
+                [0, 1],
+                Expression.EnvironmentInstance);
+
+        var xArg =
+            ExpressionBuilder.BuildExpressionForPathInExpression(
+                [1, 0],
+                Expression.EnvironmentInstance);
+
+        // f(x)
+        var fx = new Expression.ParseAndEval(encoded: fCaptured, environment: xArg);
+
+        // g(f(x))
+        var gfx = new Expression.ParseAndEval(encoded: gCaptured, environment: fx);
+
+        return FunctionValueBuilder.EmitFunctionExpression(
+            gfx,
+            parameterCount: 1,
+            envFunctionsExprs: [f, g]);
+    }
+
+    /// <summary>
+    /// (&lt;&lt;) : (b -> c) -> (a -> b) -> (a -> c)
+    /// <para>
+    /// <see href="https://package.elm-lang.org/packages/elm/core/latest/Basics#(%3C%3C)"/>
+    /// </para>
+    /// <c>composeL g f x = g (f x)</c>
+    /// </summary>
+    public static Expression Generic_ComposeL(
+        Expression g,
+        Expression f)
+    {
+        // Build a function value that captures g and f, and takes 1 argument x.
+        // Inner body environment: [[g, f], [x]]
+        // g = env[0][0], f = env[0][1], x = env[1][0]
+        var gCaptured =
+            ExpressionBuilder.BuildExpressionForPathInExpression(
+                [0, 0],
+                Expression.EnvironmentInstance);
+
+        var fCaptured =
+            ExpressionBuilder.BuildExpressionForPathInExpression(
+                [0, 1],
+                Expression.EnvironmentInstance);
+
+        var xArg =
+            ExpressionBuilder.BuildExpressionForPathInExpression(
+                [1, 0],
+                Expression.EnvironmentInstance);
+
+        // f(x)
+        var fx = new Expression.ParseAndEval(encoded: fCaptured, environment: xArg);
+
+        // g(f(x))
+        var gfx = new Expression.ParseAndEval(encoded: gCaptured, environment: fx);
+
+        return FunctionValueBuilder.EmitFunctionExpression(
+            gfx,
+            parameterCount: 1,
+            envFunctionsExprs: [g, f]);
     }
 
     private static Expression Internal_Int_div(
@@ -2622,5 +2759,57 @@ public class CoreBasics
 
         // Just return the first argument, ignoring the second
         return left;
+    }
+
+    private static Expression Internal_Generic_Append(
+        Expression left,
+        Expression right)
+    {
+        /*
+        append : appendable -> appendable -> appendable
+        append a b =
+            case ( a, b ) of
+                ( String stringA, String stringB ) ->
+                    String (Pine_kernel.concat [ stringA, stringB ])
+
+                _ ->
+                    Pine_kernel.concat [ a, b ]
+        */
+
+        // Check if left is a string (head equals "String" tag name)
+        var leftIsString =
+            BuiltinHelpers.ApplyBuiltinEqualBinary(
+                BuiltinHelpers.ApplyBuiltinHead(left),
+                s_elmStringTypeTagNameLiteral);
+
+        // String case: extract string contents, concat, and wrap in String tag
+        // String representation: ["String", [contentBlob]]
+        // Content is at: head(head(skip(1, value)))
+        var leftStringWrapper = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, left));
+        var leftStringContent = BuiltinHelpers.ApplyBuiltinHead(leftStringWrapper);
+        var rightStringWrapper = BuiltinHelpers.ApplyBuiltinHead(BuiltinHelpers.ApplyBuiltinSkip(1, right));
+        var rightStringContent = BuiltinHelpers.ApplyBuiltinHead(rightStringWrapper);
+
+        var concattedStringContent =
+            BuiltinHelpers.ApplyBuiltinConcat(
+                [leftStringContent, rightStringContent]);
+
+        var stringResult =
+            Expression.ListInstance(
+                [
+                    s_elmStringTypeTagNameLiteral,
+                    Expression.ListInstance([concattedStringContent])
+                ]);
+
+        // List case: just concat the two lists
+        var listResult =
+            BuiltinHelpers.ApplyBuiltinConcat(
+                [left, right]);
+
+        return
+            Expression.ConditionalInstance(
+                condition: leftIsString,
+                trueBranch: stringResult,
+                falseBranch: listResult);
     }
 }

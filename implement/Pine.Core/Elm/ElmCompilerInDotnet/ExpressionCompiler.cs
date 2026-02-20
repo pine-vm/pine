@@ -1398,6 +1398,19 @@ public class ExpressionCompiler
             }
         }
 
+        if (paramCount <= 0)
+        {
+            // Zero-parameter value declaration: invoke the body immediately
+            // to produce the actual value rather than returning an unevaluated function wrapper.
+            var envFuncsListExpr = Expression.ListInstance(envFunctionsExprs);
+            var callEnvironment =
+                Expression.ListInstance([envFuncsListExpr, Expression.EmptyList]);
+
+            return (Result<CompilationError, Expression>)new Expression.ParseAndEval(
+                encoded: encodedBodyExpr,
+                environment: callEnvironment);
+        }
+
         // Emit the function value expression using FunctionValueBuilder
         return FunctionValueBuilder.EmitFunctionExpressionFromEncodedBody(
             encodedBodyExpr,

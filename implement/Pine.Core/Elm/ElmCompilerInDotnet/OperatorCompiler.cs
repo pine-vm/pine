@@ -130,6 +130,21 @@ public class OperatorCompiler
             return CoreBasics.Generic_Or(leftCompiled, rightCompiled);
         }
 
+        if (operatorApp.Operator is "++")
+        {
+            return CoreBasics.Generic_Append(leftCompiled, rightCompiled);
+        }
+
+        if (operatorApp.Operator is ">>")
+        {
+            return CoreBasics.Generic_ComposeR(leftCompiled, rightCompiled);
+        }
+
+        if (operatorApp.Operator is "<<")
+        {
+            return CoreBasics.Generic_ComposeL(leftCompiled, rightCompiled);
+        }
+
         if (operatorApp.Operator is "/")
         {
             return CompilationError.UnsupportedOperator(operatorApp.Operator);
